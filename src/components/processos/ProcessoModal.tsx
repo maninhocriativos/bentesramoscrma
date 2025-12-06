@@ -91,7 +91,7 @@ export function ProcessoModal({
     
     const data = {
       ...formData,
-      cliente_id: formData.cliente_id || null,
+      cliente_id: formData.cliente_id === '__none__' ? null : formData.cliente_id || null,
     };
 
     if (isNew) {
@@ -182,14 +182,14 @@ export function ProcessoModal({
             <div>
               <Label htmlFor="cliente_id">Cliente (Lead)</Label>
               <Select
-                value={formData.cliente_id}
-                onValueChange={(value) => setFormData({ ...formData, cliente_id: value })}
+                value={formData.cliente_id || '__none__'}
+                onValueChange={(value) => setFormData({ ...formData, cliente_id: value === '__none__' ? '' : value })}
               >
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Selecione um cliente" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhum</SelectItem>
+                  <SelectItem value="__none__">Nenhum</SelectItem>
                   {clienteOptions.map((lead) => (
                     <SelectItem key={lead.id} value={lead.id}>
                       {lead.nome}
