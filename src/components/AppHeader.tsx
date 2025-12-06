@@ -14,7 +14,7 @@ interface AppHeaderProps {
 
 export function AppHeader({ title, onNewItem, newItemLabel = 'Novo' }: AppHeaderProps) {
   const { signOut, user } = useAuth();
-  const { cargo } = usePerfil();
+  const { cargo, fullName } = usePerfil();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -54,7 +54,7 @@ export function AppHeader({ title, onNewItem, newItemLabel = 'Novo' }: AppHeader
                 {cargo}
               </Badge>
               <span className="text-sm text-muted-foreground hidden lg:block">
-                {user.email}
+                {fullName || user.email}
               </span>
               <Button 
                 variant="outline" 

@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { UserPlus } from 'lucide-react';
 import logo from '@/assets/logo-bentes-ramos.png';
 
 const authSchema = z.object({
@@ -17,13 +19,19 @@ const authSchema = z.object({
 
 export default function Auth() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { signIn, signUp, user, loading } = useAuth();
   const { toast } = useToast();
   
-  const [email, setEmail] = useState('');
+  // Check if there's an invited email in the URL
+  const invitedEmail = searchParams.get('email') || '';
+  const isInvited = !!invitedEmail;
+  
+  const [email, setEmail] = useState(invitedEmail);
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [activeTab, setActiveTab] = useState(isInvited ? 'register' : 'login');
 
   useEffect(() => {
     if (user && !loading) {
@@ -115,7 +123,16 @@ export default function Auth() {
         </CardHeader>
         
         <CardContent>
-          <Tabs defaultValue="login" className="w-full">
+          {isInvited && (
+            <Alert className="mb-4 bg-primary/10 border-primary/20">
+              <UserPlus className="h-4 w-4" />
+              <AlertDescription>
+                Você foi convidado para a equipe! Crie sua conta para começar.
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-2 rounded-xl mb-6">
               <TabsTrigger value="login" className="rounded-lg">Entrar</TabsTrigger>
               <TabsTrigger value="register" className="rounded-lg">Cadastrar</TabsTrigger>
