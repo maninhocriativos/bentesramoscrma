@@ -21,6 +21,7 @@ export type Database = {
           id: string
           link_contrato: string | null
           nome: string | null
+          origem: string | null
           resumo_ia: string | null
           status: string | null
           telefone: string | null
@@ -31,6 +32,7 @@ export type Database = {
           id?: string
           link_contrato?: string | null
           nome?: string | null
+          origem?: string | null
           resumo_ia?: string | null
           status?: string | null
           telefone?: string | null
@@ -41,6 +43,7 @@ export type Database = {
           id?: string
           link_contrato?: string | null
           nome?: string | null
+          origem?: string | null
           resumo_ia?: string | null
           status?: string | null
           telefone?: string | null
