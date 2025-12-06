@@ -1,15 +1,24 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Perfil, UserCargo } from '@/types/perfil';
 import { useAuth } from './useAuth';
 
 type AppRole = 'Administrador' | 'Advogado' | 'Secretaria';
+
+export interface Perfil {
+  id: string;
+  email: string | null;
+  nome: string | null;
+  sobrenome: string | null;
+  telefone: string | null;
+  cargo: string | null;
+}
 
 export function usePerfil() {
   const { user } = useAuth();
   const [perfil, setPerfil] = useState<Perfil | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [loading, setLoading] = useState(true);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -18,6 +27,7 @@ export function usePerfil() {
       setPerfil(null);
       setRoles([]);
       setLoading(false);
+      setNeedsOnboarding(false);
     }
   }, [user]);
 
@@ -40,7 +50,10 @@ export function usePerfil() {
     ]);
 
     if (!perfilResult.error && perfilResult.data) {
-      setPerfil(perfilResult.data as Perfil);
+      const perfilData = perfilResult.data as Perfil;
+      setPerfil(perfilData);
+      // Check if user needs onboarding (nome is empty)
+      setNeedsOnboarding(!perfilData.nome || perfilData.nome.trim() === '');
     }
     
     if (!rolesResult.error && rolesResult.data) {
@@ -48,6 +61,21 @@ export function usePerfil() {
     }
     
     setLoading(false);
+  };
+
+  const updatePerfil = async (data: Partial<Perfil>) => {
+    if (!user) return { error: new Error('User not authenticated') };
+    
+    const { error } = await supabase
+      .from('perfis')
+      .update(data)
+      .eq('id', user.id);
+    
+    if (!error) {
+      await fetchData();
+    }
+    
+    return { error };
   };
 
   // Permission helpers based on user_roles table (server-side enforced)
@@ -60,7 +88,12 @@ export function usePerfil() {
   const canAccessSettings = isAdmin;
   
   // Legacy cargo field for compatibility
-  const cargo = perfil?.cargo || (roles[0] as UserCargo) || 'Secretaria';
+  const cargo = perfil?.cargo || (roles[0] as string) || 'Secretaria';
+  
+  // Full name helper
+  const fullName = perfil?.nome 
+    ? `${perfil.nome}${perfil.sobrenome ? ' ' + perfil.sobrenome : ''}`
+    : null;
 
   return {
     perfil,
@@ -72,6 +105,9 @@ export function usePerfil() {
     isSecretaria,
     canDelete,
     canAccessSettings,
+    needsOnboarding,
+    fullName,
+    updatePerfil,
     refetch: fetchData,
   };
 }

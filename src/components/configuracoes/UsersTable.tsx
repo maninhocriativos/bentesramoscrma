@@ -9,9 +9,10 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Edit2, Trash2, Loader2 } from 'lucide-react';
+import { Edit2, Trash2, Loader2, UserPlus } from 'lucide-react';
 import { UserWithRole, useUsers } from '@/hooks/useUsers';
 import { EditUserModal } from './EditUserModal';
+import { InviteUserModal } from './InviteUserModal';
 import { useAuth } from '@/hooks/useAuth';
 import {
   AlertDialog,
@@ -25,10 +26,11 @@ import {
 } from '@/components/ui/alert-dialog';
 
 export function UsersTable() {
-  const { users, loading, updateUserRole, deleteUser } = useUsers();
+  const { users, loading, updateUserRole, deleteUser, refetch } = useUsers();
   const { user: currentUser } = useAuth();
   const [editingUser, setEditingUser] = useState<UserWithRole | null>(null);
   const [deletingUser, setDeletingUser] = useState<UserWithRole | null>(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async () => {
@@ -61,7 +63,14 @@ export function UsersTable() {
   }
 
   return (
-    <>
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button onClick={() => setShowInviteModal(true)} className="rounded-xl">
+          <UserPlus className="h-4 w-4 mr-2" />
+          Convidar Membro
+        </Button>
+      </div>
+      
       <div className="rounded-xl border">
         <Table>
           <TableHeader>
@@ -120,6 +129,12 @@ export function UsersTable() {
         </Table>
       </div>
 
+      <InviteUserModal
+        open={showInviteModal}
+        onOpenChange={setShowInviteModal}
+        onSuccess={refetch}
+      />
+
       <EditUserModal
         user={editingUser}
         open={!!editingUser}
@@ -149,6 +164,6 @@ export function UsersTable() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </div>
   );
 }
