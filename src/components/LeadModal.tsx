@@ -36,6 +36,7 @@ interface LeadModalProps {
   isOpen: boolean;
   onClose: () => void;
   isNew?: boolean;
+  canDelete?: boolean;
 }
 
 const STATUSES: LeadStatus[] = [
@@ -49,7 +50,7 @@ const STATUSES: LeadStatus[] = [
 
 const ORIGENS: LeadOrigem[] = ['Instagram', 'Google', 'Site', 'Indicação', 'Outro'];
 
-export function LeadModal({ lead, isOpen, onClose, isNew = false }: LeadModalProps) {
+export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = true }: LeadModalProps) {
   const { createLead, updateLead, deleteLead } = useLeads();
   const [formData, setFormData] = useState({
     nome: '',
@@ -251,7 +252,7 @@ export function LeadModal({ lead, isOpen, onClose, isNew = false }: LeadModalPro
               </Button>
             )}
 
-            {!isNew && (
+            {!isNew && canDelete && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="destructive" className="rounded-xl ml-auto">
