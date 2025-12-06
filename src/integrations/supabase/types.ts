@@ -50,6 +50,65 @@ export type Database = {
         }
         Relationships: []
       }
+      perfis: {
+        Row: {
+          cargo: string | null
+          email: string | null
+          id: string
+          nome: string | null
+        }
+        Insert: {
+          cargo?: string | null
+          email?: string | null
+          id: string
+          nome?: string | null
+        }
+        Update: {
+          cargo?: string | null
+          email?: string | null
+          id?: string
+          nome?: string | null
+        }
+        Relationships: []
+      }
+      processos: {
+        Row: {
+          advogado_responsavel: string | null
+          cliente_id: string | null
+          created_at: string | null
+          id: string
+          numero_processo: string | null
+          status: string | null
+          titulo_acao: string | null
+        }
+        Insert: {
+          advogado_responsavel?: string | null
+          cliente_id?: string | null
+          created_at?: string | null
+          id?: string
+          numero_processo?: string | null
+          status?: string | null
+          titulo_acao?: string | null
+        }
+        Update: {
+          advogado_responsavel?: string | null
+          cliente_id?: string | null
+          created_at?: string | null
+          id?: string
+          numero_processo?: string | null
+          status?: string | null
+          titulo_acao?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
