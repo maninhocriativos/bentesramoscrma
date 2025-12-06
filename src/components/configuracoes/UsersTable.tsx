@@ -71,12 +71,13 @@ export function UsersTable() {
         </Button>
       </div>
       
-      <div className="rounded-xl border">
+      <div className="rounded-xl border overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Nome</TableHead>
               <TableHead>Email</TableHead>
+              <TableHead className="hidden md:table-cell">Telefone</TableHead>
               <TableHead>Cargo</TableHead>
               <TableHead className="w-[100px]">Ações</TableHead>
             </TableRow>
@@ -84,7 +85,7 @@ export function UsersTable() {
           <TableBody>
             {users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                   Nenhum usuário encontrado
                 </TableCell>
               </TableRow>
@@ -92,9 +93,15 @@ export function UsersTable() {
               users.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell className="font-medium">
-                    {user.nome || 'Não informado'}
+                    {user.nome 
+                      ? `${user.nome}${user.sobrenome ? ' ' + user.sobrenome : ''}`
+                      : 'Não informado'
+                    }
                   </TableCell>
-                  <TableCell>{user.email}</TableCell>
+                  <TableCell className="text-sm">{user.email}</TableCell>
+                  <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                    {user.telefone || '—'}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={getRoleBadgeVariant(user.role)}>
                       {user.role || user.cargo || 'Sem cargo'}

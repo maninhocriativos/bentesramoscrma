@@ -49,17 +49,24 @@ export function usePerfil() {
         .eq('user_id', user.id)
     ]);
 
+    let perfilData: Perfil | null = null;
+    let userRoles: AppRole[] = [];
+
     if (!perfilResult.error && perfilResult.data) {
-      const perfilData = perfilResult.data as Perfil;
+      perfilData = perfilResult.data as Perfil;
       setPerfil(perfilData);
       // Check if user needs onboarding (nome is empty)
       setNeedsOnboarding(!perfilData.nome || perfilData.nome.trim() === '');
     }
     
-    if (!rolesResult.error && rolesResult.data) {
-      setRoles(rolesResult.data.map(r => r.role as AppRole));
+    if (!rolesResult.error && rolesResult.data && rolesResult.data.length > 0) {
+      userRoles = rolesResult.data.map(r => r.role as AppRole);
+    } else if (perfilData?.cargo) {
+      // Fallback: use cargo from perfis table if user_roles is empty
+      userRoles = [perfilData.cargo as AppRole];
     }
     
+    setRoles(userRoles);
     setLoading(false);
   };
 
