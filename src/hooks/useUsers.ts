@@ -9,6 +9,8 @@ export interface UserWithRole {
   id: string;
   email: string | null;
   nome: string | null;
+  sobrenome: string | null;
+  telefone: string | null;
   cargo: string | null;
   role: AppRole | null;
 }
@@ -58,8 +60,10 @@ export function useUsers() {
         id: perfil.id,
         email: perfil.email,
         nome: perfil.nome,
+        sobrenome: perfil.sobrenome,
+        telefone: perfil.telefone,
         cargo: perfil.cargo,
-        role: userRole?.role || null,
+        role: userRole?.role || (perfil.cargo as AppRole) || null,
       };
     });
 
