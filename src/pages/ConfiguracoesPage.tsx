@@ -11,15 +11,22 @@ import { Users, Server, Shield } from 'lucide-react';
 
 export default function ConfiguracoesPage() {
   const navigate = useNavigate();
-  const { canAccessSettings, loading } = usePerfil();
+  const { canAccessSettings, loading, roles } = usePerfil();
+
+  console.log('ConfiguracoesPage render - loading:', loading, 'canAccessSettings:', canAccessSettings, 'roles:', roles);
 
   useEffect(() => {
+    console.log('ConfiguracoesPage useEffect - loading:', loading, 'canAccessSettings:', canAccessSettings);
+    // Only redirect after loading is complete AND user doesn't have access
     if (!loading && !canAccessSettings) {
+      console.log('ConfiguracoesPage: REDIRECTING to dashboard');
       navigate('/dashboard');
     }
   }, [canAccessSettings, loading, navigate]);
 
+  // Show loading while checking permissions
   if (loading) {
+    console.log('ConfiguracoesPage: Showing loading state');
     return (
       <AppLayout>
         <div className="flex items-center justify-center min-h-screen">
@@ -29,9 +36,13 @@ export default function ConfiguracoesPage() {
     );
   }
 
+  // Only return null and redirect if NOT admin (after loading completes)
   if (!canAccessSettings) {
+    console.log('ConfiguracoesPage: No access, returning null');
     return null;
   }
+
+  console.log('ConfiguracoesPage: Rendering full page');
 
   return (
     <AppLayout>
