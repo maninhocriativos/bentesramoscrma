@@ -76,6 +76,7 @@ export function EditUserModal({ user, open, onOpenChange, onSave }: EditUserModa
               </SelectTrigger>
               <SelectContent className="bg-popover">
                 <SelectItem value="Administrador">Administrador</SelectItem>
+                <SelectItem value="Gerente">Gerente</SelectItem>
                 <SelectItem value="Advogado">Advogado</SelectItem>
                 <SelectItem value="Secretaria">Secretaria</SelectItem>
               </SelectContent>

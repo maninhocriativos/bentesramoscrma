@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
-type AppRole = 'Administrador' | 'Advogado' | 'Secretaria';
+type AppRole = 'Administrador' | 'Gerente' | 'Advogado' | 'Secretaria';
 
 export interface Perfil {
   id: string;
@@ -19,10 +19,12 @@ interface PerfilContextValue {
   cargo: string;
   roles: AppRole[];
   isAdmin: boolean;
+  isGerente: boolean;
   isAdvogado: boolean;
   isSecretaria: boolean;
   canDelete: boolean;
   canAccessSettings: boolean;
+  canAccessProcessos: boolean;
   needsOnboarding: boolean;
   fullName: string | null;
   updatePerfil: (data: Partial<Perfil>) => Promise<{ error: Error | null }>;
@@ -81,7 +83,7 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
       userRoles = rolesResult.data.map(r => r.role as AppRole);
     } else if (perfilData?.cargo) {
       // Fallback: use cargo from perfis table if user_roles is empty
-      const validRoles: AppRole[] = ['Administrador', 'Advogado', 'Secretaria'];
+      const validRoles: AppRole[] = ['Administrador', 'Gerente', 'Advogado', 'Secretaria'];
       const cargoAsRole = perfilData.cargo as AppRole;
       if (validRoles.includes(cargoAsRole)) {
         userRoles = [cargoAsRole];
@@ -109,12 +111,15 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
 
   // Permission helpers based on user_roles table (server-side enforced)
   const isAdmin = roles.includes('Administrador');
+  const isGerente = roles.includes('Gerente');
   const isAdvogado = roles.includes('Advogado');
   const isSecretaria = roles.includes('Secretaria');
   
   // These are for UI hints only - actual enforcement is via RLS
-  const canDelete = isAdmin;
+  const canDelete = isAdmin || isGerente;
   const canAccessSettings = isAdmin;
+  // Gerente e Secretaria não podem acessar processos
+  const canAccessProcessos = isAdmin || isAdvogado || isSecretaria;
   
   // Legacy cargo field for compatibility
   const cargo = perfil?.cargo || (roles[0] as string) || 'Secretaria';
@@ -131,10 +136,12 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
       cargo,
       roles,
       isAdmin,
+      isGerente,
       isAdvogado,
       isSecretaria,
       canDelete,
       canAccessSettings,
+      canAccessProcessos,
       needsOnboarding,
       fullName,
       updatePerfil,
@@ -155,10 +162,12 @@ export function usePerfil(): PerfilContextValue {
       cargo: 'Secretaria',
       roles: [],
       isAdmin: false,
+      isGerente: false,
       isAdvogado: false,
       isSecretaria: false,
       canDelete: false,
       canAccessSettings: false,
+      canAccessProcessos: false,
       needsOnboarding: false,
       fullName: null,
       updatePerfil: async () => ({ error: new Error('PerfilProvider not mounted') }),

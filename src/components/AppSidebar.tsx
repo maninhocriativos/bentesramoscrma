@@ -1,5 +1,5 @@
 import { LayoutDashboard, Users, Scale, Settings } from 'lucide-react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   Sidebar,
   SidebarContent,
@@ -15,39 +15,51 @@ import {
 import { usePerfil } from '@/hooks/usePerfil';
 import logo from '@/assets/logo-bentes-ramos.png';
 
-const menuItems = [
+type MenuItemVisibility = 'all' | 'admin-only' | 'processos-only';
+
+interface MenuItem {
+  title: string;
+  url: string;
+  icon: typeof LayoutDashboard;
+  visibility: MenuItemVisibility;
+}
+
+const menuItems: MenuItem[] = [
   { 
     title: 'Dashboard', 
     url: '/dashboard', 
     icon: LayoutDashboard,
-    requiredRole: null // Everyone can access
+    visibility: 'all'
   },
   { 
     title: 'CRM de Leads', 
     url: '/leads', 
     icon: Users,
-    requiredRole: null // Everyone can access
+    visibility: 'all'
   },
   { 
     title: 'Processos', 
     url: '/processos', 
     icon: Scale,
-    requiredRole: null // Everyone can access
+    visibility: 'processos-only' // Admin, Advogado, Secretaria (NOT Gerente)
   },
   { 
     title: 'Configurações', 
     url: '/configuracoes', 
     icon: Settings,
-    requiredRole: 'Administrador' as const // Admin only
+    visibility: 'admin-only'
   },
 ];
 
 export function AppSidebar() {
   const location = useLocation();
-  const { canAccessSettings, cargo } = usePerfil();
+  const { canAccessSettings, canAccessProcessos, cargo } = usePerfil();
 
   const filteredItems = menuItems.filter(item => {
-    if (item.requiredRole === 'Administrador' && !canAccessSettings) {
+    if (item.visibility === 'admin-only' && !canAccessSettings) {
+      return false;
+    }
+    if (item.visibility === 'processos-only' && !canAccessProcessos) {
       return false;
     }
     return true;
@@ -81,15 +93,18 @@ export function AppSidebar() {
                       className={`
                         rounded-xl transition-all duration-200
                         ${isActive 
-                          ? 'bg-sidebar-primary text-sidebar-primary-foreground' 
+                          ? 'bg-sidebar-primary text-sidebar-primary-foreground font-semibold shadow-md' 
                           : 'hover:bg-sidebar-accent text-sidebar-foreground'
                         }
                       `}
                     >
-                      <NavLink to={item.url} className="flex items-center gap-3 px-3 py-2.5">
-                        <item.icon className="h-5 w-5" />
+                      <Link to={item.url} className="flex items-center gap-3 px-3 py-2.5">
+                        <item.icon className={`h-5 w-5 ${isActive ? 'text-sidebar-primary-foreground' : ''}`} />
                         <span className="font-medium">{item.title}</span>
-                      </NavLink>
+                        {isActive && (
+                          <span className="ml-auto w-1 h-6 bg-sidebar-primary-foreground rounded-full" />
+                        )}
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );

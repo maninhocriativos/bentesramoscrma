@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { ProcessosTable } from '@/components/processos/ProcessosTable';
@@ -12,14 +13,38 @@ import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
 
 export default function ProcessosPage() {
+  const navigate = useNavigate();
   const { processos, loading } = useProcessos();
   const { leads } = useLeads();
-  const { canDelete } = usePerfil();
+  const { canDelete, canAccessProcessos, loading: perfilLoading } = usePerfil();
   
   const [selectedProcesso, setSelectedProcesso] = useState<Processo | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isNew, setIsNew] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Redirect Gerente (who can't access processos) to dashboard
+  useEffect(() => {
+    if (!perfilLoading && !canAccessProcessos) {
+      navigate('/dashboard');
+    }
+  }, [perfilLoading, canAccessProcessos, navigate]);
+
+  // Show loading while checking permissions
+  if (perfilLoading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-screen">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  // Don't render if user can't access
+  if (!canAccessProcessos) {
+    return null;
+  }
 
   const handleProcessoClick = (processo: Processo) => {
     setSelectedProcesso(processo);
