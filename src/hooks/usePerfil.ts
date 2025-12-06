@@ -63,8 +63,16 @@ export function usePerfil() {
       userRoles = rolesResult.data.map(r => r.role as AppRole);
     } else if (perfilData?.cargo) {
       // Fallback: use cargo from perfis table if user_roles is empty
-      userRoles = [perfilData.cargo as AppRole];
+      const validRoles: AppRole[] = ['Administrador', 'Advogado', 'Secretaria'];
+      const cargoAsRole = perfilData.cargo as AppRole;
+      if (validRoles.includes(cargoAsRole)) {
+        userRoles = [cargoAsRole];
+      }
     }
+    
+    console.log('usePerfil: perfilData =', perfilData);
+    console.log('usePerfil: userRoles =', userRoles);
+    console.log('usePerfil: isAdmin =', userRoles.includes('Administrador'));
     
     setRoles(userRoles);
     setLoading(false);
