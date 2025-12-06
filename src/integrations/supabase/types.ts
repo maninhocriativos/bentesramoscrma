@@ -56,18 +56,24 @@ export type Database = {
           email: string | null
           id: string
           nome: string | null
+          sobrenome: string | null
+          telefone: string | null
         }
         Insert: {
           cargo?: string | null
           email?: string | null
           id: string
           nome?: string | null
+          sobrenome?: string | null
+          telefone?: string | null
         }
         Update: {
           cargo?: string | null
           email?: string | null
           id?: string
           nome?: string | null
+          sobrenome?: string | null
+          telefone?: string | null
         }
         Relationships: []
       }
