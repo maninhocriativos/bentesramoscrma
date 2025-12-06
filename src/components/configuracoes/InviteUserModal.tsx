@@ -29,7 +29,7 @@ type AppRole = Database['public']['Enums']['app_role'];
 
 const inviteSchema = z.object({
   email: z.string().trim().email('Email inválido').max(255),
-  role: z.enum(['Advogado', 'Secretaria'] as const),
+  role: z.enum(['Gerente', 'Advogado', 'Secretaria'] as const),
 });
 
 interface InviteUserModalProps {
@@ -43,7 +43,7 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
   const { toast } = useToast();
   
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'Advogado' | 'Secretaria'>('Advogado');
+  const [role, setRole] = useState<'Gerente' | 'Advogado' | 'Secretaria'>('Advogado');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
@@ -218,11 +218,12 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
 
             <div className="space-y-2">
               <Label htmlFor="invite-role">Cargo *</Label>
-              <Select value={role} onValueChange={(value) => setRole(value as 'Advogado' | 'Secretaria')}>
+              <Select value={role} onValueChange={(value) => setRole(value as 'Gerente' | 'Advogado' | 'Secretaria')}>
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Selecione o cargo" />
                 </SelectTrigger>
                 <SelectContent className="bg-popover">
+                  <SelectItem value="Gerente">Gerente</SelectItem>
                   <SelectItem value="Advogado">Advogado</SelectItem>
                   <SelectItem value="Secretaria">Secretaria</SelectItem>
                 </SelectContent>
