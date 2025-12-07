@@ -93,16 +93,13 @@ export default function DashboardPage() {
             
             <DashboardKPIs leads={filteredLeads} processos={processos} />
             
-            <div className="grid gap-4 lg:grid-cols-3">
-              <div className="lg:col-span-2">
-                <DashboardCharts leads={filteredLeads} />
-              </div>
-              <div className="lg:col-span-1">
-                <AlertasWidget 
-                  alertas={alertas} 
-                  onAlertClick={handleAlertClick}
-                />
-              </div>
+            <DashboardCharts leads={filteredLeads} />
+            
+            <div className="mt-4">
+              <AlertasWidget 
+                alertas={alertas} 
+                onAlertClick={handleAlertClick}
+              />
             </div>
           </>
         )}

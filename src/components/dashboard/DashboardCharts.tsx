@@ -77,106 +77,108 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
   };
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
       {/* Origem Donut Chart */}
-      <Card className="rounded-xl shadow-soft border border-border/50 overflow-hidden">
+      <Card className="rounded-xl shadow-soft border border-border/50 overflow-hidden min-h-[400px] bg-card">
         <CardHeader className="bg-primary text-primary-foreground py-3 px-4">
           <CardTitle className="text-sm font-semibold">Origem dos Leads</CardTitle>
         </CardHeader>
-        <CardContent className="p-4">
+        <CardContent className="p-6 h-[340px]">
           {origemData.length > 0 ? (
-            <div className="flex items-center gap-4">
-              <ResponsiveContainer width="50%" height={180}>
-                <PieChart>
-                  <Pie
-                    data={origemData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    paddingAngle={2}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {origemData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<CustomTooltip />} />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="flex flex-col h-full">
+              <div className="flex-1 min-h-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={origemData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={2}
+                      dataKey="value"
+                      stroke="none"
+                    >
+                      {origemData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip />} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
               
-              {/* Legend - Compact */}
-              <div className="flex-1 space-y-2">
+              {/* Legend - Below chart */}
+              <div className="flex flex-wrap justify-center gap-4 pt-4 border-t border-border/30 mt-4">
                 {origemData.map((entry) => (
                   <div key={entry.name} className="flex items-center gap-2">
                     <div 
                       className="w-3 h-3 rounded-full shrink-0" 
                       style={{ backgroundColor: entry.color }}
                     />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{entry.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {entry.value} ({((entry.value / totalLeads) * 100).toFixed(0)}%)
-                      </p>
-                    </div>
+                    <span className="text-sm font-medium text-foreground">{entry.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      ({entry.value})
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
-            <div className="h-[180px] flex items-center justify-center text-muted-foreground text-sm">
+            <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
               Nenhum dado disponível
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Funnel - Compact */}
-      <Card className="rounded-xl shadow-soft border border-border/50 overflow-hidden">
+      {/* Funnel - Better spacing */}
+      <Card className="rounded-xl shadow-soft border border-border/50 overflow-hidden min-h-[400px] bg-card">
         <CardHeader className="bg-primary text-primary-foreground py-3 px-4">
           <CardTitle className="text-sm font-semibold">Funil de Vendas</CardTitle>
         </CardHeader>
-        <CardContent className="p-4">
+        <CardContent className="p-6 h-[340px] flex flex-col">
           {leads.length > 0 ? (
-            <div className="space-y-2">
-              {funnelData.map((stage, index) => {
-                const maxCount = Math.max(...funnelData.map(s => s.count), 1);
-                const widthPercent = Math.max((stage.count / maxCount) * 100, 20);
-                const conversionRate = getConversionRate(index);
-                
-                return (
-                  <div key={stage.status} className="relative">
-                    {index > 0 && (
-                      <div className="absolute -top-1.5 left-1/2 transform -translate-x-1/2 flex items-center gap-0.5 text-[10px] text-muted-foreground bg-background px-1.5 py-0.5 rounded-full z-10">
-                        <ArrowRight className="h-2.5 w-2.5 rotate-90" />
-                        <span>{conversionRate}%</span>
-                      </div>
-                    )}
-                    
-                    <div 
-                      className="relative mx-auto rounded-md overflow-hidden transition-all duration-300 hover:scale-[1.01]"
-                      style={{ 
-                        width: `${widthPercent}%`,
-                        backgroundColor: stage.color,
-                      }}
-                    >
-                      <div className="py-2 px-3 flex items-center justify-between">
-                        <span className="text-white text-xs font-medium truncate">
-                          {stage.label}
-                        </span>
-                        <span className="text-white text-sm font-bold">
-                          {stage.count}
-                        </span>
+            <div className="flex-1 flex flex-col justify-between">
+              <div className="space-y-4">
+                {funnelData.map((stage, index) => {
+                  const maxCount = Math.max(...funnelData.map(s => s.count), 1);
+                  const widthPercent = Math.max((stage.count / maxCount) * 100, 25);
+                  const conversionRate = getConversionRate(index);
+                  
+                  return (
+                    <div key={stage.status} className="relative">
+                      {index > 0 && (
+                        <div className="absolute -top-2.5 left-1/2 transform -translate-x-1/2 flex items-center gap-0.5 text-xs text-muted-foreground bg-card px-2 py-0.5 rounded-full z-10 border border-border/30">
+                          <ArrowRight className="h-3 w-3 rotate-90" />
+                          <span>{conversionRate}%</span>
+                        </div>
+                      )}
+                      
+                      <div 
+                        className="relative mx-auto rounded-lg overflow-hidden transition-all duration-300 hover:scale-[1.02] shadow-sm"
+                        style={{ 
+                          width: `${widthPercent}%`,
+                          backgroundColor: stage.color,
+                        }}
+                      >
+                        <div className="py-3 px-4 flex items-center justify-between">
+                          <span className="text-white text-sm font-medium truncate">
+                            {stage.label}
+                          </span>
+                          <span className="text-white text-base font-bold">
+                            {stage.count}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
               
-              <div className="mt-3 pt-3 border-t border-border flex items-center justify-between text-sm">
-                <span className="text-muted-foreground text-xs">Conversão Final:</span>
-                <span className="font-bold text-foreground">
+              <div className="pt-4 border-t border-border/30 flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Conversão Final:</span>
+                <span className="font-bold text-lg text-foreground">
                   {totalLeads > 0 
                     ? `${Math.round((funnelData[funnelData.length - 1].count / totalLeads) * 100)}%`
                     : '0%'
@@ -185,7 +187,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
               </div>
             </div>
           ) : (
-            <div className="h-[180px] flex items-center justify-center text-muted-foreground text-sm">
+            <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
               Nenhum dado disponível
             </div>
           )}
