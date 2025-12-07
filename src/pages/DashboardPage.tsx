@@ -1,16 +1,73 @@
+import { useState, useMemo } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
+import { DashboardFiltersBar, DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { useLeads } from '@/hooks/useLeads';
 import { useProcessos } from '@/hooks/useProcessos';
 import { Loader2 } from 'lucide-react';
+import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, isAfter } from 'date-fns';
 
 export default function DashboardPage() {
   const { leads, loading: leadsLoading } = useLeads();
   const { processos, loading: processosLoading } = useProcessos();
+  
+  const [filters, setFilters] = useState<DashboardFilters>({
+    period: 'all',
+    origem: 'all',
+    status: 'all',
+  });
 
   const isLoading = leadsLoading || processosLoading;
+
+  // Apply filters to leads
+  const filteredLeads = useMemo(() => {
+    return leads.filter(lead => {
+      // Period filter
+      if (filters.period !== 'all') {
+        const leadDate = new Date(lead.created_at);
+        const now = new Date();
+        let startDate: Date;
+        
+        switch (filters.period) {
+          case 'today':
+            startDate = startOfDay(now);
+            break;
+          case 'week':
+            startDate = startOfWeek(now, { weekStartsOn: 1 });
+            break;
+          case 'month':
+            startDate = startOfMonth(now);
+            break;
+          case 'quarter':
+            startDate = startOfQuarter(now);
+            break;
+          case 'year':
+            startDate = startOfYear(now);
+            break;
+          default:
+            startDate = new Date(0);
+        }
+        
+        if (!isAfter(leadDate, startDate)) {
+          return false;
+        }
+      }
+      
+      // Origem filter
+      if (filters.origem !== 'all' && lead.origem !== filters.origem) {
+        return false;
+      }
+      
+      // Status filter
+      if (filters.status !== 'all' && lead.status !== filters.status) {
+        return false;
+      }
+      
+      return true;
+    });
+  }, [leads, filters]);
 
   return (
     <AppLayout>
@@ -23,8 +80,9 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-            <DashboardKPIs leads={leads} processos={processos} />
-            <DashboardCharts leads={leads} />
+            <DashboardFiltersBar filters={filters} onFiltersChange={setFilters} />
+            <DashboardKPIs leads={filteredLeads} processos={processos} />
+            <DashboardCharts leads={filteredLeads} />
           </>
         )}
       </div>

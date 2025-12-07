@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Lead, LeadStatus } from '@/types/leads';
 import { useToast } from '@/hooks/use-toast';
@@ -8,8 +8,7 @@ export function useLeads() {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const fetchLeads = async () => {
-    setLoading(true);
+  const fetchLeads = useCallback(async () => {
     const { data, error } = await supabase
       .from('leads_juridicos')
       .select('*')
@@ -25,27 +24,50 @@ export function useLeads() {
       setLeads((data as Lead[]) || []);
     }
     setLoading(false);
-  };
+  }, [toast]);
 
   useEffect(() => {
     fetchLeads();
 
-    // Real-time subscription
+    // Real-time subscription with optimized handling
     const channel = supabase
-      .channel('leads-changes')
+      .channel('leads-realtime')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'leads_juridicos' },
-        () => {
-          fetchLeads();
+        { event: 'INSERT', schema: 'public', table: 'leads_juridicos' },
+        (payload) => {
+          console.log('Lead inserted:', payload.new);
+          setLeads(prev => [payload.new as Lead, ...prev]);
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'leads_juridicos' },
+        (payload) => {
+          console.log('Lead updated:', payload.new);
+          setLeads(prev => 
+            prev.map(lead => 
+              lead.id === (payload.new as Lead).id ? (payload.new as Lead) : lead
+            )
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'leads_juridicos' },
+        (payload) => {
+          console.log('Lead deleted:', payload.old);
+          setLeads(prev => prev.filter(lead => lead.id !== (payload.old as Lead).id));
+        }
+      )
+      .subscribe((status) => {
+        console.log('Realtime subscription status:', status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [fetchLeads]);
 
   const createLead = async (lead: Omit<Lead, 'id' | 'created_at'>) => {
     const { data, error } = await supabase
@@ -82,7 +104,6 @@ export function useLeads() {
       return { error };
     }
 
-    toast({ title: 'Lead atualizado!' });
     return { error: null };
   };
 
@@ -105,12 +126,37 @@ export function useLeads() {
     return { error: null };
   };
 
+  // Optimistic update for drag and drop
   const updateLeadStatus = async (id: string, status: LeadStatus) => {
-    return updateLead(id, { status });
+    // Optimistic update - update UI immediately
+    setLeads(prev => 
+      prev.map(lead => 
+        lead.id === id ? { ...lead, status } : lead
+      )
+    );
+
+    const { error } = await supabase
+      .from('leads_juridicos')
+      .update({ status })
+      .eq('id', id);
+
+    if (error) {
+      // Revert on error
+      fetchLeads();
+      toast({
+        title: 'Erro ao mover lead',
+        description: error.message,
+        variant: 'destructive',
+      });
+      return { error };
+    }
+
+    return { error: null };
   };
 
   return {
     leads,
+    setLeads,
     loading,
     fetchLeads,
     createLead,
