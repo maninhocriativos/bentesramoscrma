@@ -42,7 +42,7 @@ export default function LeadsPage() {
         newItemLabel="Novo Lead"
       />
       
-      <div className="flex-1 p-4 md:p-6 animate-fade-in">
+      <div className="flex-1 px-4 md:px-6 lg:px-8 py-4 animate-fade-in overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />

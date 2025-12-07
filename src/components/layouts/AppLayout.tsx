@@ -1,11 +1,11 @@
 import { ReactNode, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SidebarProvider } from '@/components/ui/sidebar';
+import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { OnboardingModal } from '@/components/onboarding/OnboardingModal';
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Menu } from 'lucide-react';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -35,15 +35,20 @@ export function AppLayout({ children }: AppLayoutProps) {
   }
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={true}>
       <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
-        <main className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
+        <main className="flex-1 flex flex-col min-h-screen overflow-hidden">
+          {/* Mobile trigger - only visible on small screens */}
+          <div className="flex items-center gap-2 p-2 border-b border-border md:hidden">
+            <SidebarTrigger className="h-9 w-9">
+              <Menu className="h-5 w-5" />
+            </SidebarTrigger>
+          </div>
           {children}
         </main>
       </div>
       
-      {/* Onboarding modal - blocks navigation until profile is complete */}
       {needsOnboarding && <OnboardingModal />}
     </SidebarProvider>
   );

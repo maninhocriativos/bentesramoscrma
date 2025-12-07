@@ -27,14 +27,12 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
   const handleDragStart = useCallback((e: React.DragEvent, lead: Lead) => {
     setDraggedLead(lead);
     e.dataTransfer.effectAllowed = 'move';
-    // Add visual feedback
     if (e.currentTarget instanceof HTMLElement) {
       e.currentTarget.style.opacity = '0.5';
     }
   }, []);
 
   const handleDragEnd = useCallback((e: React.DragEvent) => {
-    // Restore visual feedback
     if (e.currentTarget instanceof HTMLElement) {
       e.currentTarget.style.opacity = '1';
     }
@@ -60,9 +58,6 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
     setDragOverStatus(null);
     
     if (draggedLead && draggedLead.status !== status) {
-      const previousStatus = draggedLead.status;
-      
-      // Call the optimistic update function
       const result = await updateLeadStatus(draggedLead.id, status);
       
       if (!result.error) {
@@ -77,9 +72,9 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
   }, [draggedLead, updateLeadStatus, toast]);
 
   return (
-    <div className="w-full overflow-x-auto pb-4">
+    <div className="w-full kanban-scroll">
       <div 
-        className="flex gap-4 min-w-max"
+        className="flex gap-4 pb-2"
         onDragLeave={handleDragLeave}
       >
         {STATUSES.map((status) => (
