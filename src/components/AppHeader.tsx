@@ -24,7 +24,8 @@ export function AppHeader({ title, onNewItem, newItemLabel = 'Novo' }: AppHeader
 
   const cargoColors: Record<string, string> = {
     'Administrador': 'bg-primary text-primary-foreground',
-    'Advogado': 'bg-accent text-accent-foreground',
+    'Gerente': 'bg-gold text-gold-foreground',
+    'Advogado': 'bg-secondary text-secondary-foreground',
     'Secretaria': 'bg-muted text-muted-foreground',
   };
 

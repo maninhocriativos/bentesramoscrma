@@ -62,11 +62,11 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
   return (
     <div className="grid gap-6 md:grid-cols-2">
       {/* Origem Chart */}
-      <Card className="rounded-xl shadow-soft">
-        <CardHeader>
+      <Card className="rounded-xl shadow-enterprise border-0 overflow-hidden">
+        <CardHeader className="bg-primary text-primary-foreground pb-4">
           <CardTitle className="text-lg">Origem dos Leads</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {origemData.length > 0 ? (
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
@@ -87,7 +87,15 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(0, 0%, 100%)', 
+                    border: '1px solid hsl(38, 25%, 80%)',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                  }}
+                />
+                <Legend />
               </PieChart>
             </ResponsiveContainer>
           ) : (
@@ -99,11 +107,11 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
       </Card>
 
       {/* Funnel Chart */}
-      <Card className="rounded-xl shadow-soft">
-        <CardHeader>
+      <Card className="rounded-xl shadow-enterprise border-0 overflow-hidden">
+        <CardHeader className="bg-primary text-primary-foreground pb-4">
           <CardTitle className="text-lg">Funil de Vendas</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {leads.length > 0 ? (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={statusData} layout="vertical">
@@ -111,14 +119,21 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
                 <YAxis 
                   dataKey="name" 
                   type="category" 
-                  width={120}
-                  tick={{ fontSize: 12 }}
+                  width={130}
+                  tick={{ fontSize: 11, fill: 'hsl(24, 15%, 40%)' }}
                 />
-                <Tooltip />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(0, 0%, 100%)', 
+                    border: '1px solid hsl(38, 25%, 80%)',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                  }}
+                />
                 <Bar 
                   dataKey="value" 
-                  fill="hsl(24, 21%, 21%)" 
-                  radius={[0, 4, 4, 0]}
+                  fill="hsl(38, 30%, 70%)" 
+                  radius={[0, 6, 6, 0]}
                 />
               </BarChart>
             </ResponsiveContainer>

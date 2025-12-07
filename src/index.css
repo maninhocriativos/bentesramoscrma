@@ -60,6 +60,12 @@
     --gold: 38 30% 70%;
     --gold-foreground: 24 21% 21%;
     --glass: 0 0% 100%;
+    
+    /* Table */
+    --table-header: 24 21% 21%;
+    --table-header-foreground: 40 33% 95%;
+    --table-row-odd: 40 33% 97%;
+    --table-row-even: 0 0% 100%;
   }
 
   .dark {
@@ -103,6 +109,11 @@
     --gold: 38 30% 60%;
     --gold-foreground: 24 21% 12%;
     --glass: 24 21% 20%;
+    
+    --table-header: 24 21% 18%;
+    --table-header-foreground: 40 33% 91%;
+    --table-row-odd: 24 21% 14%;
+    --table-row-even: 24 21% 16%;
   }
 }
 
@@ -127,10 +138,56 @@
   }
 
   .shadow-soft {
-    box-shadow: 0 4px 20px -2px rgba(63, 54, 45, 0.08);
+    box-shadow: 0 4px 20px -2px hsla(24, 21%, 21%, 0.08);
   }
 
   .shadow-soft-lg {
-    box-shadow: 0 8px 30px -4px rgba(63, 54, 45, 0.12);
+    box-shadow: 0 8px 30px -4px hsla(24, 21%, 21%, 0.12);
+  }
+
+  .shadow-enterprise {
+    box-shadow: 
+      0 1px 3px hsla(24, 21%, 21%, 0.04),
+      0 4px 12px hsla(24, 21%, 21%, 0.06),
+      0 8px 24px hsla(24, 21%, 21%, 0.08);
+  }
+
+  /* Page transitions */
+  .page-enter {
+    @apply animate-fade-in;
+  }
+
+  /* Professional table styles */
+  .table-professional thead {
+    @apply bg-primary text-primary-foreground;
+  }
+
+  .table-professional thead th {
+    @apply font-semibold text-sm uppercase tracking-wide py-3 px-4;
+  }
+
+  .table-professional tbody tr:nth-child(odd) {
+    background-color: hsl(var(--table-row-odd));
+  }
+
+  .table-professional tbody tr:nth-child(even) {
+    background-color: hsl(var(--table-row-even));
+  }
+
+  .table-professional tbody tr {
+    @apply transition-colors duration-150;
+  }
+
+  .table-professional tbody tr:hover {
+    @apply bg-muted/50;
+  }
+
+  .table-professional tbody td {
+    @apply py-3 px-4 text-sm;
+  }
+
+  /* Enterprise card header */
+  .card-header-enterprise {
+    @apply bg-primary text-primary-foreground rounded-t-xl -mx-6 -mt-6 px-6 py-4 mb-4;
   }
 }
