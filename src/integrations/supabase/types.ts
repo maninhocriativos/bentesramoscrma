@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      compromissos: {
+        Row: {
+          created_at: string
+          data_fim: string | null
+          data_inicio: string
+          descricao: string | null
+          id: string
+          lead_id: string | null
+          processo_id: string | null
+          responsavel_id: string | null
+          tipo: string
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data_fim?: string | null
+          data_inicio: string
+          descricao?: string | null
+          id?: string
+          lead_id?: string | null
+          processo_id?: string | null
+          responsavel_id?: string | null
+          tipo?: string
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data_fim?: string | null
+          data_inicio?: string
+          descricao?: string | null
+          id?: string
+          lead_id?: string | null
+          processo_id?: string | null
+          responsavel_id?: string | null
+          tipo?: string
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compromissos_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compromissos_processo_id_fkey"
+            columns: ["processo_id"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads_juridicos: {
         Row: {
           created_at: string
@@ -25,6 +82,7 @@ export type Database = {
           resumo_ia: string | null
           status: string | null
           telefone: string | null
+          updated_at: string | null
         }
         Insert: {
           created_at?: string
@@ -36,6 +94,7 @@ export type Database = {
           resumo_ia?: string | null
           status?: string | null
           telefone?: string | null
+          updated_at?: string | null
         }
         Update: {
           created_at?: string
@@ -47,6 +106,7 @@ export type Database = {
           resumo_ia?: string | null
           status?: string | null
           telefone?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }

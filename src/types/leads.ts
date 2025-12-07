@@ -17,5 +17,6 @@ export interface Lead {
   resumo_ia: string | null;
   link_contrato: string | null;
   created_at: string;
+  updated_at?: string | null;
   origem: LeadOrigem | null;
 }

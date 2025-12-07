@@ -1,8 +1,8 @@
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Lead } from '@/types/leads';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { getLeadIndicator } from '@/hooks/useAlertas';
 
 interface LeadCardProps {
   lead: Lead;
@@ -18,8 +18,15 @@ const ORIGEM_STYLES: Record<string, { bg: string; text: string; border: string }
   Outro: { bg: 'bg-muted', text: 'text-muted-foreground', border: 'border-border' },
 };
 
+const INDICATOR_STYLES = {
+  red: { bg: 'bg-red-500', title: 'Sem interação há 7+ dias' },
+  yellow: { bg: 'bg-amber-400', title: 'Lead novo (< 24h)' },
+  green: { bg: 'bg-emerald-500', title: 'Movimentado hoje' },
+};
+
 export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
   const origemStyle = ORIGEM_STYLES[lead.origem || 'Outro'] || ORIGEM_STYLES.Outro;
+  const indicator = getLeadIndicator(lead);
   const resumoTruncado = lead.resumo_ia 
     ? lead.resumo_ia.length > 80 
       ? lead.resumo_ia.substring(0, 80) + '...' 
@@ -30,18 +37,29 @@ export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
     <div
       onClick={onClick}
       className={cn(
-        "bg-card p-4 rounded-lg shadow-soft cursor-pointer transition-all duration-200",
+        "bg-card p-4 rounded-lg shadow-soft cursor-pointer transition-all duration-200 relative",
         "hover:shadow-enterprise hover:-translate-y-0.5",
         "border border-border/50 hover:border-gold/40",
         isDragging && "opacity-50 rotate-2 scale-105 shadow-enterprise"
       )}
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <h4 className="font-semibold text-sm line-clamp-1 text-foreground">{lead.nome}</h4>
+      {/* Status Indicator */}
+      {indicator && (
+        <div 
+          className={cn(
+            "absolute top-2 right-2 w-3 h-3 rounded-full animate-pulse",
+            INDICATOR_STYLES[indicator].bg
+          )}
+          title={INDICATOR_STYLES[indicator].title}
+        />
+      )}
+
+      <div className="flex items-start gap-2 mb-2 pr-4">
+        <h4 className="font-semibold text-sm line-clamp-1 text-foreground flex-1">{lead.nome}</h4>
         {lead.origem && (
           <span 
             className={cn(
-              "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border",
+              "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border shrink-0",
               origemStyle.bg, origemStyle.text, origemStyle.border
             )}
           >

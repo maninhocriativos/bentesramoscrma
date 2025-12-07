@@ -4,14 +4,19 @@ import { AppHeader } from '@/components/AppHeader';
 import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
 import { DashboardFiltersBar, DashboardFilters } from '@/components/dashboard/DashboardFilters';
+import { AlertasWidget } from '@/components/AlertasWidget';
 import { useLeads } from '@/hooks/useLeads';
 import { useProcessos } from '@/hooks/useProcessos';
+import { useAlertas } from '@/hooks/useAlertas';
 import { Loader2 } from 'lucide-react';
 import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, isAfter } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 
 export default function DashboardPage() {
   const { leads, loading: leadsLoading } = useLeads();
   const { processos, loading: processosLoading } = useProcessos();
+  const { alertas } = useAlertas(leads, processos);
+  const navigate = useNavigate();
   
   const [filters, setFilters] = useState<DashboardFilters>({
     period: 'all',
@@ -69,6 +74,14 @@ export default function DashboardPage() {
     });
   }, [leads, filters]);
 
+  const handleAlertClick = (alerta: any) => {
+    if (alerta.leadId) {
+      navigate('/leads');
+    } else if (alerta.processoId) {
+      navigate('/processos');
+    }
+  };
+
   return (
     <AppLayout>
       <AppHeader title="Dashboard" />
@@ -82,7 +95,18 @@ export default function DashboardPage() {
           <>
             <DashboardFiltersBar filters={filters} onFiltersChange={setFilters} />
             <DashboardKPIs leads={filteredLeads} processos={processos} />
-            <DashboardCharts leads={filteredLeads} />
+            
+            <div className="grid gap-6 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                <DashboardCharts leads={filteredLeads} />
+              </div>
+              <div className="lg:col-span-1">
+                <AlertasWidget 
+                  alertas={alertas} 
+                  onAlertClick={handleAlertClick}
+                />
+              </div>
+            </div>
           </>
         )}
       </div>
