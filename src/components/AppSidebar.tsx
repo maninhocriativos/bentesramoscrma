@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Scale, Settings } from 'lucide-react';
+import { LayoutDashboard, Users, Scale, Settings, CalendarDays } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Sidebar,
@@ -41,7 +41,13 @@ const menuItems: MenuItem[] = [
     title: 'Processos', 
     url: '/processos', 
     icon: Scale,
-    visibility: 'processos-only' // Admin, Advogado, Secretaria (NOT Gerente)
+    visibility: 'processos-only'
+  },
+  { 
+    title: 'Agenda', 
+    url: '/agenda', 
+    icon: CalendarDays,
+    visibility: 'all'
   },
   { 
     title: 'Configurações', 
