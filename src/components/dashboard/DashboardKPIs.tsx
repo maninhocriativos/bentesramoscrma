@@ -1,4 +1,4 @@
-import { Users, Scale, TrendingUp, TrendingDown, Briefcase, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Users, Scale, TrendingUp, Briefcase, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Lead } from '@/types/leads';
 import { Processo } from '@/types/processos';
@@ -15,7 +15,6 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
   const leadsPerdidos = leads.filter(l => l.status === 'Perdido').length;
   const processosAtivos = processos.filter(p => p.status === 'Em Andamento').length;
   
-  // Calculate conversion rate
   const leadsFinalizados = leadsGanhos + leadsPerdidos;
   const taxaConversao = leadsFinalizados > 0 ? Math.round((leadsGanhos / leadsFinalizados) * 100) : 0;
 
@@ -55,38 +54,37 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
   ];
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
       {kpis.map((kpi, index) => (
         <Card 
           key={kpi.title} 
-          className="rounded-xl shadow-enterprise border-0 overflow-hidden hover:shadow-soft-lg transition-all duration-300 hover:-translate-y-1 bg-card"
-          style={{ animationDelay: `${index * 100}ms` }}
+          className="rounded-xl shadow-soft border border-border/50 overflow-hidden hover:shadow-enterprise transition-all duration-200 hover:-translate-y-0.5 bg-card"
+          style={{ animationDelay: `${index * 50}ms` }}
         >
-          <CardContent className="p-5">
-            <div className="flex items-start gap-4">
-              {/* Icon */}
-              <div className="w-14 h-14 rounded-xl bg-gold/20 flex items-center justify-center shrink-0">
-                <kpi.icon className="h-7 w-7 text-gold" />
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              {/* Icon - Compact */}
+              <div className="w-10 h-10 rounded-lg bg-gold/15 flex items-center justify-center shrink-0">
+                <kpi.icon className="h-5 w-5 text-gold" />
               </div>
               
               {/* Content */}
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-0.5 truncate">
                   {kpi.title}
                 </p>
-                <div className="flex items-baseline gap-2">
-                  <p className="text-3xl font-bold text-foreground">{kpi.value}</p>
-                  {/* Trend indicator */}
-                  <div className={`flex items-center text-xs font-medium ${kpi.trendUp ? 'text-emerald-600' : 'text-red-500'}`}>
+                <div className="flex items-baseline gap-1.5">
+                  <p className="text-2xl font-bold text-foreground">{kpi.value}</p>
+                  <div className={`flex items-center text-xs font-medium ${kpi.trendUp ? 'text-success' : 'text-destructive'}`}>
                     {kpi.trendUp ? (
-                      <ArrowUpRight className="h-3.5 w-3.5" />
+                      <ArrowUpRight className="h-3 w-3" />
                     ) : (
-                      <ArrowDownRight className="h-3.5 w-3.5" />
+                      <ArrowDownRight className="h-3 w-3" />
                     )}
                     <span>{kpi.trend}</span>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">{kpi.description}</p>
+                <p className="text-xs text-muted-foreground">{kpi.description}</p>
               </div>
             </div>
           </CardContent>

@@ -26,10 +26,8 @@ export default function DashboardPage() {
 
   const isLoading = leadsLoading || processosLoading;
 
-  // Apply filters to leads
   const filteredLeads = useMemo(() => {
     return leads.filter(lead => {
-      // Period filter
       if (filters.period !== 'all') {
         const leadDate = new Date(lead.created_at);
         const now = new Date();
@@ -60,12 +58,10 @@ export default function DashboardPage() {
         }
       }
       
-      // Origem filter
       if (filters.origem !== 'all' && lead.origem !== filters.origem) {
         return false;
       }
       
-      // Status filter
       if (filters.status !== 'all' && lead.status !== filters.status) {
         return false;
       }
@@ -86,7 +82,7 @@ export default function DashboardPage() {
     <AppLayout>
       <AppHeader title="Dashboard" />
       
-      <div className="flex-1 p-4 md:p-6 space-y-6 animate-fade-in">
+      <div className="flex-1 px-4 md:px-6 lg:px-8 py-4 space-y-4 animate-fade-in overflow-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -94,9 +90,10 @@ export default function DashboardPage() {
         ) : (
           <>
             <DashboardFiltersBar filters={filters} onFiltersChange={setFilters} />
+            
             <DashboardKPIs leads={filteredLeads} processos={processos} />
             
-            <div className="grid gap-6 lg:grid-cols-3">
+            <div className="grid gap-4 lg:grid-cols-3">
               <div className="lg:col-span-2">
                 <DashboardCharts leads={filteredLeads} />
               </div>
