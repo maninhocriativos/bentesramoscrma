@@ -7,6 +7,7 @@ interface KanbanColumnProps {
   leads: Lead[];
   onLeadClick: (lead: Lead) => void;
   onDragStart: (e: React.DragEvent, lead: Lead) => void;
+  onDragEnd: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent, status: LeadStatus) => void;
   isDragOver?: boolean;
@@ -26,6 +27,7 @@ export function KanbanColumn({
   leads,
   onLeadClick,
   onDragStart,
+  onDragEnd,
   onDragOver,
   onDrop,
   isDragOver,
@@ -60,8 +62,9 @@ export function KanbanColumn({
             key={lead.id}
             draggable
             onDragStart={(e) => onDragStart(e, lead)}
+            onDragEnd={onDragEnd}
             style={{ animationDelay: `${index * 50}ms` }}
-            className="animate-fade-in"
+            className="animate-fade-in cursor-grab active:cursor-grabbing"
           >
             <LeadCard lead={lead} onClick={() => onLeadClick(lead)} />
           </div>
