@@ -41,16 +41,18 @@ export function UsersTable() {
     setDeletingUser(null);
   };
 
-  const getRoleBadgeVariant = (role: string | null) => {
+  const getRoleBadgeStyles = (role: string | null) => {
     switch (role) {
       case 'Administrador':
-        return 'default';
+        return 'bg-primary text-primary-foreground border-primary';
+      case 'Gerente':
+        return 'bg-gold text-gold-foreground border-gold';
       case 'Advogado':
-        return 'secondary';
+        return 'bg-secondary text-secondary-foreground border-secondary';
       case 'Secretaria':
-        return 'outline';
+        return 'bg-muted text-muted-foreground border-muted';
       default:
-        return 'outline';
+        return 'bg-muted text-muted-foreground border-muted';
     }
   };
 
@@ -65,33 +67,36 @@ export function UsersTable() {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Button onClick={() => setShowInviteModal(true)} className="rounded-xl">
-          <UserPlus className="h-4 w-4 mr-2" />
+        <Button onClick={() => setShowInviteModal(true)} className="rounded-xl shadow-soft gap-2">
+          <UserPlus className="h-4 w-4" />
           Convidar Membro
         </Button>
       </div>
       
-      <div className="rounded-xl border overflow-x-auto">
-        <Table>
+      <div className="rounded-xl border-0 overflow-hidden shadow-soft">
+        <Table className="table-professional">
           <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead className="hidden md:table-cell">Telefone</TableHead>
-              <TableHead>Cargo</TableHead>
-              <TableHead className="w-[100px]">Ações</TableHead>
+            <TableRow className="bg-primary hover:bg-primary border-0">
+              <TableHead className="text-primary-foreground font-semibold">Nome</TableHead>
+              <TableHead className="text-primary-foreground font-semibold">Email</TableHead>
+              <TableHead className="hidden md:table-cell text-primary-foreground font-semibold">Telefone</TableHead>
+              <TableHead className="text-primary-foreground font-semibold">Cargo</TableHead>
+              <TableHead className="w-[100px] text-primary-foreground font-semibold">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={5} className="text-center text-muted-foreground py-12">
                   Nenhum usuário encontrado
                 </TableCell>
               </TableRow>
             ) : (
-              users.map((user) => (
-                <TableRow key={user.id}>
+              users.map((user, index) => (
+                <TableRow 
+                  key={user.id}
+                  className={index % 2 === 0 ? 'bg-card' : 'bg-muted/30'}
+                >
                   <TableCell className="font-medium">
                     {user.nome 
                       ? `${user.nome}${user.sobrenome ? ' ' + user.sobrenome : ''}`
@@ -103,9 +108,9 @@ export function UsersTable() {
                     {user.telefone || '—'}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={getRoleBadgeVariant(user.role)}>
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${getRoleBadgeStyles(user.role)}`}>
                       {user.role || user.cargo || 'Sem cargo'}
-                    </Badge>
+                    </span>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
@@ -113,7 +118,7 @@ export function UsersTable() {
                         variant="ghost"
                         size="icon"
                         onClick={() => setEditingUser(user)}
-                        className="h-8 w-8"
+                        className="h-8 w-8 hover:bg-primary/10"
                       >
                         <Edit2 className="h-4 w-4" />
                       </Button>
@@ -121,7 +126,7 @@ export function UsersTable() {
                         variant="ghost"
                         size="icon"
                         onClick={() => setDeletingUser(user)}
-                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                         disabled={user.id === currentUser?.id}
                         title={user.id === currentUser?.id ? 'Você não pode remover seu próprio acesso' : undefined}
                       >
@@ -135,7 +140,6 @@ export function UsersTable() {
           </TableBody>
         </Table>
       </div>
-
       <InviteUserModal
         open={showInviteModal}
         onOpenChange={setShowInviteModal}

@@ -81,7 +81,7 @@ export default function ProcessosPage() {
         newItemLabel="Novo Processo"
       />
       
-      <div className="flex-1 p-4 md:p-6 space-y-4">
+      <div className="flex-1 p-4 md:p-6 space-y-4 animate-fade-in">
         {/* Search */}
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -89,7 +89,7 @@ export default function ProcessosPage() {
             placeholder="Buscar por número, título ou advogado..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 rounded-xl"
+            className="pl-10 rounded-xl shadow-soft border-0"
           />
         </div>
 

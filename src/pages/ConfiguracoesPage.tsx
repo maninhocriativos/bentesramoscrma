@@ -7,7 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePerfil } from '@/hooks/usePerfil';
 import { UsersTable } from '@/components/configuracoes/UsersTable';
 import { SystemStatusTab } from '@/components/configuracoes/SystemStatusTab';
-import { Users, Server, Shield } from 'lucide-react';
+import { IntegracoesTab } from '@/components/configuracoes/IntegracoesTab';
+import { Users, Server, Shield, Plug } from 'lucide-react';
 
 export default function ConfiguracoesPage() {
   const navigate = useNavigate();
@@ -17,14 +18,12 @@ export default function ConfiguracoesPage() {
 
   useEffect(() => {
     console.log('ConfiguracoesPage useEffect - loading:', loading, 'canAccessSettings:', canAccessSettings);
-    // Only redirect after loading is complete AND user doesn't have access
     if (!loading && !canAccessSettings) {
       console.log('ConfiguracoesPage: REDIRECTING to dashboard');
       navigate('/dashboard');
     }
   }, [canAccessSettings, loading, navigate]);
 
-  // Show loading while checking permissions
   if (loading) {
     console.log('ConfiguracoesPage: Showing loading state');
     return (
@@ -36,7 +35,6 @@ export default function ConfiguracoesPage() {
     );
   }
 
-  // Only return null and redirect if NOT admin (after loading completes)
   if (!canAccessSettings) {
     console.log('ConfiguracoesPage: No access, returning null');
     return null;
@@ -48,66 +46,107 @@ export default function ConfiguracoesPage() {
     <AppLayout>
       <AppHeader title="Configurações" />
       
-      <div className="flex-1 p-4 md:p-6">
+      <div className="flex-1 p-4 md:p-6 animate-fade-in">
         <Tabs defaultValue="usuarios" className="space-y-6">
-          <TabsList className="rounded-xl">
-            <TabsTrigger value="usuarios" className="rounded-lg gap-2">
+          <TabsList className="rounded-xl bg-card shadow-soft p-1 h-auto flex-wrap">
+            <TabsTrigger 
+              value="usuarios" 
+              className="rounded-lg gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground py-2.5 px-4"
+            >
               <Users className="h-4 w-4" />
-              Usuários
+              <span className="hidden sm:inline">Usuários</span>
             </TabsTrigger>
-            <TabsTrigger value="sistema" className="rounded-lg gap-2">
+            <TabsTrigger 
+              value="integracoes" 
+              className="rounded-lg gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground py-2.5 px-4"
+            >
+              <Plug className="h-4 w-4" />
+              <span className="hidden sm:inline">Integrações & API</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="sistema" 
+              className="rounded-lg gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground py-2.5 px-4"
+            >
               <Server className="h-4 w-4" />
-              Sistema
+              <span className="hidden sm:inline">Sistema</span>
             </TabsTrigger>
-            <TabsTrigger value="permissoes" className="rounded-lg gap-2">
+            <TabsTrigger 
+              value="permissoes" 
+              className="rounded-lg gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground py-2.5 px-4"
+            >
               <Shield className="h-4 w-4" />
-              Permissões
+              <span className="hidden sm:inline">Permissões</span>
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="usuarios" className="space-y-4">
-            <Card className="rounded-xl shadow-soft">
-              <CardHeader>
-                <CardTitle>Gerenciar Usuários</CardTitle>
-                <CardDescription>
+          <TabsContent value="usuarios" className="space-y-4 animate-fade-in">
+            <Card className="rounded-xl shadow-enterprise border-0 overflow-hidden">
+              <CardHeader className="bg-primary text-primary-foreground">
+                <CardTitle className="text-lg">Gerenciar Usuários</CardTitle>
+                <CardDescription className="text-primary-foreground/70">
                   Visualize e edite os usuários cadastrados no sistema
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-6">
                 <UsersTable />
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="sistema">
+          <TabsContent value="integracoes" className="animate-fade-in">
+            <IntegracoesTab />
+          </TabsContent>
+
+          <TabsContent value="sistema" className="animate-fade-in">
             <SystemStatusTab />
           </TabsContent>
 
-          <TabsContent value="permissoes" className="space-y-4">
-            <Card className="rounded-xl shadow-soft">
-              <CardHeader>
-                <CardTitle>Hierarquia de Cargos</CardTitle>
-                <CardDescription>Permissões de cada cargo no sistema</CardDescription>
+          <TabsContent value="permissoes" className="space-y-4 animate-fade-in">
+            <Card className="rounded-xl shadow-enterprise border-0 overflow-hidden">
+              <CardHeader className="bg-primary text-primary-foreground">
+                <CardTitle className="text-lg">Hierarquia de Cargos</CardTitle>
+                <CardDescription className="text-primary-foreground/70">
+                  Permissões de cada cargo no sistema
+                </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
-                    <h4 className="font-semibold text-primary">Administrador</h4>
-                    <p className="text-sm text-muted-foreground mt-1">
+              <CardContent className="p-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="p-5 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-soft">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-3 h-3 rounded-full bg-primary"></div>
+                      <h4 className="font-semibold text-primary">Administrador</h4>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
                       Acesso total: pode ver tudo, cadastrar, editar e excluir leads e processos. Acesso às configurações e gerenciamento de usuários.
                     </p>
                   </div>
                   
-                  <div className="p-4 rounded-lg bg-secondary/20 border border-secondary/30">
-                    <h4 className="font-semibold text-secondary-foreground">Advogado</h4>
-                    <p className="text-sm text-muted-foreground mt-1">
+                  <div className="p-5 rounded-xl bg-gradient-to-br from-gold/15 to-gold/5 border border-gold/30 shadow-soft">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-3 h-3 rounded-full bg-gold"></div>
+                      <h4 className="font-semibold text-foreground">Gerente</h4>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Acesso gerencial: visualiza todos os leads e dashboard. Não tem acesso a processos jurídicos. Pode gerenciar equipe comercial.
+                    </p>
+                  </div>
+                  
+                  <div className="p-5 rounded-xl bg-gradient-to-br from-secondary/20 to-secondary/5 border border-secondary/30 shadow-soft">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-3 h-3 rounded-full bg-secondary"></div>
+                      <h4 className="font-semibold text-foreground">Advogado</h4>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
                       Acesso restrito: vê apenas os processos onde é advogado responsável. Pode cadastrar e editar leads e seus próprios processos.
                     </p>
                   </div>
                   
-                  <div className="p-4 rounded-lg bg-muted border border-border">
-                    <h4 className="font-semibold text-muted-foreground">Secretaria</h4>
-                    <p className="text-sm text-muted-foreground mt-1">
+                  <div className="p-5 rounded-xl bg-gradient-to-br from-muted to-muted/50 border border-border shadow-soft">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-3 h-3 rounded-full bg-muted-foreground/50"></div>
+                      <h4 className="font-semibold text-muted-foreground">Secretaria</h4>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
                       Acesso operacional: pode cadastrar e editar leads e processos, mas não pode excluir. Sem acesso às configurações.
                     </p>
                   </div>

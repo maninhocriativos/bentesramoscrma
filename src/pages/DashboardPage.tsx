@@ -16,7 +16,7 @@ export default function DashboardPage() {
     <AppLayout>
       <AppHeader title="Dashboard" />
       
-      <div className="flex-1 p-4 md:p-6 space-y-6">
+      <div className="flex-1 p-4 md:p-6 space-y-6 animate-fade-in">
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
