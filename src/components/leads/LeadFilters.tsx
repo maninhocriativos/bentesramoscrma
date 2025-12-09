@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, Filter, X } from 'lucide-react';
+import { Search, Filter, X, Download } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Lead } from '@/types/leads';
+import { useToast } from '@/hooks/use-toast';
 
 interface LeadFiltersProps {
   leads: Lead[];
@@ -26,10 +27,24 @@ const VALOR_RANGES = [
   { label: 'Acima de R$ 500.000', value: '500000+', min: 500000, max: Infinity },
 ];
 
+const formatCurrency = (value: number | null): string => {
+  if (value === null || value === undefined) return '';
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value);
+};
+
+const formatDate = (dateString: string): string => {
+  return new Date(dateString).toLocaleDateString('pt-BR');
+};
+
 export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
+  const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [tipoAcao, setTipoAcao] = useState('all');
   const [valorRange, setValorRange] = useState('all');
+  const [currentFiltered, setCurrentFiltered] = useState<Lead[]>([]);
 
   // Get unique tipos de ação from leads
   const tiposAcao = useMemo(() => {
@@ -70,8 +85,70 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
       }
     }
 
+    setCurrentFiltered(filtered);
     onFilterChange(filtered);
   }, [leads, search, tipoAcao, valorRange, onFilterChange]);
+
+  // Export to CSV function
+  const exportToCSV = () => {
+    if (currentFiltered.length === 0) {
+      toast({
+        title: 'Nenhum lead para exportar',
+        description: 'Ajuste os filtros para ter leads disponíveis.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const headers = [
+      'Nome',
+      'Email',
+      'Telefone',
+      'Status',
+      'Origem',
+      'Tipo de Ação',
+      'Valor da Causa',
+      'Data de Criação',
+      'Última Atualização',
+      'Link do Contrato',
+      'Resumo/Anotações',
+    ];
+
+    const rows = currentFiltered.map(lead => [
+      lead.nome || '',
+      lead.email || '',
+      lead.telefone || '',
+      lead.status || '',
+      lead.origem || '',
+      lead.tipo_acao || '',
+      formatCurrency(lead.valor_causa),
+      formatDate(lead.created_at),
+      lead.updated_at ? formatDate(lead.updated_at) : '',
+      lead.link_contrato || '',
+      (lead.resumo_ia || '').replace(/[\n\r]/g, ' '),
+    ]);
+
+    const csvContent = [
+      headers.join(';'),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(';')),
+    ].join('\n');
+
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `leads_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: 'Exportação concluída!',
+      description: `${currentFiltered.length} lead(s) exportado(s) para CSV.`,
+    });
+  };
 
   const activeFiltersCount = [
     search.trim() !== '',
@@ -145,6 +222,17 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
           </Button>
         </div>
       )}
+
+      {/* Export Button */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={exportToCSV}
+        className="h-9 px-3 rounded-lg ml-auto"
+      >
+        <Download className="h-4 w-4 mr-2" />
+        Exportar CSV
+      </Button>
     </div>
   );
 }
