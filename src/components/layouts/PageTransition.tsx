@@ -20,7 +20,7 @@ export function PageTransition({ children }: PageTransitionProps) {
         setDisplayedChildren(children);
         setTransitionStage('enter');
         prevPathRef.current = location.pathname;
-      }, 200);
+      }, 350);
 
       return () => clearTimeout(exitTimer);
     } else {
@@ -31,10 +31,10 @@ export function PageTransition({ children }: PageTransitionProps) {
 
   return (
     <div
-      className={`flex-1 transition-all duration-200 ease-out ${
+      className={`flex-1 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] ${
         transitionStage === 'enter'
-          ? 'opacity-100 translate-x-0'
-          : 'opacity-0 translate-x-4'
+          ? 'opacity-100 translate-x-0 scale-100'
+          : 'opacity-0 translate-x-6 scale-[0.98]'
       }`}
     >
       {displayedChildren}
