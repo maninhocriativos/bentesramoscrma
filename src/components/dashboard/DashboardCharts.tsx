@@ -6,12 +6,27 @@ import {
   Cell,
   Tooltip,
   ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
 } from 'recharts';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, DollarSign } from 'lucide-react';
 
 interface DashboardChartsProps {
   leads: Lead[];
 }
+
+// Formatar valor em moeda
+const formatCurrency = (value: number): string => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+};
 
 // Cores vibrantes e distintas para origens
 const ORIGEM_COLORS: Record<string, string> = {
@@ -81,8 +96,109 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
     return Math.round((currentCount / previousCount) * 100);
   };
 
+  // Soma de valor_causa por status
+  const valorPorStatus = STATUS_CONFIG.map(config => {
+    const totalValor = leads
+      .filter(lead => lead.status === config.status)
+      .reduce((sum, lead) => sum + (lead.valor_causa || 0), 0);
+    return {
+      status: config.label,
+      valor: totalValor,
+      color: config.color,
+    };
+  }).filter(item => item.valor > 0);
+
+  const totalValorCausa = leads.reduce((sum, lead) => sum + (lead.valor_causa || 0), 0);
+
   return (
-    <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+    <div className="space-y-4">
+      {/* Relatório de Valor por Status */}
+      <Card className="rounded-xl shadow-soft border border-border/50 overflow-hidden bg-card">
+        <CardHeader className="bg-gradient-to-r from-success to-success/90 text-white py-3 px-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <DollarSign className="h-4 w-4" />
+              Valor da Causa por Status
+            </CardTitle>
+            <span className="text-lg font-bold">{formatCurrency(totalValorCausa)}</span>
+          </div>
+        </CardHeader>
+        <CardContent className="p-4">
+          {valorPorStatus.length > 0 ? (
+            <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={valorPorStatus} layout="vertical" margin={{ left: 20, right: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="hsl(var(--border))" />
+                  <XAxis 
+                    type="number" 
+                    tickFormatter={(value) => formatCurrency(value)}
+                    tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    type="category" 
+                    dataKey="status" 
+                    width={120}
+                    tick={{ fontSize: 12, fill: 'hsl(var(--foreground))' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => [formatCurrency(value), 'Valor']}
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '12px',
+                    }}
+                  />
+                  <Bar 
+                    dataKey="valor" 
+                    radius={[0, 6, 6, 0]}
+                  >
+                    {valorPorStatus.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
+              Nenhum lead com valor da causa informado
+            </div>
+          )}
+          
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-4 pt-4 border-t border-border/30">
+            {STATUS_CONFIG.map(config => {
+              const valor = leads
+                .filter(lead => lead.status === config.status)
+                .reduce((sum, lead) => sum + (lead.valor_causa || 0), 0);
+              const count = statusCounts[config.status] || 0;
+              
+              return (
+                <div 
+                  key={config.status}
+                  className="p-3 rounded-lg bg-muted/30 border border-border/30"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <div 
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: config.color }}
+                    />
+                    <span className="text-xs text-muted-foreground truncate">{config.label}</span>
+                  </div>
+                  <p className="text-sm font-bold text-foreground">{formatCurrency(valor)}</p>
+                  <p className="text-xs text-muted-foreground">{count} lead{count !== 1 ? 's' : ''}</p>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
       {/* Origem Donut Chart */}
       <Card className="rounded-xl shadow-soft border border-border/50 overflow-hidden min-h-[400px] bg-card">
         <CardHeader className="bg-gradient-to-r from-primary to-primary/90 text-primary-foreground py-3 px-4">
@@ -203,5 +319,6 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
         </CardContent>
       </Card>
     </div>
+  </div>
   );
 }
