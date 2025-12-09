@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useState, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 
 interface PageTransitionProps {
@@ -7,26 +7,34 @@ interface PageTransitionProps {
 
 export function PageTransition({ children }: PageTransitionProps) {
   const location = useLocation();
-  const [isVisible, setIsVisible] = useState(false);
+  const [transitionStage, setTransitionStage] = useState<'enter' | 'exit'>('enter');
   const [displayedChildren, setDisplayedChildren] = useState(children);
+  const prevPathRef = useRef(location.pathname);
 
   useEffect(() => {
-    setIsVisible(false);
-    
-    const timer = setTimeout(() => {
-      setDisplayedChildren(children);
-      setIsVisible(true);
-    }, 150);
+    // Only trigger transition if path actually changed
+    if (prevPathRef.current !== location.pathname) {
+      setTransitionStage('exit');
+      
+      const exitTimer = setTimeout(() => {
+        setDisplayedChildren(children);
+        setTransitionStage('enter');
+        prevPathRef.current = location.pathname;
+      }, 200);
 
-    return () => clearTimeout(timer);
+      return () => clearTimeout(exitTimer);
+    } else {
+      // Same path, just update children without transition
+      setDisplayedChildren(children);
+    }
   }, [location.pathname, children]);
 
   return (
     <div
-      className={`flex-1 transition-all duration-300 ease-out ${
-        isVisible 
-          ? 'opacity-100 translate-y-0' 
-          : 'opacity-0 translate-y-2'
+      className={`flex-1 transition-all duration-200 ease-out ${
+        transitionStage === 'enter'
+          ? 'opacity-100 translate-x-0'
+          : 'opacity-0 translate-x-4'
       }`}
     >
       {displayedChildren}
