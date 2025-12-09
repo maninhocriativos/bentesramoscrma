@@ -4,6 +4,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
 import { DashboardFiltersBar, DashboardFilters } from '@/components/dashboard/DashboardFilters';
+import { ConversionMetrics } from '@/components/dashboard/ConversionMetrics';
 import { AlertasWidget } from '@/components/AlertasWidget';
 import { useLeads } from '@/hooks/useLeads';
 import { useProcessos } from '@/hooks/useProcessos';
@@ -106,6 +107,8 @@ export default function DashboardPage() {
             <DashboardFiltersBar filters={filters} onFiltersChange={setFilters} />
             
             <DashboardKPIs leads={filteredLeads} processos={processos} />
+
+            <ConversionMetrics leads={leads} />
             
             <DashboardCharts leads={filteredLeads} />
             
