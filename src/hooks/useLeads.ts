@@ -29,35 +29,26 @@ export function useLeads() {
   useEffect(() => {
     fetchLeads();
 
-    // Real-time subscription with optimized handling
+    // Real-time subscription - ensures UI updates immediately
     const channel = supabase
-      .channel('leads-realtime')
+      .channel('leads-realtime-changes')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'leads_juridicos' },
+        { event: '*', schema: 'public', table: 'leads_juridicos' },
         (payload) => {
-          console.log('Lead inserted:', payload.new);
-          setLeads(prev => [payload.new as Lead, ...prev]);
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'leads_juridicos' },
-        (payload) => {
-          console.log('Lead updated:', payload.new);
-          setLeads(prev => 
-            prev.map(lead => 
-              lead.id === (payload.new as Lead).id ? (payload.new as Lead) : lead
-            )
-          );
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'leads_juridicos' },
-        (payload) => {
-          console.log('Lead deleted:', payload.old);
-          setLeads(prev => prev.filter(lead => lead.id !== (payload.old as Lead).id));
+          console.log('Lead change detected:', payload.eventType, payload);
+          
+          if (payload.eventType === 'INSERT') {
+            setLeads(prev => [payload.new as Lead, ...prev]);
+          } else if (payload.eventType === 'UPDATE') {
+            setLeads(prev => 
+              prev.map(lead => 
+                lead.id === (payload.new as Lead).id ? (payload.new as Lead) : lead
+              )
+            );
+          } else if (payload.eventType === 'DELETE') {
+            setLeads(prev => prev.filter(lead => lead.id !== (payload.old as Lead).id));
+          }
         }
       )
       .subscribe((status) => {
@@ -126,23 +117,26 @@ export function useLeads() {
     return { error: null };
   };
 
-  // Optimistic update for drag and drop
+  // Optimistic update for drag and drop - UI updates immediately
   const updateLeadStatus = async (id: string, status: LeadStatus) => {
+    // Store previous state for rollback
+    const previousLeads = [...leads];
+    
     // Optimistic update - update UI immediately
     setLeads(prev => 
       prev.map(lead => 
-        lead.id === id ? { ...lead, status } : lead
+        lead.id === id ? { ...lead, status, updated_at: new Date().toISOString() } : lead
       )
     );
 
     const { error } = await supabase
       .from('leads_juridicos')
-      .update({ status })
+      .update({ status, updated_at: new Date().toISOString() })
       .eq('id', id);
 
     if (error) {
       // Revert on error
-      fetchLeads();
+      setLeads(previousLeads);
       toast({
         title: 'Erro ao mover lead',
         description: error.message,

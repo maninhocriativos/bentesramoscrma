@@ -13,29 +13,34 @@ interface DashboardChartsProps {
   leads: Lead[];
 }
 
+// Cores vibrantes e distintas para origens
 const ORIGEM_COLORS: Record<string, string> = {
-  'Instagram': '#C9B89B',
-  'Google': '#8B7355',
-  'Site': '#3F362D',
-  'Indicação': '#D4C4A8',
-  'Outro': '#6B5B4F',
+  'Instagram': '#E1306C',
+  'Google': '#4285F4',
+  'Site': '#10B981',
+  'Indicação': '#8B5CF6',
+  'Outro': '#6B7280',
 };
 
+// Cores vibrantes para o funil
 const STATUS_CONFIG = [
-  { status: 'Lead Frio', color: '#94a3b8', label: 'Lead Frio' },
-  { status: 'Em Atendimento', color: '#3b82f6', label: 'Em Atendimento' },
-  { status: 'Aguardando Contrato', color: '#f59e0b', label: 'Aguardando Contrato' },
-  { status: 'Contrato Assinado', color: '#10b981', label: 'Contrato Assinado' },
-  { status: 'Ganho', color: '#059669', label: 'Ganho' },
+  { status: 'Lead Frio', color: '#64748B', label: 'Lead Frio' },
+  { status: 'Em Atendimento', color: '#3B82F6', label: 'Em Atendimento' },
+  { status: 'Aguardando Contrato', color: '#F59E0B', label: 'Aguardando Contrato' },
+  { status: 'Contrato Assinado', color: '#8B5CF6', label: 'Contrato Assinado' },
+  { status: 'Ganho', color: '#10B981', label: 'Ganho' },
 ];
 
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
+    const percentage = payload[0].payload.total > 0 
+      ? ((payload[0].value / payload[0].payload.total) * 100).toFixed(0)
+      : 0;
     return (
-      <div className="bg-card border border-border rounded-lg shadow-lg p-2.5 text-sm">
-        <p className="font-medium text-foreground">{payload[0].name}</p>
+      <div className="bg-card border border-border rounded-xl shadow-lg p-3 text-sm">
+        <p className="font-semibold text-foreground">{payload[0].name}</p>
         <p className="text-muted-foreground">
-          {payload[0].value} leads ({((payload[0].value / payload[0].payload.total) * 100).toFixed(0)}%)
+          {payload[0].value} leads ({percentage}%)
         </p>
       </div>
     );
@@ -55,7 +60,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
     name,
     value,
     total: totalLeads,
-    color: ORIGEM_COLORS[name] || '#6B5B4F',
+    color: ORIGEM_COLORS[name] || '#6B7280',
   }));
 
   const statusCounts = leads.reduce((acc, lead) => {
@@ -80,7 +85,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
     <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
       {/* Origem Donut Chart */}
       <Card className="rounded-xl shadow-soft border border-border/50 overflow-hidden min-h-[400px] bg-card">
-        <CardHeader className="bg-primary text-primary-foreground py-3 px-4">
+        <CardHeader className="bg-gradient-to-r from-primary to-primary/90 text-primary-foreground py-3 px-4">
           <CardTitle className="text-sm font-semibold">Origem dos Leads</CardTitle>
         </CardHeader>
         <CardContent className="p-6 h-[340px]">
@@ -93,14 +98,18 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
                       data={origemData}
                       cx="50%"
                       cy="50%"
-                      innerRadius={60}
-                      outerRadius={100}
-                      paddingAngle={2}
+                      innerRadius={55}
+                      outerRadius={95}
+                      paddingAngle={3}
                       dataKey="value"
                       stroke="none"
                     >
                       {origemData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={entry.color}
+                          className="transition-all duration-300 hover:opacity-80"
+                        />
                       ))}
                     </Pie>
                     <Tooltip content={<CustomTooltip />} />
@@ -109,14 +118,14 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
               </div>
               
               {/* Legend - Below chart */}
-              <div className="flex flex-wrap justify-center gap-4 pt-4 border-t border-border/30 mt-4">
+              <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 pt-4 border-t border-border/30 mt-4">
                 {origemData.map((entry) => (
                   <div key={entry.name} className="flex items-center gap-2">
                     <div 
-                      className="w-3 h-3 rounded-full shrink-0" 
+                      className="w-3 h-3 rounded-full shrink-0 shadow-sm" 
                       style={{ backgroundColor: entry.color }}
                     />
-                    <span className="text-sm font-medium text-foreground">{entry.name}</span>
+                    <span className="text-sm font-medium text-foreground whitespace-nowrap">{entry.name}</span>
                     <span className="text-xs text-muted-foreground">
                       ({entry.value})
                     </span>
@@ -134,39 +143,39 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
 
       {/* Funnel - Better spacing */}
       <Card className="rounded-xl shadow-soft border border-border/50 overflow-hidden min-h-[400px] bg-card">
-        <CardHeader className="bg-primary text-primary-foreground py-3 px-4">
+        <CardHeader className="bg-gradient-to-r from-primary to-primary/90 text-primary-foreground py-3 px-4">
           <CardTitle className="text-sm font-semibold">Funil de Vendas</CardTitle>
         </CardHeader>
         <CardContent className="p-6 h-[340px] flex flex-col">
           {leads.length > 0 ? (
             <div className="flex-1 flex flex-col justify-between">
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {funnelData.map((stage, index) => {
                   const maxCount = Math.max(...funnelData.map(s => s.count), 1);
-                  const widthPercent = Math.max((stage.count / maxCount) * 100, 25);
+                  const widthPercent = Math.max((stage.count / maxCount) * 100, 30);
                   const conversionRate = getConversionRate(index);
                   
                   return (
                     <div key={stage.status} className="relative">
                       {index > 0 && (
-                        <div className="absolute -top-2.5 left-1/2 transform -translate-x-1/2 flex items-center gap-0.5 text-xs text-muted-foreground bg-card px-2 py-0.5 rounded-full z-10 border border-border/30">
+                        <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 flex items-center gap-0.5 text-xs text-muted-foreground bg-card px-2 py-0.5 rounded-full z-10 border border-border/50 shadow-sm">
                           <ArrowRight className="h-3 w-3 rotate-90" />
-                          <span>{conversionRate}%</span>
+                          <span className="font-medium">{conversionRate}%</span>
                         </div>
                       )}
                       
                       <div 
-                        className="relative mx-auto rounded-lg overflow-hidden transition-all duration-300 hover:scale-[1.02] shadow-sm"
+                        className="relative mx-auto rounded-lg overflow-hidden transition-all duration-300 hover:scale-[1.02] shadow-md hover:shadow-lg cursor-default"
                         style={{ 
                           width: `${widthPercent}%`,
                           backgroundColor: stage.color,
                         }}
                       >
-                        <div className="py-3 px-4 flex items-center justify-between">
-                          <span className="text-white text-sm font-medium truncate">
+                        <div className="py-2.5 px-4 flex items-center justify-between min-w-0">
+                          <span className="text-white text-sm font-medium truncate mr-2">
                             {stage.label}
                           </span>
-                          <span className="text-white text-base font-bold">
+                          <span className="text-white text-base font-bold shrink-0">
                             {stage.count}
                           </span>
                         </div>
@@ -178,7 +187,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
               
               <div className="pt-4 border-t border-border/30 flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Conversão Final:</span>
-                <span className="font-bold text-lg text-foreground">
+                <span className="font-bold text-lg text-success">
                   {totalLeads > 0 
                     ? `${Math.round((funnelData[funnelData.length - 1].count / totalLeads) * 100)}%`
                     : '0%'

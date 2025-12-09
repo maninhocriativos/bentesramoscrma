@@ -22,12 +22,24 @@ export default function DashboardPage() {
     period: 'all',
     origem: 'all',
     status: 'all',
+    search: '',
   });
 
   const isLoading = leadsLoading || processosLoading;
 
   const filteredLeads = useMemo(() => {
     return leads.filter(lead => {
+      // Search filter - by name or email
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        const nameMatch = lead.nome?.toLowerCase().includes(searchLower);
+        const emailMatch = lead.email?.toLowerCase().includes(searchLower);
+        if (!nameMatch && !emailMatch) {
+          return false;
+        }
+      }
+
+      // Period filter
       if (filters.period !== 'all') {
         const leadDate = new Date(lead.created_at);
         const now = new Date();
@@ -58,10 +70,12 @@ export default function DashboardPage() {
         }
       }
       
+      // Origem filter
       if (filters.origem !== 'all' && lead.origem !== filters.origem) {
         return false;
       }
       
+      // Status filter
       if (filters.status !== 'all' && lead.status !== filters.status) {
         return false;
       }
