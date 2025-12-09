@@ -3,8 +3,9 @@ import { ptBR } from 'date-fns/locale';
 import { Lead } from '@/types/leads';
 import { cn } from '@/lib/utils';
 import { getLeadIndicator } from '@/hooks/useAlertas';
-import { MessageCircle, Eye, User } from 'lucide-react';
+import { MessageCircle, Eye, User, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
 
 interface LeadCardProps {
   lead: Lead;
@@ -42,6 +43,7 @@ const getActionType = (lead: Lead): string => {
 };
 
 export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
+  const navigate = useNavigate();
   const origemStyle = ORIGEM_STYLES[lead.origem || 'Outro'] || ORIGEM_STYLES.Outro;
   const indicator = getLeadIndicator(lead);
   const lastInteraction = lead.updated_at 
@@ -54,6 +56,11 @@ export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
       const phone = lead.telefone.replace(/\D/g, '');
       window.open(`https://wa.me/55${phone}`, '_blank');
     }
+  };
+
+  const handleViewDetails = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate(`/leads/${lead.id}`);
   };
 
   return (
@@ -147,10 +154,10 @@ export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
           variant="ghost"
           size="sm"
           className="h-7 px-2 text-xs text-muted-foreground hover:text-primary gap-1"
-          onClick={onClick}
+          onClick={handleViewDetails}
         >
-          <Eye className="w-3.5 h-3.5" />
-          Detalhes
+          <ExternalLink className="w-3.5 h-3.5" />
+          Ver Perfil
         </Button>
       </div>
     </div>
