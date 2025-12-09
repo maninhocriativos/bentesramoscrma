@@ -25,6 +25,11 @@ interface PerfilContextValue {
   canDelete: boolean;
   canAccessSettings: boolean;
   canAccessProcessos: boolean;
+  canAccessLeads: boolean;
+  canAccessDashboard: boolean;
+  canAccessAgenda: boolean;
+  canAccessTarefas: boolean;
+  canAccessFinanceiro: boolean;
   needsOnboarding: boolean;
   fullName: string | null;
   updatePerfil: (data: Partial<Perfil>) => Promise<{ error: Error | null }>;
@@ -118,8 +123,20 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
   // These are for UI hints only - actual enforcement is via RLS
   const canDelete = isAdmin || isGerente;
   const canAccessSettings = isAdmin;
-  // Gerente e Secretaria não podem acessar processos
+  
+  // Permissões por módulo:
+  // - Processos: Admin, Advogado, Secretaria (Gerente NÃO)
   const canAccessProcessos = isAdmin || isAdvogado || isSecretaria;
+  // - Leads/CRM: Admin, Gerente, Advogado (Secretaria NÃO)
+  const canAccessLeads = isAdmin || isGerente || isAdvogado;
+  // - Dashboard: Admin, Gerente, Advogado (Secretaria NÃO)
+  const canAccessDashboard = isAdmin || isGerente || isAdvogado;
+  // - Agenda: Todos
+  const canAccessAgenda = true;
+  // - Tarefas: Todos
+  const canAccessTarefas = true;
+  // - Financeiro: Admin, Gerente
+  const canAccessFinanceiro = isAdmin || isGerente;
   
   // Legacy cargo field for compatibility
   const cargo = perfil?.cargo || (roles[0] as string) || 'Secretaria';
@@ -142,6 +159,11 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
       canDelete,
       canAccessSettings,
       canAccessProcessos,
+      canAccessLeads,
+      canAccessDashboard,
+      canAccessAgenda,
+      canAccessTarefas,
+      canAccessFinanceiro,
       needsOnboarding,
       fullName,
       updatePerfil,
@@ -168,6 +190,11 @@ export function usePerfil(): PerfilContextValue {
       canDelete: false,
       canAccessSettings: false,
       canAccessProcessos: false,
+      canAccessLeads: false,
+      canAccessDashboard: false,
+      canAccessAgenda: true,
+      canAccessTarefas: true,
+      canAccessFinanceiro: false,
       needsOnboarding: false,
       fullName: null,
       updatePerfil: async () => ({ error: new Error('PerfilProvider not mounted') }),
