@@ -27,18 +27,14 @@ const INDICATOR_STYLES = {
   green: { bg: 'bg-emerald-500', ring: 'ring-emerald-200', title: 'Movimentado hoje' },
 };
 
-// Mock value - in real app this would come from the lead data
-const getLeadValue = (lead: Lead): string => {
-  const values = ['15.000', '25.000', '50.000', '75.000', '100.000', '150.000'];
-  const index = lead.id.charCodeAt(0) % values.length;
-  return values[index];
-};
-
-// Mock action type - in real app this would come from the lead data
-const getActionType = (lead: Lead): string => {
-  const types = ['Trabalhista', 'Cível', 'Consumidor', 'Família', 'Tributário', 'Criminal'];
-  const index = lead.id.charCodeAt(1) % types.length;
-  return types[index];
+// Format currency value
+const formatCurrency = (value: number | null): string => {
+  if (value === null || value === undefined) return 'Não informado';
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+  }).format(value);
 };
 
 export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
@@ -103,17 +99,22 @@ export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
         {/* Value */}
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">Valor da causa:</span>
-          <span className="font-semibold text-success text-sm">
-            R$ {getLeadValue(lead)},00
+          <span className={cn(
+            "font-semibold text-sm",
+            lead.valor_causa ? "text-success" : "text-muted-foreground"
+          )}>
+            {formatCurrency(lead.valor_causa)}
           </span>
         </div>
 
         {/* Badges Row */}
         <div className="flex items-center gap-1.5 flex-wrap">
           {/* Action Type Badge */}
-          <span className="badge-compact bg-muted text-muted-foreground whitespace-nowrap">
-            {getActionType(lead)}
-          </span>
+          {lead.tipo_acao && (
+            <span className="badge-compact bg-muted text-muted-foreground whitespace-nowrap">
+              {lead.tipo_acao}
+            </span>
+          )}
           
           {/* Origem Badge */}
           {lead.origem && (
