@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import logo from '@/assets/logo-bentes-ramos.png';
 import { cn } from '@/lib/utils';
 
-type MenuItemVisibility = 'all' | 'admin-only' | 'processos-only';
+type MenuItemVisibility = 'all' | 'admin-only' | 'processos-only' | 'leads-only' | 'dashboard-only' | 'financeiro-only';
 
 interface MenuItem {
   title: string;
@@ -31,13 +31,13 @@ const menuItems: MenuItem[] = [
     title: 'Dashboard', 
     url: '/dashboard', 
     icon: LayoutDashboard,
-    visibility: 'all'
+    visibility: 'dashboard-only'
   },
   { 
     title: 'CRM de Leads', 
     url: '/leads', 
     icon: Users,
-    visibility: 'all'
+    visibility: 'leads-only'
   },
   { 
     title: 'Processos', 
@@ -61,7 +61,7 @@ const menuItems: MenuItem[] = [
     title: 'Financeiro', 
     url: '/financeiro', 
     icon: DollarSign,
-    visibility: 'admin-only'
+    visibility: 'financeiro-only'
   },
   { 
     title: 'Documentos', 
@@ -79,7 +79,14 @@ const menuItems: MenuItem[] = [
 
 export function AppSidebar() {
   const location = useLocation();
-  const { canAccessSettings, canAccessProcessos, cargo } = usePerfil();
+  const { 
+    canAccessSettings, 
+    canAccessProcessos, 
+    canAccessLeads, 
+    canAccessDashboard, 
+    canAccessFinanceiro,
+    cargo 
+  } = usePerfil();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === 'collapsed';
 
@@ -88,6 +95,15 @@ export function AppSidebar() {
       return false;
     }
     if (item.visibility === 'processos-only' && !canAccessProcessos) {
+      return false;
+    }
+    if (item.visibility === 'leads-only' && !canAccessLeads) {
+      return false;
+    }
+    if (item.visibility === 'dashboard-only' && !canAccessDashboard) {
+      return false;
+    }
+    if (item.visibility === 'financeiro-only' && !canAccessFinanceiro) {
       return false;
     }
     return true;
