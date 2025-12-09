@@ -131,10 +131,37 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
     const signupLink = `${window.location.origin}/auth?email=${encodeURIComponent(result.data.email)}`;
     setInviteLink(signupLink);
     
-    toast({
-      title: 'Convite criado!',
-      description: 'Envie o link de cadastro para o novo membro.',
-    });
+    // Send the invite email
+    try {
+      const { data: emailData, error: emailError } = await supabase.functions.invoke('send-invite-email', {
+        body: {
+          email: result.data.email,
+          role: result.data.role,
+          inviteLink: signupLink,
+        },
+      });
+      
+      if (emailError || !emailData?.success) {
+        console.error('Email error:', emailError || emailData?.error);
+        toast({
+          title: 'Convite criado!',
+          description: 'Não foi possível enviar o email. Use o link abaixo para compartilhar manualmente.',
+          variant: 'default',
+        });
+      } else {
+        toast({
+          title: 'Convite enviado!',
+          description: `Email de convite enviado para ${result.data.email}`,
+        });
+      }
+    } catch (emailErr) {
+      console.error('Error sending email:', emailErr);
+      toast({
+        title: 'Convite criado!',
+        description: 'Não foi possível enviar o email. Use o link abaixo para compartilhar manualmente.',
+        variant: 'default',
+      });
+    }
     
     setSaving(false);
     onSuccess();
