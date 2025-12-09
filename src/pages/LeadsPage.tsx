@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
 import { LeadModal } from '@/components/LeadModal';
+import { LeadFilters } from '@/components/leads/LeadFilters';
 import { RecentActivities } from '@/components/crm/RecentActivities';
 import { QuickTasks } from '@/components/crm/QuickTasks';
 import { useLeads } from '@/hooks/useLeads';
@@ -21,6 +22,11 @@ export default function LeadsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isNewLead, setIsNewLead] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
+
+  const handleFilterChange = useCallback((leads: Lead[]) => {
+    setFilteredLeads(leads);
+  }, []);
 
   const handleLeadClick = (lead: Lead) => {
     setSelectedLead(lead);
@@ -59,9 +65,12 @@ export default function LeadsPage() {
           </div>
         ) : (
           <>
+            {/* Filters */}
+            <LeadFilters leads={leads} onFilterChange={handleFilterChange} />
+            
             {/* Kanban Area - 60% */}
             <div className="flex-[6] min-h-0 overflow-hidden">
-              <KanbanBoard leads={leads} onLeadClick={handleLeadClick} />
+              <KanbanBoard leads={filteredLeads} onLeadClick={handleLeadClick} />
             </div>
             
             {/* Intelligence Panels - 40% */}
