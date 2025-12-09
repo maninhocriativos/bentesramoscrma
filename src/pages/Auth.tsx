@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { UserPlus } from 'lucide-react';
+import { UserPlus, Loader2 } from 'lucide-react';
 import logo from '@/assets/logo-bentes-ramos.png';
 
 const authSchema = z.object({
@@ -20,6 +20,7 @@ const authSchema = z.object({
 
 export default function Auth() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const { signIn, signUp, signInWithGoogle, user, loading } = useAuth();
   const { toast } = useToast();
@@ -27,6 +28,9 @@ export default function Auth() {
   // Check if there's an invited email in the URL
   const invitedEmail = searchParams.get('email') || '';
   const isInvited = !!invitedEmail;
+  
+  // Check if returning from OAuth callback (has hash with access_token or error)
+  const isOAuthCallback = location.hash.includes('access_token') || location.hash.includes('error');
   
   const [email, setEmail] = useState(invitedEmail);
   const [password, setPassword] = useState('');
@@ -36,7 +40,7 @@ export default function Auth() {
 
   useEffect(() => {
     if (user && !loading) {
-      navigate('/');
+      navigate('/dashboard', { replace: true });
     }
   }, [user, loading, navigate]);
 
@@ -113,10 +117,16 @@ export default function Auth() {
     }
   };
 
-  if (loading) {
+  // Show loading while checking auth state or processing OAuth callback
+  if (loading || isOAuthCallback) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-pulse text-muted-foreground">Carregando...</div>
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">
+            {isOAuthCallback ? 'Processando login...' : 'Carregando...'}
+          </p>
+        </div>
       </div>
     );
   }
