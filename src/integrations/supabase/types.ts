@@ -71,6 +71,249 @@ export type Database = {
           },
         ]
       }
+      despesas: {
+        Row: {
+          cliente_id: string | null
+          comprovante_url: string | null
+          created_at: string
+          data_despesa: string | null
+          data_pagamento: string | null
+          descricao: string
+          id: string
+          processo_id: string | null
+          responsavel_pagamento: string | null
+          status: string | null
+          tipo: string
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          cliente_id?: string | null
+          comprovante_url?: string | null
+          created_at?: string
+          data_despesa?: string | null
+          data_pagamento?: string | null
+          descricao: string
+          id?: string
+          processo_id?: string | null
+          responsavel_pagamento?: string | null
+          status?: string | null
+          tipo: string
+          updated_at?: string
+          valor: number
+        }
+        Update: {
+          cliente_id?: string | null
+          comprovante_url?: string | null
+          created_at?: string
+          data_despesa?: string | null
+          data_pagamento?: string | null
+          descricao?: string
+          id?: string
+          processo_id?: string | null
+          responsavel_pagamento?: string | null
+          status?: string | null
+          tipo?: string
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "despesas_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "despesas_processo_id_fkey"
+            columns: ["processo_id"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documentos: {
+        Row: {
+          arquivo_nome: string
+          arquivo_tamanho: number | null
+          arquivo_url: string
+          cliente_id: string | null
+          created_at: string
+          descricao: string | null
+          id: string
+          nome: string
+          processo_id: string | null
+          tipo: string
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          arquivo_nome: string
+          arquivo_tamanho?: number | null
+          arquivo_url: string
+          cliente_id?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome: string
+          processo_id?: string | null
+          tipo: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          arquivo_nome?: string
+          arquivo_tamanho?: number | null
+          arquivo_url?: string
+          cliente_id?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+          processo_id?: string | null
+          tipo?: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documentos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documentos_processo_id_fkey"
+            columns: ["processo_id"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      honorarios: {
+        Row: {
+          cliente_id: string | null
+          created_at: string
+          data_contrato: string | null
+          forma_pagamento: string | null
+          id: string
+          num_parcelas: number | null
+          observacoes: string | null
+          percentual_exito: number | null
+          processo_id: string | null
+          status: string | null
+          tipo: string
+          updated_at: string
+          valor_entrada: number | null
+          valor_total: number
+        }
+        Insert: {
+          cliente_id?: string | null
+          created_at?: string
+          data_contrato?: string | null
+          forma_pagamento?: string | null
+          id?: string
+          num_parcelas?: number | null
+          observacoes?: string | null
+          percentual_exito?: number | null
+          processo_id?: string | null
+          status?: string | null
+          tipo?: string
+          updated_at?: string
+          valor_entrada?: number | null
+          valor_total?: number
+        }
+        Update: {
+          cliente_id?: string | null
+          created_at?: string
+          data_contrato?: string | null
+          forma_pagamento?: string | null
+          id?: string
+          num_parcelas?: number | null
+          observacoes?: string | null
+          percentual_exito?: number | null
+          processo_id?: string | null
+          status?: string | null
+          tipo?: string
+          updated_at?: string
+          valor_entrada?: number | null
+          valor_total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "honorarios_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "honorarios_processo_id_fkey"
+            columns: ["processo_id"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      interacoes: {
+        Row: {
+          cliente_id: string | null
+          created_at: string
+          data_interacao: string
+          detalhes: string | null
+          direcao: string | null
+          id: string
+          processo_id: string | null
+          responsavel_id: string | null
+          resumo: string
+          tipo: string
+        }
+        Insert: {
+          cliente_id?: string | null
+          created_at?: string
+          data_interacao?: string
+          detalhes?: string | null
+          direcao?: string | null
+          id?: string
+          processo_id?: string | null
+          responsavel_id?: string | null
+          resumo: string
+          tipo: string
+        }
+        Update: {
+          cliente_id?: string | null
+          created_at?: string
+          data_interacao?: string
+          detalhes?: string | null
+          direcao?: string | null
+          id?: string
+          processo_id?: string | null
+          responsavel_id?: string | null
+          resumo?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interacoes_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interacoes_processo_id_fkey"
+            columns: ["processo_id"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads_juridicos: {
         Row: {
           created_at: string
@@ -109,6 +352,126 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      notificacoes_prazos: {
+        Row: {
+          canal: string | null
+          compromisso_id: string | null
+          created_at: string
+          data_prazo: string
+          destinatario_id: string | null
+          dias_antecedencia: number | null
+          id: string
+          notificado: boolean | null
+          notificado_em: string | null
+          processo_id: string | null
+          tarefa_id: string | null
+          tipo: string
+          titulo: string
+        }
+        Insert: {
+          canal?: string | null
+          compromisso_id?: string | null
+          created_at?: string
+          data_prazo: string
+          destinatario_id?: string | null
+          dias_antecedencia?: number | null
+          id?: string
+          notificado?: boolean | null
+          notificado_em?: string | null
+          processo_id?: string | null
+          tarefa_id?: string | null
+          tipo: string
+          titulo: string
+        }
+        Update: {
+          canal?: string | null
+          compromisso_id?: string | null
+          created_at?: string
+          data_prazo?: string
+          destinatario_id?: string | null
+          dias_antecedencia?: number | null
+          id?: string
+          notificado?: boolean | null
+          notificado_em?: string | null
+          processo_id?: string | null
+          tarefa_id?: string | null
+          tipo?: string
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificacoes_prazos_compromisso_id_fkey"
+            columns: ["compromisso_id"]
+            isOneToOne: false
+            referencedRelation: "compromissos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificacoes_prazos_processo_id_fkey"
+            columns: ["processo_id"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificacoes_prazos_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      parcelas: {
+        Row: {
+          comprovante_url: string | null
+          created_at: string
+          data_pagamento: string | null
+          data_vencimento: string
+          forma_pagamento: string | null
+          honorario_id: string | null
+          id: string
+          numero: number
+          status: string | null
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          comprovante_url?: string | null
+          created_at?: string
+          data_pagamento?: string | null
+          data_vencimento: string
+          forma_pagamento?: string | null
+          honorario_id?: string | null
+          id?: string
+          numero: number
+          status?: string | null
+          updated_at?: string
+          valor: number
+        }
+        Update: {
+          comprovante_url?: string | null
+          created_at?: string
+          data_pagamento?: string | null
+          data_vencimento?: string
+          forma_pagamento?: string | null
+          honorario_id?: string | null
+          id?: string
+          numero?: number
+          status?: string | null
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parcelas_honorario_id_fkey"
+            columns: ["honorario_id"]
+            isOneToOne: false
+            referencedRelation: "honorarios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pending_invites: {
         Row: {
@@ -198,6 +561,139 @@ export type Database = {
             columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tarefas: {
+        Row: {
+          cliente_id: string | null
+          created_at: string
+          data_conclusao: string | null
+          data_limite: string | null
+          descricao: string | null
+          id: string
+          prioridade: string | null
+          processo_id: string | null
+          responsavel_id: string | null
+          status: string | null
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          cliente_id?: string | null
+          created_at?: string
+          data_conclusao?: string | null
+          data_limite?: string | null
+          descricao?: string | null
+          id?: string
+          prioridade?: string | null
+          processo_id?: string | null
+          responsavel_id?: string | null
+          status?: string | null
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          cliente_id?: string | null
+          created_at?: string
+          data_conclusao?: string | null
+          data_limite?: string | null
+          descricao?: string | null
+          id?: string
+          prioridade?: string | null
+          processo_id?: string | null
+          responsavel_id?: string | null
+          status?: string | null
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tarefas_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefas_processo_id_fkey"
+            columns: ["processo_id"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      timesheet: {
+        Row: {
+          cliente_id: string | null
+          created_at: string
+          data_atividade: string
+          descricao: string
+          duracao_minutos: number
+          faturavel: boolean | null
+          hora_fim: string | null
+          hora_inicio: string | null
+          id: string
+          processo_id: string | null
+          tarefa_id: string | null
+          tipo_atividade: string | null
+          updated_at: string
+          usuario_id: string
+        }
+        Insert: {
+          cliente_id?: string | null
+          created_at?: string
+          data_atividade?: string
+          descricao: string
+          duracao_minutos?: number
+          faturavel?: boolean | null
+          hora_fim?: string | null
+          hora_inicio?: string | null
+          id?: string
+          processo_id?: string | null
+          tarefa_id?: string | null
+          tipo_atividade?: string | null
+          updated_at?: string
+          usuario_id: string
+        }
+        Update: {
+          cliente_id?: string | null
+          created_at?: string
+          data_atividade?: string
+          descricao?: string
+          duracao_minutos?: number
+          faturavel?: boolean | null
+          hora_fim?: string | null
+          hora_inicio?: string | null
+          id?: string
+          processo_id?: string | null
+          tarefa_id?: string | null
+          tipo_atividade?: string | null
+          updated_at?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "timesheet_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "timesheet_processo_id_fkey"
+            columns: ["processo_id"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "timesheet_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
             referencedColumns: ["id"]
           },
         ]
