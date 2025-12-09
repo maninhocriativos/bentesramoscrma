@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Search, Filter, X, Download } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -55,8 +55,8 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
     return Array.from(tipos).sort();
   }, [leads]);
 
-  // Apply filters
-  useMemo(() => {
+  // Apply filters - use useEffect for side effects, not useMemo
+  const filteredLeads = useMemo(() => {
     let filtered = [...leads];
 
     // Search filter
@@ -85,9 +85,14 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
       }
     }
 
-    setCurrentFiltered(filtered);
-    onFilterChange(filtered);
-  }, [leads, search, tipoAcao, valorRange, onFilterChange]);
+    return filtered;
+  }, [leads, search, tipoAcao, valorRange]);
+
+  // Update parent and local state when filtered leads change
+  useEffect(() => {
+    setCurrentFiltered(filteredLeads);
+    onFilterChange(filteredLeads);
+  }, [filteredLeads, onFilterChange]);
 
   // Export to CSV function
   const exportToCSV = () => {
