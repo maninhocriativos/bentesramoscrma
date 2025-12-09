@@ -9,6 +9,7 @@ import { DespesaModal } from '@/components/financeiro/DespesaModal';
 import { HonorariosTable } from '@/components/financeiro/HonorariosTable';
 import { ParcelasTable } from '@/components/financeiro/ParcelasTable';
 import { DespesasTable } from '@/components/financeiro/DespesasTable';
+import { AppLayout } from '@/components/layouts/AppLayout';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -32,6 +33,7 @@ export default function FinanceiroPage() {
   });
 
   return (
+    <AppLayout>
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -155,5 +157,6 @@ export default function FinanceiroPage() {
       <HonorarioModal open={honorarioModalOpen} onOpenChange={setHonorarioModalOpen} />
       <DespesaModal open={despesaModalOpen} onOpenChange={setDespesaModalOpen} />
     </div>
+    </AppLayout>
   );
 }

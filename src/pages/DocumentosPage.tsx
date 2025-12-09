@@ -6,6 +6,7 @@ import { Plus, Search, FileText, Download, Trash2, Eye } from 'lucide-react';
 import { useDocumentos } from '@/hooks/useDocumentos';
 import { DocumentoUploadModal } from '@/components/documentos/DocumentoUploadModal';
 import { Badge } from '@/components/ui/badge';
+import { AppLayout } from '@/components/layouts/AppLayout';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -45,6 +46,7 @@ export default function DocumentosPage() {
   };
 
   return (
+    <AppLayout>
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -197,5 +199,6 @@ export default function DocumentosPage() {
 
       <DocumentoUploadModal open={uploadModalOpen} onOpenChange={setUploadModalOpen} />
     </div>
+    </AppLayout>
   );
 }
