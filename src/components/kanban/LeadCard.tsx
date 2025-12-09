@@ -1,9 +1,9 @@
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Lead } from '@/types/leads';
 import { cn } from '@/lib/utils';
 import { getLeadIndicator } from '@/hooks/useAlertas';
-import { MessageCircle, Eye, User, ExternalLink } from 'lucide-react';
+import { MessageCircle, ExternalLink, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 
@@ -29,7 +29,6 @@ const INDICATOR_STYLES = {
 
 // Mock value - in real app this would come from the lead data
 const getLeadValue = (lead: Lead): string => {
-  // Generate a mock value based on lead ID for demo purposes
   const values = ['15.000', '25.000', '50.000', '75.000', '100.000', '150.000'];
   const index = lead.id.charCodeAt(0) % values.length;
   return values[index];
@@ -90,11 +89,11 @@ export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
           <User className="w-4 h-4 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
-          <h4 className="font-semibold text-sm text-foreground truncate leading-tight">
+          <h4 className="font-semibold text-sm text-foreground leading-tight line-clamp-1" title={lead.nome || 'Sem nome'}>
             {lead.nome || 'Sem nome'}
           </h4>
           {lead.email && (
-            <p className="text-xs text-muted-foreground truncate">{lead.email}</p>
+            <p className="text-xs text-muted-foreground truncate" title={lead.email}>{lead.email}</p>
           )}
         </div>
       </div>
@@ -112,27 +111,27 @@ export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
         {/* Badges Row */}
         <div className="flex items-center gap-1.5 flex-wrap">
           {/* Action Type Badge */}
-          <span className="badge-compact bg-muted text-muted-foreground">
+          <span className="badge-compact bg-muted text-muted-foreground whitespace-nowrap">
             {getActionType(lead)}
           </span>
           
           {/* Origem Badge */}
           {lead.origem && (
-            <span className={cn("badge-compact", origemStyle.bg, origemStyle.text)}>
+            <span className={cn("badge-compact whitespace-nowrap", origemStyle.bg, origemStyle.text)}>
               {lead.origem}
             </span>
           )}
 
           {/* Contract Badge */}
           {lead.link_contrato && (
-            <span className="badge-compact bg-gold/20 text-gold-foreground">
+            <span className="badge-compact bg-gold/20 text-gold-foreground whitespace-nowrap">
               Contrato
             </span>
           )}
         </div>
 
         {/* Last Interaction */}
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground truncate">
           Última interação: {lastInteraction}
         </p>
       </div>
@@ -147,7 +146,7 @@ export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
           disabled={!lead.telefone}
         >
           <MessageCircle className="w-3.5 h-3.5" />
-          WhatsApp
+          <span className="hidden sm:inline">WhatsApp</span>
         </Button>
         
         <Button
@@ -157,7 +156,7 @@ export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
           onClick={handleViewDetails}
         >
           <ExternalLink className="w-3.5 h-3.5" />
-          Ver Perfil
+          <span className="hidden sm:inline">Ver Perfil</span>
         </Button>
       </div>
     </div>
