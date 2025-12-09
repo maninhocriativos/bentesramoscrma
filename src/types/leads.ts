@@ -19,4 +19,6 @@ export interface Lead {
   created_at: string;
   updated_at?: string | null;
   origem: LeadOrigem | null;
+  valor_causa: number | null;
+  tipo_acao: string | null;
 }

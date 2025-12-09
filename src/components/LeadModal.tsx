@@ -60,6 +60,8 @@ export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = tr
     origem: 'Outro' as LeadOrigem,
     resumo_ia: '',
     link_contrato: '',
+    valor_causa: '' as string | number,
+    tipo_acao: '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -73,6 +75,8 @@ export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = tr
         origem: (lead.origem as LeadOrigem) || 'Outro',
         resumo_ia: lead.resumo_ia || '',
         link_contrato: lead.link_contrato || '',
+        valor_causa: lead.valor_causa ?? '',
+        tipo_acao: lead.tipo_acao || '',
       });
     } else {
       setFormData({
@@ -83,6 +87,8 @@ export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = tr
         origem: 'Outro',
         resumo_ia: '',
         link_contrato: '',
+        valor_causa: '',
+        tipo_acao: '',
       });
     }
   }, [lead, isOpen]);
@@ -92,10 +98,15 @@ export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = tr
     
     setSaving(true);
     
+    const dataToSave = {
+      ...formData,
+      valor_causa: formData.valor_causa ? Number(formData.valor_causa) : null,
+    };
+    
     if (isNew) {
-      await createLead(formData);
+      await createLead(dataToSave);
     } else if (lead) {
-      await updateLead(lead.id, formData);
+      await updateLead(lead.id, dataToSave);
     }
     
     setSaving(false);
@@ -194,6 +205,29 @@ export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = tr
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="tipo_acao">Tipo de Ação</Label>
+              <Input
+                id="tipo_acao"
+                value={formData.tipo_acao}
+                onChange={(e) => setFormData({ ...formData, tipo_acao: e.target.value })}
+                className="rounded-xl"
+                placeholder="Ex: Trabalhista, Cível..."
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="valor_causa">Valor da Causa</Label>
+              <Input
+                id="valor_causa"
+                type="number"
+                value={formData.valor_causa}
+                onChange={(e) => setFormData({ ...formData, valor_causa: e.target.value })}
+                className="rounded-xl"
+                placeholder="R$ 0,00"
+              />
             </div>
 
             <div className="col-span-2">

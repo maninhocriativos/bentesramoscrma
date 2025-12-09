@@ -325,7 +325,9 @@ export type Database = {
           resumo_ia: string | null
           status: string | null
           telefone: string | null
+          tipo_acao: string | null
           updated_at: string | null
+          valor_causa: number | null
         }
         Insert: {
           created_at?: string
@@ -337,7 +339,9 @@ export type Database = {
           resumo_ia?: string | null
           status?: string | null
           telefone?: string | null
+          tipo_acao?: string | null
           updated_at?: string | null
+          valor_causa?: number | null
         }
         Update: {
           created_at?: string
@@ -349,7 +353,9 @@ export type Database = {
           resumo_ia?: string | null
           status?: string | null
           telefone?: string | null
+          tipo_acao?: string | null
           updated_at?: string | null
+          valor_causa?: number | null
         }
         Relationships: []
       }
