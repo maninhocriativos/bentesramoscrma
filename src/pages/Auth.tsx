@@ -29,14 +29,36 @@ export default function Auth() {
   const invitedEmail = searchParams.get('email') || '';
   const isInvited = !!invitedEmail;
   
-  // Check if returning from OAuth callback (has hash with access_token or error)
-  const isOAuthCallback = location.hash.includes('access_token') || location.hash.includes('error');
-  
   const [email, setEmail] = useState(invitedEmail);
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [activeTab, setActiveTab] = useState(isInvited ? 'register' : 'login');
+  const [isProcessingOAuth, setIsProcessingOAuth] = useState(false);
+
+  // Handle OAuth callback - check for hash fragment with tokens
+  useEffect(() => {
+    const hashParams = new URLSearchParams(location.hash.substring(1));
+    const accessToken = hashParams.get('access_token');
+    const errorDescription = hashParams.get('error_description');
+    
+    if (errorDescription) {
+      toast({
+        title: 'Erro no login',
+        description: decodeURIComponent(errorDescription),
+        variant: 'destructive',
+      });
+      // Clear the hash
+      window.history.replaceState(null, '', location.pathname);
+      return;
+    }
+    
+    if (accessToken) {
+      setIsProcessingOAuth(true);
+      // The Supabase client will automatically handle the token from the hash
+      // Just wait for the auth state to update
+    }
+  }, [location.hash, toast, location.pathname]);
 
   useEffect(() => {
     if (user && !loading) {
@@ -118,13 +140,13 @@ export default function Auth() {
   };
 
   // Show loading while checking auth state or processing OAuth callback
-  if (loading || isOAuthCallback) {
+  if (loading || isProcessingOAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-muted-foreground">
-            {isOAuthCallback ? 'Processando login...' : 'Carregando...'}
+            {isProcessingOAuth ? 'Processando login...' : 'Carregando...'}
           </p>
         </div>
       </div>
