@@ -8,6 +8,7 @@ import { TarefaModal } from '@/components/tarefas/TarefaModal';
 import { TimesheetModal } from '@/components/tarefas/TimesheetModal';
 import { TarefasKanban } from '@/components/tarefas/TarefasKanban';
 import { TimesheetTable } from '@/components/tarefas/TimesheetTable';
+import { AppLayout } from '@/components/layouts/AppLayout';
 
 export default function TarefasPage() {
   const { tarefas, loading: loadingTarefas, updateTarefa, deleteTarefa } = useTarefas();
@@ -25,6 +26,7 @@ export default function TarefasPage() {
   const totalHorasMes = registros.reduce((acc, r) => acc + r.duracao_minutos, 0) / 60;
 
   return (
+    <AppLayout>
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -127,5 +129,6 @@ export default function TarefasPage() {
       <TarefaModal open={tarefaModalOpen} onOpenChange={setTarefaModalOpen} />
       <TimesheetModal open={timesheetModalOpen} onOpenChange={setTimesheetModalOpen} />
     </div>
+    </AppLayout>
   );
 }
