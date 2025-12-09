@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { OnboardingModal } from '@/components/onboarding/OnboardingModal';
+import { PageTransition } from '@/components/layouts/PageTransition';
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
 import { Loader2, Menu } from 'lucide-react';
@@ -45,7 +46,9 @@ export function AppLayout({ children }: AppLayoutProps) {
               <Menu className="h-5 w-5" />
             </SidebarTrigger>
           </div>
-          {children}
+          <PageTransition>
+            {children}
+          </PageTransition>
         </main>
       </div>
       
