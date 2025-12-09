@@ -40,9 +40,9 @@ export function KanbanColumn({
       onDragOver={onDragOver}
       onDrop={(e) => onDrop(e, status)}
       className={cn(
-        "flex flex-col min-w-[320px] w-[320px] rounded-xl transition-all duration-200 overflow-hidden",
+        "flex flex-col min-w-[320px] w-[320px] rounded-xl transition-all duration-300 overflow-hidden",
         "bg-card border shadow-soft",
-        isDragOver && "ring-2 ring-gold/60 shadow-enterprise border-gold/40"
+        isDragOver && "ring-2 ring-gold/60 shadow-enterprise border-gold/40 kanban-column-drag-over scale-[1.01]"
       )}
     >
       {/* Header */}
@@ -63,10 +63,20 @@ export function KanbanColumn({
           <div
             key={lead.id}
             draggable
-            onDragStart={(e) => onDragStart(e, lead)}
-            onDragEnd={onDragEnd}
+            onDragStart={(e) => {
+              e.currentTarget.classList.add('kanban-card-dragging');
+              onDragStart(e, lead);
+            }}
+            onDragEnd={(e) => {
+              e.currentTarget.classList.remove('kanban-card-dragging');
+              e.currentTarget.classList.add('kanban-card-dropped');
+              setTimeout(() => {
+                e.currentTarget?.classList.remove('kanban-card-dropped');
+              }, 600);
+              onDragEnd(e);
+            }}
             style={{ animationDelay: `${index * 40}ms` }}
-            className="animate-fade-in cursor-grab active:cursor-grabbing"
+            className="kanban-card-wrapper animate-fade-in cursor-grab active:cursor-grabbing"
           >
             <LeadCard lead={lead} onClick={() => onLeadClick(lead)} />
           </div>
