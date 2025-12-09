@@ -12,6 +12,7 @@ import AgendaPage from "./pages/AgendaPage";
 import FinanceiroPage from "./pages/FinanceiroPage";
 import DocumentosPage from "./pages/DocumentosPage";
 import TarefasPage from "./pages/TarefasPage";
+import LeadDetailPage from "./pages/LeadDetailPage";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/leads" element={<LeadsPage />} />
+            <Route path="/leads/:id" element={<LeadDetailPage />} />
             <Route path="/processos" element={<ProcessosPage />} />
             <Route path="/agenda" element={<AgendaPage />} />
             <Route path="/financeiro" element={<FinanceiroPage />} />

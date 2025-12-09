@@ -5,7 +5,15 @@ import { Label } from '@/components/ui/label';
 import { useState } from 'react';
 import { useHonorarios } from '@/hooks/useFinanceiro';
 
-export function HonorarioModal({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+interface HonorarioModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  clienteId?: string;
+  processoId?: string;
+  onSuccess?: () => void;
+}
+
+export function HonorarioModal({ open, onOpenChange, clienteId, processoId, onSuccess }: HonorarioModalProps) {
   const { createHonorario } = useHonorarios();
   const [saving, setSaving] = useState(false);
 
@@ -23,11 +31,12 @@ export function HonorarioModal({ open, onOpenChange }: { open: boolean; onOpenCh
       data_contrato: new Date().toISOString().split('T')[0],
       status: 'Ativo',
       observacoes: formData.get('observacoes') as string || null,
-      cliente_id: null,
-      processo_id: null,
+      cliente_id: clienteId || null,
+      processo_id: processoId || null,
     });
     setSaving(false);
     onOpenChange(false);
+    onSuccess?.();
   };
 
   return (

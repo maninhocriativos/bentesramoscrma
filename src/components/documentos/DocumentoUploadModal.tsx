@@ -7,8 +7,15 @@ import { useState, useRef } from 'react';
 import { useDocumentos } from '@/hooks/useDocumentos';
 import { Upload } from 'lucide-react';
 
-export function DocumentoUploadModal({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const { uploadDocumento, uploading } = useDocumentos();
+interface DocumentoUploadModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  clienteId?: string;
+  processoId?: string;
+}
+
+export function DocumentoUploadModal({ open, onOpenChange, clienteId, processoId }: DocumentoUploadModalProps) {
+  const { uploadDocumento, uploading } = useDocumentos(processoId, clienteId);
   const [nome, setNome] = useState('');
   const [tipo, setTipo] = useState<'Petição' | 'Contrato' | 'Procuração' | 'Documento Pessoal' | 'Comprovante' | 'Outros'>('Outros');
   const [file, setFile] = useState<File | null>(null);
@@ -17,7 +24,7 @@ export function DocumentoUploadModal({ open, onOpenChange }: { open: boolean; on
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) return;
-    await uploadDocumento(file, { nome, tipo });
+    await uploadDocumento(file, { nome, tipo, cliente_id: clienteId, processo_id: processoId });
     setNome('');
     setFile(null);
     onOpenChange(false);

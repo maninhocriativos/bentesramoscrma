@@ -5,7 +5,15 @@ import { Label } from '@/components/ui/label';
 import { useState } from 'react';
 import { useDespesas } from '@/hooks/useFinanceiro';
 
-export function DespesaModal({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+interface DespesaModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  clienteId?: string;
+  processoId?: string;
+  onSuccess?: () => void;
+}
+
+export function DespesaModal({ open, onOpenChange, clienteId, processoId, onSuccess }: DespesaModalProps) {
   const { createDespesa } = useDespesas();
   const [saving, setSaving] = useState(false);
 
@@ -22,11 +30,12 @@ export function DespesaModal({ open, onOpenChange }: { open: boolean; onOpenChan
       status: 'Pendente',
       responsavel_pagamento: 'Escritório',
       comprovante_url: null,
-      processo_id: null,
-      cliente_id: null,
+      processo_id: processoId || null,
+      cliente_id: clienteId || null,
     });
     setSaving(false);
     onOpenChange(false);
+    onSuccess?.();
   };
 
   return (
