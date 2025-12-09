@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft } from 'lucide-react';
+import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Sidebar,
@@ -46,9 +46,27 @@ const menuItems: MenuItem[] = [
     visibility: 'processos-only'
   },
   { 
+    title: 'Tarefas', 
+    url: '/tarefas', 
+    icon: CheckSquare,
+    visibility: 'all'
+  },
+  { 
     title: 'Agenda', 
     url: '/agenda', 
     icon: CalendarDays,
+    visibility: 'all'
+  },
+  { 
+    title: 'Financeiro', 
+    url: '/financeiro', 
+    icon: DollarSign,
+    visibility: 'admin-only'
+  },
+  { 
+    title: 'Documentos', 
+    url: '/documentos', 
+    icon: FileText,
     visibility: 'all'
   },
   { 
