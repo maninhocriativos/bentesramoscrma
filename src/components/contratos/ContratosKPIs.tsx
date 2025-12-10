@@ -1,6 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Clock, XCircle, CheckCircle2, FileSignature, RefreshCw } from 'lucide-react';
+import { Clock, XCircle, CheckCircle2, FileSignature, RefreshCw, Loader2 } from 'lucide-react';
 
 interface ContratosKPIsProps {
   data: {
@@ -11,9 +11,10 @@ interface ContratosKPIsProps {
     total: number;
   };
   onRefresh: () => void;
+  refreshing?: boolean;
 }
 
-export function ContratosKPIs({ data, onRefresh }: ContratosKPIsProps) {
+export function ContratosKPIs({ data, onRefresh, refreshing = false }: ContratosKPIsProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -21,8 +22,12 @@ export function ContratosKPIs({ data, onRefresh }: ContratosKPIsProps) {
           <FileSignature className="h-5 w-5" />
           Documentos
         </h2>
-        <Button variant="outline" size="sm" onClick={onRefresh}>
-          <RefreshCw className="h-4 w-4 mr-2" />
+        <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
+          {refreshing ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4 mr-2" />
+          )}
           Atualizar
         </Button>
       </div>

@@ -10,11 +10,12 @@ const CLICKSIGN_API_KEY = Deno.env.get("CLICKSIGN_API_KEY");
 const CLICKSIGN_BASE_URL = "https://app.clicksign.com/api/v1";
 
 interface CreateDocumentRequest {
-  action: "create_document" | "add_signer" | "create_list" | "get_document" | "cancel_document";
+  action: "create_document" | "add_signer" | "create_list" | "get_document" | "cancel_document" | "list_documents";
   document_key?: string;
   file_path?: string;
   file_content?: string; // base64
   file_name?: string;
+  page?: number;
   signer?: {
     email: string;
     name: string;
@@ -158,6 +159,25 @@ serve(async (req: Request): Promise<Response> => {
 
         result = await response.json();
         console.log("Document retrieved:", result);
+        break;
+      }
+
+      case "list_documents": {
+        const page = body.page || 1;
+        console.log("Listing documents, page:", page);
+        
+        const response = await fetch(`${CLICKSIGN_BASE_URL}/documents?access_token=${CLICKSIGN_API_KEY}&page=${page}`, {
+          method: "GET",
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Clicksign list documents error:", errorText);
+          throw new Error(`Failed to list documents: ${errorText}`);
+        }
+
+        result = await response.json();
+        console.log("Documents listed:", result);
         break;
       }
 

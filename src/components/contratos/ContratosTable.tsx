@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { FileSignature, Clock, CheckCircle2, XCircle, AlertCircle, ExternalLink, ChevronRight } from 'lucide-react';
+import { FileSignature, Clock, CheckCircle2, XCircle, AlertCircle, ExternalLink, ChevronRight, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ContratoComStatus } from '@/pages/ContratosPage';
 
@@ -29,19 +29,11 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
       <Card>
         <CardContent className="py-12">
           <div className="flex flex-col items-center justify-center text-center">
-            <FileSignature className="h-12 w-12 text-muted-foreground/30 mb-3" />
+            <FileText className="h-12 w-12 text-muted-foreground/30 mb-3" />
             <h3 className="text-lg font-medium text-muted-foreground">Nenhum contrato encontrado</h3>
             <p className="text-sm text-muted-foreground/70 mt-1">
-              Vincule contratos aos leads na página de detalhes do lead
+              Seus documentos do Clicksign aparecerão aqui
             </p>
-            <Button 
-              variant="outline" 
-              className="mt-4"
-              onClick={() => navigate('/leads')}
-            >
-              Ir para Leads
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
           </div>
         </CardContent>
       </Card>
@@ -51,14 +43,14 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Lista de Contratos</CardTitle>
+        <CardTitle className="text-base">Lista de Contratos ({contratos.length})</CardTitle>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Cliente</TableHead>
-              <TableHead>Tipo de Ação</TableHead>
+              <TableHead>Documento</TableHead>
+              <TableHead>Email do Signatário</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Última Atualização</TableHead>
               <TableHead className="text-right">Ações</TableHead>
@@ -69,18 +61,16 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
               const config = statusConfig[contrato.status] || statusConfig['Aguardando Assinatura'];
               
               return (
-                <TableRow key={contrato.id} className="cursor-pointer hover:bg-muted/50">
+                <TableRow key={contrato.id} className="hover:bg-muted/50">
                   <TableCell>
-                    <div>
-                      <p className="font-medium">{contrato.leadNome}</p>
-                      {contrato.leadEmail && (
-                        <p className="text-xs text-muted-foreground">{contrato.leadEmail}</p>
-                      )}
+                    <div className="flex items-center gap-2">
+                      <FileSignature className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">{contrato.leadNome}</span>
                     </div>
                   </TableCell>
                   <TableCell>
                     <span className="text-sm text-muted-foreground">
-                      {contrato.tipoAcao || 'Não definido'}
+                      {contrato.leadEmail || '-'}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -106,15 +96,17 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => navigate(`/leads/${contrato.leadId}`)}
-                      >
-                        Ver Lead
-                      </Button>
+                      {contrato.leadId && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/leads/${contrato.leadId}`)}
+                        >
+                          Ver Lead
+                        </Button>
+                      )}
                       <a
-                        href={contrato.linkContrato.startsWith('http') ? contrato.linkContrato : `https://app.clicksign.com/documents/${contrato.linkContrato}`}
+                        href={contrato.linkContrato}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex"

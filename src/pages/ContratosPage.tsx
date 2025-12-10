@@ -5,148 +5,127 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ContratosKPIs } from '@/components/contratos/ContratosKPIs';
 import { ContratosTable } from '@/components/contratos/ContratosTable';
 import { ModelosContratos } from '@/components/contratos/ModelosContratos';
-import { useLeads } from '@/hooks/useLeads';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
+export interface ContratoClicksign {
+  id: string;
+  key: string;
+  filename: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  signers: Array<{
+    key: string;
+    email: string;
+    name: string;
+    signed_at: string | null;
+  }>;
+}
+
 export interface ContratoComStatus {
   id: string;
-  leadId: string;
+  leadId?: string;
   leadNome: string;
   leadEmail: string | null;
   tipoAcao: string | null;
   linkContrato: string;
   status: string;
   lastUpdate: string | null;
+  key?: string;
 }
 
+// Map Clicksign status to our status
+const mapClicksignStatus = (doc: any): string => {
+  if (doc.status === 'closed') return 'Finalizado';
+  if (doc.status === 'canceled') return 'Cancelado';
+  if (doc.status === 'running') {
+    const signers = doc.signers || [];
+    const allSigned = signers.length > 0 && signers.every((s: any) => s.signed_at);
+    const anySigned = signers.some((s: any) => s.signed_at);
+    
+    if (allSigned) return 'Assinado';
+    if (anySigned) return 'Assinatura Parcial';
+    return 'Aguardando Assinatura';
+  }
+  return 'Documento Enviado';
+};
+
 export default function ContratosPage() {
-  const { leads, loading: leadsLoading } = useLeads();
   const { toast } = useToast();
   const [contratos, setContratos] = useState<ContratoComStatus[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('todos');
 
-  const leadsComContrato = leads.filter(lead => lead.link_contrato);
-
-  const fetchContractStatuses = useCallback(async (showLoading = true) => {
-    if (leadsComContrato.length === 0) {
-      setLoading(false);
-      setContratos([]);
-      return;
-    }
-
+  const fetchContractsFromClicksign = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
-    const contractsWithStatus: ContratoComStatus[] = [];
-
-    const leadIds = leadsComContrato.map(lead => lead.id);
+    setRefreshing(!showLoading);
     
-    const { data: interactions, error } = await supabase
-      .from('interacoes')
-      .select('cliente_id, resumo, created_at')
-      .in('cliente_id', leadIds)
-      .eq('tipo', 'Documento')
-      .ilike('resumo', 'Contrato:%')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching contract statuses:', error);
-      setLoading(false);
-      return;
-    }
-
-    for (const lead of leadsComContrato) {
-      const leadInteraction = interactions?.find(i => i.cliente_id === lead.id);
-      let status = 'Aguardando Assinatura';
-      let lastUpdate = null;
-
-      if (leadInteraction) {
-        const statusMatch = leadInteraction.resumo.match(/Contrato:\s*(.+)/);
-        if (statusMatch) {
-          status = statusMatch[1].trim();
-        }
-        lastUpdate = leadInteraction.created_at;
-      }
-
-      contractsWithStatus.push({
-        id: `${lead.id}-contract`,
-        leadId: lead.id,
-        leadNome: lead.nome || 'Sem nome',
-        leadEmail: lead.email,
-        tipoAcao: lead.tipo_acao,
-        linkContrato: lead.link_contrato!,
-        status,
-        lastUpdate,
+    try {
+      console.log('Fetching documents from Clicksign...');
+      
+      const { data, error } = await supabase.functions.invoke('clicksign', {
+        body: { action: 'list_documents', page: 1 },
       });
-    }
 
-    // Sort: pending first
-    contractsWithStatus.sort((a, b) => {
-      const pendingStatuses = ['Aguardando Assinatura', 'Assinatura Parcial', 'Documento Enviado'];
-      const aIsPending = pendingStatuses.includes(a.status);
-      const bIsPending = pendingStatuses.includes(b.status);
-      
-      if (aIsPending && !bIsPending) return -1;
-      if (!aIsPending && bIsPending) return 1;
-      
-      if (a.lastUpdate && b.lastUpdate) {
-        return new Date(b.lastUpdate).getTime() - new Date(a.lastUpdate).getTime();
+      if (error) {
+        console.error('Error fetching from Clicksign:', error);
+        throw error;
       }
-      return 0;
-    });
 
-    setContratos(contractsWithStatus);
-    setLoading(false);
-  }, [leadsComContrato]);
+      console.log('Clicksign response:', data);
 
-  useEffect(() => {
-    if (!leadsLoading) {
-      fetchContractStatuses();
+      // Map Clicksign documents to our format
+      const documents = data?.documents || [];
+      const mappedContracts: ContratoComStatus[] = documents.map((doc: any) => ({
+        id: doc.key,
+        key: doc.key,
+        leadNome: doc.filename?.replace(/\.[^/.]+$/, '') || 'Documento',
+        leadEmail: doc.signers?.[0]?.email || null,
+        tipoAcao: doc.path || null,
+        linkContrato: `https://app.clicksign.com/documents/${doc.key}`,
+        status: mapClicksignStatus(doc),
+        lastUpdate: doc.updated_at || doc.created_at,
+      }));
+
+      // Sort by date
+      mappedContracts.sort((a, b) => {
+        if (a.lastUpdate && b.lastUpdate) {
+          return new Date(b.lastUpdate).getTime() - new Date(a.lastUpdate).getTime();
+        }
+        return 0;
+      });
+
+      setContratos(mappedContracts);
+      
+      if (!showLoading) {
+        toast({
+          title: 'Contratos atualizados',
+          description: `${mappedContracts.length} documentos encontrados no Clicksign.`,
+        });
+      }
+    } catch (error: any) {
+      console.error('Error fetching contracts:', error);
+      toast({
+        title: 'Erro ao buscar contratos',
+        description: error.message || 'Não foi possível conectar ao Clicksign.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-  }, [leads, leadsLoading]);
+  }, [toast]);
 
-  // Real-time subscription
   useEffect(() => {
-    const channel = supabase
-      .channel('contracts-page-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'interacoes',
-        },
-        (payload) => {
-          const resumo = payload.new?.resumo as string;
-          if (payload.new?.tipo === 'Documento' && resumo?.startsWith('Contrato:')) {
-            toast({
-              title: 'Atualização de contrato',
-              description: resumo,
-            });
-            fetchContractStatuses(false);
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'leads_juridicos',
-        },
-        (payload) => {
-          if (payload.new?.link_contrato !== payload.old?.link_contrato) {
-            fetchContractStatuses(false);
-          }
-        }
-      )
-      .subscribe();
+    fetchContractsFromClicksign();
+  }, []);
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [fetchContractStatuses, toast]);
+  const handleRefresh = () => {
+    fetchContractsFromClicksign(false);
+  };
 
   const filteredContratos = contratos.filter(contrato => {
     switch (activeTab) {
@@ -169,20 +148,18 @@ export default function ContratosPage() {
     total: contratos.length,
   };
 
-  const isLoading = leadsLoading || loading;
-
   return (
     <AppLayout>
       <AppHeader title="Contratos" />
       
       <div className="flex-1 px-4 md:px-6 lg:px-8 py-4 space-y-6 animate-fade-in overflow-auto">
-        {isLoading ? (
+        {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
           <>
-            <ContratosKPIs data={kpiData} onRefresh={() => fetchContractStatuses(false)} />
+            <ContratosKPIs data={kpiData} onRefresh={handleRefresh} refreshing={refreshing} />
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="mb-4">
