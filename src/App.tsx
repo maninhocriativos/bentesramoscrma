@@ -12,6 +12,7 @@ import AgendaPage from "./pages/AgendaPage";
 import FinanceiroPage from "./pages/FinanceiroPage";
 import DocumentosPage from "./pages/DocumentosPage";
 import TarefasPage from "./pages/TarefasPage";
+import ContratosPage from "./pages/ContratosPage";
 import LeadDetailPage from "./pages/LeadDetailPage";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/agenda" element={<AgendaPage />} />
             <Route path="/financeiro" element={<FinanceiroPage />} />
             <Route path="/documentos" element={<DocumentosPage />} />
+            <Route path="/contratos" element={<ContratosPage />} />
             <Route path="/tarefas" element={<TarefasPage />} />
             <Route path="/configuracoes" element={<ConfiguracoesPage />} />
             <Route path="/auth" element={<Auth />} />

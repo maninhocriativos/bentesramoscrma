@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare } from 'lucide-react';
+import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Sidebar,
@@ -67,6 +67,12 @@ const menuItems: MenuItem[] = [
     title: 'Documentos', 
     url: '/documentos', 
     icon: FileText,
+    visibility: 'all'
+  },
+  { 
+    title: 'Contratos', 
+    url: '/contratos', 
+    icon: FileSignature,
     visibility: 'all'
   },
   { 

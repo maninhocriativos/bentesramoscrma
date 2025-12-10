@@ -6,7 +6,6 @@ import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
 import { DashboardFiltersBar, DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { ConversionMetrics } from '@/components/dashboard/ConversionMetrics';
 import { AlertasWidget } from '@/components/AlertasWidget';
-import { ContractsPendingWidget } from '@/components/dashboard/ContractsPendingWidget';
 import { useLeads } from '@/hooks/useLeads';
 import { useProcessos } from '@/hooks/useProcessos';
 import { useAlertas } from '@/hooks/useAlertas';
@@ -110,16 +109,15 @@ export default function DashboardPage() {
             <DashboardKPIs leads={filteredLeads} processos={processos} />
 
             <ConversionMetrics leads={leads} />
+            
+            <DashboardCharts leads={filteredLeads} />
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <ContractsPendingWidget leads={leads} />
+            <div className="mt-4">
               <AlertasWidget 
                 alertas={alertas} 
                 onAlertClick={handleAlertClick}
               />
             </div>
-            
-            <DashboardCharts leads={filteredLeads} />
           </>
         )}
       </div>
