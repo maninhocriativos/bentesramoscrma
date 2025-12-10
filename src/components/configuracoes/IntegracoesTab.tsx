@@ -323,19 +323,53 @@ export function IntegracoesTab() {
             icon={<FileSignature className="h-5 w-5 text-purple-600" />}
             title="Clicksign"
             description="Assinatura digital de documentos"
-            status="coming-soon"
+            status="active"
             color="bg-purple-50"
           >
             <div className="space-y-3 pt-2">
-              <div className="p-3 bg-muted/30 rounded-lg border border-border/50">
-                <p className="text-xs text-muted-foreground">
-                  URL do webhook será gerada após ativação
+              <div className="space-y-2">
+                <Label className="text-xs font-medium flex items-center gap-2">
+                  URL do Webhook
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-xs text-xs">Configure esta URL no painel do Clicksign para receber notificações de assinatura</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </Label>
+                <div className="flex gap-2">
+                  <Input 
+                    readOnly 
+                    value="https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/clicksign-webhook"
+                    className="font-mono text-xs bg-muted/30 truncate h-9"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    className="shrink-0 h-9 w-9 hover:bg-purple-50 hover:border-purple-300"
+                    onClick={() => copyToClipboard('https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/clicksign-webhook', 'clicksign-webhook')}
+                  >
+                    {copiedField === 'clicksign-webhook' ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+              <div className="p-3 bg-purple-50 rounded-lg border border-purple-100">
+                <p className="text-xs text-purple-700 flex items-center gap-1.5">
+                  <Check className="h-3 w-3" />
+                  Integração configurada e pronta para uso
                 </p>
               </div>
-              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <Clock className="h-3 w-3" />
-                Contratos com assinatura eletrônica
-              </p>
+              <a 
+                href="https://app.clicksign.com" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1.5"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Acessar painel do Clicksign
+              </a>
             </div>
           </IntegrationCard>
         </div>
