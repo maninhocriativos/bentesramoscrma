@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Copy, Check, UserPlus } from 'lucide-react';
+import { Copy, Check, UserPlus, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -48,6 +48,7 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
   const [saving, setSaving] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isResend, setIsResend] = useState(false);
 
   const resetForm = () => {
     setEmail('');
@@ -55,6 +56,7 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
     setErrors({});
     setInviteLink(null);
     setCopied(false);
+    setIsResend(false);
   };
 
   const handleClose = (open: boolean) => {
@@ -62,6 +64,28 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
       resetForm();
     }
     onOpenChange(open);
+  };
+
+  const sendInviteEmail = async (targetEmail: string, targetRole: string, signupLink: string) => {
+    try {
+      const { data: emailData, error: emailError } = await supabase.functions.invoke('send-invite-email', {
+        body: {
+          email: targetEmail,
+          role: targetRole,
+          inviteLink: signupLink,
+        },
+      });
+      
+      if (emailError || !emailData?.success) {
+        console.error('Email error:', emailError || emailData?.error);
+        return { success: false, error: emailData?.error || emailError?.message };
+      }
+      
+      return { success: true };
+    } catch (emailErr: any) {
+      console.error('Error sending email:', emailErr);
+      return { success: false, error: emailErr.message };
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -84,16 +108,10 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
     // Check if email already has a pending invite
     const { data: existingInvite } = await supabase
       .from('pending_invites')
-      .select('id')
+      .select('id, role')
       .eq('email', result.data.email)
       .is('accepted_at', null)
       .maybeSingle();
-    
-    if (existingInvite) {
-      setErrors({ email: 'Este email já possui um convite pendente' });
-      setSaving(false);
-      return;
-    }
     
     // Check if user already exists
     const { data: existingUser } = await supabase
@@ -104,6 +122,40 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
     
     if (existingUser) {
       setErrors({ email: 'Este email já está cadastrado no sistema' });
+      setSaving(false);
+      return;
+    }
+    
+    // Generate the signup link
+    const signupLink = `${window.location.origin}/auth?email=${encodeURIComponent(result.data.email)}`;
+    
+    if (existingInvite) {
+      // Update role if different and resend email
+      if (existingInvite.role !== result.data.role) {
+        await supabase
+          .from('pending_invites')
+          .update({ role: result.data.role as AppRole })
+          .eq('id', existingInvite.id);
+      }
+      
+      setIsResend(true);
+      setInviteLink(signupLink);
+      
+      const emailResult = await sendInviteEmail(result.data.email, result.data.role, signupLink);
+      
+      if (emailResult.success) {
+        toast({
+          title: 'Email reenviado!',
+          description: `Novo email de convite enviado para ${result.data.email}`,
+        });
+      } else {
+        toast({
+          title: 'Email não enviado',
+          description: 'Use o link abaixo para compartilhar manualmente.',
+          variant: 'default',
+        });
+      }
+      
       setSaving(false);
       return;
     }
@@ -127,35 +179,16 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
       return;
     }
     
-    // Generate the signup link
-    const signupLink = `${window.location.origin}/auth?email=${encodeURIComponent(result.data.email)}`;
     setInviteLink(signupLink);
     
-    // Send the invite email
-    try {
-      const { data: emailData, error: emailError } = await supabase.functions.invoke('send-invite-email', {
-        body: {
-          email: result.data.email,
-          role: result.data.role,
-          inviteLink: signupLink,
-        },
+    const emailResult = await sendInviteEmail(result.data.email, result.data.role, signupLink);
+    
+    if (emailResult.success) {
+      toast({
+        title: 'Convite enviado!',
+        description: `Email de convite enviado para ${result.data.email}`,
       });
-      
-      if (emailError || !emailData?.success) {
-        console.error('Email error:', emailError || emailData?.error);
-        toast({
-          title: 'Convite criado!',
-          description: 'Não foi possível enviar o email. Use o link abaixo para compartilhar manualmente.',
-          variant: 'default',
-        });
-      } else {
-        toast({
-          title: 'Convite enviado!',
-          description: `Email de convite enviado para ${result.data.email}`,
-        });
-      }
-    } catch (emailErr) {
-      console.error('Error sending email:', emailErr);
+    } else {
       toast({
         title: 'Convite criado!',
         description: 'Não foi possível enviar o email. Use o link abaixo para compartilhar manualmente.',
@@ -192,7 +225,11 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
           <div className="space-y-4 py-4">
             <Alert className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800">
               <AlertDescription className="text-green-800 dark:text-green-200">
-                Convite criado com sucesso! Envie o link abaixo para <strong>{email}</strong>.
+                {isResend ? (
+                  <>Email reenviado com sucesso para <strong>{email}</strong>!</>
+                ) : (
+                  <>Convite criado com sucesso! Envie o link abaixo para <strong>{email}</strong>.</>
+                )}
               </AlertDescription>
             </Alert>
             
@@ -261,6 +298,11 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
               )}
             </div>
 
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <RefreshCw className="h-3 w-3" />
+              Se o email já tiver um convite pendente, o email será reenviado.
+            </p>
+
             <DialogFooter className="gap-2 sm:gap-0">
               <Button 
                 type="button" 
@@ -271,7 +313,7 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
                 Cancelar
               </Button>
               <Button type="submit" disabled={saving} className="rounded-xl">
-                {saving ? 'Criando...' : 'Criar Convite'}
+                {saving ? 'Enviando...' : 'Enviar Convite'}
               </Button>
             </DialogFooter>
           </form>
