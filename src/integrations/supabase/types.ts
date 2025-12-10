@@ -359,6 +359,42 @@ export type Database = {
         }
         Relationships: []
       }
+      modelos_contratos: {
+        Row: {
+          arquivo_nome: string
+          arquivo_url: string
+          categoria: string
+          created_at: string
+          created_by: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          arquivo_nome: string
+          arquivo_url: string
+          categoria: string
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          id?: string
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          arquivo_nome?: string
+          arquivo_url?: string
+          categoria?: string
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          id?: string
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       notificacoes_prazos: {
         Row: {
           canal: string | null

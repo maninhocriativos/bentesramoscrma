@@ -1,6 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Clock, XCircle, CheckCircle2, FileSignature, RefreshCw, Loader2 } from 'lucide-react';
+import { Clock, XCircle, CheckCircle2, FileSignature, RefreshCw, Loader2, Send } from 'lucide-react';
 
 interface ContratosKPIsProps {
   data: {
@@ -11,10 +11,11 @@ interface ContratosKPIsProps {
     total: number;
   };
   onRefresh: () => void;
+  onSendContract: () => void;
   refreshing?: boolean;
 }
 
-export function ContratosKPIs({ data, onRefresh, refreshing = false }: ContratosKPIsProps) {
+export function ContratosKPIs({ data, onRefresh, onSendContract, refreshing = false }: ContratosKPIsProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -22,14 +23,20 @@ export function ContratosKPIs({ data, onRefresh, refreshing = false }: Contratos
           <FileSignature className="h-5 w-5" />
           Documentos
         </h2>
-        <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
-          {refreshing ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4 mr-2" />
-          )}
-          Atualizar
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
+            {refreshing ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-2" />
+            )}
+            Atualizar
+          </Button>
+          <Button size="sm" onClick={onSendContract}>
+            <Send className="h-4 w-4 mr-2" />
+            Enviar Contrato
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
