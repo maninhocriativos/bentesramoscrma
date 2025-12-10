@@ -13,9 +13,22 @@ import { useToast } from '@/hooks/use-toast';
 import { UserPlus, Loader2 } from 'lucide-react';
 import logo from '@/assets/logo-bentes-ramos.png';
 
-const authSchema = z.object({
+// Schema for login - simpler validation
+const loginSchema = z.object({
   email: z.string().email('Email inválido').max(255),
   password: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres').max(100),
+});
+
+// Schema for registration - stronger password requirements
+const registerSchema = z.object({
+  email: z.string().email('Email inválido').max(255),
+  password: z
+    .string()
+    .min(8, 'Senha deve ter no mínimo 8 caracteres')
+    .max(100)
+    .regex(/[a-z]/, 'Senha deve conter pelo menos uma letra minúscula')
+    .regex(/[A-Z]/, 'Senha deve conter pelo menos uma letra maiúscula')
+    .regex(/[0-9]/, 'Senha deve conter pelo menos um número'),
 });
 
 export default function Auth() {
@@ -66,8 +79,9 @@ export default function Auth() {
     }
   }, [user, loading, navigate]);
 
-  const validateForm = () => {
-    const result = authSchema.safeParse({ email, password });
+  const validateForm = (isRegistration = false) => {
+    const schema = isRegistration ? registerSchema : loginSchema;
+    const result = schema.safeParse({ email, password });
     if (!result.success) {
       const fieldErrors: { email?: string; password?: string } = {};
       result.error.errors.forEach((err) => {
@@ -83,7 +97,7 @@ export default function Auth() {
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    if (!validateForm(false)) return;
 
     setIsSubmitting(true);
     const { error } = await signIn(email, password);
@@ -102,7 +116,7 @@ export default function Auth() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    if (!validateForm(true)) return;
 
     setIsSubmitting(true);
     const { error } = await signUp(email, password);
@@ -120,8 +134,11 @@ export default function Auth() {
     } else {
       toast({
         title: 'Conta criada!',
-        description: 'Verifique seu email para confirmar o cadastro.',
+        description: 'Sua conta foi criada e está aguardando aprovação do administrador. Você será notificado por email.',
       });
+      setEmail('');
+      setPassword('');
+      setActiveTab('login');
     }
   };
 
@@ -291,13 +308,22 @@ export default function Auth() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="rounded-xl"
-                    placeholder="Mínimo 6 caracteres"
+                    placeholder="Senha forte"
                     required
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Mínimo 8 caracteres, com letra maiúscula, minúscula e número
+                  </p>
                   {errors.password && (
                     <p className="text-sm text-destructive mt-1">{errors.password}</p>
                   )}
                 </div>
+
+                <Alert className="bg-amber-50 border-amber-200 text-amber-800">
+                  <AlertDescription className="text-xs">
+                    Após o cadastro, sua conta precisará ser aprovada por um administrador antes de você poder acessar o sistema.
+                  </AlertDescription>
+                </Alert>
                 
                 <Button 
                   type="submit" 

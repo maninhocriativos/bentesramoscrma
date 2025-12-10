@@ -14,6 +14,7 @@ export interface UserWithRole {
   cargo: string | null;
   role: AppRole | null;
   isPending?: boolean;
+  aprovado?: boolean;
 }
 
 export interface PendingInvite {
@@ -26,6 +27,7 @@ export interface PendingInvite {
 
 export function useUsers() {
   const [users, setUsers] = useState<UserWithRole[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<UserWithRole[]>([]);
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
@@ -74,8 +76,8 @@ export function useUsers() {
       setPendingInvites(invites);
     }
 
-    // Merge profiles with roles
-    const usersWithRoles: UserWithRole[] = (perfis || []).map(perfil => {
+    // Merge profiles with roles and separate approved from pending
+    const allUsers: UserWithRole[] = (perfis || []).map(perfil => {
       const userRole = roles?.find(r => r.user_id === perfil.id);
       return {
         id: perfil.id,
@@ -86,10 +88,13 @@ export function useUsers() {
         cargo: perfil.cargo,
         role: userRole?.role || (perfil.cargo as AppRole) || null,
         isPending: false,
+        aprovado: (perfil as any).aprovado ?? true,
       };
     });
 
-    setUsers(usersWithRoles);
+    // Separate approved users from pending approvals
+    setUsers(allUsers.filter(u => u.aprovado === true));
+    setPendingApprovals(allUsers.filter(u => u.aprovado === false));
     setLoading(false);
   };
 
@@ -241,18 +246,76 @@ export function useUsers() {
     }
   };
 
+  const approveUser = async (userId: string) => {
+    const { error } = await supabase
+      .from('perfis')
+      .update({ aprovado: true })
+      .eq('id', userId);
+
+    if (error) {
+      toast({
+        title: 'Erro ao aprovar usuário',
+        description: error.message,
+        variant: 'destructive',
+      });
+      return false;
+    }
+
+    toast({
+      title: 'Usuário aprovado!',
+      description: 'O usuário agora pode acessar o sistema.',
+    });
+
+    await fetchUsers();
+    return true;
+  };
+
+  const rejectUser = async (userId: string) => {
+    // Delete from user_roles first
+    await supabase
+      .from('user_roles')
+      .delete()
+      .eq('user_id', userId);
+
+    // Delete from perfis
+    const { error } = await supabase
+      .from('perfis')
+      .delete()
+      .eq('id', userId);
+
+    if (error) {
+      toast({
+        title: 'Erro ao rejeitar usuário',
+        description: error.message,
+        variant: 'destructive',
+      });
+      return false;
+    }
+
+    toast({
+      title: 'Solicitação rejeitada',
+      description: 'O cadastro foi removido.',
+    });
+
+    await fetchUsers();
+    return true;
+  };
+
   useEffect(() => {
     fetchUsers();
   }, []);
 
   return {
     users,
+    pendingApprovals,
     pendingInvites,
     loading,
     updateUserRole,
     deleteUser,
     deleteInvite,
     resendInvite,
+    approveUser,
+    rejectUser,
     refetch: fetchUsers,
   };
 }

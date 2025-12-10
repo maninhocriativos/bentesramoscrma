@@ -544,6 +544,7 @@ export type Database = {
       }
       perfis: {
         Row: {
+          aprovado: boolean | null
           cargo: string | null
           email: string | null
           id: string
@@ -552,6 +553,7 @@ export type Database = {
           telefone: string | null
         }
         Insert: {
+          aprovado?: boolean | null
           cargo?: string | null
           email?: string | null
           id: string
@@ -560,6 +562,7 @@ export type Database = {
           telefone?: string | null
         }
         Update: {
+          aprovado?: boolean | null
           cargo?: string | null
           email?: string | null
           id?: string
