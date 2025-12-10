@@ -59,13 +59,11 @@ export default function ContratosPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('todos');
 
-  const fetchContractsFromClicksign = useCallback(async (showLoading = true) => {
+  const fetchContractsFromClicksign = useCallback(async (showLoading = true, showToast = false) => {
     if (showLoading) setLoading(true);
     setRefreshing(!showLoading);
     
     try {
-      console.log('Fetching documents from Clicksign...');
-      
       const { data, error } = await supabase.functions.invoke('clicksign', {
         body: { action: 'list_documents', page: 1 },
       });
@@ -74,8 +72,6 @@ export default function ContratosPage() {
         console.error('Error fetching from Clicksign:', error);
         throw error;
       }
-
-      console.log('Clicksign response:', data);
 
       // Map Clicksign documents to our format
       const documents = data?.documents || [];
@@ -100,31 +96,40 @@ export default function ContratosPage() {
 
       setContratos(mappedContracts);
       
-      if (!showLoading) {
+      if (showToast) {
         toast({
           title: 'Contratos atualizados',
-          description: `${mappedContracts.length} documentos encontrados no Clicksign.`,
+          description: `${mappedContracts.length} documentos encontrados.`,
         });
       }
     } catch (error: any) {
       console.error('Error fetching contracts:', error);
-      toast({
-        title: 'Erro ao buscar contratos',
-        description: error.message || 'Não foi possível conectar ao Clicksign.',
-        variant: 'destructive',
-      });
+      if (showToast) {
+        toast({
+          title: 'Erro ao buscar contratos',
+          description: error.message || 'Não foi possível conectar ao Clicksign.',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, [toast]);
 
+  // Fetch on mount and set up auto-refresh every 30 seconds
   useEffect(() => {
     fetchContractsFromClicksign();
-  }, []);
+    
+    const interval = setInterval(() => {
+      fetchContractsFromClicksign(false);
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [fetchContractsFromClicksign]);
 
   const handleRefresh = () => {
-    fetchContractsFromClicksign(false);
+    fetchContractsFromClicksign(false, true); // Manual refresh shows toast
   };
 
   const filteredContratos = contratos.filter(contrato => {
