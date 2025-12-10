@@ -8,7 +8,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Edit2, Trash2, Loader2, UserPlus, RefreshCw, Clock, Copy, Check } from 'lucide-react';
+import { Edit2, Trash2, Loader2, UserPlus, RefreshCw, Clock, Copy, Check, UserCheck, UserX } from 'lucide-react';
 import { UserWithRole, PendingInvite, useUsers } from '@/hooks/useUsers';
 import { EditUserModal } from './EditUserModal';
 import { InviteUserModal } from './InviteUserModal';
@@ -27,13 +27,15 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export function UsersTable() {
-  const { users, pendingInvites, loading, updateUserRole, deleteUser, deleteInvite, resendInvite, refetch } = useUsers();
+  const { users, pendingApprovals, pendingInvites, loading, updateUserRole, deleteUser, deleteInvite, resendInvite, approveUser, rejectUser, refetch } = useUsers();
   const { user: currentUser } = useAuth();
   const [editingUser, setEditingUser] = useState<UserWithRole | null>(null);
   const [deletingUser, setDeletingUser] = useState<UserWithRole | null>(null);
   const [deletingInvite, setDeletingInvite] = useState<PendingInvite | null>(null);
+  const [rejectingUser, setRejectingUser] = useState<UserWithRole | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
@@ -51,6 +53,20 @@ export function UsersTable() {
     await deleteInvite(deletingInvite.id);
     setIsDeleting(false);
     setDeletingInvite(null);
+  };
+
+  const handleApprove = async (userId: string) => {
+    setApprovingId(userId);
+    await approveUser(userId);
+    setApprovingId(null);
+  };
+
+  const handleReject = async () => {
+    if (!rejectingUser) return;
+    setIsDeleting(true);
+    await rejectUser(rejectingUser.id);
+    setIsDeleting(false);
+    setRejectingUser(null);
   };
 
   const handleResendInvite = async (invite: PendingInvite) => {
@@ -193,6 +209,73 @@ export function UsersTable() {
         </div>
       )}
 
+      {/* Pending Approvals Section */}
+      {pendingApprovals.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <UserCheck className="h-4 w-4" />
+            <span>Aguardando Aprovação ({pendingApprovals.length})</span>
+          </div>
+          <div className="rounded-xl border border-blue-200 dark:border-blue-800 overflow-hidden bg-blue-50/50 dark:bg-blue-950/20">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-blue-100/50 dark:bg-blue-900/30 hover:bg-blue-100/50 dark:hover:bg-blue-900/30 border-b border-blue-200 dark:border-blue-800">
+                  <TableHead className="font-semibold text-blue-900 dark:text-blue-100">Email</TableHead>
+                  <TableHead className="font-semibold text-blue-900 dark:text-blue-100">Cargo Solicitado</TableHead>
+                  <TableHead className="font-semibold text-blue-900 dark:text-blue-100">Status</TableHead>
+                  <TableHead className="w-[140px] font-semibold text-blue-900 dark:text-blue-100">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendingApprovals.map((user) => (
+                  <TableRow key={user.id} className="bg-white/50 dark:bg-card/50 hover:bg-blue-50 dark:hover:bg-blue-950/30">
+                    <TableCell className="font-medium">{user.email}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${getRoleBadgeStyles(user.role)}`}>
+                        {user.role || 'Advogado'}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-200 dark:border-blue-700">
+                        <Clock className="h-3 w-3" />
+                        Aguardando
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleApprove(user.id)}
+                          disabled={approvingId === user.id}
+                          className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-100"
+                          title="Aprovar usuário"
+                        >
+                          {approvingId === user.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <UserCheck className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setRejectingUser(user)}
+                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          title="Rejeitar cadastro"
+                        >
+                          <UserX className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+
       {/* Active Users Section */}
       <div className="rounded-xl border-0 overflow-hidden shadow-soft">
         <Table className="table-professional">
@@ -318,6 +401,30 @@ export function UsersTable() {
               className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isDeleting ? 'Cancelando...' : 'Cancelar Convite'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reject User Dialog */}
+      <AlertDialog open={!!rejectingUser} onOpenChange={(open) => !open && setRejectingUser(null)}>
+        <AlertDialogContent className="rounded-xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rejeitar Cadastro</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja rejeitar o cadastro de{' '}
+              <strong>{rejectingUser?.email}</strong>?
+              O usuário será removido permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleReject}
+              disabled={isDeleting}
+              className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Rejeitando...' : 'Rejeitar'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

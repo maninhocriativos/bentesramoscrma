@@ -27,9 +27,34 @@ export function useAuth() {
     return () => subscription.unsubscribe();
   }, []);
 
+  const checkUserApproval = async (userId: string): Promise<boolean> => {
+    const { data } = await supabase
+      .from('perfis')
+      .select('aprovado')
+      .eq('id', userId)
+      .single();
+    return data?.aprovado ?? false;
+  };
+
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error };
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    
+    if (error) return { error };
+    
+    // Check if user is approved
+    if (data.user) {
+      const isApproved = await checkUserApproval(data.user.id);
+      if (!isApproved) {
+        await supabase.auth.signOut();
+        return { 
+          error: { 
+            message: 'Sua conta ainda não foi aprovada. Aguarde a aprovação do administrador.' 
+          } as any 
+        };
+      }
+    }
+    
+    return { error: null };
   };
 
   const signUp = async (email: string, password: string) => {
