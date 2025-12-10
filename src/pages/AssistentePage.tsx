@@ -17,8 +17,8 @@ interface Message {
   timestamp: Date;
 }
 
-// Configure seu Assistant ID aqui
-const ASSISTANT_ID = 'asst_XXXXXXXXX'; // Substitua pelo seu Assistant ID
+// Assistant ID configurado
+const ASSISTANT_ID = 'asst_rGFHqXnOLL6JA7UyRUdXQmaQ';
 
 export default function AssistentePage() {
   const [messages, setMessages] = useState<Message[]>([]);
