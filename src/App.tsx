@@ -14,6 +14,7 @@ import DocumentosPage from "./pages/DocumentosPage";
 import TarefasPage from "./pages/TarefasPage";
 import ContratosPage from "./pages/ContratosPage";
 import LeadDetailPage from "./pages/LeadDetailPage";
+import AssistentePage from "./pages/AssistentePage";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -38,6 +39,7 @@ const App = () => (
             <Route path="/contratos" element={<ContratosPage />} />
             <Route path="/tarefas" element={<TarefasPage />} />
             <Route path="/configuracoes" element={<ConfiguracoesPage />} />
+            <Route path="/assistente" element={<AssistentePage />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature } from 'lucide-react';
+import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature, Bot } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Sidebar,
@@ -73,6 +73,12 @@ const menuItems: MenuItem[] = [
     title: 'Contratos', 
     url: '/contratos', 
     icon: FileSignature,
+    visibility: 'all'
+  },
+  { 
+    title: 'Assistente IA', 
+    url: '/assistente', 
+    icon: Bot,
     visibility: 'all'
   },
   { 
