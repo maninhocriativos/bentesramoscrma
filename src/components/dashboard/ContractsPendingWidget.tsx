@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { FileSignature, Clock, CheckCircle2, XCircle, AlertCircle, ChevronRight, Loader2 } from 'lucide-react';
+import { FileSignature, Clock, CheckCircle2, XCircle, AlertCircle, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { Lead } from '@/types/leads';
+import { useToast } from '@/hooks/use-toast';
 
 interface ContractWithStatus {
   lead: Lead;
@@ -30,82 +31,143 @@ interface ContractsPendingWidgetProps {
 
 export function ContractsPendingWidget({ leads }: ContractsPendingWidgetProps) {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [contracts, setContracts] = useState<ContractWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Filter leads that have link_contrato
   const leadsWithContract = leads.filter(lead => lead.link_contrato);
 
-  useEffect(() => {
-    const fetchContractStatuses = async () => {
-      if (leadsWithContract.length === 0) {
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      const contractsWithStatus: ContractWithStatus[] = [];
-
-      // Fetch interactions for all leads with contracts
-      const leadIds = leadsWithContract.map(lead => lead.id);
-      
-      const { data: interactions, error } = await supabase
-        .from('interacoes')
-        .select('cliente_id, resumo, created_at')
-        .in('cliente_id', leadIds)
-        .eq('tipo', 'Documento')
-        .ilike('resumo', 'Contrato:%')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching contract statuses:', error);
-        setLoading(false);
-        return;
-      }
-
-      // Map interactions to leads
-      for (const lead of leadsWithContract) {
-        const leadInteraction = interactions?.find(i => i.cliente_id === lead.id);
-        let status = 'Aguardando Assinatura';
-        let lastUpdate = null;
-
-        if (leadInteraction) {
-          const statusMatch = leadInteraction.resumo.match(/Contrato:\s*(.+)/);
-          if (statusMatch) {
-            status = statusMatch[1].trim();
-          }
-          lastUpdate = leadInteraction.created_at;
-        }
-
-        contractsWithStatus.push({
-          lead,
-          status,
-          lastUpdate,
-        });
-      }
-
-      // Sort: pending first, then by last update
-      contractsWithStatus.sort((a, b) => {
-        const pendingStatuses = ['Aguardando Assinatura', 'Assinatura Parcial', 'Documento Enviado'];
-        const aIsPending = pendingStatuses.includes(a.status);
-        const bIsPending = pendingStatuses.includes(b.status);
-        
-        if (aIsPending && !bIsPending) return -1;
-        if (!aIsPending && bIsPending) return 1;
-        
-        // Then by last update
-        if (a.lastUpdate && b.lastUpdate) {
-          return new Date(b.lastUpdate).getTime() - new Date(a.lastUpdate).getTime();
-        }
-        return 0;
-      });
-
-      setContracts(contractsWithStatus);
+  const fetchContractStatuses = useCallback(async (showLoading = true) => {
+    if (leadsWithContract.length === 0) {
       setLoading(false);
-    };
+      setContracts([]);
+      return;
+    }
 
+    if (showLoading) setLoading(true);
+    const contractsWithStatus: ContractWithStatus[] = [];
+
+    // Fetch interactions for all leads with contracts
+    const leadIds = leadsWithContract.map(lead => lead.id);
+    
+    const { data: interactions, error } = await supabase
+      .from('interacoes')
+      .select('cliente_id, resumo, created_at')
+      .in('cliente_id', leadIds)
+      .eq('tipo', 'Documento')
+      .ilike('resumo', 'Contrato:%')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching contract statuses:', error);
+      setLoading(false);
+      return;
+    }
+
+    // Map interactions to leads
+    for (const lead of leadsWithContract) {
+      const leadInteraction = interactions?.find(i => i.cliente_id === lead.id);
+      let status = 'Aguardando Assinatura';
+      let lastUpdate = null;
+
+      if (leadInteraction) {
+        const statusMatch = leadInteraction.resumo.match(/Contrato:\s*(.+)/);
+        if (statusMatch) {
+          status = statusMatch[1].trim();
+        }
+        lastUpdate = leadInteraction.created_at;
+      }
+
+      contractsWithStatus.push({
+        lead,
+        status,
+        lastUpdate,
+      });
+    }
+
+    // Sort: pending first, then by last update
+    contractsWithStatus.sort((a, b) => {
+      const pendingStatuses = ['Aguardando Assinatura', 'Assinatura Parcial', 'Documento Enviado'];
+      const aIsPending = pendingStatuses.includes(a.status);
+      const bIsPending = pendingStatuses.includes(b.status);
+      
+      if (aIsPending && !bIsPending) return -1;
+      if (!aIsPending && bIsPending) return 1;
+      
+      // Then by last update
+      if (a.lastUpdate && b.lastUpdate) {
+        return new Date(b.lastUpdate).getTime() - new Date(a.lastUpdate).getTime();
+      }
+      return 0;
+    });
+
+    setContracts(contractsWithStatus);
+    setLoading(false);
+  }, [leadsWithContract]);
+
+  // Initial fetch
+  useEffect(() => {
     fetchContractStatuses();
   }, [leads]);
+
+  // Real-time subscription for contract status updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('contracts-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'interacoes',
+        },
+        (payload) => {
+          console.log('New interaction received:', payload);
+          // Check if it's a contract-related interaction
+          const resumo = payload.new?.resumo as string;
+          if (payload.new?.tipo === 'Documento' && resumo?.startsWith('Contrato:')) {
+            toast({
+              title: 'Atualização de contrato',
+              description: resumo,
+            });
+            // Refresh contract statuses
+            fetchContractStatuses(false);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'leads_juridicos',
+        },
+        (payload) => {
+          // Check if link_contrato was updated
+          if (payload.new?.link_contrato !== payload.old?.link_contrato) {
+            console.log('Contract link updated:', payload);
+            fetchContractStatuses(false);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchContractStatuses, toast]);
+
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    await fetchContractStatuses(false);
+    setRefreshing(false);
+    toast({
+      title: 'Atualizado',
+      description: 'Status dos contratos atualizados.',
+    });
+  };
 
   const pendingCount = contracts.filter(c => 
     ['Aguardando Assinatura', 'Assinatura Parcial', 'Documento Enviado'].includes(c.status)
@@ -134,6 +196,15 @@ export function ContractsPendingWidget({ leads }: ContractsPendingWidgetProps) {
             Contratos para Assinatura
           </CardTitle>
           <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleManualRefresh}
+              disabled={refreshing}
+              className="h-7 px-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </Button>
             <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
               {pendingCount} pendentes
             </Badge>
