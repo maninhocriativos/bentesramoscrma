@@ -13,10 +13,20 @@ export interface UserWithRole {
   telefone: string | null;
   cargo: string | null;
   role: AppRole | null;
+  isPending?: boolean;
+}
+
+export interface PendingInvite {
+  id: string;
+  email: string;
+  role: AppRole;
+  created_at: string | null;
+  invited_by: string | null;
 }
 
 export function useUsers() {
   const [users, setUsers] = useState<UserWithRole[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -53,6 +63,17 @@ export function useUsers() {
       return;
     }
 
+    // Fetch pending invites
+    const { data: invites, error: invitesError } = await supabase
+      .from('pending_invites')
+      .select('*')
+      .is('accepted_at', null)
+      .order('created_at', { ascending: false });
+
+    if (!invitesError && invites) {
+      setPendingInvites(invites);
+    }
+
     // Merge profiles with roles
     const usersWithRoles: UserWithRole[] = (perfis || []).map(perfil => {
       const userRole = roles?.find(r => r.user_id === perfil.id);
@@ -64,6 +85,7 @@ export function useUsers() {
         telefone: perfil.telefone,
         cargo: perfil.cargo,
         role: userRole?.role || (perfil.cargo as AppRole) || null,
+        isPending: false,
       };
     });
 
@@ -158,15 +180,79 @@ export function useUsers() {
     return true;
   };
 
+  const deleteInvite = async (inviteId: string) => {
+    const { error } = await supabase
+      .from('pending_invites')
+      .delete()
+      .eq('id', inviteId);
+
+    if (error) {
+      toast({
+        title: 'Erro ao cancelar convite',
+        description: error.message,
+        variant: 'destructive',
+      });
+      return false;
+    }
+
+    toast({
+      title: 'Convite cancelado',
+      description: 'O convite foi removido.',
+    });
+
+    await fetchUsers();
+    return true;
+  };
+
+  const resendInvite = async (invite: PendingInvite) => {
+    const signupLink = `${window.location.origin}/auth?email=${encodeURIComponent(invite.email)}`;
+    
+    try {
+      const { data: emailData, error: emailError } = await supabase.functions.invoke('send-invite-email', {
+        body: {
+          email: invite.email,
+          role: invite.role,
+          inviteLink: signupLink,
+        },
+      });
+      
+      if (emailError || !emailData?.success) {
+        toast({
+          title: 'Erro ao reenviar',
+          description: 'Não foi possível enviar o email. Copie o link manualmente.',
+          variant: 'destructive',
+        });
+        return { success: false, link: signupLink };
+      }
+      
+      toast({
+        title: 'Email reenviado!',
+        description: `Convite reenviado para ${invite.email}`,
+      });
+      
+      return { success: true, link: signupLink };
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao reenviar',
+        description: err.message,
+        variant: 'destructive',
+      });
+      return { success: false, link: signupLink };
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
   }, []);
 
   return {
     users,
+    pendingInvites,
     loading,
     updateUserRole,
     deleteUser,
+    deleteInvite,
+    resendInvite,
     refetch: fetchUsers,
   };
 }
