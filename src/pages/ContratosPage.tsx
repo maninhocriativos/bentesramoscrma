@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ContratosKPIs } from '@/components/contratos/ContratosKPIs';
 import { ContratosTable } from '@/components/contratos/ContratosTable';
 import { ModelosContratos } from '@/components/contratos/ModelosContratos';
+import { EnviarContratoModal } from '@/components/contratos/EnviarContratoModal';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -58,6 +59,7 @@ export default function ContratosPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('todos');
+  const [enviarModalOpen, setEnviarModalOpen] = useState(false);
 
   const fetchContractsFromClicksign = useCallback(async (showLoading = true, showToast = false) => {
     if (showLoading) setLoading(true);
@@ -164,7 +166,12 @@ export default function ContratosPage() {
           </div>
         ) : (
           <>
-            <ContratosKPIs data={kpiData} onRefresh={handleRefresh} refreshing={refreshing} />
+            <ContratosKPIs 
+              data={kpiData} 
+              onRefresh={handleRefresh} 
+              onSendContract={() => setEnviarModalOpen(true)}
+              refreshing={refreshing} 
+            />
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="mb-4">
@@ -194,6 +201,12 @@ export default function ContratosPage() {
           </>
         )}
       </div>
+
+      <EnviarContratoModal 
+        isOpen={enviarModalOpen}
+        onClose={() => setEnviarModalOpen(false)}
+        onSuccess={handleRefresh}
+      />
     </AppLayout>
   );
 }
