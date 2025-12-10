@@ -4,6 +4,7 @@ import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { OnboardingModal } from '@/components/onboarding/OnboardingModal';
 import { PageTransition } from '@/components/layouts/PageTransition';
+import { FloatingChat } from '@/components/chat/FloatingChat';
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
 import { Loader2, Menu } from 'lucide-react';
@@ -53,6 +54,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       </div>
       
       {needsOnboarding && <OnboardingModal />}
+      <FloatingChat />
     </SidebarProvider>
   );
 }
