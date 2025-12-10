@@ -2,3 +2,9 @@ project_id = "qgenaltkjtlvwfgykpxq"
 
 [functions.send-invite-email]
 verify_jwt = false
+
+[functions.clicksign]
+verify_jwt = true
+
+[functions.clicksign-webhook]
+verify_jwt = false
