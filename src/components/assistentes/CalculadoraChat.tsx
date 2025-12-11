@@ -63,7 +63,10 @@ export function CalculadoraChat() {
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
     }
   }, [messages]);
 
@@ -151,6 +154,9 @@ export function CalculadoraChat() {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+    
+    // Manter foco no input
+    setTimeout(() => inputRef.current?.focus(), 0);
 
     try {
       const { data, error } = await supabase.functions.invoke('ai-chat', {
