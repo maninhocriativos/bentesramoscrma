@@ -18,8 +18,8 @@ serve(async (req) => {
       throw new Error('MANYCHAT_API_KEY não configurada');
     }
 
-    const { action, subscriberId, message, pageId } = await req.json();
-    console.log(`ManyChat action: ${action}`, { subscriberId, pageId });
+    const { action, subscriberId, message, searchTerm } = await req.json();
+    console.log(`ManyChat action: ${action}`, { subscriberId, searchTerm });
 
     const headers = {
       'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
@@ -29,36 +29,65 @@ serve(async (req) => {
     let result;
 
     switch (action) {
-      case 'listar_subscribers': {
-        // Lista todos os subscribers (contatos)
-        const response = await fetch(`${MANYCHAT_API_URL}/fb/subscriber/getSubscribers`, {
-          method: 'POST',
+      case 'buscar_por_nome': {
+        // Busca subscribers por nome
+        const url = new URL(`${MANYCHAT_API_URL}/fb/subscriber/findByName`);
+        url.searchParams.append('name', searchTerm);
+        
+        const response = await fetch(url.toString(), {
+          method: 'GET',
           headers,
-          body: JSON.stringify({
-            page_id: pageId,
-          }),
         });
-        result = await response.json();
-        console.log('Subscribers listados:', result);
+        
+        const data = await response.json();
+        console.log('Busca por nome:', data);
+        
+        if (data.status === 'success' && data.data) {
+          result = {
+            status: 'success',
+            data: data.data.map((sub: any) => ({
+              id: sub.id,
+              nome: sub.name || `${sub.first_name || ''} ${sub.last_name || ''}`.trim(),
+              foto: sub.profile_pic,
+              canal: sub.subscribed_source || 'facebook',
+              telefone: sub.phone,
+              email: sub.email,
+            })),
+          };
+        } else {
+          result = data;
+        }
+        break;
+      }
+
+      case 'buscar_por_telefone': {
+        // Busca subscriber por telefone
+        const url = new URL(`${MANYCHAT_API_URL}/fb/subscriber/findBySystemField`);
+        url.searchParams.append('field_name', 'phone');
+        url.searchParams.append('field_value', searchTerm);
+        
+        const response = await fetch(url.toString(), {
+          method: 'GET',
+          headers,
+        });
+        
+        const data = await response.json();
+        console.log('Busca por telefone:', data);
+        result = data;
         break;
       }
 
       case 'buscar_subscriber': {
-        // Busca informações de um subscriber específico
-        const response = await fetch(`${MANYCHAT_API_URL}/fb/subscriber/getInfo`, {
-          method: 'GET',
-          headers,
-        });
-        
-        // ManyChat usa query params para este endpoint
+        // Busca informações de um subscriber específico por ID
         const url = new URL(`${MANYCHAT_API_URL}/fb/subscriber/getInfo`);
         url.searchParams.append('subscriber_id', subscriberId);
         
-        const infoResponse = await fetch(url.toString(), {
+        const response = await fetch(url.toString(), {
           method: 'GET',
           headers,
         });
-        result = await infoResponse.json();
+        
+        result = await response.json();
         console.log('Subscriber info:', result);
         break;
       }
@@ -83,43 +112,9 @@ serve(async (req) => {
             },
           }),
         });
+        
         result = await response.json();
         console.log('Mensagem enviada:', result);
-        break;
-      }
-
-      case 'buscar_conversas': {
-        // Busca histórico de conversas usando a API de threads
-        // ManyChat não tem um endpoint direto para histórico, mas podemos usar custom fields
-        // ou integrar com webhooks para armazenar mensagens
-        
-        // Por enquanto, vamos buscar os subscribers e seus dados
-        const subscribersResponse = await fetch(`${MANYCHAT_API_URL}/fb/subscriber/getSubscribers`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            page_id: pageId,
-          }),
-        });
-        
-        const subscribersData = await subscribersResponse.json();
-        
-        if (subscribersData.status === 'success' && subscribersData.data) {
-          result = {
-            status: 'success',
-            data: subscribersData.data.map((sub: any) => ({
-              id: sub.id,
-              nome: sub.name || sub.first_name + ' ' + sub.last_name,
-              foto: sub.profile_pic,
-              canal: sub.subscribed_source || 'facebook',
-              ultimaMensagem: sub.last_interaction,
-              telefone: sub.phone,
-              email: sub.email,
-            })),
-          };
-        } else {
-          result = subscribersData;
-        }
         break;
       }
 
@@ -134,13 +129,13 @@ serve(async (req) => {
       }
 
       case 'adicionar_tag': {
-        const { tagId } = await req.json();
+        const body = await req.json();
         const response = await fetch(`${MANYCHAT_API_URL}/fb/subscriber/addTag`, {
           method: 'POST',
           headers,
           body: JSON.stringify({
             subscriber_id: subscriberId,
-            tag_id: tagId,
+            tag_id: body.tagId,
           }),
         });
         result = await response.json();

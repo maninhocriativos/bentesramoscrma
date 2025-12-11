@@ -16,8 +16,7 @@ import {
   RefreshCw,
   Instagram,
   Facebook,
-  MessageCircle,
-  Link2
+  MessageCircle
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -220,17 +219,25 @@ const ManyChatInbox = () => {
     }
   };
 
-  const syncFromManyChat = async () => {
+  const searchInManyChat = async () => {
+    if (!searchTerm.trim()) {
+      toast({
+        title: 'Busca',
+        description: 'Digite um nome para buscar no ManyChat',
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('manychat', {
-        body: { action: 'buscar_conversas' },
+        body: { action: 'buscar_por_nome', searchTerm: searchTerm.trim() },
       });
 
       if (error) throw error;
 
-      if (data.status === 'success' && data.data) {
-        // Sincronizar subscribers do ManyChat com o banco local
+      if (data.status === 'success' && data.data && data.data.length > 0) {
+        // Salvar subscribers encontrados no banco local
         for (const sub of data.data) {
           await supabase
             .from('manychat_subscribers' as any)
@@ -241,7 +248,7 @@ const ManyChatInbox = () => {
               telefone: sub.telefone,
               email: sub.email,
               canal: sub.canal,
-              ultima_interacao: sub.ultimaMensagem || new Date().toISOString(),
+              ultima_interacao: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             } as any, {
               onConflict: 'subscriber_id',
@@ -252,15 +259,20 @@ const ManyChatInbox = () => {
         await loadSubscribers();
         
         toast({
-          title: 'Sincronizado',
-          description: `${data.data.length} contatos sincronizados do ManyChat`,
+          title: 'Encontrados',
+          description: `${data.data.length} contato(s) encontrado(s)`,
+        });
+      } else {
+        toast({
+          title: 'Busca',
+          description: 'Nenhum contato encontrado com esse nome',
         });
       }
     } catch (error) {
-      console.error('Erro ao sincronizar:', error);
+      console.error('Erro ao buscar:', error);
       toast({
         title: 'Erro',
-        description: 'Não foi possível sincronizar com ManyChat',
+        description: 'Não foi possível buscar no ManyChat',
         variant: 'destructive',
       });
     } finally {
@@ -310,35 +322,36 @@ const ManyChatInbox = () => {
               <MessageSquare className="h-5 w-5" />
               Conversas
             </CardTitle>
-            <div className="flex gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={syncFromManyChat}
-                disabled={isLoading}
-                title="Sincronizar do ManyChat"
-              >
-                <Link2 className={`h-4 w-4 ${isLoading ? 'animate-pulse' : ''}`} />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={loadSubscribers}
-                disabled={isLoading}
-                title="Atualizar lista"
-              >
-                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={loadSubscribers}
+              disabled={isLoading}
+              title="Atualizar lista"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </Button>
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar contatos..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9"
-            />
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar contatos..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && searchInManyChat()}
+                className="pl-9"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={searchInManyChat}
+              disabled={isLoading}
+              title="Buscar no ManyChat"
+            >
+              <Search className="h-4 w-4" />
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="flex-1 p-0 overflow-hidden">
