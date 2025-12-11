@@ -17,7 +17,7 @@ const AVAILABLE_TOOLS = [
     type: "function",
     function: {
       name: "criar_compromisso",
-      description: "Cria um novo compromisso/evento na agenda do escritório. Use para agendar reuniões, audiências, prazos, etc.",
+      description: "Cria um novo compromisso/evento na agenda do escritório. Use para agendar reuniões, audiências, prazos, etc. Notifica automaticamente o responsável por email.",
       parameters: {
         type: "object",
         properties: {
@@ -28,6 +28,7 @@ const AVAILABLE_TOOLS = [
           descricao: { type: "string", description: "Descrição detalhada do compromisso" },
           lead_id: { type: "string", description: "ID do lead/cliente relacionado (opcional)" },
           processo_id: { type: "string", description: "ID do processo relacionado (opcional)" },
+          responsavel_id: { type: "string", description: "ID do usuário responsável (opcional, será notificado por email)" },
         },
         required: ["titulo", "data_inicio"],
       },
@@ -37,7 +38,7 @@ const AVAILABLE_TOOLS = [
     type: "function",
     function: {
       name: "criar_tarefa",
-      description: "Cria uma nova tarefa no sistema. Use para criar tarefas de acompanhamento, pendências, etc.",
+      description: "Cria uma nova tarefa no sistema. Notifica automaticamente o responsável por email. Use listar_usuarios primeiro para obter o ID do responsável.",
       parameters: {
         type: "object",
         properties: {
@@ -47,6 +48,7 @@ const AVAILABLE_TOOLS = [
           prioridade: { type: "string", enum: ["Baixa", "Media", "Alta", "Urgente"], description: "Prioridade da tarefa" },
           cliente_id: { type: "string", description: "ID do cliente relacionado (opcional)" },
           processo_id: { type: "string", description: "ID do processo relacionado (opcional)" },
+          responsavel_id: { type: "string", description: "ID do usuário responsável (será notificado por email)" },
         },
         required: ["titulo"],
       },
@@ -119,6 +121,28 @@ const AVAILABLE_TOOLS = [
           direcao: { type: "string", enum: ["Entrada", "Saída"], description: "Direção da interação" },
         },
         required: ["cliente_id", "tipo", "resumo"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "listar_usuarios",
+      description: "Lista todos os usuários aprovados do sistema com nome, email e cargo. Use para encontrar o ID de um usuário antes de atribuir tarefas ou compromissos.",
+      parameters: {
+        type: "object",
+        properties: {},
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "notificar_prazos_proximos",
+      description: "Envia notificações por email para todas as tarefas com prazo nos próximos 3 dias.",
+      parameters: {
+        type: "object",
+        properties: {},
       },
     },
   },

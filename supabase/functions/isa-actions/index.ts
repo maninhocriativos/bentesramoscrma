@@ -6,6 +6,187 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+
+// Função auxiliar para enviar email de notificação
+async function enviarNotificacaoEmail(
+  destinatarioEmail: string,
+  destinatarioNome: string,
+  assunto: string,
+  conteudoHtml: string
+) {
+  if (!RESEND_API_KEY) {
+    console.log('RESEND_API_KEY não configurada, notificação não enviada');
+    return { success: false, message: 'API de email não configurada' };
+  }
+
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: 'Isa - Assistente Bentes & Ramos <onboarding@resend.dev>',
+        to: [destinatarioEmail],
+        subject: assunto,
+        html: conteudoHtml,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Erro ao enviar email:', errorText);
+      return { success: false, message: 'Falha ao enviar notificação' };
+    }
+
+    console.log(`Email enviado para ${destinatarioEmail}`);
+    return { success: true, message: 'Notificação enviada' };
+  } catch (error) {
+    console.error('Erro ao enviar email:', error);
+    return { success: false, message: 'Erro ao enviar notificação' };
+  }
+}
+
+// Templates de email
+function gerarEmailTarefa(tarefa: any, responsavel: any, tipo: 'nova' | 'atualizada' | 'prazo') {
+  const cores: Record<string, string> = {
+    'Urgente': '#dc2626',
+    'Alta': '#ea580c',
+    'Media': '#ca8a04',
+    'Baixa': '#16a34a'
+  };
+  const prioridadeCor = cores[tarefa.prioridade] || '#6b7280';
+
+  const dataLimite = tarefa.data_limite 
+    ? new Date(tarefa.data_limite).toLocaleDateString('pt-BR')
+    : 'Não definida';
+
+  const titulos = {
+    nova: `🔔 Nova Tarefa Atribuída: ${tarefa.titulo}`,
+    atualizada: `📝 Tarefa Atualizada: ${tarefa.titulo}`,
+    prazo: `⚠️ Prazo se Aproximando: ${tarefa.titulo}`
+  };
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+    </head>
+    <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px;">
+      <div style="max-width: 600px; margin: 0 auto; background-color: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <div style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); padding: 30px; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 24px;">Bentes & Ramos Advogados</h1>
+          <p style="color: #94a3b8; margin: 10px 0 0 0; font-size: 14px;">Sistema de Gestão Jurídica</p>
+        </div>
+        
+        <div style="padding: 30px;">
+          <p style="color: #374151; font-size: 16px; margin: 0 0 20px 0;">
+            Olá <strong>${responsavel?.nome || 'Usuário'}</strong>,
+          </p>
+          
+          <div style="background-color: #f1f5f9; border-left: 4px solid ${prioridadeCor}; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h2 style="color: #1e293b; margin: 0 0 15px 0; font-size: 18px;">${tarefa.titulo}</h2>
+            
+            ${tarefa.descricao ? `<p style="color: #64748b; margin: 0 0 15px 0; font-size: 14px;">${tarefa.descricao}</p>` : ''}
+            
+            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+              <div>
+                <span style="color: #94a3b8; font-size: 12px; display: block;">Prioridade</span>
+                <span style="color: ${prioridadeCor}; font-weight: 600;">${tarefa.prioridade}</span>
+              </div>
+              <div>
+                <span style="color: #94a3b8; font-size: 12px; display: block;">Data Limite</span>
+                <span style="color: #1e293b; font-weight: 600;">${dataLimite}</span>
+              </div>
+              <div>
+                <span style="color: #94a3b8; font-size: 12px; display: block;">Status</span>
+                <span style="color: #1e293b; font-weight: 600;">${tarefa.status}</span>
+              </div>
+            </div>
+          </div>
+          
+          <p style="color: #64748b; font-size: 14px; margin: 0;">
+            Acesse o sistema para mais detalhes e gerenciar suas tarefas.
+          </p>
+        </div>
+        
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+          <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+            Esta é uma mensagem automática enviada por Isa, sua assistente virtual.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+function gerarEmailCompromisso(compromisso: any, responsavel: any) {
+  const dataInicio = new Date(compromisso.data_inicio).toLocaleString('pt-BR');
+  const dataFim = compromisso.data_fim 
+    ? new Date(compromisso.data_fim).toLocaleString('pt-BR')
+    : null;
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+    </head>
+    <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px;">
+      <div style="max-width: 600px; margin: 0 auto; background-color: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <div style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); padding: 30px; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 24px;">Bentes & Ramos Advogados</h1>
+          <p style="color: #94a3b8; margin: 10px 0 0 0; font-size: 14px;">Sistema de Gestão Jurídica</p>
+        </div>
+        
+        <div style="padding: 30px;">
+          <p style="color: #374151; font-size: 16px; margin: 0 0 20px 0;">
+            Olá <strong>${responsavel?.nome || 'Usuário'}</strong>,
+          </p>
+          
+          <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h2 style="color: #1e293b; margin: 0 0 15px 0; font-size: 18px;">📅 ${compromisso.titulo}</h2>
+            
+            ${compromisso.descricao ? `<p style="color: #64748b; margin: 0 0 15px 0; font-size: 14px;">${compromisso.descricao}</p>` : ''}
+            
+            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+              <div>
+                <span style="color: #94a3b8; font-size: 12px; display: block;">Tipo</span>
+                <span style="color: #1e293b; font-weight: 600;">${compromisso.tipo}</span>
+              </div>
+              <div>
+                <span style="color: #94a3b8; font-size: 12px; display: block;">Início</span>
+                <span style="color: #1e293b; font-weight: 600;">${dataInicio}</span>
+              </div>
+              ${dataFim ? `
+              <div>
+                <span style="color: #94a3b8; font-size: 12px; display: block;">Término</span>
+                <span style="color: #1e293b; font-weight: 600;">${dataFim}</span>
+              </div>
+              ` : ''}
+            </div>
+          </div>
+          
+          <p style="color: #64748b; font-size: 14px; margin: 0;">
+            Não se esqueça de adicionar ao seu calendário!
+          </p>
+        </div>
+        
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+          <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+            Esta é uma mensagem automática enviada por Isa, sua assistente virtual.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -21,9 +202,19 @@ serve(async (req) => {
 
     let result: any = { success: false, message: 'Ação não reconhecida' };
 
+    // Função auxiliar para buscar perfil do usuário
+    async function buscarPerfil(userId: string) {
+      const { data } = await supabase
+        .from('perfis')
+        .select('nome, email')
+        .eq('id', userId)
+        .single();
+      return data;
+    }
+
     switch (action) {
       case 'criar_compromisso': {
-        const { titulo, tipo, data_inicio, data_fim, descricao, lead_id, processo_id } = data;
+        const { titulo, tipo, data_inicio, data_fim, descricao, lead_id, processo_id, responsavel_id } = data;
         
         const { data: compromisso, error } = await supabase
           .from('compromissos')
@@ -35,6 +226,7 @@ serve(async (req) => {
             descricao,
             lead_id,
             processo_id,
+            responsavel_id,
           })
           .select()
           .single();
@@ -43,7 +235,20 @@ serve(async (req) => {
           console.error('Erro ao criar compromisso:', error);
           result = { success: false, message: `Erro ao criar compromisso: ${error.message}` };
         } else {
-          result = { success: true, message: `Compromisso "${titulo}" criado com sucesso para ${new Date(data_inicio).toLocaleString('pt-BR')}`, data: compromisso };
+          // Enviar notificação ao responsável se definido
+          if (responsavel_id) {
+            const responsavel = await buscarPerfil(responsavel_id);
+            if (responsavel?.email) {
+              const emailHtml = gerarEmailCompromisso(compromisso, responsavel);
+              await enviarNotificacaoEmail(
+                responsavel.email,
+                responsavel.nome || 'Usuário',
+                `📅 Novo Compromisso: ${titulo}`,
+                emailHtml
+              );
+            }
+          }
+          result = { success: true, message: `Compromisso "${titulo}" criado com sucesso para ${new Date(data_inicio).toLocaleString('pt-BR')}. ${responsavel_id ? 'Notificação enviada ao responsável.' : ''}`, data: compromisso };
         }
         break;
       }
@@ -70,8 +275,81 @@ serve(async (req) => {
           console.error('Erro ao criar tarefa:', error);
           result = { success: false, message: `Erro ao criar tarefa: ${error.message}` };
         } else {
-          result = { success: true, message: `Tarefa "${titulo}" criada com sucesso`, data: tarefa };
+          // Enviar notificação ao responsável se definido
+          let notificacaoEnviada = false;
+          if (responsavel_id) {
+            const responsavel = await buscarPerfil(responsavel_id);
+            if (responsavel?.email) {
+              const emailHtml = gerarEmailTarefa(tarefa, responsavel, 'nova');
+              const emailResult = await enviarNotificacaoEmail(
+                responsavel.email,
+                responsavel.nome || 'Usuário',
+                `🔔 Nova Tarefa: ${titulo}`,
+                emailHtml
+              );
+              notificacaoEnviada = emailResult.success;
+            }
+          }
+          
+          // Criar notificação de prazo se houver data limite
+          if (data_limite && responsavel_id) {
+            await supabase.from('notificacoes_prazos').insert({
+              tarefa_id: tarefa.id,
+              titulo: `Prazo: ${titulo}`,
+              tipo: 'tarefa',
+              data_prazo: data_limite,
+              destinatario_id: responsavel_id,
+              dias_antecedencia: 3,
+            });
+          }
+          
+          result = { 
+            success: true, 
+            message: `Tarefa "${titulo}" criada com sucesso${notificacaoEnviada ? '. Notificação enviada ao responsável.' : '.'}`, 
+            data: tarefa 
+          };
         }
+        break;
+      }
+
+      case 'notificar_prazos_proximos': {
+        // Buscar tarefas com prazo nos próximos 3 dias
+        const hoje = new Date();
+        const tresDias = new Date(hoje.getTime() + 3 * 24 * 60 * 60 * 1000);
+        
+        const { data: tarefas, error } = await supabase
+          .from('tarefas')
+          .select('*, perfis!tarefas_responsavel_id_fkey(nome, email)')
+          .lte('data_limite', tresDias.toISOString().split('T')[0])
+          .gte('data_limite', hoje.toISOString().split('T')[0])
+          .in('status', ['Pendente', 'Em Andamento'])
+          .not('responsavel_id', 'is', null);
+
+        if (error) {
+          result = { success: false, message: `Erro ao buscar tarefas: ${error.message}` };
+          break;
+        }
+
+        let notificacoesEnviadas = 0;
+        for (const tarefa of tarefas || []) {
+          const responsavel = tarefa.perfis;
+          if (responsavel?.email) {
+            const emailHtml = gerarEmailTarefa(tarefa, responsavel, 'prazo');
+            const emailResult = await enviarNotificacaoEmail(
+              responsavel.email,
+              responsavel.nome || 'Usuário',
+              `⚠️ Prazo se Aproxima: ${tarefa.titulo}`,
+              emailHtml
+            );
+            if (emailResult.success) notificacoesEnviadas++;
+          }
+        }
+
+        result = { 
+          success: true, 
+          message: `${notificacoesEnviadas} notificação(ões) de prazo enviada(s)`,
+          data: { total: tarefas?.length || 0, enviadas: notificacoesEnviadas }
+        };
         break;
       }
 
@@ -94,7 +372,6 @@ serve(async (req) => {
           const clicksignData = await response.json();
           const documents = clicksignData.documents || [];
           
-          // Mapear status
           const mapStatus = (doc: any): string => {
             if (doc.status === 'closed') return 'Finalizado';
             if (doc.status === 'canceled') return 'Cancelado';
@@ -238,6 +515,20 @@ serve(async (req) => {
           result = { success: false, message: `Erro ao atualizar tarefa: ${error.message}` };
         } else {
           result = { success: true, message: `Tarefa atualizada para "${status}"`, data: tarefa };
+        }
+        break;
+      }
+
+      case 'listar_usuarios': {
+        const { data: usuarios, error } = await supabase
+          .from('perfis')
+          .select('id, nome, email, cargo')
+          .eq('aprovado', true);
+
+        if (error) {
+          result = { success: false, message: `Erro ao buscar usuários: ${error.message}` };
+        } else {
+          result = { success: true, message: `${usuarios?.length || 0} usuário(s) encontrado(s)`, data: usuarios };
         }
         break;
       }
