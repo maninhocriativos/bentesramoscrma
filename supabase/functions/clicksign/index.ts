@@ -163,21 +163,42 @@ serve(async (req: Request): Promise<Response> => {
       }
 
       case "list_documents": {
-        const page = body.page || 1;
-        console.log("Listing documents, page:", page);
+        console.log("Listing all documents...");
         
-        const response = await fetch(`${CLICKSIGN_BASE_URL}/documents?access_token=${CLICKSIGN_API_KEY}&page=${page}`, {
-          method: "GET",
-        });
+        let allDocuments: any[] = [];
+        let page = 1;
+        let hasMore = true;
+        
+        // Buscar todas as páginas
+        while (hasMore) {
+          const response = await fetch(`${CLICKSIGN_BASE_URL}/documents?access_token=${CLICKSIGN_API_KEY}&page=${page}`, {
+            method: "GET",
+          });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("Clicksign list documents error:", errorText);
-          throw new Error(`Failed to list documents: ${errorText}`);
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Clicksign list documents error:", errorText);
+            throw new Error(`Failed to list documents: ${errorText}`);
+          }
+
+          const data = await response.json();
+          const documents = data.documents || [];
+          
+          console.log(`Page ${page}: ${documents.length} documents`);
+          allDocuments = [...allDocuments, ...documents];
+          
+          // Verifica se há mais páginas (se retornou menos de 20, provavelmente é a última)
+          if (documents.length < 20) {
+            hasMore = false;
+          } else {
+            page++;
+            // Limitar a 10 páginas para evitar loops infinitos
+            if (page > 10) hasMore = false;
+          }
         }
-
-        result = await response.json();
-        console.log("Documents listed:", result);
+        
+        console.log(`Total documents: ${allDocuments.length}`);
+        result = { documents: allDocuments };
         break;
       }
 
