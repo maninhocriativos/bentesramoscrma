@@ -144,6 +144,7 @@
 }
 
 @layer utilities {
+  /* Glassmorphism effects */
   .glass {
     @apply bg-white/80 backdrop-blur-md border border-white/30;
   }
@@ -152,7 +153,11 @@
     @apply bg-black/30 backdrop-blur-md border border-white/10;
   }
 
-  /* Shadows refinadas */
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-lg border border-border/40 shadow-enterprise;
+  }
+
+  /* Enhanced shadows */
   .shadow-soft {
     box-shadow: 0 2px 8px -2px hsla(24, 21%, 21%, 0.06);
   }
@@ -172,6 +177,34 @@
     box-shadow: 
       0 4px 12px hsla(24, 21%, 21%, 0.08),
       0 8px 24px hsla(24, 21%, 21%, 0.1);
+  }
+
+  .shadow-glow-gold {
+    box-shadow: 0 0 30px -5px hsl(var(--gold) / 0.3);
+  }
+
+  .shadow-glow-success {
+    box-shadow: 0 0 30px -5px hsl(var(--success) / 0.3);
+  }
+
+  /* Gradient backgrounds */
+  .gradient-gold {
+    background: linear-gradient(135deg, hsl(var(--gold) / 0.15) 0%, transparent 60%);
+  }
+
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.08) 0%, transparent 60%);
+  }
+
+  .gradient-success {
+    background: linear-gradient(135deg, hsl(var(--success) / 0.1) 0%, transparent 60%);
+  }
+
+  .gradient-mesh {
+    background: 
+      radial-gradient(at 40% 20%, hsl(var(--gold) / 0.08) 0px, transparent 50%),
+      radial-gradient(at 80% 0%, hsl(var(--primary) / 0.06) 0px, transparent 50%),
+      radial-gradient(at 0% 50%, hsl(var(--success) / 0.04) 0px, transparent 50%);
   }
 
   /* Kanban specific */
@@ -260,37 +293,90 @@
     @apply inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium;
   }
 
+  /* Animated underline */
+  .link-underline {
+    @apply relative;
+  }
+  
+  .link-underline::after {
+    @apply absolute bottom-0 left-0 w-full h-0.5 bg-gold scale-x-0 origin-right transition-transform duration-300;
+    content: '';
+  }
+  
+  .link-underline:hover::after {
+    @apply scale-x-100 origin-left;
+  }
+
+  /* Shimmer effect */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--card)) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* Pulse dot */
+  .pulse-dot {
+    @apply relative;
+  }
+  
+  .pulse-dot::before {
+    @apply absolute inset-0 rounded-full animate-ping;
+    content: '';
+    background: inherit;
+    opacity: 0.4;
+  }
+
   /* Kanban drag animations */
   @keyframes card-lift {
     0% { transform: scale(1) rotate(0deg); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    100% { transform: scale(1.02) rotate(1deg); box-shadow: 0 12px 24px rgba(0,0,0,0.15); }
+    100% { transform: scale(1.03) rotate(1.5deg); box-shadow: 0 16px 32px rgba(0,0,0,0.18); }
   }
 
   @keyframes card-drop {
-    0% { transform: scale(1.02) translateY(-5px); opacity: 0.8; }
-    50% { transform: scale(0.98) translateY(2px); }
+    0% { transform: scale(1.03) translateY(-8px); opacity: 0.8; }
+    50% { transform: scale(0.97) translateY(4px); }
     100% { transform: scale(1) translateY(0); opacity: 1; }
   }
 
   @keyframes column-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 hsl(var(--gold) / 0.4); }
-    50% { box-shadow: 0 0 0 8px hsl(var(--gold) / 0); }
+    0%, 100% { box-shadow: 0 0 0 0 hsl(var(--gold) / 0.5); }
+    50% { box-shadow: 0 0 0 12px hsl(var(--gold) / 0); }
   }
 
   @keyframes success-flash {
     0% { background-color: hsl(var(--card)); }
-    50% { background-color: hsl(var(--success) / 0.15); }
+    30% { background-color: hsl(var(--success) / 0.2); }
     100% { background-color: hsl(var(--card)); }
   }
 
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-4px); }
+  }
+
+  @keyframes glow {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+
   .kanban-card-dragging {
-    animation: card-lift 0.2s ease-out forwards;
+    animation: card-lift 0.25s ease-out forwards;
     cursor: grabbing !important;
     z-index: 100;
   }
 
   .kanban-card-dropped {
-    animation: card-drop 0.3s ease-out forwards, success-flash 0.6s ease-out;
+    animation: card-drop 0.35s ease-out forwards, success-flash 0.7s ease-out;
   }
 
   .kanban-column-drag-over {
@@ -303,6 +389,29 @@
   }
 
   .kanban-card-wrapper:hover {
-    @apply -translate-y-0.5;
+    @apply -translate-y-1;
   }
+
+  /* Icon animations */
+  .icon-bounce:hover {
+    animation: float 1s ease-in-out infinite;
+  }
+
+  .icon-glow {
+    filter: drop-shadow(0 0 4px currentColor);
+  }
+
+  /* Stagger children animation */
+  .stagger-children > * {
+    @apply opacity-0 animate-fade-in;
+  }
+
+  .stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger-children > *:nth-child(2) { animation-delay: 50ms; }
+  .stagger-children > *:nth-child(3) { animation-delay: 100ms; }
+  .stagger-children > *:nth-child(4) { animation-delay: 150ms; }
+  .stagger-children > *:nth-child(5) { animation-delay: 200ms; }
+  .stagger-children > *:nth-child(6) { animation-delay: 250ms; }
+  .stagger-children > *:nth-child(7) { animation-delay: 300ms; }
+  .stagger-children > *:nth-child(8) { animation-delay: 350ms; }
 }

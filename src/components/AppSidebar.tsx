@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare, Sparkles } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Sidebar,
@@ -132,11 +132,11 @@ export function AppSidebar() {
       className="border-r-0"
       collapsible="icon"
     >
-      <SidebarHeader className="p-3 border-b border-sidebar-border">
+      <SidebarHeader className="p-3 border-b border-sidebar-border/50">
         <div className="flex items-center justify-between gap-2">
           <div className={cn(
-            "flex items-center gap-2 transition-opacity",
-            isCollapsed && "opacity-0 w-0 overflow-hidden"
+            "flex items-center gap-2 transition-all duration-300",
+            isCollapsed && "opacity-0 w-0 overflow-hidden scale-90"
           )}>
             <img 
               src={logo} 
@@ -147,11 +147,15 @@ export function AppSidebar() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent shrink-0"
+            className={cn(
+              "h-8 w-8 text-sidebar-foreground/70 hover:text-sidebar-foreground",
+              "hover:bg-sidebar-accent/80 shrink-0 rounded-lg",
+              "transition-all duration-200 hover:scale-105"
+            )}
             onClick={toggleSidebar}
           >
             <ChevronLeft className={cn(
-              "h-4 w-4 transition-transform",
+              "h-4 w-4 transition-transform duration-300",
               isCollapsed && "rotate-180"
             )} />
           </Button>
@@ -162,26 +166,44 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
-              {filteredItems.map((item) => {
-                const isActive = location.pathname === item.url;
+              {filteredItems.map((item, index) => {
+                const isActive = location.pathname === item.url || 
+                  (item.url !== '/dashboard' && location.pathname.startsWith(item.url));
                 return (
-                  <SidebarMenuItem key={item.title}>
+                  <SidebarMenuItem 
+                    key={item.title}
+                    style={{ animationDelay: `${index * 30}ms` }}
+                    className="animate-fade-in"
+                  >
                     <SidebarMenuButton 
                       asChild
                       tooltip={item.title}
                       className={cn(
-                        "rounded-lg transition-all duration-150 h-10",
+                        "rounded-lg transition-all duration-200 h-10 group/item",
+                        "relative overflow-hidden",
                         isActive 
                           ? 'bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm' 
-                          : 'hover:bg-sidebar-accent text-sidebar-foreground/80 hover:text-sidebar-foreground'
+                          : 'hover:bg-sidebar-accent/80 text-sidebar-foreground/80 hover:text-sidebar-foreground'
                       )}
                     >
                       <Link to={item.url} className="flex items-center gap-3 px-3">
+                        {/* Active indicator */}
+                        {isActive && (
+                          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-sidebar-primary-foreground rounded-r-full" />
+                        )}
+                        
                         <item.icon className={cn(
-                          "h-[18px] w-[18px] shrink-0",
-                          isActive && 'text-sidebar-primary-foreground'
+                          "h-[18px] w-[18px] shrink-0 transition-all duration-200",
+                          isActive && 'text-sidebar-primary-foreground',
+                          !isActive && 'group-hover/item:scale-110'
                         )} />
+                        
                         <span className="text-sm truncate">{item.title}</span>
+                        
+                        {/* Hover glow effect */}
+                        {!isActive && (
+                          <span className="absolute inset-0 bg-gradient-to-r from-sidebar-primary/0 via-sidebar-primary/5 to-sidebar-primary/0 opacity-0 group-hover/item:opacity-100 transition-opacity duration-300" />
+                        )}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -193,10 +215,11 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className={cn(
-        "p-3 border-t border-sidebar-border transition-opacity",
-        isCollapsed && "opacity-0"
+        "p-3 border-t border-sidebar-border/50 transition-all duration-300",
+        isCollapsed && "opacity-0 scale-90"
       )}>
-        <div className="text-xs text-sidebar-foreground/50">
+        <div className="flex items-center gap-2 text-xs text-sidebar-foreground/60">
+          <Sparkles className="h-3 w-3 text-sidebar-primary animate-pulse-subtle" />
           <span className="text-sidebar-primary font-medium">{cargo}</span>
         </div>
       </SidebarFooter>

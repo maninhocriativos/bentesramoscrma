@@ -113,21 +113,26 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
   return (
     <div className="space-y-4">
       {/* Relatório de Valor por Status */}
-      <Card className="rounded-xl shadow-soft border border-border/50 overflow-hidden bg-card">
-        <CardHeader className="bg-gradient-to-r from-success to-success/90 text-white py-3 px-4">
+      <Card className="group rounded-xl shadow-soft border border-border/50 overflow-hidden bg-card hover:shadow-card-hover transition-all duration-300">
+        <CardHeader className="bg-gradient-to-r from-success via-success/95 to-success/90 text-white py-4 px-5">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <DollarSign className="h-4 w-4" />
-              Valor da Causa por Status
+            <CardTitle className="text-base font-semibold flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                <DollarSign className="h-5 w-5" />
+              </div>
+              <span>Valor da Causa por Status</span>
             </CardTitle>
-            <span className="text-lg font-bold">{formatCurrency(totalValorCausa)}</span>
+            <div className="text-right">
+              <span className="text-2xl font-bold">{formatCurrency(totalValorCausa)}</span>
+              <p className="text-xs text-white/70">Total em pipeline</p>
+            </div>
           </div>
         </CardHeader>
-        <CardContent className="p-4">
+        <CardContent className="p-5">
           {valorPorStatus.length > 0 ? (
-            <div className="h-[200px]">
+            <div className="h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={valorPorStatus} layout="vertical" margin={{ left: 20, right: 20 }}>
+                <BarChart data={valorPorStatus} layout="vertical" margin={{ left: 20, right: 30 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="hsl(var(--border))" />
                   <XAxis 
                     type="number" 
@@ -139,7 +144,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
                   <YAxis 
                     type="category" 
                     dataKey="status" 
-                    width={120}
+                    width={130}
                     tick={{ fontSize: 12, fill: 'hsl(var(--foreground))' }}
                     axisLine={false}
                     tickLine={false}
@@ -150,28 +155,35 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
                       backgroundColor: 'hsl(var(--card))',
                       border: '1px solid hsl(var(--border))',
                       borderRadius: '12px',
+                      boxShadow: '0 4px 12px hsla(0,0%,0%,0.1)',
                     }}
+                    cursor={{ fill: 'hsl(var(--muted) / 0.3)' }}
                   />
                   <Bar 
                     dataKey="valor" 
-                    radius={[0, 6, 6, 0]}
+                    radius={[0, 8, 8, 0]}
+                    className="transition-all duration-300"
                   >
                     {valorPorStatus.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+                      <Cell 
+                        key={`cell-${index}`} 
+                        fill={entry.color}
+                        className="hover:opacity-80 transition-opacity"
+                      />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
+            <div className="h-[220px] flex items-center justify-center text-muted-foreground text-sm">
               Nenhum lead com valor da causa informado
             </div>
           )}
           
-          {/* Summary cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-4 pt-4 border-t border-border/30">
-            {STATUS_CONFIG.map(config => {
+          {/* Summary cards with hover effects */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-5 pt-5 border-t border-border/30">
+            {STATUS_CONFIG.map((config, index) => {
               const valor = leads
                 .filter(lead => lead.status === config.status)
                 .reduce((sum, lead) => sum + (lead.valor_causa || 0), 0);
@@ -180,11 +192,12 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
               return (
                 <div 
                   key={config.status}
-                  className="p-3 rounded-lg bg-muted/30 border border-border/30"
+                  className="group/card p-3.5 rounded-xl bg-muted/30 border border-border/30 hover:border-border hover:bg-muted/50 hover:shadow-soft transition-all duration-300 hover:-translate-y-0.5"
+                  style={{ animationDelay: `${index * 50}ms` }}
                 >
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-2">
                     <div 
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      className="w-3 h-3 rounded-full shrink-0 transition-transform duration-200 group-hover/card:scale-125"
                       style={{ backgroundColor: config.color }}
                     />
                     <span className="text-xs text-muted-foreground truncate">{config.label}</span>
