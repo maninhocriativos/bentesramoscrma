@@ -359,6 +359,106 @@ export type Database = {
         }
         Relationships: []
       }
+      manychat_mensagens: {
+        Row: {
+          canal: string | null
+          conteudo: string
+          created_at: string
+          direcao: string
+          id: string
+          lead_id: string | null
+          metadata: Json | null
+          subscriber_foto: string | null
+          subscriber_id: string
+          subscriber_nome: string | null
+          tipo: string | null
+        }
+        Insert: {
+          canal?: string | null
+          conteudo: string
+          created_at?: string
+          direcao?: string
+          id?: string
+          lead_id?: string | null
+          metadata?: Json | null
+          subscriber_foto?: string | null
+          subscriber_id: string
+          subscriber_nome?: string | null
+          tipo?: string | null
+        }
+        Update: {
+          canal?: string | null
+          conteudo?: string
+          created_at?: string
+          direcao?: string
+          id?: string
+          lead_id?: string | null
+          metadata?: Json | null
+          subscriber_foto?: string | null
+          subscriber_id?: string
+          subscriber_nome?: string | null
+          tipo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manychat_mensagens_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      manychat_subscribers: {
+        Row: {
+          canal: string | null
+          created_at: string
+          email: string | null
+          foto: string | null
+          id: string
+          lead_id: string | null
+          nome: string | null
+          subscriber_id: string
+          telefone: string | null
+          ultima_interacao: string | null
+          updated_at: string
+        }
+        Insert: {
+          canal?: string | null
+          created_at?: string
+          email?: string | null
+          foto?: string | null
+          id?: string
+          lead_id?: string | null
+          nome?: string | null
+          subscriber_id: string
+          telefone?: string | null
+          ultima_interacao?: string | null
+          updated_at?: string
+        }
+        Update: {
+          canal?: string | null
+          created_at?: string
+          email?: string | null
+          foto?: string | null
+          id?: string
+          lead_id?: string | null
+          nome?: string | null
+          subscriber_id?: string
+          telefone?: string | null
+          ultima_interacao?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manychat_subscribers_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       modelos_contratos: {
         Row: {
           arquivo_nome: string

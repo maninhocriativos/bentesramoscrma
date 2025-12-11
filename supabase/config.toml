@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.manychat]
 verify_jwt = false
+
+[functions.manychat-webhook]
+verify_jwt = false
