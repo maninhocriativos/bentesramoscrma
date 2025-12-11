@@ -33,6 +33,7 @@ serve(async (req) => {
     let subscriberNome: string | undefined;
     let telefone: string | undefined;
     let messageContent: string | undefined;
+    let direcao = 'entrada';
     let canal = 'whatsapp';
     let metadata: Record<string, unknown> = {};
 
@@ -41,13 +42,22 @@ serve(async (req) => {
       subscriberId = payload['Id do Manychat']?.toString();
       subscriberNome = payload['Nome do Usuário'] || 'Desconhecido';
       telefone = payload['Numero Whatsapp'];
-      messageContent = payload['Pergunta do Usuário'];
+      
+      // Suporta tanto entrada do usuário quanto resposta do bot
+      if (payload['Resposta do Bot'] || payload['Direcao'] === 'saida') {
+        messageContent = payload['Resposta do Bot'] || payload['Mensagem'];
+        direcao = 'saida';
+      } else {
+        messageContent = payload['Pergunta do Usuário'] || payload['Mensagem'];
+        direcao = 'entrada';
+      }
+      
       metadata = {
         thread_id: payload['Thread ID'],
         formato: payload['Formato'],
         interrupcao: payload['Interrupção'],
       };
-      console.log('Formato customizado detectado');
+      console.log('Formato customizado detectado, direção:', direcao);
     } 
     // Formato padrão ManyChat
     else if (payload.subscriber) {
@@ -165,7 +175,7 @@ serve(async (req) => {
           canal: canal,
           conteudo: messageContent,
           tipo: 'text',
-          direcao: 'entrada',
+          direcao: direcao,
           lead_id: leadId,
           metadata: metadata,
         })
