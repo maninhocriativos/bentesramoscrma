@@ -96,14 +96,26 @@ export function CalculadoraChat() {
     localStorage.setItem(STORAGE_KEY_CALC, JSON.stringify({ messages, threadId, selectedBank }));
   }, [messages, threadId, selectedBank]);
 
+  // Auto-scroll quando mensagens mudam ou loading muda
   useEffect(() => {
-    if (scrollRef.current) {
-      const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (viewport) {
-        viewport.scrollTop = viewport.scrollHeight;
+    const scrollToBottom = () => {
+      if (scrollRef.current) {
+        const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
+        if (viewport) {
+          viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' });
+        }
       }
+    };
+    const timer = setTimeout(scrollToBottom, 100);
+    return () => clearTimeout(timer);
+  }, [messages, isLoading]);
+
+  // Manter foco no input após enviar
+  useEffect(() => {
+    if (!isLoading) {
+      inputRef.current?.focus();
     }
-  }, [messages]);
+  }, [isLoading]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -189,9 +201,6 @@ export function CalculadoraChat() {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
-    
-    // Manter foco no input
-    setTimeout(() => inputRef.current?.focus(), 0);
 
     try {
       const { data, error } = await supabase.functions.invoke('ai-chat', {

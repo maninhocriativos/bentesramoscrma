@@ -52,21 +52,32 @@ export function IsaChat() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_ISA, JSON.stringify({ messages, threadId }));
   }, [messages, threadId]);
-
+  // Foco inicial no input
   useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
+    inputRef.current?.focus();
   }, []);
 
+  // Auto-scroll quando mensagens mudam ou loading muda
   useEffect(() => {
-    if (scrollRef.current) {
-      const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (viewport) {
-        viewport.scrollTop = viewport.scrollHeight;
+    const scrollToBottom = () => {
+      if (scrollRef.current) {
+        const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
+        if (viewport) {
+          viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' });
+        }
       }
+    };
+    // Pequeno delay para garantir que o DOM foi atualizado
+    const timer = setTimeout(scrollToBottom, 100);
+    return () => clearTimeout(timer);
+  }, [messages, isLoading]);
+
+  // Manter foco no input após enviar
+  useEffect(() => {
+    if (!isLoading) {
+      inputRef.current?.focus();
     }
-  }, [messages]);
+  }, [isLoading]);
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
@@ -81,9 +92,6 @@ export function IsaChat() {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
-    
-    // Manter foco no input
-    setTimeout(() => inputRef.current?.focus(), 0);
 
     try {
       const { data, error } = await supabase.functions.invoke('ai-chat', {
