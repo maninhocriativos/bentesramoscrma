@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature, Bot } from 'lucide-react';
+import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Sidebar,
@@ -79,6 +79,12 @@ const menuItems: MenuItem[] = [
     title: 'Assistentes IA', 
     url: '/assistente', 
     icon: Bot,
+    visibility: 'all'
+  },
+  { 
+    title: 'ManyChat', 
+    url: '/manychat', 
+    icon: MessageSquare,
     visibility: 'all'
   },
   { 

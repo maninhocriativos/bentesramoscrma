@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.isa-actions]
 verify_jwt = false
+
+[functions.manychat]
+verify_jwt = false
