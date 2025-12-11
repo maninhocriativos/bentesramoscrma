@@ -17,15 +17,41 @@ interface Message {
 }
 
 const ASSISTANT_ID = 'asst_rGFHqXnOLL6JA7UyRUdXQmaQ';
+const STORAGE_KEY_ISA = 'isa-chat-state';
 
 export function IsaChat() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_ISA);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.messages?.map((m: any) => ({
+          ...m,
+          timestamp: new Date(m.timestamp)
+        })) || [];
+      } catch { return []; }
+    }
+    return [];
+  });
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [threadId, setThreadId] = useState<string | null>(null);
+  const [threadId, setThreadId] = useState<string | null>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_ISA);
+    if (saved) {
+      try {
+        return JSON.parse(saved).threadId || null;
+      } catch { return null; }
+    }
+    return null;
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  // Persistir estado
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_ISA, JSON.stringify({ messages, threadId }));
+  }, [messages, threadId]);
 
   useEffect(() => {
     if (inputRef.current) {
@@ -105,6 +131,7 @@ export function IsaChat() {
   const clearChat = () => {
     setMessages([]);
     setThreadId(null);
+    localStorage.removeItem(STORAGE_KEY_ISA);
   };
 
   return (
