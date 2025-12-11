@@ -13,7 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import isaAvatar from '@/assets/isa-avatar.png';
 
 // Assistant ID para Isa Cálculo Bancário no GPT
-const CALCULATOR_ASSISTANT_ID = 'asst_rGFHqXnOLL6JA7UyRUdXQmaQ'; // TODO: Substituir pelo ID correto do assistant
+const CALCULATOR_ASSISTANT_ID = 'asst_KiAQOjNUkOfTv1PI49xeK8uX';
 
 interface Message {
   id: string;
