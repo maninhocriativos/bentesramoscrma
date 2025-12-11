@@ -242,7 +242,7 @@ export function CalculadoraChat() {
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o banco" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-60 overflow-y-auto">
                     {BANCOS.map((banco) => (
                       <SelectItem key={banco.value} value={banco.value}>
                         {banco.label}
