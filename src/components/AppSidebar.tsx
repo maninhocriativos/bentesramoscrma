@@ -76,7 +76,7 @@ const menuItems: MenuItem[] = [
     visibility: 'all'
   },
   { 
-    title: 'Assistente IA', 
+    title: 'Assistentes IA', 
     url: '/assistente', 
     icon: Bot,
     visibility: 'all'
