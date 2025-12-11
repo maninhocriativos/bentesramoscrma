@@ -47,12 +47,42 @@ const BANCOS = [
   { value: 'outro', label: 'Outro' },
 ];
 
+const STORAGE_KEY_CALC = 'isa-calc-chat-state';
+
 export function CalculadoraChat() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_CALC);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.messages?.map((m: any) => ({
+          ...m,
+          timestamp: new Date(m.timestamp)
+        })) || [];
+      } catch { return []; }
+    }
+    return [];
+  });
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [threadId, setThreadId] = useState<string | null>(null);
-  const [selectedBank, setSelectedBank] = useState<string>('');
+  const [threadId, setThreadId] = useState<string | null>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_CALC);
+    if (saved) {
+      try {
+        return JSON.parse(saved).threadId || null;
+      } catch { return null; }
+    }
+    return null;
+  });
+  const [selectedBank, setSelectedBank] = useState<string>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_CALC);
+    if (saved) {
+      try {
+        return JSON.parse(saved).selectedBank || '';
+      } catch { return ''; }
+    }
+    return '';
+  });
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -60,6 +90,11 @@ export function CalculadoraChat() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { user } = useAuth();
+
+  // Persistir estado
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_CALC, JSON.stringify({ messages, threadId, selectedBank }));
+  }, [messages, threadId, selectedBank]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -206,6 +241,7 @@ export function CalculadoraChat() {
     setThreadId(null);
     setUploadedFiles([]);
     setSelectedBank('');
+    localStorage.removeItem(STORAGE_KEY_CALC);
   };
 
   return (
