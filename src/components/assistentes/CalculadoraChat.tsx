@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Loader2, Percent, RotateCcw, User, Upload, File, X, Landmark } from 'lucide-react';
+import { ArrowUp, Loader2, RotateCcw, User, Upload, File, X, Landmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -10,6 +10,10 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import isaAvatar from '@/assets/isa-avatar.png';
+
+// Assistant ID para Isa Cálculo Bancário no GPT
+const CALCULATOR_ASSISTANT_ID = 'asst_rGFHqXnOLL6JA7UyRUdXQmaQ'; // TODO: Substituir pelo ID correto do assistant
 
 interface Message {
   id: string;
@@ -47,6 +51,7 @@ export function CalculadoraChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [threadId, setThreadId] = useState<string | null>(null);
   const [selectedBank, setSelectedBank] = useState<string>('');
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -148,21 +153,20 @@ export function CalculadoraChat() {
     setIsLoading(true);
 
     try {
-      // Build conversation history for context
-      const conversationHistory = messages.map(m => ({
-        role: m.role,
-        content: m.content
-      }));
-
-      const { data, error } = await supabase.functions.invoke('calculadora-financeira', {
+      const { data, error } = await supabase.functions.invoke('ai-chat', {
         body: {
           message: fullMessage,
-          conversationHistory,
+          threadId,
+          assistantId: CALCULATOR_ASSISTANT_ID,
         },
       });
 
       if (error) throw error;
       if (data.error) throw new Error(data.error);
+
+      if (data.threadId && !threadId) {
+        setThreadId(data.threadId);
+      }
 
       const assistantMessage: Message = {
         id: crypto.randomUUID(),
@@ -193,6 +197,7 @@ export function CalculadoraChat() {
 
   const clearChat = () => {
     setMessages([]);
+    setThreadId(null);
     setUploadedFiles([]);
     setSelectedBank('');
   };
@@ -203,11 +208,13 @@ export function CalculadoraChat() {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-              <Percent className="h-5 w-5 text-emerald-600" strokeWidth={1.5} />
-            </div>
+            <img 
+              src={isaAvatar} 
+              alt="Isa Cálculo Bancário"
+              className="h-10 w-10 rounded-full object-cover object-top border border-border"
+            />
             <div>
-              <h3 className="font-medium text-foreground">Calculadora de Juros</h3>
+              <h3 className="font-medium text-foreground">Isa Cálculo Bancário</h3>
               <p className="text-xs text-muted-foreground">
                 {isLoading ? 'Analisando...' : 'Análise de extratos bancários'}
               </p>
@@ -305,11 +312,13 @@ export function CalculadoraChat() {
           <ScrollArea className="h-full p-6" ref={scrollRef}>
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-8">
-                <div className="h-16 w-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mb-5">
-                  <Percent className="h-8 w-8 text-emerald-600" strokeWidth={1.5} />
-                </div>
+                <img 
+                  src={isaAvatar} 
+                  alt="Isa Cálculo Bancário"
+                  className="h-20 w-20 rounded-full object-cover object-top border-2 border-border shadow-lg mb-5"
+                />
                 <h3 className="text-lg font-medium text-foreground mb-2">
-                  Calculadora de Juros Bancários
+                  Isa Cálculo Bancário
                 </h3>
                 <p className="text-sm text-muted-foreground max-w-md mb-6">
                   Selecione o banco, envie os extratos e descreva o que deseja calcular.
@@ -346,9 +355,11 @@ export function CalculadoraChat() {
                     )}
                   >
                     {msg.role === 'assistant' && (
-                      <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                        <Percent className="h-4 w-4 text-emerald-600" strokeWidth={1.5} />
-                      </div>
+                      <img 
+                        src={isaAvatar} 
+                        alt="Isa"
+                        className="h-8 w-8 rounded-full object-cover object-top shrink-0"
+                      />
                     )}
                     <div
                       className={cn(
@@ -375,9 +386,11 @@ export function CalculadoraChat() {
                 ))}
                 {isLoading && (
                   <div className="flex gap-3 justify-start">
-                    <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                      <Percent className="h-4 w-4 text-emerald-600" strokeWidth={1.5} />
-                    </div>
+                    <img 
+                      src={isaAvatar} 
+                      alt="Isa"
+                      className="h-8 w-8 rounded-full object-cover object-top shrink-0"
+                    />
                     <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">
                       <div className="flex gap-1">
                         <span className="h-2 w-2 bg-emerald-500/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />

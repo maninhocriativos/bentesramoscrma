@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Loader2, Sparkles, RotateCcw, User } from 'lucide-react';
+import { ArrowUp, Loader2, RotateCcw, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import isaAvatar from '@/assets/isa-avatar.png';
 
 interface Message {
   id: string;
@@ -106,9 +107,11 @@ export function IsaChat() {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-              <Sparkles className="h-5 w-5 text-primary" strokeWidth={1.5} />
-            </div>
+            <img 
+              src={isaAvatar} 
+              alt="Isa"
+              className="h-10 w-10 rounded-full object-cover object-top border border-border"
+            />
             <div>
               <h3 className="font-medium text-foreground">Isa</h3>
               <p className="text-xs text-muted-foreground">
@@ -129,9 +132,11 @@ export function IsaChat() {
           <ScrollArea className="h-full p-6" ref={scrollRef}>
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-5">
-                  <Sparkles className="h-8 w-8 text-primary" strokeWidth={1.5} />
-                </div>
+                <img 
+                  src={isaAvatar} 
+                  alt="Isa"
+                  className="h-20 w-20 rounded-full object-cover object-top border-2 border-border shadow-lg mb-5"
+                />
                 <h3 className="text-lg font-medium text-foreground mb-2">
                   Olá! Sou a Isa
                 </h3>
@@ -170,9 +175,11 @@ export function IsaChat() {
                     )}
                   >
                     {msg.role === 'assistant' && (
-                      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <Sparkles className="h-4 w-4 text-primary" strokeWidth={1.5} />
-                      </div>
+                      <img 
+                        src={isaAvatar} 
+                        alt="Isa"
+                        className="h-8 w-8 rounded-full object-cover object-top shrink-0"
+                      />
                     )}
                     <div
                       className={cn(
@@ -199,9 +206,11 @@ export function IsaChat() {
                 ))}
                 {isLoading && (
                   <div className="flex gap-3 justify-start">
-                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Sparkles className="h-4 w-4 text-primary" strokeWidth={1.5} />
-                    </div>
+                    <img 
+                      src={isaAvatar} 
+                      alt="Isa"
+                      className="h-8 w-8 rounded-full object-cover object-top shrink-0"
+                    />
                     <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">
                       <div className="flex gap-1">
                         <span className="h-2 w-2 bg-muted-foreground/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
