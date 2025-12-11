@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react';
 import { ArrowUp, Loader2, RotateCcw, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -44,35 +43,32 @@ export function IsaChat() {
     }
     return null;
   });
-  const scrollRef = useRef<HTMLDivElement>(null);
+  
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  // Scroll to bottom
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   // Persistir estado
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_ISA, JSON.stringify({ messages, threadId }));
   }, [messages, threadId]);
+
   // Foco inicial no input
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  // Auto-scroll quando mensagens mudam ou loading muda
+  // Auto-scroll quando mensagens mudam
   useEffect(() => {
-    const scrollToBottom = () => {
-      if (scrollRef.current) {
-        const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
-        if (viewport) {
-          viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' });
-        }
-      }
-    };
-    // Pequeno delay para garantir que o DOM foi atualizado
-    const timer = setTimeout(scrollToBottom, 100);
-    return () => clearTimeout(timer);
+    scrollToBottom();
   }, [messages, isLoading]);
 
-  // Manter foco no input após enviar
+  // Foco no input quando termina de carregar
   useEffect(() => {
     if (!isLoading) {
       inputRef.current?.focus();
@@ -92,6 +88,9 @@ export function IsaChat() {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+    
+    // Scroll imediato após enviar
+    setTimeout(scrollToBottom, 50);
 
     try {
       // Buscar dados do sistema para contexto
@@ -157,13 +156,14 @@ Parcelas pendentes: ${systemData.resumo.totalParcelasPendentes}
     setMessages([]);
     setThreadId(null);
     localStorage.removeItem(STORAGE_KEY_ISA);
+    inputRef.current?.focus();
   };
 
   return (
-    <div className="flex-1 flex flex-col max-h-[calc(100vh-180px)]">
+    <div className="flex-1 flex flex-col h-[calc(100vh-180px)]">
       <Card className="flex-1 flex flex-col overflow-hidden mx-6 mb-6 mt-4">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b">
+        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
           <div className="flex items-center gap-3">
             <img 
               src={isaAvatar} 
@@ -185,9 +185,9 @@ Parcelas pendentes: ${systemData.resumo.totalParcelasPendentes}
           )}
         </div>
 
-        {/* Messages */}
+        {/* Messages - Usando div com overflow ao invés de ScrollArea */}
         <CardContent className="flex-1 p-0 overflow-hidden">
-          <ScrollArea className="h-full p-6" ref={scrollRef}>
+          <div className="h-full overflow-y-auto p-6">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-12">
                 <img 
@@ -278,13 +278,15 @@ Parcelas pendentes: ${systemData.resumo.totalParcelasPendentes}
                     </div>
                   </div>
                 )}
+                {/* Elemento âncora para scroll */}
+                <div ref={messagesEndRef} />
               </div>
             )}
-          </ScrollArea>
+          </div>
         </CardContent>
 
         {/* Input */}
-        <div className="border-t p-4 bg-background">
+        <div className="border-t p-4 bg-background shrink-0">
           <div className="flex gap-3 max-w-4xl mx-auto">
             <Input
               ref={inputRef}
@@ -294,6 +296,7 @@ Parcelas pendentes: ${systemData.resumo.totalParcelasPendentes}
               placeholder="Digite sua mensagem..."
               disabled={isLoading}
               className="flex-1 h-12 rounded-xl"
+              autoFocus
             />
             <Button
               onClick={sendMessage}
