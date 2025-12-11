@@ -43,14 +43,10 @@ const BANCOS = [
   { value: 'outro', label: 'Outro' },
 ];
 
-// Você pode criar um novo Assistant na OpenAI para cálculos bancários
-const CALCULATOR_ASSISTANT_ID = 'asst_rGFHqXnOLL6JA7UyRUdXQmaQ'; // Substitua pelo ID do assistente de cálculos
-
 export function CalculadoraChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [threadId, setThreadId] = useState<string | null>(null);
   const [selectedBank, setSelectedBank] = useState<string>('');
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -152,20 +148,21 @@ export function CalculadoraChat() {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('ai-chat', {
+      // Build conversation history for context
+      const conversationHistory = messages.map(m => ({
+        role: m.role,
+        content: m.content
+      }));
+
+      const { data, error } = await supabase.functions.invoke('calculadora-financeira', {
         body: {
           message: fullMessage,
-          threadId,
-          assistantId: CALCULATOR_ASSISTANT_ID,
+          conversationHistory,
         },
       });
 
       if (error) throw error;
       if (data.error) throw new Error(data.error);
-
-      if (data.threadId && !threadId) {
-        setThreadId(data.threadId);
-      }
 
       const assistantMessage: Message = {
         id: crypto.randomUUID(),
@@ -196,7 +193,6 @@ export function CalculadoraChat() {
 
   const clearChat = () => {
     setMessages([]);
-    setThreadId(null);
     setUploadedFiles([]);
     setSelectedBank('');
   };
