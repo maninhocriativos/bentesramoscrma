@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Calculator, Trash2, User, Upload, FileText, X, Building2 } from 'lucide-react';
+import { ArrowUp, Loader2, Percent, RotateCcw, User, Upload, File, X, Landmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -201,21 +201,21 @@ export function CalculadoraChat() {
     <div className="flex-1 flex flex-col max-h-[calc(100vh-180px)]">
       <Card className="flex-1 flex flex-col overflow-hidden mx-6 mb-6 mt-4">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-emerald-500/10 to-transparent">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
-              <Calculator className="h-6 w-6 text-emerald-500" />
+            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+              <Percent className="h-5 w-5 text-emerald-600" strokeWidth={1.5} />
             </div>
             <div>
-              <h3 className="font-semibold text-foreground">Calculadora de Juros</h3>
+              <h3 className="font-medium text-foreground">Calculadora de Juros</h3>
               <p className="text-xs text-muted-foreground">
                 {isLoading ? 'Analisando...' : 'Análise de extratos bancários'}
               </p>
             </div>
           </div>
           {messages.length > 0 && (
-            <Button variant="outline" size="sm" onClick={clearChat} className="gap-2">
-              <Trash2 className="h-4 w-4" />
+            <Button variant="ghost" size="sm" onClick={clearChat} className="gap-2 text-muted-foreground hover:text-foreground">
+              <RotateCcw className="h-4 w-4" strokeWidth={1.5} />
               Nova análise
             </Button>
           )}
@@ -227,8 +227,8 @@ export function CalculadoraChat() {
             <div className="grid md:grid-cols-2 gap-4">
               {/* Seleção de banco */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium flex items-center gap-2">
-                  <Building2 className="h-4 w-4" />
+                <Label className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                  <Landmark className="h-4 w-4" strokeWidth={1.5} />
                   Banco
                 </Label>
                 <Select value={selectedBank} onValueChange={setSelectedBank}>
@@ -247,8 +247,8 @@ export function CalculadoraChat() {
 
               {/* Upload de arquivos */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
+                <Label className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                  <File className="h-4 w-4" strokeWidth={1.5} />
                   Extratos
                 </Label>
                 <div className="flex gap-2">
@@ -269,7 +269,7 @@ export function CalculadoraChat() {
                     {isUploading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <Upload className="h-4 w-4" />
+                      <Upload className="h-4 w-4" strokeWidth={1.5} />
                     )}
                     Enviar extratos
                   </Button>
@@ -285,7 +285,7 @@ export function CalculadoraChat() {
                     key={file.path}
                     className="flex items-center gap-2 bg-background rounded-lg px-3 py-2 text-sm border"
                   >
-                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <File className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
                     <span className="truncate max-w-[150px]">{file.name}</span>
                     <button
                       onClick={() => removeFile(file)}
@@ -305,15 +305,14 @@ export function CalculadoraChat() {
           <ScrollArea className="h-full p-6" ref={scrollRef}>
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-8">
-                <div className="h-20 w-20 rounded-3xl bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 flex items-center justify-center mb-6">
-                  <Calculator className="h-10 w-10 text-emerald-500" />
+                <div className="h-16 w-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mb-5">
+                  <Percent className="h-8 w-8 text-emerald-600" strokeWidth={1.5} />
                 </div>
-                <h3 className="text-xl font-semibold text-foreground mb-2">
+                <h3 className="text-lg font-medium text-foreground mb-2">
                   Calculadora de Juros Bancários
                 </h3>
-                <p className="text-muted-foreground max-w-md mb-6">
+                <p className="text-sm text-muted-foreground max-w-md mb-6">
                   Selecione o banco, envie os extratos e descreva o que deseja calcular.
-                  Posso ajudar com análise de juros, taxas e encargos.
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center">
                   {[
@@ -347,8 +346,8 @@ export function CalculadoraChat() {
                     )}
                   >
                     {msg.role === 'assistant' && (
-                      <div className="h-8 w-8 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
-                        <Calculator className="h-4 w-4 text-emerald-500" />
+                      <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                        <Percent className="h-4 w-4 text-emerald-600" strokeWidth={1.5} />
                       </div>
                     )}
                     <div
@@ -368,16 +367,16 @@ export function CalculadoraChat() {
                       </span>
                     </div>
                     {msg.role === 'user' && (
-                      <div className="h-8 w-8 rounded-xl bg-secondary flex items-center justify-center shrink-0">
-                        <User className="h-4 w-4 text-secondary-foreground" />
+                      <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
+                        <User className="h-4 w-4 text-secondary-foreground" strokeWidth={1.5} />
                       </div>
                     )}
                   </div>
                 ))}
                 {isLoading && (
                   <div className="flex gap-3 justify-start">
-                    <div className="h-8 w-8 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
-                      <Calculator className="h-4 w-4 text-emerald-500" />
+                    <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                      <Percent className="h-4 w-4 text-emerald-600" strokeWidth={1.5} />
                     </div>
                     <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">
                       <div className="flex gap-1">
@@ -408,13 +407,13 @@ export function CalculadoraChat() {
             <Button
               onClick={sendMessage}
               disabled={!input.trim() || isLoading}
-              size="lg"
-              className="h-12 px-6 rounded-xl bg-emerald-500 hover:bg-emerald-600"
+              size="icon"
+              className="h-10 w-10 rounded-full bg-emerald-500 hover:bg-emerald-600"
             >
               {isLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Send className="h-5 w-5" />
+                <ArrowUp className="h-4 w-4" strokeWidth={2} />
               )}
             </Button>
           </div>
