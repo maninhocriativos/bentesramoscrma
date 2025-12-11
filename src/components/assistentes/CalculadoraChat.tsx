@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowUp, Loader2, User, Upload, File, X, Landmark, Plus } from 'lucide-react';
+import { ArrowUp, Loader2, User, Upload, File, X, Landmark, Plus, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -19,6 +19,7 @@ import {
   generateConversationTitle,
   generatePreview,
 } from './ChatHistory';
+import { generateFinancialReport, extractBankFromMessages, hasAnalysisContent } from '@/lib/pdfGenerator';
 
 const CALCULATOR_ASSISTANT_ID = 'asst_KiAQOjNUkOfTv1PI49xeK8uX';
 
@@ -274,6 +275,21 @@ export function CalculadoraChat() {
     });
   };
 
+  const handleDownloadPDF = (content: string) => {
+    const banco = extractBankFromMessages(messages);
+    generateFinancialReport({
+      titulo: 'Análise Financeira',
+      banco: banco || selectedBank ? BANCOS.find(b => b.value === selectedBank)?.label : undefined,
+      dataAnalise: new Date().toLocaleDateString('pt-BR'),
+      conteudo: content,
+    });
+    
+    toast({
+      title: 'PDF gerado',
+      description: 'O relatório foi baixado com sucesso.',
+    });
+  };
+
   return (
     <div className="flex-1 flex flex-col h-[calc(100vh-180px)]">
       <Card className="flex-1 flex flex-col overflow-hidden mx-6 mb-6 mt-4">
@@ -439,21 +455,34 @@ export function CalculadoraChat() {
                         className="h-8 w-8 rounded-full object-cover object-top shrink-0"
                       />
                     )}
-                    <div
-                      className={cn(
-                        'max-w-[70%] rounded-2xl px-4 py-3 text-sm',
-                        msg.role === 'user'
-                          ? 'bg-emerald-500 text-white rounded-br-md'
-                          : 'bg-muted text-foreground rounded-bl-md'
+                    <div className="flex flex-col gap-2">
+                      <div
+                        className={cn(
+                          'max-w-[70%] rounded-2xl px-4 py-3 text-sm',
+                          msg.role === 'user'
+                            ? 'bg-emerald-500 text-white rounded-br-md'
+                            : 'bg-muted text-foreground rounded-bl-md'
+                        )}
+                      >
+                        <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                        <span className={cn(
+                          "text-[10px] mt-1 block",
+                          msg.role === 'user' ? 'text-white/70' : 'text-muted-foreground'
+                        )}>
+                          {msg.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      {msg.role === 'assistant' && hasAnalysisContent(msg.content) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDownloadPDF(msg.content)}
+                          className="w-fit gap-2 text-xs"
+                        >
+                          <Download className="h-3 w-3" />
+                          Baixar PDF
+                        </Button>
                       )}
-                    >
-                      <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                      <span className={cn(
-                        "text-[10px] mt-1 block",
-                        msg.role === 'user' ? 'text-white/70' : 'text-muted-foreground'
-                      )}>
-                        {msg.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
                     </div>
                     {msg.role === 'user' && (
                       <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
