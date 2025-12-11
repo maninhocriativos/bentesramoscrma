@@ -16,26 +16,30 @@ import {
   RefreshCw,
   Instagram,
   Facebook,
-  MessageCircle
+  MessageCircle,
+  Link2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface Subscriber {
   id: string;
+  subscriber_id: string;
   nome: string;
   foto?: string;
   canal: string;
-  ultimaMensagem?: string;
+  ultima_interacao?: string;
   telefone?: string;
   email?: string;
+  lead_id?: string;
 }
 
 interface Message {
   id: string;
-  content: string;
-  timestamp: Date;
-  isFromUser: boolean;
+  conteudo: string;
+  created_at: string;
+  direcao: 'entrada' | 'saida';
+  tipo: string;
 }
 
 const ManyChatInbox = () => {
@@ -46,6 +50,7 @@ const ManyChatInbox = () => {
   const [newMessage, setNewMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -59,31 +64,89 @@ const ManyChatInbox = () => {
 
   useEffect(() => {
     loadSubscribers();
-  }, []);
+    
+    // Configurar realtime para novas mensagens
+    const channel = supabase
+      .channel('manychat-messages')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'manychat_mensagens',
+        },
+        (payload) => {
+          console.log('Nova mensagem recebida:', payload);
+          const newMsg = payload.new as Message & { subscriber_id: string };
+          
+          // Se for do subscriber selecionado, adicionar à lista
+          if (selectedSubscriber && newMsg.subscriber_id === selectedSubscriber.subscriber_id) {
+            setMessages(prev => [...prev, newMsg]);
+          }
+          
+          // Atualizar lista de subscribers
+          loadSubscribers();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedSubscriber?.subscriber_id]);
+
+  // Carregar mensagens quando selecionar subscriber
+  useEffect(() => {
+    if (selectedSubscriber) {
+      loadMessages(selectedSubscriber.subscriber_id);
+    } else {
+      setMessages([]);
+    }
+  }, [selectedSubscriber?.subscriber_id]);
 
   const loadSubscribers = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('manychat', {
-        body: { action: 'buscar_conversas' },
-      });
+      // Buscar do banco de dados local
+      const { data, error } = await supabase
+        .from('manychat_subscribers')
+        .select('*')
+        .order('ultima_interacao', { ascending: false });
 
       if (error) throw error;
-
-      if (data.status === 'success' && data.data) {
-        setSubscribers(data.data);
-      } else if (data.status === 'error') {
-        throw new Error(data.error || 'Erro ao carregar contatos');
-      }
+      setSubscribers(data || []);
     } catch (error) {
       console.error('Erro ao carregar subscribers:', error);
       toast({
         title: 'Erro',
-        description: 'Não foi possível carregar os contatos do ManyChat',
+        description: 'Não foi possível carregar os contatos',
         variant: 'destructive',
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadMessages = async (subscriberId: string) => {
+    setIsLoadingMessages(true);
+    try {
+      const { data, error } = await supabase
+        .from('manychat_mensagens')
+        .select('*')
+        .eq('subscriber_id', subscriberId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setMessages(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar mensagens:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível carregar as mensagens',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingMessages(false);
     }
   };
 
@@ -92,35 +155,53 @@ const ManyChatInbox = () => {
 
     setIsSending(true);
     try {
+      // Enviar via ManyChat API
       const { data, error } = await supabase.functions.invoke('manychat', {
         body: {
           action: 'enviar_mensagem',
-          subscriberId: selectedSubscriber.id,
+          subscriberId: selectedSubscriber.subscriber_id,
           message: newMessage,
         },
       });
 
       if (error) throw error;
 
-      if (data.status === 'success') {
-        // Adiciona mensagem localmente
-        setMessages(prev => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            content: newMessage,
-            timestamp: new Date(),
-            isFromUser: false,
-          },
-        ]);
-        setNewMessage('');
-        toast({
-          title: 'Mensagem enviada',
-          description: `Mensagem enviada para ${selectedSubscriber.nome}`,
+      // Salvar mensagem localmente
+      const { error: insertError } = await supabase
+        .from('manychat_mensagens')
+        .insert({
+          subscriber_id: selectedSubscriber.subscriber_id,
+          subscriber_nome: selectedSubscriber.nome,
+          subscriber_foto: selectedSubscriber.foto,
+          canal: selectedSubscriber.canal,
+          conteudo: newMessage,
+          tipo: 'text',
+          direcao: 'saida',
+          lead_id: selectedSubscriber.lead_id,
         });
-      } else {
-        throw new Error(data.error || 'Erro ao enviar mensagem');
+
+      if (insertError) {
+        console.error('Erro ao salvar mensagem localmente:', insertError);
       }
+
+      // Atualizar última interação do subscriber
+      await supabase
+        .from('manychat_subscribers')
+        .update({ 
+          ultima_interacao: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('subscriber_id', selectedSubscriber.subscriber_id);
+
+      setNewMessage('');
+      
+      // Recarregar mensagens
+      await loadMessages(selectedSubscriber.subscriber_id);
+      
+      toast({
+        title: 'Mensagem enviada',
+        description: `Mensagem enviada para ${selectedSubscriber.nome}`,
+      });
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
       toast({
@@ -130,6 +211,54 @@ const ManyChatInbox = () => {
       });
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const syncFromManyChat = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('manychat', {
+        body: { action: 'buscar_conversas' },
+      });
+
+      if (error) throw error;
+
+      if (data.status === 'success' && data.data) {
+        // Sincronizar subscribers do ManyChat com o banco local
+        for (const sub of data.data) {
+          await supabase
+            .from('manychat_subscribers')
+            .upsert({
+              subscriber_id: sub.id,
+              nome: sub.nome,
+              foto: sub.foto,
+              telefone: sub.telefone,
+              email: sub.email,
+              canal: sub.canal,
+              ultima_interacao: sub.ultimaMensagem || new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }, {
+              onConflict: 'subscriber_id',
+            });
+        }
+        
+        // Recarregar lista
+        await loadSubscribers();
+        
+        toast({
+          title: 'Sincronizado',
+          description: `${data.data.length} contatos sincronizados do ManyChat`,
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao sincronizar:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível sincronizar com ManyChat',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -175,14 +304,26 @@ const ManyChatInbox = () => {
               <MessageSquare className="h-5 w-5" />
               Conversas
             </CardTitle>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={loadSubscribers}
-              disabled={isLoading}
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            </Button>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={syncFromManyChat}
+                disabled={isLoading}
+                title="Sincronizar do ManyChat"
+              >
+                <Link2 className={`h-4 w-4 ${isLoading ? 'animate-pulse' : ''}`} />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={loadSubscribers}
+                disabled={isLoading}
+                title="Atualizar lista"
+              >
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -222,9 +363,9 @@ const ManyChatInbox = () => {
                           <p className="font-medium truncate">{subscriber.nome}</p>
                           {getChannelIcon(subscriber.canal)}
                         </div>
-                        {subscriber.ultimaMensagem && (
+                        {subscriber.ultima_interacao && (
                           <p className="text-xs text-muted-foreground">
-                            {format(new Date(subscriber.ultimaMensagem), "dd/MM HH:mm", { locale: ptBR })}
+                            {format(new Date(subscriber.ultima_interacao), "dd/MM HH:mm", { locale: ptBR })}
                           </p>
                         )}
                       </div>
@@ -278,7 +419,11 @@ const ManyChatInbox = () => {
             {/* Mensagens */}
             <CardContent className="flex-1 p-4 overflow-hidden">
               <ScrollArea className="h-full pr-4">
-                {messages.length === 0 ? (
+                {isLoadingMessages ? (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">
+                    <RefreshCw className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : messages.length === 0 ? (
                   <div className="h-full flex items-center justify-center text-muted-foreground">
                     <div className="text-center">
                       <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
@@ -291,20 +436,20 @@ const ManyChatInbox = () => {
                     {messages.map((message) => (
                       <div
                         key={message.id}
-                        className={`flex ${message.isFromUser ? 'justify-start' : 'justify-end'}`}
+                        className={`flex ${message.direcao === 'entrada' ? 'justify-start' : 'justify-end'}`}
                       >
                         <div
                           className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                            message.isFromUser
+                            message.direcao === 'entrada'
                               ? 'bg-muted'
                               : 'bg-primary text-primary-foreground'
                           }`}
                         >
-                          <p>{message.content}</p>
+                          <p>{message.conteudo}</p>
                           <p className={`text-xs mt-1 ${
-                            message.isFromUser ? 'text-muted-foreground' : 'text-primary-foreground/70'
+                            message.direcao === 'entrada' ? 'text-muted-foreground' : 'text-primary-foreground/70'
                           }`}>
-                            {format(message.timestamp, "HH:mm", { locale: ptBR })}
+                            {format(new Date(message.created_at), "HH:mm", { locale: ptBR })}
                           </p>
                         </div>
                       </div>
