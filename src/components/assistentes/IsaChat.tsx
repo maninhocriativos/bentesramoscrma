@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Bot, Trash2, User } from 'lucide-react';
+import { ArrowUp, Loader2, Sparkles, RotateCcw, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -104,21 +104,21 @@ export function IsaChat() {
     <div className="flex-1 flex flex-col max-h-[calc(100vh-180px)]">
       <Card className="flex-1 flex flex-col overflow-hidden mx-6 mb-6 mt-4">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-primary/10 to-transparent">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <Bot className="h-6 w-6 text-primary" />
+            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Sparkles className="h-5 w-5 text-primary" strokeWidth={1.5} />
             </div>
             <div>
-              <h3 className="font-semibold text-foreground">Isa</h3>
+              <h3 className="font-medium text-foreground">Isa</h3>
               <p className="text-xs text-muted-foreground">
                 {isLoading ? 'Digitando...' : 'Assistente do escritório'}
               </p>
             </div>
           </div>
           {messages.length > 0 && (
-            <Button variant="outline" size="sm" onClick={clearChat} className="gap-2">
-              <Trash2 className="h-4 w-4" />
+            <Button variant="ghost" size="sm" onClick={clearChat} className="gap-2 text-muted-foreground hover:text-foreground">
+              <RotateCcw className="h-4 w-4" strokeWidth={1.5} />
               Nova conversa
             </Button>
           )}
@@ -129,13 +129,13 @@ export function IsaChat() {
           <ScrollArea className="h-full p-6" ref={scrollRef}>
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                <div className="h-20 w-20 rounded-3xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-6">
-                  <Bot className="h-10 w-10 text-primary" />
+                <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-5">
+                  <Sparkles className="h-8 w-8 text-primary" strokeWidth={1.5} />
                 </div>
-                <h3 className="text-xl font-semibold text-foreground mb-2">
-                  Olá! Sou a Isa 👋
+                <h3 className="text-lg font-medium text-foreground mb-2">
+                  Olá! Sou a Isa
                 </h3>
-                <p className="text-muted-foreground max-w-md mb-6">
+                <p className="text-sm text-muted-foreground max-w-md mb-6">
                   Estou aqui para ajudar com dúvidas sobre leads, processos, tarefas, agenda e muito mais.
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center">
@@ -170,8 +170,8 @@ export function IsaChat() {
                     )}
                   >
                     {msg.role === 'assistant' && (
-                      <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                        <Bot className="h-4 w-4 text-primary" />
+                      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <Sparkles className="h-4 w-4 text-primary" strokeWidth={1.5} />
                       </div>
                     )}
                     <div
@@ -191,16 +191,16 @@ export function IsaChat() {
                       </span>
                     </div>
                     {msg.role === 'user' && (
-                      <div className="h-8 w-8 rounded-xl bg-secondary flex items-center justify-center shrink-0">
-                        <User className="h-4 w-4 text-secondary-foreground" />
+                      <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
+                        <User className="h-4 w-4 text-secondary-foreground" strokeWidth={1.5} />
                       </div>
                     )}
                   </div>
                 ))}
                 {isLoading && (
                   <div className="flex gap-3 justify-start">
-                    <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                      <Bot className="h-4 w-4 text-primary" />
+                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <Sparkles className="h-4 w-4 text-primary" strokeWidth={1.5} />
                     </div>
                     <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">
                       <div className="flex gap-1">
@@ -231,13 +231,13 @@ export function IsaChat() {
             <Button
               onClick={sendMessage}
               disabled={!input.trim() || isLoading}
-              size="lg"
-              className="h-12 px-6 rounded-xl"
+              size="icon"
+              className="h-10 w-10 rounded-full"
             >
               {isLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Send className="h-5 w-5" />
+                <ArrowUp className="h-4 w-4" strokeWidth={2} />
               )}
             </Button>
           </div>
