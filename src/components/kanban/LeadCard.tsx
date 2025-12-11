@@ -3,7 +3,7 @@ import { ptBR } from 'date-fns/locale';
 import { Lead } from '@/types/leads';
 import { cn } from '@/lib/utils';
 import { getLeadIndicator } from '@/hooks/useAlertas';
-import { MessageCircle, ExternalLink, User } from 'lucide-react';
+import { MessageCircle, ExternalLink, User, Clock, DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 
@@ -13,18 +13,18 @@ interface LeadCardProps {
   isDragging?: boolean;
 }
 
-const ORIGEM_STYLES: Record<string, { bg: string; text: string }> = {
-  Instagram: { bg: 'bg-pink-100', text: 'text-pink-700' },
-  Google: { bg: 'bg-blue-100', text: 'text-blue-700' },
-  Site: { bg: 'bg-emerald-100', text: 'text-emerald-700' },
-  Indicação: { bg: 'bg-purple-100', text: 'text-purple-700' },
-  Outro: { bg: 'bg-muted', text: 'text-muted-foreground' },
+const ORIGEM_STYLES: Record<string, { bg: string; text: string; glow: string }> = {
+  Instagram: { bg: 'bg-pink-100', text: 'text-pink-700', glow: 'shadow-pink-200' },
+  Google: { bg: 'bg-blue-100', text: 'text-blue-700', glow: 'shadow-blue-200' },
+  Site: { bg: 'bg-emerald-100', text: 'text-emerald-700', glow: 'shadow-emerald-200' },
+  Indicação: { bg: 'bg-purple-100', text: 'text-purple-700', glow: 'shadow-purple-200' },
+  Outro: { bg: 'bg-muted', text: 'text-muted-foreground', glow: '' },
 };
 
 const INDICATOR_STYLES = {
-  red: { bg: 'bg-red-500', ring: 'ring-red-200', title: 'Sem interação há 7+ dias' },
-  yellow: { bg: 'bg-amber-400', ring: 'ring-amber-200', title: 'Lead novo (< 24h)' },
-  green: { bg: 'bg-emerald-500', ring: 'ring-emerald-200', title: 'Movimentado hoje' },
+  red: { bg: 'bg-red-500', ring: 'ring-red-200', title: 'Sem interação há 7+ dias', pulse: true },
+  yellow: { bg: 'bg-amber-400', ring: 'ring-amber-200', title: 'Lead novo (< 24h)', pulse: false },
+  green: { bg: 'bg-emerald-500', ring: 'ring-emerald-200', title: 'Movimentado hoje', pulse: false },
 };
 
 // Format currency value
@@ -33,7 +33,8 @@ const formatCurrency = (value: number | null): string => {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
-    minimumFractionDigits: 2,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(value);
 };
 
@@ -41,6 +42,7 @@ export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
   const navigate = useNavigate();
   const origemStyle = ORIGEM_STYLES[lead.origem || 'Outro'] || ORIGEM_STYLES.Outro;
   const indicator = getLeadIndicator(lead);
+  const indicatorStyle = indicator ? INDICATOR_STYLES[indicator] : null;
   const lastInteraction = lead.updated_at 
     ? formatDistanceToNow(new Date(lead.updated_at), { addSuffix: true, locale: ptBR })
     : formatDistanceToNow(new Date(lead.created_at), { addSuffix: true, locale: ptBR });
@@ -62,45 +64,61 @@ export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
     <div
       onClick={onClick}
       className={cn(
-        "bg-card rounded-lg cursor-pointer transition-all duration-200 relative group",
-        "border border-border/60 hover:border-gold/50",
-        "shadow-soft hover:shadow-card-hover hover:-translate-y-0.5",
-        isDragging && "opacity-60 rotate-1 scale-105 shadow-card-hover"
+        "bg-card rounded-xl cursor-pointer transition-all duration-300 relative group",
+        "border border-border/60 hover:border-gold/40",
+        "shadow-soft hover:shadow-card-hover",
+        isDragging && "opacity-60 rotate-2 scale-105 shadow-lg"
       )}
     >
-      {/* Status Indicator - top right */}
-      {indicator && (
+      {/* Status Indicator - top right with pulse for urgent */}
+      {indicatorStyle && (
         <div 
           className={cn(
-            "absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full ring-2 ring-card z-10",
-            INDICATOR_STYLES[indicator].bg
+            "absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full ring-2 ring-card z-10",
+            indicatorStyle.bg,
+            indicatorStyle.pulse && "animate-pulse"
           )}
-          title={INDICATOR_STYLES[indicator].title}
-        />
+          title={indicatorStyle.title}
+        >
+          {indicatorStyle.pulse && (
+            <span className={cn(
+              "absolute inset-0 rounded-full animate-ping",
+              indicatorStyle.bg,
+              "opacity-40"
+            )} />
+          )}
+        </div>
       )}
 
       {/* Card Header - Client Name + Avatar */}
-      <div className="flex items-center gap-3 p-3 pb-2 border-b border-border/40">
-        <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-          <User className="w-4 h-4 text-primary" />
+      <div className="flex items-center gap-3 p-3.5 pb-2.5 border-b border-border/30">
+        <div className={cn(
+          "w-10 h-10 rounded-xl bg-gradient-to-br from-primary/15 to-primary/5",
+          "flex items-center justify-center shrink-0",
+          "transition-transform duration-300 group-hover:scale-105"
+        )}>
+          <User className="w-5 h-5 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
-          <h4 className="font-semibold text-sm text-foreground leading-tight line-clamp-1" title={lead.nome || 'Sem nome'}>
+          <h4 className="font-semibold text-sm text-foreground leading-tight line-clamp-1 group-hover:text-primary transition-colors" title={lead.nome || 'Sem nome'}>
             {lead.nome || 'Sem nome'}
           </h4>
           {lead.email && (
-            <p className="text-xs text-muted-foreground truncate" title={lead.email}>{lead.email}</p>
+            <p className="text-xs text-muted-foreground truncate mt-0.5" title={lead.email}>{lead.email}</p>
           )}
         </div>
       </div>
 
       {/* Card Body - Value, Action Type, Last Interaction */}
-      <div className="p-3 space-y-2">
+      <div className="p-3.5 pt-3 space-y-2.5">
         {/* Value */}
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Valor da causa:</span>
+        <div className="flex items-center justify-between bg-muted/30 rounded-lg px-2.5 py-2">
+          <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+            <DollarSign className="w-3.5 h-3.5" />
+            Valor:
+          </span>
           <span className={cn(
-            "font-semibold text-sm",
+            "font-bold text-sm",
             lead.valor_causa ? "text-success" : "text-muted-foreground"
           )}>
             {formatCurrency(lead.valor_causa)}
@@ -118,46 +136,63 @@ export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
           
           {/* Origem Badge */}
           {lead.origem && (
-            <span className={cn("badge-compact whitespace-nowrap", origemStyle.bg, origemStyle.text)}>
+            <span className={cn(
+              "badge-compact whitespace-nowrap transition-shadow duration-200",
+              origemStyle.bg, 
+              origemStyle.text,
+              `hover:${origemStyle.glow}`
+            )}>
               {lead.origem}
             </span>
           )}
 
           {/* Contract Badge */}
           {lead.link_contrato && (
-            <span className="badge-compact bg-gold/20 text-gold-foreground whitespace-nowrap">
+            <span className="badge-compact bg-gold/20 text-gold-foreground whitespace-nowrap animate-pulse-subtle">
               Contrato
             </span>
           )}
         </div>
 
         {/* Last Interaction */}
-        <p className="text-xs text-muted-foreground truncate">
-          Última interação: {lastInteraction}
+        <p className="text-xs text-muted-foreground truncate flex items-center gap-1.5">
+          <Clock className="w-3 h-3" />
+          {lastInteraction}
         </p>
       </div>
 
-      {/* Card Footer - Actions */}
-      <div className="flex items-center justify-between px-3 py-2 border-t border-border/40 bg-muted/20">
+      {/* Card Footer - Actions with hover reveal */}
+      <div className={cn(
+        "flex items-center justify-between px-3 py-2 border-t border-border/30",
+        "bg-gradient-to-r from-muted/20 via-transparent to-muted/20"
+      )}>
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 px-2 text-xs text-muted-foreground hover:text-success gap-1"
+          className={cn(
+            "h-8 px-2.5 text-xs text-muted-foreground gap-1.5 rounded-lg",
+            "hover:text-success hover:bg-success/10 transition-all duration-200",
+            "hover:scale-105"
+          )}
           onClick={handleWhatsApp}
           disabled={!lead.telefone}
         >
-          <MessageCircle className="w-3.5 h-3.5" />
+          <MessageCircle className="w-4 h-4" />
           <span className="hidden sm:inline">WhatsApp</span>
         </Button>
         
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 px-2 text-xs text-muted-foreground hover:text-primary gap-1"
+          className={cn(
+            "h-8 px-2.5 text-xs text-muted-foreground gap-1.5 rounded-lg",
+            "hover:text-primary hover:bg-primary/10 transition-all duration-200",
+            "hover:scale-105"
+          )}
           onClick={handleViewDetails}
         >
-          <ExternalLink className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Ver Perfil</span>
+          <ExternalLink className="w-4 h-4" />
+          <span className="hidden sm:inline">Detalhes</span>
         </Button>
       </div>
     </div>

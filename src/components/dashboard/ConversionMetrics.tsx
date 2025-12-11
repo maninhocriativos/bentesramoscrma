@@ -129,39 +129,44 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
   return (
     <div className="space-y-4">
       {/* Period Comparison Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 stagger-children">
         {/* Weekly */}
-        <Card className="rounded-xl shadow-soft border border-border/50">
-          <CardHeader className="pb-2">
+        <Card className="group rounded-xl shadow-soft border border-border/50 hover:shadow-card-hover hover:-translate-y-1 transition-all duration-300 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          <CardHeader className="pb-2 relative">
             <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-              <Calendar className="h-4 w-4" />
+              <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
+                <Calendar className="h-4 w-4 text-blue-500" />
+              </div>
               Esta Semana
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 relative">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-2xl font-bold">{metrics.week.current.conversionRate.toFixed(0)}%</p>
+                <p className="text-3xl font-bold tracking-tight">{metrics.week.current.conversionRate.toFixed(0)}%</p>
                 <p className="text-xs text-muted-foreground">Taxa de Conversão</p>
               </div>
-              <div className="text-right">
-                {getTrendIcon(metrics.week.current.conversionRate, metrics.week.previous.conversionRate)}
-                <span className={`text-xs ${getTrendColor(metrics.week.current.conversionRate, metrics.week.previous.conversionRate)}`}>
+              <div className="text-right flex flex-col items-end gap-1">
+                <div className="w-8 h-8 rounded-full bg-muted/50 flex items-center justify-center">
+                  {getTrendIcon(metrics.week.current.conversionRate, metrics.week.previous.conversionRate)}
+                </div>
+                <span className={`text-xs font-semibold ${getTrendColor(metrics.week.current.conversionRate, metrics.week.previous.conversionRate)}`}>
                   {getVariation(metrics.week.current.conversionRate, metrics.week.previous.conversionRate)}
                 </span>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/30">
-              <div className="text-center">
-                <p className="text-lg font-semibold">{metrics.week.current.total}</p>
+            <div className="grid grid-cols-3 gap-2 pt-3 border-t border-border/30">
+              <div className="text-center p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                <p className="text-lg font-bold">{metrics.week.current.total}</p>
                 <p className="text-xs text-muted-foreground">Novos</p>
               </div>
-              <div className="text-center">
-                <p className="text-lg font-semibold text-success">{metrics.week.current.converted}</p>
+              <div className="text-center p-2 rounded-lg bg-success/10 hover:bg-success/20 transition-colors">
+                <p className="text-lg font-bold text-success">{metrics.week.current.converted}</p>
                 <p className="text-xs text-muted-foreground">Ganhos</p>
               </div>
-              <div className="text-center">
-                <p className="text-lg font-semibold text-destructive">{metrics.week.current.lost}</p>
+              <div className="text-center p-2 rounded-lg bg-destructive/10 hover:bg-destructive/20 transition-colors">
+                <p className="text-lg font-bold text-destructive">{metrics.week.current.lost}</p>
                 <p className="text-xs text-muted-foreground">Perdidos</p>
               </div>
             </div>
@@ -169,37 +174,42 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
         </Card>
 
         {/* Monthly */}
-        <Card className="rounded-xl shadow-soft border border-border/50">
-          <CardHeader className="pb-2">
+        <Card className="group rounded-xl shadow-soft border border-border/50 hover:shadow-card-hover hover:-translate-y-1 transition-all duration-300 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-gold/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          <CardHeader className="pb-2 relative">
             <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-              <Target className="h-4 w-4" />
+              <div className="w-8 h-8 rounded-lg bg-gold/10 flex items-center justify-center group-hover:bg-gold/20 transition-colors">
+                <Target className="h-4 w-4 text-gold" />
+              </div>
               Este Mês
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 relative">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-2xl font-bold">{metrics.month.current.conversionRate.toFixed(0)}%</p>
+                <p className="text-3xl font-bold tracking-tight">{metrics.month.current.conversionRate.toFixed(0)}%</p>
                 <p className="text-xs text-muted-foreground">Taxa de Conversão</p>
               </div>
-              <div className="text-right">
-                {getTrendIcon(metrics.month.current.conversionRate, metrics.month.previous.conversionRate)}
-                <span className={`text-xs ${getTrendColor(metrics.month.current.conversionRate, metrics.month.previous.conversionRate)}`}>
+              <div className="text-right flex flex-col items-end gap-1">
+                <div className="w-8 h-8 rounded-full bg-muted/50 flex items-center justify-center">
+                  {getTrendIcon(metrics.month.current.conversionRate, metrics.month.previous.conversionRate)}
+                </div>
+                <span className={`text-xs font-semibold ${getTrendColor(metrics.month.current.conversionRate, metrics.month.previous.conversionRate)}`}>
                   {getVariation(metrics.month.current.conversionRate, metrics.month.previous.conversionRate)}
                 </span>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/30">
-              <div className="text-center">
-                <p className="text-lg font-semibold">{metrics.month.current.total}</p>
+            <div className="grid grid-cols-3 gap-2 pt-3 border-t border-border/30">
+              <div className="text-center p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                <p className="text-lg font-bold">{metrics.month.current.total}</p>
                 <p className="text-xs text-muted-foreground">Novos</p>
               </div>
-              <div className="text-center">
-                <p className="text-lg font-semibold text-success">{metrics.month.current.converted}</p>
+              <div className="text-center p-2 rounded-lg bg-success/10 hover:bg-success/20 transition-colors">
+                <p className="text-lg font-bold text-success">{metrics.month.current.converted}</p>
                 <p className="text-xs text-muted-foreground">Ganhos</p>
               </div>
-              <div className="text-center">
-                <p className="text-lg font-semibold text-destructive">{metrics.month.current.lost}</p>
+              <div className="text-center p-2 rounded-lg bg-destructive/10 hover:bg-destructive/20 transition-colors">
+                <p className="text-lg font-bold text-destructive">{metrics.month.current.lost}</p>
                 <p className="text-xs text-muted-foreground">Perdidos</p>
               </div>
             </div>
@@ -207,37 +217,42 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
         </Card>
 
         {/* Quarterly */}
-        <Card className="rounded-xl shadow-soft border border-border/50">
-          <CardHeader className="pb-2">
+        <Card className="group rounded-xl shadow-soft border border-border/50 hover:shadow-card-hover hover:-translate-y-1 transition-all duration-300 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-success/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          <CardHeader className="pb-2 relative">
             <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-              <DollarSign className="h-4 w-4" />
+              <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center group-hover:bg-success/20 transition-colors">
+                <DollarSign className="h-4 w-4 text-success" />
+              </div>
               Este Trimestre
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 relative">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-2xl font-bold">{formatCurrency(metrics.quarter.current.totalValue)}</p>
+                <p className="text-3xl font-bold tracking-tight">{formatCurrency(metrics.quarter.current.totalValue)}</p>
                 <p className="text-xs text-muted-foreground">Valor Convertido</p>
               </div>
-              <div className="text-right">
-                {getTrendIcon(metrics.quarter.current.totalValue, metrics.quarter.previous.totalValue)}
-                <span className={`text-xs ${getTrendColor(metrics.quarter.current.totalValue, metrics.quarter.previous.totalValue)}`}>
+              <div className="text-right flex flex-col items-end gap-1">
+                <div className="w-8 h-8 rounded-full bg-muted/50 flex items-center justify-center">
+                  {getTrendIcon(metrics.quarter.current.totalValue, metrics.quarter.previous.totalValue)}
+                </div>
+                <span className={`text-xs font-semibold ${getTrendColor(metrics.quarter.current.totalValue, metrics.quarter.previous.totalValue)}`}>
                   {getVariation(metrics.quarter.current.totalValue, metrics.quarter.previous.totalValue)}
                 </span>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/30">
-              <div className="text-center">
-                <p className="text-lg font-semibold">{metrics.quarter.current.total}</p>
+            <div className="grid grid-cols-3 gap-2 pt-3 border-t border-border/30">
+              <div className="text-center p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                <p className="text-lg font-bold">{metrics.quarter.current.total}</p>
                 <p className="text-xs text-muted-foreground">Novos</p>
               </div>
-              <div className="text-center">
-                <p className="text-lg font-semibold">{metrics.quarter.current.conversionRate.toFixed(0)}%</p>
+              <div className="text-center p-2 rounded-lg bg-gold/10 hover:bg-gold/20 transition-colors">
+                <p className="text-lg font-bold">{metrics.quarter.current.conversionRate.toFixed(0)}%</p>
                 <p className="text-xs text-muted-foreground">Taxa</p>
               </div>
-              <div className="text-center">
-                <p className="text-lg font-semibold text-destructive">{metrics.quarter.current.lossRate.toFixed(0)}%</p>
+              <div className="text-center p-2 rounded-lg bg-destructive/10 hover:bg-destructive/20 transition-colors">
+                <p className="text-lg font-bold text-destructive">{metrics.quarter.current.lossRate.toFixed(0)}%</p>
                 <p className="text-xs text-muted-foreground">Perda</p>
               </div>
             </div>
