@@ -18,7 +18,16 @@ import AssistentePage from "./pages/AssistentePage";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      retry: 1,
+      staleTime: 5 * 60 * 1000, // 5 minutos
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
