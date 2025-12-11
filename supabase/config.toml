@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.isa-system-data]
 verify_jwt = false
+
+[functions.isa-actions]
+verify_jwt = false

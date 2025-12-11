@@ -7,8 +7,143 @@ const corsHeaders = {
 };
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-// Assistant ID - pode ser configurado via env ou passado na requisição
 const DEFAULT_ASSISTANT_ID = Deno.env.get('OPENAI_ASSISTANT_ID') || '';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+// Tools disponíveis para o assistant
+const AVAILABLE_TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "criar_compromisso",
+      description: "Cria um novo compromisso/evento na agenda do escritório. Use para agendar reuniões, audiências, prazos, etc.",
+      parameters: {
+        type: "object",
+        properties: {
+          titulo: { type: "string", description: "Título do compromisso" },
+          tipo: { type: "string", enum: ["Reunião", "Audiência", "Prazo", "Outro"], description: "Tipo do compromisso" },
+          data_inicio: { type: "string", description: "Data e hora de início no formato ISO (YYYY-MM-DDTHH:mm:ss)" },
+          data_fim: { type: "string", description: "Data e hora de término no formato ISO (opcional)" },
+          descricao: { type: "string", description: "Descrição detalhada do compromisso" },
+          lead_id: { type: "string", description: "ID do lead/cliente relacionado (opcional)" },
+          processo_id: { type: "string", description: "ID do processo relacionado (opcional)" },
+        },
+        required: ["titulo", "data_inicio"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "criar_tarefa",
+      description: "Cria uma nova tarefa no sistema. Use para criar tarefas de acompanhamento, pendências, etc.",
+      parameters: {
+        type: "object",
+        properties: {
+          titulo: { type: "string", description: "Título da tarefa" },
+          descricao: { type: "string", description: "Descrição da tarefa" },
+          data_limite: { type: "string", description: "Data limite no formato YYYY-MM-DD" },
+          prioridade: { type: "string", enum: ["Baixa", "Media", "Alta", "Urgente"], description: "Prioridade da tarefa" },
+          cliente_id: { type: "string", description: "ID do cliente relacionado (opcional)" },
+          processo_id: { type: "string", description: "ID do processo relacionado (opcional)" },
+        },
+        required: ["titulo"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "buscar_contratos_clicksign",
+      description: "Busca os contratos pendentes de assinatura e finalizados no Clicksign. Use quando o usuário perguntar sobre contratos, assinaturas pendentes, documentos para assinar.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "buscar_lead",
+      description: "Busca leads/clientes no sistema pelo nome, email ou telefone.",
+      parameters: {
+        type: "object",
+        properties: {
+          nome: { type: "string", description: "Nome do lead para buscar" },
+          email: { type: "string", description: "Email do lead para buscar" },
+          telefone: { type: "string", description: "Telefone do lead para buscar" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "listar_compromissos",
+      description: "Lista os compromissos da agenda. Use para ver a agenda, reuniões agendadas, etc.",
+      parameters: {
+        type: "object",
+        properties: {
+          data_inicio: { type: "string", description: "Data inicial no formato ISO para filtrar" },
+          data_fim: { type: "string", description: "Data final no formato ISO para filtrar" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "listar_tarefas_pendentes",
+      description: "Lista as tarefas pendentes do sistema.",
+      parameters: {
+        type: "object",
+        properties: {},
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "criar_interacao",
+      description: "Registra uma interação com um cliente (ligação, email, reunião, etc.)",
+      parameters: {
+        type: "object",
+        properties: {
+          cliente_id: { type: "string", description: "ID do cliente" },
+          tipo: { type: "string", enum: ["Ligação", "Email", "WhatsApp", "Reunião", "Outro"], description: "Tipo da interação" },
+          resumo: { type: "string", description: "Resumo da interação" },
+          detalhes: { type: "string", description: "Detalhes da interação" },
+          direcao: { type: "string", enum: ["Entrada", "Saída"], description: "Direção da interação" },
+        },
+        required: ["cliente_id", "tipo", "resumo"],
+      },
+    },
+  },
+];
+
+// Função para executar ações
+async function executeAction(functionName: string, args: any): Promise<any> {
+  console.log('Executando ação:', functionName, args);
+  
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/isa-actions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({
+      action: functionName,
+      data: args,
+    }),
+  });
+
+  const result = await response.json();
+  console.log('Resultado da ação:', result);
+  return result;
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -28,7 +163,7 @@ serve(async (req) => {
       throw new Error('Assistant ID não fornecido');
     }
 
-    console.log('Recebendo mensagem:', message);
+    console.log('Recebendo mensagem:', message?.substring(0, 100));
     console.log('Thread ID:', threadId);
     console.log('Assistant ID:', assistantToUse);
 
@@ -79,8 +214,8 @@ serve(async (req) => {
       throw new Error(`Erro ao adicionar mensagem: ${error}`);
     }
 
-    // Executar o assistant
-    console.log('Executando assistant...');
+    // Executar o assistant com tools
+    console.log('Executando assistant com tools...');
     const runResponse = await fetch(`https://api.openai.com/v1/threads/${currentThreadId}/runs`, {
       method: 'POST',
       headers: {
@@ -90,6 +225,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         assistant_id: assistantToUse,
+        tools: AVAILABLE_TOOLS,
       }),
     });
 
@@ -102,10 +238,11 @@ serve(async (req) => {
     const run = await runResponse.json();
     console.log('Run iniciado:', run.id);
 
-    // Aguardar a conclusão do run (polling)
+    // Aguardar a conclusão do run com suporte a tool calls
     let runStatus = run.status;
+    let runData = run;
     let attempts = 0;
-    const maxAttempts = 60; // 60 segundos máximo
+    const maxAttempts = 120; // 2 minutos máximo
 
     while (runStatus !== 'completed' && runStatus !== 'failed' && runStatus !== 'cancelled' && attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -117,10 +254,49 @@ serve(async (req) => {
         },
       });
       
-      const statusData = await statusResponse.json();
-      runStatus = statusData.status;
+      runData = await statusResponse.json();
+      runStatus = runData.status;
       attempts++;
       console.log(`Status do run (tentativa ${attempts}):`, runStatus);
+
+      // Se precisa chamar uma tool
+      if (runStatus === 'requires_action' && runData.required_action?.type === 'submit_tool_outputs') {
+        const toolCalls = runData.required_action.submit_tool_outputs.tool_calls;
+        console.log('Tool calls necessárias:', toolCalls.length);
+
+        const toolOutputs = [];
+        
+        for (const toolCall of toolCalls) {
+          const functionName = toolCall.function.name;
+          const args = JSON.parse(toolCall.function.arguments);
+          
+          console.log(`Executando tool: ${functionName}`, args);
+          
+          const result = await executeAction(functionName, args);
+          
+          toolOutputs.push({
+            tool_call_id: toolCall.id,
+            output: JSON.stringify(result),
+          });
+        }
+
+        // Submeter os resultados das tools
+        console.log('Submetendo resultados das tools...');
+        const submitResponse = await fetch(`https://api.openai.com/v1/threads/${currentThreadId}/runs/${run.id}/submit_tool_outputs`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+            'OpenAI-Beta': 'assistants=v2',
+          },
+          body: JSON.stringify({ tool_outputs: toolOutputs }),
+        });
+
+        if (!submitResponse.ok) {
+          const error = await submitResponse.text();
+          console.error('Erro ao submeter tool outputs:', error);
+        }
+      }
     }
 
     if (runStatus !== 'completed') {
