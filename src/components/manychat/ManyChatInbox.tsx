@@ -109,12 +109,15 @@ const ManyChatInbox = () => {
     try {
       // Buscar do banco de dados local
       const { data, error } = await supabase
-        .from('manychat_subscribers')
+        .from('manychat_subscribers' as any)
         .select('*')
         .order('ultima_interacao', { ascending: false });
 
-      if (error) throw error;
-      setSubscribers(data || []);
+      if (error) {
+        console.error('Erro ao buscar subscribers:', error);
+        throw error;
+      }
+      setSubscribers((data as Subscriber[]) || []);
     } catch (error) {
       console.error('Erro ao carregar subscribers:', error);
       toast({
@@ -131,13 +134,16 @@ const ManyChatInbox = () => {
     setIsLoadingMessages(true);
     try {
       const { data, error } = await supabase
-        .from('manychat_mensagens')
+        .from('manychat_mensagens' as any)
         .select('*')
         .eq('subscriber_id', subscriberId)
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
-      setMessages(data || []);
+      if (error) {
+        console.error('Erro ao buscar mensagens:', error);
+        throw error;
+      }
+      setMessages((data as Message[]) || []);
     } catch (error) {
       console.error('Erro ao carregar mensagens:', error);
       toast({
@@ -168,7 +174,7 @@ const ManyChatInbox = () => {
 
       // Salvar mensagem localmente
       const { error: insertError } = await supabase
-        .from('manychat_mensagens')
+        .from('manychat_mensagens' as any)
         .insert({
           subscriber_id: selectedSubscriber.subscriber_id,
           subscriber_nome: selectedSubscriber.nome,
@@ -178,7 +184,7 @@ const ManyChatInbox = () => {
           tipo: 'text',
           direcao: 'saida',
           lead_id: selectedSubscriber.lead_id,
-        });
+        } as any);
 
       if (insertError) {
         console.error('Erro ao salvar mensagem localmente:', insertError);
@@ -186,11 +192,11 @@ const ManyChatInbox = () => {
 
       // Atualizar última interação do subscriber
       await supabase
-        .from('manychat_subscribers')
+        .from('manychat_subscribers' as any)
         .update({ 
           ultima_interacao: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        })
+        } as any)
         .eq('subscriber_id', selectedSubscriber.subscriber_id);
 
       setNewMessage('');
@@ -227,7 +233,7 @@ const ManyChatInbox = () => {
         // Sincronizar subscribers do ManyChat com o banco local
         for (const sub of data.data) {
           await supabase
-            .from('manychat_subscribers')
+            .from('manychat_subscribers' as any)
             .upsert({
               subscriber_id: sub.id,
               nome: sub.nome,
@@ -237,7 +243,7 @@ const ManyChatInbox = () => {
               canal: sub.canal,
               ultima_interacao: sub.ultimaMensagem || new Date().toISOString(),
               updated_at: new Date().toISOString(),
-            }, {
+            } as any, {
               onConflict: 'subscriber_id',
             });
         }
