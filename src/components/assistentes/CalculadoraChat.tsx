@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Loader2, RotateCcw, User, Upload, File, X, Landmark } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { ArrowUp, Loader2, User, Upload, File, X, Landmark, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -10,8 +10,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import isaAvatar from '@/assets/isa-avatar.png';
+import {
+  ChatHistory,
+  SavedConversation,
+  getConversations,
+  saveConversation,
+  deleteConversation,
+  generateConversationTitle,
+  generatePreview,
+} from './ChatHistory';
 
-// Assistant ID para Isa Cálculo Bancário no GPT
 const CALCULATOR_ASSISTANT_ID = 'asst_KiAQOjNUkOfTv1PI49xeK8uX';
 
 interface Message {
@@ -46,44 +54,18 @@ const BANCOS = [
   { value: 'outro', label: 'Outro' },
 ];
 
-const STORAGE_KEY_CALC = 'isa-calc-chat-state';
+const STORAGE_KEY_CALC = 'isa-calc-chat';
 
 export function CalculadoraChat() {
-  const [messages, setMessages] = useState<Message[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_CALC);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return parsed.messages?.map((m: any) => ({
-          ...m,
-          timestamp: new Date(m.timestamp)
-        })) || [];
-      } catch { return []; }
-    }
-    return [];
-  });
+  const [conversationId, setConversationId] = useState<string>(() => crypto.randomUUID());
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [threadId, setThreadId] = useState<string | null>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_CALC);
-    if (saved) {
-      try {
-        return JSON.parse(saved).threadId || null;
-      } catch { return null; }
-    }
-    return null;
-  });
-  const [selectedBank, setSelectedBank] = useState<string>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_CALC);
-    if (saved) {
-      try {
-        return JSON.parse(saved).selectedBank || '';
-      } catch { return ''; }
-    }
-    return '';
-  });
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [selectedBank, setSelectedBank] = useState<string>('');
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [conversations, setConversations] = useState<SavedConversation[]>([]);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -91,15 +73,15 @@ export function CalculadoraChat() {
   const { toast } = useToast();
   const { user } = useAuth();
 
-  // Scroll to bottom
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  // Persistir estado
+  // Carregar histórico de conversas
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_CALC, JSON.stringify({ messages, threadId, selectedBank }));
-  }, [messages, threadId, selectedBank]);
+    setConversations(getConversations(STORAGE_KEY_CALC));
+  }, []);
+
+  // Scroll to bottom
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
 
   // Foco inicial no input
   useEffect(() => {
@@ -109,7 +91,7 @@ export function CalculadoraChat() {
   // Auto-scroll quando mensagens mudam
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isLoading]);
+  }, [messages, isLoading, scrollToBottom]);
 
   // Foco no input quando termina de carregar
   useEffect(() => {
@@ -117,6 +99,23 @@ export function CalculadoraChat() {
       inputRef.current?.focus();
     }
   }, [isLoading]);
+
+  // Salvar conversa quando há mensagens
+  useEffect(() => {
+    if (messages.length > 0) {
+      const conversation: SavedConversation = {
+        id: conversationId,
+        title: generateConversationTitle(messages),
+        messages,
+        threadId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        preview: generatePreview(messages),
+      };
+      saveConversation(STORAGE_KEY_CALC, conversation);
+      setConversations(getConversations(STORAGE_KEY_CALC));
+    }
+  }, [messages, threadId, conversationId]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -126,7 +125,6 @@ export function CalculadoraChat() {
 
     try {
       for (const file of Array.from(files)) {
-        const fileExt = file.name.split('.').pop();
         const filePath = `${user.id}/${Date.now()}_${file.name}`;
 
         const { error: uploadError } = await supabase.storage
@@ -180,7 +178,6 @@ export function CalculadoraChat() {
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
 
-    // Construir mensagem com contexto
     let fullMessage = input.trim();
     
     if (selectedBank && messages.length === 0) {
@@ -203,7 +200,6 @@ export function CalculadoraChat() {
     setInput('');
     setIsLoading(true);
     
-    // Scroll imediato após enviar
     setTimeout(scrollToBottom, 50);
 
     try {
@@ -249,13 +245,33 @@ export function CalculadoraChat() {
     }
   };
 
-  const clearChat = () => {
+  const startNewChat = () => {
+    setConversationId(crypto.randomUUID());
     setMessages([]);
     setThreadId(null);
     setUploadedFiles([]);
     setSelectedBank('');
-    localStorage.removeItem(STORAGE_KEY_CALC);
     inputRef.current?.focus();
+  };
+
+  const loadConversation = (conversation: SavedConversation) => {
+    setConversationId(conversation.id);
+    setMessages(conversation.messages);
+    setThreadId(conversation.threadId);
+  };
+
+  const handleDeleteConversation = (id: string) => {
+    deleteConversation(STORAGE_KEY_CALC, id);
+    setConversations(getConversations(STORAGE_KEY_CALC));
+    
+    if (id === conversationId) {
+      startNewChat();
+    }
+    
+    toast({
+      title: 'Conversa excluída',
+      description: 'A conversa foi removida do histórico.',
+    });
   };
 
   return (
@@ -276,19 +292,27 @@ export function CalculadoraChat() {
               </p>
             </div>
           </div>
-          {messages.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={clearChat} className="gap-2 text-muted-foreground hover:text-foreground">
-              <RotateCcw className="h-4 w-4" strokeWidth={1.5} />
-              Nova análise
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            <ChatHistory
+              storageKey={STORAGE_KEY_CALC}
+              currentConversationId={conversationId}
+              onLoadConversation={loadConversation}
+              onDeleteConversation={handleDeleteConversation}
+              conversations={conversations}
+            />
+            {messages.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={startNewChat} className="gap-2 text-muted-foreground hover:text-foreground">
+                <Plus className="h-4 w-4" strokeWidth={1.5} />
+                Nova análise
+              </Button>
+            )}
+          </div>
         </div>
 
-        {/* Config Panel - Só mostra se não tem mensagens */}
+        {/* Config Panel */}
         {messages.length === 0 && (
           <div className="px-6 py-4 border-b bg-muted/30 space-y-4 shrink-0">
             <div className="grid md:grid-cols-2 gap-4">
-              {/* Seleção de banco */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
                   <Landmark className="h-4 w-4" strokeWidth={1.5} />
@@ -308,7 +332,6 @@ export function CalculadoraChat() {
                 </Select>
               </div>
 
-              {/* Upload de arquivos */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
                   <File className="h-4 w-4" strokeWidth={1.5} />
@@ -340,7 +363,6 @@ export function CalculadoraChat() {
               </div>
             </div>
 
-            {/* Arquivos enviados */}
             {uploadedFiles.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {uploadedFiles.map((file) => (
@@ -363,7 +385,7 @@ export function CalculadoraChat() {
           </div>
         )}
 
-        {/* Messages - Usando div com overflow ao invés de ScrollArea */}
+        {/* Messages */}
         <CardContent className="flex-1 p-0 overflow-hidden">
           <div className="h-full overflow-y-auto p-6">
             {messages.length === 0 ? (
@@ -456,7 +478,6 @@ export function CalculadoraChat() {
                     </div>
                   </div>
                 )}
-                {/* Elemento âncora para scroll */}
                 <div ref={messagesEndRef} />
               </div>
             )}

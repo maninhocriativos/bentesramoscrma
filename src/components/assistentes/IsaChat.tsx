@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Loader2, RotateCcw, User } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { ArrowUp, Loader2, RotateCcw, User, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -7,6 +7,15 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import isaAvatar from '@/assets/isa-avatar.png';
+import {
+  ChatHistory,
+  SavedConversation,
+  getConversations,
+  saveConversation,
+  deleteConversation,
+  generateConversationTitle,
+  generatePreview,
+} from './ChatHistory';
 
 interface Message {
   id: string;
@@ -16,47 +25,29 @@ interface Message {
 }
 
 const ASSISTANT_ID = 'asst_rGFHqXnOLL6JA7UyRUdXQmaQ';
-const STORAGE_KEY_ISA = 'isa-chat-state';
+const STORAGE_KEY_ISA = 'isa-chat';
 
 export function IsaChat() {
-  const [messages, setMessages] = useState<Message[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_ISA);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return parsed.messages?.map((m: any) => ({
-          ...m,
-          timestamp: new Date(m.timestamp)
-        })) || [];
-      } catch { return []; }
-    }
-    return [];
-  });
+  const [conversationId, setConversationId] = useState<string>(() => crypto.randomUUID());
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [threadId, setThreadId] = useState<string | null>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_ISA);
-    if (saved) {
-      try {
-        return JSON.parse(saved).threadId || null;
-      } catch { return null; }
-    }
-    return null;
-  });
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<SavedConversation[]>([]);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  // Scroll to bottom
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  // Persistir estado
+  // Carregar histórico de conversas
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_ISA, JSON.stringify({ messages, threadId }));
-  }, [messages, threadId]);
+    setConversations(getConversations(STORAGE_KEY_ISA));
+  }, []);
+
+  // Scroll to bottom
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
 
   // Foco inicial no input
   useEffect(() => {
@@ -66,7 +57,7 @@ export function IsaChat() {
   // Auto-scroll quando mensagens mudam
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isLoading]);
+  }, [messages, isLoading, scrollToBottom]);
 
   // Foco no input quando termina de carregar
   useEffect(() => {
@@ -74,6 +65,23 @@ export function IsaChat() {
       inputRef.current?.focus();
     }
   }, [isLoading]);
+
+  // Salvar conversa quando há mensagens
+  useEffect(() => {
+    if (messages.length > 0) {
+      const conversation: SavedConversation = {
+        id: conversationId,
+        title: generateConversationTitle(messages),
+        messages,
+        threadId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        preview: generatePreview(messages),
+      };
+      saveConversation(STORAGE_KEY_ISA, conversation);
+      setConversations(getConversations(STORAGE_KEY_ISA));
+    }
+  }, [messages, threadId, conversationId]);
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
@@ -89,11 +97,9 @@ export function IsaChat() {
     setInput('');
     setIsLoading(true);
     
-    // Scroll imediato após enviar
     setTimeout(scrollToBottom, 50);
 
     try {
-      // Buscar dados do sistema para contexto
       let systemContext = '';
       try {
         const { data: systemData } = await supabase.functions.invoke('isa-system-data');
@@ -152,11 +158,31 @@ Parcelas pendentes: ${systemData.resumo.totalParcelasPendentes}
     }
   };
 
-  const clearChat = () => {
+  const startNewChat = () => {
+    setConversationId(crypto.randomUUID());
     setMessages([]);
     setThreadId(null);
-    localStorage.removeItem(STORAGE_KEY_ISA);
     inputRef.current?.focus();
+  };
+
+  const loadConversation = (conversation: SavedConversation) => {
+    setConversationId(conversation.id);
+    setMessages(conversation.messages);
+    setThreadId(conversation.threadId);
+  };
+
+  const handleDeleteConversation = (id: string) => {
+    deleteConversation(STORAGE_KEY_ISA, id);
+    setConversations(getConversations(STORAGE_KEY_ISA));
+    
+    if (id === conversationId) {
+      startNewChat();
+    }
+    
+    toast({
+      title: 'Conversa excluída',
+      description: 'A conversa foi removida do histórico.',
+    });
   };
 
   return (
@@ -177,15 +203,24 @@ Parcelas pendentes: ${systemData.resumo.totalParcelasPendentes}
               </p>
             </div>
           </div>
-          {messages.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={clearChat} className="gap-2 text-muted-foreground hover:text-foreground">
-              <RotateCcw className="h-4 w-4" strokeWidth={1.5} />
-              Nova conversa
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            <ChatHistory
+              storageKey={STORAGE_KEY_ISA}
+              currentConversationId={conversationId}
+              onLoadConversation={loadConversation}
+              onDeleteConversation={handleDeleteConversation}
+              conversations={conversations}
+            />
+            {messages.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={startNewChat} className="gap-2 text-muted-foreground hover:text-foreground">
+                <Plus className="h-4 w-4" strokeWidth={1.5} />
+                Nova conversa
+              </Button>
+            )}
+          </div>
         </div>
 
-        {/* Messages - Usando div com overflow ao invés de ScrollArea */}
+        {/* Messages */}
         <CardContent className="flex-1 p-0 overflow-hidden">
           <div className="h-full overflow-y-auto p-6">
             {messages.length === 0 ? (
@@ -278,7 +313,6 @@ Parcelas pendentes: ${systemData.resumo.totalParcelasPendentes}
                     </div>
                   </div>
                 )}
-                {/* Elemento âncora para scroll */}
                 <div ref={messagesEndRef} />
               </div>
             )}
