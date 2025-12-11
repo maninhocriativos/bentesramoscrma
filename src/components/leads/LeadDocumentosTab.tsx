@@ -30,7 +30,7 @@ function formatFileSize(bytes: number | null) {
 }
 
 export function LeadDocumentosTab({ clienteId }: LeadDocumentosTabProps) {
-  const { documentos, loading, deleteDocumento } = useDocumentos(clienteId);
+  const { documentos, loading, deleteDocumento } = useDocumentos(undefined, clienteId);
   const [modalOpen, setModalOpen] = useState(false);
 
   if (loading) {
