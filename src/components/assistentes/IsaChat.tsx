@@ -94,9 +94,26 @@ export function IsaChat() {
     setIsLoading(true);
 
     try {
+      // Buscar dados do sistema para contexto
+      let systemContext = '';
+      try {
+        const { data: systemData } = await supabase.functions.invoke('isa-system-data');
+        if (systemData && !systemData.error) {
+          systemContext = `\n\n[CONTEXTO DO SISTEMA - ${new Date().toLocaleDateString('pt-BR')}]
+Resumo: ${systemData.resumo.totalLeads} leads, ${systemData.resumo.totalProcessosAtivos} processos ativos, ${systemData.resumo.totalTarefasPendentes} tarefas pendentes, ${systemData.resumo.totalCompromissosProximos7Dias} compromissos nos próximos 7 dias.
+Leads por status: ${JSON.stringify(systemData.resumo.leadsPorStatus)}
+Compromissos próximos: ${JSON.stringify(systemData.compromissos?.slice(0, 5))}
+Tarefas pendentes: ${JSON.stringify(systemData.tarefas?.slice(0, 5))}
+Parcelas pendentes: ${systemData.resumo.totalParcelasPendentes}
+[FIM DO CONTEXTO]`;
+        }
+      } catch (e) {
+        console.log('Não foi possível buscar contexto do sistema:', e);
+      }
+
       const { data, error } = await supabase.functions.invoke('ai-chat', {
         body: {
-          message: userMessage.content,
+          message: userMessage.content + systemContext,
           threadId,
           assistantId: ASSISTANT_ID,
         },
