@@ -83,7 +83,53 @@ serve(async (req) => {
       subscriberId = `webhook_${Date.now()}`;
     }
 
-    // Upsert subscriber
+    // Tentar vincular automaticamente com lead existente
+    let leadId: string | null = null;
+    
+    // Primeiro, verificar se já existe subscriber com lead vinculado
+    const { data: existingSubscriber } = await supabase
+      .from('manychat_subscribers')
+      .select('lead_id')
+      .eq('subscriber_id', subscriberId)
+      .maybeSingle();
+    
+    if (existingSubscriber?.lead_id) {
+      leadId = existingSubscriber.lead_id;
+      console.log('Lead já vinculado ao subscriber:', leadId);
+    } else {
+      // Buscar lead pelo telefone (normalizado)
+      if (telefone) {
+        const telefoneLimpo = telefone.replace(/\D/g, ''); // Remove não-dígitos
+        const { data: leadByPhone } = await supabase
+          .from('leads_juridicos')
+          .select('id, nome')
+          .or(`telefone.ilike.%${telefoneLimpo.slice(-9)}%,telefone.ilike.%${telefoneLimpo}%`)
+          .limit(1)
+          .maybeSingle();
+        
+        if (leadByPhone) {
+          leadId = leadByPhone.id;
+          console.log('Lead encontrado por telefone:', leadByPhone.nome, leadId);
+        }
+      }
+      
+      // Se não encontrou por telefone, buscar por nome (match exato)
+      if (!leadId && subscriberNome && subscriberNome !== 'Desconhecido') {
+        const { data: leadByName } = await supabase
+          .from('leads_juridicos')
+          .select('id, nome')
+          .ilike('nome', `%${subscriberNome}%`)
+          .limit(1)
+          .maybeSingle();
+        
+        if (leadByName) {
+          leadId = leadByName.id;
+          console.log('Lead encontrado por nome:', leadByName.nome, leadId);
+        }
+      }
+    }
+
+    // Upsert subscriber com lead_id vinculado
     const { data: subscriberData, error: subscriberError } = await supabase
       .from('manychat_subscribers')
       .upsert({
@@ -91,6 +137,7 @@ serve(async (req) => {
         nome: subscriberNome,
         telefone: telefone,
         canal: canal,
+        lead_id: leadId,
         ultima_interacao: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }, {
@@ -103,6 +150,9 @@ serve(async (req) => {
       console.error('Erro ao salvar subscriber:', subscriberError);
     } else {
       console.log('Subscriber salvo/atualizado:', subscriberData);
+      if (leadId) {
+        console.log('Subscriber vinculado ao lead:', leadId);
+      }
     }
 
     // Salvar mensagem se houver conteúdo
@@ -116,7 +166,7 @@ serve(async (req) => {
           conteudo: messageContent,
           tipo: 'text',
           direcao: 'entrada',
-          lead_id: subscriberData?.lead_id || null,
+          lead_id: leadId,
           metadata: metadata,
         })
         .select()
