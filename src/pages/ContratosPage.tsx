@@ -83,7 +83,7 @@ export default function ContratosPage() {
         leadNome: doc.filename?.replace(/\.[^/.]+$/, '') || 'Documento',
         leadEmail: doc.signers?.[0]?.email || null,
         tipoAcao: doc.path || null,
-        linkContrato: `https://app.clicksign.com/documents/${doc.key}`,
+        linkContrato: `https://app.clicksign.com/document/${doc.key}`,
         status: mapClicksignStatus(doc),
         lastUpdate: doc.updated_at || doc.created_at,
       }));
