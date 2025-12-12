@@ -1,11 +1,13 @@
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useState } from 'react';
 import { Lead } from '@/types/leads';
 import { cn } from '@/lib/utils';
 import { getLeadIndicator } from '@/hooks/useAlertas';
-import { MessageCircle, ExternalLink, User, Clock, DollarSign } from 'lucide-react';
+import { MessageCircle, ExternalLink, User, Clock, DollarSign, FileSignature } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
+import { EnviarContratoModal } from '@/components/contratos/EnviarContratoModal';
 
 interface LeadCardProps {
   lead: Lead;
@@ -40,12 +42,16 @@ const formatCurrency = (value: number | null): string => {
 
 export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
   const navigate = useNavigate();
+  const [isContratoModalOpen, setIsContratoModalOpen] = useState(false);
+  
   const origemStyle = ORIGEM_STYLES[lead.origem || 'Outro'] || ORIGEM_STYLES.Outro;
   const indicator = getLeadIndicator(lead);
   const indicatorStyle = indicator ? INDICATOR_STYLES[indicator] : null;
   const lastInteraction = lead.updated_at 
     ? formatDistanceToNow(new Date(lead.updated_at), { addSuffix: true, locale: ptBR })
     : formatDistanceToNow(new Date(lead.created_at), { addSuffix: true, locale: ptBR });
+
+  const showContractButton = lead.status === 'Aguardando Contrato' && !lead.link_contrato;
 
   const handleWhatsApp = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -58,6 +64,11 @@ export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
   const handleViewDetails = (e: React.MouseEvent) => {
     e.stopPropagation();
     navigate(`/leads/${lead.id}`);
+  };
+
+  const handleGenerateContract = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsContratoModalOpen(true);
   };
 
   return (
@@ -161,6 +172,25 @@ export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
         </p>
       </div>
 
+      {/* Generate Contract Button - only for "Aguardando Contrato" */}
+      {showContractButton && (
+        <div className="px-3.5 pb-2">
+          <Button
+            variant="default"
+            size="sm"
+            className={cn(
+              "w-full h-9 text-xs gap-2 rounded-lg",
+              "bg-gold hover:bg-gold/90 text-gold-foreground",
+              "shadow-sm hover:shadow-md transition-all duration-200"
+            )}
+            onClick={handleGenerateContract}
+          >
+            <FileSignature className="w-4 h-4" />
+            Gerar Contrato
+          </Button>
+        </div>
+      )}
+
       {/* Card Footer - Actions with hover reveal */}
       <div className={cn(
         "flex items-center justify-between px-3 py-2 border-t border-border/30",
@@ -195,6 +225,14 @@ export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
           <span className="hidden sm:inline">Detalhes</span>
         </Button>
       </div>
+
+      {/* Contract Modal */}
+      <EnviarContratoModal
+        isOpen={isContratoModalOpen}
+        onClose={() => setIsContratoModalOpen(false)}
+        onSuccess={() => setIsContratoModalOpen(false)}
+        preSelectedLead={{ id: lead.id, nome: lead.nome || '', email: lead.email, telefone: lead.telefone }}
+      />
     </div>
   );
 }
