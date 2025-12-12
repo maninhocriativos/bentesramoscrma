@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,9 +11,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Send, Loader2, Upload } from 'lucide-react';
+import { Send, Loader2, User } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+
+interface Lead {
+  id: string;
+  nome: string | null;
+  email: string | null;
+  telefone: string | null;
+}
 
 interface EnviarContratoModalProps {
   isOpen: boolean;
@@ -24,12 +31,38 @@ interface EnviarContratoModalProps {
 export function EnviarContratoModal({ isOpen, onClose, onSuccess }: EnviarContratoModalProps) {
   const { toast } = useToast();
   const [file, setFile] = useState<File | null>(null);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [selectedLeadId, setSelectedLeadId] = useState<string>('');
   const [signerName, setSignerName] = useState('');
   const [signerEmail, setSignerEmail] = useState('');
   const [signerPhone, setSignerPhone] = useState('');
   const [authType, setAuthType] = useState<'email' | 'sms' | 'whatsapp'>('email');
   const [message, setMessage] = useState('Por favor, assine o contrato.');
   const [sending, setSending] = useState(false);
+
+  // Fetch leads for selection
+  useEffect(() => {
+    const fetchLeads = async () => {
+      const { data } = await supabase
+        .from('leads_juridicos')
+        .select('id, nome, email, telefone')
+        .order('nome');
+      if (data) setLeads(data);
+    };
+    if (isOpen) fetchLeads();
+  }, [isOpen]);
+
+  // Auto-fill when lead is selected
+  const handleLeadSelect = (leadId: string) => {
+    const actualId = leadId === 'none' ? '' : leadId;
+    setSelectedLeadId(actualId);
+    const lead = leads.find(l => l.id === actualId);
+    if (lead) {
+      setSignerName(lead.nome || '');
+      setSignerEmail(lead.email || '');
+      setSignerPhone(lead.telefone || '');
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -104,6 +137,23 @@ export function EnviarContratoModal({ isOpen, onClose, onSuccess }: EnviarContra
       if (listError) throw listError;
       if (listData.error) throw new Error(listData.error);
 
+      // Update lead with contract link if a lead was selected
+      if (selectedLeadId && documentKey) {
+        const clicksignUrl = `https://app.clicksign.com/document/${documentKey}`;
+        await supabase
+          .from('leads_juridicos')
+          .update({ link_contrato: clicksignUrl })
+          .eq('id', selectedLeadId);
+        
+        // Also create an interaction record
+        await supabase.from('interacoes').insert({
+          cliente_id: selectedLeadId,
+          tipo: 'Documento',
+          resumo: 'Contrato enviado para assinatura via Clicksign',
+          detalhes: `Documento: ${file.name}\nEmail: ${signerEmail}`,
+        });
+      }
+
       toast({
         title: 'Contrato enviado!',
         description: `O contrato foi enviado para ${signerEmail} via Clicksign.`,
@@ -111,6 +161,7 @@ export function EnviarContratoModal({ isOpen, onClose, onSuccess }: EnviarContra
 
       // Reset form
       setFile(null);
+      setSelectedLeadId('');
       setSignerName('');
       setSignerEmail('');
       setSignerPhone('');
@@ -154,6 +205,30 @@ export function EnviarContratoModal({ isOpen, onClose, onSuccess }: EnviarContra
           </div>
 
           <div className="border-t pt-4">
+            <h4 className="font-medium mb-3 flex items-center gap-2">
+              <User className="h-4 w-4" />
+              Vincular a Lead (opcional)
+            </h4>
+            
+            <div className="space-y-2 mb-4">
+              <Select value={selectedLeadId || 'none'} onValueChange={handleLeadSelect}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um lead para vincular..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum (envio avulso)</SelectItem>
+                  {leads.map((lead) => (
+                    <SelectItem key={lead.id} value={lead.id}>
+                      {lead.nome || 'Sem nome'} {lead.email ? `(${lead.email})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Ao vincular, o link do contrato será salvo no cadastro do lead
+              </p>
+            </div>
+
             <h4 className="font-medium mb-3">Dados do Signatário</h4>
             
             <div className="grid grid-cols-2 gap-4">
