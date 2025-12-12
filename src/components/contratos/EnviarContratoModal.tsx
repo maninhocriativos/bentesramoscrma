@@ -26,9 +26,10 @@ interface EnviarContratoModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  preSelectedLead?: Lead | null;
 }
 
-export function EnviarContratoModal({ isOpen, onClose, onSuccess }: EnviarContratoModalProps) {
+export function EnviarContratoModal({ isOpen, onClose, onSuccess, preSelectedLead }: EnviarContratoModalProps) {
   const { toast } = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -51,6 +52,16 @@ export function EnviarContratoModal({ isOpen, onClose, onSuccess }: EnviarContra
     };
     if (isOpen) fetchLeads();
   }, [isOpen]);
+
+  // Pre-fill when opening with a pre-selected lead
+  useEffect(() => {
+    if (isOpen && preSelectedLead) {
+      setSelectedLeadId(preSelectedLead.id);
+      setSignerName(preSelectedLead.nome || '');
+      setSignerEmail(preSelectedLead.email || '');
+      setSignerPhone(preSelectedLead.telefone || '');
+    }
+  }, [isOpen, preSelectedLead]);
 
   // Auto-fill when lead is selected
   const handleLeadSelect = (leadId: string) => {
