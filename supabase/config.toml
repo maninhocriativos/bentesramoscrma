@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.manychat-webhook]
 verify_jwt = false
+
+[functions.api-hub]
+verify_jwt = false

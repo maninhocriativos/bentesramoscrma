@@ -710,6 +710,65 @@ export type Database = {
           },
         ]
       }
+      system_events: {
+        Row: {
+          acao: string
+          created_at: string
+          dados: Json | null
+          entidade_id: string | null
+          entidade_tipo: string | null
+          erro: string | null
+          fonte: string
+          id: string
+          ip_origem: string | null
+          lead_id: string | null
+          metadata: Json | null
+          processado: boolean | null
+          tipo: string
+          user_agent: string | null
+        }
+        Insert: {
+          acao: string
+          created_at?: string
+          dados?: Json | null
+          entidade_id?: string | null
+          entidade_tipo?: string | null
+          erro?: string | null
+          fonte: string
+          id?: string
+          ip_origem?: string | null
+          lead_id?: string | null
+          metadata?: Json | null
+          processado?: boolean | null
+          tipo: string
+          user_agent?: string | null
+        }
+        Update: {
+          acao?: string
+          created_at?: string
+          dados?: Json | null
+          entidade_id?: string | null
+          entidade_tipo?: string | null
+          erro?: string | null
+          fonte?: string
+          id?: string
+          ip_origem?: string | null
+          lead_id?: string | null
+          metadata?: Json | null
+          processado?: boolean | null
+          tipo?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tarefas: {
         Row: {
           cliente_id: string | null

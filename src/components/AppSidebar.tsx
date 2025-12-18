@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare, Sparkles, Webhook } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Sidebar,
@@ -86,6 +86,12 @@ const menuItems: MenuItem[] = [
     url: '/manychat', 
     icon: MessageSquare,
     visibility: 'all'
+  },
+  { 
+    title: 'API Hub', 
+    url: '/api-hub', 
+    icon: Webhook,
+    visibility: 'admin-only'
   },
   { 
     title: 'Configurações', 
