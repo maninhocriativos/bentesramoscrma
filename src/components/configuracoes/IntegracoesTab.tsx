@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Copy, Check, Key, Webhook, ExternalLink, Eye, EyeOff, Save, MessageSquare, CreditCard, FileSignature, Clock, Zap, Info } from 'lucide-react';
+import { Copy, Check, Key, Webhook, ExternalLink, Eye, EyeOff, Save, MessageSquare, CreditCard, FileSignature, Clock, Zap, Info, Calendar, RefreshCw, Briefcase, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-
+import { supabase } from '@/integrations/supabase/client';
 interface IntegrationCardProps {
   icon: React.ReactNode;
   title: string;
@@ -55,9 +55,41 @@ export function IntegracoesTab() {
   const [asaasToken, setAsaasToken] = useState('');
   const [showZapi, setShowZapi] = useState(false);
   const [showAsaas, setShowAsaas] = useState(false);
+  
+  // Google Calendar state
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [googleSyncing, setGoogleSyncing] = useState(false);
+  const [googleTokens, setGoogleTokens] = useState<{ access_token?: string; refresh_token?: string } | null>(null);
+  
+  // Advbox state
+  const [advboxSyncing, setAdvboxSyncing] = useState(false);
+  const [advboxConnected, setAdvboxConnected] = useState(true); // Token já configurado
 
   const SUPABASE_URL = 'https://qgenaltkjtlvwfgykpxq.supabase.co/rest/v1/leads_juridicos';
   const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFnZW5hbHRranRsdndmZ3lrcHhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxNjI1NzAsImV4cCI6MjA2NDczODU3MH0.DgXi_2D3fVNDWMvz9M3aSIbY58FEJc3dTz05kfH_Mew';
+
+  // Listen for OAuth callback
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data.type === 'google-oauth-success') {
+        setGoogleTokens(event.data.tokens);
+        setGoogleConnected(true);
+        toast({
+          title: 'Google Calendar conectado!',
+          description: 'Sua conta foi conectada com sucesso.',
+        });
+      } else if (event.data.type === 'google-oauth-error') {
+        toast({
+          title: 'Erro na conexão',
+          description: event.data.error,
+          variant: 'destructive',
+        });
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [toast]);
 
   const copyToClipboard = async (text: string, field: string) => {
     await navigator.clipboard.writeText(text);
@@ -79,6 +111,107 @@ export function IntegracoesTab() {
       title: 'Tokens salvos!', 
       description: 'Os tokens foram salvos com sucesso.',
     });
+  };
+
+  const handleConnectGoogle = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
+        body: {},
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      // Try with query params approach
+      const response = await fetch(
+        'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/google-calendar-auth?action=get_auth_url',
+        { method: 'GET' }
+      );
+      
+      const result = await response.json();
+      
+      if (result.error) {
+        toast({
+          title: 'Configuração necessária',
+          description: result.error,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (result.authUrl) {
+        window.open(result.authUrl, 'google-oauth', 'width=600,height=700');
+      }
+    } catch (error) {
+      console.error('Error connecting to Google:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível iniciar a conexão com o Google.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleSyncGoogle = async () => {
+    if (!googleTokens?.access_token) {
+      toast({
+        title: 'Erro',
+        description: 'Conecte sua conta do Google primeiro.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setGoogleSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('calendar-sync', {
+        body: {
+          action: 'sync_google',
+          google_access_token: googleTokens.access_token,
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Sincronização concluída!',
+        description: data.message,
+      });
+    } catch (error) {
+      console.error('Error syncing Google Calendar:', error);
+      toast({
+        title: 'Erro na sincronização',
+        description: 'Não foi possível sincronizar o Google Calendar.',
+        variant: 'destructive',
+      });
+    } finally {
+      setGoogleSyncing(false);
+    }
+  };
+
+  const handleSyncAdvbox = async () => {
+    setAdvboxSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('calendar-sync', {
+        body: {
+          action: 'sync_advbox',
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Sincronização concluída!',
+        description: data.message,
+      });
+    } catch (error) {
+      console.error('Error syncing Advbox:', error);
+      toast({
+        title: 'Erro na sincronização',
+        description: 'Não foi possível sincronizar o Advbox.',
+        variant: 'destructive',
+      });
+    } finally {
+      setAdvboxSyncing(false);
+    }
   };
 
   return (
@@ -219,6 +352,96 @@ export function IntegracoesTab() {
         </Card>
 
         {/* API Integrations Grid */}
+        <h3 className="text-sm font-semibold text-foreground mt-6 mb-3 flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-primary" />
+          Sincronização de Agenda
+        </h3>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2 mb-6">
+          {/* Google Calendar */}
+          <IntegrationCard
+            icon={<Calendar className="h-5 w-5 text-red-600" />}
+            title="Google Calendar"
+            description="Sincronização bidirecional"
+            status={googleConnected ? 'active' : 'inactive'}
+            color="bg-red-50"
+          >
+            <div className="space-y-3 pt-2">
+              {!googleConnected ? (
+                <Button 
+                  onClick={handleConnectGoogle}
+                  className="w-full bg-red-600 hover:bg-red-700 text-white"
+                >
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Conectar Google Calendar
+                </Button>
+              ) : (
+                <div className="space-y-3">
+                  <div className="p-3 bg-green-50 rounded-lg border border-green-100">
+                    <p className="text-xs text-green-700 flex items-center gap-1.5">
+                      <Check className="h-3 w-3" />
+                      Conta Google conectada
+                    </p>
+                  </div>
+                  <Button 
+                    onClick={handleSyncGoogle}
+                    disabled={googleSyncing}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    {googleSyncing ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                    )}
+                    {googleSyncing ? 'Sincronizando...' : 'Sincronizar Agora'}
+                  </Button>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Eventos serão sincronizados automaticamente nos dois sentidos.
+              </p>
+            </div>
+          </IntegrationCard>
+
+          {/* Advbox */}
+          <IntegrationCard
+            icon={<Briefcase className="h-5 w-5 text-indigo-600" />}
+            title="Advbox"
+            description="Sistema jurídico"
+            status={advboxConnected ? 'active' : 'inactive'}
+            color="bg-indigo-50"
+          >
+            <div className="space-y-3 pt-2">
+              <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+                <p className="text-xs text-indigo-700 flex items-center gap-1.5">
+                  <Check className="h-3 w-3" />
+                  Token Advbox configurado
+                </p>
+              </div>
+              <Button 
+                onClick={handleSyncAdvbox}
+                disabled={advboxSyncing}
+                variant="outline"
+                className="w-full"
+              >
+                {advboxSyncing ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                {advboxSyncing ? 'Sincronizando...' : 'Sincronizar Agenda'}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Compromissos do Advbox serão importados para sua agenda.
+              </p>
+            </div>
+          </IntegrationCard>
+        </div>
+
+        <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+          <Zap className="h-4 w-4 text-gold-foreground" />
+          Outras Integrações
+        </h3>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {/* Z-API */}
           <IntegrationCard
