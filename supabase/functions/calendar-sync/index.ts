@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 const ADVBOX_TOKEN = Deno.env.get('ADVBOX_TOKEN');
+const ADVBOX_API_URL = Deno.env.get('ADVBOX_API_URL') || 'https://app.advbox.com.br/api/v1';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -51,28 +52,54 @@ serve(async (req) => {
       }
 
       console.log('Fetching events from Advbox...');
+      console.log('Using Advbox API URL:', ADVBOX_API_URL);
       
       // Fetch events from Advbox API
-      const advboxResponse = await fetch('https://api.advbox.com.br/v1/agenda', {
+      const advboxUrl = `${ADVBOX_API_URL}/agenda`;
+      console.log('Full Advbox URL:', advboxUrl);
+      
+      const advboxResponse = await fetch(advboxUrl, {
         headers: {
           'Authorization': `Bearer ${ADVBOX_TOKEN}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
       });
+
+      console.log('Advbox response status:', advboxResponse.status);
 
       if (!advboxResponse.ok) {
         const errorText = await advboxResponse.text();
         console.error('Advbox API error:', advboxResponse.status, errorText);
         return new Response(JSON.stringify({ 
           error: `Erro ao buscar eventos do Advbox: ${advboxResponse.status}`,
-          details: errorText
+          details: errorText,
+          url_used: advboxUrl
         }), {
           status: advboxResponse.status,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      const advboxEvents: AdvboxEvento[] = await advboxResponse.json();
+      const responseText = await advboxResponse.text();
+      console.log('Advbox raw response:', responseText.substring(0, 500));
+      
+      let advboxEvents: AdvboxEvento[] = [];
+      try {
+        const parsed = JSON.parse(responseText);
+        // Handle different response formats
+        advboxEvents = Array.isArray(parsed) ? parsed : (parsed.data || parsed.items || parsed.agenda || []);
+      } catch (parseError) {
+        console.error('Error parsing Advbox response:', parseError);
+        return new Response(JSON.stringify({ 
+          error: 'Erro ao processar resposta do Advbox',
+          details: responseText.substring(0, 200)
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
       console.log(`Found ${advboxEvents.length} events from Advbox`);
 
       // Upsert events to local database
@@ -286,11 +313,12 @@ serve(async (req) => {
         tipo: compromisso.tipo,
       };
 
-      const advboxResponse = await fetch('https://api.advbox.com.br/v1/agenda', {
+      const advboxResponse = await fetch(`${ADVBOX_API_URL}/agenda`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${ADVBOX_TOKEN}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
         body: JSON.stringify(advboxEvent),
       });
