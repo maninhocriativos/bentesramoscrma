@@ -20,8 +20,10 @@ export type Database = {
           data_fim: string | null
           data_inicio: string
           descricao: string | null
+          external_id: string | null
           id: string
           lead_id: string | null
+          origem: string | null
           processo_id: string | null
           responsavel_id: string | null
           tipo: string
@@ -33,8 +35,10 @@ export type Database = {
           data_fim?: string | null
           data_inicio: string
           descricao?: string | null
+          external_id?: string | null
           id?: string
           lead_id?: string | null
+          origem?: string | null
           processo_id?: string | null
           responsavel_id?: string | null
           tipo?: string
@@ -46,8 +50,10 @@ export type Database = {
           data_fim?: string | null
           data_inicio?: string
           descricao?: string | null
+          external_id?: string | null
           id?: string
           lead_id?: string | null
+          origem?: string | null
           processo_id?: string | null
           responsavel_id?: string | null
           tipo?: string

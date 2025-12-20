@@ -11,21 +11,22 @@ const ADVBOX_API_URL = 'https://app.advbox.com.br/api/v1';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-// Advbox uses /posts endpoint for tasks/agenda items
+// Advbox uses /posts endpoint for tasks/agenda items - real structure from API
 interface AdvboxPost {
   id: number;
-  title?: string;
-  description?: string;
-  due_date?: string;
-  start_date?: string;
-  end_date?: string;
-  status?: string;
-  priority?: string;
-  lawsuit_id?: number;
-  customer_id?: number;
-  user_id?: number;
+  task?: string;           // Title of the task
+  notes?: string;          // Description/notes
+  date?: string;           // Main date (e.g., "2019-03-08 00:00:00")
+  date_deadline?: string;  // Deadline date
+  reward?: string | null;
+  local?: string | null;
+  lawsuits_id?: number;
   created_at?: string;
-  updated_at?: string;
+  lawsuit?: {
+    id: number;
+    process_number?: string;
+    customers?: Array<{ name: string; customer_id: number }>;
+  };
 }
 
 interface GoogleCalendarEvent {
@@ -110,30 +111,74 @@ serve(async (req) => {
       
       console.log(`Found ${advboxPosts.length} posts/tasks from Advbox`);
 
-      // Map Advbox posts to compromissos
-      const compromissos = advboxPosts.map(post => ({
-        id: `advbox_${post.id}`,
-        titulo: post.title || 'Tarefa sem título',
-        descricao: post.description || null,
-        data_inicio: post.due_date || post.start_date || post.created_at || new Date().toISOString(),
-        data_fim: post.end_date || null,
-        tipo: 'advbox',
-      }));
-
-      for (const compromisso of compromissos) {
-        const { error } = await supabase
-          .from('compromissos')
-          .upsert(compromisso, { onConflict: 'id' });
+      // Map Advbox posts to compromissos - use external_id for tracking
+      let syncedCount = 0;
+      let errorCount = 0;
+      
+      for (const post of advboxPosts) {
+        const externalId = `advbox_${post.id}`;
         
-        if (error) {
-          console.error('Error upserting compromisso:', error);
+        // Check if already exists
+        const { data: existing } = await supabase
+          .from('compromissos')
+          .select('id')
+          .eq('external_id', externalId)
+          .single();
+        
+        if (existing) {
+          // Update existing
+          const { error } = await supabase
+            .from('compromissos')
+            .update({
+              titulo: post.task || 'Tarefa sem título',
+              descricao: post.notes || null,
+              data_inicio: post.date || post.date_deadline || post.created_at || new Date().toISOString(),
+              data_fim: post.date_deadline || null,
+            })
+            .eq('id', existing.id);
+          
+          if (error) {
+            console.error('Error updating compromisso:', error);
+            errorCount++;
+          } else {
+            syncedCount++;
+          }
+        } else {
+          // Build title with process info if available
+          let titulo = post.task || 'Tarefa sem título';
+          if (post.lawsuit?.process_number) {
+            titulo = `${titulo} - ${post.lawsuit.process_number}`;
+          }
+          
+          // Insert new
+          const { error } = await supabase
+            .from('compromissos')
+            .insert({
+              external_id: externalId,
+              titulo,
+              descricao: post.notes || null,
+              data_inicio: post.date || post.date_deadline || post.created_at || new Date().toISOString(),
+              data_fim: post.date_deadline || null,
+              tipo: 'Reunião',
+              origem: 'advbox',
+            });
+          
+          if (error) {
+            console.error('Error inserting compromisso:', error);
+            errorCount++;
+          } else {
+            syncedCount++;
+          }
         }
       }
+      
+      console.log(`Synced ${syncedCount} posts from Advbox, ${errorCount} errors`);
 
       return new Response(JSON.stringify({ 
         success: true, 
-        synced: compromissos.length,
-        message: `${compromissos.length} tarefas sincronizadas do Advbox`
+        synced: syncedCount,
+        errors: errorCount,
+        message: `${syncedCount} tarefas sincronizadas do Advbox${errorCount > 0 ? `, ${errorCount} erros` : ''}`
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
