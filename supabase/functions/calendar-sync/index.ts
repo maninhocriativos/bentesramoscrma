@@ -7,17 +7,25 @@ const corsHeaders = {
 };
 
 const ADVBOX_TOKEN = Deno.env.get('ADVBOX_TOKEN');
-const ADVBOX_API_URL = Deno.env.get('ADVBOX_API_URL') || 'https://app.advbox.com.br/api/v1';
+const ADVBOX_API_URL = 'https://app.advbox.com.br/api/v1';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-interface AdvboxEvento {
-  id: string;
-  titulo: string;
-  descricao?: string;
-  data_inicio: string;
-  data_fim?: string;
-  tipo?: string;
+// Advbox uses /posts endpoint for tasks/agenda items
+interface AdvboxPost {
+  id: number;
+  title?: string;
+  description?: string;
+  due_date?: string;
+  start_date?: string;
+  end_date?: string;
+  status?: string;
+  priority?: string;
+  lawsuit_id?: number;
+  customer_id?: number;
+  user_id?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface GoogleCalendarEvent {
@@ -51,11 +59,11 @@ serve(async (req) => {
         });
       }
 
-      console.log('Fetching events from Advbox...');
+      console.log('Fetching tasks/posts from Advbox...');
       console.log('Using Advbox API URL:', ADVBOX_API_URL);
       
-      // Fetch events from Advbox API
-      const advboxUrl = `${ADVBOX_API_URL}/agenda`;
+      // Advbox uses /posts endpoint for tasks (agenda items)
+      const advboxUrl = `${ADVBOX_API_URL}/posts`;
       console.log('Full Advbox URL:', advboxUrl);
       
       const advboxResponse = await fetch(advboxUrl, {
@@ -72,7 +80,7 @@ serve(async (req) => {
         const errorText = await advboxResponse.text();
         console.error('Advbox API error:', advboxResponse.status, errorText);
         return new Response(JSON.stringify({ 
-          error: `Erro ao buscar eventos do Advbox: ${advboxResponse.status}`,
+          error: `Erro ao buscar tarefas do Advbox: ${advboxResponse.status}`,
           details: errorText,
           url_used: advboxUrl
         }), {
@@ -82,13 +90,13 @@ serve(async (req) => {
       }
 
       const responseText = await advboxResponse.text();
-      console.log('Advbox raw response:', responseText.substring(0, 500));
+      console.log('Advbox raw response (first 500 chars):', responseText.substring(0, 500));
       
-      let advboxEvents: AdvboxEvento[] = [];
+      let advboxPosts: AdvboxPost[] = [];
       try {
         const parsed = JSON.parse(responseText);
         // Handle different response formats
-        advboxEvents = Array.isArray(parsed) ? parsed : (parsed.data || parsed.items || parsed.agenda || []);
+        advboxPosts = Array.isArray(parsed) ? parsed : (parsed.data || parsed.items || parsed.posts || []);
       } catch (parseError) {
         console.error('Error parsing Advbox response:', parseError);
         return new Response(JSON.stringify({ 
@@ -100,16 +108,16 @@ serve(async (req) => {
         });
       }
       
-      console.log(`Found ${advboxEvents.length} events from Advbox`);
+      console.log(`Found ${advboxPosts.length} posts/tasks from Advbox`);
 
-      // Upsert events to local database
-      const compromissos = advboxEvents.map(event => ({
-        id: `advbox_${event.id}`,
-        titulo: event.titulo,
-        descricao: event.descricao || null,
-        data_inicio: event.data_inicio,
-        data_fim: event.data_fim || null,
-        tipo: event.tipo || 'advbox',
+      // Map Advbox posts to compromissos
+      const compromissos = advboxPosts.map(post => ({
+        id: `advbox_${post.id}`,
+        titulo: post.title || 'Tarefa sem título',
+        descricao: post.description || null,
+        data_inicio: post.due_date || post.start_date || post.created_at || new Date().toISOString(),
+        data_fim: post.end_date || null,
+        tipo: 'advbox',
       }));
 
       for (const compromisso of compromissos) {
@@ -125,7 +133,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ 
         success: true, 
         synced: compromissos.length,
-        message: `${compromissos.length} eventos sincronizados do Advbox`
+        message: `${compromissos.length} tarefas sincronizadas do Advbox`
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -305,22 +313,23 @@ serve(async (req) => {
         });
       }
 
-      const advboxEvent = {
-        titulo: compromisso.titulo,
-        descricao: compromisso.descricao,
-        data_inicio: compromisso.data_inicio,
-        data_fim: compromisso.data_fim,
-        tipo: compromisso.tipo,
+      // Map to Advbox post format
+      const advboxPost = {
+        title: compromisso.titulo,
+        description: compromisso.descricao,
+        due_date: compromisso.data_inicio,
+        start_date: compromisso.data_inicio,
+        end_date: compromisso.data_fim,
       };
 
-      const advboxResponse = await fetch(`${ADVBOX_API_URL}/agenda`, {
+      const advboxResponse = await fetch(`${ADVBOX_API_URL}/posts`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${ADVBOX_TOKEN}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: JSON.stringify(advboxEvent),
+        body: JSON.stringify(advboxPost),
       });
 
       if (!advboxResponse.ok) {
