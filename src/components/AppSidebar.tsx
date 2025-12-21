@@ -168,10 +168,10 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       
-      <SidebarContent className="px-2 py-3">
+      <SidebarContent className="px-2 py-3 overflow-y-auto">
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu className="gap-1">
+            <SidebarMenu className="gap-0.5">
               {filteredItems.map((item, index) => {
                 const isActive = location.pathname === item.url || 
                   (item.url !== '/dashboard' && location.pathname.startsWith(item.url));
@@ -185,7 +185,7 @@ export function AppSidebar() {
                       asChild
                       tooltip={item.title}
                       className={cn(
-                        "rounded-lg transition-all duration-200 h-10 group/item",
+                        "rounded-lg transition-all duration-200 h-9 group/item",
                         "relative overflow-hidden",
                         isActive 
                           ? 'bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm' 
@@ -195,16 +195,16 @@ export function AppSidebar() {
                       <Link to={item.url} className="flex items-center gap-3 px-3">
                         {/* Active indicator */}
                         {isActive && (
-                          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-sidebar-primary-foreground rounded-r-full" />
+                          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-sidebar-primary-foreground rounded-r-full" />
                         )}
                         
                         <item.icon className={cn(
-                          "h-[18px] w-[18px] shrink-0 transition-all duration-200",
+                          "h-4 w-4 shrink-0 transition-all duration-200",
                           isActive && 'text-sidebar-primary-foreground',
                           !isActive && 'group-hover/item:scale-110'
                         )} />
                         
-                        <span className="text-sm truncate">{item.title}</span>
+                        <span className="text-[13px] truncate">{item.title}</span>
                         
                         {/* Hover glow effect */}
                         {!isActive && (
