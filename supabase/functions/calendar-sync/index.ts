@@ -132,64 +132,45 @@ serve(async (req) => {
       
       console.log(`Total fetched from Advbox: ${allPosts.length} of ${totalCount}`);
 
-      // Map Advbox posts to compromissos - use external_id for tracking
+      // Prepare all compromissos for batch upsert
+      const compromissosToUpsert = allPosts.map(post => {
+        let titulo = post.task || 'Tarefa sem título';
+        if (post.lawsuit?.process_number) {
+          titulo = `${titulo} - ${post.lawsuit.process_number}`;
+        }
+        
+        return {
+          external_id: `advbox_${post.id}`,
+          titulo,
+          descricao: post.notes || null,
+          data_inicio: post.date || post.date_deadline || post.created_at || new Date().toISOString(),
+          data_fim: post.date_deadline || null,
+          tipo: 'Reunião',
+          origem: 'advbox',
+        };
+      });
+
+      // Batch upsert in chunks of 100
+      const chunkSize = 100;
       let syncedCount = 0;
       let errorCount = 0;
       
-      for (const post of allPosts) {
-        const externalId = `advbox_${post.id}`;
+      for (let i = 0; i < compromissosToUpsert.length; i += chunkSize) {
+        const chunk = compromissosToUpsert.slice(i, i + chunkSize);
+        console.log(`Upserting batch ${Math.floor(i/chunkSize) + 1}/${Math.ceil(compromissosToUpsert.length/chunkSize)} (${chunk.length} items)`);
         
-        // Check if already exists
-        const { data: existing } = await supabase
+        const { error } = await supabase
           .from('compromissos')
-          .select('id')
-          .eq('external_id', externalId)
-          .single();
+          .upsert(chunk, { 
+            onConflict: 'external_id',
+            ignoreDuplicates: false 
+          });
         
-        if (existing) {
-          // Update existing
-          const { error } = await supabase
-            .from('compromissos')
-            .update({
-              titulo: post.task || 'Tarefa sem título',
-              descricao: post.notes || null,
-              data_inicio: post.date || post.date_deadline || post.created_at || new Date().toISOString(),
-              data_fim: post.date_deadline || null,
-            })
-            .eq('id', existing.id);
-          
-          if (error) {
-            console.error('Error updating compromisso:', error);
-            errorCount++;
-          } else {
-            syncedCount++;
-          }
+        if (error) {
+          console.error('Error upserting batch:', error);
+          errorCount += chunk.length;
         } else {
-          // Build title with process info if available
-          let titulo = post.task || 'Tarefa sem título';
-          if (post.lawsuit?.process_number) {
-            titulo = `${titulo} - ${post.lawsuit.process_number}`;
-          }
-          
-          // Insert new
-          const { error } = await supabase
-            .from('compromissos')
-            .insert({
-              external_id: externalId,
-              titulo,
-              descricao: post.notes || null,
-              data_inicio: post.date || post.date_deadline || post.created_at || new Date().toISOString(),
-              data_fim: post.date_deadline || null,
-              tipo: 'Reunião',
-              origem: 'advbox',
-            });
-          
-          if (error) {
-            console.error('Error inserting compromisso:', error);
-            errorCount++;
-          } else {
-            syncedCount++;
-          }
+          syncedCount += chunk.length;
         }
       }
       
