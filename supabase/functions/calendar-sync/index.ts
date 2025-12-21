@@ -60,62 +60,83 @@ serve(async (req) => {
         });
       }
 
-      console.log('Fetching tasks/posts from Advbox...');
+      console.log('Fetching tasks/posts from Advbox with pagination...');
       console.log('Using Advbox API URL:', ADVBOX_API_URL);
       
-      // Advbox uses /posts endpoint for tasks (agenda items)
-      const advboxUrl = `${ADVBOX_API_URL}/posts`;
-      console.log('Full Advbox URL:', advboxUrl);
+      let allPosts: AdvboxPost[] = [];
+      let offset = 0;
+      const limit = 500; // Fetch 500 at a time
+      let totalCount = 0;
+      let hasMore = true;
       
-      const advboxResponse = await fetch(advboxUrl, {
-        headers: {
-          'Authorization': `Bearer ${ADVBOX_TOKEN}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      });
-
-      console.log('Advbox response status:', advboxResponse.status);
-
-      if (!advboxResponse.ok) {
-        const errorText = await advboxResponse.text();
-        console.error('Advbox API error:', advboxResponse.status, errorText);
-        return new Response(JSON.stringify({ 
-          error: `Erro ao buscar tarefas do Advbox: ${advboxResponse.status}`,
-          details: errorText,
-          url_used: advboxUrl
-        }), {
-          status: advboxResponse.status,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      // Paginate through all results
+      while (hasMore) {
+        const advboxUrl = `${ADVBOX_API_URL}/posts?offset=${offset}&limit=${limit}`;
+        console.log(`Fetching page: offset=${offset}, limit=${limit}`);
+        
+        const advboxResponse = await fetch(advboxUrl, {
+          headers: {
+            'Authorization': `Bearer ${ADVBOX_TOKEN}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
         });
-      }
 
-      const responseText = await advboxResponse.text();
-      console.log('Advbox raw response (first 500 chars):', responseText.substring(0, 500));
-      
-      let advboxPosts: AdvboxPost[] = [];
-      try {
-        const parsed = JSON.parse(responseText);
-        // Handle different response formats
-        advboxPosts = Array.isArray(parsed) ? parsed : (parsed.data || parsed.items || parsed.posts || []);
-      } catch (parseError) {
-        console.error('Error parsing Advbox response:', parseError);
-        return new Response(JSON.stringify({ 
-          error: 'Erro ao processar resposta do Advbox',
-          details: responseText.substring(0, 200)
-        }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        if (!advboxResponse.ok) {
+          const errorText = await advboxResponse.text();
+          console.error('Advbox API error:', advboxResponse.status, errorText);
+          return new Response(JSON.stringify({ 
+            error: `Erro ao buscar tarefas do Advbox: ${advboxResponse.status}`,
+            details: errorText,
+            url_used: advboxUrl
+          }), {
+            status: advboxResponse.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const responseText = await advboxResponse.text();
+        
+        try {
+          const parsed = JSON.parse(responseText);
+          
+          // Get total count from first response
+          if (offset === 0) {
+            totalCount = parsed.totalCount || 0;
+            console.log(`Total records in Advbox: ${totalCount}`);
+          }
+          
+          // Handle different response formats
+          const posts = Array.isArray(parsed) ? parsed : (parsed.data || parsed.items || parsed.posts || []);
+          allPosts = allPosts.concat(posts);
+          
+          console.log(`Fetched ${posts.length} posts (total so far: ${allPosts.length})`);
+          
+          // Check if there are more records
+          if (posts.length < limit || allPosts.length >= totalCount) {
+            hasMore = false;
+          } else {
+            offset += limit;
+          }
+        } catch (parseError) {
+          console.error('Error parsing Advbox response:', parseError);
+          return new Response(JSON.stringify({ 
+            error: 'Erro ao processar resposta do Advbox',
+            details: responseText.substring(0, 200)
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
       }
       
-      console.log(`Found ${advboxPosts.length} posts/tasks from Advbox`);
+      console.log(`Total fetched from Advbox: ${allPosts.length} of ${totalCount}`);
 
       // Map Advbox posts to compromissos - use external_id for tracking
       let syncedCount = 0;
       let errorCount = 0;
       
-      for (const post of advboxPosts) {
+      for (const post of allPosts) {
         const externalId = `advbox_${post.id}`;
         
         // Check if already exists
@@ -177,8 +198,10 @@ serve(async (req) => {
       return new Response(JSON.stringify({ 
         success: true, 
         synced: syncedCount,
+        total_fetched: allPosts.length,
+        total_available: totalCount,
         errors: errorCount,
-        message: `${syncedCount} tarefas sincronizadas do Advbox${errorCount > 0 ? `, ${errorCount} erros` : ''}`
+        message: `${syncedCount} tarefas sincronizadas do Advbox (${allPosts.length} de ${totalCount})${errorCount > 0 ? `, ${errorCount} erros` : ''}`
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
