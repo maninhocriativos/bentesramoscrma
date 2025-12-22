@@ -45,7 +45,8 @@ serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   try {
-    const { action, google_access_token, sync_from, sync_to } = await req.json();
+    const body = await req.json();
+    const { action, google_access_token, sync_from, sync_to, compromisso_id } = body;
 
     console.log('Calendar Sync - Action:', action);
 
@@ -273,7 +274,16 @@ serve(async (req) => {
         });
       }
 
-      const { compromisso_id } = await req.json();
+      if (!compromisso_id) {
+        return new Response(JSON.stringify({ 
+          error: 'ID do compromisso não fornecido' 
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      console.log('Pushing compromisso to Google Calendar:', compromisso_id);
 
       const { data: compromisso, error } = await supabase
         .from('compromissos')
@@ -347,7 +357,16 @@ serve(async (req) => {
         });
       }
 
-      const { compromisso_id } = await req.json();
+      if (!compromisso_id) {
+        return new Response(JSON.stringify({ 
+          error: 'ID do compromisso não fornecido' 
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      console.log('Pushing compromisso to Advbox:', compromisso_id);
 
       const { data: compromisso, error } = await supabase
         .from('compromissos')

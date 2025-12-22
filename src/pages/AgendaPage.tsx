@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Calendar } from '@/components/agenda/Calendar';
 import { CompromissoModal } from '@/components/agenda/CompromissoModal';
+import { GoogleCalendarConnect } from '@/components/agenda/GoogleCalendarConnect';
 import { useCompromissos } from '@/hooks/useCompromissos';
 import { Compromisso } from '@/types/compromissos';
 import { Loader2, CalendarDays, Gavel, Clock, CheckSquare } from 'lucide-react';
@@ -62,23 +63,27 @@ export default function AgendaPage() {
       />
       
       <div className="flex-1 p-4 md:p-6 space-y-4 animate-fade-in">
-        {/* Filters */}
-        <div className="flex flex-wrap gap-2">
-          {filters.map(({ label, value, icon: Icon }) => (
-            <Button
-              key={value}
-              variant={filter === value ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFilter(value)}
-              className={cn(
-                "rounded-full",
-                filter === value && "bg-primary text-primary-foreground"
-              )}
-            >
-              <Icon className="h-4 w-4 mr-2" />
-              {label}
-            </Button>
-          ))}
+        {/* Filters + Google Calendar */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2">
+            {filters.map(({ label, value, icon: Icon }) => (
+              <Button
+                key={value}
+                variant={filter === value ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilter(value)}
+                className={cn(
+                  "rounded-full",
+                  filter === value && "bg-primary text-primary-foreground"
+                )}
+              >
+                <Icon className="h-4 w-4 mr-2" />
+                {label}
+              </Button>
+            ))}
+          </div>
+          
+          <GoogleCalendarConnect />
         </div>
 
         {loading ? (
