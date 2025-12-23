@@ -36,7 +36,7 @@ export function useGoogleDrive() {
     }
 
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('google_drive_tokens')
         .select('id, expires_at')
         .eq('user_id', user.id)
@@ -67,7 +67,7 @@ export function useGoogleDrive() {
             ? new Date(tokens.expires_at).toISOString()
             : new Date(Date.now() + 3600 * 1000).toISOString();
 
-          const { error } = await supabase
+          const { error } = await (supabase as any)
             .from('google_drive_tokens')
             .upsert({
               user_id: user.id,
@@ -136,7 +136,7 @@ export function useGoogleDrive() {
     if (!user) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('google_drive_tokens')
         .delete()
         .eq('user_id', user.id);
@@ -156,7 +156,7 @@ export function useGoogleDrive() {
     if (!user) return null;
 
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('google_drive_tokens')
         .select('*')
         .eq('user_id', user.id)
@@ -176,7 +176,7 @@ export function useGoogleDrive() {
         });
 
         if (response.data?.access_token) {
-          await supabase
+          await (supabase as any)
             .from('google_drive_tokens')
             .update({
               access_token: response.data.access_token,

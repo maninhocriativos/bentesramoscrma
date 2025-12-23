@@ -5,6 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Plus, Search, FileText, Download, Trash2, Eye } from 'lucide-react';
 import { useDocumentos } from '@/hooks/useDocumentos';
 import { DocumentoUploadModal } from '@/components/documentos/DocumentoUploadModal';
+import { GoogleDriveConnect } from '@/components/documentos/GoogleDriveConnect';
+import { GoogleDriveModal } from '@/components/documentos/GoogleDriveModal';
 import { Badge } from '@/components/ui/badge';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { format } from 'date-fns';
@@ -31,6 +33,7 @@ const tipoColors: Record<string, string> = {
 export default function DocumentosPage() {
   const { documentos, loading, deleteDocumento } = useDocumentos();
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [driveModalOpen, setDriveModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredDocumentos = documentos.filter(doc =>
@@ -53,10 +56,13 @@ export default function DocumentosPage() {
           <h1 className="text-3xl font-bold text-foreground">Documentos</h1>
           <p className="text-muted-foreground">Gestão de documentos e arquivos</p>
         </div>
-        <Button onClick={() => setUploadModalOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Novo Documento
-        </Button>
+        <div className="flex gap-2">
+          <GoogleDriveConnect onOpenDriveModal={() => setDriveModalOpen(true)} />
+          <Button onClick={() => setUploadModalOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Documento
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -198,6 +204,7 @@ export default function DocumentosPage() {
       </Card>
 
       <DocumentoUploadModal open={uploadModalOpen} onOpenChange={setUploadModalOpen} />
+      <GoogleDriveModal open={driveModalOpen} onOpenChange={setDriveModalOpen} />
     </div>
     </AppLayout>
   );
