@@ -85,14 +85,15 @@ export function useGoogleCalendar() {
   // Start OAuth flow
   const connect = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
-        body: {},
-        method: 'GET',
-      });
-
-      // Try getting auth URL
+      // Use fetch with query param since supabase.functions.invoke doesn't support GET params well
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL || 'https://qgenaltkjtlvwfgykpxq.supabase.co'}/functions/v1/google-calendar-auth?action=get_auth_url`
+        'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/google-calendar-auth?action=get_auth_url',
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
       );
       
       const result = await response.json();
