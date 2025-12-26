@@ -200,12 +200,15 @@ export function useGoogleDrive() {
   const listFiles = async (folderId?: string, query?: string): Promise<DriveFile[]> => {
     const accessToken = await getAccessToken();
     if (!accessToken) {
+      console.error('No access token available');
       toast.error('Reconecte sua conta do Google Drive');
       setIsConnected(false);
       return [];
     }
 
     try {
+      console.log('Listing files from Google Drive, folder:', folderId || 'root');
+      
       const { data, error } = await supabase.functions.invoke('google-drive', {
         body: {
           action: 'list_files',
@@ -215,13 +218,22 @@ export function useGoogleDrive() {
         }
       });
 
-      if (error || data?.error) {
-        throw new Error(data?.error || 'Erro ao listar arquivos');
+      console.log('Google Drive list_files response:', data, error);
+
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(error.message || 'Erro ao listar arquivos');
+      }
+      
+      if (data?.error) {
+        console.error('Google Drive API error:', data.error);
+        throw new Error(data.error);
       }
 
-      return data.files || [];
+      return data?.files || [];
     } catch (error) {
       console.error('Error listing files:', error);
+      toast.error('Erro ao listar arquivos do Google Drive');
       return [];
     }
   };

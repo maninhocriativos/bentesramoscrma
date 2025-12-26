@@ -12,22 +12,14 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  );
 
+  try {
     const payload = await req.json();
     console.log('ManyChat Webhook recebido:', JSON.stringify(payload, null, 2));
-
-    // Suporta formato customizado do usuário
-    // Campos esperados:
-    // "Id do Manychat" ou subscriber.id
-    // "Nome do Usuário" ou subscriber.name
-    // "Pergunta do Usuário" ou last_input_text
-    // "Numero Whatsapp" ou subscriber.phone
-    // "Thread ID", "Formato", "Interrupção" (campos extras)
 
     let subscriberId: string | undefined;
     let subscriberNome: string | undefined;
@@ -43,7 +35,6 @@ serve(async (req) => {
       subscriberNome = payload['Nome do Usuário'] || 'Desconhecido';
       telefone = payload['Numero Whatsapp'];
       
-      // Suporta tanto entrada do usuário quanto resposta do bot
       if (payload['Resposta do Bot'] || payload['Direcao'] === 'saida') {
         messageContent = payload['Resposta do Bot'] || payload['Mensagem'];
         direcao = 'saida';
@@ -109,7 +100,7 @@ serve(async (req) => {
     } else {
       // Buscar lead pelo telefone (normalizado)
       if (telefone) {
-        const telefoneLimpo = telefone.replace(/\D/g, ''); // Remove não-dígitos
+        const telefoneLimpo = telefone.replace(/\D/g, '');
         const { data: leadByPhone } = await supabase
           .from('leads_juridicos')
           .select('id, nome')
@@ -123,7 +114,7 @@ serve(async (req) => {
         }
       }
       
-      // Se não encontrou por telefone, buscar por nome (match exato)
+      // Se não encontrou por telefone, buscar por nome
       if (!leadId && subscriberNome && subscriberNome !== 'Desconhecido') {
         const { data: leadByName } = await supabase
           .from('leads_juridicos')
@@ -160,9 +151,6 @@ serve(async (req) => {
       console.error('Erro ao salvar subscriber:', subscriberError);
     } else {
       console.log('Subscriber salvo/atualizado:', subscriberData);
-      if (leadId) {
-        console.log('Subscriber vinculado ao lead:', leadId);
-      }
     }
 
     // Salvar mensagem se houver conteúdo
@@ -189,6 +177,32 @@ serve(async (req) => {
       }
     }
 
+    // REGISTRAR EVENTO NO SYSTEM_EVENTS para aparecer no API Hub
+    const { error: eventError } = await supabase
+      .from('system_events')
+      .insert({
+        tipo: 'mensagem',
+        fonte: 'manychat',
+        acao: direcao === 'entrada' ? 'mensagem_recebida' : 'mensagem_enviada',
+        entidade_tipo: 'manychat_mensagem',
+        entidade_id: subscriberId,
+        lead_id: leadId,
+        dados: {
+          subscriber_nome: subscriberNome,
+          conteudo: messageContent?.substring(0, 200),
+          canal: canal,
+          telefone: telefone,
+        },
+        metadata: metadata,
+        processado: true,
+      });
+
+    if (eventError) {
+      console.error('Erro ao registrar evento:', eventError);
+    } else {
+      console.log('Evento registrado no system_events');
+    }
+
     // Responder com sucesso
     return new Response(
       JSON.stringify({ 
@@ -196,6 +210,7 @@ serve(async (req) => {
         message: 'Webhook processado com sucesso',
         subscriber_id: subscriberId,
         subscriber_nome: subscriberNome,
+        lead_id: leadId,
       }), 
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -204,6 +219,20 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Erro no webhook ManyChat:', error);
+
+    // Registrar erro no system_events
+    try {
+      await supabase.from('system_events').insert({
+        tipo: 'erro',
+        fonte: 'manychat',
+        acao: 'webhook_error',
+        erro: error instanceof Error ? error.message : 'Erro desconhecido',
+        processado: false,
+      });
+    } catch (e) {
+      console.error('Erro ao registrar evento de erro:', e);
+    }
+
     return new Response(
       JSON.stringify({ 
         success: false, 
