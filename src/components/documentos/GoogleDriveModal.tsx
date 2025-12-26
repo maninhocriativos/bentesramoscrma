@@ -59,6 +59,7 @@ export function GoogleDriveModal({ open, onOpenChange }: GoogleDriveModalProps) 
   const [folderStack, setFolderStack] = useState<{ id: string; name: string }[]>([]);
   const [selectedClient, setSelectedClient] = useState<string>('');
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [autoLoadedClient, setAutoLoadedClient] = useState<string>('');
 
   // Load files when modal opens
   useEffect(() => {
@@ -70,6 +71,13 @@ export function GoogleDriveModal({ open, onOpenChange }: GoogleDriveModalProps) 
       setFiles([]);
     }
   }, [open, isConnected, currentFolderId]);
+
+  // Auto-load client folder when a client is selected
+  useEffect(() => {
+    if (selectedClient && selectedClient !== autoLoadedClient && isConnected && open) {
+      handleOpenClientFolder(selectedClient);
+    }
+  }, [selectedClient, isConnected, open]);
 
   const loadFiles = async () => {
     setLoading(true);
@@ -101,26 +109,37 @@ export function GoogleDriveModal({ open, onOpenChange }: GoogleDriveModalProps) 
   const handleGoToRoot = () => {
     setFolderStack([]);
     setCurrentFolderId(undefined);
+    setSelectedClient('');
+    setAutoLoadedClient('');
   };
 
-  const handleOpenClientFolder = async () => {
-    if (!selectedClient) {
+  const handleOpenClientFolder = async (clientId?: string) => {
+    const targetClientId = clientId || selectedClient;
+    
+    if (!targetClientId) {
       toast.error('Selecione um cliente');
       return;
     }
 
-    const client = leads.find(l => l.id === selectedClient);
+    const client = leads.find(l => l.id === targetClientId);
     if (!client || !client.nome) {
       toast.error('Cliente não encontrado');
       return;
     }
 
+    setLoading(true);
     const result = await findOrCreateClientFolder(client.nome, client.id);
     if (result) {
       setFolderStack([{ id: result.folderId, name: result.folderName }]);
       setCurrentFolderId(result.folderId);
-      toast.success(`Pasta "${result.folderName}" ${result.folderId ? 'aberta' : 'criada'}`);
+      setAutoLoadedClient(targetClientId);
+      toast.success(`Pasta "${result.folderName}" aberta`);
     }
+    setLoading(false);
+  };
+
+  const handleOpenClientFolderClick = () => {
+    handleOpenClientFolder();
   };
 
   const handleUploadToDrive = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -224,7 +243,7 @@ export function GoogleDriveModal({ open, onOpenChange }: GoogleDriveModalProps) 
                 ))}
               </SelectContent>
             </Select>
-            <Button onClick={handleOpenClientFolder} disabled={!selectedClient || isOperating}>
+            <Button onClick={handleOpenClientFolderClick} disabled={!selectedClient || isOperating || loading}>
               {isOperating ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
