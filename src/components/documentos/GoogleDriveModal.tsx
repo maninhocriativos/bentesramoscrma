@@ -63,17 +63,24 @@ export function GoogleDriveModal({ open, onOpenChange }: GoogleDriveModalProps) 
   // Load files when modal opens
   useEffect(() => {
     if (open && isConnected) {
+      console.log('GoogleDriveModal: Loading files, connected:', isConnected, 'folderId:', currentFolderId);
       loadFiles();
+    } else if (open && !isConnected) {
+      console.log('GoogleDriveModal: Not connected to Google Drive');
+      setFiles([]);
     }
   }, [open, isConnected, currentFolderId]);
 
   const loadFiles = async () => {
     setLoading(true);
+    console.log('GoogleDriveModal: Starting to load files...');
     try {
       const result = await listFiles(currentFolderId);
+      console.log('GoogleDriveModal: Files loaded:', result.length);
       setFiles(result);
     } catch (error) {
-      console.error('Error loading files:', error);
+      console.error('GoogleDriveModal: Error loading files:', error);
+      toast.error('Erro ao carregar arquivos do Drive');
     } finally {
       setLoading(false);
     }
