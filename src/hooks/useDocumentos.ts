@@ -4,6 +4,101 @@ import { Documento } from '@/types/documentos';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 
+// Helper para sincronizar com Google Drive em background
+async function syncToGoogleDrive(
+  userId: string,
+  clienteId: string,
+  clienteNome: string,
+  file: File,
+  fileName: string
+) {
+  try {
+    // Verificar se usuário tem conexão com Google Drive
+    const { data: tokenData } = await supabase
+      .from('google_drive_tokens')
+      .select('access_token, refresh_token, expires_at')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!tokenData) {
+      console.log('Google Drive não conectado, pulando sincronização');
+      return { synced: false, reason: 'not_connected' };
+    }
+
+    // Verificar se token expirou e renovar se necessário
+    let accessToken = tokenData.access_token;
+    const expiresAt = tokenData.expires_at ? new Date(tokenData.expires_at) : null;
+    const isExpired = expiresAt && expiresAt < new Date();
+
+    if (isExpired && tokenData.refresh_token) {
+      const { data: refreshData } = await supabase.functions.invoke('google-drive', {
+        body: { 
+          action: 'refresh',
+          refresh_token: tokenData.refresh_token 
+        }
+      });
+
+      if (refreshData?.access_token) {
+        accessToken = refreshData.access_token;
+        await supabase
+          .from('google_drive_tokens')
+          .update({
+            access_token: refreshData.access_token,
+            expires_at: new Date(Date.now() + (refreshData.expires_in || 3600) * 1000).toISOString(),
+          })
+          .eq('user_id', userId);
+      } else {
+        console.log('Falha ao renovar token do Google Drive');
+        return { synced: false, reason: 'token_refresh_failed' };
+      }
+    }
+
+    // Encontrar ou criar pasta do cliente
+    const { data: folderData, error: folderError } = await supabase.functions.invoke('google-drive', {
+      body: {
+        action: 'find_or_create_client_folder',
+        access_token: accessToken,
+        client_name: clienteNome,
+        client_id: clienteId,
+      }
+    });
+
+    if (folderError || !folderData?.folder_id) {
+      console.error('Erro ao criar/encontrar pasta do cliente:', folderError);
+      return { synced: false, reason: 'folder_error' };
+    }
+
+    // Converter arquivo para base64
+    const arrayBuffer = await file.arrayBuffer();
+    const base64 = btoa(
+      new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+    );
+
+    // Upload do arquivo para o Google Drive
+    const { data: uploadData, error: uploadError } = await supabase.functions.invoke('google-drive', {
+      body: {
+        action: 'upload_file',
+        access_token: accessToken,
+        folder_id: folderData.folder_id,
+        file_name: fileName,
+        file_content: base64,
+        mime_type: file.type || 'application/octet-stream',
+      }
+    });
+
+    if (uploadError || uploadData?.error) {
+      console.error('Erro ao fazer upload para Google Drive:', uploadError || uploadData?.error);
+      return { synced: false, reason: 'upload_error' };
+    }
+
+    console.log('Documento sincronizado com Google Drive:', uploadData);
+    return { synced: true, driveFileId: uploadData?.id };
+  } catch (error) {
+    console.error('Erro na sincronização com Google Drive:', error);
+    return { synced: false, reason: 'exception' };
+  }
+}
+
 export function useDocumentos(processoId?: string, clienteId?: string) {
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,6 +183,33 @@ export function useDocumentos(processoId?: string, clienteId?: string) {
     }
 
     toast({ title: 'Documento enviado com sucesso!' });
+    
+    // Sincronização com Google Drive em background (não bloqueia)
+    if (metadata.cliente_id && user?.id) {
+      // Buscar nome do cliente
+      const { data: clienteData } = await supabase
+        .from('leads_juridicos')
+        .select('nome')
+        .eq('id', metadata.cliente_id)
+        .maybeSingle();
+
+      if (clienteData?.nome) {
+        // Executar em background
+        syncToGoogleDrive(user.id, metadata.cliente_id, clienteData.nome, file, file.name)
+          .then((result) => {
+            if (result.synced) {
+              toast({ 
+                title: 'Sincronizado com Google Drive',
+                description: `Documento enviado para pasta "${clienteData.nome}"`,
+              });
+            }
+          })
+          .catch((err) => {
+            console.error('Erro na sincronização em background:', err);
+          });
+      }
+    }
+
     await fetchDocumentos();
     setUploading(false);
     return data;
