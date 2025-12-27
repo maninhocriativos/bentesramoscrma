@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useSystemEvents, SystemEvent } from '@/hooks/useSystemEvents';
+import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
@@ -25,7 +26,10 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  AlertTriangle
+  AlertTriangle,
+  PlayCircle,
+  Stethoscope,
+  Send
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -38,7 +42,8 @@ const FONTE_ICONS: Record<string, any> = {
   n8n: Zap,
   whatsapp: MessageSquare,
   sistema: Activity,
-  'api-hub': Webhook
+  'api-hub': Webhook,
+  teste: PlayCircle
 };
 
 const FONTE_COLORS: Record<string, string> = {
@@ -49,7 +54,8 @@ const FONTE_COLORS: Record<string, string> = {
   n8n: 'bg-red-500/10 text-red-500 border-red-500/30',
   whatsapp: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30',
   sistema: 'bg-gray-500/10 text-gray-500 border-gray-500/30',
-  'api-hub': 'bg-primary/10 text-primary border-primary/30'
+  'api-hub': 'bg-primary/10 text-primary border-primary/30',
+  teste: 'bg-amber-500/10 text-amber-500 border-amber-500/30'
 };
 
 const TIPO_COLORS: Record<string, string> = {
@@ -58,13 +64,17 @@ const TIPO_COLORS: Record<string, string> = {
   lead_status: 'bg-yellow-500',
   interacao: 'bg-purple-500',
   mensagem: 'bg-cyan-500',
-  sistema: 'bg-gray-500'
+  sistema: 'bg-gray-500',
+  teste: 'bg-amber-500'
 };
 
 export default function ApiHubPage() {
   const { toast } = useToast();
   const [tipoFilter, setTipoFilter] = useState<string>('');
   const [fonteFilter, setFonteFilter] = useState<string>('');
+  const [healthStatus, setHealthStatus] = useState<'idle' | 'checking' | 'success' | 'error'>('idle');
+  const [healthData, setHealthData] = useState<any>(null);
+  const [testingWebhook, setTestingWebhook] = useState<string | null>(null);
   
   const { events, stats, loading, fetchEvents, clearEvents } = useSystemEvents({
     tipo: tipoFilter || undefined,
@@ -73,22 +83,163 @@ export default function ApiHubPage() {
   });
 
   const baseUrl = 'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/api-hub';
+  const manychatWebhookUrl = 'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/manychat-webhook';
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({ title: 'Copiado!', description: 'URL copiada para a área de transferência' });
   };
 
+  // Health check function
+  const runHealthCheck = async () => {
+    setHealthStatus('checking');
+    try {
+      const response = await fetch(`${baseUrl}/health`);
+      const data = await response.json();
+      setHealthData(data);
+      setHealthStatus(data.success ? 'success' : 'error');
+      toast({
+        title: data.success ? 'API Hub Online' : 'API Hub com problemas',
+        description: data.success ? 'Todos os endpoints estão funcionando' : 'Verifique os logs',
+        variant: data.success ? 'default' : 'destructive'
+      });
+    } catch (error) {
+      setHealthStatus('error');
+      setHealthData({ error: error instanceof Error ? error.message : 'Erro desconhecido' });
+      toast({
+        title: 'Erro no Health Check',
+        description: 'Não foi possível conectar à API',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Test webhook function
+  const testWebhook = async (webhookType: string) => {
+    setTestingWebhook(webhookType);
+    try {
+      let url = '';
+      let payload = {};
+
+      switch (webhookType) {
+        case 'manychat':
+          url = manychatWebhookUrl;
+          payload = {
+            'Id do Manychat': `teste_${Date.now()}`,
+            'Nome do Usuário': 'Teste Diagnóstico',
+            'Numero Whatsapp': '+5511999999999',
+            'Pergunta do Usuário': `Mensagem de teste enviada em ${new Date().toLocaleString('pt-BR')}`,
+            'Formato': 'teste'
+          };
+          break;
+        case 'api-hub-manychat':
+          url = `${baseUrl}/webhook/manychat`;
+          payload = {
+            subscriber_id: `teste_${Date.now()}`,
+            name: 'Teste API Hub',
+            phone: '+5511888888888',
+            last_input_text: `Teste via API Hub em ${new Date().toLocaleString('pt-BR')}`
+          };
+          break;
+        case 'automation':
+          url = `${baseUrl}/webhook/automation`;
+          payload = {
+            action: 'create_interaction',
+            source: 'diagnostico',
+            resumo: `Teste de automação em ${new Date().toLocaleString('pt-BR')}`,
+            detalhes: 'Evento de teste gerado pelo painel de diagnóstico'
+          };
+          break;
+        default:
+          throw new Error('Webhook não suportado');
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      
+      toast({
+        title: data.success ? 'Webhook testado com sucesso!' : 'Webhook retornou erro',
+        description: data.success 
+          ? `Evento registrado. Atualize a lista de eventos.` 
+          : data.error || 'Verifique os logs',
+        variant: data.success ? 'default' : 'destructive'
+      });
+
+      // Refresh events after test
+      setTimeout(() => fetchEvents(), 1000);
+
+    } catch (error) {
+      toast({
+        title: 'Erro ao testar webhook',
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
+        variant: 'destructive'
+      });
+    } finally {
+      setTestingWebhook(null);
+    }
+  };
+
+  // Insert test event directly in database
+  const insertTestEvent = async () => {
+    try {
+      const { error } = await supabase.from('system_events').insert({
+        tipo: 'teste',
+        fonte: 'diagnostico',
+        acao: 'evento_teste',
+        entidade_tipo: 'teste',
+        dados: { 
+          mensagem: 'Evento de teste criado manualmente',
+          timestamp: new Date().toISOString()
+        },
+        metadata: { origem: 'painel_diagnostico' },
+        processado: true
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Evento de teste criado!',
+        description: 'Verifique a lista de eventos abaixo'
+      });
+
+      fetchEvents();
+    } catch (error) {
+      toast({
+        title: 'Erro ao criar evento',
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
+        variant: 'destructive'
+      });
+    }
+  };
+
   const webhookEndpoints = [
     { 
-      name: 'ManyChat', 
-      path: '/webhook/manychat', 
-      description: 'Recebe mensagens e eventos do ManyChat',
+      name: 'ManyChat (Dedicado)', 
+      url: manychatWebhookUrl,
+      path: '',
+      description: 'URL principal para configurar no ManyChat',
       icon: MessageSquare,
-      color: 'text-blue-500'
+      color: 'text-blue-500',
+      testKey: 'manychat',
+      recommended: true
+    },
+    { 
+      name: 'ManyChat (via API Hub)', 
+      url: baseUrl,
+      path: '/webhook/manychat', 
+      description: 'Alternativa via API Hub centralizado',
+      icon: MessageSquare,
+      color: 'text-blue-400',
+      testKey: 'api-hub-manychat'
     },
     { 
       name: 'Clicksign', 
+      url: baseUrl,
       path: '/webhook/clicksign', 
       description: 'Recebe eventos de assinatura de contratos',
       icon: FileSignature,
@@ -96,13 +247,16 @@ export default function ApiHubPage() {
     },
     { 
       name: 'Automações', 
+      url: baseUrl,
       path: '/webhook/automation', 
       description: 'Zapier, Make, n8n e outras automações',
       icon: Zap,
-      color: 'text-orange-500'
+      color: 'text-orange-500',
+      testKey: 'automation'
     },
     { 
       name: 'WhatsApp', 
+      url: baseUrl,
       path: '/webhook/whatsapp', 
       description: 'Recebe mensagens do WhatsApp Business',
       icon: MessageSquare,
@@ -115,8 +269,12 @@ export default function ApiHubPage() {
       <AppHeader title="API Hub - Central de Integrações" />
       
       <div className="flex-1 p-4 md:p-6 space-y-6 overflow-auto animate-fade-in">
-        <Tabs defaultValue="monitor" className="space-y-4">
-          <TabsList className="grid w-full max-w-md grid-cols-3">
+        <Tabs defaultValue="diagnostico" className="space-y-4">
+          <TabsList className="grid w-full max-w-lg grid-cols-4">
+            <TabsTrigger value="diagnostico" className="gap-2">
+              <Stethoscope className="w-4 h-4" />
+              Diagnóstico
+            </TabsTrigger>
             <TabsTrigger value="monitor" className="gap-2">
               <Activity className="w-4 h-4" />
               Monitor
@@ -130,6 +288,225 @@ export default function ApiHubPage() {
               Docs
             </TabsTrigger>
           </TabsList>
+
+          {/* Diagnóstico Tab */}
+          <TabsContent value="diagnostico" className="space-y-4">
+            {/* Health Check Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Stethoscope className="w-5 h-5" />
+                  Health Check da API
+                </CardTitle>
+                <CardDescription>
+                  Verifique se todos os endpoints estão funcionando
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <Button onClick={runHealthCheck} disabled={healthStatus === 'checking'}>
+                    {healthStatus === 'checking' ? (
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <PlayCircle className="w-4 h-4 mr-2" />
+                    )}
+                    Executar Health Check
+                  </Button>
+                  
+                  <div className="flex items-center gap-2">
+                    {healthStatus === 'idle' && (
+                      <Badge variant="outline">Aguardando</Badge>
+                    )}
+                    {healthStatus === 'checking' && (
+                      <Badge variant="secondary">Verificando...</Badge>
+                    )}
+                    {healthStatus === 'success' && (
+                      <Badge className="bg-green-500">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Online
+                      </Badge>
+                    )}
+                    {healthStatus === 'error' && (
+                      <Badge variant="destructive">
+                        <XCircle className="w-3 h-3 mr-1" />
+                        Erro
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                {healthData && (
+                  <div className="p-3 bg-muted rounded-lg">
+                    <pre className="text-xs overflow-auto">
+                      {JSON.stringify(healthData, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Test Webhooks Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Send className="w-5 h-5" />
+                  Testar Webhooks
+                </CardTitle>
+                <CardDescription>
+                  Envie eventos de teste para verificar se os webhooks estão funcionando
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => testWebhook('manychat')}
+                    disabled={testingWebhook !== null}
+                    className="h-auto py-3 flex flex-col items-center gap-2"
+                  >
+                    {testingWebhook === 'manychat' ? (
+                      <RefreshCw className="w-5 h-5 animate-spin text-blue-500" />
+                    ) : (
+                      <MessageSquare className="w-5 h-5 text-blue-500" />
+                    )}
+                    <span className="text-sm">Testar ManyChat</span>
+                    <span className="text-xs text-muted-foreground">(Dedicado)</span>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => testWebhook('api-hub-manychat')}
+                    disabled={testingWebhook !== null}
+                    className="h-auto py-3 flex flex-col items-center gap-2"
+                  >
+                    {testingWebhook === 'api-hub-manychat' ? (
+                      <RefreshCw className="w-5 h-5 animate-spin text-blue-400" />
+                    ) : (
+                      <Webhook className="w-5 h-5 text-blue-400" />
+                    )}
+                    <span className="text-sm">Testar API Hub</span>
+                    <span className="text-xs text-muted-foreground">(ManyChat)</span>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => testWebhook('automation')}
+                    disabled={testingWebhook !== null}
+                    className="h-auto py-3 flex flex-col items-center gap-2"
+                  >
+                    {testingWebhook === 'automation' ? (
+                      <RefreshCw className="w-5 h-5 animate-spin text-orange-500" />
+                    ) : (
+                      <Zap className="w-5 h-5 text-orange-500" />
+                    )}
+                    <span className="text-sm">Testar Automação</span>
+                    <span className="text-xs text-muted-foreground">(Zapier/Make/n8n)</span>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={insertTestEvent}
+                    className="h-auto py-3 flex flex-col items-center gap-2"
+                  >
+                    <Activity className="w-5 h-5 text-amber-500" />
+                    <span className="text-sm">Criar Evento</span>
+                    <span className="text-xs text-muted-foreground">(Direto no DB)</span>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* URLs Configuration Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-500" />
+                  URLs para Configuração
+                </CardTitle>
+                <CardDescription>
+                  Configure estas URLs nas suas ferramentas de integração
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <MessageSquare className="w-5 h-5 text-blue-500" />
+                    <span className="font-medium text-blue-600">URL do ManyChat (RECOMENDADA)</span>
+                    <Badge className="bg-blue-500">Principal</Badge>
+                  </div>
+                  <code className="block text-sm bg-muted p-2 rounded mb-2 break-all">
+                    {manychatWebhookUrl}
+                  </code>
+                  <Button size="sm" onClick={() => copyToClipboard(manychatWebhookUrl)}>
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copiar URL do ManyChat
+                  </Button>
+                </div>
+
+                <div className="text-sm text-muted-foreground p-3 bg-muted/50 rounded-lg">
+                  <p className="font-medium mb-2">Como configurar no ManyChat:</p>
+                  <ol className="list-decimal list-inside space-y-1">
+                    <li>Acesse seu flow no ManyChat</li>
+                    <li>Adicione uma ação "External Request" ou "Webhook"</li>
+                    <li>Cole a URL acima no campo de URL</li>
+                    <li>Método: POST</li>
+                    <li>Content-Type: application/json</li>
+                    <li>No body, envie os dados do subscriber</li>
+                  </ol>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Recent Events Summary */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="w-5 h-5" />
+                    Resumo de Eventos (24h)
+                  </CardTitle>
+                  <Button variant="outline" size="sm" onClick={() => fetchEvents()}>
+                    <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
+                    Atualizar
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-4 bg-muted rounded-lg text-center">
+                    <p className="text-3xl font-bold">{stats?.total || 0}</p>
+                    <p className="text-sm text-muted-foreground">Total</p>
+                  </div>
+                  <div className="p-4 bg-blue-500/10 rounded-lg text-center">
+                    <p className="text-3xl font-bold text-blue-500">{stats?.by_fonte?.manychat || 0}</p>
+                    <p className="text-sm text-muted-foreground">ManyChat</p>
+                  </div>
+                  <div className="p-4 bg-green-500/10 rounded-lg text-center">
+                    <p className="text-3xl font-bold text-green-500">{stats?.by_fonte?.clicksign || 0}</p>
+                    <p className="text-sm text-muted-foreground">Clicksign</p>
+                  </div>
+                  <div className="p-4 bg-orange-500/10 rounded-lg text-center">
+                    <p className="text-3xl font-bold text-orange-500">
+                      {(stats?.by_fonte?.zapier || 0) + (stats?.by_fonte?.make || 0) + (stats?.by_fonte?.n8n || 0)}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Automações</p>
+                  </div>
+                </div>
+
+                {stats?.total === 0 && (
+                  <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                    <div className="flex items-center gap-2 text-amber-600">
+                      <AlertTriangle className="w-5 h-5" />
+                      <span className="font-medium">Nenhum evento nas últimas 24h</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Use os botões acima para enviar eventos de teste e verificar se as integrações estão configuradas corretamente.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* Monitor Tab */}
           <TabsContent value="monitor" className="space-y-4">
@@ -277,27 +654,51 @@ export default function ApiHubPage() {
               <CardContent className="space-y-4">
                 {webhookEndpoints.map((endpoint) => (
                   <div 
-                    key={endpoint.path}
-                    className="flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                    key={endpoint.url + endpoint.path}
+                    className={cn(
+                      "flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors",
+                      endpoint.recommended && "ring-2 ring-blue-500/50"
+                    )}
                   >
                     <div className={cn("p-3 rounded-lg bg-muted", endpoint.color)}>
                       <endpoint.icon className="w-6 h-6" />
                     </div>
                     <div className="flex-1">
-                      <h4 className="font-medium">{endpoint.name}</h4>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-medium">{endpoint.name}</h4>
+                        {endpoint.recommended && (
+                          <Badge className="bg-blue-500">Recomendado</Badge>
+                        )}
+                      </div>
                       <p className="text-sm text-muted-foreground">{endpoint.description}</p>
-                      <code className="text-xs bg-muted px-2 py-1 rounded mt-2 inline-block">
-                        {baseUrl}{endpoint.path}
+                      <code className="text-xs bg-muted px-2 py-1 rounded mt-2 inline-block break-all">
+                        {endpoint.url}{endpoint.path}
                       </code>
                     </div>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => copyToClipboard(`${baseUrl}${endpoint.path}`)}
-                    >
-                      <Copy className="w-4 h-4 mr-2" />
-                      Copiar
-                    </Button>
+                    <div className="flex gap-2">
+                      {endpoint.testKey && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => testWebhook(endpoint.testKey!)}
+                          disabled={testingWebhook !== null}
+                        >
+                          {testingWebhook === endpoint.testKey ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <PlayCircle className="w-4 h-4" />
+                          )}
+                        </Button>
+                      )}
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => copyToClipboard(`${endpoint.url}${endpoint.path}`)}
+                      >
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copiar
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </CardContent>
