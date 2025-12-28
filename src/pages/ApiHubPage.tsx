@@ -70,15 +70,15 @@ const TIPO_COLORS: Record<string, string> = {
 
 export default function ApiHubPage() {
   const { toast } = useToast();
-  const [tipoFilter, setTipoFilter] = useState<string>('');
-  const [fonteFilter, setFonteFilter] = useState<string>('');
+  const [tipoFilter, setTipoFilter] = useState<string>('all');
+  const [fonteFilter, setFonteFilter] = useState<string>('all');
   const [healthStatus, setHealthStatus] = useState<'idle' | 'checking' | 'success' | 'error'>('idle');
   const [healthData, setHealthData] = useState<any>(null);
   const [testingWebhook, setTestingWebhook] = useState<string | null>(null);
   
   const { events, stats, loading, fetchEvents, clearEvents } = useSystemEvents({
-    tipo: tipoFilter || undefined,
-    fonte: fonteFilter || undefined,
+    tipo: tipoFilter === 'all' ? undefined : tipoFilter,
+    fonte: fonteFilter === 'all' ? undefined : fonteFilter,
     limit: 200
   });
 
@@ -560,7 +560,7 @@ export default function ApiHubPage() {
                       <SelectValue placeholder="Tipo" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todos os tipos</SelectItem>
+                      <SelectItem value="all">Todos os tipos</SelectItem>
                       <SelectItem value="webhook">Webhook</SelectItem>
                       <SelectItem value="contrato">Contrato</SelectItem>
                       <SelectItem value="lead_status">Status Lead</SelectItem>
@@ -575,7 +575,7 @@ export default function ApiHubPage() {
                       <SelectValue placeholder="Fonte" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todas as fontes</SelectItem>
+                      <SelectItem value="all">Todas as fontes</SelectItem>
                       <SelectItem value="manychat">ManyChat</SelectItem>
                       <SelectItem value="clicksign">Clicksign</SelectItem>
                       <SelectItem value="zapier">Zapier</SelectItem>

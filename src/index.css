@@ -385,11 +385,12 @@
 
   /* Smooth card transitions */
   .kanban-card-wrapper {
-    @apply transition-all duration-300 ease-out;
+    @apply transition-all duration-200 ease-out;
   }
 
+  /* Evita “pular” cards no hover (causava sensação de objetos se movendo sozinhos) */
   .kanban-card-wrapper:hover {
-    @apply -translate-y-1;
+    @apply shadow-card-hover;
   }
 
   /* Icon animations */

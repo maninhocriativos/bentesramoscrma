@@ -156,10 +156,6 @@ export function useDocumentos(processoId?: string, clienteId?: string) {
       return null;
     }
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('documentos')
-      .getPublicUrl(filePath);
-
     const { data, error } = await supabase
       .from('documentos')
       .insert({
@@ -168,7 +164,8 @@ export function useDocumentos(processoId?: string, clienteId?: string) {
         descricao: metadata.descricao || null,
         processo_id: metadata.processo_id || null,
         cliente_id: metadata.cliente_id || null,
-        arquivo_url: publicUrl,
+        // Bucket é privado: salvar o PATH e gerar signed URL na hora de abrir/baixar
+        arquivo_url: filePath,
         arquivo_nome: file.name,
         arquivo_tamanho: file.size,
         uploaded_by: user?.id,
@@ -216,10 +213,15 @@ export function useDocumentos(processoId?: string, clienteId?: string) {
   };
 
   const deleteDocumento = async (id: string, arquivoUrl: string) => {
-    // Extract file path from URL
-    const urlParts = arquivoUrl.split('/documentos/');
-    if (urlParts.length > 1) {
-      const filePath = urlParts[1];
+    const getStoragePath = (value: string) => {
+      if (!value) return '';
+      // suporta tanto URL antiga quanto path (novo padrão)
+      if (value.includes('/documentos/')) return value.split('/documentos/')[1].split('?')[0];
+      return value.split('?')[0];
+    };
+
+    const filePath = getStoragePath(arquivoUrl);
+    if (filePath) {
       await supabase.storage.from('documentos').remove([filePath]);
     }
 

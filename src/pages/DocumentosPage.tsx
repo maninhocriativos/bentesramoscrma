@@ -9,6 +9,8 @@ import { GoogleDriveConnect } from '@/components/documentos/GoogleDriveConnect';
 import { GoogleDriveModal } from '@/components/documentos/GoogleDriveModal';
 import { Badge } from '@/components/ui/badge';
 import { AppLayout } from '@/components/layouts/AppLayout';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -22,21 +24,48 @@ import {
 } from '@/components/ui/table';
 
 const tipoColors: Record<string, string> = {
-  'Petição': 'bg-blue-100 text-blue-800 border-blue-200',
-  'Contrato': 'bg-green-100 text-green-800 border-green-200',
-  'Procuração': 'bg-purple-100 text-purple-800 border-purple-200',
-  'Documento Pessoal': 'bg-amber-100 text-amber-800 border-amber-200',
-  'Comprovante': 'bg-cyan-100 text-cyan-800 border-cyan-200',
-  'Outros': 'bg-gray-100 text-gray-800 border-gray-200',
+  'Petição': 'bg-primary/10 text-primary border border-primary/20',
+  'Contrato': 'bg-success/10 text-success border border-success/20',
+  'Procuração': 'bg-secondary/30 text-secondary-foreground border border-secondary/40',
+  'Documento Pessoal': 'bg-accent/25 text-accent-foreground border border-accent/40',
+  'Comprovante': 'bg-muted text-muted-foreground border border-border',
+  'Outros': 'bg-muted/60 text-muted-foreground border border-border',
 };
 
 export default function DocumentosPage() {
+  const { toast } = useToast();
   const { documentos, loading, deleteDocumento } = useDocumentos();
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [driveModalOpen, setDriveModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredDocumentos = documentos.filter(doc =>
+  const getStoragePath = (value: string) => {
+    if (!value) return '';
+    if (value.includes('/documentos/')) return value.split('/documentos/')[1].split('?')[0];
+    return value.split('?')[0];
+  };
+
+  const openDocumento = async (arquivoUrl: string) => {
+    const filePath = getStoragePath(arquivoUrl);
+    if (!filePath) return;
+
+    const { data, error } = await supabase.storage
+      .from('documentos')
+      .createSignedUrl(filePath, 60);
+
+    if (error || !data?.signedUrl) {
+      toast({
+        title: 'Não foi possível abrir o documento',
+        description: error?.message || 'Erro ao gerar link seguro',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    window.open(data.signedUrl, '_blank');
+  };
+
+  const filteredDocumentos = documentos.filter((doc) =>
     doc.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
     doc.tipo.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -48,7 +77,6 @@ export default function DocumentosPage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  return (
     <AppLayout>
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -81,7 +109,7 @@ export default function DocumentosPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
-              <FileText className="h-8 w-8 text-blue-500" />
+              <FileText className="h-8 w-8 text-primary" />
               <div>
                 <p className="text-2xl font-bold">{documentos.filter(d => d.tipo === 'Petição').length}</p>
                 <p className="text-sm text-muted-foreground">Petições</p>
@@ -92,7 +120,7 @@ export default function DocumentosPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
-              <FileText className="h-8 w-8 text-green-500" />
+              <FileText className="h-8 w-8 text-success" />
               <div>
                 <p className="text-2xl font-bold">{documentos.filter(d => d.tipo === 'Contrato').length}</p>
                 <p className="text-sm text-muted-foreground">Contratos</p>
@@ -103,7 +131,7 @@ export default function DocumentosPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
-              <FileText className="h-8 w-8 text-purple-500" />
+              <FileText className="h-8 w-8 text-secondary" />
               <div>
                 <p className="text-2xl font-bold">{documentos.filter(d => d.tipo === 'Procuração').length}</p>
                 <p className="text-sm text-muted-foreground">Procurações</p>
@@ -170,16 +198,30 @@ export default function DocumentosPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => window.open(doc.arquivo_url, '_blank')}
+                          onClick={() => openDocumento(doc.arquivo_url)}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => {
+                          onClick={async () => {
+                            const filePath = getStoragePath(doc.arquivo_url);
+                            const { data, error } = await supabase.storage
+                              .from('documentos')
+                              .createSignedUrl(filePath, 60);
+
+                            if (error || !data?.signedUrl) {
+                              toast({
+                                title: 'Não foi possível baixar o documento',
+                                description: error?.message || 'Erro ao gerar link seguro',
+                                variant: 'destructive',
+                              });
+                              return;
+                            }
+
                             const link = document.createElement('a');
-                            link.href = doc.arquivo_url;
+                            link.href = data.signedUrl;
                             link.download = doc.arquivo_nome;
                             link.click();
                           }}
