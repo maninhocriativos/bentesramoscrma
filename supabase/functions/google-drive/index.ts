@@ -71,7 +71,13 @@ serve(async (req) => {
     </script>
     <p>Erro na autenticação. Esta janela pode ser fechada.</p>
   </body>
-</html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+</html>`, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-store',
+          },
+        });
       }
 
       if (!code) {
@@ -85,7 +91,14 @@ serve(async (req) => {
     </script>
     <p>Código de autorização não encontrado. Esta janela pode ser fechada.</p>
   </body>
-</html>`, { status: 400, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+</html>`, {
+          status: 400,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-store',
+          },
+        });
       }
 
       const redirectUri = `${SUPABASE_URL}/functions/v1/google-drive?action=callback`;
@@ -118,7 +131,13 @@ serve(async (req) => {
     </script>
     <p>Falha ao obter tokens. Esta janela pode ser fechada.</p>
   </body>
-</html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+</html>`, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-store',
+          },
+        });
       }
 
       return new Response(`<!DOCTYPE html>
@@ -126,15 +145,21 @@ serve(async (req) => {
   <head><meta charset="utf-8"><title>Sucesso</title></head>
   <body>
     <script>
-      window.opener?.postMessage({ 
-        type: 'google-drive-oauth-success', 
+      window.opener?.postMessage({
+        type: 'google-drive-oauth-success',
         tokens: ${JSON.stringify(tokens)}
       }, '*');
       window.close();
     </script>
     <p>Google Drive conectado com sucesso! Esta janela pode ser fechada.</p>
   </body>
-</html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+</html>`, {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+        },
+      });
     }
 
     // Refresh token
