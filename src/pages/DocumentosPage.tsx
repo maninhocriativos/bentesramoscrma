@@ -77,6 +77,7 @@ export default function DocumentosPage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  return (
     <AppLayout>
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
