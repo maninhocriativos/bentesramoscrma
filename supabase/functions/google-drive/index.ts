@@ -61,20 +61,31 @@ serve(async (req) => {
 
       if (error) {
         console.error('OAuth error:', error);
-        return new Response(`
-          <html>
-            <body>
-              <script>
-                window.opener.postMessage({ type: 'google-drive-oauth-error', error: '${error}' }, '*');
-                window.close();
-              </script>
-            </body>
-          </html>
-        `, { headers: { 'Content-Type': 'text/html' } });
+        return new Response(`<!DOCTYPE html>
+<html>
+  <head><meta charset="utf-8"><title>Erro</title></head>
+  <body>
+    <script>
+      window.opener?.postMessage({ type: 'google-drive-oauth-error', error: '${error}' }, '*');
+      window.close();
+    </script>
+    <p>Erro na autenticação. Esta janela pode ser fechada.</p>
+  </body>
+</html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
       }
 
       if (!code) {
-        return new Response('Código de autorização não encontrado', { status: 400 });
+        return new Response(`<!DOCTYPE html>
+<html>
+  <head><meta charset="utf-8"><title>Erro</title></head>
+  <body>
+    <script>
+      window.opener?.postMessage({ type: 'google-drive-oauth-error', error: 'Código não encontrado' }, '*');
+      window.close();
+    </script>
+    <p>Código de autorização não encontrado. Esta janela pode ser fechada.</p>
+  </body>
+</html>`, { status: 400, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
       }
 
       const redirectUri = `${SUPABASE_URL}/functions/v1/google-drive?action=callback`;
@@ -97,31 +108,33 @@ serve(async (req) => {
 
       if (!tokenResponse.ok) {
         console.error('Token exchange error:', tokens);
-        return new Response(`
-          <html>
-            <body>
-              <script>
-                window.opener.postMessage({ type: 'google-drive-oauth-error', error: 'Falha ao obter tokens' }, '*');
-                window.close();
-              </script>
-            </body>
-          </html>
-        `, { headers: { 'Content-Type': 'text/html' } });
+        return new Response(`<!DOCTYPE html>
+<html>
+  <head><meta charset="utf-8"><title>Erro</title></head>
+  <body>
+    <script>
+      window.opener?.postMessage({ type: 'google-drive-oauth-error', error: 'Falha ao obter tokens' }, '*');
+      window.close();
+    </script>
+    <p>Falha ao obter tokens. Esta janela pode ser fechada.</p>
+  </body>
+</html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
       }
 
-      return new Response(`
-        <html>
-          <body>
-            <script>
-              window.opener.postMessage({ 
-                type: 'google-drive-oauth-success', 
-                tokens: ${JSON.stringify(tokens)}
-              }, '*');
-              window.close();
-            </script>
-          </body>
-        </html>
-      `, { headers: { 'Content-Type': 'text/html' } });
+      return new Response(`<!DOCTYPE html>
+<html>
+  <head><meta charset="utf-8"><title>Sucesso</title></head>
+  <body>
+    <script>
+      window.opener?.postMessage({ 
+        type: 'google-drive-oauth-success', 
+        tokens: ${JSON.stringify(tokens)}
+      }, '*');
+      window.close();
+    </script>
+    <p>Google Drive conectado com sucesso! Esta janela pode ser fechada.</p>
+  </body>
+</html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     }
 
     // Refresh token
