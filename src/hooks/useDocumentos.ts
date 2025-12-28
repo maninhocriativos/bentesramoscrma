@@ -169,6 +169,7 @@ export function useDocumentos(processoId?: string, clienteId?: string) {
         arquivo_nome: file.name,
         arquivo_tamanho: file.size,
         uploaded_by: user?.id,
+        sync_status: 'pending', // Marcar como pendente para sync
       })
       .select()
       .single();
@@ -181,30 +182,27 @@ export function useDocumentos(processoId?: string, clienteId?: string) {
 
     toast({ title: 'Documento enviado com sucesso!' });
     
-    // Sincronização com Google Drive em background (não bloqueia)
-    if (metadata.cliente_id && user?.id) {
-      // Buscar nome do cliente
-      const { data: clienteData } = await supabase
-        .from('leads_juridicos')
-        .select('nome')
-        .eq('id', metadata.cliente_id)
-        .maybeSingle();
-
-      if (clienteData?.nome) {
-        // Executar em background
-        syncToGoogleDrive(user.id, metadata.cliente_id, clienteData.nome, file, file.name)
-          .then((result) => {
-            if (result.synced) {
-              toast({ 
-                title: 'Sincronizado com Google Drive',
-                description: `Documento enviado para pasta "${clienteData.nome}"`,
-              });
-            }
-          })
-          .catch((err) => {
-            console.error('Erro na sincronização em background:', err);
-          });
-      }
+    // Sincronização com Google Drive em background usando a nova edge function
+    if (user?.id && data?.id) {
+      // Executar em background via edge function drive-sync
+      supabase.functions.invoke('drive-sync', {
+        body: {
+          action: 'sync_to_drive',
+          user_id: user.id,
+          document_id: data.id,
+        }
+      })
+        .then(({ data: syncResult }) => {
+          if (syncResult?.success) {
+            toast({ 
+              title: 'Sincronizado com Google Drive',
+              description: 'Documento enviado para o Drive automaticamente',
+            });
+          }
+        })
+        .catch((err) => {
+          console.error('Erro na sincronização em background:', err);
+        });
     }
 
     await fetchDocumentos();

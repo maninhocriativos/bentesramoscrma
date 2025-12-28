@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, FileText, Download, Trash2, Eye } from 'lucide-react';
+import { Plus, Search, FileText, Download, Trash2, Eye, Cloud, CloudOff, RefreshCw, Loader2 } from 'lucide-react';
 import { useDocumentos } from '@/hooks/useDocumentos';
+import { useDriveSync } from '@/hooks/useDriveSync';
+import { useGoogleDrive } from '@/hooks/useGoogleDrive';
 import { DocumentoUploadModal } from '@/components/documentos/DocumentoUploadModal';
 import { GoogleDriveConnect } from '@/components/documentos/GoogleDriveConnect';
 import { GoogleDriveModal } from '@/components/documentos/GoogleDriveModal';
@@ -14,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Table,
   TableBody,
@@ -34,10 +37,57 @@ const tipoColors: Record<string, string> = {
 
 export default function DocumentosPage() {
   const { toast } = useToast();
-  const { documentos, loading, deleteDocumento } = useDocumentos();
+  const { documentos, loading, deleteDocumento, fetchDocumentos } = useDocumentos();
+  const { syncDocument, syncAll, isSyncing, syncStats, refreshStats } = useDriveSync();
+  const { isConnected: isDriveConnected } = useGoogleDrive();
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [driveModalOpen, setDriveModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Fetch sync stats on mount
+  useEffect(() => {
+    if (isDriveConnected) {
+      refreshStats();
+    }
+  }, [isDriveConnected, refreshStats]);
+
+  const getSyncStatusIcon = (status: string | null | undefined) => {
+    switch (status) {
+      case 'synced':
+        return <Cloud className="h-4 w-4 text-green-500" />;
+      case 'syncing':
+        return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
+      case 'error':
+        return <CloudOff className="h-4 w-4 text-destructive" />;
+      default:
+        return <CloudOff className="h-4 w-4 text-muted-foreground" />;
+    }
+  };
+
+  const getSyncStatusLabel = (status: string | null | undefined) => {
+    switch (status) {
+      case 'synced':
+        return 'Sincronizado';
+      case 'syncing':
+        return 'Sincronizando...';
+      case 'error':
+        return 'Erro no sync';
+      default:
+        return 'Pendente';
+    }
+  };
+
+  const handleSyncDocument = async (docId: string) => {
+    const success = await syncDocument(docId);
+    if (success) {
+      fetchDocumentos();
+    }
+  };
+
+  const handleSyncAll = async () => {
+    await syncAll();
+    fetchDocumentos();
+  };
 
   const getStoragePath = (value: string) => {
     if (!value) return '';
@@ -86,6 +136,20 @@ export default function DocumentosPage() {
           <p className="text-muted-foreground">Gestão de documentos e arquivos</p>
         </div>
         <div className="flex gap-2">
+          {isDriveConnected && (
+            <Button 
+              variant="outline" 
+              onClick={handleSyncAll} 
+              disabled={isSyncing}
+            >
+              {isSyncing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Sincronizar Tudo
+            </Button>
+          )}
           <GoogleDriveConnect onOpenDriveModal={() => setDriveModalOpen(true)} />
           <Button onClick={() => setUploadModalOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -95,14 +159,14 @@ export default function DocumentosPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <FileText className="h-8 w-8 text-primary" />
               <div>
                 <p className="text-2xl font-bold">{documentos.length}</p>
-                <p className="text-sm text-muted-foreground">Total de documentos</p>
+                <p className="text-sm text-muted-foreground">Total</p>
               </div>
             </div>
           </CardContent>
@@ -140,6 +204,21 @@ export default function DocumentosPage() {
             </div>
           </CardContent>
         </Card>
+        {isDriveConnected && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <Cloud className="h-8 w-8 text-primary" />
+                <div>
+                  <p className="text-2xl font-bold">
+                    {documentos.filter((d: any) => d.sync_status === 'synced').length}/{documentos.length}
+                  </p>
+                  <p className="text-sm text-muted-foreground">Sincronizados</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Search and Table */}
@@ -171,6 +250,7 @@ export default function DocumentosPage() {
               <p>Nenhum documento encontrado</p>
             </div>
           ) : (
+            <TooltipProvider>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -178,6 +258,7 @@ export default function DocumentosPage() {
                   <TableHead>Tipo</TableHead>
                   <TableHead>Tamanho</TableHead>
                   <TableHead>Data</TableHead>
+                  {isDriveConnected && <TableHead>Sync</TableHead>}
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -194,6 +275,29 @@ export default function DocumentosPage() {
                     <TableCell>
                       {format(new Date(doc.created_at), 'dd/MM/yyyy', { locale: ptBR })}
                     </TableCell>
+                    {isDriveConnected && (
+                      <TableCell>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => (doc as any).sync_status !== 'synced' && handleSyncDocument(doc.id)}
+                              disabled={isSyncing || (doc as any).sync_status === 'syncing'}
+                            >
+                              {getSyncStatusIcon((doc as any).sync_status)}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{getSyncStatusLabel((doc as any).sync_status)}</p>
+                            {(doc as any).sync_status !== 'synced' && (
+                              <p className="text-xs text-muted-foreground">Clique para sincronizar</p>
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TableCell>
+                    )}
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button
@@ -242,6 +346,7 @@ export default function DocumentosPage() {
                 ))}
               </TableBody>
             </Table>
+            </TooltipProvider>
           )}
         </CardContent>
       </Card>
