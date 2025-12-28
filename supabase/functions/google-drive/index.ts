@@ -150,9 +150,39 @@ serve(async (req) => {
     if (req.method === 'POST') {
       const body = await req.json();
       const postAction = body.action;
-      const accessToken = body.access_token;
 
       console.log('Google Drive POST Action:', postAction);
+
+      // Refresh token (POST) - usado pelo app via supabase.functions.invoke
+      if (postAction === 'refresh') {
+        const refreshToken = body.refresh_token;
+
+        if (!refreshToken) {
+          return new Response(JSON.stringify({ error: 'refresh_token não fornecido' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            refresh_token: refreshToken,
+            client_id: GOOGLE_CLIENT_ID!,
+            client_secret: GOOGLE_CLIENT_SECRET!,
+            grant_type: 'refresh_token',
+          }),
+        });
+
+        const tokens = await tokenResponse.json();
+
+        return new Response(JSON.stringify(tokens), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const accessToken = body.access_token;
 
       if (!accessToken) {
         return new Response(JSON.stringify({ error: 'Token de acesso não fornecido' }), {
