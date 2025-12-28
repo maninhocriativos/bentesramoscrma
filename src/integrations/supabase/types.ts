@@ -148,9 +148,12 @@ export type Database = {
           cliente_id: string | null
           created_at: string
           descricao: string | null
+          drive_file_id: string | null
+          drive_synced_at: string | null
           id: string
           nome: string
           processo_id: string | null
+          sync_status: string | null
           tipo: string
           updated_at: string
           uploaded_by: string | null
@@ -162,9 +165,12 @@ export type Database = {
           cliente_id?: string | null
           created_at?: string
           descricao?: string | null
+          drive_file_id?: string | null
+          drive_synced_at?: string | null
           id?: string
           nome: string
           processo_id?: string | null
+          sync_status?: string | null
           tipo: string
           updated_at?: string
           uploaded_by?: string | null
@@ -176,9 +182,12 @@ export type Database = {
           cliente_id?: string | null
           created_at?: string
           descricao?: string | null
+          drive_file_id?: string | null
+          drive_synced_at?: string | null
           id?: string
           nome?: string
           processo_id?: string | null
+          sync_status?: string | null
           tipo?: string
           updated_at?: string
           uploaded_by?: string | null
