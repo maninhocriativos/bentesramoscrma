@@ -9,9 +9,12 @@ import { GoogleDriveConnect } from '@/components/documentos/GoogleDriveConnect';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Loader2, RefreshCw, Cloud, CloudOff, AlertTriangle, CheckCircle, Clock, Play, FolderSearch, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
+import { Loader2, RefreshCw, Cloud, CloudOff, AlertTriangle, CheckCircle, Clock, Play, FolderSearch, ArrowDownToLine, ArrowUpFromLine, Settings2, Timer } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -44,14 +47,22 @@ interface SyncStats {
   error: number;
 }
 
+interface SyncConfig {
+  auto_sync_enabled: boolean;
+  sync_interval_minutes: number;
+  last_auto_sync_at: string | null;
+}
+
 export default function DriveSyncPage() {
   const { user } = useAuth();
   const { isConnected, isLoading: driveLoading } = useGoogleDrive();
   const [jobs, setJobs] = useState<SyncJob[]>([]);
   const [stats, setStats] = useState<SyncStats | null>(null);
+  const [config, setConfig] = useState<SyncConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
 
   const fetchJobs = useCallback(async () => {
     if (!user) return;
@@ -89,12 +100,59 @@ export default function DriveSyncPage() {
     }
   }, [user]);
 
+  const fetchConfig = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase.functions.invoke('drive-sync', {
+        body: { action: 'get_config', user_id: user.id }
+      });
+
+      if (error) throw error;
+      if (data?.config) {
+        setConfig(data.config as SyncConfig);
+      } else {
+        // Default config
+        setConfig({ auto_sync_enabled: false, sync_interval_minutes: 30, last_auto_sync_at: null });
+      }
+    } catch (err) {
+      console.error('Error fetching config:', err);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (isConnected && user) {
       fetchJobs();
       fetchStats();
+      fetchConfig();
     }
-  }, [isConnected, user, fetchJobs, fetchStats]);
+  }, [isConnected, user, fetchJobs, fetchStats, fetchConfig]);
+
+  const handleUpdateConfig = async (autoEnabled: boolean, interval: number) => {
+    if (!user) return;
+    setSavingConfig(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('drive-sync', {
+        body: { 
+          action: 'update_config', 
+          user_id: user.id,
+          auto_sync_enabled: autoEnabled,
+          interval_minutes: interval
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        setConfig(prev => prev ? { ...prev, auto_sync_enabled: autoEnabled, sync_interval_minutes: interval } : null);
+        toast.success(autoEnabled ? 'Sync automático ativado!' : 'Sync automático desativado');
+      }
+    } catch (err) {
+      console.error('Config error:', err);
+      toast.error('Erro ao salvar configuração');
+    } finally {
+      setSavingConfig(false);
+    }
+  };
 
   const handleSyncAll = async () => {
     if (!user) return;
@@ -236,6 +294,64 @@ export default function DriveSyncPage() {
             </Button>
           </div>
         </div>
+
+        {/* Auto-Sync Configuration */}
+        <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <Settings2 className="h-5 w-5 text-primary" />
+              <div>
+                <CardTitle className="text-lg">Sincronização Automática</CardTitle>
+                <CardDescription>Configure o polling periódico para sincronizar automaticamente</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col md:flex-row md:items-center gap-6">
+              <div className="flex items-center gap-3">
+                <Switch
+                  id="auto-sync"
+                  checked={config?.auto_sync_enabled ?? false}
+                  onCheckedChange={(checked) => handleUpdateConfig(checked, config?.sync_interval_minutes ?? 30)}
+                  disabled={savingConfig}
+                />
+                <Label htmlFor="auto-sync" className="font-medium">
+                  {config?.auto_sync_enabled ? 'Ativado' : 'Desativado'}
+                </Label>
+                {savingConfig && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Timer className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm text-muted-foreground">Intervalo:</Label>
+                <Select
+                  value={String(config?.sync_interval_minutes ?? 30)}
+                  onValueChange={(val) => handleUpdateConfig(config?.auto_sync_enabled ?? false, parseInt(val))}
+                  disabled={savingConfig || !config?.auto_sync_enabled}
+                >
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="15">15 min</SelectItem>
+                    <SelectItem value="30">30 min</SelectItem>
+                    <SelectItem value="60">1 hora</SelectItem>
+                    <SelectItem value="120">2 horas</SelectItem>
+                    <SelectItem value="360">6 horas</SelectItem>
+                    <SelectItem value="720">12 horas</SelectItem>
+                    <SelectItem value="1440">24 horas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {config?.last_auto_sync_at && (
+                <div className="text-sm text-muted-foreground">
+                  Último sync automático: {format(new Date(config.last_auto_sync_at), "dd/MM 'às' HH:mm", { locale: ptBR })}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">

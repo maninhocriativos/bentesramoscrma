@@ -218,6 +218,36 @@ export type Database = {
           },
         ]
       }
+      drive_sync_config: {
+        Row: {
+          auto_sync_enabled: boolean
+          created_at: string
+          id: string
+          last_auto_sync_at: string | null
+          sync_interval_minutes: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_sync_enabled?: boolean
+          created_at?: string
+          id?: string
+          last_auto_sync_at?: string | null
+          sync_interval_minutes?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_sync_enabled?: boolean
+          created_at?: string
+          id?: string
+          last_auto_sync_at?: string | null
+          sync_interval_minutes?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       drive_sync_jobs: {
         Row: {
           attempts: number
