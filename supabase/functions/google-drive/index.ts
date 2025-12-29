@@ -7,10 +7,31 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
-const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID');
-const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+// Helper function to get Google credentials from app_settings
+async function getGoogleCredentials(supabase: any): Promise<{ clientId: string | null; clientSecret: string | null }> {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .in('key', ['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET']);
+
+  if (error) {
+    console.error('Error fetching Google credentials:', error);
+    return { clientId: null, clientSecret: null };
+  }
+
+  const settings = data.reduce((acc: Record<string, string>, item: { key: string; value: string }) => {
+    acc[item.key] = item.value;
+    return acc;
+  }, {});
+
+  return {
+    clientId: settings['GOOGLE_OAUTH_CLIENT_ID'] || null,
+    clientSecret: settings['GOOGLE_OAUTH_CLIENT_SECRET'] || null,
+  };
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -25,11 +46,14 @@ serve(async (req) => {
 
     console.log('Google Drive - Action:', action);
 
+    // Get credentials from database
+    const { clientId, clientSecret } = await getGoogleCredentials(supabase);
+
     // Get authorization URL for OAuth flow (Drive scope)
     if (action === 'get_auth_url') {
-      if (!GOOGLE_CLIENT_ID) {
+      if (!clientId) {
         return new Response(JSON.stringify({ 
-          error: 'Google OAuth não configurado. Configure GOOGLE_CLIENT_ID.' 
+          error: 'Google OAuth não configurado. Configure as credenciais em Configurações > Integrações.' 
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -43,7 +67,7 @@ serve(async (req) => {
       ].join(' ');
       
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${GOOGLE_CLIENT_ID}` +
+        `client_id=${clientId}` +
         `&redirect_uri=${encodeURIComponent(redirectUri)}` +
         `&response_type=code` +
         `&scope=${encodeURIComponent(scopes)}` +
@@ -102,6 +126,27 @@ serve(async (req) => {
         });
       }
 
+      if (!clientId || !clientSecret) {
+        return new Response(`<!DOCTYPE html>
+<html>
+  <head><meta charset="utf-8"><title>Erro</title></head>
+  <body>
+    <script>
+      window.opener?.postMessage({ type: 'google-drive-oauth-error', error: 'Credenciais não configuradas' }, '*');
+      window.close();
+    </script>
+    <p>Credenciais não configuradas. Esta janela pode ser fechada.</p>
+  </body>
+</html>`, {
+          status: 400,
+          headers: {
+            ...corsHeaders,
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
+          },
+        });
+      }
+
       const redirectUri = `${SUPABASE_URL}/functions/v1/google-drive?action=callback`;
       
       // Exchange code for tokens
@@ -110,8 +155,8 @@ serve(async (req) => {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           code,
-          client_id: GOOGLE_CLIENT_ID!,
-          client_secret: GOOGLE_CLIENT_SECRET!,
+          client_id: clientId,
+          client_secret: clientSecret,
           redirect_uri: redirectUri,
           grant_type: 'authorization_code',
         }),
@@ -191,17 +236,24 @@ serve(async (req) => {
       });
     }
 
-    // Refresh token
+    // Refresh token (GET for backwards compatibility)
     if (action === 'refresh') {
       const { refresh_token } = await req.json();
+
+      if (!clientId || !clientSecret) {
+        return new Response(JSON.stringify({ error: 'Credenciais não configuradas' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
       const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           refresh_token,
-          client_id: GOOGLE_CLIENT_ID!,
-          client_secret: GOOGLE_CLIENT_SECRET!,
+          client_id: clientId,
+          client_secret: clientSecret,
           grant_type: 'refresh_token',
         }),
       });
@@ -231,13 +283,20 @@ serve(async (req) => {
           });
         }
 
+        if (!clientId || !clientSecret) {
+          return new Response(JSON.stringify({ error: 'Credenciais não configuradas' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
             refresh_token: refreshToken,
-            client_id: GOOGLE_CLIENT_ID!,
-            client_secret: GOOGLE_CLIENT_SECRET!,
+            client_id: clientId,
+            client_secret: clientSecret,
             grant_type: 'refresh_token',
           }),
         });

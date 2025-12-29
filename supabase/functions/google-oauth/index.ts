@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -32,6 +33,36 @@ async function getGoogleCredentials(supabase: any): Promise<{ clientId: string |
   };
 }
 
+// Helper function to get integration flags
+async function getIntegrationFlags(supabase: any): Promise<{
+  driveEnabled: boolean;
+  calendarEnabled: boolean;
+  calendarId: string;
+  syncMode: string;
+}> {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .in('key', ['GOOGLE_DRIVE_ENABLED', 'GOOGLE_CALENDAR_ENABLED', 'GOOGLE_CALENDAR_ID', 'GOOGLE_CALENDAR_SYNC_MODE']);
+
+  if (error) {
+    console.error('Error fetching integration flags:', error);
+    return { driveEnabled: false, calendarEnabled: false, calendarId: 'primary', syncMode: 'push' };
+  }
+
+  const settings = data.reduce((acc: Record<string, string>, item: { key: string; value: string }) => {
+    acc[item.key] = item.value;
+    return acc;
+  }, {});
+
+  return {
+    driveEnabled: settings['GOOGLE_DRIVE_ENABLED'] === 'true',
+    calendarEnabled: settings['GOOGLE_CALENDAR_ENABLED'] === 'true',
+    calendarId: settings['GOOGLE_CALENDAR_ID'] || 'primary',
+    syncMode: settings['GOOGLE_CALENDAR_SYNC_MODE'] || 'push',
+  };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -42,13 +73,15 @@ serve(async (req) => {
   try {
     const url = new URL(req.url);
     const action = url.searchParams.get('action');
+    const service = url.searchParams.get('service'); // 'drive' or 'calendar'
 
-    console.log('Google Calendar Auth - Action:', action);
+    console.log('Google OAuth - Action:', action, 'Service:', service);
 
     // Get credentials from database
     const { clientId, clientSecret } = await getGoogleCredentials(supabase);
+    const flags = await getIntegrationFlags(supabase);
 
-    // Get authorization URL for OAuth flow
+    // GET: Return authorization URL
     if (action === 'get_auth_url') {
       if (!clientId) {
         return new Response(JSON.stringify({ 
@@ -59,18 +92,38 @@ serve(async (req) => {
         });
       }
 
-      const redirectUri = `${SUPABASE_URL}/functions/v1/google-calendar-auth?action=callback`;
-      const scope = 'https://www.googleapis.com/auth/calendar.events';
+      // Build scopes dynamically based on enabled services
+      const scopes: string[] = [];
+      
+      if (flags.driveEnabled || service === 'drive') {
+        scopes.push('https://www.googleapis.com/auth/drive.file');
+        scopes.push('https://www.googleapis.com/auth/drive.readonly');
+      }
+      
+      if (flags.calendarEnabled || service === 'calendar') {
+        scopes.push('https://www.googleapis.com/auth/calendar.events');
+      }
+
+      // Always include basic scopes
+      if (scopes.length === 0) {
+        scopes.push('https://www.googleapis.com/auth/drive.file');
+        scopes.push('https://www.googleapis.com/auth/calendar.events');
+      }
+
+      const redirectUri = `${SUPABASE_URL}/functions/v1/google-oauth?action=callback&service=${service || 'both'}`;
       
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
         `client_id=${clientId}` +
         `&redirect_uri=${encodeURIComponent(redirectUri)}` +
         `&response_type=code` +
-        `&scope=${encodeURIComponent(scope)}` +
+        `&scope=${encodeURIComponent(scopes.join(' '))}` +
         `&access_type=offline` +
-        `&prompt=consent`;
+        `&prompt=consent` +
+        `&include_granted_scopes=true`;
 
-      return new Response(JSON.stringify({ authUrl }), {
+      console.log('Generated auth URL with scopes:', scopes.join(' '));
+
+      return new Response(JSON.stringify({ authUrl, scopes }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -79,6 +132,7 @@ serve(async (req) => {
     if (action === 'callback') {
       const code = url.searchParams.get('code');
       const error = url.searchParams.get('error');
+      const callbackService = url.searchParams.get('service') || 'both';
 
       if (error) {
         console.error('OAuth error:', error);
@@ -110,7 +164,7 @@ serve(async (req) => {
       window.opener?.postMessage({ type: 'google-oauth-error', error: 'Código não encontrado' }, '*');
       setTimeout(function() { window.close(); }, 1000);
     </script>
-    <p>Código de autorização não encontrado.</p>
+    <p>Código de autorização não encontrado. Esta janela pode ser fechada.</p>
   </body>
 </html>`, {
           status: 400,
@@ -131,7 +185,7 @@ serve(async (req) => {
       window.opener?.postMessage({ type: 'google-oauth-error', error: 'Credenciais não configuradas' }, '*');
       setTimeout(function() { window.close(); }, 1000);
     </script>
-    <p>Credenciais não configuradas.</p>
+    <p>Credenciais OAuth não configuradas. Esta janela pode ser fechada.</p>
   </body>
 </html>`, {
           status: 400,
@@ -143,7 +197,7 @@ serve(async (req) => {
         });
       }
 
-      const redirectUri = `${SUPABASE_URL}/functions/v1/google-calendar-auth?action=callback`;
+      const redirectUri = `${SUPABASE_URL}/functions/v1/google-oauth?action=callback&service=${callbackService}`;
       
       // Exchange code for tokens
       const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
@@ -171,7 +225,7 @@ serve(async (req) => {
       window.opener?.postMessage({ type: 'google-oauth-error', error: 'Falha ao obter tokens' }, '*');
       setTimeout(function() { window.close(); }, 1000);
     </script>
-    <p>Falha ao obter tokens.</p>
+    <p>Falha ao obter tokens. Esta janela pode ser fechada.</p>
   </body>
 </html>`, {
           headers: {
@@ -182,11 +236,18 @@ serve(async (req) => {
         });
       }
 
+      // Determine message type based on service
+      const messageType = callbackService === 'drive' 
+        ? 'google-drive-oauth-success' 
+        : callbackService === 'calendar' 
+          ? 'google-oauth-success' 
+          : 'google-oauth-success';
+
       const successHtml = `<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Google Calendar Conectado</title>
+    <title>Google Conectado</title>
     <style>
       body { font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; }
       .container { text-align: center; padding: 2rem; }
@@ -198,15 +259,20 @@ serve(async (req) => {
   <body>
     <div class="container">
       <div class="icon">✓</div>
-      <h1>Google Calendar Conectado!</h1>
+      <h1>Google Conectado!</h1>
       <p>Esta janela será fechada automaticamente...</p>
     </div>
     <script>
       (function() {
         try {
           if (window.opener) {
-            window.opener.postMessage({ 
-              type: 'google-oauth-success', 
+            // Send to both message types for compatibility
+            window.opener.postMessage({
+              type: 'google-drive-oauth-success',
+              tokens: ${JSON.stringify(tokens)}
+            }, '*');
+            window.opener.postMessage({
+              type: 'google-oauth-success',
               tokens: ${JSON.stringify(tokens)}
             }, '*');
           }
@@ -229,57 +295,64 @@ serve(async (req) => {
       });
     }
 
-    // Refresh token - handle both GET query param and POST body
-    if (action === 'refresh' || req.method === 'POST') {
-      let refreshToken: string | null = null;
+    // POST: Refresh token
+    if (req.method === 'POST') {
+      const body = await req.json();
       
-      if (req.method === 'POST') {
-        const body = await req.json();
-        if (body.action === 'refresh') {
-          refreshToken = body.refresh_token;
-        } else {
-          refreshToken = body.refresh_token;
+      if (body.action === 'refresh') {
+        if (!clientId || !clientSecret) {
+          return new Response(JSON.stringify({ error: 'Credenciais não configuradas' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
         }
-      }
 
-      if (!refreshToken) {
-        return new Response(JSON.stringify({ error: 'refresh_token não fornecido' }), {
-          status: 400,
+        const refreshToken = body.refresh_token;
+        if (!refreshToken) {
+          return new Response(JSON.stringify({ error: 'refresh_token não fornecido' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            refresh_token: refreshToken,
+            client_id: clientId,
+            client_secret: clientSecret,
+            grant_type: 'refresh_token',
+          }),
+        });
+
+        const tokens = await tokenResponse.json();
+
+        if (!tokenResponse.ok) {
+          console.error('Token refresh error:', tokens);
+          return new Response(JSON.stringify({ error: tokens.error_description || 'Falha ao renovar token' }), {
+            status: tokenResponse.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        return new Response(JSON.stringify(tokens), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      if (!clientId || !clientSecret) {
-        return new Response(JSON.stringify({ error: 'Credenciais não configuradas' }), {
-          status: 400,
+      // Get integration status
+      if (body.action === 'status') {
+        return new Response(JSON.stringify({
+          configured: !!clientId && !!clientSecret,
+          driveEnabled: flags.driveEnabled,
+          calendarEnabled: flags.calendarEnabled,
+          calendarId: flags.calendarId,
+          syncMode: flags.syncMode,
+        }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-
-      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          refresh_token: refreshToken,
-          client_id: clientId,
-          client_secret: clientSecret,
-          grant_type: 'refresh_token',
-        }),
-      });
-
-      const tokens = await tokenResponse.json();
-
-      if (!tokenResponse.ok) {
-        console.error('Token refresh error:', tokens);
-        return new Response(JSON.stringify({ error: tokens.error_description || 'Falha ao renovar token' }), {
-          status: tokenResponse.status,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      return new Response(JSON.stringify(tokens), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
     }
 
     return new Response(JSON.stringify({ error: 'Ação inválida' }), {
@@ -288,7 +361,7 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Error in google-calendar-auth:', error);
+    console.error('Error in google-oauth:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
