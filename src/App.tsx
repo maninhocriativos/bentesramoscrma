@@ -20,6 +20,8 @@ import ManyChatPage from "./pages/ManyChatPage";
 import ApiHubPage from "./pages/ApiHubPage";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import PoliticaPrivacidadePage from "./pages/PoliticaPrivacidadePage";
+import TermosServicoPage from "./pages/TermosServicoPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -56,6 +58,8 @@ const App = () => (
             <Route path="/manychat" element={<ManyChatPage />} />
             <Route path="/api-hub" element={<ApiHubPage />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/politica-privacidade" element={<PoliticaPrivacidadePage />} />
+            <Route path="/termos-servico" element={<TermosServicoPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </PerfilProvider>
