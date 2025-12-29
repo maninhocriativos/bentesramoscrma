@@ -11,6 +11,7 @@ import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 import AgendaPage from "./pages/AgendaPage";
 import FinanceiroPage from "./pages/FinanceiroPage";
 import DocumentosPage from "./pages/DocumentosPage";
+import DriveSyncPage from "./pages/DriveSyncPage";
 import TarefasPage from "./pages/TarefasPage";
 import ContratosPage from "./pages/ContratosPage";
 import LeadDetailPage from "./pages/LeadDetailPage";
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="/agenda" element={<AgendaPage />} />
             <Route path="/financeiro" element={<FinanceiroPage />} />
             <Route path="/documentos" element={<DocumentosPage />} />
+            <Route path="/drive-sync" element={<DriveSyncPage />} />
             <Route path="/contratos" element={<ContratosPage />} />
             <Route path="/tarefas" element={<TarefasPage />} />
             <Route path="/configuracoes" element={<ConfiguracoesPage />} />
