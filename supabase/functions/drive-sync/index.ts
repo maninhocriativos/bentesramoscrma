@@ -616,6 +616,108 @@ async function retryJob(userId: string, jobId: string): Promise<boolean> {
   return false;
 }
 
+// Auto-sync: run for all users with auto_sync_enabled
+async function runAutoSync(): Promise<{ users: number; synced: number; imported: number }> {
+  console.log('Running auto-sync for all enabled users...');
+  
+  const { data: configs, error } = await supabase
+    .from('drive_sync_config')
+    .select('user_id, sync_interval_minutes, last_auto_sync_at')
+    .eq('auto_sync_enabled', true);
+
+  if (error || !configs) {
+    console.error('Error fetching sync configs:', error);
+    return { users: 0, synced: 0, imported: 0 };
+  }
+
+  let totalSynced = 0;
+  let totalImported = 0;
+  let usersProcessed = 0;
+
+  for (const config of configs) {
+    // Check if enough time has passed since last sync
+    const lastSync = config.last_auto_sync_at ? new Date(config.last_auto_sync_at) : null;
+    const intervalMs = (config.sync_interval_minutes || 30) * 60 * 1000;
+    const now = Date.now();
+
+    if (lastSync && (now - lastSync.getTime()) < intervalMs) {
+      console.log(`Skipping user ${config.user_id} - not enough time elapsed`);
+      continue;
+    }
+
+    console.log(`Auto-syncing for user ${config.user_id}`);
+    usersProcessed++;
+
+    // Scan Drive for new files
+    const scanResult = await scanDrive(config.user_id);
+    totalImported += scanResult.imported;
+
+    // Sync pending documents to Drive
+    const syncResult = await syncAllPending(config.user_id);
+    totalSynced += syncResult.synced;
+
+    // Update last sync time
+    await supabase
+      .from('drive_sync_config')
+      .update({ last_auto_sync_at: new Date().toISOString() })
+      .eq('user_id', config.user_id);
+  }
+
+  console.log(`Auto-sync complete: ${usersProcessed} users, ${totalSynced} synced, ${totalImported} imported`);
+  return { users: usersProcessed, synced: totalSynced, imported: totalImported };
+}
+
+// Get or create sync config
+async function getSyncConfig(userId: string) {
+  const { data, error } = await supabase
+    .from('drive_sync_config')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching sync config:', error);
+    return null;
+  }
+
+  return data;
+}
+
+// Update sync config
+async function updateSyncConfig(userId: string, autoSyncEnabled: boolean, intervalMinutes: number) {
+  const existing = await getSyncConfig(userId);
+
+  if (existing) {
+    const { error } = await supabase
+      .from('drive_sync_config')
+      .update({
+        auto_sync_enabled: autoSyncEnabled,
+        sync_interval_minutes: intervalMinutes,
+      })
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error updating sync config:', error);
+      return false;
+    }
+  } else {
+    const { error } = await supabase
+      .from('drive_sync_config')
+      .insert({
+        user_id: userId,
+        auto_sync_enabled: autoSyncEnabled,
+        sync_interval_minutes: intervalMinutes,
+      });
+
+    if (error) {
+      console.error('Error inserting sync config:', error);
+      return false;
+    }
+  }
+
+  return true;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -623,13 +725,41 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { action, user_id, document_id, drive_file_id, cliente_id, job_id } = body;
+    const { action, user_id, document_id, drive_file_id, cliente_id, job_id, auto_sync_enabled, interval_minutes } = body;
 
     console.log('Drive Sync - Action:', action, 'User:', user_id);
+
+    // Auto-sync cron action (no user_id required)
+    if (action === 'auto_sync_cron') {
+      const result = await runAutoSync();
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     if (!user_id) {
       return new Response(JSON.stringify({ error: 'user_id é obrigatório' }), {
         status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Get sync config
+    if (action === 'get_config') {
+      const config = await getSyncConfig(user_id);
+      return new Response(JSON.stringify({ config }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Update sync config
+    if (action === 'update_config') {
+      const success = await updateSyncConfig(
+        user_id, 
+        auto_sync_enabled ?? false, 
+        interval_minutes ?? 30
+      );
+      return new Response(JSON.stringify({ success }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
