@@ -5,12 +5,33 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID');
-const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+// Helper function to get Google credentials from app_settings
+async function getGoogleCredentials(): Promise<{ clientId: string | null; clientSecret: string | null }> {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .in('key', ['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET']);
+
+  if (error) {
+    console.error('Error fetching Google credentials:', error);
+    return { clientId: null, clientSecret: null };
+  }
+
+  const settings = data.reduce((acc: Record<string, string>, item: { key: string; value: string }) => {
+    acc[item.key] = item.value;
+    return acc;
+  }, {});
+
+  return {
+    clientId: settings['GOOGLE_OAUTH_CLIENT_ID'] || null,
+    clientSecret: settings['GOOGLE_OAUTH_CLIENT_SECRET'] || null,
+  };
+}
 
 // Get valid access token, refreshing if needed
 async function getValidAccessToken(userId: string): Promise<string | null> {
@@ -30,13 +51,20 @@ async function getValidAccessToken(userId: string): Promise<string | null> {
 
   if (isExpired && tokenData.refresh_token) {
     console.log('Token expired, refreshing...');
+    
+    const { clientId, clientSecret } = await getGoogleCredentials();
+    if (!clientId || !clientSecret) {
+      console.error('Google credentials not configured');
+      return null;
+    }
+    
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         refresh_token: tokenData.refresh_token,
-        client_id: GOOGLE_CLIENT_ID!,
-        client_secret: GOOGLE_CLIENT_SECRET!,
+        client_id: clientId,
+        client_secret: clientSecret,
         grant_type: 'refresh_token',
       }),
     });
