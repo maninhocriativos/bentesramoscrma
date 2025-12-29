@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare, Sparkles, Webhook, CloudCog } from 'lucide-react';
+import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare, Sparkles, Webhook } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Sidebar,
@@ -67,12 +67,6 @@ const menuItems: MenuItem[] = [
     title: 'Documentos', 
     url: '/documentos', 
     icon: FileText,
-    visibility: 'all'
-  },
-  { 
-    title: 'Sync Drive', 
-    url: '/drive-sync', 
-    icon: CloudCog,
     visibility: 'all'
   },
   { 
