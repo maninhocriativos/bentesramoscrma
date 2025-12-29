@@ -142,7 +142,20 @@ export default function DocumentosPage() {
       if (data?.config) {
         setConfig(data.config as SyncConfig);
       } else {
-        setConfig({ auto_sync_enabled: false, sync_interval_minutes: 30, last_auto_sync_at: null });
+        // Criar configuração padrão automaticamente
+        const defaultConfig = { auto_sync_enabled: false, sync_interval_minutes: 30, last_auto_sync_at: null };
+        setConfig(defaultConfig);
+        
+        // Salvar configuração padrão no banco
+        await supabase.functions.invoke('drive-sync', {
+          body: { 
+            action: 'update_config', 
+            user_id: user.id,
+            auto_sync_enabled: false,
+            interval_minutes: 30
+          }
+        });
+        console.log('Configuração padrão criada automaticamente');
       }
     } catch (err) {
       console.error('Error fetching config:', err);
