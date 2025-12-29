@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Filter, X, Download } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -45,6 +45,10 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
   const [tipoAcao, setTipoAcao] = useState('all');
   const [valorRange, setValorRange] = useState('all');
   const [currentFiltered, setCurrentFiltered] = useState<Lead[]>([]);
+  
+  // Store ref to avoid dependency issues
+  const onFilterChangeRef = React.useRef(onFilterChange);
+  onFilterChangeRef.current = onFilterChange;
 
   // Get unique tipos de ação from leads
   const tiposAcao = useMemo(() => {
@@ -55,7 +59,7 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
     return Array.from(tipos).sort();
   }, [leads]);
 
-  // Apply filters - use useEffect for side effects, not useMemo
+  // Apply filters
   const filteredLeads = useMemo(() => {
     let filtered = [...leads];
 
@@ -88,11 +92,11 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
     return filtered;
   }, [leads, search, tipoAcao, valorRange]);
 
-  // Update parent and local state when filtered leads change
+  // Update parent when filtered leads change - using ref to avoid loop
   useEffect(() => {
     setCurrentFiltered(filteredLeads);
-    onFilterChange(filteredLeads);
-  }, [filteredLeads, onFilterChange]);
+    onFilterChangeRef.current(filteredLeads);
+  }, [filteredLeads]);
 
   // Export to CSV function
   const exportToCSV = () => {
