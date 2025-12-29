@@ -9,6 +9,10 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+// IMPORTANT: The redirect_uri MUST match exactly what's registered in Google Cloud Console
+// Register this URL in Google Cloud Console: https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/google-calendar-auth/callback
+const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/google-calendar-auth/callback`;
+
 // Helper function to get Google credentials from app_settings
 async function getGoogleCredentials(supabase: any): Promise<{ clientId: string | null; clientSecret: string | null }> {
   const { data, error } = await supabase
@@ -41,44 +45,21 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
+    const pathname = url.pathname;
     const action = url.searchParams.get('action');
 
-    console.log('Google Calendar Auth - Action:', action);
+    console.log('Google Calendar Auth - Path:', pathname, 'Action:', action);
 
     // Get credentials from database
     const { clientId, clientSecret } = await getGoogleCredentials(supabase);
 
-    // Get authorization URL for OAuth flow
-    if (action === 'get_auth_url') {
-      if (!clientId) {
-        return new Response(JSON.stringify({ 
-          error: 'Google OAuth não configurado. Configure as credenciais em Configurações > Integrações.' 
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      const redirectUri = `${SUPABASE_URL}/functions/v1/google-calendar-auth?action=callback`;
-      const scope = 'https://www.googleapis.com/auth/calendar.events';
-      
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${clientId}` +
-        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-        `&response_type=code` +
-        `&scope=${encodeURIComponent(scope)}` +
-        `&access_type=offline` +
-        `&prompt=consent`;
-
-      return new Response(JSON.stringify({ authUrl }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Handle OAuth callback
-    if (action === 'callback') {
+    // Handle OAuth callback via path (Google redirects here)
+    // Path: /functions/v1/google-calendar-auth/callback
+    if (pathname.endsWith('/callback')) {
       const code = url.searchParams.get('code');
       const error = url.searchParams.get('error');
+
+      console.log('OAuth callback - code:', code ? 'present' : 'missing', 'error:', error);
 
       if (error) {
         console.error('OAuth error:', error);
@@ -143,9 +124,9 @@ serve(async (req) => {
         });
       }
 
-      const redirectUri = `${SUPABASE_URL}/functions/v1/google-calendar-auth?action=callback`;
+      // Exchange code for tokens - MUST use exact same redirect_uri
+      console.log('Exchanging code for tokens with redirect_uri:', REDIRECT_URI);
       
-      // Exchange code for tokens
       const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -153,13 +134,13 @@ serve(async (req) => {
           code,
           client_id: clientId,
           client_secret: clientSecret,
-          redirect_uri: redirectUri,
+          redirect_uri: REDIRECT_URI,
           grant_type: 'authorization_code',
         }),
       });
 
       const tokens = await tokenResponse.json();
-      console.log('Token exchange result:', tokenResponse.ok ? 'success' : 'failed');
+      console.log('Token exchange result:', tokenResponse.ok ? 'success' : 'failed', tokens.error || '');
 
       if (!tokenResponse.ok) {
         console.error('Token exchange error:', tokens);
@@ -168,7 +149,7 @@ serve(async (req) => {
   <head><meta charset="utf-8"><title>Erro</title></head>
   <body>
     <script>
-      window.opener?.postMessage({ type: 'google-oauth-error', error: 'Falha ao obter tokens' }, '*');
+      window.opener?.postMessage({ type: 'google-oauth-error', error: 'Falha ao obter tokens: ${tokens.error_description || tokens.error || 'unknown'}' }, '*');
       setTimeout(function() { window.close(); }, 1000);
     </script>
     <p>Falha ao obter tokens.</p>
@@ -226,6 +207,34 @@ serve(async (req) => {
           'Content-Type': 'text/html; charset=utf-8',
           'Cache-Control': 'no-store',
         },
+      });
+    }
+
+    // Get authorization URL for OAuth flow
+    if (action === 'get_auth_url') {
+      if (!clientId) {
+        return new Response(JSON.stringify({ 
+          error: 'Google OAuth não configurado. Configure as credenciais em Configurações > Integrações.' 
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const scope = 'https://www.googleapis.com/auth/calendar.events';
+      
+      console.log('Generating auth URL with redirect_uri:', REDIRECT_URI);
+      
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${clientId}` +
+        `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
+        `&response_type=code` +
+        `&scope=${encodeURIComponent(scope)}` +
+        `&access_type=offline` +
+        `&prompt=consent`;
+
+      return new Response(JSON.stringify({ authUrl, redirect_uri: REDIRECT_URI }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
