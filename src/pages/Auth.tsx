@@ -331,10 +331,36 @@ export default function Auth() {
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? 'Criando conta...' : 'Criar Conta'}
-                </Button>
+              </Button>
               </form>
             </TabsContent>
           </Tabs>
+
+          {/* Links obrigatórios para verificação Google */}
+          <div className="mt-6 pt-4 border-t border-border/50 text-center">
+            <p className="text-xs text-muted-foreground mb-2">
+              Ao continuar, você concorda com nossos termos
+            </p>
+            <div className="flex justify-center gap-4 text-xs">
+              <a 
+                href="/politica-privacidade" 
+                className="text-primary hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Política de Privacidade
+              </a>
+              <span className="text-muted-foreground">•</span>
+              <a 
+                href="/termos-servico" 
+                className="text-primary hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Termos de Serviço
+              </a>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
