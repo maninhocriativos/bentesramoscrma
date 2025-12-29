@@ -10,6 +10,11 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+// IMPORTANT: The redirect_uri MUST match exactly what's registered in Google Cloud Console
+// This unified OAuth function uses path-based callback
+// Register this URL in Google Cloud Console: https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/google-oauth/callback
+const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/google-oauth/callback`;
+
 // Helper function to get Google credentials from app_settings
 async function getGoogleCredentials(supabase: any): Promise<{ clientId: string | null; clientSecret: string | null }> {
   const { data, error } = await supabase
@@ -72,67 +77,24 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
+    const pathname = url.pathname;
     const action = url.searchParams.get('action');
     const service = url.searchParams.get('service'); // 'drive' or 'calendar'
 
-    console.log('Google OAuth - Action:', action, 'Service:', service);
+    console.log('Google OAuth - Path:', pathname, 'Action:', action, 'Service:', service);
 
     // Get credentials from database
     const { clientId, clientSecret } = await getGoogleCredentials(supabase);
     const flags = await getIntegrationFlags(supabase);
 
-    // GET: Return authorization URL
-    if (action === 'get_auth_url') {
-      if (!clientId) {
-        return new Response(JSON.stringify({ 
-          error: 'Google OAuth não configurado. Configure as credenciais em Configurações > Integrações.' 
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      // Build scopes dynamically based on enabled services
-      const scopes: string[] = [];
-      
-      if (flags.driveEnabled || service === 'drive') {
-        scopes.push('https://www.googleapis.com/auth/drive.file');
-        scopes.push('https://www.googleapis.com/auth/drive.readonly');
-      }
-      
-      if (flags.calendarEnabled || service === 'calendar') {
-        scopes.push('https://www.googleapis.com/auth/calendar.events');
-      }
-
-      // Always include basic scopes
-      if (scopes.length === 0) {
-        scopes.push('https://www.googleapis.com/auth/drive.file');
-        scopes.push('https://www.googleapis.com/auth/calendar.events');
-      }
-
-      const redirectUri = `${SUPABASE_URL}/functions/v1/google-oauth?action=callback&service=${service || 'both'}`;
-      
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${clientId}` +
-        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-        `&response_type=code` +
-        `&scope=${encodeURIComponent(scopes.join(' '))}` +
-        `&access_type=offline` +
-        `&prompt=consent` +
-        `&include_granted_scopes=true`;
-
-      console.log('Generated auth URL with scopes:', scopes.join(' '));
-
-      return new Response(JSON.stringify({ authUrl, scopes }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Handle OAuth callback
-    if (action === 'callback') {
+    // Handle OAuth callback via path (Google redirects here)
+    // Path: /functions/v1/google-oauth/callback
+    if (pathname.endsWith('/callback')) {
       const code = url.searchParams.get('code');
       const error = url.searchParams.get('error');
-      const callbackService = url.searchParams.get('service') || 'both';
+      const state = url.searchParams.get('state'); // We use state to pass service info
+
+      console.log('OAuth callback - code:', code ? 'present' : 'missing', 'error:', error, 'state:', state);
 
       if (error) {
         console.error('OAuth error:', error);
@@ -197,9 +159,9 @@ serve(async (req) => {
         });
       }
 
-      const redirectUri = `${SUPABASE_URL}/functions/v1/google-oauth?action=callback&service=${callbackService}`;
+      // Exchange code for tokens - MUST use exact same redirect_uri
+      console.log('Exchanging code for tokens with redirect_uri:', REDIRECT_URI);
       
-      // Exchange code for tokens
       const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -207,13 +169,13 @@ serve(async (req) => {
           code,
           client_id: clientId,
           client_secret: clientSecret,
-          redirect_uri: redirectUri,
+          redirect_uri: REDIRECT_URI,
           grant_type: 'authorization_code',
         }),
       });
 
       const tokens = await tokenResponse.json();
-      console.log('Token exchange result:', tokenResponse.ok ? 'success' : 'failed');
+      console.log('Token exchange result:', tokenResponse.ok ? 'success' : 'failed', tokens.error || '');
 
       if (!tokenResponse.ok) {
         console.error('Token exchange error:', tokens);
@@ -222,7 +184,7 @@ serve(async (req) => {
   <head><meta charset="utf-8"><title>Erro</title></head>
   <body>
     <script>
-      window.opener?.postMessage({ type: 'google-oauth-error', error: 'Falha ao obter tokens' }, '*');
+      window.opener?.postMessage({ type: 'google-oauth-error', error: 'Falha ao obter tokens: ${tokens.error_description || tokens.error || 'unknown'}' }, '*');
       setTimeout(function() { window.close(); }, 1000);
     </script>
     <p>Falha ao obter tokens. Esta janela pode ser fechada.</p>
@@ -235,13 +197,6 @@ serve(async (req) => {
           },
         });
       }
-
-      // Determine message type based on service
-      const messageType = callbackService === 'drive' 
-        ? 'google-drive-oauth-success' 
-        : callbackService === 'calendar' 
-          ? 'google-oauth-success' 
-          : 'google-oauth-success';
 
       const successHtml = `<!DOCTYPE html>
 <html>
@@ -295,7 +250,53 @@ serve(async (req) => {
       });
     }
 
-    // POST: Refresh token
+    // GET: Return authorization URL
+    if (action === 'get_auth_url') {
+      if (!clientId) {
+        return new Response(JSON.stringify({ 
+          error: 'Google OAuth não configurado. Configure as credenciais em Configurações > Integrações.' 
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Build scopes dynamically based on enabled services
+      const scopes: string[] = [];
+      
+      if (flags.driveEnabled || service === 'drive') {
+        scopes.push('https://www.googleapis.com/auth/drive.file');
+        scopes.push('https://www.googleapis.com/auth/drive.readonly');
+      }
+      
+      if (flags.calendarEnabled || service === 'calendar') {
+        scopes.push('https://www.googleapis.com/auth/calendar.events');
+      }
+
+      // Always include basic scopes if nothing selected
+      if (scopes.length === 0) {
+        scopes.push('https://www.googleapis.com/auth/drive.file');
+        scopes.push('https://www.googleapis.com/auth/calendar.events');
+      }
+
+      console.log('Generating auth URL with redirect_uri:', REDIRECT_URI, 'scopes:', scopes.join(' '));
+      
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${clientId}` +
+        `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
+        `&response_type=code` +
+        `&scope=${encodeURIComponent(scopes.join(' '))}` +
+        `&access_type=offline` +
+        `&prompt=consent` +
+        `&include_granted_scopes=true` +
+        `&state=${service || 'both'}`;
+
+      return new Response(JSON.stringify({ authUrl, redirect_uri: REDIRECT_URI, scopes }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // POST: Refresh token or get status
     if (req.method === 'POST') {
       const body = await req.json();
       
