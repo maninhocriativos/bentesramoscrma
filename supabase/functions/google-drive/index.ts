@@ -7,6 +7,13 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
+// Force HTML rendering in OAuth popup windows (some browsers/proxies behave better with canonical casing)
+const htmlHeaders = {
+  ...corsHeaders,
+  'Content-Type': 'text/html; charset=utf-8',
+  'Cache-Control': 'no-store',
+};
+
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -64,7 +71,8 @@ serve(async (req) => {
 
       if (error) {
         console.error('OAuth error:', error);
-        return new Response(`<!DOCTYPE html>
+        return new Response(
+          `<!DOCTYPE html>
 <html>
   <head><meta charset="utf-8"><title>Erro</title></head>
   <body>
@@ -74,17 +82,14 @@ serve(async (req) => {
     </script>
     <p>Erro na autenticação. Esta janela pode ser fechada.</p>
   </body>
-</html>`, {
-          headers: {
-            ...corsHeaders,
-            'content-type': 'text/html; charset=utf-8',
-            'cache-control': 'no-store',
-          },
-        });
+</html>`,
+          { headers: htmlHeaders },
+        );
       }
 
       if (!code) {
-        return new Response(`<!DOCTYPE html>
+        return new Response(
+          `<!DOCTYPE html>
 <html>
   <head><meta charset="utf-8"><title>Erro</title></head>
   <body>
@@ -94,18 +99,14 @@ serve(async (req) => {
     </script>
     <p>Código de autorização não encontrado. Esta janela pode ser fechada.</p>
   </body>
-</html>`, {
-          status: 400,
-          headers: {
-            ...corsHeaders,
-            'content-type': 'text/html; charset=utf-8',
-            'cache-control': 'no-store',
-          },
-        });
+</html>`,
+          { status: 400, headers: htmlHeaders },
+        );
       }
 
       if (!clientId || !clientSecret) {
-        return new Response(`<!DOCTYPE html>
+        return new Response(
+          `<!DOCTYPE html>
 <html>
   <head><meta charset="utf-8"><title>Erro</title></head>
   <body>
@@ -115,19 +116,14 @@ serve(async (req) => {
     </script>
     <p>Credenciais não configuradas. Esta janela pode ser fechada.</p>
   </body>
-</html>`, {
-          status: 400,
-          headers: {
-            ...corsHeaders,
-            'content-type': 'text/html; charset=utf-8',
-            'cache-control': 'no-store',
-          },
-        });
+</html>`,
+          { status: 400, headers: htmlHeaders },
+        );
       }
 
       // Exchange code for tokens - MUST use exact same redirect_uri
       console.log('Exchanging code for tokens with redirect_uri:', REDIRECT_URI);
-      
+
       const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -145,7 +141,8 @@ serve(async (req) => {
 
       if (!tokenResponse.ok) {
         console.error('Token exchange error:', tokens);
-        return new Response(`<!DOCTYPE html>
+        return new Response(
+          `<!DOCTYPE html>
 <html>
   <head><meta charset="utf-8"><title>Erro</title></head>
   <body>
@@ -155,13 +152,9 @@ serve(async (req) => {
     </script>
     <p>Falha ao obter tokens. Esta janela pode ser fechada.</p>
   </body>
-</html>`, {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'no-store',
-          },
-        });
+</html>`,
+          { status: 400, headers: htmlHeaders },
+        );
       }
 
       const successHtml = `<!DOCTYPE html>
@@ -203,11 +196,7 @@ serve(async (req) => {
 
       return new Response(successHtml, {
         status: 200,
-        headers: {
-          ...corsHeaders,
-          'content-type': 'text/html; charset=utf-8',
-          'cache-control': 'no-store',
-        },
+        headers: htmlHeaders,
       });
     }
 
