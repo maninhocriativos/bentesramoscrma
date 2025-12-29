@@ -58,7 +58,7 @@ export default function LeadsPage() {
         newItemLabel="Novo Lead"
       />
       
-      <div className="flex-1 flex flex-col px-4 md:px-6 lg:px-8 py-4 animate-fade-in overflow-hidden">
+      <div className="flex-1 flex flex-col px-4 md:px-6 lg:px-8 py-4 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -68,18 +68,21 @@ export default function LeadsPage() {
             {/* Filters */}
             <LeadFilters leads={leads} onFilterChange={handleFilterChange} />
             
-            {/* Kanban Area - 60% */}
-            <div className="flex-[6] min-h-0 overflow-hidden">
-              <KanbanBoard leads={filteredLeads} onLeadClick={handleLeadClick} />
-            </div>
-            
-            {/* Intelligence Panels - 40% */}
-            <div className="flex-[4] min-h-[240px] mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <RecentActivities leads={leads} />
-              <QuickTasks 
-                compromissos={compromissos} 
-                onNewTask={handleNewTask}
-              />
+            {/* Main Content Grid */}
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 min-h-0 overflow-hidden">
+              {/* Kanban Area */}
+              <div className="min-h-0 overflow-hidden">
+                <KanbanBoard leads={filteredLeads} onLeadClick={handleLeadClick} />
+              </div>
+              
+              {/* Sidebar - Intelligence Panels */}
+              <div className="flex flex-col gap-4 lg:overflow-y-auto lg:max-h-[calc(100vh-200px)]">
+                <RecentActivities leads={leads} />
+                <QuickTasks 
+                  compromissos={compromissos} 
+                  onNewTask={handleNewTask}
+                />
+              </div>
             </div>
           </>
         )}
