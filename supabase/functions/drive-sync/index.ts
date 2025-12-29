@@ -200,8 +200,65 @@ async function downloadFromStorage(bucket: string, path: string): Promise<{ data
   return { data: arrayBuffer, mimeType: data.type };
 }
 
+// Create a sync job
+async function createJob(userId: string, direction: string, kind: string, documentId?: string, driveFileId?: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('drive_sync_jobs')
+    .insert({
+      user_id: userId,
+      direction,
+      kind,
+      document_id: documentId || null,
+      drive_file_id: driveFileId || null,
+      status: 'pending',
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    console.error('Error creating job:', error);
+    return null;
+  }
+  return data.id;
+}
+
+// Update job status
+async function updateJob(jobId: string, status: string, lastError?: string) {
+  const updates: Record<string, unknown> = { status };
+  if (status === 'processing') {
+    updates.started_at = new Date().toISOString();
+  }
+  if (status === 'success' || status === 'error') {
+    updates.finished_at = new Date().toISOString();
+  }
+  if (lastError !== undefined) {
+    updates.last_error = lastError;
+  }
+
+  await supabase
+    .from('drive_sync_jobs')
+    .update(updates)
+    .eq('id', jobId);
+}
+
+// Increment job attempts
+async function incrementJobAttempts(jobId: string) {
+  // Get current attempts first
+  const { data } = await supabase
+    .from('drive_sync_jobs')
+    .select('attempts')
+    .eq('id', jobId)
+    .single();
+
+  const newAttempts = (data?.attempts || 0) + 1;
+  await supabase
+    .from('drive_sync_jobs')
+    .update({ attempts: newAttempts })
+    .eq('id', jobId);
+}
+
 // Sync a single document to Google Drive
-async function syncDocumentToDrive(docId: string, userId: string): Promise<boolean> {
+async function syncDocumentToDrive(docId: string, userId: string, jobId?: string): Promise<boolean> {
   console.log(`Syncing document ${docId} for user ${userId}`);
   
   // Get document info
@@ -213,28 +270,37 @@ async function syncDocumentToDrive(docId: string, userId: string): Promise<boole
 
   if (docError || !doc) {
     console.error('Document not found:', docError);
+    if (jobId) await updateJob(jobId, 'error', 'Documento não encontrado');
     return false;
   }
 
   // Skip if already synced
   if (doc.drive_file_id && doc.sync_status === 'synced') {
     console.log('Document already synced');
+    if (jobId) await updateJob(jobId, 'success');
     return true;
   }
 
   // Update status to syncing
   await supabase
     .from('documentos')
-    .update({ sync_status: 'syncing' })
+    .update({ sync_status: 'syncing', sync_last_attempt_at: new Date().toISOString() })
     .eq('id', docId);
+
+  if (jobId) {
+    await updateJob(jobId, 'processing');
+    await incrementJobAttempts(jobId);
+  }
 
   const accessToken = await getValidAccessToken(userId);
   if (!accessToken) {
-    console.error('No valid access token');
+    const errMsg = 'Token de acesso inválido';
+    console.error(errMsg);
     await supabase
       .from('documentos')
-      .update({ sync_status: 'error' })
+      .update({ sync_status: 'error', sync_last_error: errMsg, sync_retry_count: (doc.sync_retry_count || 0) + 1 })
       .eq('id', docId);
+    if (jobId) await updateJob(jobId, 'error', errMsg);
     return false;
   }
 
@@ -242,12 +308,12 @@ async function syncDocumentToDrive(docId: string, userId: string): Promise<boole
     // Get base folder
     const baseFolderId = await findOrCreateBaseFolder(accessToken);
     if (!baseFolderId) {
-      throw new Error('Could not create base folder');
+      throw new Error('Não foi possível criar pasta base');
     }
 
     // Determine target folder
     let targetFolderId = baseFolderId;
-    const clientName = (doc.leads_juridicos as any)?.nome;
+    const clientName = (doc.leads_juridicos as Record<string, unknown>)?.nome as string | undefined;
     
     if (clientName) {
       const clientFolderId = await findOrCreateClientFolder(accessToken, baseFolderId, clientName);
@@ -257,10 +323,8 @@ async function syncDocumentToDrive(docId: string, userId: string): Promise<boole
     }
 
     // Download from Supabase Storage
-    // arquivo_url might be a full URL or just a path
     let storagePath = doc.arquivo_url;
     if (storagePath.includes('/storage/v1/object/')) {
-      // Extract path from full URL
       const parts = storagePath.split('/documentos/');
       if (parts.length > 1) {
         storagePath = parts[1];
@@ -269,7 +333,7 @@ async function syncDocumentToDrive(docId: string, userId: string): Promise<boole
 
     const fileData = await downloadFromStorage('documentos', storagePath);
     if (!fileData) {
-      throw new Error('Could not download file from storage');
+      throw new Error('Não foi possível baixar arquivo do storage');
     }
 
     // Upload to Google Drive
@@ -282,7 +346,7 @@ async function syncDocumentToDrive(docId: string, userId: string): Promise<boole
     );
 
     if (!driveResult) {
-      throw new Error('Could not upload to Google Drive');
+      throw new Error('Não foi possível fazer upload para o Drive');
     }
 
     // Update document with Drive info
@@ -292,17 +356,25 @@ async function syncDocumentToDrive(docId: string, userId: string): Promise<boole
         drive_file_id: driveResult.id,
         drive_synced_at: new Date().toISOString(),
         sync_status: 'synced',
+        sync_last_error: null,
       })
       .eq('id', docId);
 
+    if (jobId) await updateJob(jobId, 'success');
     console.log(`Document ${docId} synced successfully to Drive`);
     return true;
   } catch (error) {
-    console.error('Sync error:', error);
+    const errMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+    console.error('Sync error:', errMsg);
     await supabase
       .from('documentos')
-      .update({ sync_status: 'error' })
+      .update({ 
+        sync_status: 'error', 
+        sync_last_error: errMsg,
+        sync_retry_count: (doc.sync_retry_count || 0) + 1 
+      })
       .eq('id', docId);
+    if (jobId) await updateJob(jobId, 'error', errMsg);
     return false;
   }
 }
@@ -311,16 +383,36 @@ async function syncDocumentToDrive(docId: string, userId: string): Promise<boole
 async function importFromDrive(
   userId: string,
   driveFileId: string,
-  clienteId?: string
+  clienteId?: string,
+  jobId?: string
 ): Promise<{ success: boolean; documentId?: string }> {
   console.log(`Importing Drive file ${driveFileId} for user ${userId}`);
 
+  if (jobId) {
+    await updateJob(jobId, 'processing');
+    await incrementJobAttempts(jobId);
+  }
+
   const accessToken = await getValidAccessToken(userId);
   if (!accessToken) {
+    if (jobId) await updateJob(jobId, 'error', 'Token de acesso inválido');
     return { success: false };
   }
 
   try {
+    // Check if already imported
+    const { data: existing } = await supabase
+      .from('documentos')
+      .select('id')
+      .eq('drive_file_id', driveFileId)
+      .maybeSingle();
+
+    if (existing) {
+      console.log('File already imported:', existing.id);
+      if (jobId) await updateJob(jobId, 'success');
+      return { success: true, documentId: existing.id };
+    }
+
     // Get file metadata
     const metaResponse = await fetch(
       `https://www.googleapis.com/drive/v3/files/${driveFileId}?fields=id,name,mimeType,size`,
@@ -330,8 +422,7 @@ async function importFromDrive(
     const metadata = await metaResponse.json();
     
     if (!metaResponse.ok) {
-      console.error('Error getting Drive file metadata:', metadata);
-      return { success: false };
+      throw new Error(metadata.error?.message || 'Erro ao obter metadados');
     }
 
     // Download file content
@@ -341,8 +432,7 @@ async function importFromDrive(
     );
 
     if (!contentResponse.ok) {
-      console.error('Error downloading Drive file');
-      return { success: false };
+      throw new Error('Erro ao baixar arquivo do Drive');
     }
 
     const arrayBuffer = await contentResponse.arrayBuffer();
@@ -358,8 +448,7 @@ async function importFromDrive(
       });
 
     if (uploadError) {
-      console.error('Error uploading to storage:', uploadError);
-      return { success: false };
+      throw new Error(uploadError.message);
     }
 
     // Create document record
@@ -381,16 +470,84 @@ async function importFromDrive(
       .single();
 
     if (insertError) {
-      console.error('Error creating document record:', insertError);
-      return { success: false };
+      throw new Error(insertError.message);
     }
 
+    if (jobId) await updateJob(jobId, 'success');
     console.log(`Drive file imported successfully: ${newDoc.id}`);
     return { success: true, documentId: newDoc.id };
   } catch (error) {
-    console.error('Import error:', error);
+    const errMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+    console.error('Import error:', errMsg);
+    if (jobId) await updateJob(jobId, 'error', errMsg);
     return { success: false };
   }
+}
+
+// Scan Google Drive for files and import them
+async function scanDrive(userId: string): Promise<{ found: number; imported: number }> {
+  console.log(`Scanning Drive for user ${userId}`);
+
+  const accessToken = await getValidAccessToken(userId);
+  if (!accessToken) {
+    console.error('No valid access token for scan');
+    return { found: 0, imported: 0 };
+  }
+
+  // Find base folder
+  const baseFolderId = await findOrCreateBaseFolder(accessToken);
+  if (!baseFolderId) {
+    console.error('Could not find/create base folder');
+    return { found: 0, imported: 0 };
+  }
+
+  // List all files in the base folder and subfolders
+  const allFiles: Array<{ id: string; name: string; mimeType: string }> = [];
+
+  async function listFilesInFolder(folderId: string) {
+    const searchQuery = `'${folderId}' in parents and trashed = false`;
+    const response = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(searchQuery)}&fields=files(id,name,mimeType)&pageSize=100`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+
+    const data = await response.json();
+    
+    if (data.files) {
+      for (const file of data.files) {
+        if (file.mimeType === 'application/vnd.google-apps.folder') {
+          // Recurse into subfolder
+          await listFilesInFolder(file.id);
+        } else {
+          allFiles.push(file);
+        }
+      }
+    }
+  }
+
+  await listFilesInFolder(baseFolderId);
+  console.log(`Found ${allFiles.length} files in Drive`);
+
+  // Check which files are not yet imported
+  let imported = 0;
+  for (const file of allFiles) {
+    const { data: existing } = await supabase
+      .from('documentos')
+      .select('id')
+      .eq('drive_file_id', file.id)
+      .maybeSingle();
+
+    if (!existing) {
+      // Create import job
+      const jobId = await createJob(userId, 'pull', 'import_from_drive', undefined, file.id);
+      if (jobId) {
+        const result = await importFromDrive(userId, file.id, undefined, jobId);
+        if (result.success) imported++;
+      }
+    }
+  }
+
+  return { found: allFiles.length, imported };
 }
 
 // Sync all pending documents for a user
@@ -410,7 +567,9 @@ async function syncAllPending(userId: string): Promise<{ synced: number; errors:
   let errors = 0;
 
   for (const doc of pendingDocs) {
-    const success = await syncDocumentToDrive(doc.id, userId);
+    // Create job for tracking
+    const jobId = await createJob(userId, 'push', 'sync_to_drive', doc.id);
+    const success = await syncDocumentToDrive(doc.id, userId, jobId || undefined);
     if (success) {
       synced++;
     } else {
@@ -421,6 +580,42 @@ async function syncAllPending(userId: string): Promise<{ synced: number; errors:
   return { synced, errors };
 }
 
+// Retry a specific job
+async function retryJob(userId: string, jobId: string): Promise<boolean> {
+  const { data: job, error } = await supabase
+    .from('drive_sync_jobs')
+    .select('*')
+    .eq('id', jobId)
+    .eq('user_id', userId)
+    .single();
+
+  if (error || !job) {
+    console.error('Job not found:', error);
+    return false;
+  }
+
+  if (job.status !== 'error' || job.attempts >= job.max_attempts) {
+    console.log('Job cannot be retried');
+    return false;
+  }
+
+  // Reset job status
+  await supabase
+    .from('drive_sync_jobs')
+    .update({ status: 'pending', last_error: null })
+    .eq('id', jobId);
+
+  // Execute based on kind
+  if (job.kind === 'sync_to_drive' && job.document_id) {
+    return await syncDocumentToDrive(job.document_id, userId, jobId);
+  } else if (job.kind === 'import_from_drive' && job.drive_file_id) {
+    const result = await importFromDrive(userId, job.drive_file_id, undefined, jobId);
+    return result.success;
+  }
+
+  return false;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -428,7 +623,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { action, user_id, document_id, drive_file_id, cliente_id } = body;
+    const { action, user_id, document_id, drive_file_id, cliente_id, job_id } = body;
 
     console.log('Drive Sync - Action:', action, 'User:', user_id);
 
@@ -448,7 +643,8 @@ Deno.serve(async (req) => {
         });
       }
 
-      const success = await syncDocumentToDrive(document_id, user_id);
+      const jobId = await createJob(user_id, 'push', 'sync_to_drive', document_id);
+      const success = await syncDocumentToDrive(document_id, user_id, jobId || undefined);
       return new Response(JSON.stringify({ success }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -463,7 +659,16 @@ Deno.serve(async (req) => {
         });
       }
 
-      const result = await importFromDrive(user_id, drive_file_id, cliente_id);
+      const jobId = await createJob(user_id, 'pull', 'import_from_drive', undefined, drive_file_id);
+      const result = await importFromDrive(user_id, drive_file_id, cliente_id, jobId || undefined);
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Scan Drive for new files
+    if (action === 'scan_drive') {
+      const result = await scanDrive(user_id);
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -473,6 +678,21 @@ Deno.serve(async (req) => {
     if (action === 'sync_all') {
       const result = await syncAllPending(user_id);
       return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Retry a job
+    if (action === 'retry_job') {
+      if (!job_id) {
+        return new Response(JSON.stringify({ error: 'job_id é obrigatório' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const success = await retryJob(user_id, job_id);
+      return new Response(JSON.stringify({ success }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -505,14 +725,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ error: 'Ação inválida' }), {
+    return new Response(JSON.stringify({ error: 'Ação não reconhecida' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error: unknown) {
+  } catch (error) {
     console.error('Drive sync error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Erro interno';
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: 'Erro interno' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

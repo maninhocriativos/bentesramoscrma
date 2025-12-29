@@ -153,6 +153,9 @@ export type Database = {
           id: string
           nome: string
           processo_id: string | null
+          sync_last_attempt_at: string | null
+          sync_last_error: string | null
+          sync_retry_count: number
           sync_status: string | null
           tipo: string
           updated_at: string
@@ -170,6 +173,9 @@ export type Database = {
           id?: string
           nome: string
           processo_id?: string | null
+          sync_last_attempt_at?: string | null
+          sync_last_error?: string | null
+          sync_retry_count?: number
           sync_status?: string | null
           tipo: string
           updated_at?: string
@@ -187,6 +193,9 @@ export type Database = {
           id?: string
           nome?: string
           processo_id?: string | null
+          sync_last_attempt_at?: string | null
+          sync_last_error?: string | null
+          sync_retry_count?: number
           sync_status?: string | null
           tipo?: string
           updated_at?: string
@@ -205,6 +214,65 @@ export type Database = {
             columns: ["processo_id"]
             isOneToOne: false
             referencedRelation: "processos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      drive_sync_jobs: {
+        Row: {
+          attempts: number
+          created_at: string
+          direction: string
+          document_id: string | null
+          drive_file_id: string | null
+          finished_at: string | null
+          id: string
+          kind: string
+          last_error: string | null
+          max_attempts: number
+          started_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          direction: string
+          document_id?: string | null
+          drive_file_id?: string | null
+          finished_at?: string | null
+          id?: string
+          kind: string
+          last_error?: string | null
+          max_attempts?: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          direction?: string
+          document_id?: string | null
+          drive_file_id?: string | null
+          finished_at?: string | null
+          id?: string
+          kind?: string
+          last_error?: string | null
+          max_attempts?: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drive_sync_jobs_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documentos"
             referencedColumns: ["id"]
           },
         ]

@@ -140,24 +140,51 @@ serve(async (req) => {
         });
       }
 
-      return new Response(`<!DOCTYPE html>
+      // Use a proper HTML page with inline script that sends message and auto-closes
+      const successHtml = `<!DOCTYPE html>
 <html>
-  <head><meta charset="utf-8"><title>Sucesso</title></head>
+  <head>
+    <meta charset="utf-8">
+    <title>Google Drive Conectado</title>
+    <style>
+      body { font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; }
+      .container { text-align: center; padding: 2rem; }
+      .icon { font-size: 4rem; margin-bottom: 1rem; }
+      h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+      p { color: #94a3b8; font-size: 0.875rem; }
+    </style>
+  </head>
   <body>
+    <div class="container">
+      <div class="icon">✓</div>
+      <h1>Google Drive Conectado!</h1>
+      <p>Esta janela será fechada automaticamente...</p>
+    </div>
     <script>
-      window.opener?.postMessage({
-        type: 'google-drive-oauth-success',
-        tokens: ${JSON.stringify(tokens)}
-      }, '*');
-      window.close();
+      (function() {
+        try {
+          if (window.opener) {
+            window.opener.postMessage({
+              type: 'google-drive-oauth-success',
+              tokens: ${JSON.stringify(tokens)}
+            }, '*');
+          }
+        } catch (e) {
+          console.error('PostMessage error:', e);
+        }
+        setTimeout(function() { window.close(); }, 1500);
+      })();
     </script>
-    <p>Google Drive conectado com sucesso! Esta janela pode ser fechada.</p>
   </body>
-</html>`, {
+</html>`;
+
+      return new Response(successHtml, {
+        status: 200,
         headers: {
-          ...corsHeaders,
           'Content-Type': 'text/html; charset=utf-8',
-          'Cache-Control': 'no-store',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'Pragma': 'no-cache',
+          'X-Content-Type-Options': 'nosniff',
         },
       });
     }
