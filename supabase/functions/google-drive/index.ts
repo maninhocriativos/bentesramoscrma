@@ -181,10 +181,9 @@ serve(async (req) => {
       return new Response(successHtml, {
         status: 200,
         headers: {
+          ...corsHeaders,
           'Content-Type': 'text/html; charset=utf-8',
-          'Cache-Control': 'no-store, no-cache, must-revalidate',
-          'Pragma': 'no-cache',
-          'X-Content-Type-Options': 'nosniff',
+          'Cache-Control': 'no-store',
         },
       });
     }
