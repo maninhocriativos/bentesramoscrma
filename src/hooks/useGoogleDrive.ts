@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
@@ -26,6 +26,7 @@ export function useGoogleDrive() {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isOperating, setIsOperating] = useState(false);
+  const popupRef = useRef<Window | null>(null);
 
   // Check if user has connected Google Drive
   const checkConnection = useCallback(async () => {
@@ -80,12 +81,16 @@ export function useGoogleDrive() {
 
           setIsConnected(true);
           toast.success('Google Drive conectado com sucesso!');
+          popupRef.current?.close();
+          popupRef.current = null;
         } catch (error) {
           console.error('Error saving Google Drive tokens:', error);
           toast.error('Erro ao salvar conexão com Google Drive');
         }
       } else if (event.data?.type === 'google-drive-oauth-error') {
         toast.error(`Erro na autenticação: ${event.data.error}`);
+        popupRef.current?.close();
+        popupRef.current = null;
       }
     };
 
@@ -119,7 +124,7 @@ export function useGoogleDrive() {
         const left = window.screen.width / 2 - width / 2;
         const top = window.screen.height / 2 - height / 2;
         
-        window.open(
+        popupRef.current = window.open(
           result.authUrl,
           'Google Drive Auth',
           `width=${width},height=${height},left=${left},top=${top}`

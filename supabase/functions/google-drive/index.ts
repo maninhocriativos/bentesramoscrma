@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
 const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID');
@@ -74,8 +75,8 @@ serve(async (req) => {
 </html>`, {
           headers: {
             ...corsHeaders,
-            'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'no-store',
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
           },
         });
       }
@@ -95,8 +96,8 @@ serve(async (req) => {
           status: 400,
           headers: {
             ...corsHeaders,
-            'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'no-store',
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
           },
         });
       }
@@ -178,12 +179,14 @@ serve(async (req) => {
   </body>
 </html>`;
 
+      console.log('OAuth callback success: returning HTML close page');
+
       return new Response(successHtml, {
         status: 200,
         headers: {
           ...corsHeaders,
-          'Content-Type': 'text/html; charset=utf-8',
-          'Cache-Control': 'no-store',
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'no-store',
         },
       });
     }
