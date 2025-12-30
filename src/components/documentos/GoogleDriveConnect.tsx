@@ -5,6 +5,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { useGoogleDrive } from '@/hooks/useGoogleDrive';
+import { useAuth } from '@/hooks/useAuth';
 import { Loader2, FolderOpen, Link2Off, CloudUpload } from 'lucide-react';
 
 interface GoogleDriveConnectProps {
@@ -12,6 +13,7 @@ interface GoogleDriveConnectProps {
 }
 
 export function GoogleDriveConnect({ onOpenDriveModal }: GoogleDriveConnectProps) {
+  const { user } = useAuth();
   const {
     isConnected,
     isLoading,
@@ -28,6 +30,8 @@ export function GoogleDriveConnect({ onOpenDriveModal }: GoogleDriveConnectProps
       </Button>
     );
   }
+
+  const canOperate = !!user;
 
   return (
     <Popover>
@@ -49,9 +53,11 @@ export function GoogleDriveConnect({ onOpenDriveModal }: GoogleDriveConnectProps
           <div>
             <h4 className="font-medium mb-1">Google Drive</h4>
             <p className="text-sm text-muted-foreground">
-              {isConnected
-                ? 'Conectado! Acesse arquivos e pastas de clientes.'
-                : 'Conecte para sincronizar documentos com o Drive.'}
+              {!canOperate
+                ? 'Faça login para conectar e acessar seus arquivos.'
+                : isConnected
+                  ? 'Conectado! Acesse arquivos e pastas de clientes.'
+                  : 'Conecte para sincronizar documentos com o Drive.'}
             </p>
           </div>
 
@@ -79,7 +85,7 @@ export function GoogleDriveConnect({ onOpenDriveModal }: GoogleDriveConnectProps
               </Button>
             </div>
           ) : (
-            <Button onClick={connect} className="w-full gap-2">
+            <Button onClick={connect} className="w-full gap-2" disabled={!canOperate}>
               <FolderOpen className="h-4 w-4" />
               Conectar Google Drive
             </Button>

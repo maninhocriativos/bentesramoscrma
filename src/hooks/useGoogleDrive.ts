@@ -60,22 +60,32 @@ export function useGoogleDrive() {
   // Handle OAuth callback message
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
-      if (event.data?.type === 'google-drive-oauth-success' && user) {
+      if (event.data?.type === 'google-drive-oauth-success') {
+        if (!user) {
+          toast.error('Faça login no sistema para finalizar a conexão com o Google Drive');
+          popupRef.current?.close();
+          popupRef.current = null;
+          return;
+        }
+
         const tokens = event.data.tokens as GoogleDriveTokens;
-        
+
         try {
-          const expiresAt = tokens.expires_at 
+          const expiresAt = tokens.expires_at
             ? new Date(tokens.expires_at).toISOString()
             : new Date(Date.now() + 3600 * 1000).toISOString();
 
           const { error } = await (supabase as any)
             .from('google_drive_tokens')
-            .upsert({
-              user_id: user.id,
-              access_token: tokens.access_token,
-              refresh_token: tokens.refresh_token || null,
-              expires_at: expiresAt,
-            }, { onConflict: 'user_id' });
+            .upsert(
+              {
+                user_id: user.id,
+                access_token: tokens.access_token,
+                refresh_token: tokens.refresh_token || null,
+                expires_at: expiresAt,
+              },
+              { onConflict: 'user_id' }
+            );
 
           if (error) throw error;
 
@@ -100,6 +110,11 @@ export function useGoogleDrive() {
 
   // Start OAuth flow
   const connect = async () => {
+    if (!user) {
+      toast.error('Faça login para conectar o Google Drive');
+      return;
+    }
+
     try {
       const response = await fetch(
         'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/google-drive?action=get_auth_url',
@@ -110,7 +125,7 @@ export function useGoogleDrive() {
           },
         }
       );
-      
+
       const result = await response.json();
 
       if (result.error) {
@@ -123,7 +138,7 @@ export function useGoogleDrive() {
         const height = 700;
         const left = window.screen.width / 2 - width / 2;
         const top = window.screen.height / 2 - height / 2;
-        
+
         popupRef.current = window.open(
           result.authUrl,
           'Google Drive Auth',
