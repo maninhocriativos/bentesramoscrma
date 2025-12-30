@@ -6,6 +6,110 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Função para detectar automaticamente o canal baseado no payload
+function detectChannel(payload: Record<string, unknown>): string {
+  // 1. Campo explícito de canal
+  if (payload.canal) {
+    return normalizeChannel(String(payload.canal));
+  }
+  if (payload.channel) {
+    return normalizeChannel(String(payload.channel));
+  }
+
+  // 2. Verificar no subscriber
+  const subscriber = payload.subscriber as Record<string, unknown> | undefined;
+  if (subscriber) {
+    if (subscriber.source) return normalizeChannel(String(subscriber.source));
+    if (subscriber.channel) return normalizeChannel(String(subscriber.channel));
+    
+    // Detectar por campos específicos do subscriber
+    if (subscriber.ig_id || subscriber.instagram_id) return 'instagram';
+    if (subscriber.whatsapp_phone || subscriber.wa_phone) return 'whatsapp';
+    if (subscriber.messenger_id || subscriber.psid) return 'facebook';
+  }
+
+  // 3. Verificar por campos específicos de cada plataforma no payload raiz
+  // Instagram
+  if (payload.ig_id || payload.instagram_id || payload.ig_user_id) {
+    return 'instagram';
+  }
+  // WhatsApp
+  if (payload.wa_id || payload.whatsapp_id || payload['Numero Whatsapp'] || payload.whatsapp_phone) {
+    return 'whatsapp';
+  }
+  // Facebook Messenger
+  if (payload.psid || payload.messenger_id || payload.page_id) {
+    return 'facebook';
+  }
+
+  // 4. Verificar na mensagem
+  const message = payload.message as Record<string, unknown> | undefined;
+  if (message) {
+    if (message.source) return normalizeChannel(String(message.source));
+    if (message.channel) return normalizeChannel(String(message.channel));
+  }
+
+  // 5. Verificar por padrão de telefone (WhatsApp geralmente tem telefone)
+  const telefone = payload.telefone || payload.phone || payload['Numero Whatsapp'];
+  if (telefone && String(telefone).match(/^\+?\d{10,15}$/)) {
+    return 'whatsapp';
+  }
+
+  // 6. Verificar custom_fields
+  const customFields = payload.custom_fields as Record<string, unknown> | undefined;
+  if (customFields) {
+    if (customFields.channel) return normalizeChannel(String(customFields.channel));
+    if (customFields.source) return normalizeChannel(String(customFields.source));
+  }
+
+  // 7. Verificar por palavras-chave no payload inteiro
+  const payloadStr = JSON.stringify(payload).toLowerCase();
+  if (payloadStr.includes('instagram') || payloadStr.includes('"ig_')) {
+    return 'instagram';
+  }
+  if (payloadStr.includes('whatsapp') || payloadStr.includes('"wa_')) {
+    return 'whatsapp';
+  }
+  if (payloadStr.includes('messenger') || payloadStr.includes('facebook')) {
+    return 'facebook';
+  }
+
+  // Default
+  return 'facebook';
+}
+
+// Normaliza o nome do canal para formato padrão
+function normalizeChannel(channel: string): string {
+  const normalized = channel.toLowerCase().trim();
+  
+  // Instagram
+  if (normalized.includes('instagram') || normalized === 'ig') {
+    return 'instagram';
+  }
+  
+  // WhatsApp
+  if (normalized.includes('whatsapp') || normalized === 'wa' || normalized === 'waba') {
+    return 'whatsapp';
+  }
+  
+  // Telegram
+  if (normalized.includes('telegram') || normalized === 'tg') {
+    return 'telegram';
+  }
+  
+  // SMS
+  if (normalized === 'sms') {
+    return 'sms';
+  }
+  
+  // Facebook/Messenger
+  if (normalized.includes('facebook') || normalized.includes('messenger') || normalized === 'fb') {
+    return 'facebook';
+  }
+  
+  return normalized || 'facebook';
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -19,21 +123,26 @@ serve(async (req) => {
 
   try {
     const payload = await req.json();
-    console.log('ManyChat Webhook recebido:', JSON.stringify(payload, null, 2));
+    console.log('📩 ManyChat Webhook recebido:', JSON.stringify(payload, null, 2));
 
     let subscriberId: string | undefined;
     let subscriberNome: string | undefined;
+    let subscriberFoto: string | undefined;
     let telefone: string | undefined;
+    let email: string | undefined;
     let messageContent: string | undefined;
     let direcao = 'entrada';
-    let canal = 'whatsapp';
     let metadata: Record<string, unknown> = {};
 
-    // Formato customizado do usuário
+    // Detectar canal automaticamente
+    const canal = detectChannel(payload);
+    console.log('📱 Canal detectado:', canal);
+
+    // Formato customizado do usuário (Make.com)
     if (payload['Id do Manychat'] || payload['Nome do Usuário']) {
       subscriberId = payload['Id do Manychat']?.toString();
       subscriberNome = payload['Nome do Usuário'] || 'Desconhecido';
-      telefone = payload['Numero Whatsapp'];
+      telefone = payload['Numero Whatsapp'] || payload['Telefone'];
       
       if (payload['Resposta do Bot'] || payload['Direcao'] === 'saida') {
         messageContent = payload['Resposta do Bot'] || payload['Mensagem'];
@@ -47,40 +156,52 @@ serve(async (req) => {
         thread_id: payload['Thread ID'],
         formato: payload['Formato'],
         interrupcao: payload['Interrupção'],
+        source_format: 'custom_makecom',
       };
-      console.log('Formato customizado detectado, direção:', direcao);
+      console.log('📋 Formato customizado detectado, direção:', direcao);
     } 
-    // Formato padrão ManyChat
+    // Formato padrão ManyChat API
     else if (payload.subscriber) {
       const { subscriber, message, page_id, last_input_text, custom_fields } = payload;
       subscriberId = subscriber.id?.toString() || subscriber.user_id?.toString();
       subscriberNome = subscriber.name || 
         `${subscriber.first_name || ''} ${subscriber.last_name || ''}`.trim() || 
         'Desconhecido';
-      telefone = subscriber.phone || custom_fields?.phone;
+      telefone = subscriber.phone || subscriber.whatsapp_phone || custom_fields?.phone;
+      email = subscriber.email || custom_fields?.email;
+      subscriberFoto = subscriber.profile_pic || subscriber.picture || subscriber.avatar;
       messageContent = last_input_text || message?.text || message?.content;
-      canal = subscriber.source || subscriber.channel || 'facebook';
+      
       metadata = {
         page_id,
         custom_fields,
         raw_message: message,
-        subscriber_foto: subscriber.profile_pic || subscriber.picture,
-        email: subscriber.email || custom_fields?.email,
+        ig_id: subscriber.ig_id,
+        psid: subscriber.psid,
+        wa_id: subscriber.wa_id,
+        source_format: 'manychat_standard',
       };
-      console.log('Formato padrão ManyChat detectado');
+      console.log('📋 Formato padrão ManyChat detectado');
     }
-    // Formato simplificado
+    // Formato simplificado / genérico
     else {
       subscriberId = payload.subscriber_id?.toString() || payload.id?.toString() || `manual_${Date.now()}`;
       subscriberNome = payload.nome || payload.name || 'Desconhecido';
       telefone = payload.telefone || payload.phone || payload.whatsapp;
-      messageContent = payload.mensagem || payload.message || payload.pergunta;
-      metadata = { raw: payload };
-      console.log('Formato simplificado detectado');
+      email = payload.email;
+      subscriberFoto = payload.foto || payload.picture || payload.avatar;
+      messageContent = payload.mensagem || payload.message || payload.pergunta || payload.text;
+      direcao = payload.direcao || payload.direction || 'entrada';
+      
+      metadata = { 
+        raw: payload,
+        source_format: 'simplified',
+      };
+      console.log('📋 Formato simplificado detectado');
     }
 
     if (!subscriberId) {
-      console.log('Nenhum subscriber_id encontrado, gerando um');
+      console.log('⚠️ Nenhum subscriber_id encontrado, gerando um');
       subscriberId = `webhook_${Date.now()}`;
     }
 
@@ -96,7 +217,7 @@ serve(async (req) => {
     
     if (existingSubscriber?.lead_id) {
       leadId = existingSubscriber.lead_id;
-      console.log('Lead já vinculado ao subscriber:', leadId);
+      console.log('🔗 Lead já vinculado ao subscriber:', leadId);
     } else {
       // Buscar lead pelo telefone (normalizado)
       if (telefone) {
@@ -110,11 +231,26 @@ serve(async (req) => {
         
         if (leadByPhone) {
           leadId = leadByPhone.id;
-          console.log('Lead encontrado por telefone:', leadByPhone.nome, leadId);
+          console.log('📞 Lead encontrado por telefone:', leadByPhone.nome, leadId);
         }
       }
       
-      // Se não encontrou por telefone, buscar por nome
+      // Se não encontrou por telefone, buscar por email
+      if (!leadId && email) {
+        const { data: leadByEmail } = await supabase
+          .from('leads_juridicos')
+          .select('id, nome')
+          .ilike('email', email)
+          .limit(1)
+          .maybeSingle();
+        
+        if (leadByEmail) {
+          leadId = leadByEmail.id;
+          console.log('📧 Lead encontrado por email:', leadByEmail.nome, leadId);
+        }
+      }
+      
+      // Se não encontrou por email, buscar por nome
       if (!leadId && subscriberNome && subscriberNome !== 'Desconhecido') {
         const { data: leadByName } = await supabase
           .from('leads_juridicos')
@@ -125,7 +261,7 @@ serve(async (req) => {
         
         if (leadByName) {
           leadId = leadByName.id;
-          console.log('Lead encontrado por nome:', leadByName.nome, leadId);
+          console.log('👤 Lead encontrado por nome:', leadByName.nome, leadId);
         }
       }
     }
@@ -137,6 +273,8 @@ serve(async (req) => {
         subscriber_id: subscriberId,
         nome: subscriberNome,
         telefone: telefone,
+        email: email,
+        foto: subscriberFoto,
         canal: canal,
         lead_id: leadId,
         ultima_interacao: new Date().toISOString(),
@@ -148,9 +286,9 @@ serve(async (req) => {
       .single();
 
     if (subscriberError) {
-      console.error('Erro ao salvar subscriber:', subscriberError);
+      console.error('❌ Erro ao salvar subscriber:', subscriberError);
     } else {
-      console.log('Subscriber salvo/atualizado:', subscriberData);
+      console.log('✅ Subscriber salvo/atualizado:', subscriberData);
     }
 
     // Salvar mensagem se houver conteúdo
@@ -160,6 +298,7 @@ serve(async (req) => {
         .insert({
           subscriber_id: subscriberId,
           subscriber_nome: subscriberNome,
+          subscriber_foto: subscriberFoto,
           canal: canal,
           conteudo: messageContent,
           tipo: 'text',
@@ -171,9 +310,9 @@ serve(async (req) => {
         .single();
 
       if (messageError) {
-        console.error('Erro ao salvar mensagem:', messageError);
+        console.error('❌ Erro ao salvar mensagem:', messageError);
       } else {
-        console.log('Mensagem salva:', messageData);
+        console.log('✅ Mensagem salva:', messageData);
       }
     }
 
@@ -198,9 +337,9 @@ serve(async (req) => {
       });
 
     if (eventError) {
-      console.error('Erro ao registrar evento:', eventError);
+      console.error('❌ Erro ao registrar evento:', eventError);
     } else {
-      console.log('Evento registrado no system_events');
+      console.log('✅ Evento registrado no system_events');
     }
 
     // Responder com sucesso
@@ -210,6 +349,7 @@ serve(async (req) => {
         message: 'Webhook processado com sucesso',
         subscriber_id: subscriberId,
         subscriber_nome: subscriberNome,
+        canal: canal,
         lead_id: leadId,
       }), 
       {
@@ -218,7 +358,7 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Erro no webhook ManyChat:', error);
+    console.error('❌ Erro no webhook ManyChat:', error);
 
     // Registrar erro no system_events
     try {
@@ -230,7 +370,7 @@ serve(async (req) => {
         processado: false,
       });
     } catch (e) {
-      console.error('Erro ao registrar evento de erro:', e);
+      console.error('❌ Erro ao registrar evento de erro:', e);
     }
 
     return new Response(
