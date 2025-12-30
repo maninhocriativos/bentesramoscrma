@@ -61,12 +61,15 @@ const ManyChatInbox = () => {
     scrollToBottom();
   }, [messages]);
 
+  // Carregar subscribers inicialmente
   useEffect(() => {
     loadSubscribers();
-    
-    // Configurar realtime para novas mensagens
-    const channel = supabase
-      .channel('manychat-messages')
+  }, []);
+
+  // Realtime para novas mensagens
+  useEffect(() => {
+    const messagesChannel = supabase
+      .channel('manychat-messages-realtime')
       .on(
         'postgres_changes',
         {
@@ -75,22 +78,64 @@ const ManyChatInbox = () => {
           table: 'manychat_mensagens',
         },
         (payload) => {
-          console.log('Nova mensagem recebida:', payload);
+          console.log('🔔 Nova mensagem recebida em tempo real:', payload);
           const newMsg = payload.new as Message & { subscriber_id: string };
           
-          // Se for do subscriber selecionado, adicionar à lista
+          // Se for do subscriber selecionado, adicionar à lista imediatamente
           if (selectedSubscriber && newMsg.subscriber_id === selectedSubscriber.subscriber_id) {
-            setMessages(prev => [...prev, newMsg]);
+            setMessages(prev => {
+              // Evitar duplicatas
+              if (prev.some(m => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
           }
           
-          // Atualizar lista de subscribers
+          // Atualizar lista de subscribers para mostrar última mensagem
           loadSubscribers();
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'manychat_mensagens',
+        },
+        (payload) => {
+          console.log('🔄 Mensagem atualizada:', payload);
+          const updatedMsg = payload.new as Message & { subscriber_id: string };
+          
+          if (selectedSubscriber && updatedMsg.subscriber_id === selectedSubscriber.subscriber_id) {
+            setMessages(prev => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m));
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Realtime mensagens status:', status);
+      });
+
+    // Realtime para subscribers (última interação, etc)
+    const subscribersChannel = supabase
+      .channel('manychat-subscribers-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'manychat_subscribers',
+        },
+        (payload) => {
+          console.log('👤 Subscriber atualizado:', payload);
+          loadSubscribers();
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Realtime subscribers status:', status);
+      });
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(subscribersChannel);
     };
   }, [selectedSubscriber?.subscriber_id]);
 
