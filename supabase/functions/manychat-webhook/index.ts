@@ -266,8 +266,17 @@ serve(async (req) => {
       }
       
       // 🆕 Se não encontrou lead, CRIAR automaticamente como "Lead Frio"
-      if (!leadId && subscriberNome && subscriberNome !== 'Desconhecido') {
-        console.log('🆕 Criando novo lead automaticamente para:', subscriberNome);
+      // Criar lead se: tem nome válido OU tem telefone OU tem email (mensagens de entrada)
+      const temDadosParaCriarLead = (subscriberNome && subscriberNome !== 'Desconhecido') || telefone || email;
+      
+      if (!leadId && temDadosParaCriarLead && direcao === 'entrada') {
+        const nomeDoLead = (subscriberNome && subscriberNome !== 'Desconhecido') 
+          ? subscriberNome 
+          : telefone 
+            ? `Contato ${telefone}` 
+            : `Contato via ${canal}`;
+            
+        console.log('🆕 Criando novo lead automaticamente para:', nomeDoLead);
         
         // Determinar origem baseado no canal
         let origem = 'ManyChat';
@@ -279,7 +288,7 @@ serve(async (req) => {
         const { data: newLead, error: leadError } = await supabase
           .from('leads_juridicos')
           .insert({
-            nome: subscriberNome,
+            nome: nomeDoLead,
             telefone: telefone || null,
             email: email || null,
             status: 'Lead Frio',
@@ -295,7 +304,7 @@ serve(async (req) => {
           leadId = newLead.id;
           console.log('✅ Novo lead criado com sucesso:', newLead.nome, leadId);
           
-          // Registrar evento de criação de lead
+          // Registrar evento de criação de lead (entidade_id é UUID do lead, não subscriber_id)
           await supabase.from('system_events').insert({
             tipo: 'lead',
             fonte: 'manychat',
@@ -304,11 +313,12 @@ serve(async (req) => {
             entidade_id: leadId,
             lead_id: leadId,
             dados: {
-              nome: subscriberNome,
+              nome: nomeDoLead,
               telefone: telefone,
               email: email,
               canal: canal,
               origem: origem,
+              subscriber_id: subscriberId,
             },
             processado: true,
           });
@@ -367,6 +377,7 @@ serve(async (req) => {
     }
 
     // REGISTRAR EVENTO NO SYSTEM_EVENTS para aparecer no API Hub
+    // NOTA: entidade_id precisa ser UUID válido ou null
     const { error: eventError } = await supabase
       .from('system_events')
       .insert({
@@ -374,9 +385,10 @@ serve(async (req) => {
         fonte: 'manychat',
         acao: direcao === 'entrada' ? 'mensagem_recebida' : 'mensagem_enviada',
         entidade_tipo: 'manychat_mensagem',
-        entidade_id: subscriberId,
+        entidade_id: leadId, // Usar lead_id (UUID) em vez de subscriber_id (string)
         lead_id: leadId,
         dados: {
+          subscriber_id: subscriberId, // Guardar subscriber_id nos dados
           subscriber_nome: subscriberNome,
           conteudo: messageContent?.substring(0, 200),
           canal: canal,
