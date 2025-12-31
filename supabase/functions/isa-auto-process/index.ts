@@ -72,18 +72,28 @@ async function executarAcao(supabase: any, acao: string, dados: any): Promise<{ 
   try {
     switch (acao) {
       case 'classificar_lead': {
-        const { lead_id, novo_status, motivo } = dados;
+        // A IA pode passar 'status' ou 'novo_status'
+        const novoStatus = dados.novo_status || dados.status;
+        const motivo = dados.motivo || dados.resumo || 'Classificação automática pela Isa';
+        const lead_id = dados.lead_id;
+        
+        if (!novoStatus) {
+          return { success: false, message: 'Status não informado' };
+        }
+        
         const { data, error } = await supabase
           .from('leads_juridicos')
           .update({ 
-            status: novo_status,
+            status: novoStatus,
             resumo_ia: motivo 
           })
           .eq('id', lead_id)
-          .select()
-          .single();
+          .select();
         
         if (error) throw error;
+        if (!data || data.length === 0) {
+          return { success: false, message: 'Lead não encontrado' };
+        }
         
         // Registrar evento
         await supabase.from('system_events').insert({
@@ -92,23 +102,29 @@ async function executarAcao(supabase: any, acao: string, dados: any): Promise<{ 
           acao: 'lead_classificado',
           entidade_id: lead_id,
           lead_id: lead_id,
-          dados: { status_anterior: dados.status_anterior, novo_status, motivo },
+          dados: { status_anterior: dados.status_anterior, novo_status: novoStatus, motivo },
           processado: true,
         });
         
-        return { success: true, message: `Lead classificado como "${novo_status}"`, data };
+        return { success: true, message: `Lead classificado como "${novoStatus}"`, data: data[0] };
       }
 
       case 'criar_interacao': {
-        const { cliente_id, tipo, resumo, detalhes, direcao } = dados;
+        const cliente_id = dados.cliente_id || dados.lead_id;
+        // A IA pode passar 'resumo', 'mensagem' ou 'descricao'
+        const resumo = dados.resumo || dados.mensagem || dados.descricao || 'Interação registrada pela Isa';
+        const detalhes = dados.detalhes || dados.mensagem || null;
+        const tipo = dados.tipo || 'WhatsApp';
+        const direcao = dados.direcao || 'Entrada';
+        
         const { data, error } = await supabase
           .from('interacoes')
           .insert({
             cliente_id,
-            tipo: tipo || 'WhatsApp',
-            resumo,
+            tipo,
+            resumo: resumo.substring(0, 500), // Limitar tamanho
             detalhes,
-            direcao: direcao || 'Entrada',
+            direcao,
             data_interacao: new Date().toISOString(),
           })
           .select()
