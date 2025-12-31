@@ -69,9 +69,9 @@ export default function LeadsPage() {
             <LeadFilters leads={leads} onFilterChange={handleFilterChange} />
             
             {/* Main Content Grid */}
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 min-h-0 overflow-hidden">
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 min-h-0">
               {/* Kanban Area */}
-              <div className="min-h-0 overflow-hidden">
+              <div className="min-h-0 h-full">
                 <KanbanBoard leads={filteredLeads} onLeadClick={handleLeadClick} />
               </div>
               

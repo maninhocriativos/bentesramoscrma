@@ -207,29 +207,34 @@
       radial-gradient(at 0% 50%, hsl(var(--success) / 0.04) 0px, transparent 50%);
   }
 
-  /* Kanban specific */
-  .kanban-scroll {
-    @apply overflow-x-auto pb-4;
+  /* Kanban specific - stable scrollbar */
+  .scrollbar-stable {
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--border)) transparent;
+    scrollbar-gutter: stable;
   }
 
-  .kanban-scroll::-webkit-scrollbar {
-    height: 8px;
-  }
-
-  .kanban-scroll::-webkit-scrollbar-track {
+  .scrollbar-stable::-webkit-scrollbar {
+    height: 10px;
     background: transparent;
-    border-radius: 4px;
   }
 
-  .kanban-scroll::-webkit-scrollbar-thumb {
+  .scrollbar-stable::-webkit-scrollbar-track {
+    background: hsl(var(--muted) / 0.3);
+    border-radius: 5px;
+    margin: 0 8px;
+  }
+
+  .scrollbar-stable::-webkit-scrollbar-thumb {
     background: hsl(var(--border));
-    border-radius: 4px;
+    border-radius: 5px;
+    border: 2px solid transparent;
+    background-clip: content-box;
   }
 
-  .kanban-scroll::-webkit-scrollbar-thumb:hover {
+  .scrollbar-stable::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground));
+    background-clip: content-box;
   }
 
   /* Page transitions */
