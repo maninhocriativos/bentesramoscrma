@@ -3,6 +3,11 @@ import { LeadCard } from './LeadCard';
 import { cn } from '@/lib/utils';
 import { Inbox } from 'lucide-react';
 
+interface IsaInsight {
+  sentimento: 'positivo' | 'neutro' | 'negativo' | null;
+  urgencia: 'baixa' | 'media' | 'alta' | 'urgente' | null;
+}
+
 interface KanbanColumnProps {
   status: LeadStatus;
   leads: Lead[];
@@ -12,6 +17,7 @@ interface KanbanColumnProps {
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent, status: LeadStatus) => void;
   isDragOver?: boolean;
+  isaInsights?: Record<string, IsaInsight>;
 }
 
 const STATUS_COLORS: Record<LeadStatus, { 
@@ -74,6 +80,7 @@ export function KanbanColumn({
   onDragOver,
   onDrop,
   isDragOver,
+  isaInsights = {},
 }: KanbanColumnProps) {
   const columnLeads = leads.filter((lead) => lead.status === status);
   const statusStyle = STATUS_COLORS[status];
@@ -141,7 +148,7 @@ export function KanbanColumn({
             style={{ animationDelay: `${index * 50}ms` }}
             className="kanban-card-wrapper animate-fade-in cursor-grab active:cursor-grabbing"
           >
-            <LeadCard lead={lead} onClick={() => onLeadClick(lead)} />
+            <LeadCard lead={lead} onClick={() => onLeadClick(lead)} isaInsight={isaInsights[lead.id]} />
           </div>
         ))}
         
