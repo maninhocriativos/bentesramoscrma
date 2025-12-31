@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Lead } from '@/types/leads';
 import { cn } from '@/lib/utils';
 import { getLeadIndicator } from '@/hooks/useAlertas';
-import { MessageCircle, ExternalLink, User, Clock, DollarSign, FileSignature } from 'lucide-react';
+import { MessageCircle, ExternalLink, User, Clock, DollarSign, FileSignature, Instagram, Facebook, Phone, Globe, Users, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { EnviarContratoModal } from '@/components/contratos/EnviarContratoModal';
@@ -15,12 +15,18 @@ interface LeadCardProps {
   isDragging?: boolean;
 }
 
-const ORIGEM_STYLES: Record<string, { bg: string; text: string; glow: string }> = {
-  Instagram: { bg: 'bg-pink-100', text: 'text-pink-700', glow: 'shadow-pink-200' },
-  Google: { bg: 'bg-blue-100', text: 'text-blue-700', glow: 'shadow-blue-200' },
-  Site: { bg: 'bg-emerald-100', text: 'text-emerald-700', glow: 'shadow-emerald-200' },
-  Indicação: { bg: 'bg-purple-100', text: 'text-purple-700', glow: 'shadow-purple-200' },
-  Outro: { bg: 'bg-muted', text: 'text-muted-foreground', glow: '' },
+const ORIGEM_CONFIG: Record<string, { bg: string; text: string; glow: string; icon: React.ElementType }> = {
+  Instagram: { bg: 'bg-gradient-to-r from-pink-500/15 to-purple-500/15', text: 'text-pink-600', glow: 'shadow-pink-200', icon: Instagram },
+  Facebook: { bg: 'bg-blue-500/15', text: 'text-blue-600', glow: 'shadow-blue-200', icon: Facebook },
+  WhatsApp: { bg: 'bg-emerald-500/15', text: 'text-emerald-600', glow: 'shadow-emerald-200', icon: MessageCircle },
+  ManyChat: { bg: 'bg-violet-500/15', text: 'text-violet-600', glow: 'shadow-violet-200', icon: MessageCircle },
+  Google: { bg: 'bg-red-500/15', text: 'text-red-600', glow: 'shadow-red-200', icon: Globe },
+  Site: { bg: 'bg-cyan-500/15', text: 'text-cyan-600', glow: 'shadow-cyan-200', icon: Globe },
+  Indicação: { bg: 'bg-amber-500/15', text: 'text-amber-600', glow: 'shadow-amber-200', icon: Users },
+  Telegram: { bg: 'bg-sky-500/15', text: 'text-sky-600', glow: 'shadow-sky-200', icon: MessageCircle },
+  Email: { bg: 'bg-slate-500/15', text: 'text-slate-600', glow: 'shadow-slate-200', icon: Mail },
+  Telefone: { bg: 'bg-green-500/15', text: 'text-green-600', glow: 'shadow-green-200', icon: Phone },
+  Outro: { bg: 'bg-muted', text: 'text-muted-foreground', glow: '', icon: User },
 };
 
 const INDICATOR_STYLES = {
@@ -44,7 +50,8 @@ export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
   const navigate = useNavigate();
   const [isContratoModalOpen, setIsContratoModalOpen] = useState(false);
   
-  const origemStyle = ORIGEM_STYLES[lead.origem || 'Outro'] || ORIGEM_STYLES.Outro;
+  const origemConfig = ORIGEM_CONFIG[lead.origem || 'Outro'] || ORIGEM_CONFIG.Outro;
+  const OrigemIcon = origemConfig.icon;
   const indicator = getLeadIndicator(lead);
   const indicatorStyle = indicator ? INDICATOR_STYLES[indicator] : null;
   const lastInteraction = lead.updated_at 
@@ -145,14 +152,15 @@ export function LeadCard({ lead, onClick, isDragging }: LeadCardProps) {
             </span>
           )}
           
-          {/* Origem Badge */}
+          {/* Origem Badge with Icon */}
           {lead.origem && (
             <span className={cn(
-              "badge-compact whitespace-nowrap transition-shadow duration-200",
-              origemStyle.bg, 
-              origemStyle.text,
-              `hover:${origemStyle.glow}`
+              "badge-compact whitespace-nowrap transition-shadow duration-200 flex items-center gap-1",
+              origemConfig.bg, 
+              origemConfig.text,
+              `hover:${origemConfig.glow}`
             )}>
+              <OrigemIcon className="w-3 h-3" />
               {lead.origem}
             </span>
           )}
