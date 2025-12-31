@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, ArrowRight, Bot, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bot, Sparkles, MessageSquare, Calculator, Brain, Zap } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,27 +7,34 @@ import { Button } from '@/components/ui/button';
 import { IsaChat } from '@/components/assistentes/IsaChat';
 import { CalculadoraChat } from '@/components/assistentes/CalculadoraChat';
 import { IsaAcoesPendentes } from '@/components/assistentes/IsaAcoesPendentes';
+import { cn } from '@/lib/utils';
 import isaAvatar from '@/assets/isa-avatar.png';
 
 interface Agent {
   id: string;
   name: string;
   description: string;
-  bgColor: string;
+  icon: React.ReactNode;
+  gradient: string;
+  features: string[];
 }
 
 const agents: Agent[] = [
   {
     id: 'isa',
-    name: 'Isa',
-    description: 'Assistente virtual do escritório. Tire dúvidas sobre leads, processos, tarefas e muito mais.',
-    bgColor: 'bg-stone-100',
+    name: 'Isa Assistente',
+    description: 'Assistente virtual inteligente do escritório para consultas gerais.',
+    icon: <MessageSquare className="h-6 w-6" />,
+    gradient: 'from-violet-500 to-purple-600',
+    features: ['Consultar leads', 'Ver processos', 'Buscar tarefas', 'Análise de dados'],
   },
   {
     id: 'calculadora',
     name: 'Isa Cálculo Bancário',
-    description: 'Analise extratos bancários, calcule juros abusivos e identifique cobranças indevidas.',
-    bgColor: 'bg-emerald-50',
+    description: 'Especialista em análise de contratos e cálculos financeiros.',
+    icon: <Calculator className="h-6 w-6" />,
+    gradient: 'from-emerald-500 to-teal-600',
+    features: ['Calcular juros', 'Analisar contratos', 'Identificar abusividades', 'Gerar relatórios'],
   },
 ];
 
@@ -72,89 +79,146 @@ export default function AssistentePage() {
     <AppLayout>
       <AppHeader title="Assistentes IA" />
       
-      <div className="flex-1 p-6">
+      <div className="flex-1 overflow-y-auto">
         {/* Hero Section */}
-        <div className="text-center mb-10">
-          <div className="inline-block mb-4">
-            <img 
-              src={isaAvatar} 
-              alt="Isa" 
-              className="h-24 w-24 rounded-full object-cover object-top border-4 border-background shadow-lg"
-            />
+        <div className="relative bg-gradient-to-br from-primary/5 via-background to-violet-500/5 border-b">
+          <div className="max-w-6xl mx-auto px-6 py-10">
+            <div className="flex flex-col md:flex-row items-center gap-6">
+              {/* Avatar */}
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full blur-xl opacity-30 animate-pulse" />
+                <img 
+                  src={isaAvatar} 
+                  alt="Isa" 
+                  className="relative h-28 w-28 rounded-full object-cover object-top border-4 border-background shadow-xl"
+                />
+                <div className="absolute -bottom-1 -right-1 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full p-2 shadow-lg">
+                  <Brain className="h-4 w-4 text-white" />
+                </div>
+              </div>
+              
+              {/* Text */}
+              <div className="text-center md:text-left">
+                <div className="flex items-center gap-2 justify-center md:justify-start mb-2">
+                  <span className="text-xs font-medium px-2 py-1 rounded-full bg-violet-500/10 text-violet-600">
+                    Powered by GPT-4
+                  </span>
+                </div>
+                <h1 className="text-3xl font-bold text-foreground mb-2">
+                  Olá! Eu sou a <span className="bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">Isa</span>
+                </h1>
+                <p className="text-muted-foreground max-w-lg">
+                  Sua assistente virtual inteligente. Escolha um dos meus módulos especializados para começar.
+                </p>
+              </div>
+            </div>
           </div>
-          <h2 className="text-2xl font-semibold text-foreground mb-2">
-            Escolha um Assistente
-          </h2>
-          <p className="text-muted-foreground max-w-md mx-auto text-sm">
-            Nossos assistentes de IA estão prontos para ajudar você com diferentes tarefas do dia a dia.
-          </p>
         </div>
 
-        {/* Main Content Grid */}
-        <div className="grid lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
-          {/* Agent Cards */}
-          <div className="lg:col-span-2 grid md:grid-cols-2 gap-6">
-            {agents.map((agent) => (
-              <Card
-                key={agent.id}
-                className={`group cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border ${agent.bgColor}`}
-                onClick={() => setSelectedAgent(agent.id)}
-              >
-                <CardHeader className="pb-3">
-                  <div className="mb-3">
-                    <img 
-                      src={isaAvatar} 
-                      alt={agent.name}
-                      className="h-14 w-14 rounded-full object-cover object-top border-2 border-background shadow-sm"
-                    />
-                  </div>
-                  <CardTitle className="text-lg">{agent.name}</CardTitle>
-                  <CardDescription className="text-sm leading-relaxed">
-                    {agent.description}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <Button 
-                    className="w-full gap-2 transition-colors"
-                    variant="outline"
+        {/* Main Content */}
+        <div className="max-w-6xl mx-auto px-6 py-8">
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Agent Cards */}
+            <div className="lg:col-span-2 space-y-4">
+              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-violet-500" />
+                Módulos Disponíveis
+              </h2>
+              
+              <div className="grid sm:grid-cols-2 gap-4">
+                {agents.map((agent) => (
+                  <Card
+                    key={agent.id}
+                    className={cn(
+                      "group cursor-pointer transition-all duration-300",
+                      "hover:shadow-lg hover:border-violet-500/30 hover:-translate-y-1",
+                      "bg-card overflow-hidden"
+                    )}
+                    onClick={() => setSelectedAgent(agent.id)}
                   >
-                    Iniciar conversa
-                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" strokeWidth={1.5} />
-                  </Button>
+                    {/* Gradient Header */}
+                    <div className={cn(
+                      "h-2 w-full bg-gradient-to-r",
+                      agent.gradient
+                    )} />
+                    
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between">
+                        <div className={cn(
+                          "p-3 rounded-xl bg-gradient-to-br text-white shadow-lg",
+                          agent.gradient
+                        )}>
+                          {agent.icon}
+                        </div>
+                        <ArrowRight className="h-5 w-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all group-hover:translate-x-1" />
+                      </div>
+                      <CardTitle className="text-lg mt-3">{agent.name}</CardTitle>
+                      <CardDescription className="text-sm">
+                        {agent.description}
+                      </CardDescription>
+                    </CardHeader>
+                    
+                    <CardContent className="pt-0">
+                      {/* Features Tags */}
+                      <div className="flex flex-wrap gap-1.5 mb-4">
+                        {agent.features.map((feature, idx) => (
+                          <span 
+                            key={idx}
+                            className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground"
+                          >
+                            {feature}
+                          </span>
+                        ))}
+                      </div>
+                      
+                      <Button 
+                        className={cn(
+                          "w-full gap-2 bg-gradient-to-r text-white shadow-md",
+                          "hover:shadow-lg hover:scale-[1.02] transition-all",
+                          agent.gradient
+                        )}
+                      >
+                        Iniciar conversa
+                        <ArrowRight className="h-4 w-4" strokeWidth={1.5} />
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              
+              {/* Isa Autônoma Card */}
+              <Card className="bg-gradient-to-br from-amber-500/5 via-orange-500/5 to-red-500/5 border-amber-500/20">
+                <CardContent className="p-5">
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-lg shrink-0">
+                      <Zap className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-foreground mb-1">Isa Autônoma</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Eu processo automaticamente as mensagens do ManyChat, classifico leads, 
+                        registro interações e sugiro ações para sua aprovação. Tudo em tempo real!
+                      </p>
+                      <div className="flex items-center gap-3 mt-3">
+                        <span className="flex items-center gap-1.5 text-xs text-emerald-600">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          Ativo
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          Integrado com ManyChat
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-          
-          {/* Ações Pendentes da Isa */}
-          <div className="lg:col-span-1">
-            <IsaAcoesPendentes />
+            </div>
             
-            {/* Info Card */}
-            <Card className="mt-4 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Isa Autônoma</p>
-                    <p className="text-xs text-muted-foreground">
-                      A Isa processa automaticamente mensagens do ManyChat, classifica leads, 
-                      registra interações e sugere ações para aprovação.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Sidebar - Ações Pendentes */}
+            <div className="lg:col-span-1">
+              <IsaAcoesPendentes />
+            </div>
           </div>
-        </div>
-
-        {/* Info Section */}
-        <div className="mt-12 text-center">
-          <p className="text-xs text-muted-foreground">
-            Os assistentes utilizam inteligência artificial para processar suas solicitações.
-          </p>
         </div>
       </div>
     </AppLayout>
