@@ -264,6 +264,56 @@ serve(async (req) => {
           console.log('👤 Lead encontrado por nome:', leadByName.nome, leadId);
         }
       }
+      
+      // 🆕 Se não encontrou lead, CRIAR automaticamente como "Lead Frio"
+      if (!leadId && subscriberNome && subscriberNome !== 'Desconhecido') {
+        console.log('🆕 Criando novo lead automaticamente para:', subscriberNome);
+        
+        // Determinar origem baseado no canal
+        let origem = 'ManyChat';
+        if (canal === 'instagram') origem = 'Instagram';
+        else if (canal === 'facebook') origem = 'Facebook';
+        else if (canal === 'whatsapp') origem = 'WhatsApp';
+        else if (canal === 'telegram') origem = 'Telegram';
+        
+        const { data: newLead, error: leadError } = await supabase
+          .from('leads_juridicos')
+          .insert({
+            nome: subscriberNome,
+            telefone: telefone || null,
+            email: email || null,
+            status: 'Lead Frio',
+            origem: origem,
+            resumo_ia: `Lead criado automaticamente via ${origem}. Primeiro contato em ${new Date().toLocaleDateString('pt-BR')}.`,
+          })
+          .select()
+          .single();
+        
+        if (leadError) {
+          console.error('❌ Erro ao criar lead:', leadError);
+        } else {
+          leadId = newLead.id;
+          console.log('✅ Novo lead criado com sucesso:', newLead.nome, leadId);
+          
+          // Registrar evento de criação de lead
+          await supabase.from('system_events').insert({
+            tipo: 'lead',
+            fonte: 'manychat',
+            acao: 'lead_criado_automatico',
+            entidade_tipo: 'lead',
+            entidade_id: leadId,
+            lead_id: leadId,
+            dados: {
+              nome: subscriberNome,
+              telefone: telefone,
+              email: email,
+              canal: canal,
+              origem: origem,
+            },
+            processado: true,
+          });
+        }
+      }
     }
 
     // Upsert subscriber com lead_id vinculado
