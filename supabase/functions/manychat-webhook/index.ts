@@ -186,7 +186,11 @@ serve(async (req) => {
     // Formato simplificado / genérico
     else {
       subscriberId = payload.subscriber_id?.toString() || payload.id?.toString() || `manual_${Date.now()}`;
-      subscriberNome = payload.nome || payload.name || 'Desconhecido';
+      // Suportar first_name + last_name além de nome/name
+      const firstName = payload.first_name || '';
+      const lastName = payload.last_name || '';
+      subscriberNome = payload.nome || payload.name || 
+        (firstName || lastName ? `${firstName} ${lastName}`.trim() : 'Desconhecido');
       telefone = payload.telefone || payload.phone || payload.whatsapp;
       email = payload.email;
       subscriberFoto = payload.foto || payload.picture || payload.avatar;
