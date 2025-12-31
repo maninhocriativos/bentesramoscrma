@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare, Sparkles, Webhook } from 'lucide-react';
+import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare, Sparkles, Webhook, Zap } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Sidebar,
@@ -79,6 +79,12 @@ const menuItems: MenuItem[] = [
     title: 'Assistentes IA', 
     url: '/assistente', 
     icon: Bot,
+    visibility: 'all'
+  },
+  { 
+    title: 'Isa Autônoma', 
+    url: '/isa-autonoma', 
+    icon: Zap,
     visibility: 'all'
   },
   { 
