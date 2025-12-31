@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bot, Sparkles } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { IsaChat } from '@/components/assistentes/IsaChat';
 import { CalculadoraChat } from '@/components/assistentes/CalculadoraChat';
+import { IsaAcoesPendentes } from '@/components/assistentes/IsaAcoesPendentes';
 import isaAvatar from '@/assets/isa-avatar.png';
 
 interface Agent {
@@ -89,38 +90,64 @@ export default function AssistentePage() {
           </p>
         </div>
 
-        {/* Agent Cards */}
-        <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-          {agents.map((agent) => (
-            <Card
-              key={agent.id}
-              className={`group cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border ${agent.bgColor}`}
-              onClick={() => setSelectedAgent(agent.id)}
-            >
-              <CardHeader className="pb-3">
-                <div className="mb-3">
-                  <img 
-                    src={isaAvatar} 
-                    alt={agent.name}
-                    className="h-14 w-14 rounded-full object-cover object-top border-2 border-background shadow-sm"
-                  />
+        {/* Main Content Grid */}
+        <div className="grid lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+          {/* Agent Cards */}
+          <div className="lg:col-span-2 grid md:grid-cols-2 gap-6">
+            {agents.map((agent) => (
+              <Card
+                key={agent.id}
+                className={`group cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border ${agent.bgColor}`}
+                onClick={() => setSelectedAgent(agent.id)}
+              >
+                <CardHeader className="pb-3">
+                  <div className="mb-3">
+                    <img 
+                      src={isaAvatar} 
+                      alt={agent.name}
+                      className="h-14 w-14 rounded-full object-cover object-top border-2 border-background shadow-sm"
+                    />
+                  </div>
+                  <CardTitle className="text-lg">{agent.name}</CardTitle>
+                  <CardDescription className="text-sm leading-relaxed">
+                    {agent.description}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <Button 
+                    className="w-full gap-2 transition-colors"
+                    variant="outline"
+                  >
+                    Iniciar conversa
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" strokeWidth={1.5} />
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          
+          {/* Ações Pendentes da Isa */}
+          <div className="lg:col-span-1">
+            <IsaAcoesPendentes />
+            
+            {/* Info Card */}
+            <Card className="mt-4 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Isa Autônoma</p>
+                    <p className="text-xs text-muted-foreground">
+                      A Isa processa automaticamente mensagens do ManyChat, classifica leads, 
+                      registra interações e sugere ações para aprovação.
+                    </p>
+                  </div>
                 </div>
-                <CardTitle className="text-lg">{agent.name}</CardTitle>
-                <CardDescription className="text-sm leading-relaxed">
-                  {agent.description}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <Button 
-                  className="w-full gap-2 transition-colors"
-                  variant="outline"
-                >
-                  Iniciar conversa
-                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" strokeWidth={1.5} />
-                </Button>
               </CardContent>
             </Card>
-          ))}
+          </div>
         </div>
 
         {/* Info Section */}

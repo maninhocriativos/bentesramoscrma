@@ -377,6 +377,39 @@ serve(async (req) => {
         console.error('❌ Erro ao salvar mensagem:', messageError);
       } else {
         console.log('✅ Mensagem salva:', messageData);
+        
+        // 🤖 CHAMAR ISA AUTO-PROCESS para processar a mensagem automaticamente
+        // Apenas para mensagens de entrada com lead vinculado
+        if (direcao === 'entrada' && leadId) {
+          console.log('🤖 Acionando Isa Auto-Process...');
+          try {
+            const isaResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/isa-auto-process`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              },
+              body: JSON.stringify({
+                lead_id: leadId,
+                subscriber_id: subscriberId,
+                mensagem: messageContent,
+                canal: canal,
+              }),
+            });
+            
+            if (isaResponse.ok) {
+              const isaResult = await isaResponse.json();
+              console.log('✅ Isa processou a mensagem:', isaResult.analise);
+              console.log(`   - Ações executadas: ${isaResult.acoes_executadas?.length || 0}`);
+              console.log(`   - Resposta enviada: ${isaResult.resposta_enviada}`);
+            } else {
+              console.error('⚠️ Erro no Isa Auto-Process:', await isaResponse.text());
+            }
+          } catch (isaError) {
+            console.error('⚠️ Erro ao chamar Isa Auto-Process:', isaError);
+            // Não bloquear o webhook por erro na Isa
+          }
+        }
       }
     }
 
