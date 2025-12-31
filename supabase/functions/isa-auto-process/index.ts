@@ -2,6 +2,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -9,6 +10,166 @@ const corsHeaders = {
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY');
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+
+// Mapeamento de ações para labels em português
+const ACAO_LABELS: Record<string, string> = {
+  'criar_tarefa': 'Criar Tarefa',
+  'criar_compromisso': 'Agendar Compromisso',
+  'atualizar_status_lead': 'Atualizar Status do Lead',
+  'enviar_contrato': 'Enviar Contrato',
+};
+
+const URGENCIA_CORES: Record<string, string> = {
+  'baixa': '#22c55e',
+  'media': '#eab308',
+  'alta': '#f97316',
+  'urgente': '#ef4444',
+};
+
+// Enviar email de notificação para equipe
+async function enviarNotificacaoEquipe(
+  supabase: any,
+  lead: any,
+  acoesPendentes: Array<{ acao: string; dados: any; motivo: string }>,
+  analise: { intencao: string; sentimento: string; urgencia: string },
+  mensagemOriginal: string
+): Promise<boolean> {
+  if (!RESEND_API_KEY) {
+    console.log('⚠️ RESEND_API_KEY não configurada, email não enviado');
+    return false;
+  }
+
+  try {
+    // Buscar emails dos usuários aprovados (admin e gerentes)
+    const { data: usuarios } = await supabase
+      .from('perfis')
+      .select('email, nome, cargo')
+      .eq('aprovado', true)
+      .in('cargo', ['Administrador', 'Gerente']);
+
+    if (!usuarios || usuarios.length === 0) {
+      console.log('⚠️ Nenhum usuário para notificar');
+      return false;
+    }
+
+    const destinatarios = usuarios.map((u: any) => u.email).filter(Boolean);
+    
+    if (destinatarios.length === 0) {
+      console.log('⚠️ Nenhum email válido encontrado');
+      return false;
+    }
+
+    const urgenciaCor = URGENCIA_CORES[analise.urgencia] || '#6b7280';
+    const acoesHtml = acoesPendentes.map(a => `
+      <div style="background: #f8fafc; border-left: 4px solid #3b82f6; padding: 12px 16px; margin: 8px 0; border-radius: 0 8px 8px 0;">
+        <strong style="color: #1e40af;">${ACAO_LABELS[a.acao] || a.acao}</strong>
+        <p style="margin: 4px 0 0 0; color: #64748b; font-size: 14px;">${a.motivo}</p>
+      </div>
+    `).join('');
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 0; background-color: #f1f5f9;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); padding: 24px; border-radius: 12px 12px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 22px;">🤖 Isa - Ação Requer Aprovação</h1>
+        </div>
+        
+        <div style="background: white; padding: 24px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+          <div style="background: #f0f9ff; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+            <h3 style="margin: 0 0 8px 0; color: #0369a1;">Lead: ${lead.nome || 'Sem nome'}</h3>
+            <p style="margin: 0; color: #64748b; font-size: 14px;">
+              ${lead.telefone || ''} ${lead.email ? `• ${lead.email}` : ''}<br>
+              Status: <strong>${lead.status || 'Não definido'}</strong>
+            </p>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <h4 style="color: #334155; margin: 0 0 8px 0;">💬 Mensagem recebida:</h4>
+            <div style="background: #fefce8; padding: 12px 16px; border-radius: 8px; border-left: 4px solid #eab308;">
+              <p style="margin: 0; color: #713f12; font-style: italic;">"${mensagemOriginal}"</p>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <h4 style="color: #334155; margin: 0 0 8px 0;">🧠 Análise da Isa:</h4>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 12px; background: #f8fafc; border-radius: 6px;">
+                  <strong>Intenção:</strong> ${analise.intencao}
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 12px;">
+                  <strong>Sentimento:</strong> ${analise.sentimento === 'positivo' ? '😊 Positivo' : analise.sentimento === 'negativo' ? '😟 Negativo' : '😐 Neutro'}
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 12px; background: #f8fafc; border-radius: 6px;">
+                  <strong>Urgência:</strong> 
+                  <span style="background: ${urgenciaCor}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; text-transform: uppercase;">
+                    ${analise.urgencia}
+                  </span>
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <h4 style="color: #334155; margin: 0 0 12px 0;">📋 Ações sugeridas para aprovação:</h4>
+            ${acoesHtml}
+          </div>
+
+          <div style="text-align: center; margin-top: 24px;">
+            <a href="https://lovable.dev/projects/qgenaltkjtlvwfgykpxq" 
+               style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);">
+              Revisar no Sistema
+            </a>
+          </div>
+
+          <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 24px;">
+            Este email foi enviado automaticamente pela Isa, assistente do Bentes & Ramos Advocacia.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+
+    // Enviar via API Resend diretamente
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: 'Isa - Bentes & Ramos <onboarding@resend.dev>',
+        to: destinatarios,
+        subject: `🔔 Ação pendente: ${lead.nome || 'Lead'} - ${ACAO_LABELS[acoesPendentes[0]?.acao] || 'Nova ação'}`,
+        html,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('❌ Erro ao enviar email:', error);
+      return false;
+    }
+
+    console.log(`✅ Email de notificação enviado para ${destinatarios.length} destinatário(s)`);
+    return true;
+  } catch (error) {
+    console.error('❌ Erro ao enviar notificação por email:', error);
+    return false;
+  }
+}
 
 // Ações que a Isa pode executar automaticamente (sem confirmação)
 const ACOES_AUTOMATICAS = [
@@ -465,6 +626,18 @@ serve(async (req) => {
         
         acoesNauto.push(acao);
       }
+    }
+
+    // Enviar email de notificação se houver ações pendentes
+    if (acoesNauto.length > 0) {
+      console.log('📧 Enviando notificação por email para equipe...');
+      await enviarNotificacaoEquipe(
+        supabase,
+        contexto.lead,
+        acoesNauto,
+        resultado.analise,
+        mensagem
+      );
     }
 
     // Enviar resposta via ManyChat se houver
