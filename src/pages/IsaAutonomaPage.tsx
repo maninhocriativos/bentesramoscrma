@@ -8,8 +8,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Zap, Brain, CheckCircle2, XCircle, Clock, 
-  TrendingUp, Users, MessageSquare, ListTodo, 
-  Calendar, RefreshCw, Loader2, Activity, Target
+  Users, MessageSquare, ListTodo, 
+  Calendar, RefreshCw, Loader2, Activity, Target, Sparkles
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subDays, startOfDay } from 'date-fns';
@@ -136,26 +136,62 @@ export default function IsaAutonomaPage() {
       <div className="flex-1 p-6 overflow-y-auto">
         <div className="max-w-6xl mx-auto space-y-6">
           
-          {/* Header */}
-          <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-200/50 rounded-xl">
-            <img 
-              src={isaAvatar} 
-              alt="Isa" 
-              className="h-14 w-14 rounded-full object-cover object-top border-2 border-amber-300 shadow-sm"
-            />
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <h2 className="text-lg font-semibold text-foreground">Isa Autônoma</h2>
-                <Badge className="bg-emerald-500 text-white text-[10px]">ATIVO</Badge>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Processamento automático de mensagens, classificação de leads e sugestão de ações.
-              </p>
+          {/* Hero Section */}
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500 via-orange-500 to-red-500 p-6 text-white">
+            {/* Background Effects */}
+            <div className="absolute inset-0 opacity-20">
+              <div className="absolute top-0 right-0 w-48 h-48 bg-white rounded-full blur-3xl" />
+              <div className="absolute bottom-0 left-0 w-32 h-32 bg-yellow-300 rounded-full blur-3xl" />
             </div>
-            <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
-              Atualizar
-            </Button>
+            
+            <div className="relative flex items-center justify-between gap-6">
+              <div className="flex items-center gap-5">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-white/20 rounded-full blur-xl scale-110" />
+                  <img 
+                    src={isaAvatar} 
+                    alt="Isa" 
+                    className="relative h-20 w-20 rounded-full object-cover object-top border-4 border-white/30 shadow-2xl"
+                  />
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-400 rounded-full border-2 border-white flex items-center justify-center animate-pulse">
+                    <Zap className="w-3 h-3 text-white" />
+                  </div>
+                </div>
+                
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h1 className="text-2xl font-bold">Isa Autônoma</h1>
+                    <Badge className="bg-white/20 text-white border-0 text-[10px] backdrop-blur-sm">
+                      ATIVO
+                    </Badge>
+                  </div>
+                  <p className="text-white/80 text-sm max-w-md">
+                    Processamento automático de mensagens, classificação de leads e sugestão inteligente de ações.
+                  </p>
+                  <div className="flex items-center gap-3 mt-3">
+                    <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs">
+                      <Brain className="w-3.5 h-3.5" />
+                      IA Avançada
+                    </div>
+                    <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Tempo Real
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={fetchData} 
+                disabled={loading}
+                className="bg-white/20 hover:bg-white/30 text-white border-0 backdrop-blur-sm"
+              >
+                <RefreshCw className={`h-4 w-4 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+            </div>
           </div>
 
           {/* Stats Grid */}
