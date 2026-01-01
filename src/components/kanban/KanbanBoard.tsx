@@ -77,9 +77,9 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
   }, [draggedLead, updateLeadStatus, toast]);
 
   return (
-    <div className="w-full h-full overflow-x-auto overflow-y-hidden scrollbar-stable">
+    <div className="w-full h-full overflow-x-auto overflow-y-hidden pb-2">
       <div 
-        className="inline-flex gap-4 pb-4 pr-4 min-w-max"
+        className="inline-flex gap-3 pb-2 pr-2 min-w-max"
         onDragLeave={handleDragLeave}
       >
         {STATUSES.map((status) => (

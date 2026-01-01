@@ -90,43 +90,38 @@ export function KanbanColumn({
       onDragOver={onDragOver}
       onDrop={(e) => onDrop(e, status)}
       className={cn(
-        "flex flex-col min-w-[340px] w-[340px] rounded-2xl overflow-hidden",
-        "bg-card border shadow-soft",
-        "transition-all duration-300 ease-out",
+        "flex flex-col min-w-[260px] w-[260px] rounded-xl overflow-hidden",
+        "bg-card border shadow-sm",
+        "transition-all duration-200 ease-out",
         isDragOver && [
-          "ring-2 ring-gold/60 shadow-card-hover border-gold/40",
-          "kanban-column-drag-over scale-[1.02]"
+          "ring-2 ring-gold/60 shadow-md border-gold/40",
+          "scale-[1.01]"
         ]
       )}
     >
-      {/* Header with gradient */}
+      {/* Header */}
       <div className={cn(
-        "relative flex items-center gap-3 px-4 py-3.5 border-b",
+        "flex items-center gap-2 px-3 py-2.5 border-b",
         statusStyle.headerBg, statusStyle.border
       )}>
-        {/* Indicator dot */}
         <div className={cn(
-          "w-3 h-3 rounded-full shrink-0 transition-transform duration-200",
-          statusStyle.indicator,
-          isDragOver && "scale-125"
+          "w-2.5 h-2.5 rounded-full shrink-0",
+          statusStyle.indicator
         )} />
         
-        <h3 className="font-semibold text-sm text-foreground flex-1">{status}</h3>
+        <h3 className="font-medium text-xs text-foreground flex-1 truncate">{status}</h3>
         
-        {/* Count badge */}
         <span className={cn(
-          "text-xs px-2.5 py-1 rounded-full font-semibold",
-          "bg-primary text-primary-foreground",
-          "shadow-sm transition-all duration-300",
-          isDragOver && "scale-110 shadow-md"
+          "text-[10px] px-2 py-0.5 rounded-full font-semibold",
+          "bg-primary text-primary-foreground"
         )}>
           {columnLeads.length}
         </span>
       </div>
 
-      {/* Cards Container with gradient fade */}
+      {/* Cards Container */}
       <div className={cn(
-        "relative flex flex-col gap-3 p-3 flex-1 overflow-y-auto max-h-[calc(100vh-280px)]",
+        "flex flex-col gap-2 p-2 flex-1 overflow-y-auto max-h-[calc(100vh-260px)]",
         "bg-gradient-to-b", statusStyle.gradient
       )}>
         {columnLeads.map((lead, index) => (
@@ -154,18 +149,14 @@ export function KanbanColumn({
         
         {columnLeads.length === 0 && (
           <div className={cn(
-            "flex-1 flex flex-col items-center justify-center min-h-[150px]",
-            "text-muted-foreground border-2 border-dashed border-border/60 rounded-xl",
-            "bg-card/50 backdrop-blur-sm",
-            "transition-all duration-300",
+            "flex-1 flex flex-col items-center justify-center min-h-[100px]",
+            "text-muted-foreground border border-dashed border-border/50 rounded-lg",
+            "bg-card/50",
             isDragOver && "border-gold/50 bg-gold/5"
           )}>
-            <Inbox className={cn(
-              "w-8 h-8 mb-2 opacity-40",
-              isDragOver && "opacity-60 text-gold"
-            )} />
-            <span className="text-sm text-center px-4">
-              {isDragOver ? 'Solte aqui!' : 'Arraste leads para cá'}
+            <Inbox className="w-6 h-6 mb-1 opacity-30" />
+            <span className="text-xs text-center">
+              {isDragOver ? 'Solte aqui!' : 'Arraste leads'}
             </span>
           </div>
         )}
