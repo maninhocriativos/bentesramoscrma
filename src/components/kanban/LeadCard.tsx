@@ -109,17 +109,17 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProp
     <div
       onClick={onClick}
       className={cn(
-        "bg-card rounded-xl cursor-pointer transition-all duration-200 relative group",
-        "border border-border/60 hover:border-primary/30",
+        "bg-card rounded-lg cursor-pointer transition-all duration-150 relative group",
+        "border border-border/50 hover:border-primary/40",
         "shadow-sm hover:shadow-md",
-        isDragging && "opacity-60 rotate-1 scale-105 shadow-lg"
+        isDragging && "opacity-70 rotate-1 scale-[1.02] shadow-lg"
       )}
     >
       {/* Status Indicator */}
       {indicatorStyle && (
         <div 
           className={cn(
-            "absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full ring-2 ring-card z-10",
+            "absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ring-2 ring-card z-10",
             indicatorStyle.bg,
             indicatorStyle.pulse && "animate-pulse"
           )}
@@ -127,130 +127,110 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProp
         />
       )}
 
-      {/* Header */}
-      <div className="flex items-center gap-2.5 p-3 pb-2">
-        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-          <User className="w-4 h-4 text-primary" />
+      {/* Compact Header */}
+      <div className="flex items-center gap-2 p-2.5 pb-1.5">
+        <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+          <User className="w-3.5 h-3.5 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
-          <h4 className="font-medium text-sm text-foreground truncate group-hover:text-primary transition-colors">
+          <h4 className="font-medium text-xs text-foreground truncate group-hover:text-primary transition-colors">
             {lead.nome || 'Sem nome'}
           </h4>
-          <p className="text-[11px] text-muted-foreground truncate">{lead.email || lead.telefone}</p>
+          <p className="text-[10px] text-muted-foreground truncate">{lead.email || lead.telefone || '--'}</p>
         </div>
-        <span className={cn(
-          "text-[11px] font-semibold px-1.5 py-0.5 rounded",
-          lead.valor_causa ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground"
-        )}>
-          {formatShortCurrency(lead.valor_causa)}
-        </span>
       </div>
 
-      {/* Body */}
-      <div className="px-3 pb-2.5 space-y-1.5">
-        {/* Isa Insights Row */}
-        {(sentimentoConfig || urgenciaConfig) && (
-          <div className="flex items-center gap-1.5">
-            <Sparkles className="w-3 h-3 text-violet-500" />
-            {sentimentoConfig && SentimentoIcon && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium", sentimentoConfig.bg, sentimentoConfig.color)}>
-                    <SentimentoIcon className="w-2.5 h-2.5" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                  Sentimento: {sentimentoConfig.label}
-                </TooltipContent>
-              </Tooltip>
-            )}
-            {urgenciaConfig && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className={cn(
-                    "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium",
-                    urgenciaConfig.bg, urgenciaConfig.color,
-                    urgenciaConfig.pulse && "animate-pulse"
-                  )}>
-                    <AlertTriangle className="w-2.5 h-2.5" />
-                    {urgenciaConfig.label}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                  Urgência detectada pela Isa
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-        )}
-
-        {/* Tipo de Ação */}
-        {lead.tipo_acao && (
-          <div className="flex items-center gap-1.5 text-xs text-foreground">
-            <Briefcase className="w-3 h-3 text-primary" />
-            <span className="truncate">{lead.tipo_acao}</span>
-          </div>
-        )}
-
-        {/* Resumo IA */}
-        {truncatedResumo && (
-          <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2 pl-0.5">
-            {truncatedResumo}
-          </p>
-        )}
-
-        {/* Badges */}
+      {/* Compact Body */}
+      <div className="px-2.5 pb-2 space-y-1">
+        {/* Value + Insights Row */}
         <div className="flex items-center gap-1 flex-wrap">
+          <span className={cn(
+            "text-[10px] font-semibold px-1.5 py-0.5 rounded",
+            lead.valor_causa ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-muted text-muted-foreground"
+          )}>
+            {formatShortCurrency(lead.valor_causa)}
+          </span>
+          
+          {sentimentoConfig && SentimentoIcon && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className={cn("inline-flex items-center px-1 py-0.5 rounded", sentimentoConfig.bg, sentimentoConfig.color)}>
+                  <SentimentoIcon className="w-2.5 h-2.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                {sentimentoConfig.label}
+              </TooltipContent>
+            </Tooltip>
+          )}
+          
+          {urgenciaConfig && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className={cn(
+                  "inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-medium",
+                  urgenciaConfig.bg, urgenciaConfig.color,
+                  urgenciaConfig.pulse && "animate-pulse"
+                )}>
+                  <Zap className="w-2 h-2" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                {urgenciaConfig.label}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+
+        {/* Origin + Time Row */}
+        <div className="flex items-center justify-between gap-1">
           {lead.origem && (
-            <span className={cn("inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium", origemConfig.bg, origemConfig.text)}>
+            <span className={cn("inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium", origemConfig.bg, origemConfig.text)}>
               <OrigemIcon className="w-2.5 h-2.5" />
               {lead.origem}
             </span>
           )}
           {lead.link_contrato && (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gold/20 text-gold-foreground">
-              <FileSignature className="w-2.5 h-2.5" />
-            </span>
+            <FileSignature className="w-3 h-3 text-gold" />
           )}
+          <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 ml-auto">
+            <Clock className="w-2 h-2" />
+            {lastInteraction}
+          </span>
         </div>
-
-        {/* Time */}
-        <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-          <Clock className="w-2.5 h-2.5" />
-          {lastInteraction}
-        </p>
       </div>
 
-      {/* Contract Button */}
+      {/* Contract Button - Only when needed */}
       {showContractButton && (
-        <div className="px-3 pb-2">
+        <div className="px-2.5 pb-2">
           <Button
             size="sm"
-            className="w-full h-7 text-[11px] gap-1.5 bg-gold hover:bg-gold/90 text-gold-foreground"
+            className="w-full h-6 text-[10px] gap-1 bg-gold hover:bg-gold/90 text-gold-foreground"
             onClick={handleGenerateContract}
           >
-            <FileSignature className="w-3 h-3" />
+            <FileSignature className="w-2.5 h-2.5" />
             Gerar Contrato
           </Button>
         </div>
       )}
 
-      {/* Footer */}
-      <div className="flex items-center justify-between px-2 py-1.5 border-t border-border/30 bg-muted/30">
+      {/* Minimal Footer */}
+      <div className="flex items-center border-t border-border/30">
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 px-2 text-[11px] text-muted-foreground gap-1 hover:text-emerald-600"
+          className="flex-1 h-7 rounded-none text-[10px] text-muted-foreground gap-1 hover:text-emerald-600 hover:bg-emerald-50/50"
           onClick={handleWhatsApp}
           disabled={!lead.telefone}
         >
           <MessageCircle className="w-3 h-3" />
           WhatsApp
         </Button>
+        <div className="w-px h-4 bg-border/50" />
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 px-2 text-[11px] text-muted-foreground gap-1 hover:text-primary"
+          className="flex-1 h-7 rounded-none text-[10px] text-muted-foreground gap-1 hover:text-primary hover:bg-primary/5"
           onClick={handleViewDetails}
         >
           <ExternalLink className="w-3 h-3" />
