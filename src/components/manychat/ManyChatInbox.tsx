@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,9 +15,16 @@ import {
   RefreshCw,
   Instagram,
   Facebook,
-  MessageCircle
+  MessageCircle,
+  Mic,
+  Image,
+  Paperclip,
+  X,
+  User,
+  Check,
+  CheckCheck
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface Subscriber {
@@ -51,7 +57,13 @@ const ManyChatInbox = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -61,7 +73,6 @@ const ManyChatInbox = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Carregar subscribers inicialmente
   useEffect(() => {
     loadSubscribers();
   }, []);
@@ -81,16 +92,13 @@ const ManyChatInbox = () => {
           console.log('🔔 Nova mensagem recebida em tempo real:', payload);
           const newMsg = payload.new as Message & { subscriber_id: string };
           
-          // Se for do subscriber selecionado, adicionar à lista imediatamente
           if (selectedSubscriber && newMsg.subscriber_id === selectedSubscriber.subscriber_id) {
             setMessages(prev => {
-              // Evitar duplicatas
               if (prev.some(m => m.id === newMsg.id)) return prev;
               return [...prev, newMsg];
             });
           }
           
-          // Atualizar lista de subscribers para mostrar última mensagem
           loadSubscribers();
         }
       )
@@ -102,7 +110,6 @@ const ManyChatInbox = () => {
           table: 'manychat_mensagens',
         },
         (payload) => {
-          console.log('🔄 Mensagem atualizada:', payload);
           const updatedMsg = payload.new as Message & { subscriber_id: string };
           
           if (selectedSubscriber && updatedMsg.subscriber_id === selectedSubscriber.subscriber_id) {
@@ -110,11 +117,8 @@ const ManyChatInbox = () => {
           }
         }
       )
-      .subscribe((status) => {
-        console.log('📡 Realtime mensagens status:', status);
-      });
+      .subscribe();
 
-    // Realtime para subscribers (última interação, etc)
     const subscribersChannel = supabase
       .channel('manychat-subscribers-realtime')
       .on(
@@ -124,14 +128,11 @@ const ManyChatInbox = () => {
           schema: 'public',
           table: 'manychat_subscribers',
         },
-        (payload) => {
-          console.log('👤 Subscriber atualizado:', payload);
+        () => {
           loadSubscribers();
         }
       )
-      .subscribe((status) => {
-        console.log('📡 Realtime subscribers status:', status);
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(messagesChannel);
@@ -139,7 +140,6 @@ const ManyChatInbox = () => {
     };
   }, [selectedSubscriber?.subscriber_id]);
 
-  // Carregar mensagens quando selecionar subscriber
   useEffect(() => {
     if (selectedSubscriber) {
       loadMessages(selectedSubscriber.subscriber_id);
@@ -151,16 +151,12 @@ const ManyChatInbox = () => {
   const loadSubscribers = async () => {
     setIsLoading(true);
     try {
-      // Buscar do banco de dados local
       const { data, error } = await supabase
         .from('manychat_subscribers' as any)
         .select('*')
         .order('ultima_interacao', { ascending: false });
 
-      if (error) {
-        console.error('Erro ao buscar subscribers:', error);
-        throw error;
-      }
+      if (error) throw error;
       setSubscribers((data as Subscriber[]) || []);
     } catch (error) {
       console.error('Erro ao carregar subscribers:', error);
@@ -183,10 +179,7 @@ const ManyChatInbox = () => {
         .eq('subscriber_id', subscriberId)
         .order('created_at', { ascending: true });
 
-      if (error) {
-        console.error('Erro ao buscar mensagens:', error);
-        throw error;
-      }
+      if (error) throw error;
       setMessages((data as Message[]) || []);
     } catch (error) {
       console.error('Erro ao carregar mensagens:', error);
@@ -200,41 +193,38 @@ const ManyChatInbox = () => {
     }
   };
 
-  const sendMessage = async () => {
-    if (!newMessage.trim() || !selectedSubscriber) return;
+  const sendMessage = async (mediaUrl?: string, mediaType?: string) => {
+    const content = mediaUrl || newMessage.trim();
+    if (!content || !selectedSubscriber) return;
 
     setIsSending(true);
     try {
       // Enviar via ManyChat API
-      const { data, error } = await supabase.functions.invoke('manychat', {
+      const { error } = await supabase.functions.invoke('manychat', {
         body: {
           action: 'enviar_mensagem',
           subscriberId: selectedSubscriber.subscriber_id,
-          message: newMessage,
+          message: content,
+          type: mediaType || 'text',
         },
       });
 
       if (error) throw error;
 
       // Salvar mensagem localmente
-      const { error: insertError } = await supabase
+      await supabase
         .from('manychat_mensagens' as any)
         .insert({
           subscriber_id: selectedSubscriber.subscriber_id,
           subscriber_nome: selectedSubscriber.nome,
           subscriber_foto: selectedSubscriber.foto,
           canal: selectedSubscriber.canal,
-          conteudo: newMessage,
-          tipo: 'text',
+          conteudo: content,
+          tipo: mediaType || 'text',
           direcao: 'saida',
           lead_id: selectedSubscriber.lead_id,
         } as any);
 
-      if (insertError) {
-        console.error('Erro ao salvar mensagem localmente:', insertError);
-      }
-
-      // Atualizar última interação do subscriber
       await supabase
         .from('manychat_subscribers' as any)
         .update({ 
@@ -244,8 +234,8 @@ const ManyChatInbox = () => {
         .eq('subscriber_id', selectedSubscriber.subscriber_id);
 
       setNewMessage('');
-      
-      // Recarregar mensagens
+      setSelectedFile(null);
+      setPreviewUrl(null);
       await loadMessages(selectedSubscriber.subscriber_id);
       
       toast({
@@ -264,14 +254,90 @@ const ManyChatInbox = () => {
     }
   };
 
-  const searchInManyChat = async () => {
-    if (!searchTerm.trim()) {
-      toast({
-        title: 'Busca',
-        description: 'Digite um nome para buscar no ManyChat',
-      });
-      return;
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
     }
+  };
+
+  const uploadAndSendFile = async () => {
+    if (!selectedFile || !selectedSubscriber) return;
+
+    setIsSending(true);
+    try {
+      const fileExt = selectedFile.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `manychat/${selectedSubscriber.subscriber_id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('documentos')
+        .upload(filePath, selectedFile);
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('documentos')
+        .getPublicUrl(filePath);
+
+      const mediaType = selectedFile.type.startsWith('image/') ? 'image' : 
+                       selectedFile.type.startsWith('audio/') ? 'audio' : 
+                       selectedFile.type.startsWith('video/') ? 'video' : 'document';
+
+      await sendMessage(urlData.publicUrl, mediaType);
+    } catch (error) {
+      console.error('Erro ao enviar arquivo:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível enviar o arquivo',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/ogg' });
+        const file = new File([audioBlob], `audio_${Date.now()}.ogg`, { type: 'audio/ogg' });
+        setSelectedFile(file);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Erro ao iniciar gravação:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível acessar o microfone',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const searchInManyChat = async () => {
+    if (!searchTerm.trim()) return;
 
     setIsLoading(true);
     try {
@@ -281,8 +347,7 @@ const ManyChatInbox = () => {
 
       if (error) throw error;
 
-      if (data.status === 'success' && data.data && data.data.length > 0) {
-        // Salvar subscribers encontrados no banco local
+      if (data.status === 'success' && data.data?.length > 0) {
         for (const sub of data.data) {
           await supabase
             .from('manychat_subscribers' as any)
@@ -300,9 +365,7 @@ const ManyChatInbox = () => {
             });
         }
         
-        // Recarregar lista
         await loadSubscribers();
-        
         toast({
           title: 'Encontrados',
           description: `${data.data.length} contato(s) encontrado(s)`,
@@ -310,7 +373,7 @@ const ManyChatInbox = () => {
       } else {
         toast({
           title: 'Busca',
-          description: 'Nenhum contato encontrado com esse nome',
+          description: 'Nenhum contato encontrado',
         });
       }
     } catch (error) {
@@ -328,27 +391,42 @@ const ManyChatInbox = () => {
   const getChannelIcon = (canal: string) => {
     switch (canal?.toLowerCase()) {
       case 'instagram':
-        return <Instagram className="h-4 w-4 text-pink-500" />;
+        return <Instagram className="h-3.5 w-3.5" />;
       case 'whatsapp':
-        return <MessageCircle className="h-4 w-4 text-green-500" />;
+        return <MessageCircle className="h-3.5 w-3.5" />;
       case 'messenger':
       case 'facebook':
       default:
-        return <Facebook className="h-4 w-4 text-blue-500" />;
+        return <Facebook className="h-3.5 w-3.5" />;
     }
   };
 
-  const getChannelColor = (canal: string) => {
+  const getChannelStyle = (canal: string) => {
     switch (canal?.toLowerCase()) {
       case 'instagram':
-        return 'bg-pink-500/10 text-pink-500';
+        return 'bg-gradient-to-r from-purple-500 to-pink-500 text-white';
       case 'whatsapp':
-        return 'bg-green-500/10 text-green-500';
+        return 'bg-emerald-500 text-white';
       case 'messenger':
       case 'facebook':
       default:
-        return 'bg-blue-500/10 text-blue-500';
+        return 'bg-blue-500 text-white';
     }
+  };
+
+  const formatMessageDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    if (isToday(date)) return 'Hoje';
+    if (isYesterday(date)) return 'Ontem';
+    return format(date, "dd 'de' MMMM", { locale: ptBR });
+  };
+
+  const getDateLabel = (messages: Message[], index: number) => {
+    if (index === 0) return formatMessageDate(messages[0].created_at);
+    const currentDate = new Date(messages[index].created_at).toDateString();
+    const prevDate = new Date(messages[index - 1].created_at).toDateString();
+    if (currentDate !== prevDate) return formatMessageDate(messages[index].created_at);
+    return null;
   };
 
   const filteredSubscribers = subscribers.filter(sub =>
@@ -357,234 +435,360 @@ const ManyChatInbox = () => {
     sub.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const renderMessage = (message: Message) => {
+    const content = message.conteudo || '';
+    const isAudio = content.match(/\.(ogg|mp3|wav|m4a|aac)(\?|$)/i) || message.tipo === 'audio';
+    const isImage = content.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) || message.tipo === 'image';
+    const isVideo = content.match(/\.(mp4|webm|mov)(\?|$)/i) || message.tipo === 'video';
+    const cleanUrl = content.replace(/^\[|\]$/g, '');
+    const isOutgoing = message.direcao === 'saida';
+
+    if (isAudio) {
+      return (
+        <div className="flex items-center gap-2">
+          <div className={`p-2 rounded-full ${isOutgoing ? 'bg-white/20' : 'bg-primary/10'}`}>
+            <Mic className={`h-4 w-4 ${isOutgoing ? 'text-white' : 'text-primary'}`} />
+          </div>
+          <audio controls className="max-w-[200px] h-8" preload="metadata">
+            <source src={cleanUrl} type="audio/ogg" />
+            <source src={cleanUrl} type="audio/mpeg" />
+          </audio>
+        </div>
+      );
+    }
+
+    if (isImage) {
+      return (
+        <img 
+          src={cleanUrl} 
+          alt="Imagem" 
+          className="max-w-[280px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity shadow-sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            window.open(cleanUrl, '_blank');
+          }}
+        />
+      );
+    }
+
+    if (isVideo) {
+      return (
+        <video controls className="max-w-[280px] rounded-lg shadow-sm" preload="metadata">
+          <source src={cleanUrl} type="video/mp4" />
+        </video>
+      );
+    }
+
+    return <p className="whitespace-pre-wrap break-words">{content}</p>;
+  };
+
   return (
-    <div className="flex h-[calc(100vh-200px)] gap-4">
-      {/* Lista de Contatos */}
-      <Card className="w-80 flex flex-col">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" />
+    <div className="flex h-[calc(100vh-180px)] gap-0 bg-background rounded-xl overflow-hidden border shadow-lg">
+      {/* Lista de Contatos - Design elegante */}
+      <div className="w-[340px] flex flex-col border-r bg-card">
+        {/* Header */}
+        <div className="p-4 border-b bg-gradient-to-r from-primary/5 to-transparent">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-primary" />
               Conversas
-            </CardTitle>
+            </h2>
             <Button
               variant="ghost"
               size="icon"
               onClick={loadSubscribers}
               disabled={isLoading}
-              title="Atualizar lista"
+              className="h-8 w-8 hover:bg-primary/10"
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             </Button>
           </div>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar contatos..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && searchInManyChat()}
-                className="pl-9"
-              />
-            </div>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={searchInManyChat}
-              disabled={isLoading}
-              title="Buscar no ManyChat"
-            >
-              <Search className="h-4 w-4" />
-            </Button>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar contatos..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && searchInManyChat()}
+              className="pl-9 bg-background/50 border-muted focus:border-primary transition-colors"
+            />
           </div>
-        </CardHeader>
-        <CardContent className="flex-1 p-0 overflow-hidden">
-          <ScrollArea className="h-full">
-            {filteredSubscribers.length === 0 ? (
-              <div className="p-4 text-center text-muted-foreground">
-                {isLoading ? 'Carregando...' : 'Nenhum contato encontrado'}
-              </div>
-            ) : (
-              <div className="divide-y">
-                {filteredSubscribers.map((subscriber) => (
-                  <div
-                    key={subscriber.id}
-                    onClick={() => setSelectedSubscriber(subscriber)}
-                    className={`p-3 cursor-pointer hover:bg-muted/50 transition-colors ${
-                      selectedSubscriber?.id === subscriber.id ? 'bg-muted' : ''
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-10 w-10">
+        </div>
+
+        {/* Lista */}
+        <ScrollArea className="flex-1">
+          {filteredSubscribers.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">
+              <User className="h-12 w-12 mx-auto mb-3 opacity-30" />
+              <p className="font-medium">{isLoading ? 'Carregando...' : 'Nenhum contato'}</p>
+              <p className="text-sm">Os contatos aparecerão aqui</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border/50">
+              {filteredSubscribers.map((subscriber) => (
+                <div
+                  key={subscriber.id}
+                  onClick={() => setSelectedSubscriber(subscriber)}
+                  className={`p-3 cursor-pointer transition-all duration-200 hover:bg-accent/50 ${
+                    selectedSubscriber?.id === subscriber.id 
+                      ? 'bg-primary/10 border-l-2 border-l-primary' 
+                      : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <Avatar className="h-12 w-12 ring-2 ring-background shadow-sm">
                         <AvatarImage src={subscriber.foto} />
-                        <AvatarFallback>
+                        <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-medium">
                           {subscriber.nome?.substring(0, 2).toUpperCase() || '??'}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <p className="font-medium truncate">{subscriber.nome}</p>
-                          {getChannelIcon(subscriber.canal)}
-                        </div>
-                        {subscriber.ultima_interacao && (
-                          <p className="text-xs text-muted-foreground">
-                            {format(new Date(subscriber.ultima_interacao), "dd/MM HH:mm", { locale: ptBR })}
-                          </p>
-                        )}
+                      <div className={`absolute -bottom-0.5 -right-0.5 p-1 rounded-full shadow-sm ${getChannelStyle(subscriber.canal)}`}>
+                        {getChannelIcon(subscriber.canal)}
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
-        </CardContent>
-      </Card>
-
-      {/* Área de Chat */}
-      <Card className="flex-1 flex flex-col">
-        {selectedSubscriber ? (
-          <>
-            {/* Header do Chat */}
-            <CardHeader className="pb-3 border-b">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-10 w-10">
-                    <AvatarImage src={selectedSubscriber.foto} />
-                    <AvatarFallback>
-                      {selectedSubscriber.nome?.substring(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-medium">{selectedSubscriber.nome}</p>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Badge variant="secondary" className={getChannelColor(selectedSubscriber.canal)}>
-                        {selectedSubscriber.canal || 'Facebook'}
-                      </Badge>
-                      {selectedSubscriber.telefone && (
-                        <span className="flex items-center gap-1">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium truncate">{subscriber.nome || 'Sem nome'}</p>
+                        {subscriber.lead_id && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-emerald-500/10 text-emerald-600 border-emerald-200">
+                            Lead
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        {subscriber.ultima_interacao && (
+                          <span>{format(new Date(subscriber.ultima_interacao), "dd/MM 'às' HH:mm", { locale: ptBR })}</span>
+                        )}
+                      </div>
+                      {subscriber.telefone && (
+                        <p className="text-xs text-muted-foreground truncate flex items-center gap-1 mt-0.5">
                           <Phone className="h-3 w-3" />
-                          {selectedSubscriber.telefone}
-                        </span>
-                      )}
-                      {selectedSubscriber.email && (
-                        <span className="flex items-center gap-1">
-                          <Mail className="h-3 w-3" />
-                          {selectedSubscriber.email}
-                        </span>
+                          {subscriber.telefone}
+                        </p>
                       )}
                     </div>
                   </div>
                 </div>
+              ))}
+            </div>
+          )}
+        </ScrollArea>
+      </div>
+
+      {/* Área de Chat - Design moderno */}
+      <div className="flex-1 flex flex-col bg-gradient-to-b from-muted/30 to-muted/10">
+        {selectedSubscriber ? (
+          <>
+            {/* Header do Chat */}
+            <div className="p-4 border-b bg-card/80 backdrop-blur-sm">
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <Avatar className="h-11 w-11 ring-2 ring-background shadow-md">
+                    <AvatarImage src={selectedSubscriber.foto} />
+                    <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-primary-foreground font-medium">
+                      {selectedSubscriber.nome?.substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className={`absolute -bottom-0.5 -right-0.5 p-1 rounded-full shadow ${getChannelStyle(selectedSubscriber.canal)}`}>
+                    {getChannelIcon(selectedSubscriber.canal)}
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg">{selectedSubscriber.nome}</h3>
+                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                    {selectedSubscriber.telefone && (
+                      <span className="flex items-center gap-1">
+                        <Phone className="h-3.5 w-3.5" />
+                        {selectedSubscriber.telefone}
+                      </span>
+                    )}
+                    {selectedSubscriber.email && (
+                      <span className="flex items-center gap-1">
+                        <Mail className="h-3.5 w-3.5" />
+                        {selectedSubscriber.email}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {selectedSubscriber.lead_id && (
+                  <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                    <Check className="h-3 w-3 mr-1" />
+                    Lead Vinculado
+                  </Badge>
+                )}
               </div>
-            </CardHeader>
+            </div>
 
             {/* Mensagens */}
-            <CardContent className="flex-1 p-4 overflow-hidden">
-              <ScrollArea className="h-full pr-4">
-                {isLoadingMessages ? (
-                  <div className="h-full flex items-center justify-center text-muted-foreground">
-                    <RefreshCw className="h-6 w-6 animate-spin" />
+            <ScrollArea className="flex-1 p-4">
+              {isLoadingMessages ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <RefreshCw className="h-8 w-8 animate-spin mx-auto text-primary/50" />
+                    <p className="text-sm text-muted-foreground mt-2">Carregando mensagens...</p>
                   </div>
-                ) : messages.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-muted-foreground">
-                    <div className="text-center">
-                      <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                      <p>Inicie uma conversa com {selectedSubscriber.nome}</p>
-                      <p className="text-sm">As mensagens enviadas aparecerão aqui</p>
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center p-8 rounded-2xl bg-card/50 backdrop-blur-sm">
+                    <div className="h-16 w-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
+                      <MessageSquare className="h-8 w-8 text-primary/50" />
                     </div>
+                    <p className="font-medium text-lg">Inicie uma conversa</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Envie uma mensagem para {selectedSubscriber.nome}
+                    </p>
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    {messages.map((message) => {
-                      // Detectar tipo de mídia pela URL
-                      const content = message.conteudo || '';
-                      const isAudio = content.match(/\.(ogg|mp3|wav|m4a|aac)(\?|$)/i) || message.tipo === 'audio';
-                      const isImage = content.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) || message.tipo === 'image';
-                      const isVideo = content.match(/\.(mp4|webm|mov)(\?|$)/i) || message.tipo === 'video';
-                      const isMediaUrl = content.match(/^https?:\/\/.+\.(ogg|mp3|wav|jpg|jpeg|png|gif|webp|mp4|webm)/i);
-                      
-                      // Limpar colchetes de URLs malformadas
-                      const cleanUrl = content.replace(/^\[|\]$/g, '');
-                      
-                      return (
-                        <div
-                          key={message.id}
-                          className={`flex ${message.direcao === 'entrada' ? 'justify-start' : 'justify-end'}`}
-                        >
+                </div>
+              ) : (
+                <div className="space-y-1 max-w-3xl mx-auto">
+                  {messages.map((message, index) => {
+                    const dateLabel = getDateLabel(messages, index);
+                    const isOutgoing = message.direcao === 'saida';
+                    
+                    return (
+                      <div key={message.id}>
+                        {dateLabel && (
+                          <div className="flex justify-center my-4">
+                            <span className="px-3 py-1 rounded-full bg-card text-xs text-muted-foreground shadow-sm">
+                              {dateLabel}
+                            </span>
+                          </div>
+                        )}
+                        <div className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'} mb-2`}>
                           <div
-                            className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                              message.direcao === 'entrada'
-                                ? 'bg-muted'
-                                : 'bg-primary text-primary-foreground'
+                            className={`max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm ${
+                              isOutgoing
+                                ? 'bg-primary text-primary-foreground rounded-br-md'
+                                : 'bg-card border rounded-bl-md'
                             }`}
                           >
-                            {isAudio ? (
-                              <audio controls className="max-w-full" preload="metadata">
-                                <source src={cleanUrl} type="audio/ogg" />
-                                <source src={cleanUrl} type="audio/mpeg" />
-                                Seu navegador não suporta áudio.
-                              </audio>
-                            ) : isImage ? (
-                              <img 
-                                src={cleanUrl} 
-                                alt="Imagem enviada" 
-                                className="max-w-full rounded cursor-pointer hover:opacity-90 transition-opacity"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  window.open(cleanUrl, '_blank');
-                                }}
-                              />
-                            ) : isVideo ? (
-                              <video controls className="max-w-full rounded" preload="metadata">
-                                <source src={cleanUrl} type="video/mp4" />
-                                Seu navegador não suporta vídeo.
-                              </video>
-                            ) : (
-                              <p>{content}</p>
-                            )}
-                            <p className={`text-xs mt-1 ${
-                              message.direcao === 'entrada' ? 'text-muted-foreground' : 'text-primary-foreground/70'
+                            {renderMessage(message)}
+                            <div className={`flex items-center justify-end gap-1 mt-1 ${
+                              isOutgoing ? 'text-primary-foreground/60' : 'text-muted-foreground'
                             }`}>
-                              {format(new Date(message.created_at), "HH:mm", { locale: ptBR })}
-                            </p>
+                              <span className="text-[10px]">
+                                {format(new Date(message.created_at), "HH:mm", { locale: ptBR })}
+                              </span>
+                              {isOutgoing && <CheckCheck className="h-3 w-3" />}
+                            </div>
                           </div>
                         </div>
-                      );
-                    })}
-                    <div ref={messagesEndRef} />
+                      </div>
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
+            </ScrollArea>
+
+            {/* Preview de arquivo selecionado */}
+            {selectedFile && (
+              <div className="px-4 py-2 border-t bg-card/80">
+                <div className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
+                  {selectedFile.type.startsWith('image/') ? (
+                    <img 
+                      src={previewUrl || ''} 
+                      alt="Preview" 
+                      className="h-16 w-16 object-cover rounded-lg"
+                    />
+                  ) : (
+                    <div className="h-16 w-16 rounded-lg bg-primary/10 flex items-center justify-center">
+                      {selectedFile.type.startsWith('audio/') ? (
+                        <Mic className="h-6 w-6 text-primary" />
+                      ) : (
+                        <Paperclip className="h-6 w-6 text-primary" />
+                      )}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{selectedFile.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(selectedFile.size / 1024).toFixed(1)} KB
+                    </p>
                   </div>
-                )}
-              </ScrollArea>
-            </CardContent>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      setSelectedFile(null);
+                      setPreviewUrl(null);
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Input de Mensagem */}
-            <div className="p-4 border-t">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Digite sua mensagem..."
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                  disabled={isSending}
+            <div className="p-4 border-t bg-card/80 backdrop-blur-sm">
+              <div className="flex items-end gap-2 max-w-3xl mx-auto">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  accept="image/*,audio/*,video/*"
+                  className="hidden"
                 />
-                <Button onClick={sendMessage} disabled={isSending || !newMessage.trim()}>
-                  <Send className="h-4 w-4" />
+                
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isSending}
+                  className="h-10 w-10 rounded-full hover:bg-primary/10"
+                >
+                  <Image className="h-5 w-5 text-muted-foreground" />
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={isRecording ? stopRecording : startRecording}
+                  disabled={isSending}
+                  className={`h-10 w-10 rounded-full ${isRecording ? 'bg-red-500 hover:bg-red-600 text-white' : 'hover:bg-primary/10'}`}
+                >
+                  <Mic className={`h-5 w-5 ${isRecording ? '' : 'text-muted-foreground'}`} />
+                </Button>
+
+                <div className="flex-1 relative">
+                  <Input
+                    placeholder="Digite sua mensagem..."
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && (selectedFile ? uploadAndSendFile() : sendMessage())}
+                    disabled={isSending || isRecording}
+                    className="pr-12 py-5 rounded-full bg-background/80 border-muted focus:border-primary transition-colors"
+                  />
+                </div>
+
+                <Button 
+                  onClick={selectedFile ? uploadAndSendFile : () => sendMessage()} 
+                  disabled={isSending || (!newMessage.trim() && !selectedFile) || isRecording}
+                  className="h-10 w-10 rounded-full"
+                  size="icon"
+                >
+                  <Send className="h-5 w-5" />
                 </Button>
               </div>
             </div>
           </>
         ) : (
-          <div className="h-full flex items-center justify-center text-muted-foreground">
-            <div className="text-center">
-              <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-50" />
-              <p className="text-lg">Selecione uma conversa</p>
-              <p className="text-sm">Escolha um contato para visualizar e responder mensagens</p>
+          <div className="h-full flex items-center justify-center">
+            <div className="text-center p-8">
+              <div className="h-24 w-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                <MessageSquare className="h-12 w-12 text-primary/40" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">Selecione uma conversa</h3>
+              <p className="text-muted-foreground max-w-sm">
+                Escolha um contato da lista para visualizar e responder mensagens
+              </p>
             </div>
           </div>
         )}
-      </Card>
+      </div>
     </div>
   );
 };
