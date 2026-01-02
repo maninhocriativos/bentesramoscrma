@@ -49,33 +49,166 @@ serve(async (req: Request) => {
 
     // === WEBHOOK ROUTES ===
     
-    // ManyChat Webhook
+    // ManyChat Webhook - Redirecionar para manychat-webhook para processamento completo
     if (path === '/webhook/manychat' || path.startsWith('/manychat')) {
-      const subscriberId = body.subscriber_id || body.id;
-      const nome = body.name || body.first_name || body.subscriber?.name;
-      const telefone = body.phone || body.subscriber?.phone;
-      const mensagem = body.last_input_text || body.text || body.message;
+      const subscriberId = body.subscriber_id || body.id?.toString() || `api_${Date.now()}`;
+      const nome = body.name || body.first_name || body.subscriber?.name || 'Desconhecido';
+      const telefone = body.phone || body.subscriber?.phone || body.telefone;
+      const email = body.email || body.subscriber?.email;
+      const mensagem = body.last_input_text || body.text || body.message || body.mensagem;
 
-      // Try to find linked lead
-      let leadId = null;
-      if (telefone) {
-        const { data: lead } = await supabase
-          .from('leads_juridicos')
-          .select('id')
-          .or(`telefone.ilike.%${telefone.slice(-8)}%`)
-          .maybeSingle();
-        leadId = lead?.id;
+      // Detectar canal
+      let canal = 'facebook';
+      const payloadStr = JSON.stringify(body).toLowerCase();
+      if (payloadStr.includes('instagram') || payloadStr.includes('"ig_')) canal = 'instagram';
+      else if (payloadStr.includes('whatsapp') || payloadStr.includes('"wa_') || telefone) canal = 'whatsapp';
+
+      // Tentar encontrar subscriber existente com lead vinculado
+      let leadId: string | null = null;
+      
+      const { data: existingSubscriber } = await supabase
+        .from('manychat_subscribers')
+        .select('lead_id')
+        .eq('subscriber_id', subscriberId)
+        .maybeSingle();
+      
+      if (existingSubscriber?.lead_id) {
+        leadId = existingSubscriber.lead_id;
+        console.log('[API-HUB] Lead já vinculado ao subscriber:', leadId);
+      } else {
+        // Buscar lead pelo telefone (normalizado)
+        if (telefone) {
+          const telefoneLimpo = telefone.toString().replace(/\D/g, '');
+          const { data: leadByPhone } = await supabase
+            .from('leads_juridicos')
+            .select('id, nome')
+            .or(`telefone.ilike.%${telefoneLimpo.slice(-9)}%,telefone.ilike.%${telefoneLimpo}%`)
+            .limit(1)
+            .maybeSingle();
+          
+          if (leadByPhone) {
+            leadId = leadByPhone.id;
+            console.log('[API-HUB] Lead encontrado por telefone:', leadByPhone.nome);
+          }
+        }
+        
+        // Buscar por email se não encontrou por telefone
+        if (!leadId && email) {
+          const { data: leadByEmail } = await supabase
+            .from('leads_juridicos')
+            .select('id, nome')
+            .ilike('email', email)
+            .limit(1)
+            .maybeSingle();
+          
+          if (leadByEmail) {
+            leadId = leadByEmail.id;
+            console.log('[API-HUB] Lead encontrado por email:', leadByEmail.nome);
+          }
+        }
+        
+        // Buscar por nome
+        if (!leadId && nome && nome !== 'Desconhecido') {
+          const { data: leadByName } = await supabase
+            .from('leads_juridicos')
+            .select('id, nome')
+            .ilike('nome', `%${nome}%`)
+            .limit(1)
+            .maybeSingle();
+          
+          if (leadByName) {
+            leadId = leadByName.id;
+            console.log('[API-HUB] Lead encontrado por nome:', leadByName.nome);
+          }
+        }
+        
+        // CRIAR LEAD AUTOMATICAMENTE se não encontrou
+        const temDadosParaCriarLead = (nome && nome !== 'Desconhecido') || telefone || email;
+        
+        if (!leadId && temDadosParaCriarLead) {
+          const nomeDoLead = (nome && nome !== 'Desconhecido') 
+            ? nome 
+            : telefone 
+              ? `Contato ${telefone}` 
+              : `Contato via ${canal}`;
+          
+          // Determinar origem baseado no canal
+          let origem = 'ManyChat';
+          if (canal === 'instagram') origem = 'Instagram';
+          else if (canal === 'facebook') origem = 'Facebook';
+          else if (canal === 'whatsapp') origem = 'WhatsApp';
+          
+          console.log('[API-HUB] Criando novo lead automaticamente:', nomeDoLead);
+          
+          const { data: newLead, error: leadError } = await supabase
+            .from('leads_juridicos')
+            .insert({
+              nome: nomeDoLead,
+              telefone: telefone || null,
+              email: email || null,
+              status: 'Lead Frio',
+              origem: origem,
+              resumo_ia: `Lead criado automaticamente via ${origem}. Primeiro contato em ${new Date().toLocaleDateString('pt-BR')}.`,
+            })
+            .select()
+            .single();
+          
+          if (leadError) {
+            console.error('[API-HUB] Erro ao criar lead:', leadError);
+          } else {
+            leadId = newLead.id;
+            console.log('[API-HUB] Novo lead criado:', newLead.nome, leadId);
+            
+            // Registrar evento de criação de lead
+            await supabase.from('system_events').insert({
+              tipo: 'lead',
+              fonte: 'manychat',
+              acao: 'lead_criado_automatico',
+              entidade_tipo: 'lead',
+              entidade_id: leadId,
+              lead_id: leadId,
+              ...eventData,
+              dados: {
+                nome: nomeDoLead,
+                telefone: telefone,
+                email: email,
+                canal: canal,
+                origem: origem,
+                subscriber_id: subscriberId,
+              },
+              processado: true,
+            });
+          }
+        }
       }
+
+      // Upsert subscriber com lead_id vinculado
+      await supabase
+        .from('manychat_subscribers')
+        .upsert({
+          subscriber_id: subscriberId,
+          nome: nome,
+          telefone: telefone,
+          email: email,
+          canal: canal,
+          lead_id: leadId,
+          ultima_interacao: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'subscriber_id',
+        });
 
       // Log event
       await supabase.from('system_events').insert({
-        tipo: 'webhook',
+        tipo: 'mensagem',
         fonte: 'manychat',
-        acao: 'received',
+        acao: 'mensagem_recebida',
         entidade_tipo: 'mensagem',
+        entidade_id: leadId,
         lead_id: leadId,
         ...eventData,
-        dados: { subscriber_id: subscriberId, nome, telefone, mensagem, ...body }
+        dados: { subscriber_id: subscriberId, nome, telefone, mensagem, canal, ...body },
+        processado: true,
       });
 
       // Store message
@@ -84,12 +217,14 @@ serve(async (req: Request) => {
           subscriber_id: subscriberId,
           subscriber_nome: nome,
           conteudo: mensagem,
+          canal: canal,
           direcao: 'entrada',
           lead_id: leadId
         });
+        console.log('[API-HUB] Mensagem salva para subscriber:', subscriberId);
       }
 
-      response = { success: true, lead_id: leadId };
+      response = { success: true, lead_id: leadId, lead_criado: !existingSubscriber?.lead_id && leadId ? true : false };
     }
 
     // Clicksign Webhook
