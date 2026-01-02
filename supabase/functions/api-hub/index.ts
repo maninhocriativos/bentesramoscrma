@@ -211,17 +211,34 @@ serve(async (req: Request) => {
         processado: true,
       });
 
-      // Store message
+      // Store message - detectar tipo de mídia
       if (subscriberId && mensagem) {
+        // Detectar tipo de conteúdo pela URL
+        let tipoMensagem = 'text';
+        const mensagemLower = mensagem.toString().toLowerCase();
+        
+        if (mensagemLower.match(/\.(ogg|mp3|wav|m4a|aac)(\?|$)/)) {
+          tipoMensagem = 'audio';
+        } else if (mensagemLower.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/)) {
+          tipoMensagem = 'image';
+        } else if (mensagemLower.match(/\.(mp4|webm|mov)(\?|$)/)) {
+          tipoMensagem = 'video';
+        } else if (mensagemLower.match(/\.(pdf|doc|docx|xls|xlsx)(\?|$)/)) {
+          tipoMensagem = 'document';
+        }
+        
+        console.log('[API-HUB] Tipo detectado:', tipoMensagem, '- Mensagem:', mensagem.substring(0, 100));
+        
         await supabase.from('manychat_mensagens').insert({
           subscriber_id: subscriberId,
           subscriber_nome: nome,
           conteudo: mensagem,
           canal: canal,
+          tipo: tipoMensagem,
           direcao: 'entrada',
           lead_id: leadId
         });
-        console.log('[API-HUB] Mensagem salva para subscriber:', subscriberId);
+        console.log('[API-HUB] Mensagem salva para subscriber:', subscriberId, 'tipo:', tipoMensagem);
       }
 
       response = { success: true, lead_id: leadId, lead_criado: !existingSubscriber?.lead_id && leadId ? true : false };
