@@ -51,11 +51,18 @@ serve(async (req: Request) => {
     
     // ManyChat Webhook - Redirecionar para manychat-webhook para processamento completo
     if (path === '/webhook/manychat' || path.startsWith('/manychat')) {
-      const subscriberId = body.subscriber_id || body.id?.toString() || `api_${Date.now()}`;
-      const nome = body.name || body.first_name || body.subscriber?.name || 'Desconhecido';
-      const telefone = body.phone || body.subscriber?.phone || body.telefone;
+      const subscriberIdRaw = body.subscriber_id || body.id?.toString() || `api_${Date.now()}`;
+      const subscriberId = subscriberIdRaw.toString().replace(/^\[|\]$/g, '').trim();
+      
+      const nomeRaw = body.name || body.first_name || body.subscriber?.name || 'Desconhecido';
+      const nome = nomeRaw.toString().replace(/^\[|\]$/g, '').trim();
+      
+      const telefoneRaw = body.phone || body.subscriber?.phone || body.telefone;
+      const telefone = telefoneRaw ? telefoneRaw.toString().replace(/^\[|\]$/g, '').trim() : null;
+      
       const email = body.email || body.subscriber?.email;
-      const mensagem = body.last_input_text || body.text || body.message || body.mensagem;
+      const mensagemRaw = body.last_input_text || body.text || body.message || body.mensagem;
+      const mensagem = mensagemRaw ? mensagemRaw.toString().replace(/^\[|\]$/g, '').trim() : null;
 
       // Detectar canal
       let canal = 'facebook';
