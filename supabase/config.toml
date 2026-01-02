@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.google-oauth]
 verify_jwt = false
+
+[functions.followup-automation]
+verify_jwt = false

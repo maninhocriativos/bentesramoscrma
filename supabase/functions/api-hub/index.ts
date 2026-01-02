@@ -185,6 +185,16 @@ serve(async (req: Request) => {
               },
               processado: true,
             });
+            
+            // Criar follow-up automático para o novo lead
+            await supabase.from('lead_followups').insert({
+              lead_id: leadId,
+              subscriber_id: subscriberId,
+              canal: canal,
+              primeiro_contato_em: new Date().toISOString(),
+              status: 'aguardando'
+            });
+            console.log('[API-HUB] Follow-up automático criado para:', leadId);
           }
         }
       }
