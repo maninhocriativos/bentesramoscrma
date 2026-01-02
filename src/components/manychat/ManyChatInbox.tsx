@@ -497,27 +497,62 @@ const ManyChatInbox = () => {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {messages.map((message) => (
-                      <div
-                        key={message.id}
-                        className={`flex ${message.direcao === 'entrada' ? 'justify-start' : 'justify-end'}`}
-                      >
+                    {messages.map((message) => {
+                      // Detectar tipo de mídia pela URL
+                      const content = message.conteudo || '';
+                      const isAudio = content.match(/\.(ogg|mp3|wav|m4a|aac)(\?|$)/i) || message.tipo === 'audio';
+                      const isImage = content.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) || message.tipo === 'image';
+                      const isVideo = content.match(/\.(mp4|webm|mov)(\?|$)/i) || message.tipo === 'video';
+                      const isMediaUrl = content.match(/^https?:\/\/.+\.(ogg|mp3|wav|jpg|jpeg|png|gif|webp|mp4|webm)/i);
+                      
+                      // Limpar colchetes de URLs malformadas
+                      const cleanUrl = content.replace(/^\[|\]$/g, '');
+                      
+                      return (
                         <div
-                          className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                            message.direcao === 'entrada'
-                              ? 'bg-muted'
-                              : 'bg-primary text-primary-foreground'
-                          }`}
+                          key={message.id}
+                          className={`flex ${message.direcao === 'entrada' ? 'justify-start' : 'justify-end'}`}
                         >
-                          <p>{message.conteudo}</p>
-                          <p className={`text-xs mt-1 ${
-                            message.direcao === 'entrada' ? 'text-muted-foreground' : 'text-primary-foreground/70'
-                          }`}>
-                            {format(new Date(message.created_at), "HH:mm", { locale: ptBR })}
-                          </p>
+                          <div
+                            className={`max-w-[70%] rounded-lg px-4 py-2 ${
+                              message.direcao === 'entrada'
+                                ? 'bg-muted'
+                                : 'bg-primary text-primary-foreground'
+                            }`}
+                          >
+                            {isAudio ? (
+                              <audio controls className="max-w-full" preload="metadata">
+                                <source src={cleanUrl} type="audio/ogg" />
+                                <source src={cleanUrl} type="audio/mpeg" />
+                                Seu navegador não suporta áudio.
+                              </audio>
+                            ) : isImage ? (
+                              <img 
+                                src={cleanUrl} 
+                                alt="Imagem enviada" 
+                                className="max-w-full rounded cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(cleanUrl, '_blank');
+                                }}
+                              />
+                            ) : isVideo ? (
+                              <video controls className="max-w-full rounded" preload="metadata">
+                                <source src={cleanUrl} type="video/mp4" />
+                                Seu navegador não suporta vídeo.
+                              </video>
+                            ) : (
+                              <p>{content}</p>
+                            )}
+                            <p className={`text-xs mt-1 ${
+                              message.direcao === 'entrada' ? 'text-muted-foreground' : 'text-primary-foreground/70'
+                            }`}>
+                              {format(new Date(message.created_at), "HH:mm", { locale: ptBR })}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <div ref={messagesEndRef} />
                   </div>
                 )}
