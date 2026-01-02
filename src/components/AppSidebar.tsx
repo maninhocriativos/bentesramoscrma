@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare, Sparkles, Webhook, Zap } from 'lucide-react';
+import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare, Sparkles, Webhook, Zap, BookOpen } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Sidebar,
@@ -97,6 +97,12 @@ const menuItems: MenuItem[] = [
     title: 'API Hub', 
     url: '/api-hub', 
     icon: Webhook,
+    visibility: 'admin-only'
+  },
+  { 
+    title: 'API Docs', 
+    url: '/api-docs', 
+    icon: BookOpen,
     visibility: 'admin-only'
   },
   { 

@@ -6,6 +6,7 @@ import { LeadModal } from '@/components/LeadModal';
 import { LeadFilters } from '@/components/leads/LeadFilters';
 import { RecentActivities } from '@/components/crm/RecentActivities';
 import { QuickTasks } from '@/components/crm/QuickTasks';
+import { FollowupStatusPanel } from '@/components/crm/FollowupStatusPanel';
 import { useLeads } from '@/hooks/useLeads';
 import { useCompromissos } from '@/hooks/useCompromissos';
 import { usePerfil } from '@/hooks/usePerfil';
@@ -77,6 +78,7 @@ export default function LeadsPage() {
               
               {/* Sidebar - Intelligence Panels */}
               <div className="flex flex-col gap-4 lg:overflow-y-auto lg:max-h-[calc(100vh-200px)]">
+                <FollowupStatusPanel />
                 <RecentActivities leads={leads} />
                 <QuickTasks 
                   compromissos={compromissos} 
