@@ -514,6 +514,71 @@ export type Database = {
           },
         ]
       }
+      lead_followups: {
+        Row: {
+          canal: string | null
+          created_at: string
+          followup_1_enviado: boolean | null
+          followup_1_enviado_em: string | null
+          followup_2_enviado: boolean | null
+          followup_2_enviado_em: string | null
+          followup_3_enviado: boolean | null
+          followup_3_enviado_em: string | null
+          id: string
+          lead_id: string
+          primeiro_contato_em: string
+          respondido: boolean | null
+          respondido_em: string | null
+          status: string | null
+          subscriber_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          canal?: string | null
+          created_at?: string
+          followup_1_enviado?: boolean | null
+          followup_1_enviado_em?: string | null
+          followup_2_enviado?: boolean | null
+          followup_2_enviado_em?: string | null
+          followup_3_enviado?: boolean | null
+          followup_3_enviado_em?: string | null
+          id?: string
+          lead_id: string
+          primeiro_contato_em?: string
+          respondido?: boolean | null
+          respondido_em?: string | null
+          status?: string | null
+          subscriber_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          canal?: string | null
+          created_at?: string
+          followup_1_enviado?: boolean | null
+          followup_1_enviado_em?: string | null
+          followup_2_enviado?: boolean | null
+          followup_2_enviado_em?: string | null
+          followup_3_enviado?: boolean | null
+          followup_3_enviado_em?: string | null
+          id?: string
+          lead_id?: string
+          primeiro_contato_em?: string
+          respondido?: boolean | null
+          respondido_em?: string | null
+          status?: string | null
+          subscriber_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_followups_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads_juridicos: {
         Row: {
           created_at: string
