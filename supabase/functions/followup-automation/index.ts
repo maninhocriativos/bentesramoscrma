@@ -15,15 +15,12 @@ const FOLLOWUP_TEMPLATES = {
   // Follow-up 1: 10 minutos - Mensagem de interesse
   followup_1: {
     titulo: "Ainda estou aqui para ajudar! 🤝",
-    mensagem: `Oi {{nome}}! Vi que você entrou em contato conosco há pouco. 
+    mensagem: `Oi {{nome}}! Vi que você entrou em contato conosco há pouco.
 
 Sei que às vezes a vida corrida nos faz pausar, mas estou aqui para te ajudar com sua questão jurídica.
 
-*Posso te ajudar com algo agora?*`,
-    botoes: [
-      { type: "reply", title: "Sim, tenho dúvidas" },
-      { type: "reply", title: "Quero agendar consulta" }
-    ],
+Posso te ajudar com algo agora?`,
+    botoes: ["Sim, tenho dúvidas", "Quero agendar consulta"],
     delay_minutos: 10
   },
   
@@ -32,7 +29,7 @@ Sei que às vezes a vida corrida nos faz pausar, mas estou aqui para te ajudar c
     titulo: "Sua situação merece atenção 📋",
     mensagem: `{{nome}}, percebi que ainda não conversamos.
 
-Muitos clientes que atendemos estavam na mesma situação - *sem saber por onde começar*.
+Muitos clientes que atendemos estavam na mesma situação - sem saber por onde começar.
 
 Nossa equipe já ajudou centenas de pessoas a resolver questões como:
 ✅ Revisão de contratos
@@ -40,11 +37,8 @@ Nossa equipe já ajudou centenas de pessoas a resolver questões como:
 ✅ Direitos do consumidor
 ✅ E muito mais
 
-*Que tal conversarmos sem compromisso?*`,
-    botoes: [
-      { type: "reply", title: "Quero saber mais" },
-      { type: "reply", title: "Qual o valor?" }
-    ],
+Que tal conversarmos sem compromisso?`,
+    botoes: ["Quero saber mais", "Qual o valor?"],
     delay_minutos: 60
   },
   
@@ -55,29 +49,20 @@ Nossa equipe já ajudou centenas de pessoas a resolver questões como:
 
 Entendo que você pode estar ocupado(a), mas não queria deixar de oferecer nossa ajuda.
 
-🎯 *Primeira consulta GRATUITA*
+🎯 Primeira consulta GRATUITA
 📱 Atendimento rápido pelo WhatsApp
 🔒 Sigilo total garantido
 
 Se mudar de ideia, é só responder aqui que retomamos de onde paramos!`,
-    botoes: [
-      { type: "reply", title: "Quero a consulta grátis" },
-      { type: "reply", title: "Me ligue depois" }
-    ],
+    botoes: ["Quero a consulta grátis", "Me ligue depois"],
     delay_minutos: 1440 // 24 horas
   }
 };
 
-// Enviar mensagem via ManyChat API
-async function enviarMensagemManyChat(subscriberId: string, mensagem: string, botoes: any[]) {
+// Enviar mensagem via ManyChat API - Formato correto para sendFlow com texto
+async function enviarMensagemManyChat(subscriberId: string, mensagem: string, botoes: string[]) {
   try {
-    // Formatar botões para ManyChat
-    const quickReplies = botoes.map(b => ({
-      type: "node",
-      caption: b.title,
-      target_node_id: null // Deixar null para usar resposta livre
-    }));
-
+    // Usar sendContent com formato simples de texto
     const response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
       method: 'POST',
       headers: {
@@ -85,21 +70,20 @@ async function enviarMensagemManyChat(subscriberId: string, mensagem: string, bo
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        subscriber_id: subscriberId,
+        subscriber_id: parseInt(subscriberId),
         data: {
           version: "v2",
           content: {
             messages: [
               {
                 type: "text",
-                text: mensagem,
-                buttons: botoes.map(b => ({
-                  type: "reply",
-                  caption: b.title
-                }))
+                text: mensagem
               }
             ],
-            quick_replies: quickReplies
+            quick_replies: botoes.map(texto => ({
+              type: "text",
+              title: texto
+            }))
           }
         }
       }),
@@ -107,7 +91,67 @@ async function enviarMensagemManyChat(subscriberId: string, mensagem: string, bo
 
     const result = await response.json();
     console.log('[FOLLOWUP] ManyChat response:', JSON.stringify(result));
-    return { success: response.ok, result };
+    
+    if (result.status === 'error') {
+      // Tentar formato alternativo com sendFlow
+      console.log('[FOLLOWUP] Tentando formato alternativo...');
+      const altResponse = await fetch('https://api.manychat.com/fb/subscriber/sendContent', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${manychatApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          subscriber_id: parseInt(subscriberId),
+          data: {
+            version: "v2",
+            content: {
+              type: "messages",
+              messages: [
+                {
+                  type: "text",
+                  text: mensagem
+                }
+              ]
+            }
+          }
+        }),
+      });
+      
+      const altResult = await altResponse.json();
+      console.log('[FOLLOWUP] ManyChat alt response:', JSON.stringify(altResult));
+      
+      if (altResult.status === 'error') {
+        // Última tentativa - usar endpoint mais simples
+        const simpleResponse = await fetch(`https://api.manychat.com/fb/sending/sendContent`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${manychatApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            subscriber_id: parseInt(subscriberId),
+            data: {
+              version: "v2",
+              content: {
+                messages: [{
+                  type: "text",
+                  text: mensagem
+                }]
+              }
+            }
+          }),
+        });
+        
+        const simpleResult = await simpleResponse.json();
+        console.log('[FOLLOWUP] ManyChat simple response:', JSON.stringify(simpleResult));
+        return { success: simpleResult.status === 'success', result: simpleResult };
+      }
+      
+      return { success: altResult.status === 'success', result: altResult };
+    }
+    
+    return { success: result.status === 'success', result };
   } catch (error: any) {
     console.error('[FOLLOWUP] Erro ao enviar ManyChat:', error);
     return { success: false, error: error.message };
@@ -190,7 +234,7 @@ serve(async (req: Request) => {
         const template = FOLLOWUP_TEMPLATES[templateKey as keyof typeof FOLLOWUP_TEMPLATES];
         const mensagemPersonalizada = template.mensagem.replace(/\{\{nome\}\}/g, lead.nome || 'cliente');
         
-        console.log(`[FOLLOWUP] Enviando ${templateKey} para ${lead.nome}`);
+        console.log(`[FOLLOWUP] Enviando ${templateKey} para ${lead.nome} (subscriber: ${followup.subscriber_id})`);
 
         const resultado = await enviarMensagemManyChat(
           followup.subscriber_id,
@@ -221,14 +265,14 @@ serve(async (req: Request) => {
             cliente_id: lead.id,
             tipo: 'WhatsApp',
             direcao: 'Saída',
-            resumo: `Follow-up automático ${templateKey.replace('_', ' ')} enviado`,
+            resumo: `Follow-up automático ${templateKey.replace('_', ' ')} enviado pela Isa`,
             detalhes: mensagemPersonalizada,
           });
 
           // Registrar evento
           await supabase.from('system_events').insert({
             tipo: 'followup',
-            fonte: 'automation',
+            fonte: 'isa-automation',
             acao: `${templateKey}_enviado`,
             lead_id: lead.id,
             entidade_tipo: 'lead_followup',
@@ -241,7 +285,7 @@ serve(async (req: Request) => {
           console.log(`[FOLLOWUP] ✅ ${templateKey} enviado com sucesso para ${lead.nome}`);
         } else {
           erros++;
-          console.error(`[FOLLOWUP] ❌ Erro ao enviar ${templateKey} para ${lead.nome}:`, resultado.error);
+          console.error(`[FOLLOWUP] ❌ Erro ao enviar ${templateKey} para ${lead.nome}:`, resultado.error || resultado.result);
         }
       }
     }
