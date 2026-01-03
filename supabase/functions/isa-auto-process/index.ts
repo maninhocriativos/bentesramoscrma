@@ -178,12 +178,15 @@ const ACOES_AUTOMATICAS = [
   'atualizar_resumo_lead',
   'buscar_lead',
   'buscar_historico',
+  'atualizar_dados_lead', // Atualizar nome/telefone do lead
+  'solicitar_agendamento', // Enviar opções de horário para lead confirmar
+  'confirmar_agendamento', // Confirmar agendamento após resposta do lead
 ];
 
-// Ações que precisam de confirmação (híbrido)
+// Ações que precisam de confirmação do USUÁRIO INTERNO (híbrido)
 const ACOES_CONFIRMACAO = [
   'criar_tarefa',
-  'criar_compromisso',
+  'criar_compromisso', // Quando criado manualmente pela equipe
   'atualizar_status_lead',
   'enviar_contrato',
 ];
@@ -227,7 +230,7 @@ async function buscarContextoLead(supabase: any, leadId: string): Promise<LeadCo
 }
 
 // Executar ação no sistema
-async function executarAcao(supabase: any, acao: string, dados: any): Promise<{ success: boolean; message: string; data?: any }> {
+async function executarAcao(supabase: any, acao: string, dados: any, subscriberId?: string): Promise<{ success: boolean; message: string; data?: any }> {
   console.log(`🔧 Executando ação: ${acao}`, dados);
   
   try {
@@ -268,6 +271,120 @@ async function executarAcao(supabase: any, acao: string, dados: any): Promise<{ 
         });
         
         return { success: true, message: `Lead classificado como "${novoStatus}"`, data: data[0] };
+      }
+
+      case 'atualizar_dados_lead': {
+        // Atualizar nome e/ou telefone do lead
+        const { lead_id, nome, telefone, email } = dados;
+        const updateData: any = {};
+        
+        if (nome) updateData.nome = nome;
+        if (telefone) updateData.telefone = telefone;
+        if (email) updateData.email = email;
+        
+        if (Object.keys(updateData).length === 0) {
+          return { success: false, message: 'Nenhum dado para atualizar' };
+        }
+        
+        const { data, error } = await supabase
+          .from('leads_juridicos')
+          .update(updateData)
+          .eq('id', lead_id)
+          .select()
+          .single();
+        
+        if (error) throw error;
+        
+        // Registrar evento
+        await supabase.from('system_events').insert({
+          tipo: 'lead',
+          fonte: 'isa_auto',
+          acao: 'dados_lead_atualizados',
+          entidade_id: lead_id,
+          lead_id: lead_id,
+          dados: { campos_atualizados: Object.keys(updateData), valores: updateData },
+          processado: true,
+        });
+        
+        console.log(`✅ Dados do lead atualizados: ${JSON.stringify(updateData)}`);
+        return { success: true, message: `Dados atualizados: ${Object.keys(updateData).join(', ')}`, data };
+      }
+
+      case 'solicitar_agendamento': {
+        // Enviar mensagem pedindo para o lead confirmar/escolher horário
+        if (!subscriberId || !MANYCHAT_API_KEY) {
+          return { success: false, message: 'Subscriber ID ou ManyChat API não disponível' };
+        }
+        
+        const { lead_id, tipo_reuniao, mensagem_personalizada } = dados;
+        
+        // Gerar opções de horários (próximos 3 dias úteis)
+        const opcoes = gerarOpcoesHorario();
+        
+        const mensagem = mensagem_personalizada || `Ótimo! Vamos agendar sua consulta. 📅
+
+Por favor, escolha um dos horários disponíveis:
+
+${opcoes.map((o, i) => `${i + 1}️⃣ ${o.label}`).join('\n')}
+
+Ou digite outro horário de sua preferência.`;
+
+        // Enviar via ManyChat com botões
+        const response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            subscriber_id: parseInt(subscriberId),
+            data: {
+              version: 'v2',
+              content: {
+                messages: [{ type: 'text', text: mensagem }],
+                quick_replies: opcoes.slice(0, 3).map(o => ({
+                  type: 'text',
+                  title: o.short
+                }))
+              }
+            }
+          }),
+        });
+
+        const result = await response.json();
+        console.log('📅 Solicitação de agendamento enviada:', result);
+
+        // Salvar no banco que estamos aguardando confirmação
+        await supabase.from('system_events').insert({
+          tipo: 'agendamento',
+          fonte: 'isa_auto',
+          acao: 'aguardando_confirmacao_lead',
+          entidade_id: lead_id,
+          lead_id: lead_id,
+          dados: { 
+            opcoes_oferecidas: opcoes,
+            tipo_reuniao: tipo_reuniao || 'Consulta',
+            subscriber_id: subscriberId,
+          },
+          processado: false, // Aguardando resposta do lead
+        });
+
+        // Registrar a mensagem enviada
+        await supabase.from('manychat_mensagens').insert({
+          subscriber_id: subscriberId,
+          subscriber_nome: 'Isa (Assistente)',
+          canal: 'whatsapp',
+          conteudo: mensagem,
+          tipo: 'text',
+          direcao: 'saida',
+          lead_id: lead_id,
+          metadata: { 
+            tipo: 'solicitacao_agendamento',
+            opcoes: opcoes 
+          },
+        });
+
+        return { success: true, message: 'Solicitação de agendamento enviada ao lead', data: { opcoes } };
       }
 
       case 'criar_interacao': {
@@ -372,6 +489,49 @@ async function executarAcao(supabase: any, acao: string, dados: any): Promise<{ 
         return { success: true, message: `Compromisso "${titulo}" agendado`, data };
       }
 
+      // Nova ação: confirmar agendamento após resposta do lead
+      case 'confirmar_agendamento': {
+        const { lead_id, data_hora, titulo, tipo } = dados;
+        
+        // Criar o compromisso
+        const dataInicio = new Date(data_hora);
+        const dataFim = new Date(dataInicio.getTime() + 60 * 60 * 1000); // +1 hora
+        
+        const { data, error } = await supabase
+          .from('compromissos')
+          .insert({
+            titulo: titulo || 'Consulta agendada',
+            tipo: tipo || 'Reunião',
+            data_inicio: dataInicio.toISOString(),
+            data_fim: dataFim.toISOString(),
+            descricao: 'Agendamento confirmado pelo cliente via chat',
+            lead_id,
+          })
+          .select()
+          .single();
+        
+        if (error) throw error;
+        
+        // Atualizar status do lead
+        await supabase
+          .from('leads_juridicos')
+          .update({ status: 'Em Negociação' })
+          .eq('id', lead_id);
+        
+        // Registrar evento
+        await supabase.from('system_events').insert({
+          tipo: 'compromisso',
+          fonte: 'isa_auto',
+          acao: 'agendamento_confirmado_lead',
+          entidade_id: data.id,
+          lead_id: lead_id,
+          dados: { titulo, tipo, data_inicio: dataInicio.toISOString() },
+          processado: true,
+        });
+        
+        return { success: true, message: `Reunião agendada para ${dataInicio.toLocaleDateString('pt-BR')} às ${dataInicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`, data };
+      }
+
       default:
         return { success: false, message: `Ação "${acao}" não reconhecida` };
     }
@@ -380,6 +540,45 @@ async function executarAcao(supabase: any, acao: string, dados: any): Promise<{ 
     const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
     return { success: false, message: `Erro ao executar ${acao}: ${errorMessage}` };
   }
+}
+
+// Gerar opções de horários para agendamento
+function gerarOpcoesHorario(): Array<{ label: string; short: string; datetime: string }> {
+  const opcoes = [];
+  const agora = new Date();
+  let diasAdicionados = 0;
+  let dia = new Date(agora);
+  
+  while (diasAdicionados < 3) {
+    dia.setDate(dia.getDate() + 1);
+    const diaSemana = dia.getDay();
+    
+    // Pular fins de semana
+    if (diaSemana === 0 || diaSemana === 6) continue;
+    
+    diasAdicionados++;
+    
+    const dataStr = dia.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
+    
+    // Horários disponíveis
+    const horarios = ['09:00', '10:00', '14:00', '15:00', '16:00'];
+    
+    for (const horario of horarios.slice(0, 2)) { // Pegar só 2 por dia
+      const [hora, minuto] = horario.split(':').map(Number);
+      const dataHora = new Date(dia);
+      dataHora.setHours(hora, minuto, 0, 0);
+      
+      if (opcoes.length < 5) {
+        opcoes.push({
+          label: `${dataStr.charAt(0).toUpperCase() + dataStr.slice(1)} às ${horario}`,
+          short: `${dia.getDate()}/${dia.getMonth() + 1} ${horario}`,
+          datetime: dataHora.toISOString(),
+        });
+      }
+    }
+  }
+  
+  return opcoes;
 }
 
 // Enviar resposta via ManyChat
@@ -427,6 +626,25 @@ async function processarComIA(contexto: LeadContext, mensagem: string, subscribe
   acoes: Array<{ acao: string; dados: any; motivo: string; automatica: boolean }>;
   analise: { intencao: string; sentimento: string; urgencia: string };
 }> {
+  // Verificar se há agendamento pendente de confirmação
+  const supabaseClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  );
+  
+  const { data: agendamentoPendente } = await supabaseClient
+    .from('system_events')
+    .select('*')
+    .eq('lead_id', contexto.lead.id)
+    .eq('acao', 'aguardando_confirmacao_lead')
+    .eq('processado', false)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const temAgendamentoPendente = !!agendamentoPendente;
+  const opcoesAgendamento = agendamentoPendente?.dados?.opcoes_oferecidas || [];
+
   const systemPrompt = `Você é Isa, a assistente inteligente do escritório de advocacia Bentes & Ramos.
 Seu papel é analisar mensagens de clientes e tomar ações inteligentes no sistema.
 
@@ -445,6 +663,12 @@ ${JSON.stringify({
 HISTÓRICO DE MENSAGENS (últimas 10):
 ${contexto.mensagens.slice(0, 10).map(m => `[${m.direcao}] ${m.subscriber_nome || 'Cliente'}: ${m.conteudo}`).join('\n')}
 
+${temAgendamentoPendente ? `
+⚠️ ATENÇÃO: Existe uma solicitação de agendamento PENDENTE para este lead.
+Opções de horário oferecidas: ${JSON.stringify(opcoesAgendamento)}
+Se o cliente escolher um horário ou confirmar, use "confirmar_agendamento".
+` : ''}
+
 INTERAÇÕES ANTERIORES:
 ${contexto.interacoes.slice(0, 5).map(i => `[${i.tipo}] ${i.resumo}`).join('\n') || 'Nenhuma interação registrada'}
 
@@ -454,42 +678,50 @@ ${contexto.tarefas.filter(t => t.status !== 'Concluída').slice(0, 5).map(t => `
 COMPROMISSOS:
 ${contexto.compromissos.slice(0, 3).map(c => `- ${c.titulo} em ${new Date(c.data_inicio).toLocaleDateString('pt-BR')}`).join('\n') || 'Nenhum compromisso'}
 
-PROCESSOS:
-${contexto.processos.map(p => `- ${p.titulo_acao || 'Sem título'} (${p.status})`).join('\n') || 'Nenhum processo'}
-
-FINANCEIRO:
-${contexto.honorarios.length > 0 ? 
-  `Honorários: R$ ${contexto.honorarios.reduce((sum, h) => sum + h.valor_total, 0).toLocaleString('pt-BR')}
-Parcelas pendentes: ${contexto.parcelas.filter(p => p.status !== 'Pago').length}` 
-  : 'Nenhum honorário cadastrado'}
-
 ---
 
-INSTRUÇÕES:
+INSTRUÇÕES IMPORTANTES:
 1. Analise a mensagem do cliente considerando todo o contexto
 2. Identifique a intenção, sentimento e urgência
-3. Determine quais ações devem ser tomadas
-4. Gere uma resposta empática e profissional
+3. Se o cliente fornecer NOME ou TELEFONE, use "atualizar_dados_lead" para salvar
+4. Se o cliente demonstrar interesse em agendar reunião/consulta, use "solicitar_agendamento" para enviar opções de horário
+5. Se o cliente CONFIRMAR um horário (responder a opções de agendamento), use "confirmar_agendamento" com a data/hora escolhida
+6. Gere uma resposta empática e profissional
 
 AÇÕES DISPONÍVEIS:
-- classificar_lead: Atualizar status do lead (Lead Frio, Lead Morno, Lead Quente, Em Negociação, Cliente)
+- classificar_lead: Atualizar status (Lead Frio → Lead Morno → Lead Quente → Em Negociação → Cliente)
 - criar_interacao: Registrar esta interação no histórico
 - atualizar_resumo_lead: Atualizar o resumo/notas sobre o lead
+- atualizar_dados_lead: Atualizar nome, telefone ou email do lead. Use quando o cliente fornecer esses dados.
+  Dados: { "nome": "Nome Completo", "telefone": "11999999999", "email": "email@exemplo.com" }
+- solicitar_agendamento: Enviar opções de horário para o cliente escolher. Use quando ele quiser agendar.
+  Dados: { "tipo_reuniao": "Consulta", "mensagem_personalizada": "opcional" }
+- confirmar_agendamento: Criar compromisso após cliente confirmar horário. Use quando ele responder escolhendo horário.
+  Dados: { "data_hora": "2025-01-06T09:00:00.000Z", "titulo": "Consulta com Nome", "tipo": "Reunião" }
 - criar_tarefa: Criar tarefa de follow-up ou ação necessária
-- criar_compromisso: Agendar reunião ou compromisso
 
-Responda em JSON com a seguinte estrutura:
+FLUXO DE AGENDAMENTO:
+1. Cliente demonstra interesse → Use "solicitar_agendamento"
+2. Cliente escolhe horário → Use "confirmar_agendamento" + resposta confirmando
+3. Cliente não escolhe → Pergunte novamente ou sugira ligar
+
+EXTRAÇÃO DE DADOS:
+- Se a mensagem contiver um nome (ex: "Meu nome é João Silva"), extraia e use "atualizar_dados_lead"
+- Se a mensagem contiver telefone (ex: "11988887777"), extraia e use "atualizar_dados_lead"
+- Combine múltiplas ações quando necessário
+
+Responda em JSON:
 {
   "analise": {
     "intencao": "string descrevendo a intenção do cliente",
     "sentimento": "positivo|neutro|negativo",
     "urgencia": "baixa|media|alta|urgente"
   },
-  "resposta": "Mensagem para responder ao cliente (deixe vazio se não for para responder)",
+  "resposta": "Mensagem para responder ao cliente",
   "acoes": [
     {
       "acao": "nome_da_acao",
-      "dados": { /* dados necessários para a ação */ },
+      "dados": { /* dados necessários */ },
       "motivo": "por que esta ação é necessária"
     }
   ]
@@ -598,11 +830,21 @@ serve(async (req) => {
     for (const acao of resultado.acoes) {
       if (acao.automatica) {
         console.log(`⚡ Executando ação automática: ${acao.acao}`);
-        const resultadoAcao = await executarAcao(supabase, acao.acao, acao.dados);
+        const resultadoAcao = await executarAcao(supabase, acao.acao, acao.dados, subscriber_id);
         acoesExecutadas.push({
           ...acao,
           resultado: resultadoAcao,
         });
+        
+        // Se confirmou agendamento, marcar evento pendente como processado
+        if (acao.acao === 'confirmar_agendamento') {
+          await supabase
+            .from('system_events')
+            .update({ processado: true })
+            .eq('lead_id', lead_id)
+            .eq('acao', 'aguardando_confirmacao_lead')
+            .eq('processado', false);
+        }
       } else {
         // Ações que precisam de confirmação - salvar para notificar equipe
         console.log(`⏳ Ação requer confirmação: ${acao.acao}`);
