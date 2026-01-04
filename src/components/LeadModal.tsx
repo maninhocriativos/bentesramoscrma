@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { MessageCircle, FileText, Trash2 } from 'lucide-react';
+import { MessageCircle, FileText, Trash2, Sparkles, Bot } from 'lucide-react';
+import { useInteracoes } from '@/hooks/useInteracoes';
 import {
   Dialog,
   DialogContent,
@@ -52,6 +53,7 @@ const ORIGENS: LeadOrigem[] = ['Instagram', 'Google', 'Site', 'Indicação', 'Ou
 
 export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = true }: LeadModalProps) {
   const { createLead, updateLead, deleteLead } = useLeads();
+  const { interacoes } = useInteracoes(lead?.id);
   const [formData, setFormData] = useState({
     nome: '',
     telefone: '',
@@ -247,10 +249,45 @@ export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = tr
                 id="resumo_ia"
                 value={formData.resumo_ia}
                 onChange={(e) => setFormData({ ...formData, resumo_ia: e.target.value })}
-                className="rounded-xl min-h-[100px]"
+                className="rounded-xl min-h-[80px]"
                 placeholder="Observações sobre o lead..."
               />
             </div>
+
+            {/* Insights da IA baseados nas interações */}
+            {!isNew && interacoes.length > 0 && (
+              <div className="col-span-2 bg-muted/50 rounded-xl p-4 border border-border/50">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Bot className="h-4 w-4 text-primary" />
+                  </div>
+                  <span className="font-medium text-sm">Insights da Isa</span>
+                  <Sparkles className="h-3 w-3 text-gold" />
+                </div>
+                
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span>Total de interações:</span>
+                    <span className="font-semibold text-foreground">{interacoes.length}</span>
+                  </div>
+                  
+                  {interacoes[0] && (
+                    <div className="pt-2 border-t border-border/50">
+                      <p className="text-xs text-muted-foreground mb-1">Última interação:</p>
+                      <p className="text-foreground line-clamp-2">{interacoes[0].resumo}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {new Date(interacoes[0].data_interacao).toLocaleDateString('pt-BR', {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}

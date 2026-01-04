@@ -15,6 +15,7 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
   const totalProcessos = processos.length;
   const leadsGanhos = leads.filter(l => l.status === 'Ganho').length;
   const leadsPerdidos = leads.filter(l => l.status === 'Perdido').length;
+  const leadsEmAtendimento = leads.filter(l => l.status === 'Em Atendimento').length;
   const processosAtivos = processos.filter(p => p.status === 'Em Andamento').length;
   
   const leadsFinalizados = leadsGanhos + leadsPerdidos;
@@ -33,10 +34,21 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
       iconColor: 'text-blue-600',
     },
     {
+      title: 'Em Atendimento',
+      value: leadsEmAtendimento,
+      icon: TrendingUp,
+      trend: leadsEmAtendimento > 0 ? '+' + leadsEmAtendimento : '0',
+      trendUp: leadsEmAtendimento > 0,
+      description: 'Leads ativos agora',
+      gradient: 'from-orange-500/20 via-orange-400/10 to-transparent',
+      iconBg: 'bg-orange-500/15 group-hover:bg-orange-500/25',
+      iconColor: 'text-orange-600',
+    },
+    {
       title: 'Taxa de Conversão',
       value: taxaConversao,
       isPercentage: true,
-      icon: TrendingUp,
+      icon: Scale,
       trend: taxaConversao >= 50 ? '+5%' : '-3%',
       trendUp: taxaConversao >= 50,
       description: 'Leads convertidos',
@@ -47,24 +59,13 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
     {
       title: 'Leads Ganhos',
       value: leadsGanhos,
-      icon: Scale,
+      icon: Briefcase,
       trend: leadsGanhos > 0 ? '+8%' : '0%',
       trendUp: leadsGanhos > 0,
       description: 'Contratos fechados',
       gradient: 'from-success/20 via-success/10 to-transparent',
       iconBg: 'bg-success/15 group-hover:bg-success/25',
       iconColor: 'text-success',
-    },
-    {
-      title: 'Processos Ativos',
-      value: processosAtivos,
-      icon: Briefcase,
-      trend: '+15%',
-      trendUp: true,
-      description: `de ${totalProcessos} total`,
-      gradient: 'from-purple-500/20 via-purple-400/10 to-transparent',
-      iconBg: 'bg-purple-500/15 group-hover:bg-purple-500/25',
-      iconColor: 'text-purple-600',
     },
   ];
 
