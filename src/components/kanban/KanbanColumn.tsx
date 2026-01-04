@@ -8,6 +8,19 @@ interface IsaInsight {
   urgencia: 'baixa' | 'media' | 'alta' | 'urgente' | null;
 }
 
+interface LeadExtra {
+  leadId: string;
+  ultimaInteracao: {
+    resumo: string;
+    data: string;
+  } | null;
+  temAgendamento: boolean;
+  proximoAgendamento: {
+    titulo: string;
+    data: string;
+  } | null;
+}
+
 interface KanbanColumnProps {
   status: LeadStatus;
   leads: Lead[];
@@ -18,6 +31,7 @@ interface KanbanColumnProps {
   onDrop: (e: React.DragEvent, status: LeadStatus) => void;
   isDragOver?: boolean;
   isaInsights?: Record<string, IsaInsight>;
+  leadExtras?: Record<string, LeadExtra>;
 }
 
 const STATUS_COLORS: Record<LeadStatus, { 
@@ -81,6 +95,7 @@ export function KanbanColumn({
   onDrop,
   isDragOver,
   isaInsights = {},
+  leadExtras = {},
 }: KanbanColumnProps) {
   const columnLeads = leads.filter((lead) => lead.status === status);
   const statusStyle = STATUS_COLORS[status];
@@ -143,7 +158,12 @@ export function KanbanColumn({
             style={{ animationDelay: `${index * 50}ms` }}
             className="kanban-card-wrapper animate-fade-in cursor-grab active:cursor-grabbing"
           >
-            <LeadCard lead={lead} onClick={() => onLeadClick(lead)} isaInsight={isaInsights[lead.id]} />
+            <LeadCard 
+              lead={lead} 
+              onClick={() => onLeadClick(lead)} 
+              isaInsight={isaInsights[lead.id]} 
+              leadExtra={leadExtras[lead.id]}
+            />
           </div>
         ))}
         

@@ -7,12 +7,25 @@ import { getLeadIndicator } from '@/hooks/useAlertas';
 import { 
   MessageCircle, ExternalLink, User, Clock, FileSignature, 
   Instagram, Facebook, Phone, Globe, Users, Mail, Briefcase, Sparkles,
-  ThumbsUp, ThumbsDown, Minus, AlertTriangle, Zap
+  ThumbsUp, ThumbsDown, Minus, AlertTriangle, Zap, CalendarX, Calendar
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useNavigate } from 'react-router-dom';
 import { EnviarContratoModal } from '@/components/contratos/EnviarContratoModal';
+
+interface LeadExtra {
+  leadId: string;
+  ultimaInteracao: {
+    resumo: string;
+    data: string;
+  } | null;
+  temAgendamento: boolean;
+  proximoAgendamento: {
+    titulo: string;
+    data: string;
+  } | null;
+}
 
 interface LeadCardProps {
   lead: Lead;
@@ -22,6 +35,7 @@ interface LeadCardProps {
     sentimento: 'positivo' | 'neutro' | 'negativo' | null;
     urgencia: 'baixa' | 'media' | 'alta' | 'urgente' | null;
   };
+  leadExtra?: LeadExtra;
 }
 
 const ORIGEM_CONFIG: Record<string, { bg: string; text: string; icon: React.ElementType }> = {
@@ -64,7 +78,7 @@ const formatShortCurrency = (value: number | null): string => {
   return `R$ ${value.toFixed(0)}`;
 };
 
-export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProps) {
+export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra }: LeadCardProps) {
   const navigate = useNavigate();
   const [isContratoModalOpen, setIsContratoModalOpen] = useState(false);
   
@@ -86,6 +100,15 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProp
   const sentimentoConfig = isaInsight?.sentimento ? SENTIMENTO_CONFIG[isaInsight.sentimento] : null;
   const urgenciaConfig = isaInsight?.urgencia ? URGENCIA_CONFIG[isaInsight.urgencia] : null;
   const SentimentoIcon = sentimentoConfig?.icon;
+  
+  // Verifica se é lead em atendimento e precisa mostrar extras
+  const isEmAtendimento = lead.status === 'Em Atendimento';
+  const precisaAgendar = isEmAtendimento && leadExtra && !leadExtra.temAgendamento;
+  const ultimaInteracaoResumo = leadExtra?.ultimaInteracao?.resumo 
+    ? leadExtra.ultimaInteracao.resumo.length > 50 
+      ? leadExtra.ultimaInteracao.resumo.substring(0, 50) + '...'
+      : leadExtra.ultimaInteracao.resumo
+    : null;
 
   const handleWhatsApp = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -198,6 +221,43 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProp
             {lastInteraction}
           </span>
         </div>
+
+        {/* Resumo da conversa para leads em atendimento */}
+        {isEmAtendimento && ultimaInteracaoResumo && (
+          <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200/50 rounded-md p-1.5">
+            <p className="text-[9px] text-blue-700 dark:text-blue-300 line-clamp-2">
+              <Sparkles className="w-2 h-2 inline mr-0.5" />
+              {ultimaInteracaoResumo}
+            </p>
+          </div>
+        )}
+
+        {/* Alerta de agendamento pendente */}
+        {precisaAgendar && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 border border-amber-300/50 rounded-md px-1.5 py-1 animate-pulse">
+                <CalendarX className="w-3 h-3 text-amber-600" />
+                <span className="text-[9px] font-medium text-amber-700 dark:text-amber-400">
+                  Falta agendar atendimento
+                </span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              Este lead está em atendimento mas ainda não tem reunião agendada
+            </TooltipContent>
+          </Tooltip>
+        )}
+
+        {/* Próximo agendamento */}
+        {leadExtra?.proximoAgendamento && (
+          <div className="flex items-center gap-1 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-200/50 rounded-md px-1.5 py-1">
+            <Calendar className="w-2.5 h-2.5 text-emerald-600" />
+            <span className="text-[9px] text-emerald-700 dark:text-emerald-400 truncate">
+              {new Date(leadExtra.proximoAgendamento.data).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Contract Button - Only when needed */}

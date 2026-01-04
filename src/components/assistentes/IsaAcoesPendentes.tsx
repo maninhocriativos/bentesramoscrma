@@ -47,6 +47,11 @@ const ACAO_CONFIG: Record<string, { label: string; icon: React.ReactNode; color:
     icon: <Calendar className="h-4 w-4" />, 
     color: 'bg-purple-500' 
   },
+  solicitar_agendamento: { 
+    label: 'Solicitar Agendamento', 
+    icon: <Calendar className="h-4 w-4" />, 
+    color: 'bg-amber-500' 
+  },
   atualizar_status_lead: { 
     label: 'Atualizar Status', 
     icon: <User className="h-4 w-4" />, 
@@ -56,6 +61,11 @@ const ACAO_CONFIG: Record<string, { label: string; icon: React.ReactNode; color:
     label: 'Enviar Contrato', 
     icon: <AlertTriangle className="h-4 w-4" />, 
     color: 'bg-orange-500' 
+  },
+  agendar_atendimento: { 
+    label: 'Agendar Atendimento', 
+    icon: <Calendar className="h-4 w-4" />, 
+    color: 'bg-amber-500' 
   },
 };
 
