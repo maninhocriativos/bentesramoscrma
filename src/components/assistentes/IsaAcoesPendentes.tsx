@@ -3,6 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { 
   CheckCircle2, 
   XCircle, 
@@ -80,6 +89,12 @@ export function IsaAcoesPendentes() {
   const [acoes, setAcoes] = useState<AcaoPendente[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
+  
+  // Modal de agendamento
+  const [showDateModal, setShowDateModal] = useState(false);
+  const [selectedAcao, setSelectedAcao] = useState<AcaoPendente | null>(null);
+  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedTime, setSelectedTime] = useState('10:00');
 
   const fetchAcoes = async () => {
     setLoading(true);
@@ -124,6 +139,66 @@ export function IsaAcoesPendentes() {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // Verifica se a ação é de agendamento
+  const isAgendamentoAction = (acao: AcaoPendente) => {
+    return ['criar_compromisso', 'solicitar_agendamento', 'agendar_atendimento'].includes(acao.dados.acao_sugerida);
+  };
+
+  const handleAprovar = (acao: AcaoPendente) => {
+    if (isAgendamentoAction(acao)) {
+      // Abrir modal para escolher data
+      setSelectedAcao(acao);
+      setSelectedDate(format(new Date(), 'yyyy-MM-dd'));
+      setSelectedTime('10:00');
+      setShowDateModal(true);
+    } else {
+      aprovarAcao(acao);
+    }
+  };
+
+  const aprovarComData = async () => {
+    if (!selectedAcao || !selectedDate || !selectedTime) {
+      toast.error('Selecione uma data e horário');
+      return;
+    }
+
+    setProcessing(selectedAcao.id);
+    try {
+      const dataHoraAgendamento = new Date(`${selectedDate}T${selectedTime}:00`);
+      
+      const dadosComData = {
+        ...selectedAcao.dados.dados_acao,
+        data_inicio: dataHoraAgendamento.toISOString(),
+        data_fim: new Date(dataHoraAgendamento.getTime() + 60 * 60 * 1000).toISOString(), // 1 hora depois
+      };
+
+      const { error } = await supabase.functions.invoke('isa-actions', {
+        body: {
+          action: selectedAcao.dados.acao_sugerida,
+          data: dadosComData,
+        },
+      });
+
+      if (error) throw error;
+
+      // Marcar como processado
+      await supabase
+        .from('system_events')
+        .update({ processado: true })
+        .eq('id', selectedAcao.id);
+
+      toast.success(`Agendamento criado para ${format(dataHoraAgendamento, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`);
+      setShowDateModal(false);
+      setSelectedAcao(null);
+      fetchAcoes();
+    } catch (error) {
+      console.error('Erro ao aprovar ação com data:', error);
+      toast.error('Erro ao executar ação');
+    } finally {
+      setProcessing(null);
+    }
+  };
 
   const aprovarAcao = async (acao: AcaoPendente) => {
     setProcessing(acao.id);
@@ -299,7 +374,7 @@ export function IsaAcoesPendentes() {
                     <Button 
                       size="sm" 
                       className="flex-1 h-8 text-xs bg-emerald-600 hover:bg-emerald-700"
-                      onClick={() => aprovarAcao(acao)}
+                      onClick={() => handleAprovar(acao)}
                       disabled={processing === acao.id}
                     >
                       {processing === acao.id ? (
@@ -307,7 +382,7 @@ export function IsaAcoesPendentes() {
                       ) : (
                         <CheckCircle2 className="h-3 w-3 mr-1" />
                       )}
-                      Aprovar
+                      {isAgendamentoAction(acao) ? 'Agendar' : 'Aprovar'}
                     </Button>
                     <Button 
                       size="sm" 
@@ -326,6 +401,71 @@ export function IsaAcoesPendentes() {
           </div>
         </ScrollArea>
       </CardContent>
+
+      {/* Modal de seleção de data para agendamento */}
+      <Dialog open={showDateModal} onOpenChange={setShowDateModal}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-primary" />
+              Escolha a data do agendamento
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="date">Data</Label>
+              <Input
+                id="date"
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                min={format(new Date(), 'yyyy-MM-dd')}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="time">Horário</Label>
+              <Input
+                id="time"
+                type="time"
+                value={selectedTime}
+                onChange={(e) => setSelectedTime(e.target.value)}
+              />
+            </div>
+
+            {selectedAcao && (
+              <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                <p className="text-muted-foreground text-xs mb-1">Lead:</p>
+                <p className="font-medium">{selectedAcao.dados.dados_acao?.titulo || 'Reunião com cliente'}</p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDateModal(false);
+                setSelectedAcao(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={aprovarComData}
+              disabled={!selectedDate || !selectedTime || processing !== null}
+            >
+              {processing ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+              )}
+              Confirmar Agendamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

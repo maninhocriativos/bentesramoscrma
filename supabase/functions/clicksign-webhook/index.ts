@@ -70,7 +70,7 @@ serve(async (req: Request): Promise<Response> => {
       // Update leads that have this document key in their link_contrato
       const { data: leads, error: leadsError } = await supabase
         .from("leads_juridicos")
-        .select("id, link_contrato")
+        .select("id, link_contrato, status")
         .ilike("link_contrato", `%${documentKey}%`);
 
       if (leadsError) {
@@ -78,8 +78,25 @@ serve(async (req: Request): Promise<Response> => {
       } else if (leads && leads.length > 0) {
         console.log(`Found ${leads.length} leads with document ${documentKey}`);
         
-        // Create interaction for each lead
         for (const lead of leads) {
+          // Se contrato foi assinado completamente ou finalizado, atualizar lead para "Ganho"
+          if (newStatus === "Assinado" || newStatus === "Finalizado") {
+            const { error: updateLeadError } = await supabase
+              .from("leads_juridicos")
+              .update({ 
+                status: "Ganho",
+                updated_at: new Date().toISOString()
+              })
+              .eq("id", lead.id);
+
+            if (updateLeadError) {
+              console.error("Error updating lead status to Ganho:", updateLeadError);
+            } else {
+              console.log(`Lead ${lead.id} atualizado para Ganho - contrato assinado`);
+            }
+          }
+
+          // Create interaction for each lead
           const { error: interactionError } = await supabase
             .from("interacoes")
             .insert({
