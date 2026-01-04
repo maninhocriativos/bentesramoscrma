@@ -4,6 +4,7 @@ import { KanbanColumn } from './KanbanColumn';
 import { useLeads } from '@/hooks/useLeads';
 import { useToast } from '@/hooks/use-toast';
 import { useIsaInsights } from '@/hooks/useIsaInsights';
+import { useLeadExtras } from '@/hooks/useLeadExtras';
 
 interface KanbanBoardProps {
   leads: Lead[];
@@ -25,9 +26,10 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
   const [draggedLead, setDraggedLead] = useState<Lead | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<LeadStatus | null>(null);
 
-  // Buscar insights da Isa para todos os leads
+  // Buscar insights da Isa e extras para todos os leads
   const leadIds = useMemo(() => leads.map(l => l.id), [leads]);
   const { insights: isaInsights } = useIsaInsights(leadIds);
+  const { extras: leadExtras } = useLeadExtras(leadIds);
 
   const handleDragStart = useCallback((e: React.DragEvent, lead: Lead) => {
     setDraggedLead(lead);
@@ -97,6 +99,7 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
               onDrop={handleDrop}
               isDragOver={dragOverStatus === status}
               isaInsights={isaInsights}
+              leadExtras={leadExtras}
             />
           </div>
         ))}
