@@ -39,14 +39,20 @@ Deno.serve(async (req) => {
     }
 
     const leadIds = leadsEmAtendimento.map(l => l.id);
-    const now = new Date().toISOString();
 
-    // 2. Buscar compromissos futuros para esses leads
+    const nowDate = new Date();
+    const nowIso = nowDate.toISOString();
+    const sinceIso = new Date(nowDate.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    // 2. Buscar compromissos recentes (últimos 30 dias) e futuros.
+    //    Importante: alguns compromissos foram criados sem lead_id; nesses casos usamos o padrão "Atendimento - {NOME}".
     const { data: compromissos, error: compromissosError } = await supabase
       .from('compromissos')
-      .select('lead_id, titulo, data_inicio')
-      .in('lead_id', leadIds)
-      .gte('data_inicio', now)
+      .select('id, lead_id, titulo, data_inicio')
+      .gte('data_inicio', sinceIso)
+      .or(
+        `lead_id.in.(${leadIds.join(',')}),and(lead_id.is.null,titulo.ilike.%Atendimento - %)`
+      )
       .order('data_inicio', { ascending: true });
 
     if (compromissosError) {
@@ -54,9 +60,52 @@ Deno.serve(async (req) => {
       throw compromissosError;
     }
 
-    // Mapear leads com agendamentos
-    const leadsComAgendamento = new Set(compromissos?.map(c => c.lead_id) || []);
-    console.log(`[ISA-CHECK] ${leadsComAgendamento.size} leads têm agendamentos futuros`);
+    const normalize = (v: string | null | undefined) => (v || '').trim().toLowerCase();
+    const extractNomeAtendimento = (titulo: string | null | undefined) => {
+      const t = (titulo || '').trim();
+      const m = t.match(/^Atendimento\s*-\s*(.+)$/i);
+      return m?.[1]?.trim() || null;
+    };
+
+    const leadByNome = new Map<string, { id: string; nome: string | null }>();
+    for (const lead of leadsEmAtendimento) {
+      leadByNome.set(normalize(lead.nome), { id: lead.id, nome: lead.nome });
+    }
+
+    const compromissosPorLead = new Map<string, Array<{ id: string; data_inicio: string; titulo: string | null }>>();
+    let compromissosVinculados = 0;
+
+    for (const c of compromissos || []) {
+      if (c.lead_id && leadIds.includes(c.lead_id)) {
+        const arr = compromissosPorLead.get(c.lead_id) || [];
+        arr.push({ id: c.id, data_inicio: c.data_inicio, titulo: c.titulo });
+        compromissosPorLead.set(c.lead_id, arr);
+        continue;
+      }
+
+      // Tentar vincular compromissos sem lead_id via padrão "Atendimento - Nome"
+      if (!c.lead_id) {
+        const nome = extractNomeAtendimento(c.titulo);
+        if (!nome) continue;
+
+        const match = leadByNome.get(normalize(nome));
+        if (!match) continue;
+
+        // Atualizar compromisso para garantir que o Kanban/Agenda reconheçam
+        const { error: vincularError } = await supabase
+          .from('compromissos')
+          .update({ lead_id: match.id })
+          .eq('id', c.id);
+
+        if (!vincularError) {
+          compromissosVinculados++;
+          const arr = compromissosPorLead.get(match.id) || [];
+          arr.push({ id: c.id, data_inicio: c.data_inicio, titulo: c.titulo });
+          compromissosPorLead.set(match.id, arr);
+          console.log(`[ISA-CHECK] Compromisso ${c.id} vinculado ao lead ${match.nome || match.id}`);
+        }
+      }
+    }
 
     // 3. Buscar ações pendentes de agendamento
     const { data: acoesPendentes, error: acoesError } = await supabase
@@ -76,26 +125,26 @@ Deno.serve(async (req) => {
 
     // 4. Para cada lead, verificar e atualizar
     for (const lead of leadsEmAtendimento) {
-      const temAgendamento = leadsComAgendamento.has(lead.id);
+      const compromissosLead = compromissosPorLead.get(lead.id) || [];
+      const temAgendamento = compromissosLead.length > 0;
 
       if (temAgendamento) {
-        // Lead tem agendamento - resolver ações pendentes de agendamento
-        const acoesDoLead = acoesPendentes?.filter(a => 
-          a.lead_id === lead.id && 
+        // Lead tem compromisso recente/futuro - resolver ações pendentes de agendamento
+        const acoesDoLead = acoesPendentes?.filter(a =>
+          a.lead_id === lead.id &&
           (a.dados as any)?.acao_sugerida === 'agendar_atendimento'
         ) || [];
 
         for (const acao of acoesDoLead) {
-          // Marcar ação como processada (resolvida automaticamente)
           const { error: updateError } = await supabase
             .from('system_events')
-            .update({ 
+            .update({
               processado: true,
               dados: {
                 ...(acao.dados as object),
                 resolvido_automaticamente: true,
                 resolvido_em: new Date().toISOString(),
-                motivo_resolucao: 'Agendamento detectado automaticamente pela Isa'
+                motivo_resolucao: 'Compromisso detectado automaticamente pela Isa'
               }
             })
             .eq('id', acao.id);
@@ -106,14 +155,13 @@ Deno.serve(async (req) => {
           }
         }
       } else {
-        // Lead SEM agendamento - verificar se já existe alerta
-        const alertaExistente = acoesPendentes?.find(a => 
-          a.lead_id === lead.id && 
+        // Lead SEM compromisso - verificar se já existe alerta
+        const alertaExistente = acoesPendentes?.find(a =>
+          a.lead_id === lead.id &&
           (a.dados as any)?.acao_sugerida === 'agendar_atendimento'
         );
 
         if (!alertaExistente) {
-          // Criar novo alerta
           const { error: insertError } = await supabase
             .from('system_events')
             .insert({
@@ -147,15 +195,17 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`[ISA-CHECK] Finalizado: ${acoesResolvidas} ações resolvidas, ${alertasCriados} alertas criados`);
+    console.log(`[ISA-CHECK] Finalizado: ${acoesResolvidas} ações resolvidas, ${alertasCriados} alertas criados, ${compromissosVinculados} compromissos vinculados`);
 
     return new Response(JSON.stringify({
       success: true,
       message: 'Verificação concluída',
       leadsVerificados: leadsEmAtendimento.length,
-      leadsComAgendamento: leadsComAgendamento.size,
       acoesResolvidas,
-      alertasCriados
+      alertasCriados,
+      compromissosVinculados,
+      since: sinceIso,
+      now: nowIso
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: unknown) {
