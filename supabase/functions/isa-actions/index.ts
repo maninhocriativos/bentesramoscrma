@@ -253,6 +253,58 @@ serve(async (req) => {
         break;
       }
 
+      case 'agendar_atendimento': {
+        const { lead_id, lead_nome, data_inicio, data_fim, descricao, responsavel_id } = data;
+
+        if (!lead_id) {
+          result = { success: false, message: 'lead_id não informado para agendar atendimento' };
+          break;
+        }
+
+        const titulo = data.titulo || `Atendimento - ${lead_nome || 'Lead'}`;
+
+        const { data: compromisso, error } = await supabase
+          .from('compromissos')
+          .insert({
+            titulo,
+            tipo: 'Atendimento',
+            data_inicio,
+            data_fim,
+            descricao,
+            lead_id,
+            responsavel_id,
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Erro ao agendar atendimento:', error);
+          result = { success: false, message: `Erro ao agendar atendimento: ${error.message}` };
+        } else {
+          // Enviar notificação ao responsável se definido
+          if (responsavel_id) {
+            const responsavel = await buscarPerfil(responsavel_id);
+            if (responsavel?.email) {
+              const emailHtml = gerarEmailCompromisso(compromisso, responsavel);
+              await enviarNotificacaoEmail(
+                responsavel.email,
+                responsavel.nome || 'Usuário',
+                `📅 Atendimento agendado: ${titulo}`,
+                emailHtml
+              );
+            }
+          }
+
+          result = {
+            success: true,
+            message: `Atendimento "${titulo}" agendado com sucesso para ${new Date(data_inicio).toLocaleString('pt-BR')}. ${responsavel_id ? 'Notificação enviada ao responsável.' : ''}`,
+            data: compromisso,
+          };
+        }
+
+        break;
+      }
+
       case 'criar_tarefa': {
         const { titulo, descricao, data_limite, prioridade, cliente_id, processo_id, responsavel_id } = data;
         

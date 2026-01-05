@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.followup-automation]
 verify_jwt = false
+
+[functions.isa-check-appointments]
+verify_jwt = false
