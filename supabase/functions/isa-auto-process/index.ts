@@ -773,6 +773,65 @@ Responda em JSON:
   };
 }
 
+// Transcrever áudio usando Whisper
+async function transcreverAudio(audioUrl: string): Promise<string | null> {
+  if (!OPENAI_API_KEY) {
+    console.log('⚠️ OPENAI_API_KEY não configurada para transcrição');
+    return null;
+  }
+
+  try {
+    console.log('🎤 Baixando áudio para transcrição:', audioUrl.substring(0, 80));
+    
+    // Baixar o áudio
+    const audioResponse = await fetch(audioUrl);
+    if (!audioResponse.ok) {
+      console.error('❌ Erro ao baixar áudio:', audioResponse.status);
+      return null;
+    }
+    
+    const audioBlob = await audioResponse.blob();
+    console.log('🎤 Áudio baixado:', audioBlob.size, 'bytes');
+    
+    // Criar FormData para enviar ao Whisper
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'audio.ogg');
+    formData.append('model', 'whisper-1');
+    formData.append('language', 'pt');
+    
+    // Enviar para Whisper
+    const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: formData,
+    });
+    
+    if (!whisperResponse.ok) {
+      const error = await whisperResponse.text();
+      console.error('❌ Erro no Whisper:', error);
+      return null;
+    }
+    
+    const result = await whisperResponse.json();
+    console.log('✅ Transcrição concluída:', result.text?.substring(0, 100));
+    return result.text || null;
+  } catch (error) {
+    console.error('❌ Erro ao transcrever áudio:', error);
+    return null;
+  }
+}
+
+// Detectar se é URL de áudio
+function isAudioUrl(content: string): boolean {
+  if (!content) return false;
+  const lowerContent = content.toLowerCase();
+  return lowerContent.match(/\.(ogg|mp3|wav|m4a|aac|opus)(\?|$)/) !== null ||
+         lowerContent.includes('voice') ||
+         lowerContent.includes('audio');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -784,12 +843,13 @@ serve(async (req) => {
   );
 
   try {
-    const { lead_id, subscriber_id, mensagem, canal } = await req.json();
+    const { lead_id, subscriber_id, mensagem, canal, tipo_mensagem } = await req.json();
     
     console.log('🤖 Isa Auto-Process iniciado');
     console.log('📝 Lead ID:', lead_id);
     console.log('📱 Subscriber ID:', subscriber_id);
     console.log('💬 Mensagem:', mensagem?.substring(0, 100));
+    console.log('📎 Tipo:', tipo_mensagem);
 
     if (!lead_id || !mensagem) {
       return new Response(JSON.stringify({ 
@@ -799,6 +859,33 @@ serve(async (req) => {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Se for áudio, transcrever primeiro
+    let mensagemProcessada = mensagem;
+    let audioTranscrito = false;
+    
+    if (tipo_mensagem === 'audio' || isAudioUrl(mensagem)) {
+      console.log('🎤 Detectado áudio, iniciando transcrição...');
+      const transcricao = await transcreverAudio(mensagem);
+      
+      if (transcricao) {
+        mensagemProcessada = transcricao;
+        audioTranscrito = true;
+        console.log('✅ Áudio transcrito com sucesso');
+        
+        // Salvar transcrição como interação
+        await supabase.from('interacoes').insert({
+          cliente_id: lead_id,
+          tipo: 'WhatsApp',
+          resumo: `Áudio transcrito: "${transcricao.substring(0, 200)}${transcricao.length > 200 ? '...' : ''}"`,
+          detalhes: `Transcrição completa: ${transcricao}`,
+          direcao: 'Entrada',
+        });
+      } else {
+        mensagemProcessada = '[Áudio recebido - transcrição não disponível]';
+        console.log('⚠️ Não foi possível transcrever o áudio');
+      }
     }
 
     // Buscar contexto completo do lead
@@ -817,8 +904,8 @@ serve(async (req) => {
 
     console.log('📊 Contexto carregado para:', contexto.lead.nome);
 
-    // Processar com IA
-    const resultado = await processarComIA(contexto, mensagem, subscriber_id);
+    // Processar com IA (usando mensagem transcrita se for áudio)
+    const resultado = await processarComIA(contexto, mensagemProcessada, subscriber_id);
     
     console.log('🧠 Análise da IA:', resultado.analise);
     console.log('📋 Ações sugeridas:', resultado.acoes.length);
@@ -861,6 +948,8 @@ serve(async (req) => {
             dados_acao: acao.dados,
             motivo: acao.motivo,
             mensagem_original: mensagem,
+            mensagem_processada: mensagemProcessada,
+            audio_transcrito: audioTranscrito,
             analise: resultado.analise,
           },
           processado: false,
@@ -878,7 +967,7 @@ serve(async (req) => {
         contexto.lead,
         acoesNauto,
         resultado.analise,
-        mensagem
+        audioTranscrito ? `[🎤 Áudio transcrito]: ${mensagemProcessada}` : mensagem
       );
     }
 
@@ -913,7 +1002,9 @@ serve(async (req) => {
       entidade_id: lead_id,
       lead_id: lead_id,
       dados: {
-        mensagem: mensagem.substring(0, 200),
+        mensagem_original: mensagem.substring(0, 200),
+        mensagem_processada: mensagemProcessada.substring(0, 200),
+        audio_transcrito: audioTranscrito,
         analise: resultado.analise,
         acoes_executadas: acoesExecutadas.length,
         acoes_pendentes: acoesNauto.length,
@@ -923,6 +1014,7 @@ serve(async (req) => {
     });
 
     console.log('✅ Processamento concluído');
+    console.log(`   - Áudio transcrito: ${audioTranscrito}`);
     console.log(`   - Ações executadas: ${acoesExecutadas.length}`);
     console.log(`   - Ações pendentes: ${acoesNauto.length}`);
     console.log(`   - Resposta enviada: ${respostaEnviada}`);
@@ -933,6 +1025,8 @@ serve(async (req) => {
       analise: resultado.analise,
       resposta: resultado.resposta,
       resposta_enviada: respostaEnviada,
+      audio_transcrito: audioTranscrito,
+      transcricao: audioTranscrito ? mensagemProcessada : null,
       acoes_executadas: acoesExecutadas,
       acoes_pendentes: acoesNauto,
     }), {
