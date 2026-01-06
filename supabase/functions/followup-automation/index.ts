@@ -62,10 +62,90 @@ Se mudar de ideia, é só responder aqui que retomamos de onde paramos!`,
   }
 };
 
-// Enviar via Flow do ManyChat
+// Enviar mensagem direta via ManyChat (funciona dentro de 24h)
+async function enviarMensagemManyChat(subscriberId: string, mensagem: string, canal: string = 'whatsapp') {
+  try {
+    console.log(`[FOLLOWUP] Enviando mensagem direta: subscriber=${subscriberId}, canal=${canal}`);
+    
+    // Tentar via sendContent primeiro
+    const response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${manychatApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        subscriber_id: parseInt(subscriberId),
+        data: {
+          version: "v2",
+          content: {
+            type: canal === 'instagram' ? 'instagram' : 'whatsapp',
+            messages: [{ type: "text", text: mensagem }]
+          }
+        }
+      }),
+    });
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType?.includes('application/json')) {
+      const text = await response.text();
+      console.error('[FOLLOWUP] Resposta não-JSON:', text.substring(0, 300));
+      
+      // Tentar fallback com sendMessage
+      return await tentarSendMessage(subscriberId, mensagem);
+    }
+
+    const result = await response.json();
+    console.log('[FOLLOWUP] sendContent response:', JSON.stringify(result));
+    
+    if (result.status === 'success') {
+      return { success: true, result };
+    }
+    
+    // Se falhou, tentar sendMessage como fallback
+    console.log('[FOLLOWUP] sendContent falhou, tentando sendMessage...');
+    return await tentarSendMessage(subscriberId, mensagem);
+
+  } catch (error: any) {
+    console.error('[FOLLOWUP] Erro no envio:', error);
+    return await tentarSendMessage(subscriberId, mensagem);
+  }
+}
+
+// Fallback via sendMessage (endpoint mais simples)
+async function tentarSendMessage(subscriberId: string, mensagem: string) {
+  try {
+    const response = await fetch('https://api.manychat.com/fb/subscriber/sendMessage', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${manychatApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        subscriber_id: parseInt(subscriberId),
+        message_tag: 'CONFIRMED_EVENT_UPDATE',
+        data: {
+          version: "v2",
+          content: {
+            messages: [{ type: "text", text: mensagem }]
+          }
+        }
+      }),
+    });
+
+    const result = await response.json();
+    console.log('[FOLLOWUP] sendMessage response:', JSON.stringify(result));
+    return { success: result.status === 'success', result };
+  } catch (error: any) {
+    console.error('[FOLLOWUP] sendMessage falhou:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Enviar via Flow (para templates aprovados após 24h)
 async function enviarViaFlow(subscriberId: string, flowNs: string, dados: Record<string, any>) {
   try {
-    console.log(`[FOLLOWUP] Enviando via sendFlow: subscriber=${subscriberId}, flow=${flowNs}`);
+    console.log(`[FOLLOWUP] Enviando via Flow: subscriber=${subscriberId}, flow=${flowNs}`);
     
     const response = await fetch('https://api.manychat.com/fb/sending/sendFlow', {
       method: 'POST',
@@ -94,12 +174,7 @@ async function enviarViaFlow(subscriberId: string, flowNs: string, dados: Record
       return { success: true, result };
     }
     
-    // Se o flow não existe, marcar para fallback
-    if (result.error?.includes('not found') || result.error?.includes('Flow')) {
-      return { success: false, error: result.error, fallback: true };
-    }
-    
-    return { success: false, error: result.error || 'Erro desconhecido' };
+    return { success: false, error: result.error || 'Erro desconhecido', fallback: true };
 
   } catch (error: any) {
     console.error('[FOLLOWUP] Erro no sendFlow:', error);
@@ -107,48 +182,6 @@ async function enviarViaFlow(subscriberId: string, flowNs: string, dados: Record
   }
 }
 
-// Fallback: enviar mensagem direta (só funciona dentro da janela 24h)
-async function enviarMensagemDireta(subscriberId: string, mensagem: string, canal: string = 'whatsapp') {
-  try {
-    console.log(`[FOLLOWUP] Tentando envio direto: subscriber=${subscriberId}`);
-    
-    const contentType = canal === 'whatsapp' ? 'whatsapp' : 'instagram';
-    
-    const response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${manychatApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        subscriber_id: parseInt(subscriberId),
-        data: {
-          version: "v2",
-          content: {
-            type: contentType,
-            messages: [{ type: "text", text: mensagem }]
-          }
-        }
-      }),
-    });
-
-    const respContentType = response.headers.get('content-type');
-    if (!respContentType?.includes('application/json')) {
-      const text = await response.text();
-      console.error('[FOLLOWUP] Resposta não-JSON do sendContent:', text.substring(0, 200));
-      return { success: false, error: 'API retornou HTML' };
-    }
-
-    const result = await response.json();
-    console.log('[FOLLOWUP] sendContent response:', JSON.stringify(result));
-    
-    return { success: result.status === 'success', result };
-
-  } catch (error: any) {
-    console.error('[FOLLOWUP] Erro no sendContent:', error);
-    return { success: false, error: error.message };
-  }
-}
 
 // Função principal de envio
 async function enviarFollowup(
@@ -165,44 +198,28 @@ async function enviarFollowup(
   
   const mensagemPersonalizada = config.mensagem.replace(/\{\{nome\}\}/g, nome || 'cliente');
   
-  // Se requer template (fora de 24h), só podemos usar sendFlow com template aprovado
+  // Se está fora da janela 24h e requer template
   if (config.requer_template && minutosDesdeContato > 1440) {
-    console.log(`[FOLLOWUP] Follow-up ${templateKey} requer template aprovado (${minutosDesdeContato.toFixed(0)} min > 24h)`);
+    console.log(`[FOLLOWUP] Follow-up ${templateKey} fora da janela 24h (${minutosDesdeContato.toFixed(0)} min)`);
     
+    // Tentar via Flow primeiro (para templates aprovados)
     const resultado = await enviarViaFlow(subscriberId, config.flow_ns, { 
       nome: nome || 'cliente',
       mensagem: mensagemPersonalizada 
     });
     
-    if (!resultado.success && resultado.fallback) {
-      console.warn(`[FOLLOWUP] ⚠️ Flow '${config.flow_ns}' não encontrado. Crie no ManyChat com Message Template aprovado!`);
-      return { 
-        success: false, 
-        error: `Flow '${config.flow_ns}' não configurado no ManyChat`,
-        precisa_criar_flow: true
-      };
+    if (resultado.success) {
+      return resultado;
     }
     
-    return resultado;
+    // Se flow não existe, tentar envio direto mesmo assim (pode funcionar se janela ainda aberta no ManyChat)
+    console.log('[FOLLOWUP] Flow falhou, tentando envio direto...');
+    return await enviarMensagemManyChat(subscriberId, mensagemPersonalizada, canal);
   }
   
-  // Dentro da janela 24h - tentar flow primeiro, depois fallback
-  const resultadoFlow = await enviarViaFlow(subscriberId, config.flow_ns, { 
-    nome: nome || 'cliente',
-    mensagem: mensagemPersonalizada 
-  });
-  
-  if (resultadoFlow.success) {
-    return resultadoFlow;
-  }
-  
-  // Fallback: mensagem direta
-  if (resultadoFlow.fallback && minutosDesdeContato <= 1440) {
-    console.log('[FOLLOWUP] Usando fallback de mensagem direta (dentro de 24h)');
-    return await enviarMensagemDireta(subscriberId, mensagemPersonalizada, canal);
-  }
-  
-  return resultadoFlow;
+  // Dentro da janela 24h - enviar mensagem direta
+  console.log(`[FOLLOWUP] Dentro da janela 24h, enviando direto (${minutosDesdeContato.toFixed(0)} min)`);
+  return await enviarMensagemManyChat(subscriberId, mensagemPersonalizada, canal);
 }
 
 serve(async (req: Request) => {
