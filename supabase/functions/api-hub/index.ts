@@ -51,24 +51,56 @@ serve(async (req: Request) => {
     
     // ManyChat Webhook - Redirecionar para manychat-webhook para processamento completo
     if (path === '/webhook/manychat' || path.startsWith('/manychat')) {
-      const subscriberIdRaw = body.subscriber_id || body.id?.toString() || `api_${Date.now()}`;
-      const subscriberId = subscriberIdRaw.toString().replace(/^\[|\]$/g, '').trim();
-      
-      const nomeRaw = body.name || body.first_name || body.subscriber?.name || 'Desconhecido';
-      const nome = nomeRaw.toString().replace(/^\[|\]$/g, '').trim();
-      
-      const telefoneRaw = body.phone || body.subscriber?.phone || body.telefone;
-      const telefone = telefoneRaw ? telefoneRaw.toString().replace(/^\[|\]$/g, '').trim() : null;
-      
-      const email = body.email || body.subscriber?.email;
-      const mensagemRaw = body.last_input_text || body.text || body.message || body.mensagem;
-      const mensagem = mensagemRaw ? mensagemRaw.toString().replace(/^\[|\]$/g, '').trim() : null;
+      // Limpar colchetes de arrays do ManyChat
+      const cleanValue = (val: any): string | null => {
+        if (!val) return null;
+        const str = val.toString().replace(/^\[|\]$/g, '').trim();
+        return str && str !== 'null' && str !== 'undefined' ? str : null;
+      };
 
-      // Detectar canal
+      const subscriberIdRaw = body.subscriber_id || body.id?.toString() || `api_${Date.now()}`;
+      const subscriberId = cleanValue(subscriberIdRaw) || `api_${Date.now()}`;
+      
+      // Extrair nome de múltiplos campos possíveis
+      const nomeRaw = body.full_name || body.name || body.first_name || 
+                      body.subscriber?.full_name || body.subscriber?.name || 
+                      body.subscriber?.first_name || body.nome;
+      let nome = cleanValue(nomeRaw);
+      
+      // Se tiver first_name e last_name separados, juntar
+      if (!nome && body.first_name) {
+        const firstName = cleanValue(body.first_name);
+        const lastName = cleanValue(body.last_name);
+        if (firstName) {
+          nome = lastName ? `${firstName} ${lastName}` : firstName;
+        }
+      }
+      nome = nome || 'Desconhecido';
+      
+      const telefoneRaw = body.phone || body.subscriber?.phone || body.telefone || body.wa_id;
+      const telefone = cleanValue(telefoneRaw);
+      
+      const emailRaw = body.email || body.subscriber?.email;
+      const email = cleanValue(emailRaw);
+      
+      const mensagemRaw = body.last_input_text || body.text || body.message || body.mensagem;
+      const mensagem = cleanValue(mensagemRaw);
+
+      // Detectar canal com prioridade correta
       let canal = 'facebook';
       const payloadStr = JSON.stringify(body).toLowerCase();
-      if (payloadStr.includes('instagram') || payloadStr.includes('"ig_')) canal = 'instagram';
-      else if (payloadStr.includes('whatsapp') || payloadStr.includes('"wa_') || telefone) canal = 'whatsapp';
+      
+      // Prioridade: WhatsApp > Instagram > Facebook
+      if (body.wa_id || payloadStr.includes('whatsapp') || payloadStr.includes('"wa_')) {
+        canal = 'whatsapp';
+      } else if (telefone && telefone.match(/^55\d{10,11}$/)) {
+        // Telefone brasileiro = provavelmente WhatsApp
+        canal = 'whatsapp';
+      } else if (payloadStr.includes('instagram') || payloadStr.includes('"ig_') || body.ig_id) {
+        canal = 'instagram';
+      }
+      
+      console.log('[API-HUB] Dados extraídos:', { subscriberId, nome, telefone, canal, mensagem: mensagem?.substring(0, 50) });
 
       // Tentar encontrar subscriber existente com lead vinculado
       let leadId: string | null = null;
@@ -199,21 +231,52 @@ serve(async (req: Request) => {
         }
       }
 
+      // Verificar subscriber existente
+      const { data: existingSub } = await supabase
+        .from('manychat_subscribers')
+        .select('nome, lead_id')
+        .eq('subscriber_id', subscriberId)
+        .maybeSingle();
+      
+      // Se já existe subscriber mas com nome "Desconhecido" e agora temos nome válido, atualizar
+      const shouldUpdateName = existingSub && 
+        existingSub.nome === 'Desconhecido' && 
+        nome !== 'Desconhecido';
+      
       // Upsert subscriber com lead_id vinculado
       await supabase
         .from('manychat_subscribers')
         .upsert({
           subscriber_id: subscriberId,
-          nome: nome,
+          nome: shouldUpdateName ? nome : (existingSub?.nome !== 'Desconhecido' ? existingSub?.nome : nome),
           telefone: telefone,
           email: email,
           canal: canal,
-          lead_id: leadId,
+          lead_id: leadId || existingSub?.lead_id,
           ultima_interacao: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }, {
           onConflict: 'subscriber_id',
         });
+      
+      // Se atualizamos o nome do subscriber, atualizar também o lead vinculado
+      if (shouldUpdateName && (leadId || existingSub?.lead_id)) {
+        const leadToUpdate = leadId || existingSub?.lead_id;
+        const { data: leadData } = await supabase
+          .from('leads_juridicos')
+          .select('nome')
+          .eq('id', leadToUpdate)
+          .maybeSingle();
+        
+        // Só atualizar se o lead também tem nome genérico
+        if (leadData && (leadData.nome === 'Desconhecido' || leadData.nome?.startsWith('Contato'))) {
+          await supabase
+            .from('leads_juridicos')
+            .update({ nome: nome })
+            .eq('id', leadToUpdate);
+          console.log('[API-HUB] Lead atualizado com nome:', nome);
+        }
+      }
 
       // Log event
       await supabase.from('system_events').insert({
