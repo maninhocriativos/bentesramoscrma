@@ -10,9 +10,16 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const manychatApiKey = Deno.env.get('MANYCHAT_API_KEY')!;
 
-// Templates de mensagem simples (sem botões - não suportados pela API sendContent)
-const FOLLOWUP_TEMPLATES = {
-  // Follow-up 1: 10 minutos - Mensagem de interesse
+interface FollowupConfig {
+  titulo: string;
+  mensagem: string;
+  delay_minutos: number;
+  flow_ns: string;
+  requer_template?: boolean;
+}
+
+// Configuração de follow-ups
+const FOLLOWUP_CONFIG: Record<string, FollowupConfig> = {
   followup_1: {
     titulo: "Ainda estou aqui para ajudar! 🤝",
     mensagem: `Oi {{nome}}! Vi que você entrou em contato conosco há pouco.
@@ -20,10 +27,9 @@ const FOLLOWUP_TEMPLATES = {
 Sei que às vezes a vida corrida nos faz pausar, mas estou aqui para te ajudar com sua questão jurídica.
 
 Responda "SIM" se quiser conversar agora ou "AGENDAR" para marcar um horário! 📅`,
-    delay_minutos: 10
+    delay_minutos: 10,
+    flow_ns: 'followup_10min'
   },
-  
-  // Follow-up 2: 1 hora - Valor e urgência
   followup_2: {
     titulo: "Sua situação merece atenção 📋",
     mensagem: `{{nome}}, percebi que ainda não conversamos.
@@ -36,10 +42,9 @@ Nossa equipe já ajudou centenas de pessoas a resolver questões como:
 ✅ Direitos do consumidor
 
 Que tal conversarmos sem compromisso? Só responder aqui! 💬`,
-    delay_minutos: 60
+    delay_minutos: 60,
+    flow_ns: 'followup_1hora'
   },
-  
-  // Follow-up 3: 24 horas - Última tentativa com oferta
   followup_3: {
     titulo: "Última mensagem sobre seu caso 📌",
     mensagem: `Olá {{nome}}, essa é minha última tentativa de contato.
@@ -51,17 +56,64 @@ Entendo que você pode estar ocupado(a), mas não queria deixar de oferecer noss
 🔒 Sigilo total garantido
 
 Se mudar de ideia, é só responder aqui que retomamos de onde paramos!`,
-    delay_minutos: 1440 // 24 horas
+    delay_minutos: 1440,
+    flow_ns: 'followup_24h_template',
+    requer_template: true
   }
 };
 
-// Enviar mensagem via ManyChat API - Formato correto
-async function enviarMensagemManyChat(subscriberId: string, mensagem: string, canal: string = 'instagram') {
+// Enviar via Flow do ManyChat
+async function enviarViaFlow(subscriberId: string, flowNs: string, dados: Record<string, any>) {
   try {
-    // Detectar o tipo de conteúdo baseado no canal
+    console.log(`[FOLLOWUP] Enviando via sendFlow: subscriber=${subscriberId}, flow=${flowNs}`);
+    
+    const response = await fetch('https://api.manychat.com/fb/sending/sendFlow', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${manychatApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        subscriber_id: parseInt(subscriberId),
+        flow_ns: flowNs,
+        external_data: dados
+      }),
+    });
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType?.includes('application/json')) {
+      const text = await response.text();
+      console.error('[FOLLOWUP] Resposta não-JSON do sendFlow:', text.substring(0, 200));
+      return { success: false, error: 'Resposta não-JSON', fallback: true };
+    }
+
+    const result = await response.json();
+    console.log('[FOLLOWUP] sendFlow response:', JSON.stringify(result));
+    
+    if (result.status === 'success') {
+      return { success: true, result };
+    }
+    
+    // Se o flow não existe, marcar para fallback
+    if (result.error?.includes('not found') || result.error?.includes('Flow')) {
+      return { success: false, error: result.error, fallback: true };
+    }
+    
+    return { success: false, error: result.error || 'Erro desconhecido' };
+
+  } catch (error: any) {
+    console.error('[FOLLOWUP] Erro no sendFlow:', error);
+    return { success: false, error: error.message, fallback: true };
+  }
+}
+
+// Fallback: enviar mensagem direta (só funciona dentro da janela 24h)
+async function enviarMensagemDireta(subscriberId: string, mensagem: string, canal: string = 'whatsapp') {
+  try {
+    console.log(`[FOLLOWUP] Tentando envio direto: subscriber=${subscriberId}`);
+    
     const contentType = canal === 'whatsapp' ? 'whatsapp' : 'instagram';
     
-    // Usar sendContent com formato simples de texto (sem quick_replies que não são suportados)
     const response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
       method: 'POST',
       headers: {
@@ -74,100 +126,83 @@ async function enviarMensagemManyChat(subscriberId: string, mensagem: string, ca
           version: "v2",
           content: {
             type: contentType,
-            messages: [
-              {
-                type: "text",
-                text: mensagem
-              }
-            ]
+            messages: [{ type: "text", text: mensagem }]
           }
         }
       }),
     });
 
-    // Verificar se a resposta é JSON
-    const contentTypeHeader = response.headers.get('content-type');
-    if (!contentTypeHeader?.includes('application/json')) {
+    const respContentType = response.headers.get('content-type');
+    if (!respContentType?.includes('application/json')) {
       const text = await response.text();
-      console.error('[FOLLOWUP] Resposta não-JSON da ManyChat:', text.substring(0, 200));
-      
-      // Tentar endpoint alternativo
-      return await tentarEndpointAlternativo(subscriberId, mensagem);
+      console.error('[FOLLOWUP] Resposta não-JSON do sendContent:', text.substring(0, 200));
+      return { success: false, error: 'API retornou HTML' };
     }
 
     const result = await response.json();
-    console.log('[FOLLOWUP] ManyChat response:', JSON.stringify(result));
+    console.log('[FOLLOWUP] sendContent response:', JSON.stringify(result));
     
-    if (result.status === 'success') {
-      return { success: true, result };
-    }
-    
-    // Se falhou, tentar endpoint alternativo
-    console.log('[FOLLOWUP] Tentando endpoint alternativo...');
-    return await tentarEndpointAlternativo(subscriberId, mensagem);
+    return { success: result.status === 'success', result };
 
   } catch (error: any) {
-    console.error('[FOLLOWUP] Erro ao enviar ManyChat:', error);
+    console.error('[FOLLOWUP] Erro no sendContent:', error);
     return { success: false, error: error.message };
   }
 }
 
-// Endpoint alternativo para envio
-async function tentarEndpointAlternativo(subscriberId: string, mensagem: string) {
-  try {
-    // Tentar sendFlow com flow_ns
-    const response = await fetch('https://api.manychat.com/fb/sending/sendFlow', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${manychatApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        subscriber_id: parseInt(subscriberId),
-        flow_ns: 'content20250106',
-        external_data: {
-          mensagem: mensagem
-        }
-      }),
-    });
-
-    const contentTypeHeader = response.headers.get('content-type');
-    if (!contentTypeHeader?.includes('application/json')) {
-      // Última tentativa: sendMessage simples
-      const simpleResponse = await fetch('https://api.manychat.com/fb/subscriber/sendMessage', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${manychatApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          subscriber_id: parseInt(subscriberId),
-          message: {
-            text: mensagem
-          }
-        }),
-      });
-      
-      const simpleContentType = simpleResponse.headers.get('content-type');
-      if (!simpleContentType?.includes('application/json')) {
-        const errorText = await simpleResponse.text();
-        console.error('[FOLLOWUP] Todos endpoints falharam:', errorText.substring(0, 100));
-        return { success: false, error: 'Nenhum endpoint ManyChat disponível' };
-      }
-      
-      const simpleResult = await simpleResponse.json();
-      console.log('[FOLLOWUP] ManyChat sendMessage response:', JSON.stringify(simpleResult));
-      return { success: simpleResult.status === 'success', result: simpleResult };
-    }
-
-    const result = await response.json();
-    console.log('[FOLLOWUP] ManyChat sendFlow response:', JSON.stringify(result));
-    return { success: result.status === 'success', result };
-
-  } catch (error: any) {
-    console.error('[FOLLOWUP] Erro no endpoint alternativo:', error);
-    return { success: false, error: error.message };
+// Função principal de envio
+async function enviarFollowup(
+  subscriberId: string, 
+  templateKey: string, 
+  nome: string, 
+  canal: string,
+  minutosDesdeContato: number
+) {
+  const config = FOLLOWUP_CONFIG[templateKey as keyof typeof FOLLOWUP_CONFIG];
+  if (!config) {
+    return { success: false, error: 'Template não encontrado' };
   }
+  
+  const mensagemPersonalizada = config.mensagem.replace(/\{\{nome\}\}/g, nome || 'cliente');
+  
+  // Se requer template (fora de 24h), só podemos usar sendFlow com template aprovado
+  if (config.requer_template && minutosDesdeContato > 1440) {
+    console.log(`[FOLLOWUP] Follow-up ${templateKey} requer template aprovado (${minutosDesdeContato.toFixed(0)} min > 24h)`);
+    
+    const resultado = await enviarViaFlow(subscriberId, config.flow_ns, { 
+      nome: nome || 'cliente',
+      mensagem: mensagemPersonalizada 
+    });
+    
+    if (!resultado.success && resultado.fallback) {
+      console.warn(`[FOLLOWUP] ⚠️ Flow '${config.flow_ns}' não encontrado. Crie no ManyChat com Message Template aprovado!`);
+      return { 
+        success: false, 
+        error: `Flow '${config.flow_ns}' não configurado no ManyChat`,
+        precisa_criar_flow: true
+      };
+    }
+    
+    return resultado;
+  }
+  
+  // Dentro da janela 24h - tentar flow primeiro, depois fallback
+  const resultadoFlow = await enviarViaFlow(subscriberId, config.flow_ns, { 
+    nome: nome || 'cliente',
+    mensagem: mensagemPersonalizada 
+  });
+  
+  if (resultadoFlow.success) {
+    return resultadoFlow;
+  }
+  
+  // Fallback: mensagem direta
+  if (resultadoFlow.fallback && minutosDesdeContato <= 1440) {
+    console.log('[FOLLOWUP] Usando fallback de mensagem direta (dentro de 24h)');
+    return await enviarMensagemDireta(subscriberId, mensagemPersonalizada, canal);
+  }
+  
+  return resultadoFlow;
 }
 
 serve(async (req: Request) => {
@@ -181,14 +216,14 @@ serve(async (req: Request) => {
   console.log('[FOLLOWUP] Iniciando processamento de follow-ups:', agora.toISOString());
 
   try {
-    // Buscar follow-ups pendentes
+    // Buscar follow-ups pendentes de leads frios
     const { data: followups, error: fetchError } = await supabase
       .from('lead_followups')
       .select(`
         *,
         leads_juridicos!inner(id, nome, telefone, status)
       `)
-      .in('status', ['aguardando', 'em_andamento'])
+      .in('status', ['aguardando', 'em_andamento', 'pendente'])
       .eq('respondido', false);
 
     if (fetchError) {
@@ -200,15 +235,16 @@ serve(async (req: Request) => {
 
     let enviados = 0;
     let erros = 0;
+    let pendentesTemplate = 0;
 
     for (const followup of followups || []) {
       const lead = followup.leads_juridicos;
       const primeiroContato = new Date(followup.primeiro_contato_em);
       const minutosDesdeContato = (agora.getTime() - primeiroContato.getTime()) / (1000 * 60);
       
-      console.log(`[FOLLOWUP] Lead: ${lead.nome}, minutos desde contato: ${minutosDesdeContato.toFixed(0)}`);
+      console.log(`[FOLLOWUP] Lead: ${lead.nome}, minutos: ${minutosDesdeContato.toFixed(0)}, status: ${lead.status}`);
 
-      // Verificar se lead respondeu (status mudou de Lead Frio)
+      // Verificar se lead respondeu
       if (lead.status !== 'Lead Frio') {
         await supabase
           .from('lead_followups')
@@ -226,43 +262,35 @@ serve(async (req: Request) => {
       let templateKey: string | null = null;
       let updateField: string | null = null;
 
-      // Follow-up 1: 10 minutos
-      if (!followup.followup_1_enviado && minutosDesdeContato >= FOLLOWUP_TEMPLATES.followup_1.delay_minutos) {
+      if (!followup.followup_1_enviado && minutosDesdeContato >= FOLLOWUP_CONFIG.followup_1.delay_minutos) {
         templateKey = 'followup_1';
         updateField = 'followup_1';
-      }
-      // Follow-up 2: 1 hora
-      else if (followup.followup_1_enviado && !followup.followup_2_enviado && minutosDesdeContato >= FOLLOWUP_TEMPLATES.followup_2.delay_minutos) {
+      } else if (followup.followup_1_enviado && !followup.followup_2_enviado && minutosDesdeContato >= FOLLOWUP_CONFIG.followup_2.delay_minutos) {
         templateKey = 'followup_2';
         updateField = 'followup_2';
-      }
-      // Follow-up 3: 24 horas
-      else if (followup.followup_2_enviado && !followup.followup_3_enviado && minutosDesdeContato >= FOLLOWUP_TEMPLATES.followup_3.delay_minutos) {
+      } else if (followup.followup_2_enviado && !followup.followup_3_enviado && minutosDesdeContato >= FOLLOWUP_CONFIG.followup_3.delay_minutos) {
         templateKey = 'followup_3';
         updateField = 'followup_3';
       }
 
       if (templateKey && followup.subscriber_id) {
-        const template = FOLLOWUP_TEMPLATES[templateKey as keyof typeof FOLLOWUP_TEMPLATES];
-        const mensagemPersonalizada = template.mensagem.replace(/\{\{nome\}\}/g, lead.nome || 'cliente');
-        
         console.log(`[FOLLOWUP] Enviando ${templateKey} para ${lead.nome} (subscriber: ${followup.subscriber_id})`);
 
-        const resultado = await enviarMensagemManyChat(
+        const resultado = await enviarFollowup(
           followup.subscriber_id,
-          mensagemPersonalizada,
-          followup.canal || 'instagram'
+          templateKey,
+          lead.nome,
+          followup.canal || 'whatsapp',
+          minutosDesdeContato
         );
 
         if (resultado.success) {
-          // Atualizar registro
           const updateData: any = {
             [`${updateField}_enviado`]: true,
             [`${updateField}_enviado_em`]: agora.toISOString(),
             status: 'em_andamento'
           };
           
-          // Se foi o último follow-up, marcar como concluído
           if (templateKey === 'followup_3') {
             updateData.status = 'concluido';
           }
@@ -278,10 +306,9 @@ serve(async (req: Request) => {
             tipo: 'WhatsApp',
             direcao: 'Saída',
             resumo: `Follow-up automático ${templateKey.replace('_', ' ')} enviado pela Isa`,
-            detalhes: mensagemPersonalizada,
+            detalhes: FOLLOWUP_CONFIG[templateKey as keyof typeof FOLLOWUP_CONFIG].mensagem.replace(/\{\{nome\}\}/g, lead.nome || 'cliente'),
           });
 
-          // Registrar evento
           await supabase.from('system_events').insert({
             tipo: 'followup',
             fonte: 'isa-automation',
@@ -294,15 +321,20 @@ serve(async (req: Request) => {
           });
 
           enviados++;
-          console.log(`[FOLLOWUP] ✅ ${templateKey} enviado com sucesso para ${lead.nome}`);
+          console.log(`[FOLLOWUP] ✅ ${templateKey} enviado para ${lead.nome}`);
         } else {
-          erros++;
-          console.error(`[FOLLOWUP] ❌ Erro ao enviar ${templateKey} para ${lead.nome}:`, resultado.error || resultado.result);
+          if ((resultado as any).precisa_criar_flow) {
+            pendentesTemplate++;
+            console.warn(`[FOLLOWUP] ⚠️ ${templateKey} pendente: precisa criar flow no ManyChat`);
+          } else {
+            erros++;
+            console.error(`[FOLLOWUP] ❌ Erro ao enviar ${templateKey}: ${resultado.error}`);
+          }
         }
       }
     }
 
-    console.log(`[FOLLOWUP] Processamento concluído. Enviados: ${enviados}, Erros: ${erros}`);
+    console.log(`[FOLLOWUP] Concluído. Enviados: ${enviados}, Erros: ${erros}, Pendentes template: ${pendentesTemplate}`);
 
     return new Response(
       JSON.stringify({ 
@@ -310,7 +342,11 @@ serve(async (req: Request) => {
         processados: followups?.length || 0,
         enviados,
         erros,
-        timestamp: agora.toISOString()
+        pendentes_template: pendentesTemplate,
+        timestamp: agora.toISOString(),
+        instrucoes: pendentesTemplate > 0 
+          ? 'Crie flows no ManyChat (followup_10min, followup_1hora, followup_24h_template) com Message Templates aprovados para envio fora da janela 24h.'
+          : null
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
