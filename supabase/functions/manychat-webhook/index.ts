@@ -357,6 +357,22 @@ serve(async (req) => {
 
     // Salvar mensagem se houver conteúdo
     if (messageContent) {
+      // Detectar tipo de mídia
+      let tipoMensagem = 'text';
+      const contentLower = messageContent.toString().toLowerCase();
+      
+      if (contentLower.match(/\.(ogg|mp3|wav|m4a|aac|opus)(\?|$)/)) {
+        tipoMensagem = 'audio';
+      } else if (contentLower.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/)) {
+        tipoMensagem = 'image';
+      } else if (contentLower.match(/\.(mp4|webm|mov)(\?|$)/)) {
+        tipoMensagem = 'video';
+      } else if (contentLower.match(/\.(pdf|doc|docx|xls|xlsx)(\?|$)/)) {
+        tipoMensagem = 'document';
+      }
+      
+      console.log('📎 Tipo de mensagem detectado:', tipoMensagem);
+      
       const { data: messageData, error: messageError } = await supabase
         .from('manychat_mensagens')
         .insert({
@@ -365,7 +381,7 @@ serve(async (req) => {
           subscriber_foto: subscriberFoto,
           canal: canal,
           conteudo: messageContent,
-          tipo: 'text',
+          tipo: tipoMensagem,
           direcao: direcao,
           lead_id: leadId,
           metadata: metadata,
@@ -394,12 +410,14 @@ serve(async (req) => {
                 subscriber_id: subscriberId,
                 mensagem: messageContent,
                 canal: canal,
+                tipo_mensagem: tipoMensagem,
               }),
             });
             
             if (isaResponse.ok) {
               const isaResult = await isaResponse.json();
               console.log('✅ Isa processou a mensagem:', isaResult.analise);
+              console.log(`   - Áudio transcrito: ${isaResult.audio_transcrito || false}`);
               console.log(`   - Ações executadas: ${isaResult.acoes_executadas?.length || 0}`);
               console.log(`   - Resposta enviada: ${isaResult.resposta_enviada}`);
             } else {
