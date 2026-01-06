@@ -77,10 +77,12 @@ const ManyChatInbox = () => {
     loadSubscribers();
   }, []);
 
-  // Realtime para novas mensagens
+  // Realtime para novas mensagens - otimizado para updates instantâneos
   useEffect(() => {
+    console.log('🔌 Conectando realtime...');
+    
     const messagesChannel = supabase
-      .channel('manychat-messages-realtime')
+      .channel('manychat-messages-live')
       .on(
         'postgres_changes',
         {
@@ -89,9 +91,10 @@ const ManyChatInbox = () => {
           table: 'manychat_mensagens',
         },
         (payload) => {
-          console.log('🔔 Nova mensagem recebida em tempo real:', payload);
-          const newMsg = payload.new as Message & { subscriber_id: string };
+          console.log('🔔 Nova mensagem instantânea:', payload.new);
+          const newMsg = payload.new as Message & { subscriber_id: string; subscriber_nome: string };
           
+          // Atualizar mensagens se é do subscriber selecionado
           if (selectedSubscriber && newMsg.subscriber_id === selectedSubscriber.subscriber_id) {
             setMessages(prev => {
               if (prev.some(m => m.id === newMsg.id)) return prev;
@@ -99,7 +102,19 @@ const ManyChatInbox = () => {
             });
           }
           
-          loadSubscribers();
+          // Atualizar lista de subscribers sem recarregar tudo
+          setSubscribers(prev => {
+            const idx = prev.findIndex(s => s.subscriber_id === newMsg.subscriber_id);
+            if (idx === -1) {
+              // Novo subscriber - recarregar lista
+              loadSubscribers();
+              return prev;
+            }
+            // Mover para o topo e atualizar última interação
+            const updated = [...prev];
+            const [subscriber] = updated.splice(idx, 1);
+            return [{ ...subscriber, ultima_interacao: new Date().toISOString() }, ...updated];
+          });
         }
       )
       .on(
@@ -117,24 +132,54 @@ const ManyChatInbox = () => {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Status mensagens realtime:', status);
+      });
 
     const subscribersChannel = supabase
-      .channel('manychat-subscribers-realtime')
+      .channel('manychat-subscribers-live')
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'manychat_subscribers',
         },
-        () => {
-          loadSubscribers();
+        (payload) => {
+          console.log('👤 Novo subscriber:', payload.new);
+          const newSub = payload.new as Subscriber;
+          setSubscribers(prev => {
+            if (prev.some(s => s.subscriber_id === newSub.subscriber_id)) return prev;
+            return [newSub, ...prev];
+          });
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'manychat_subscribers',
+        },
+        (payload) => {
+          console.log('👤 Subscriber atualizado:', payload.new);
+          const updatedSub = payload.new as Subscriber;
+          setSubscribers(prev => 
+            prev.map(s => s.subscriber_id === updatedSub.subscriber_id ? { ...s, ...updatedSub } : s)
+          );
+          
+          // Atualizar subscriber selecionado se for o mesmo
+          if (selectedSubscriber?.subscriber_id === updatedSub.subscriber_id) {
+            setSelectedSubscriber(prev => prev ? { ...prev, ...updatedSub } : null);
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Status subscribers realtime:', status);
+      });
 
     return () => {
+      console.log('🔌 Desconectando realtime...');
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(subscribersChannel);
     };
