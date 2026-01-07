@@ -118,6 +118,14 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra }: L
     }
   };
 
+  const handleCall = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (lead.telefone) {
+      const phone = lead.telefone.replace(/\D/g, '');
+      window.location.href = `tel:+55${phone}`;
+    }
+  };
+
   const handleViewDetails = (e: React.MouseEvent) => {
     e.stopPropagation();
     navigate(`/leads/${lead.id}`);
@@ -276,26 +284,49 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra }: L
 
       {/* Minimal Footer */}
       <div className="flex items-center border-t border-border/30">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="flex-1 h-7 rounded-none text-[10px] text-muted-foreground gap-1 hover:text-emerald-600 hover:bg-emerald-50/50"
-          onClick={handleWhatsApp}
-          disabled={!lead.telefone}
-        >
-          <MessageCircle className="w-3 h-3" />
-          WhatsApp
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex-1 h-7 rounded-none text-[10px] text-muted-foreground gap-1 hover:text-green-600 hover:bg-green-50/50"
+              onClick={handleCall}
+              disabled={!lead.telefone}
+            >
+              <Phone className="w-3 h-3" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">Ligar</TooltipContent>
+        </Tooltip>
         <div className="w-px h-4 bg-border/50" />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="flex-1 h-7 rounded-none text-[10px] text-muted-foreground gap-1 hover:text-primary hover:bg-primary/5"
-          onClick={handleViewDetails}
-        >
-          <ExternalLink className="w-3 h-3" />
-          Detalhes
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex-1 h-7 rounded-none text-[10px] text-muted-foreground gap-1 hover:text-emerald-600 hover:bg-emerald-50/50"
+              onClick={handleWhatsApp}
+              disabled={!lead.telefone}
+            >
+              <MessageCircle className="w-3 h-3" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">WhatsApp</TooltipContent>
+        </Tooltip>
+        <div className="w-px h-4 bg-border/50" />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex-1 h-7 rounded-none text-[10px] text-muted-foreground gap-1 hover:text-primary hover:bg-primary/5"
+              onClick={handleViewDetails}
+            >
+              <ExternalLink className="w-3 h-3" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">Detalhes</TooltipContent>
+        </Tooltip>
       </div>
 
       <EnviarContratoModal
