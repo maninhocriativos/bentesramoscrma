@@ -18,44 +18,57 @@ interface FollowupConfig {
   requer_template?: boolean;
 }
 
-// Configuração de follow-ups
+// Configuração de follow-ups com mensagens de alto impacto
 const FOLLOWUP_CONFIG: Record<string, FollowupConfig> = {
   followup_1: {
-    titulo: "Ainda estou aqui para ajudar! 🤝",
-    mensagem: `Oi {{nome}}! Vi que você entrou em contato conosco há pouco.
+    titulo: "Vitória recente para mostrar! 💰",
+    mensagem: `{{nome}}, acabei de ver seu contato! 
 
-Sei que às vezes a vida corrida nos faz pausar, mas estou aqui para te ajudar com sua questão jurídica.
+⚠️ Sabia que esta semana ganhamos uma causa onde o cliente recebeu *R$ 5.609,24* de volta?
 
-Responda "SIM" se quiser conversar agora ou "AGENDAR" para marcar um horário! 📅`,
+💰 Devolução em DOBRO: R$ 2.609,24
+💰 Danos Morais: R$ 3.000,00
+✅ Título de capitalização CANCELADO
+
+O banco cobrou dele o que não devia, e a Justiça mandou devolver TUDO!
+
+*Você pode estar na mesma situação.* Me conta o que está acontecendo? 👇`,
     delay_minutos: 10,
     flow_ns: 'followup_10min'
   },
   followup_2: {
-    titulo: "Sua situação merece atenção 📋",
-    mensagem: `{{nome}}, percebi que ainda não conversamos.
+    titulo: "Alerta: Prazo para pedir devolução 📋",
+    mensagem: `{{nome}}, você sabia que existe PRAZO para pedir o dinheiro de volta?
 
-Muitos clientes que atendemos estavam na mesma situação - sem saber por onde começar.
+⚡ Cobranças indevidas dos últimos 5 anos podem ser recuperadas
+⚡ Depois disso, você PERDE o direito
 
-Nossa equipe já ajudou centenas de pessoas a resolver questões como:
-✅ Revisão de contratos
-✅ Ações trabalhistas  
-✅ Direitos do consumidor
+📊 *Resultado REAL de cliente nosso:*
+"Declaro INEXIGÍVEL o débito sob rubrica TÍTULO DE CAPITALIZAÇÃO e CONDENO à devolução em DOBRO no valor de R$ 2.609,24"
 
-Que tal conversarmos sem compromisso? Só responder aqui! 💬`,
+Já ajudamos pessoas que nem sabiam que tinham direito!
+
+Quer que eu analise seu caso SEM COMPROMISSO? Só responder "SIM" 👇`,
     delay_minutos: 60,
     flow_ns: 'followup_1hora'
   },
   followup_3: {
-    titulo: "Última mensagem sobre seu caso 📌",
-    mensagem: `Olá {{nome}}, essa é minha última tentativa de contato.
+    titulo: "Última chance - Decisão real do Tribunal 📌",
+    mensagem: `{{nome}}, última mensagem... 
 
-Entendo que você pode estar ocupado(a), mas não queria deixar de oferecer nossa ajuda.
+Vi que você não respondeu, mas antes de encerrar, olha esse resultado que acabamos de conseguir:
 
-🎯 Primeira consulta GRATUITA
-📱 Atendimento rápido pelo WhatsApp
-🔒 Sigilo total garantido
+⚖️ *DECISÃO JUDICIAL - Junho/2025:*
+✅ Débito declarado INEXIGÍVEL
+✅ Devolução em DOBRO: R$ 2.609,24
+✅ Danos Morais: R$ 3.000,00
+✅ Isento de custas processuais
 
-Se mudar de ideia, é só responder aqui que retomamos de onde paramos!`,
+O cliente nem precisou ir na audiência!
+
+Se você tem financiamento, empréstimo ou cobrança bancária, pode ter dinheiro a receber.
+
+*Responda "QUERO ANALISAR"* e verificamos GRÁTIS se você tem direito! 🔍`,
     delay_minutos: 1440,
     flow_ns: 'followup_24h_template',
     requer_template: true
