@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { isPast, parseISO, isToday, startOfDay } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { Calendar } from '@/components/agenda/Calendar';
 import { CompromissoModal } from '@/components/agenda/CompromissoModal';
+import { DayEventsModal } from '@/components/agenda/DayEventsModal';
 import { GoogleCalendarConnect } from '@/components/agenda/GoogleCalendarConnect';
 import { ConfirmacoesPendentes } from '@/components/agenda/ConfirmacoesPendentes';
 import { useCompromissos } from '@/hooks/useCompromissos';
@@ -25,6 +28,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
+const TIMEZONE = 'America/Manaus';
+
+const parseLocalDate = (dateString: string): Date => {
+  const utcDate = parseISO(dateString);
+  return toZonedTime(utcDate, TIMEZONE);
+};
+
 type FilterType = 'todos' | 'Prazo' | 'Audiência' | 'Reunião';
 
 export default function AgendaPage() {
@@ -32,17 +42,26 @@ export default function AgendaPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedCompromisso, setSelectedCompromisso] = useState<Compromisso | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDayEventsModalOpen, setIsDayEventsModalOpen] = useState(false);
   const [filter, setFilter] = useState<FilterType>('todos');
   const [showConfirmacoes, setShowConfirmacoes] = useState(false);
 
+  // Filter out past events (keep today and future)
+  const activeCompromissos = useMemo(() => {
+    const todayStart = startOfDay(new Date());
+    return compromissos.filter(c => {
+      const eventDate = parseLocalDate(c.data_inicio);
+      return eventDate >= todayStart || isToday(eventDate);
+    });
+  }, [compromissos]);
+
   const filteredCompromissos = filter === 'todos' 
-    ? compromissos 
-    : compromissos.filter(c => c.tipo === filter);
+    ? activeCompromissos 
+    : activeCompromissos.filter(c => c.tipo === filter);
 
   const handleDayClick = (date: Date) => {
     setSelectedDate(date);
-    setSelectedCompromisso(null);
-    setIsModalOpen(true);
+    setIsDayEventsModalOpen(true);
   };
 
   const handleEventClick = (compromisso: Compromisso) => {
@@ -195,6 +214,20 @@ export default function AgendaPage() {
         )}
       </div>
 
+      {/* Modal para listar todos os eventos do dia */}
+      <DayEventsModal
+        isOpen={isDayEventsModalOpen}
+        onClose={() => setIsDayEventsModalOpen(false)}
+        date={selectedDate}
+        compromissos={filteredCompromissos}
+        onEventClick={handleEventClick}
+        onNewEvent={() => {
+          setIsDayEventsModalOpen(false);
+          setIsModalOpen(true);
+        }}
+      />
+
+      {/* Modal para criar/editar evento */}
       <CompromissoModal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
