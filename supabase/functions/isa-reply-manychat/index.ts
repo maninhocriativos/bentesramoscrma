@@ -153,10 +153,11 @@ serve(async (req: Request) => {
       lead_id: subscriber?.lead_id,
     });
 
-    // Enviar resposta via ManyChat API
+    // Enviar resposta via ManyChat API com message_tag para contatos inativos
     console.log('[ISA-REPLY] Enviando para ManyChat...');
     
-    const manychatResponse = await fetch('https://api.manychat.com/fb/sending/sendContent', {
+    // Primeiro tentar sem message_tag (para contatos ativos nas últimas 24h)
+    let manychatResponse = await fetch('https://api.manychat.com/fb/sending/sendContent', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
@@ -167,44 +168,39 @@ serve(async (req: Request) => {
         data: {
           version: 'v2',
           content: {
-            messages: [
-              {
-                type: 'text',
-                text: respostaIsa,
-              }
-            ]
+            messages: [{ type: 'text', text: respostaIsa }]
           }
         }
       }),
     });
 
-    const manychatResult = await manychatResponse.json();
+    let manychatResult = await manychatResponse.json();
     console.log('[ISA-REPLY] Resposta ManyChat:', JSON.stringify(manychatResult));
 
-    if (!manychatResponse.ok || manychatResult.status !== 'success') {
-      console.error('[ISA-REPLY] Erro ao enviar para ManyChat, tentando formato alternativo...');
+    // Se falhar por inatividade (código 3011), tentar com message_tag
+    if (manychatResult.code === 3011 || manychatResult.status === 'error') {
+      console.log('[ISA-REPLY] Tentando com message_tag ACCOUNT_UPDATE...');
       
-      // Tentar formato alternativo
-      const altResponse = await fetch('https://api.manychat.com/fb/subscriber/sendContent', {
+      manychatResponse = await fetch('https://api.manychat.com/fb/sending/sendContent', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          subscriber_id: subscriberId,
+          subscriber_id: parseInt(subscriberId),
+          message_tag: 'ACCOUNT_UPDATE',
           data: {
             version: 'v2',
             content: {
-              type: 'text',
-              text: respostaIsa
+              messages: [{ type: 'text', text: respostaIsa }]
             }
           }
         }),
       });
 
-      const altResult = await altResponse.json();
-      console.log('[ISA-REPLY] Resposta alternativa ManyChat:', JSON.stringify(altResult));
+      manychatResult = await manychatResponse.json();
+      console.log('[ISA-REPLY] Resposta com message_tag:', JSON.stringify(manychatResult));
     }
 
     // Registrar evento no sistema
