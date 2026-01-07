@@ -128,6 +128,8 @@ serve(async (req: Request) => {
     let enviados = 0;
     let erros = 0;
 
+    let pulados = 0;
+
     for (const followup of followups || []) {
       const lead = followup.leads_juridicos;
       
@@ -139,6 +141,40 @@ serve(async (req: Request) => {
 
       if (!followup.subscriber_id) {
         console.log(`[RETOMADA] Lead ${lead.nome} sem subscriber_id, pulando`);
+        continue;
+      }
+
+      // ⚠️ VERIFICAR SE LEAD TEM MENSAGENS RECENTES DE ENTRADA (conversa ativa)
+      // Se o lead mandou mensagem nas últimas 2 horas, NÃO enviar retomada automática
+      const duasHorasAtras = new Date(agora.getTime() - 2 * 60 * 60 * 1000).toISOString();
+      
+      const { data: mensagensRecentes } = await supabase
+        .from('manychat_mensagens')
+        .select('id, created_at, direcao')
+        .eq('lead_id', lead.id)
+        .eq('direcao', 'entrada')
+        .gte('created_at', duasHorasAtras)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (mensagensRecentes && mensagensRecentes.length > 0) {
+        console.log(`[RETOMADA] ⏸️ Lead ${lead.nome} tem conversa ativa (última msg: ${mensagensRecentes[0].created_at}), pulando retomada`);
+        pulados++;
+        continue;
+      }
+
+      // Verificar também interações recentes
+      const { data: interacoesRecentes } = await supabase
+        .from('interacoes')
+        .select('id, data_interacao')
+        .eq('cliente_id', lead.id)
+        .gte('data_interacao', duasHorasAtras)
+        .order('data_interacao', { ascending: false })
+        .limit(1);
+
+      if (interacoesRecentes && interacoesRecentes.length > 0) {
+        console.log(`[RETOMADA] ⏸️ Lead ${lead.nome} tem interação recente, pulando retomada`);
+        pulados++;
         continue;
       }
 
@@ -238,7 +274,7 @@ serve(async (req: Request) => {
       }
     }
 
-    console.log(`[RETOMADA] Concluído. Enviados: ${enviados}, Erros: ${erros}`);
+    console.log(`[RETOMADA] Concluído. Enviados: ${enviados}, Erros: ${erros}, Pulados (conversa ativa): ${pulados}`);
 
     return new Response(
       JSON.stringify({ 
@@ -246,6 +282,7 @@ serve(async (req: Request) => {
         processados: followups?.length || 0,
         enviados,
         erros,
+        pulados_conversa_ativa: pulados,
         timestamp: agora.toISOString()
       }),
       { 
