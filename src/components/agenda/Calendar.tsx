@@ -12,8 +12,15 @@ import {
   addMonths,
   subMonths,
   isFuture,
+  parseISO,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+
+// Helper para converter data UTC para local
+const parseLocalDate = (dateString: string): Date => {
+  const date = parseISO(dateString);
+  return date;
+};
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -68,19 +75,19 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
 
   const getCompromissosForDay = (date: Date) => {
     return compromissos.filter(c => 
-      isSameDay(new Date(c.data_inicio), date)
+      isSameDay(parseLocalDate(c.data_inicio), date)
     );
   };
 
   const getCompromissosForMonth = () => {
     return compromissos.filter(c => 
-      isSameMonth(new Date(c.data_inicio), currentMonth)
-    ).sort((a, b) => new Date(a.data_inicio).getTime() - new Date(b.data_inicio).getTime());
+      isSameMonth(parseLocalDate(c.data_inicio), currentMonth)
+    ).sort((a, b) => parseLocalDate(a.data_inicio).getTime() - parseLocalDate(b.data_inicio).getTime());
   };
 
   const upcomingEvents = compromissos
-    .filter(c => isFuture(new Date(c.data_inicio)) || isToday(new Date(c.data_inicio)))
-    .sort((a, b) => new Date(a.data_inicio).getTime() - new Date(b.data_inicio).getTime())
+    .filter(c => isFuture(parseLocalDate(c.data_inicio)) || isToday(parseLocalDate(c.data_inicio)))
+    .sort((a, b) => parseLocalDate(a.data_inicio).getTime() - parseLocalDate(b.data_inicio).getTime())
     .slice(0, 8);
 
   const handleSyncAdvbox = async () => {
@@ -113,7 +120,7 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
   const weekDaysMobile = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 
   const totalEvents = compromissos.length;
-  const futureEvents = compromissos.filter(c => isFuture(new Date(c.data_inicio))).length;
+  const futureEvents = compromissos.filter(c => isFuture(parseLocalDate(c.data_inicio))).length;
   const thisMonthEvents = getCompromissosForMonth().length;
 
   const getColors = (tipo: string) => TIPO_COLORS[tipo] || TIPO_COLORS['Outro'];
@@ -327,10 +334,10 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                       >
                         <div className="text-center shrink-0 w-12 md:w-14 py-1">
                           <p className="text-2xl md:text-3xl font-bold text-foreground">
-                            {format(new Date(compromisso.data_inicio), 'dd')}
+                            {format(parseLocalDate(compromisso.data_inicio), 'dd')}
                           </p>
                           <p className="text-[10px] md:text-xs text-muted-foreground uppercase font-medium">
-                            {format(new Date(compromisso.data_inicio), 'EEE', { locale: ptBR })}
+                            {format(parseLocalDate(compromisso.data_inicio), 'EEE', { locale: ptBR })}
                           </p>
                         </div>
                         <div className="flex-1 min-w-0">
@@ -343,7 +350,7 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                           <div className="flex items-center gap-3 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
-                              {format(new Date(compromisso.data_inicio), "HH:mm")}
+                              {format(parseLocalDate(compromisso.data_inicio), "HH:mm")}
                             </span>
                             {compromisso.descricao && (
                               <span className="flex items-center gap-1 truncate">
@@ -378,7 +385,7 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                 ) : (
                   upcomingEvents.map(compromisso => {
                     const colors = getColors(compromisso.tipo);
-                    const isTodays = isToday(new Date(compromisso.data_inicio));
+                    const isTodays = isToday(parseLocalDate(compromisso.data_inicio));
                     return (
                       <div
                         key={compromisso.id}
@@ -393,17 +400,17 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                           isTodays ? "bg-primary text-primary-foreground" : "bg-muted"
                         )}>
                           <p className="text-lg font-bold">
-                            {format(new Date(compromisso.data_inicio), 'dd')}
+                            {format(parseLocalDate(compromisso.data_inicio), 'dd')}
                           </p>
                           <p className="text-[9px] uppercase font-medium opacity-70">
-                            {format(new Date(compromisso.data_inicio), 'MMM', { locale: ptBR })}
+                            {format(parseLocalDate(compromisso.data_inicio), 'MMM', { locale: ptBR })}
                           </p>
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate">{compromisso.titulo}</p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Clock className="h-3 w-3" />
-                            <span>{format(new Date(compromisso.data_inicio), "HH:mm")}</span>
+                            <span>{format(parseLocalDate(compromisso.data_inicio), "HH:mm")}</span>
                             <div className={cn("w-1.5 h-1.5 rounded-full", colors.dot)} />
                             <span className={colors.text}>{compromisso.tipo}</span>
                           </div>
