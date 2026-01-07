@@ -19,47 +19,33 @@ interface FollowupConfig {
 }
 
 // Fluxo de retomada após 24h para leads frios (template aprovado da Meta)
-const RETOMADA_FLOW_NS = '20260105140934_525890';
+// Formato do namespace ManyChat: content{timestamp}_{id}
+const RETOMADA_FLOW_NS = 'content20260105140934_525890';
 
-// Configuração de follow-ups com mensagens de alto impacto
+// Configuração de follow-ups para leads frios sem resposta
+// Todos usam o mesmo fluxo de retomada aprovado pela Meta
 const FOLLOWUP_CONFIG: Record<string, FollowupConfig> = {
+  // Follow-up 1: após 24 horas (1440 minutos)
   followup_1: {
-    titulo: "Vitória recente para mostrar! 💰",
-    mensagem: `{{nome}}, acabei de ver seu contato! 
-
-⚠️ Sabia que esta semana ganhamos uma causa onde o cliente recebeu *R$ 5.609,24* de volta?
-
-💰 Devolução em DOBRO: R$ 2.609,24
-💰 Danos Morais: R$ 3.000,00
-✅ Título de capitalização CANCELADO
-
-O banco cobrou dele o que não devia, e a Justiça mandou devolver TUDO!
-
-*Você pode estar na mesma situação.* Me conta o que está acontecendo? 👇`,
-    delay_minutos: 10,
-    flow_ns: 'followup_10min'
-  },
-  followup_2: {
-    titulo: "Alerta: Prazo para pedir devolução 📋",
-    mensagem: `{{nome}}, você sabia que existe PRAZO para pedir o dinheiro de volta?
-
-⚡ Cobranças indevidas dos últimos 5 anos podem ser recuperadas
-⚡ Depois disso, você PERDE o direito
-
-📊 *Resultado REAL de cliente nosso:*
-"Declaro INEXIGÍVEL o débito sob rubrica TÍTULO DE CAPITALIZAÇÃO e CONDENO à devolução em DOBRO no valor de R$ 2.609,24"
-
-Já ajudamos pessoas que nem sabiam que tinham direito!
-
-Quer que eu analise seu caso SEM COMPROMISSO? Só responder "SIM" 👇`,
-    delay_minutos: 60,
-    flow_ns: 'followup_1hora'
-  },
-  // Follow-up 3: usa o fluxo de retomada após 24h (template aprovado)
-  followup_3: {
-    titulo: "Retomada após 24h - Template aprovado 📌",
+    titulo: "Retomada 24h",
     mensagem: ``, // Mensagem está no template do ManyChat
     delay_minutos: 1440, // 24 horas
+    flow_ns: RETOMADA_FLOW_NS,
+    requer_template: true
+  },
+  // Follow-up 2: após 48 horas (2880 minutos)
+  followup_2: {
+    titulo: "Retomada 48h",
+    mensagem: ``,
+    delay_minutos: 2880, // 48 horas
+    flow_ns: RETOMADA_FLOW_NS,
+    requer_template: true
+  },
+  // Follow-up 3: após 6 dias (8640 minutos)
+  followup_3: {
+    titulo: "Retomada 6 dias",
+    mensagem: ``,
+    delay_minutos: 8640, // 6 dias
     flow_ns: RETOMADA_FLOW_NS,
     requer_template: true
   }
