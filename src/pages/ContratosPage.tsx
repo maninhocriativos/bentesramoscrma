@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ContratosKPIs } from '@/components/contratos/ContratosKPIs';
 import { ContratosTable } from '@/components/contratos/ContratosTable';
 import { ModelosContratos } from '@/components/contratos/ModelosContratos';
 import { EnviarContratoModal } from '@/components/contratos/EnviarContratoModal';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2 } from 'lucide-react';
+import { Loader2, FileText, FolderOpen, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 export interface ContratoClicksign {
   id: string;
@@ -52,6 +52,14 @@ const mapClicksignStatus = (doc: any): string => {
   }
   return 'Documento Enviado';
 };
+
+const TABS = [
+  { id: 'todos', label: 'Todos', icon: FileText },
+  { id: 'em-processo', label: 'Em Processo', icon: Clock },
+  { id: 'finalizados', label: 'Finalizados', icon: CheckCircle2 },
+  { id: 'cancelados', label: 'Cancelados', icon: XCircle },
+  { id: 'modelos', label: 'Modelos', icon: FolderOpen },
+];
 
 export default function ContratosPage() {
   const { toast } = useToast();
@@ -155,14 +163,26 @@ export default function ContratosPage() {
     total: contratos.length,
   };
 
+  const getTabCount = (tabId: string) => {
+    switch (tabId) {
+      case 'todos': return contratos.length;
+      case 'em-processo': return kpiData.emProcesso;
+      case 'finalizados': return kpiData.finalizados;
+      case 'cancelados': return kpiData.cancelados;
+      case 'modelos': return null;
+      default: return null;
+    }
+  };
+
   return (
     <AppLayout>
       <AppHeader title="Contratos" />
       
-      <div className="flex-1 px-4 md:px-6 lg:px-8 py-4 space-y-6 animate-fade-in overflow-auto">
+      <div className="flex-1 px-4 md:px-6 lg:px-8 py-4 space-y-4 md:space-y-6 animate-fade-in overflow-auto">
         {loading ? (
-          <div className="flex items-center justify-center py-20">
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Carregando contratos...</p>
           </div>
         ) : (
           <>
@@ -173,31 +193,48 @@ export default function ContratosPage() {
               refreshing={refreshing} 
             />
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="mb-4">
-                <TabsTrigger value="todos">Todos ({contratos.length})</TabsTrigger>
-                <TabsTrigger value="em-processo">Em Processo ({kpiData.emProcesso})</TabsTrigger>
-                <TabsTrigger value="finalizados">Finalizados ({kpiData.finalizados})</TabsTrigger>
-                <TabsTrigger value="cancelados">Cancelados ({kpiData.cancelados})</TabsTrigger>
-                <TabsTrigger value="modelos">Modelos</TabsTrigger>
-              </TabsList>
+            {/* Custom Tabs */}
+            <div className="space-y-4">
+              {/* Tab Navigation */}
+              <div className="flex gap-1 p-1 bg-muted/50 rounded-lg overflow-x-auto">
+                {TABS.map((tab) => {
+                  const Icon = tab.icon;
+                  const count = getTabCount(tab.id);
+                  const isActive = activeTab === tab.id;
+                  
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-all",
+                        isActive 
+                          ? "bg-background text-foreground shadow-sm" 
+                          : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span className="hidden sm:inline">{tab.label}</span>
+                      {count !== null && (
+                        <span className={cn(
+                          "text-xs px-1.5 py-0.5 rounded-full",
+                          isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                        )}>
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
 
-              <TabsContent value="todos">
-                <ContratosTable contratos={filteredContratos} />
-              </TabsContent>
-              <TabsContent value="em-processo">
-                <ContratosTable contratos={filteredContratos} />
-              </TabsContent>
-              <TabsContent value="finalizados">
-                <ContratosTable contratos={filteredContratos} />
-              </TabsContent>
-              <TabsContent value="cancelados">
-                <ContratosTable contratos={filteredContratos} />
-              </TabsContent>
-              <TabsContent value="modelos">
+              {/* Tab Content */}
+              {activeTab === 'modelos' ? (
                 <ModelosContratos />
-              </TabsContent>
-            </Tabs>
+              ) : (
+                <ContratosTable contratos={filteredContratos} />
+              )}
+            </div>
           </>
         )}
       </div>

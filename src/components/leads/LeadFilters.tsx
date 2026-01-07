@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Filter, X, Download } from 'lucide-react';
+import { Search, Filter, X, Download, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,9 +9,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Lead } from '@/types/leads';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 interface LeadFiltersProps {
   leads: Lead[];
@@ -45,6 +53,7 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
   const [tipoAcao, setTipoAcao] = useState('all');
   const [valorRange, setValorRange] = useState('all');
   const [currentFiltered, setCurrentFiltered] = useState<Lead[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   
   // Store ref to avoid dependency issues
   const onFilterChangeRef = React.useRef(onFilterChange);
@@ -171,77 +180,191 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
     setValorRange('all');
   };
 
-  return (
-    <div className="flex flex-wrap items-center gap-3 p-3 bg-card rounded-xl border border-border/50 shadow-soft mb-4">
-      {/* Search */}
-      <div className="relative flex-1 min-w-[200px] max-w-[300px]">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por nome, email..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9 rounded-lg h-9"
-        />
+  const FilterControls = () => (
+    <div className="flex flex-col gap-3">
+      {/* Tipo de Ação */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Tipo de Ação</label>
+        <Select value={tipoAcao} onValueChange={setTipoAcao}>
+          <SelectTrigger className="w-full h-10 rounded-lg">
+            <SelectValue placeholder="Tipo de Ação" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os tipos</SelectItem>
+            {tiposAcao.map((tipo) => (
+              <SelectItem key={tipo} value={tipo}>
+                {tipo}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {/* Tipo de Ação */}
-      <Select value={tipoAcao} onValueChange={setTipoAcao}>
-        <SelectTrigger className="w-[160px] h-9 rounded-lg">
-          <SelectValue placeholder="Tipo de Ação" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Todos os tipos</SelectItem>
-          {tiposAcao.map((tipo) => (
-            <SelectItem key={tipo} value={tipo}>
-              {tipo}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
       {/* Faixa de Valor */}
-      <Select value={valorRange} onValueChange={setValorRange}>
-        <SelectTrigger className="w-[180px] h-9 rounded-lg">
-          <SelectValue placeholder="Faixa de valor" />
-        </SelectTrigger>
-        <SelectContent>
-          {VALOR_RANGES.map((range) => (
-            <SelectItem key={range.value} value={range.value}>
-              {range.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Faixa de Valor</label>
+        <Select value={valorRange} onValueChange={setValorRange}>
+          <SelectTrigger className="w-full h-10 rounded-lg">
+            <SelectValue placeholder="Faixa de valor" />
+          </SelectTrigger>
+          <SelectContent>
+            {VALOR_RANGES.map((range) => (
+              <SelectItem key={range.value} value={range.value}>
+                {range.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-      {/* Active filters indicator */}
       {activeFiltersCount > 0 && (
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-xs">
-            <Filter className="h-3 w-3 mr-1" />
-            {activeFiltersCount} filtro{activeFiltersCount > 1 ? 's' : ''}
-          </Badge>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={clearFilters}
-            className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
-          >
-            <X className="h-3.5 w-3.5 mr-1" />
-            Limpar
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={clearFilters}
+          className="w-full mt-2"
+        >
+          <X className="h-4 w-4 mr-2" />
+          Limpar filtros
+        </Button>
       )}
+    </div>
+  );
 
-      {/* Export Button */}
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={exportToCSV}
-        className="h-9 px-3 rounded-lg ml-auto"
-      >
-        <Download className="h-4 w-4 mr-2" />
-        Exportar CSV
-      </Button>
+  return (
+    <div className="flex flex-col gap-3 mb-4">
+      {/* Mobile: Search + Filter Button */}
+      <div className="flex items-center gap-2">
+        {/* Search */}
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar leads..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 h-10 rounded-lg"
+          />
+        </div>
+
+        {/* Mobile Filter Button */}
+        <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <SheetTrigger asChild>
+            <Button 
+              variant="outline" 
+              size="icon" 
+              className={cn(
+                "h-10 w-10 rounded-lg shrink-0 md:hidden",
+                activeFiltersCount > 0 && "border-primary text-primary"
+              )}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              {activeFiltersCount > 0 && (
+                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="bottom" className="h-auto max-h-[80vh] rounded-t-2xl">
+            <SheetHeader className="mb-4">
+              <SheetTitle className="flex items-center gap-2">
+                <Filter className="h-5 w-5" />
+                Filtros
+              </SheetTitle>
+            </SheetHeader>
+            <FilterControls />
+            <div className="flex gap-2 mt-6">
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => setFiltersOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                className="flex-1"
+                onClick={() => setFiltersOpen(false)}
+              >
+                Aplicar
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* Desktop Filters */}
+        <div className="hidden md:flex items-center gap-2">
+          <Select value={tipoAcao} onValueChange={setTipoAcao}>
+            <SelectTrigger className="w-[160px] h-10 rounded-lg">
+              <SelectValue placeholder="Tipo de Ação" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os tipos</SelectItem>
+              {tiposAcao.map((tipo) => (
+                <SelectItem key={tipo} value={tipo}>
+                  {tipo}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={valorRange} onValueChange={setValorRange}>
+            <SelectTrigger className="w-[180px] h-10 rounded-lg">
+              <SelectValue placeholder="Faixa de valor" />
+            </SelectTrigger>
+            <SelectContent>
+              {VALOR_RANGES.map((range) => (
+                <SelectItem key={range.value} value={range.value}>
+                  {range.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Active filters indicator - Desktop */}
+        {activeFiltersCount > 0 && (
+          <div className="hidden md:flex items-center gap-2">
+            <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-xs">
+              <Filter className="h-3 w-3 mr-1" />
+              {activeFiltersCount}
+            </Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearFilters}
+              className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
+
+        {/* Export Button */}
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={exportToCSV}
+          className="h-10 w-10 rounded-lg shrink-0"
+          title="Exportar CSV"
+        >
+          <Download className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* Results Count */}
+      <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+        <span>
+          {currentFiltered.length} lead{currentFiltered.length !== 1 ? 's' : ''} encontrado{currentFiltered.length !== 1 ? 's' : ''}
+        </span>
+        {activeFiltersCount > 0 && (
+          <button 
+            onClick={clearFilters}
+            className="text-primary hover:underline md:hidden"
+          >
+            Limpar filtros
+          </button>
+        )}
+      </div>
     </div>
   );
 }
