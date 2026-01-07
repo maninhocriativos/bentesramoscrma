@@ -71,6 +71,9 @@
     /* Success/Value colors */
     --success: 142 76% 36%;
     --success-foreground: 0 0% 100%;
+    
+    /* WhatsApp Chat Background */
+    --chat-bg: #ECE5DD;
   }
 
   .dark {
@@ -122,6 +125,9 @@
 
     --success: 142 70% 45%;
     --success-foreground: 0 0% 100%;
+    
+    /* WhatsApp Chat Background - Dark */
+    --chat-bg: #0B141A;
   }
 }
 

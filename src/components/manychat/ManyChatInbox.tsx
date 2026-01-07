@@ -45,10 +45,13 @@ interface Message {
   tipo: string;
 }
 
-// Cores do WhatsApp
+// Filtros de conversa
+type ConversationFilter = 'all' | 'unread' | 'favorites' | 'groups';
+
+// Cores do WhatsApp Desktop (Dark Mode)
 const WHATSAPP_COLORS = {
   headerBg: '#008069',
-  headerDark: '#1F2C34',
+  headerDark: '#202C33',
   chatBg: '#E4DDD6',
   chatBgDark: '#0B141A',
   sidebarBg: '#FFFFFF',
@@ -84,6 +87,7 @@ const ManyChatInbox = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<ConversationFilter>('all');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -366,10 +370,14 @@ const ManyChatInbox = () => {
     return name.substring(0, 2).toUpperCase();
   };
 
-  const filteredSubscribers = subscribers.filter(sub =>
+  // Aplicar filtro de busca
+  const searchFilteredSubscribers = subscribers.filter(sub =>
     sub.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     sub.telefone?.includes(searchTerm)
   );
+
+  // Aplicar filtro de categoria (por enquanto só "Tudo" funciona)
+  const filteredSubscribers = searchFilteredSubscribers;
 
   const renderMessage = (message: Message) => {
     const content = message.conteudo || '';
@@ -403,16 +411,14 @@ const ManyChatInbox = () => {
 
   return (
     <div className="flex h-[calc(100vh-140px)] md:h-[calc(100vh-180px)] overflow-hidden rounded-lg shadow-xl">
-      {/* Sidebar - Lista de Conversas (WhatsApp Style) */}
-      <div className={`${showMobileChat ? 'hidden md:flex' : 'flex'} w-full md:w-[400px] flex-col bg-white dark:bg-[#111B21] border-r border-[#E9EDEF] dark:border-[#222D34]`}>
-        {/* Header */}
+      {/* Sidebar - Lista de Conversas (WhatsApp Desktop Style) */}
+      <div className={`${showMobileChat ? 'hidden md:flex' : 'flex'} w-full md:w-[420px] flex-col bg-white dark:bg-[#111B21] border-r border-[#E9EDEF] dark:border-[#2A3942]`}>
+        {/* Header com título "Conversas" */}
         <div className="h-[60px] px-4 flex items-center justify-between bg-[#F0F2F5] dark:bg-[#202C33]">
-          <Avatar className="h-10 w-10 cursor-pointer">
-            <AvatarFallback className="bg-[#DFE5E7] dark:bg-[#6B7C85] text-[#54656F] dark:text-white">
-              EU
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex items-center gap-2">
+          <h1 className="text-[22px] font-semibold text-[#111B21] dark:text-[#E9EDEF]">
+            Conversas
+          </h1>
+          <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="icon"
@@ -446,6 +452,52 @@ const ManyChatInbox = () => {
           </div>
         </div>
 
+        {/* Filtros de conversa */}
+        <div className="px-3 py-2 bg-white dark:bg-[#111B21] border-b border-[#E9EDEF] dark:border-[#2A3942]">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveFilter('all')}
+              className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
+                activeFilter === 'all'
+                  ? 'bg-[#00A884] text-white'
+                  : 'bg-[#F0F2F5] dark:bg-[#202C33] text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E0E4E7] dark:hover:bg-[#374248]'
+              }`}
+            >
+              Tudo
+            </button>
+            <button
+              onClick={() => setActiveFilter('unread')}
+              className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
+                activeFilter === 'unread'
+                  ? 'bg-[#00A884] text-white'
+                  : 'bg-[#F0F2F5] dark:bg-[#202C33] text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E0E4E7] dark:hover:bg-[#374248]'
+              }`}
+            >
+              Não lidas
+            </button>
+            <button
+              onClick={() => setActiveFilter('favorites')}
+              className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
+                activeFilter === 'favorites'
+                  ? 'bg-[#00A884] text-white'
+                  : 'bg-[#F0F2F5] dark:bg-[#202C33] text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E0E4E7] dark:hover:bg-[#374248]'
+              }`}
+            >
+              Favoritas
+            </button>
+            <button
+              onClick={() => setActiveFilter('groups')}
+              className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
+                activeFilter === 'groups'
+                  ? 'bg-[#00A884] text-white'
+                  : 'bg-[#F0F2F5] dark:bg-[#202C33] text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E0E4E7] dark:hover:bg-[#374248]'
+              }`}
+            >
+              Grupos
+            </button>
+          </div>
+        </div>
+
         {/* Lista de Conversas */}
         <ScrollArea className="flex-1">
           {filteredSubscribers.length === 0 ? (
@@ -458,18 +510,24 @@ const ManyChatInbox = () => {
                 <div
                   key={subscriber.id}
                   onClick={() => setSelectedSubscriber(subscriber)}
-                  className={`flex items-center gap-3 px-3 py-3 cursor-pointer transition-colors hover:bg-[#F5F6F6] dark:hover:bg-[#202C33] ${
+                  className={`flex items-center gap-3 px-3 py-[10px] cursor-pointer transition-colors hover:bg-[#F5F6F6] dark:hover:bg-[#202C33] ${
                     selectedSubscriber?.id === subscriber.id ? 'bg-[#F0F2F5] dark:bg-[#2A3942]' : ''
                   }`}
                 >
-                  <Avatar className="h-[49px] w-[49px] shrink-0">
-                    <AvatarImage src={subscriber.foto} />
-                    <AvatarFallback className="bg-[#00A884] text-white text-base font-normal">
-                      {getInitials(subscriber)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="relative">
+                    <Avatar className="h-[49px] w-[49px] shrink-0">
+                      <AvatarImage src={subscriber.foto} />
+                      <AvatarFallback className="bg-[#00A884] text-white text-base font-normal">
+                        {getInitials(subscriber)}
+                      </AvatarFallback>
+                    </Avatar>
+                    {/* Indicador online */}
+                    {isOnline(subscriber.subscriber_id) && (
+                      <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#25D366] border-2 border-white dark:border-[#111B21]" />
+                    )}
+                  </div>
                   
-                  <div className="flex-1 min-w-0 border-b border-[#E9EDEF] dark:border-[#222D34] py-[2px]">
+                  <div className="flex-1 min-w-0 border-b border-[#E9EDEF] dark:border-[#222D34] pb-[10px]">
                     <div className="flex items-center justify-between">
                       <span className="font-normal text-[17px] text-[#111B21] dark:text-[#E9EDEF] truncate">
                         {getDisplayName(subscriber)}
@@ -478,14 +536,7 @@ const ManyChatInbox = () => {
                         {subscriber.ultima_interacao && formatLastMessageTime(subscriber.ultima_interacao)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 mt-[2px]">
-                      {subscriber.foto && (
-                        <img 
-                          src={subscriber.foto} 
-                          alt="" 
-                          className="h-4 w-4 rounded-full object-cover shrink-0"
-                        />
-                      )}
+                    <div className="flex items-center gap-1 mt-[2px]">
                       <CheckCheck className="h-[16px] w-[16px] text-[#53BDEB] shrink-0" />
                       <span className="text-[14px] text-[#667781] dark:text-[#8696A0] truncate">
                         {subscriber.telefone || subscriber.canal}
@@ -591,12 +642,12 @@ const ManyChatInbox = () => {
               </div>
             </div>
 
-            {/* Área de Mensagens */}
+            {/* Área de Mensagens - WhatsApp Desktop Dark Pattern */}
             <div 
-              className="flex-1 overflow-y-auto px-[63px] py-4"
+              className="flex-1 overflow-y-auto px-[63px] py-4 dark:bg-[#0B141A]"
               style={{
-                backgroundImage: 'url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACASURBVGhD7dexDQAgDAPBsP+Qw2RQxUl0Jv5qSrJDAAAAAAAAAAAAAIAlb7Y7R7N/tzvH936PNfu3u3M0+7e7c7R7N7tzNPu3u3O0eze7czR7t7tzNHu3u3M0e7e7czR7t7tzNHu3u3M0e7e7c7R7N7tzAAAAAAAAAAAAAPDNlx8GDxIuJxkAAAAASUVORK5CYII=")',
-                backgroundColor: '#ECE5DD',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3Cpattern id='p' patternUnits='userSpaceOnUse' width='40' height='40' patternTransform='rotate(45)'%3E%3Crect width='1' height='1' fill='%23ffffff08'/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill='url(%23p)' width='100' height='100'/%3E%3C/svg%3E")`,
+                backgroundColor: 'var(--chat-bg, #ECE5DD)',
               }}
             >
               {isLoadingMessages ? (
