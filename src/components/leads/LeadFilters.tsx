@@ -232,17 +232,17 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
   );
 
   return (
-    <div className="flex flex-col gap-3 mb-4">
+    <div className="flex flex-col gap-2 mb-3">
       {/* Mobile: Search + Filter Button */}
       <div className="flex items-center gap-2">
         {/* Search */}
-        <div className="relative flex-1">
+        <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar leads..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-10 rounded-lg"
+            className="pl-9 h-9 rounded-lg text-sm"
           />
         </div>
 
@@ -253,7 +253,7 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
               variant="outline" 
               size="icon" 
               className={cn(
-                "h-10 w-10 rounded-lg shrink-0 md:hidden",
+                "h-9 w-9 rounded-lg shrink-0 md:hidden relative",
                 activeFiltersCount > 0 && "border-primary text-primary"
               )}
             >
@@ -344,24 +344,22 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
           variant="outline"
           size="icon"
           onClick={exportToCSV}
-          className="h-10 w-10 rounded-lg shrink-0"
+          className="h-9 w-9 rounded-lg shrink-0"
           title="Exportar CSV"
         >
           <Download className="h-4 w-4" />
         </Button>
       </div>
 
-      {/* Results Count */}
-      <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-        <span>
-          {currentFiltered.length} lead{currentFiltered.length !== 1 ? 's' : ''} encontrado{currentFiltered.length !== 1 ? 's' : ''}
-        </span>
+      {/* Results Count - Compact */}
+      <div className="text-xs text-muted-foreground px-1">
+        {currentFiltered.length} lead{currentFiltered.length !== 1 ? 's' : ''} encontrado{currentFiltered.length !== 1 ? 's' : ''}
         {activeFiltersCount > 0 && (
           <button 
             onClick={clearFilters}
-            className="text-primary hover:underline md:hidden"
+            className="text-primary hover:underline ml-2 md:hidden"
           >
-            Limpar filtros
+            (limpar)
           </button>
         )}
       </div>

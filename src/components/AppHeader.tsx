@@ -31,27 +31,27 @@ export function AppHeader({ title, onNewItem, newItemLabel = 'Novo' }: AppHeader
 
   return (
     <header className="sticky top-0 z-40 w-full bg-card/80 backdrop-blur-md border-b border-border">
-      <div className="flex h-16 items-center justify-between px-4 md:px-6">
-        <div className="flex items-center gap-4">
-          <SidebarTrigger className="md:hidden" />
-          <h1 className="text-xl font-semibold text-foreground">{title}</h1>
+      <div className="flex h-14 md:h-16 items-center justify-between px-3 md:px-6 gap-2">
+        <div className="flex items-center gap-2 md:gap-4 min-w-0">
+          <SidebarTrigger className="md:hidden shrink-0" />
+          <h1 className="text-base md:text-xl font-semibold text-foreground truncate">{title}</h1>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3 shrink-0">
           {onNewItem && (
             <Button 
               onClick={onNewItem}
-              className="rounded-xl bg-primary hover:bg-primary/90 shadow-soft"
+              className="rounded-xl bg-primary hover:bg-primary/90 shadow-soft h-8 md:h-9 px-2.5 md:px-4"
               size="sm"
             >
-              <Plus className="h-4 w-4 mr-2" />
-              {newItemLabel}
+              <Plus className="h-4 w-4 md:mr-2" />
+              <span className="hidden md:inline">{newItemLabel}</span>
             </Button>
           )}
           
           {user && (
-            <div className="flex items-center gap-3">
-              <Badge className={`${cargoColors[cargo] || cargoColors['Secretaria']} rounded-lg`}>
+            <div className="flex items-center gap-1.5 md:gap-3">
+              <Badge className={`${cargoColors[cargo] || cargoColors['Secretaria']} rounded-lg text-[10px] md:text-xs px-1.5 md:px-2.5`}>
                 {cargo}
               </Badge>
               <span className="text-sm text-muted-foreground hidden lg:block">
@@ -61,7 +61,7 @@ export function AppHeader({ title, onNewItem, newItemLabel = 'Novo' }: AppHeader
                 variant="outline" 
                 size="icon"
                 onClick={handleSignOut}
-                className="rounded-xl border-border hover:bg-muted"
+                className="rounded-xl border-border hover:bg-muted h-8 w-8 md:h-10 md:w-10"
               >
                 <LogOut className="h-4 w-4" />
               </Button>
