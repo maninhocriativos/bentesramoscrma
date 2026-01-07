@@ -53,23 +53,32 @@ export default function IsaAutonomaPage() {
     try {
       const last7Days = subDays(startOfDay(new Date()), 7).toISOString();
       
-      // Buscar eventos da Isa
+      // Buscar todos os eventos da Isa (incluindo isa_auto e isa_scheduler)
       const { data: events } = await supabase
         .from('system_events')
         .select('*')
-        .eq('fonte', 'isa')
+        .or('fonte.eq.isa,fonte.eq.isa_auto,fonte.eq.isa_scheduler,fonte.eq.sistema')
         .gte('created_at', last7Days)
         .order('created_at', { ascending: false });
 
       if (events) {
-        const leadsClassificados = events.filter(e => e.acao === 'classificar_lead').length;
-        const interacoesRegistradas = events.filter(e => e.acao === 'criar_interacao').length;
-        const tarefasCriadas = events.filter(e => e.acao === 'criar_tarefa' && e.processado).length;
-        const compromissosCriados = events.filter(e => e.acao === 'criar_compromisso' && e.processado).length;
+        const leadsClassificados = events.filter(e => 
+          e.acao === 'classificar_lead' || e.acao === 'dados_lead_atualizados'
+        ).length;
+        const interacoesRegistradas = events.filter(e => 
+          e.acao === 'criar_interacao' || e.tipo === 'processamento'
+        ).length;
+        const tarefasCriadas = events.filter(e => 
+          e.acao === 'criar_tarefa' && e.processado
+        ).length;
+        const compromissosCriados = events.filter(e => 
+          (e.acao === 'criar_compromisso' || e.tipo === 'agendamento') && e.processado
+        ).length;
         
+        // Contar ações pendentes processadas
         const pendentes = events.filter(e => e.tipo === 'acao_pendente');
-        const acoesAprovadas = pendentes.filter(e => e.processado && !e.metadata?.rejeitado).length;
-        const acoesRejeitadas = pendentes.filter(e => e.processado && e.metadata?.rejeitado).length;
+        const acoesAprovadas = pendentes.filter(e => e.processado && !(e.metadata as any)?.rejeitado).length;
+        const acoesRejeitadas = pendentes.filter(e => e.processado && (e.metadata as any)?.rejeitado).length;
 
         setStats({
           leadsClassificados,
@@ -80,7 +89,7 @@ export default function IsaAutonomaPage() {
           acoesRejeitadas,
         });
 
-        setRecentActions(events.slice(0, 20) as RecentAction[]);
+        setRecentActions(events.slice(0, 30) as RecentAction[]);
       }
     } catch (error) {
       console.error('Erro ao buscar dados:', error);
@@ -91,6 +100,27 @@ export default function IsaAutonomaPage() {
 
   useEffect(() => {
     fetchData();
+
+    // Realtime subscription
+    const channel = supabase
+      .channel('isa-stats-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'system_events',
+        },
+        (payload) => {
+          console.log('📊 Novo evento para stats:', payload.new);
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const StatCard = ({ icon: Icon, label, value, color }: { icon: any; label: string; value: number; color: string }) => (
