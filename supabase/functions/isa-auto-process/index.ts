@@ -318,6 +318,28 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
         
         const { lead_id, tipo_reuniao, mensagem_personalizada } = dados;
         
+        // VERIFICAR SE JÁ EXISTE COMPROMISSO FUTURO PARA ESTE LEAD
+        const agora = new Date().toISOString();
+        const { data: compromissosExistentes } = await supabase
+          .from('compromissos')
+          .select('id, titulo, data_inicio, confirmacao_status')
+          .eq('lead_id', lead_id)
+          .gte('data_inicio', agora)
+          .order('data_inicio', { ascending: true })
+          .limit(1);
+
+        if (compromissosExistentes && compromissosExistentes.length > 0) {
+          const existente = compromissosExistentes[0];
+          console.log(`⚠️ Lead ${lead_id} já possui compromisso agendado: ${existente.titulo} em ${existente.data_inicio}`);
+          
+          // Se já existe, não solicitar novo agendamento
+          return { 
+            success: false, 
+            message: `Lead já possui compromisso agendado: "${existente.titulo}" para ${existente.data_inicio}`,
+            data: { compromisso_existente: existente }
+          };
+        }
+        
         // Gerar opções de horários (próximos 3 dias úteis)
         const opcoes = gerarOpcoesHorario();
         
@@ -459,6 +481,29 @@ Ou digite outro horário de sua preferência.`;
 
       case 'criar_compromisso': {
         const { titulo, tipo, data_inicio, data_fim, descricao, lead_id, responsavel_id } = dados;
+        
+        // VERIFICAR SE JÁ EXISTE COMPROMISSO FUTURO PARA ESTE LEAD
+        if (lead_id) {
+          const agora = new Date().toISOString();
+          const { data: compromissosExistentes } = await supabase
+            .from('compromissos')
+            .select('id, titulo, data_inicio')
+            .eq('lead_id', lead_id)
+            .gte('data_inicio', agora)
+            .order('data_inicio', { ascending: true })
+            .limit(1);
+
+          if (compromissosExistentes && compromissosExistentes.length > 0) {
+            const existente = compromissosExistentes[0];
+            console.log(`⚠️ Lead ${lead_id} já possui compromisso: ${existente.titulo} em ${existente.data_inicio}`);
+            return { 
+              success: false, 
+              message: `Lead já possui compromisso agendado: "${existente.titulo}" para ${existente.data_inicio}`,
+              data: { compromisso_existente: existente }
+            };
+          }
+        }
+        
         const { data, error } = await supabase
           .from('compromissos')
           .insert({
