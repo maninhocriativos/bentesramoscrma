@@ -273,6 +273,7 @@ serve(async (req: Request) => {
     let enviados = 0;
     let erros = 0;
     let pendentesTemplate = 0;
+    let pulados = 0;
 
     for (const followup of followups || []) {
       const lead = followup.leads_juridicos;
@@ -281,7 +282,7 @@ serve(async (req: Request) => {
       
       console.log(`[FOLLOWUP] Lead: ${lead.nome}, minutos: ${minutosDesdeContato.toFixed(0)}, status: ${lead.status}`);
 
-      // Verificar se lead respondeu
+      // Verificar se lead respondeu (status diferente de Lead Frio)
       if (lead.status !== 'Lead Frio') {
         await supabase
           .from('lead_followups')
@@ -292,6 +293,40 @@ serve(async (req: Request) => {
           })
           .eq('id', followup.id);
         console.log(`[FOLLOWUP] Lead ${lead.nome} respondeu (status: ${lead.status})`);
+        continue;
+      }
+
+      // ⚠️ VERIFICAR SE LEAD TEM MENSAGENS RECENTES DE ENTRADA (conversa ativa)
+      // Se o lead mandou mensagem nos últimos 30 minutos, NÃO enviar follow-up automático
+      const trintaMinutosAtras = new Date(agora.getTime() - 30 * 60 * 1000).toISOString();
+      
+      const { data: mensagensRecentes } = await supabase
+        .from('manychat_mensagens')
+        .select('id, created_at, direcao')
+        .eq('lead_id', lead.id)
+        .eq('direcao', 'entrada')
+        .gte('created_at', trintaMinutosAtras)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (mensagensRecentes && mensagensRecentes.length > 0) {
+        console.log(`[FOLLOWUP] ⏸️ Lead ${lead.nome} tem conversa ativa (última msg: ${mensagensRecentes[0].created_at}), pulando follow-up`);
+        pulados++;
+        continue;
+      }
+
+      // Verificar também interações recentes (se o advogado está conversando com o lead)
+      const { data: interacoesRecentes } = await supabase
+        .from('interacoes')
+        .select('id, data_interacao, tipo')
+        .eq('cliente_id', lead.id)
+        .gte('data_interacao', trintaMinutosAtras)
+        .order('data_interacao', { ascending: false })
+        .limit(1);
+
+      if (interacoesRecentes && interacoesRecentes.length > 0) {
+        console.log(`[FOLLOWUP] ⏸️ Lead ${lead.nome} tem interação recente, pulando follow-up`);
+        pulados++;
         continue;
       }
 
@@ -371,7 +406,7 @@ serve(async (req: Request) => {
       }
     }
 
-    console.log(`[FOLLOWUP] Concluído. Enviados: ${enviados}, Erros: ${erros}, Pendentes template: ${pendentesTemplate}`);
+    console.log(`[FOLLOWUP] Concluído. Enviados: ${enviados}, Erros: ${erros}, Pulados (conversa ativa): ${pulados}, Pendentes template: ${pendentesTemplate}`);
 
     return new Response(
       JSON.stringify({ 
@@ -379,6 +414,7 @@ serve(async (req: Request) => {
         processados: followups?.length || 0,
         enviados,
         erros,
+        pulados_conversa_ativa: pulados,
         pendentes_template: pendentesTemplate,
         timestamp: agora.toISOString(),
         instrucoes: pendentesTemplate > 0 
