@@ -18,35 +18,59 @@ interface FollowupConfig {
   requer_template?: boolean;
 }
 
-// Fluxo de retomada após 24h para leads frios (template aprovado da Meta)
-// Formato do namespace ManyChat: content{timestamp}_{id}
-const RETOMADA_FLOW_NS = 'content20260105140934_525890';
-
-// Configuração de follow-ups para leads frios sem resposta
-// Todos usam o mesmo fluxo de retomada aprovado pela Meta
+// Configuração de follow-ups com mensagens de alto impacto (dentro da janela 24h)
 const FOLLOWUP_CONFIG: Record<string, FollowupConfig> = {
-  // Follow-up 1: após 24 horas (1440 minutos)
   followup_1: {
-    titulo: "Retomada 24h",
-    mensagem: ``, // Mensagem está no template do ManyChat
-    delay_minutos: 1440, // 24 horas
-    flow_ns: RETOMADA_FLOW_NS,
-    requer_template: true
+    titulo: "Vitória recente para mostrar! 💰",
+    mensagem: `{{nome}}, acabei de ver seu contato! 
+
+⚠️ Sabia que esta semana ganhamos uma causa onde o cliente recebeu *R$ 5.609,24* de volta?
+
+💰 Devolução em DOBRO: R$ 2.609,24
+💰 Danos Morais: R$ 3.000,00
+✅ Título de capitalização CANCELADO
+
+O banco cobrou dele o que não devia, e a Justiça mandou devolver TUDO!
+
+*Você pode estar na mesma situação.* Me conta o que está acontecendo? 👇`,
+    delay_minutos: 10,
+    flow_ns: 'followup_10min'
   },
-  // Follow-up 2: após 48 horas (2880 minutos)
   followup_2: {
-    titulo: "Retomada 48h",
-    mensagem: ``,
-    delay_minutos: 2880, // 48 horas
-    flow_ns: RETOMADA_FLOW_NS,
-    requer_template: true
+    titulo: "Alerta: Prazo para pedir devolução 📋",
+    mensagem: `{{nome}}, você sabia que existe PRAZO para pedir o dinheiro de volta?
+
+⚡ Cobranças indevidas dos últimos 5 anos podem ser recuperadas
+⚡ Depois disso, você PERDE o direito
+
+📊 *Resultado REAL de cliente nosso:*
+"Declaro INEXIGÍVEL o débito sob rubrica TÍTULO DE CAPITALIZAÇÃO e CONDENO à devolução em DOBRO no valor de R$ 2.609,24"
+
+Já ajudamos pessoas que nem sabiam que tinham direito!
+
+Quer que eu analise seu caso SEM COMPROMISSO? Só responder "SIM" 👇`,
+    delay_minutos: 60,
+    flow_ns: 'followup_1hora'
   },
-  // Follow-up 3: após 6 dias (8640 minutos)
   followup_3: {
-    titulo: "Retomada 6 dias",
-    mensagem: ``,
-    delay_minutos: 8640, // 6 dias
-    flow_ns: RETOMADA_FLOW_NS,
+    titulo: "Última chance - Decisão real do Tribunal 📌",
+    mensagem: `{{nome}}, última mensagem... 
+
+Vi que você não respondeu, mas antes de encerrar, olha esse resultado que acabamos de conseguir:
+
+⚖️ *DECISÃO JUDICIAL - Junho/2025:*
+✅ Débito declarado INEXIGÍVEL
+✅ Devolução em DOBRO: R$ 2.609,24
+✅ Danos Morais: R$ 3.000,00
+✅ Isento de custas processuais
+
+O cliente nem precisou ir na audiência!
+
+Se você tem financiamento, empréstimo ou cobrança bancária, pode ter dinheiro a receber.
+
+*Responda "QUERO ANALISAR"* e verificamos GRÁTIS se você tem direito! 🔍`,
+    delay_minutos: 1440,
+    flow_ns: 'followup_24h_template',
     requer_template: true
   }
 };
@@ -225,27 +249,7 @@ serve(async (req: Request) => {
     body = await req.json();
   } catch { /* sem body */ }
 
-  // Teste manual do fluxo de retomada
-  if (body.test_retomada && body.subscriber_id) {
-    console.log(`[FOLLOWUP-TEST] Testando fluxo de retomada para subscriber: ${body.subscriber_id}`);
-    
-    const resultado = await enviarViaFlow(body.subscriber_id, RETOMADA_FLOW_NS, {
-      nome: body.nome || 'Cliente'
-    });
-    
-    console.log(`[FOLLOWUP-TEST] Resultado:`, JSON.stringify(resultado));
-    
-    return new Response(
-      JSON.stringify({ 
-        success: resultado.success, 
-        flow_ns: RETOMADA_FLOW_NS,
-        subscriber_id: body.subscriber_id,
-        resultado 
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-  
+  console.log('[FOLLOWUP] Iniciando processamento de follow-ups:', agora.toISOString());
   console.log('[FOLLOWUP] Iniciando processamento de follow-ups:', agora.toISOString());
 
   try {

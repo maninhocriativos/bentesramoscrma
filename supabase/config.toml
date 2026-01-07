@@ -59,3 +59,6 @@ verify_jwt = false
 
 [functions.isa-reply-manychat]
 verify_jwt = false
+
+[functions.retomada-leads-frios]
+verify_jwt = false
