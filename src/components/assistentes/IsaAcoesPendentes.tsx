@@ -321,7 +321,10 @@ export function IsaAcoesPendentes() {
   const rejeitarAcao = async (acao: AcaoPendente) => {
     setProcessing(acao.id);
     try {
-      await supabase
+      // Remover imediatamente da lista local para feedback instantâneo
+      setAcoes(prev => prev.filter(a => a.id !== acao.id));
+
+      const { error } = await supabase
         .from('system_events')
         .update({ 
           processado: true,
@@ -329,8 +332,13 @@ export function IsaAcoesPendentes() {
         })
         .eq('id', acao.id);
 
+      if (error) {
+        // Restaurar a ação se houve erro
+        setAcoes(prev => [...prev, acao]);
+        throw error;
+      }
+
       toast.info('Ação rejeitada');
-      fetchAcoes();
     } catch (error) {
       console.error('Erro ao rejeitar ação:', error);
       toast.error('Erro ao rejeitar ação');
