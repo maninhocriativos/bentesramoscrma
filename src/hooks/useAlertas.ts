@@ -1,11 +1,12 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Lead } from '@/types/leads';
 import { Processo } from '@/types/processos';
 import { differenceInDays, differenceInHours, isAfter, addDays } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface Alerta {
   id: string;
-  tipo: 'risco' | 'prazo' | 'tarefa';
+  tipo: 'risco' | 'prazo' | 'tarefa' | 'resposta';
   titulo: string;
   descricao: string;
   prioridade: 'alta' | 'media' | 'baixa';
@@ -14,6 +15,56 @@ export interface Alerta {
 }
 
 export function useAlertas(leads: Lead[], processos: Processo[]) {
+  const [alertasRetomada, setAlertasRetomada] = useState<Alerta[]>([]);
+
+  // Buscar alertas de leads frios que responderam
+  useEffect(() => {
+    const fetchAlertasRetomada = async () => {
+      const { data: events } = await supabase
+        .from('system_events')
+        .select('*')
+        .eq('tipo', 'alerta')
+        .eq('fonte', 'retomada')
+        .eq('acao', 'lead_frio_respondeu')
+        .eq('processado', false)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (events) {
+        const alertas: Alerta[] = events.map((event) => ({
+          id: `retomada-${event.id}`,
+          tipo: 'resposta' as const,
+          titulo: '🔥 Lead Frio Respondeu!',
+          descricao: `${(event.dados as any)?.nome || 'Lead'} respondeu após retomada`,
+          prioridade: 'alta' as const,
+          leadId: event.lead_id || undefined,
+        }));
+        setAlertasRetomada(alertas);
+      }
+    };
+
+    fetchAlertasRetomada();
+
+    // Subscribe para novos alertas em tempo real
+    const channel = supabase
+      .channel('alertas-retomada')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'system_events',
+          filter: 'acao=eq.lead_frio_respondeu',
+        },
+        () => fetchAlertasRetomada()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const alertas = useMemo(() => {
     const now = new Date();
     const result: Alerta[] = [];
@@ -71,11 +122,11 @@ export function useAlertas(leads: Lead[], processos: Processo[]) {
     });
 
     // Ordenar por prioridade
-    return result.sort((a, b) => {
+    return [...alertasRetomada, ...result].sort((a, b) => {
       const prioridadeOrder = { alta: 0, media: 1, baixa: 2 };
       return prioridadeOrder[a.prioridade] - prioridadeOrder[b.prioridade];
     });
-  }, [leads, processos]);
+  }, [leads, processos, alertasRetomada]);
 
   return { alertas };
 }
