@@ -2,34 +2,103 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Bentes Ramos | CRM Jurídico</title>
     <meta name="description" content="Sistema de Gestão Jurídica - Bentes Ramos Advocacia e Consultoria">
     <meta name="author" content="Bentes Ramos Advocacia" />
-
     
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#1a365d" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="BR CRM" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="msapplication-TileColor" content="#1a365d" />
+    <meta name="msapplication-tap-highlight" content="no" />
     
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/icons/icon-152x152.png" />
+    
+    <!-- Splash Screens for iOS -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    
+    <!-- OG Tags -->
     <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/Ot5Iv1GIa4VGxA0Yfdqk42frCoU2/social-images/social-1765292958796-Sem título-1.png">
+    <meta name="twitter:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/Ot5Iv1GIa4VGxA0Yfdqk42frCoU2/social-images/social-1765292958796-Sem título-1.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta property="og:title" content="Bentes Ramos | CRM Jurídico">
+    <meta name="twitter:title" content="Bentes Ramos | CRM Jurídico">
+    <meta property="og:description" content="Sistema de Gestão Jurídica - Bentes Ramos Advocacia e Consultoria">
+    <meta name="twitter:description" content="Sistema de Gestão Jurídica - Bentes Ramos Advocacia e Consultoria">
+    <link rel="icon" type="image/x-icon" href="https://storage.googleapis.com/gpt-engineer-file-uploads/Ot5Iv1GIa4VGxA0Yfdqk42frCoU2/uploads/1765293079566-Layer 1.png">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
-  
-  
-  
-  <meta property="og:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/Ot5Iv1GIa4VGxA0Yfdqk42frCoU2/social-images/social-1765292958796-Sem título-1.png">
-  <meta name="twitter:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/Ot5Iv1GIa4VGxA0Yfdqk42frCoU2/social-images/social-1765292958796-Sem título-1.png">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta property="og:title" content="Bentes Ramos | CRM Jurídico">
-  <meta name="twitter:title" content="Bentes Ramos | CRM Jurídico">
-  <meta property="og:description" content="Sistema de Gestão Jurídica - Bentes Ramos Advocacia e Consultoria">
-  <meta name="twitter:description" content="Sistema de Gestão Jurídica - Bentes Ramos Advocacia e Consultoria">
-  <link rel="icon" type="image/x-icon" href="https://storage.googleapis.com/gpt-engineer-file-uploads/Ot5Iv1GIa4VGxA0Yfdqk42frCoU2/uploads/1765293079566-Layer 1.png">
-</head>
+    <!-- PWA Styles for iOS safe areas -->
+    <style>
+      :root {
+        --sat: env(safe-area-inset-top);
+        --sar: env(safe-area-inset-right);
+        --sab: env(safe-area-inset-bottom);
+        --sal: env(safe-area-inset-left);
+      }
+      
+      body {
+        padding-top: var(--sat);
+        padding-right: var(--sar);
+        padding-bottom: var(--sab);
+        padding-left: var(--sal);
+        -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+        overscroll-behavior: none;
+      }
+      
+      /* Allow text selection in inputs */
+      input, textarea, [contenteditable="true"] {
+        -webkit-user-select: text;
+        user-select: text;
+      }
+      
+      /* Smooth scrolling */
+      * {
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      /* Hide scrollbars on mobile */
+      @media (max-width: 768px) {
+        ::-webkit-scrollbar {
+          display: none;
+        }
+        * {
+          scrollbar-width: none;
+        }
+      }
+    </style>
+  </head>
 
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Register Service Worker -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>
