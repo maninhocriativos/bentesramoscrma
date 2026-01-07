@@ -18,6 +18,9 @@ interface FollowupConfig {
   requer_template?: boolean;
 }
 
+// Fluxo de retomada após 24h para leads frios (template aprovado da Meta)
+const RETOMADA_FLOW_NS = '20260105140934_525890';
+
 // Configuração de follow-ups com mensagens de alto impacto
 const FOLLOWUP_CONFIG: Record<string, FollowupConfig> = {
   followup_1: {
@@ -52,25 +55,12 @@ Quer que eu analise seu caso SEM COMPROMISSO? Só responder "SIM" 👇`,
     delay_minutos: 60,
     flow_ns: 'followup_1hora'
   },
+  // Follow-up 3: usa o fluxo de retomada após 24h (template aprovado)
   followup_3: {
-    titulo: "Última chance - Decisão real do Tribunal 📌",
-    mensagem: `{{nome}}, última mensagem... 
-
-Vi que você não respondeu, mas antes de encerrar, olha esse resultado que acabamos de conseguir:
-
-⚖️ *DECISÃO JUDICIAL - Junho/2025:*
-✅ Débito declarado INEXIGÍVEL
-✅ Devolução em DOBRO: R$ 2.609,24
-✅ Danos Morais: R$ 3.000,00
-✅ Isento de custas processuais
-
-O cliente nem precisou ir na audiência!
-
-Se você tem financiamento, empréstimo ou cobrança bancária, pode ter dinheiro a receber.
-
-*Responda "QUERO ANALISAR"* e verificamos GRÁTIS se você tem direito! 🔍`,
-    delay_minutos: 1440,
-    flow_ns: 'followup_24h_template',
+    titulo: "Retomada após 24h - Template aprovado 📌",
+    mensagem: ``, // Mensagem está no template do ManyChat
+    delay_minutos: 1440, // 24 horas
+    flow_ns: RETOMADA_FLOW_NS,
     requer_template: true
   }
 };
