@@ -1,5 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { 
+  formatarDataHora, 
+  formatarData, 
+  formatarHora, 
+  formatarDataExtenso, 
+  formatarDataHoraExtenso,
+  getHojeManaus,
+  getInicioHojeUtc,
+  getInicioAmanhaUtc,
+  MANAUS_TIMEZONE
+} from '../_shared/timezone-helpers.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -169,13 +180,7 @@ serve(async (req) => {
             .single();
 
           if (subscriber?.subscriber_id) {
-            const dataFormatada = dataComp.toLocaleDateString('pt-BR', {
-              weekday: 'long',
-              day: '2-digit',
-              month: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit'
-            });
+            const dataFormatada = formatarDataHoraExtenso(dataComp);
 
             const mensagem = tipoLembrete === '1h'
               ? `⏰ Olá ${lead.nome || 'Cliente'}! Lembrando que seu atendimento "${comp.titulo}" está marcado para daqui 1 hora (${dataFormatada}). Até logo!`
@@ -228,13 +233,7 @@ serve(async (req) => {
           .single();
 
         if (subscriber?.subscriber_id) {
-          const dataFormatada = new Date(comp.data_inicio).toLocaleDateString('pt-BR', {
-            weekday: 'long',
-            day: '2-digit',
-            month: 'long',
-            hour: '2-digit',
-            minute: '2-digit'
-          });
+          const dataFormatada = formatarDataHoraExtenso(comp.data_inicio);
 
           const mensagem = `✅ ${lead.nome || 'Cliente'}, seu atendimento foi agendado com sucesso!\n\n📋 *${comp.titulo}*\n📅 ${dataFormatada}\n\nCaso precise remarcar, é só nos avisar. Até lá! 👋`;
 
@@ -323,14 +322,9 @@ serve(async (req) => {
         .in('role', ['Administrador', 'Advogado', 'Gerente']);
 
       const hoje = new Date();
-      const hojeManaus = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'America/Manaus',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).format(hoje);
-      const inicioHojeUtc = new Date(`${hojeManaus}T00:00:00-04:00`);
-      const amanhaUtc = new Date(inicioHojeUtc.getTime() + 24 * 60 * 60 * 1000);
+      const hojeManaus = getHojeManaus();
+      const inicioHojeUtc = getInicioHojeUtc();
+      const amanhaUtc = getInicioAmanhaUtc();
 
       const { data: compromissosHoje } = await supabase
         .from('compromissos')
@@ -349,12 +343,12 @@ serve(async (req) => {
         .neq('status', 'concluida');
 
       if ((compromissosHoje?.length || 0) > 0 || (tarefasHoje?.length || 0) > 0) {
-        let conteudo = `<p style="color: #4a5568; font-size: 16px;">Bom dia! Aqui está sua agenda para hoje, ${hoje.toLocaleDateString('pt-BR', { timeZone: 'America/Manaus', weekday: 'long', day: '2-digit', month: 'long' })}:</p>`;
+        let conteudo = `<p style="color: #4a5568; font-size: 16px;">Bom dia! Aqui está sua agenda para hoje, ${formatarDataExtenso(hoje)}:</p>`;
 
         if (compromissosHoje?.length) {
           conteudo += `<h3 style="color: #2d3748; margin-top: 20px;">📅 Compromissos (${compromissosHoje.length})</h3><ul style="color: #4a5568;">`;
           for (const c of compromissosHoje) {
-            const hora = new Date(c.data_inicio).toLocaleTimeString('pt-BR', { timeZone: 'America/Manaus', hour: '2-digit', minute: '2-digit' });
+            const hora = formatarHora(c.data_inicio);
             conteudo += `<li><strong>${hora}</strong> - ${c.titulo} ${c.leads_juridicos?.nome ? `(${c.leads_juridicos.nome})` : ''}</li>`;
           }
           conteudo += '</ul>';
@@ -377,7 +371,7 @@ serve(async (req) => {
         if (emailsDestino.length > 0) {
           await enviarEmail(
             emailsDestino,
-            `📅 Sua Agenda para Hoje - ${hoje.toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' })}`,
+            `📅 Sua Agenda para Hoje - ${formatarData(hoje)}`,
             emailTemplate('Agenda do Dia', conteudo)
           );
 
@@ -432,7 +426,7 @@ serve(async (req) => {
           conteudo += `<tr>
             <td style="padding: 10px; border: 1px solid #e2e8f0;">${lead.nome || 'Sem nome'}</td>
             <td style="padding: 10px; border: 1px solid #e2e8f0;">${lead.status}</td>
-            <td style="padding: 10px; border: 1px solid #e2e8f0;">${new Date(dataRef).toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' })}</td>
+            <td style="padding: 10px; border: 1px solid #e2e8f0;">${formatarData(dataRef)}</td>
           </tr>`;
         }
         conteudo += '</table>';
@@ -501,7 +495,7 @@ serve(async (req) => {
 
           conteudo += `<tr style="background-color: ${corLinha};">
             <td style="padding: 10px; border: 1px solid #e2e8f0;">
-              <strong>${new Date(prazo.data_inicio).toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' })}</strong>
+              <strong>${formatarData(prazo.data_inicio)}</strong>
               <br><small style="color: ${diasRestantes <= 2 ? '#e53e3e' : '#718096'}">${diasRestantes} dia(s)</small>
             </td>
             <td style="padding: 10px; border: 1px solid #e2e8f0;">${prazo.titulo}</td>
@@ -598,7 +592,7 @@ serve(async (req) => {
       });
 
       let conteudo = `
-        <p style="color: #4a5568; font-size: 16px;">Aqui está o resumo da semana de ${semanaPassada.toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' })} a ${hoje.toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' })}:</p>
+        <p style="color: #4a5568; font-size: 16px;">Aqui está o resumo da semana de ${formatarData(semanaPassada)} a ${formatarData(hoje)}:</p>
         
         <div style="display: flex; flex-wrap: wrap; gap: 15px; margin: 20px 0;">
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; min-width: 120px; text-align: center;">
@@ -651,7 +645,7 @@ serve(async (req) => {
       if (emails.length > 0) {
         await enviarEmail(
           emails,
-          `📈 Relatório Semanal - ${semanaPassada.toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' })} a ${hoje.toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' })}`,
+          `📈 Relatório Semanal - ${formatarData(semanaPassada)} a ${formatarData(hoje)}`,
           emailTemplate('Relatório Semanal', conteudo)
         );
 
