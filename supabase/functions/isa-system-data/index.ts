@@ -1,45 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { formatarDataHora, formatarData, formatarHora } from '../_shared/timezone-helpers.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Fuso horário de Manaus (UTC-4) - O escritório fica em Manaus
-const TIMEZONE_OFFSET = -4 * 60; // -4 horas em minutos
-
-// Formatar data/hora no horário de Manaus (sem mencionar UTC)
-function formatarDataHoraManaus(isoString: string): string {
-  const date = new Date(isoString);
-  // Ajustar para o fuso de Manaus (UTC-4)
-  const manausDate = new Date(date.getTime() + (date.getTimezoneOffset() + TIMEZONE_OFFSET) * 60 * 1000);
-  
-  return manausDate.toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
-
-function formatarHoraManaus(isoString: string): string {
-  const date = new Date(isoString);
-  const manausDate = new Date(date.getTime() + (date.getTimezoneOffset() + TIMEZONE_OFFSET) * 60 * 1000);
-  
-  return manausDate.toLocaleTimeString('pt-BR', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
-
-function formatarDataManaus(isoString: string): string {
-  const date = new Date(isoString);
-  const manausDate = new Date(date.getTime() + (date.getTimezoneOffset() + TIMEZONE_OFFSET) * 60 * 1000);
-  
-  return manausDate.toLocaleDateString('pt-BR');
-}
+// Aliases para compatibilidade
+const formatarDataHoraManaus = formatarDataHora;
+const formatarDataManaus = formatarData;
+const formatarHoraManaus = formatarHora;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
