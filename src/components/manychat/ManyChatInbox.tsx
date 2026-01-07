@@ -25,7 +25,9 @@ import {
   Smile,
   Sun,
   Moon,
-  Menu
+  Menu,
+  Bot,
+  UserRound
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -47,6 +49,8 @@ interface Subscriber {
   telefone?: string;
   email?: string;
   lead_id?: string;
+  atendimento_humano?: boolean;
+  atendimento_humano_desde?: string;
 }
 
 interface Message {
@@ -683,6 +687,43 @@ const ManyChatInbox = () => {
                     </Button>
                   </>
                 )}
+                {/* Botão Toggle Atendimento Humano */}
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    const novoStatus = !selectedSubscriber.atendimento_humano;
+                    const { error } = await supabase
+                      .from('manychat_subscribers')
+                      .update({ 
+                        atendimento_humano: novoStatus,
+                        atendimento_humano_desde: novoStatus ? new Date().toISOString() : null
+                      })
+                      .eq('subscriber_id', selectedSubscriber.subscriber_id);
+                    
+                    if (!error) {
+                      setSelectedSubscriber(prev => prev ? { ...prev, atendimento_humano: novoStatus } : null);
+                      setSubscribers(prev => prev.map(s => 
+                        s.subscriber_id === selectedSubscriber.subscriber_id 
+                          ? { ...s, atendimento_humano: novoStatus }
+                          : s
+                      ));
+                      toast({
+                        title: novoStatus ? '🙋 Atendimento Humano Ativado' : '🤖 Isa Reativada',
+                        description: novoStatus ? 'Isa parou de responder nesta conversa' : 'Isa voltou a responder automaticamente',
+                      });
+                    }
+                  }}
+                  className={`h-9 w-9 md:h-10 md:w-10 rounded-full transition-colors ${
+                    selectedSubscriber.atendimento_humano 
+                      ? 'text-[#25D366] bg-[#25D366]/10 hover:bg-[#25D366]/20' 
+                      : 'text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]'
+                  }`}
+                  title={selectedSubscriber.atendimento_humano ? 'Reativar Isa' : 'Assumir Atendimento (pausar Isa)'}
+                >
+                  {selectedSubscriber.atendimento_humano ? <UserRound className="h-5 w-5" /> : <Bot className="h-5 w-5" />}
+                </Button>
                 <Button variant="ghost" size="icon" className="hidden md:flex h-10 w-10 rounded-full text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]">
                   <Search className="h-5 w-5" />
                 </Button>
