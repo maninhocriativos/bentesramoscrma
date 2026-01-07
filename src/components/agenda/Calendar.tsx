@@ -33,13 +33,16 @@ import {
   RefreshCw,
   Clock,
   MapPin,
-  ArrowRight
+  ArrowRight,
+  CheckCircle2,
+  AlertCircle,
+  XCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { Compromisso } from '@/types/compromissos';
+import { Compromisso, ConfirmacaoStatus } from '@/types/compromissos';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -55,6 +58,13 @@ const TIPO_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
   'Prazo': { bg: 'bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400', dot: 'bg-amber-500' },
   'Tarefa': { bg: 'bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500' },
   'Outro': { bg: 'bg-slate-500/10', text: 'text-slate-600 dark:text-slate-400', dot: 'bg-slate-500' },
+};
+
+const CONFIRMACAO_ICONS: Record<ConfirmacaoStatus, { icon: typeof CheckCircle2; color: string }> = {
+  pendente: { icon: Clock, color: 'text-amber-500' },
+  confirmado: { icon: CheckCircle2, color: 'text-emerald-500' },
+  remarcado: { icon: AlertCircle, color: 'text-blue-500' },
+  cancelado: { icon: XCircle, color: 'text-red-500' },
 };
 
 type ViewMode = 'calendar' | 'list';
@@ -258,11 +268,15 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                   <div className="space-y-0.5 md:space-y-1">
                     {dayCompromissos.slice(0, 2).map(compromisso => {
                       const colors = getColors(compromisso.tipo);
+                      const confirmStatus = (compromisso.confirmacao_status || 'pendente') as ConfirmacaoStatus;
+                      const confirmConfig = compromisso.lead_id ? CONFIRMACAO_ICONS[confirmStatus] : null;
+                      const ConfirmIcon = confirmConfig?.icon;
+                      
                       return (
                         <div
                           key={compromisso.id}
                           className={cn(
-                            "text-[8px] md:text-[10px] leading-tight px-1.5 py-0.5 md:py-1 rounded-md cursor-pointer transition-all hover:scale-[1.02]",
+                            "text-[8px] md:text-[10px] leading-tight px-1.5 py-0.5 md:py-1 rounded-md cursor-pointer transition-all hover:scale-[1.02] flex items-center gap-1",
                             colors.bg, colors.text
                           )}
                           onClick={(e) => {
@@ -271,7 +285,10 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                           }}
                           title={compromisso.titulo}
                         >
-                          <span className="font-medium truncate block">{compromisso.titulo}</span>
+                          {ConfirmIcon && (
+                            <ConfirmIcon className={cn("h-2.5 w-2.5 shrink-0", confirmConfig.color)} />
+                          )}
+                          <span className="font-medium truncate">{compromisso.titulo}</span>
                         </div>
                       );
                     })}

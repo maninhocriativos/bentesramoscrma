@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
-import { AppHeader } from '@/components/AppHeader';
 import { Calendar } from '@/components/agenda/Calendar';
 import { CompromissoModal } from '@/components/agenda/CompromissoModal';
 import { GoogleCalendarConnect } from '@/components/agenda/GoogleCalendarConnect';
+import { ConfirmacoesPendentes } from '@/components/agenda/ConfirmacoesPendentes';
 import { useCompromissos } from '@/hooks/useCompromissos';
 import { Compromisso } from '@/types/compromissos';
 import { 
@@ -13,7 +13,8 @@ import {
   Clock, 
   Users,
   Plus,
-  Filter
+  Filter,
+  Phone
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -32,6 +33,7 @@ export default function AgendaPage() {
   const [selectedCompromisso, setSelectedCompromisso] = useState<Compromisso | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filter, setFilter] = useState<FilterType>('todos');
+  const [showConfirmacoes, setShowConfirmacoes] = useState(false);
 
   const filteredCompromissos = filter === 'todos' 
     ? compromissos 
@@ -83,6 +85,16 @@ export default function AgendaPage() {
           </div>
           
           <div className="flex items-center gap-2">
+            <Button
+              variant={showConfirmacoes ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setShowConfirmacoes(!showConfirmacoes)}
+              className="gap-2"
+            >
+              <Phone className="h-4 w-4" />
+              <span className="hidden sm:inline">Confirmações</span>
+            </Button>
+            
             <GoogleCalendarConnect />
             
             <Button 
@@ -157,11 +169,29 @@ export default function AgendaPage() {
             <p className="text-sm text-muted-foreground">Carregando agenda...</p>
           </div>
         ) : (
-          <Calendar
-            compromissos={filteredCompromissos}
-            onDayClick={handleDayClick}
-            onEventClick={handleEventClick}
-          />
+          <div className={cn(
+            "grid gap-6",
+            showConfirmacoes ? "grid-cols-1 lg:grid-cols-3" : "grid-cols-1"
+          )}>
+            {/* Panel de Confirmações */}
+            {showConfirmacoes && (
+              <div className="lg:col-span-1 order-first lg:order-last">
+                <ConfirmacoesPendentes 
+                  compromissos={compromissos} 
+                  onEventClick={handleEventClick} 
+                />
+              </div>
+            )}
+            
+            {/* Calendário */}
+            <div className={showConfirmacoes ? "lg:col-span-2" : ""}>
+              <Calendar
+                compromissos={filteredCompromissos}
+                onDayClick={handleDayClick}
+                onEventClick={handleEventClick}
+              />
+            </div>
+          </div>
         )}
       </div>
 
