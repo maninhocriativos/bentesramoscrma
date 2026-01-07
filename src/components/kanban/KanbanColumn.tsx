@@ -55,6 +55,13 @@ const STATUS_COLORS: Record<LeadStatus, {
     gradient: 'from-blue-500/10 to-transparent',
     headerBg: 'bg-gradient-to-r from-blue-100 to-blue-50'
   },
+  'Em Negociação': {
+    bg: 'bg-cyan-50',
+    border: 'border-cyan-200',
+    indicator: 'bg-cyan-500',
+    gradient: 'from-cyan-500/10 to-transparent',
+    headerBg: 'bg-gradient-to-r from-cyan-100 to-cyan-50'
+  },
   'Aguardando Contrato': { 
     bg: 'bg-amber-50', 
     border: 'border-amber-200', 
@@ -89,6 +96,7 @@ const STATUS_COLORS: Record<LeadStatus, {
 const STATUS_SHORT_LABELS: Record<LeadStatus, string> = {
   'Lead Frio': 'Frio',
   'Em Atendimento': 'Atendimento',
+  'Em Negociação': 'Negociação',
   'Aguardando Contrato': 'Contrato',
   'Contrato Assinado': 'Assinado',
   'Ganho': 'Ganho',

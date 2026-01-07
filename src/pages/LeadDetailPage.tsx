@@ -20,6 +20,7 @@ import { ptBR } from 'date-fns/locale';
 const statusColors: Record<string, string> = {
   'Lead Frio': 'bg-slate-500',
   'Em Atendimento': 'bg-blue-500',
+  'Em Negociação': 'bg-cyan-500',
   'Aguardando Contrato': 'bg-amber-500',
   'Contrato Assinado': 'bg-emerald-500',
   'Ganho': 'bg-green-600',
