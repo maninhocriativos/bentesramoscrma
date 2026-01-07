@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.isa-scheduler]
 verify_jwt = false
+
+[functions.isa-reply-manychat]
+verify_jwt = false
