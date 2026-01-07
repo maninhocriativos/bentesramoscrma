@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -6,6 +6,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { useChatPresence } from '@/hooks/useChatPresence';
+import { useAuth } from '@/hooks/useAuth';
 import { 
   Send, 
   Search, 
@@ -18,13 +20,15 @@ import {
   MessageCircle,
   Mic,
   Image,
-  Paperclip,
   X,
   User,
   Check,
-  CheckCheck
+  CheckCheck,
+  ArrowLeft,
+  Circle,
+  MoreVertical
 } from 'lucide-react';
-import { format, isToday, isYesterday } from 'date-fns';
+import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface Subscriber {
@@ -49,6 +53,7 @@ interface Message {
 
 const ManyChatInbox = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [selectedSubscriber, setSelectedSubscriber] = useState<Subscriber | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -60,10 +65,18 @@ const ManyChatInbox = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [showMobileChat, setShowMobileChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Presence hook for online/typing status
+  const { isOnline, isTyping, setTyping, getLastSeen } = useChatPresence(
+    user?.id,
+    user?.email?.split('@')[0]
+  );
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -77,7 +90,20 @@ const ManyChatInbox = () => {
     loadSubscribers();
   }, []);
 
-  // Realtime para novas mensagens - otimizado para updates instantâneos
+  // Handle typing indicator
+  const handleTyping = useCallback(() => {
+    setTyping(true);
+    
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    typingTimeoutRef.current = setTimeout(() => {
+      setTyping(false);
+    }, 2000);
+  }, [setTyping]);
+
+  // Realtime subscriptions
   useEffect(() => {
     console.log('🔌 Conectando realtime...');
     
@@ -85,16 +111,11 @@ const ManyChatInbox = () => {
       .channel('manychat-messages-live')
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'manychat_mensagens',
-        },
+        { event: 'INSERT', schema: 'public', table: 'manychat_mensagens' },
         (payload) => {
-          console.log('🔔 Nova mensagem instantânea:', payload.new);
-          const newMsg = payload.new as Message & { subscriber_id: string; subscriber_nome: string };
+          console.log('🔔 Nova mensagem:', payload.new);
+          const newMsg = payload.new as Message & { subscriber_id: string };
           
-          // Atualizar mensagens se é do subscriber selecionado
           if (selectedSubscriber && newMsg.subscriber_id === selectedSubscriber.subscriber_id) {
             setMessages(prev => {
               if (prev.some(m => m.id === newMsg.id)) return prev;
@@ -102,15 +123,12 @@ const ManyChatInbox = () => {
             });
           }
           
-          // Atualizar lista de subscribers sem recarregar tudo
           setSubscribers(prev => {
             const idx = prev.findIndex(s => s.subscriber_id === newMsg.subscriber_id);
             if (idx === -1) {
-              // Novo subscriber - recarregar lista
               loadSubscribers();
               return prev;
             }
-            // Mover para o topo e atualizar última interação
             const updated = [...prev];
             const [subscriber] = updated.splice(idx, 1);
             return [{ ...subscriber, ultima_interacao: new Date().toISOString() }, ...updated];
@@ -119,34 +137,22 @@ const ManyChatInbox = () => {
       )
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'manychat_mensagens',
-        },
+        { event: 'UPDATE', schema: 'public', table: 'manychat_mensagens' },
         (payload) => {
           const updatedMsg = payload.new as Message & { subscriber_id: string };
-          
           if (selectedSubscriber && updatedMsg.subscriber_id === selectedSubscriber.subscriber_id) {
             setMessages(prev => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m));
           }
         }
       )
-      .subscribe((status) => {
-        console.log('📡 Status mensagens realtime:', status);
-      });
+      .subscribe();
 
     const subscribersChannel = supabase
       .channel('manychat-subscribers-live')
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'manychat_subscribers',
-        },
+        { event: 'INSERT', schema: 'public', table: 'manychat_subscribers' },
         (payload) => {
-          console.log('👤 Novo subscriber:', payload.new);
           const newSub = payload.new as Subscriber;
           setSubscribers(prev => {
             if (prev.some(s => s.subscriber_id === newSub.subscriber_id)) return prev;
@@ -156,30 +162,20 @@ const ManyChatInbox = () => {
       )
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'manychat_subscribers',
-        },
+        { event: 'UPDATE', schema: 'public', table: 'manychat_subscribers' },
         (payload) => {
-          console.log('👤 Subscriber atualizado:', payload.new);
           const updatedSub = payload.new as Subscriber;
           setSubscribers(prev => 
             prev.map(s => s.subscriber_id === updatedSub.subscriber_id ? { ...s, ...updatedSub } : s)
           );
-          
-          // Atualizar subscriber selecionado se for o mesmo
           if (selectedSubscriber?.subscriber_id === updatedSub.subscriber_id) {
             setSelectedSubscriber(prev => prev ? { ...prev, ...updatedSub } : null);
           }
         }
       )
-      .subscribe((status) => {
-        console.log('📡 Status subscribers realtime:', status);
-      });
+      .subscribe();
 
     return () => {
-      console.log('🔌 Desconectando realtime...');
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(subscribersChannel);
     };
@@ -188,6 +184,7 @@ const ManyChatInbox = () => {
   useEffect(() => {
     if (selectedSubscriber) {
       loadMessages(selectedSubscriber.subscriber_id);
+      setShowMobileChat(true);
     } else {
       setMessages([]);
     }
@@ -202,7 +199,37 @@ const ManyChatInbox = () => {
         .order('ultima_interacao', { ascending: false });
 
       if (error) throw error;
-      setSubscribers((data as Subscriber[]) || []);
+      
+      // Try to update names from ManyChat for subscribers without names
+      const subscribersData = (data as Subscriber[]) || [];
+      const needsNameUpdate = subscribersData.filter(s => !s.nome || s.nome === 'Sem nome');
+      
+      if (needsNameUpdate.length > 0) {
+        // Update names in background
+        needsNameUpdate.slice(0, 5).forEach(async (sub) => {
+          try {
+            const { data: mcData } = await supabase.functions.invoke('manychat', {
+              body: { action: 'buscar_subscriber', subscriberId: sub.subscriber_id }
+            });
+            
+            if (mcData?.status === 'success' && mcData?.data) {
+              const nome = mcData.data.name || 
+                `${mcData.data.first_name || ''} ${mcData.data.last_name || ''}`.trim();
+              
+              if (nome) {
+                await supabase
+                  .from('manychat_subscribers' as any)
+                  .update({ nome, updated_at: new Date().toISOString() } as any)
+                  .eq('subscriber_id', sub.subscriber_id);
+              }
+            }
+          } catch (e) {
+            console.log('Erro ao buscar nome:', e);
+          }
+        });
+      }
+      
+      setSubscribers(subscribersData);
     } catch (error) {
       console.error('Erro ao carregar subscribers:', error);
       toast({
@@ -244,7 +271,6 @@ const ManyChatInbox = () => {
 
     setIsSending(true);
     try {
-      // Enviar via ManyChat API
       const { error } = await supabase.functions.invoke('manychat', {
         body: {
           action: 'enviar_mensagem',
@@ -256,7 +282,6 @@ const ManyChatInbox = () => {
 
       if (error) throw error;
 
-      // Salvar mensagem localmente
       await supabase
         .from('manychat_mensagens' as any)
         .insert({
@@ -281,12 +306,8 @@ const ManyChatInbox = () => {
       setNewMessage('');
       setSelectedFile(null);
       setPreviewUrl(null);
-      await loadMessages(selectedSubscriber.subscriber_id);
+      setTyping(false);
       
-      toast({
-        title: 'Mensagem enviada',
-        description: `Mensagem enviada para ${selectedSubscriber.nome}`,
-      });
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
       toast({
@@ -303,8 +324,7 @@ const ManyChatInbox = () => {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
+      setPreviewUrl(URL.createObjectURL(file));
     }
   };
 
@@ -381,81 +401,49 @@ const ManyChatInbox = () => {
     }
   };
 
-  const searchInManyChat = async () => {
-    if (!searchTerm.trim()) return;
-
-    setIsLoading(true);
+  const syncSubscriberName = async (subscriber: Subscriber) => {
     try {
-      const { data, error } = await supabase.functions.invoke('manychat', {
-        body: { action: 'buscar_por_nome', searchTerm: searchTerm.trim() },
+      const { data } = await supabase.functions.invoke('manychat', {
+        body: { action: 'buscar_subscriber', subscriberId: subscriber.subscriber_id }
       });
-
-      if (error) throw error;
-
-      if (data.status === 'success' && data.data?.length > 0) {
-        for (const sub of data.data) {
+      
+      if (data?.status === 'success' && data?.data) {
+        const nome = data.data.name || 
+          `${data.data.first_name || ''} ${data.data.last_name || ''}`.trim();
+        
+        if (nome) {
           await supabase
             .from('manychat_subscribers' as any)
-            .upsert({
-              subscriber_id: sub.id,
-              nome: sub.nome,
-              foto: sub.foto,
-              telefone: sub.telefone,
-              email: sub.email,
-              canal: sub.canal,
-              ultima_interacao: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            } as any, {
-              onConflict: 'subscriber_id',
-            });
+            .update({ 
+              nome, 
+              foto: data.data.profile_pic || subscriber.foto,
+              telefone: data.data.phone || subscriber.telefone,
+              email: data.data.email || subscriber.email,
+              updated_at: new Date().toISOString() 
+            } as any)
+            .eq('subscriber_id', subscriber.subscriber_id);
+          
+          toast({ title: 'Contato atualizado!', description: `Nome: ${nome}` });
         }
-        
-        await loadSubscribers();
-        toast({
-          title: 'Encontrados',
-          description: `${data.data.length} contato(s) encontrado(s)`,
-        });
-      } else {
-        toast({
-          title: 'Busca',
-          description: 'Nenhum contato encontrado',
-        });
       }
     } catch (error) {
-      console.error('Erro ao buscar:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível buscar no ManyChat',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
+      toast({ title: 'Erro', description: 'Não foi possível sincronizar', variant: 'destructive' });
     }
   };
 
   const getChannelIcon = (canal: string) => {
     switch (canal?.toLowerCase()) {
-      case 'instagram':
-        return <Instagram className="h-3.5 w-3.5" />;
-      case 'whatsapp':
-        return <MessageCircle className="h-3.5 w-3.5" />;
-      case 'messenger':
-      case 'facebook':
-      default:
-        return <Facebook className="h-3.5 w-3.5" />;
+      case 'instagram': return <Instagram className="h-3 w-3" />;
+      case 'whatsapp': return <MessageCircle className="h-3 w-3" />;
+      default: return <Facebook className="h-3 w-3" />;
     }
   };
 
   const getChannelStyle = (canal: string) => {
     switch (canal?.toLowerCase()) {
-      case 'instagram':
-        return 'bg-gradient-to-r from-purple-500 to-pink-500 text-white';
-      case 'whatsapp':
-        return 'bg-emerald-500 text-white';
-      case 'messenger':
-      case 'facebook':
-      default:
-        return 'bg-blue-500 text-white';
+      case 'instagram': return 'bg-gradient-to-r from-purple-500 to-pink-500 text-white';
+      case 'whatsapp': return 'bg-emerald-500 text-white';
+      default: return 'bg-blue-500 text-white';
     }
   };
 
@@ -471,6 +459,23 @@ const ManyChatInbox = () => {
     const currentDate = new Date(messages[index].created_at).toDateString();
     const prevDate = new Date(messages[index - 1].created_at).toDateString();
     if (currentDate !== prevDate) return formatMessageDate(messages[index].created_at);
+    return null;
+  };
+
+  const getOnlineStatus = (subscriber: Subscriber) => {
+    const online = isOnline(subscriber.subscriber_id);
+    const typing = isTyping(subscriber.subscriber_id);
+    const lastSeen = getLastSeen(subscriber.subscriber_id);
+    
+    if (typing) return { text: 'digitando...', color: 'text-emerald-500', animate: true };
+    if (online) return { text: 'online', color: 'text-emerald-500', animate: false };
+    if (lastSeen) {
+      return { 
+        text: `visto ${formatDistanceToNow(new Date(lastSeen), { locale: ptBR, addSuffix: true })}`,
+        color: 'text-muted-foreground',
+        animate: false
+      };
+    }
     return null;
   };
 
@@ -494,7 +499,7 @@ const ManyChatInbox = () => {
           <div className={`p-2 rounded-full ${isOutgoing ? 'bg-white/20' : 'bg-primary/10'}`}>
             <Mic className={`h-4 w-4 ${isOutgoing ? 'text-white' : 'text-primary'}`} />
           </div>
-          <audio controls className="max-w-[200px] h-8" preload="metadata">
+          <audio controls className="max-w-[180px] md:max-w-[200px] h-8" preload="metadata">
             <source src={cleanUrl} type="audio/ogg" />
             <source src={cleanUrl} type="audio/mpeg" />
           </audio>
@@ -507,7 +512,7 @@ const ManyChatInbox = () => {
         <img 
           src={cleanUrl} 
           alt="Imagem" 
-          className="max-w-[280px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity shadow-sm"
+          className="max-w-[200px] md:max-w-[280px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity shadow-sm"
           onClick={(e) => {
             e.stopPropagation();
             window.open(cleanUrl, '_blank');
@@ -518,24 +523,29 @@ const ManyChatInbox = () => {
 
     if (isVideo) {
       return (
-        <video controls className="max-w-[280px] rounded-lg shadow-sm" preload="metadata">
+        <video controls className="max-w-[200px] md:max-w-[280px] rounded-lg shadow-sm" preload="metadata">
           <source src={cleanUrl} type="video/mp4" />
         </video>
       );
     }
 
-    return <p className="whitespace-pre-wrap break-words">{content}</p>;
+    return <p className="whitespace-pre-wrap break-words text-sm md:text-base">{content}</p>;
+  };
+
+  const handleBackToList = () => {
+    setSelectedSubscriber(null);
+    setShowMobileChat(false);
   };
 
   return (
-    <div className="flex h-[calc(100vh-180px)] gap-0 bg-background rounded-xl overflow-hidden border shadow-lg">
-      {/* Lista de Contatos - Design elegante */}
-      <div className="w-[340px] flex flex-col border-r bg-card">
+    <div className="flex h-[calc(100vh-140px)] md:h-[calc(100vh-180px)] gap-0 bg-background rounded-xl overflow-hidden border shadow-lg">
+      {/* Lista de Contatos - Hidden on mobile when chat is open */}
+      <div className={`${showMobileChat ? 'hidden md:flex' : 'flex'} w-full md:w-[340px] flex-col border-r bg-card`}>
         {/* Header */}
-        <div className="p-4 border-b bg-gradient-to-r from-primary/5 to-transparent">
+        <div className="p-3 md:p-4 border-b bg-gradient-to-r from-primary/5 to-transparent">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-primary" />
+            <h2 className="text-base md:text-lg font-semibold flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 md:h-5 md:w-5 text-primary" />
               Conversas
             </h2>
             <Button
@@ -554,8 +564,7 @@ const ManyChatInbox = () => {
               placeholder="Buscar contatos..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && searchInManyChat()}
-              className="pl-9 bg-background/50 border-muted focus:border-primary transition-colors"
+              className="pl-9 bg-background/50 border-muted focus:border-primary transition-colors h-10"
             />
           </div>
         </div>
@@ -570,117 +579,142 @@ const ManyChatInbox = () => {
             </div>
           ) : (
             <div className="divide-y divide-border/50">
-              {filteredSubscribers.map((subscriber) => (
-                <div
-                  key={subscriber.id}
-                  onClick={() => setSelectedSubscriber(subscriber)}
-                  className={`p-3 cursor-pointer transition-all duration-200 hover:bg-accent/50 ${
-                    selectedSubscriber?.id === subscriber.id 
-                      ? 'bg-primary/10 border-l-2 border-l-primary' 
-                      : ''
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <Avatar className="h-12 w-12 ring-2 ring-background shadow-sm">
-                        <AvatarImage src={subscriber.foto} />
-                        <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-medium">
-                          {subscriber.nome?.substring(0, 2).toUpperCase() || '??'}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className={`absolute -bottom-0.5 -right-0.5 p-1 rounded-full shadow-sm ${getChannelStyle(subscriber.canal)}`}>
-                        {getChannelIcon(subscriber.canal)}
+              {filteredSubscribers.map((subscriber) => {
+                const status = getOnlineStatus(subscriber);
+                return (
+                  <div
+                    key={subscriber.id}
+                    onClick={() => setSelectedSubscriber(subscriber)}
+                    className={`p-3 cursor-pointer transition-all duration-200 hover:bg-accent/50 active:scale-[0.98] ${
+                      selectedSubscriber?.id === subscriber.id 
+                        ? 'bg-primary/10 border-l-2 border-l-primary' 
+                        : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <Avatar className="h-11 w-11 md:h-12 md:w-12 ring-2 ring-background shadow-sm">
+                          <AvatarImage src={subscriber.foto} />
+                          <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-medium text-sm">
+                            {subscriber.nome?.substring(0, 2).toUpperCase() || '??'}
+                          </AvatarFallback>
+                        </Avatar>
+                        {/* Online indicator */}
+                        {isOnline(subscriber.subscriber_id) && (
+                          <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-background" />
+                        )}
+                        <div className={`absolute -bottom-0.5 -left-0.5 p-0.5 rounded-full shadow-sm ${getChannelStyle(subscriber.canal)}`}>
+                          {getChannelIcon(subscriber.canal)}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-medium truncate">{subscriber.nome || 'Sem nome'}</p>
-                        {subscriber.lead_id && (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-emerald-500/10 text-emerald-600 border-emerald-200">
-                            Lead
-                          </Badge>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-medium truncate text-sm md:text-base">{subscriber.nome || 'Sem nome'}</p>
+                          {subscriber.lead_id && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-emerald-500/10 text-emerald-600 border-emerald-200 shrink-0">
+                              Lead
+                            </Badge>
+                          )}
+                        </div>
+                        {status && (
+                          <p className={`text-xs ${status.color} ${status.animate ? 'animate-pulse' : ''}`}>
+                            {status.animate && <Circle className="inline h-1.5 w-1.5 mr-1 fill-current" />}
+                            {status.text}
+                          </p>
+                        )}
+                        {!status && subscriber.ultima_interacao && (
+                          <p className="text-xs text-muted-foreground">
+                            {format(new Date(subscriber.ultima_interacao), "dd/MM 'às' HH:mm", { locale: ptBR })}
+                          </p>
                         )}
                       </div>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        {subscriber.ultima_interacao && (
-                          <span>{format(new Date(subscriber.ultima_interacao), "dd/MM 'às' HH:mm", { locale: ptBR })}</span>
-                        )}
-                      </div>
-                      {subscriber.telefone && (
-                        <p className="text-xs text-muted-foreground truncate flex items-center gap-1 mt-0.5">
-                          <Phone className="h-3 w-3" />
-                          {subscriber.telefone}
-                        </p>
-                      )}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </ScrollArea>
       </div>
 
-      {/* Área de Chat - Design moderno */}
-      <div className="flex-1 flex flex-col bg-gradient-to-b from-muted/30 to-muted/10">
+      {/* Área de Chat */}
+      <div className={`${!showMobileChat ? 'hidden md:flex' : 'flex'} flex-1 flex-col bg-gradient-to-b from-muted/30 to-muted/10`}>
         {selectedSubscriber ? (
           <>
             {/* Header do Chat */}
-            <div className="p-4 border-b bg-card/80 backdrop-blur-sm">
-              <div className="flex items-center gap-4">
+            <div className="p-3 md:p-4 border-b bg-card/80 backdrop-blur-sm safe-area-top">
+              <div className="flex items-center gap-3 md:gap-4">
+                {/* Back button for mobile */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleBackToList}
+                  className="md:hidden h-9 w-9 -ml-1"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+                
                 <div className="relative">
-                  <Avatar className="h-11 w-11 ring-2 ring-background shadow-md">
+                  <Avatar className="h-10 w-10 md:h-11 md:w-11 ring-2 ring-background shadow-md">
                     <AvatarImage src={selectedSubscriber.foto} />
                     <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-primary-foreground font-medium">
                       {selectedSubscriber.nome?.substring(0, 2).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <div className={`absolute -bottom-0.5 -right-0.5 p-1 rounded-full shadow ${getChannelStyle(selectedSubscriber.canal)}`}>
-                    {getChannelIcon(selectedSubscriber.canal)}
+                  {isOnline(selectedSubscriber.subscriber_id) && (
+                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-background" />
+                  )}
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-base md:text-lg truncate">{selectedSubscriber.nome || 'Sem nome'}</h3>
+                  <div className="flex items-center gap-2 text-xs md:text-sm text-muted-foreground">
+                    {(() => {
+                      const status = getOnlineStatus(selectedSubscriber);
+                      if (status) {
+                        return (
+                          <span className={`${status.color} ${status.animate ? 'animate-pulse' : ''}`}>
+                            {status.text}
+                          </span>
+                        );
+                      }
+                      return selectedSubscriber.telefone ? (
+                        <span className="flex items-center gap-1">
+                          <Phone className="h-3 w-3" />
+                          {selectedSubscriber.telefone}
+                        </span>
+                      ) : null;
+                    })()}
                   </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-lg">{selectedSubscriber.nome}</h3>
-                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                    {selectedSubscriber.telefone && (
-                      <span className="flex items-center gap-1">
-                        <Phone className="h-3.5 w-3.5" />
-                        {selectedSubscriber.telefone}
-                      </span>
-                    )}
-                    {selectedSubscriber.email && (
-                      <span className="flex items-center gap-1">
-                        <Mail className="h-3.5 w-3.5" />
-                        {selectedSubscriber.email}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {selectedSubscriber.lead_id && (
-                  <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white">
-                    <Check className="h-3 w-3 mr-1" />
-                    Lead Vinculado
-                  </Badge>
-                )}
+                
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => syncSubscriberName(selectedSubscriber)}
+                  className="h-9 w-9"
+                >
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
               </div>
             </div>
 
             {/* Mensagens */}
-            <ScrollArea className="flex-1 p-4">
+            <ScrollArea className="flex-1 p-3 md:p-4">
               {isLoadingMessages ? (
                 <div className="h-full flex items-center justify-center">
                   <div className="text-center">
                     <RefreshCw className="h-8 w-8 animate-spin mx-auto text-primary/50" />
-                    <p className="text-sm text-muted-foreground mt-2">Carregando mensagens...</p>
+                    <p className="text-sm text-muted-foreground mt-2">Carregando...</p>
                   </div>
                 </div>
               ) : messages.length === 0 ? (
                 <div className="h-full flex items-center justify-center">
-                  <div className="text-center p-8 rounded-2xl bg-card/50 backdrop-blur-sm">
-                    <div className="h-16 w-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
-                      <MessageSquare className="h-8 w-8 text-primary/50" />
+                  <div className="text-center p-6 rounded-2xl bg-card/50 backdrop-blur-sm">
+                    <div className="h-14 w-14 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
+                      <MessageSquare className="h-7 w-7 text-primary/50" />
                     </div>
-                    <p className="font-medium text-lg">Inicie uma conversa</p>
+                    <p className="font-medium">Inicie uma conversa</p>
                     <p className="text-sm text-muted-foreground mt-1">
                       Envie uma mensagem para {selectedSubscriber.nome}
                     </p>
@@ -695,15 +729,15 @@ const ManyChatInbox = () => {
                     return (
                       <div key={message.id}>
                         {dateLabel && (
-                          <div className="flex justify-center my-4">
-                            <span className="px-3 py-1 rounded-full bg-card text-xs text-muted-foreground shadow-sm">
+                          <div className="flex justify-center my-3">
+                            <span className="px-3 py-1 rounded-full bg-card text-[11px] text-muted-foreground shadow-sm">
                               {dateLabel}
                             </span>
                           </div>
                         )}
-                        <div className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'} mb-2`}>
+                        <div className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'} mb-1.5`}>
                           <div
-                            className={`max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm ${
+                            className={`max-w-[85%] md:max-w-[75%] rounded-2xl px-3 py-2 md:px-4 md:py-2.5 shadow-sm ${
                               isOutgoing
                                 ? 'bg-primary text-primary-foreground rounded-br-md'
                                 : 'bg-card border rounded-bl-md'
@@ -723,32 +757,42 @@ const ManyChatInbox = () => {
                       </div>
                     );
                   })}
+                  
+                  {/* Typing indicator */}
+                  {isTyping(selectedSubscriber.subscriber_id) && (
+                    <div className="flex justify-start mb-1.5">
+                      <div className="bg-card border rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
+                        <div className="flex gap-1">
+                          <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   <div ref={messagesEndRef} />
                 </div>
               )}
             </ScrollArea>
 
-            {/* Preview de arquivo selecionado */}
+            {/* Preview de arquivo */}
             {selectedFile && (
-              <div className="px-4 py-2 border-t bg-card/80">
+              <div className="px-3 md:px-4 py-2 border-t bg-card/80">
                 <div className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
                   {selectedFile.type.startsWith('image/') ? (
                     <img 
                       src={previewUrl || ''} 
                       alt="Preview" 
-                      className="h-16 w-16 object-cover rounded-lg"
+                      className="h-14 w-14 object-cover rounded-lg"
                     />
                   ) : (
-                    <div className="h-16 w-16 rounded-lg bg-primary/10 flex items-center justify-center">
-                      {selectedFile.type.startsWith('audio/') ? (
-                        <Mic className="h-6 w-6 text-primary" />
-                      ) : (
-                        <Paperclip className="h-6 w-6 text-primary" />
-                      )}
+                    <div className="h-14 w-14 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Mic className="h-6 w-6 text-primary" />
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{selectedFile.name}</p>
+                    <p className="font-medium truncate text-sm">{selectedFile.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {(selectedFile.size / 1024).toFixed(1)} KB
                     </p>
@@ -760,6 +804,7 @@ const ManyChatInbox = () => {
                       setSelectedFile(null);
                       setPreviewUrl(null);
                     }}
+                    className="h-8 w-8"
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -768,7 +813,7 @@ const ManyChatInbox = () => {
             )}
 
             {/* Input de Mensagem */}
-            <div className="p-4 border-t bg-card/80 backdrop-blur-sm">
+            <div className="p-3 md:p-4 border-t bg-card/80 backdrop-blur-sm safe-area-bottom">
               <div className="flex items-end gap-2 max-w-3xl mx-auto">
                 <input
                   type="file"
@@ -783,7 +828,7 @@ const ManyChatInbox = () => {
                   size="icon"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isSending}
-                  className="h-10 w-10 rounded-full hover:bg-primary/10"
+                  className="h-10 w-10 rounded-full hover:bg-primary/10 shrink-0"
                 >
                   <Image className="h-5 w-5 text-muted-foreground" />
                 </Button>
@@ -793,7 +838,7 @@ const ManyChatInbox = () => {
                   size="icon"
                   onClick={isRecording ? stopRecording : startRecording}
                   disabled={isSending}
-                  className={`h-10 w-10 rounded-full ${isRecording ? 'bg-red-500 hover:bg-red-600 text-white' : 'hover:bg-primary/10'}`}
+                  className={`h-10 w-10 rounded-full shrink-0 ${isRecording ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' : 'hover:bg-primary/10'}`}
                 >
                   <Mic className={`h-5 w-5 ${isRecording ? '' : 'text-muted-foreground'}`} />
                 </Button>
@@ -802,17 +847,20 @@ const ManyChatInbox = () => {
                   <Input
                     placeholder="Digite sua mensagem..."
                     value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
+                    onChange={(e) => {
+                      setNewMessage(e.target.value);
+                      handleTyping();
+                    }}
                     onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && (selectedFile ? uploadAndSendFile() : sendMessage())}
                     disabled={isSending || isRecording}
-                    className="pr-12 py-5 rounded-full bg-background/80 border-muted focus:border-primary transition-colors"
+                    className="pr-4 py-5 rounded-full bg-background/80 border-muted focus:border-primary transition-colors text-base"
                   />
                 </div>
 
                 <Button 
                   onClick={selectedFile ? uploadAndSendFile : () => sendMessage()} 
                   disabled={isSending || (!newMessage.trim() && !selectedFile) || isRecording}
-                  className="h-10 w-10 rounded-full"
+                  className="h-10 w-10 rounded-full shrink-0"
                   size="icon"
                 >
                   <Send className="h-5 w-5" />
@@ -821,13 +869,13 @@ const ManyChatInbox = () => {
             </div>
           </>
         ) : (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center p-8">
-              <div className="h-24 w-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                <MessageSquare className="h-12 w-12 text-primary/40" />
+          <div className="h-full flex items-center justify-center p-4">
+            <div className="text-center">
+              <div className="h-20 w-20 md:h-24 md:w-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                <MessageSquare className="h-10 w-10 md:h-12 md:w-12 text-primary/40" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">Selecione uma conversa</h3>
-              <p className="text-muted-foreground max-w-sm">
+              <h3 className="text-lg md:text-xl font-semibold mb-2">Selecione uma conversa</h3>
+              <p className="text-muted-foreground text-sm md:text-base max-w-sm">
                 Escolha um contato da lista para visualizar e responder mensagens
               </p>
             </div>
