@@ -12,10 +12,18 @@ import {
   addMonths,
   subMonths,
   isFuture,
-  isPast
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, List, RefreshCw } from 'lucide-react';
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  Calendar as CalendarIcon, 
+  List, 
+  RefreshCw,
+  Clock,
+  MapPin,
+  ArrowRight
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -30,20 +38,12 @@ interface CalendarProps {
   onEventClick: (compromisso: Compromisso) => void;
 }
 
-const TIPO_COLORS: Record<string, string> = {
-  'Reunião': 'bg-blue-500 hover:bg-blue-600',
-  'Audiência': 'bg-red-500 hover:bg-red-600',
-  'Prazo': 'bg-amber-500 hover:bg-amber-600',
-  'Tarefa': 'bg-emerald-500 hover:bg-emerald-600',
-  'Outro': 'bg-slate-500 hover:bg-slate-600',
-};
-
-const TIPO_DOTS: Record<string, string> = {
-  'Reunião': 'bg-blue-500',
-  'Audiência': 'bg-red-500',
-  'Prazo': 'bg-amber-500',
-  'Tarefa': 'bg-emerald-500',
-  'Outro': 'bg-slate-500',
+const TIPO_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
+  'Reunião': { bg: 'bg-blue-500/10', text: 'text-blue-600 dark:text-blue-400', dot: 'bg-blue-500' },
+  'Audiência': { bg: 'bg-red-500/10', text: 'text-red-600 dark:text-red-400', dot: 'bg-red-500' },
+  'Prazo': { bg: 'bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400', dot: 'bg-amber-500' },
+  'Tarefa': { bg: 'bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500' },
+  'Outro': { bg: 'bg-slate-500/10', text: 'text-slate-600 dark:text-slate-400', dot: 'bg-slate-500' },
 };
 
 type ViewMode = 'calendar' | 'list';
@@ -81,7 +81,7 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
   const upcomingEvents = compromissos
     .filter(c => isFuture(new Date(c.data_inicio)) || isToday(new Date(c.data_inicio)))
     .sort((a, b) => new Date(a.data_inicio).getTime() - new Date(b.data_inicio).getTime())
-    .slice(0, 10);
+    .slice(0, 8);
 
   const handleSyncAdvbox = async () => {
     setSyncing(true);
@@ -97,7 +97,6 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
         description: data.message || `${data.synced} eventos sincronizados`
       });
       
-      // Reload page to refresh data
       window.location.reload();
     } catch (error: any) {
       toast({
@@ -111,98 +110,99 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
   };
 
   const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const weekDaysMobile = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 
   const totalEvents = compromissos.length;
   const futureEvents = compromissos.filter(c => isFuture(new Date(c.data_inicio))).length;
   const thisMonthEvents = getCompromissosForMonth().length;
 
+  const getColors = (tipo: string) => TIPO_COLORS[tipo] || TIPO_COLORS['Outro'];
+
   return (
-    <div className="space-y-4">
-      {/* Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-card rounded-lg p-3 border">
-          <p className="text-xs text-muted-foreground">Total de Eventos</p>
-          <p className="text-2xl font-bold text-primary">{totalEvents}</p>
+    <div className="space-y-4 md:space-y-6">
+      {/* Stats Cards - Compact on mobile */}
+      <div className="grid grid-cols-4 gap-2 md:gap-4">
+        <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-xl p-3 md:p-4 border border-primary/20">
+          <p className="text-[10px] md:text-xs text-muted-foreground font-medium uppercase tracking-wide">Total</p>
+          <p className="text-xl md:text-3xl font-bold text-primary">{totalEvents}</p>
         </div>
-        <div className="bg-card rounded-lg p-3 border">
-          <p className="text-xs text-muted-foreground">Este Mês</p>
-          <p className="text-2xl font-bold text-blue-500">{thisMonthEvents}</p>
+        <div className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 rounded-xl p-3 md:p-4 border border-blue-500/20">
+          <p className="text-[10px] md:text-xs text-muted-foreground font-medium uppercase tracking-wide">Mês</p>
+          <p className="text-xl md:text-3xl font-bold text-blue-500">{thisMonthEvents}</p>
         </div>
-        <div className="bg-card rounded-lg p-3 border">
-          <p className="text-xs text-muted-foreground">Futuros</p>
-          <p className="text-2xl font-bold text-emerald-500">{futureEvents}</p>
+        <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 rounded-xl p-3 md:p-4 border border-emerald-500/20">
+          <p className="text-[10px] md:text-xs text-muted-foreground font-medium uppercase tracking-wide">Futuros</p>
+          <p className="text-xl md:text-3xl font-bold text-emerald-500">{futureEvents}</p>
         </div>
-        <div className="bg-card rounded-lg p-3 border flex items-center justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground">Advbox</p>
-            <p className="text-sm font-medium">Sincronizar</p>
+        <div 
+          className="bg-gradient-to-br from-violet-500/10 to-violet-500/5 rounded-xl p-3 md:p-4 border border-violet-500/20 cursor-pointer hover:border-violet-500/40 transition-colors"
+          onClick={handleSyncAdvbox}
+        >
+          <p className="text-[10px] md:text-xs text-muted-foreground font-medium uppercase tracking-wide">Advbox</p>
+          <div className="flex items-center gap-1 md:gap-2 mt-1">
+            <RefreshCw className={cn("h-4 w-4 md:h-5 md:w-5 text-violet-500", syncing && "animate-spin")} />
+            <span className="text-xs md:text-sm font-medium text-violet-500">Sync</span>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSyncAdvbox}
-            disabled={syncing}
-          >
-            <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
-          </Button>
         </div>
       </div>
 
       {/* View Toggle */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between bg-card rounded-lg p-1 border">
+        <div className="flex gap-1">
           <Button
-            variant={viewMode === 'calendar' ? 'default' : 'outline'}
+            variant={viewMode === 'calendar' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setViewMode('calendar')}
+            className="gap-2"
           >
-            <CalendarIcon className="h-4 w-4 mr-2" />
-            Calendário
+            <CalendarIcon className="h-4 w-4" />
+            <span className="hidden sm:inline">Calendário</span>
           </Button>
           <Button
-            variant={viewMode === 'list' ? 'default' : 'outline'}
+            variant={viewMode === 'list' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setViewMode('list')}
+            className="gap-2"
           >
-            <List className="h-4 w-4 mr-2" />
-            Lista
+            <List className="h-4 w-4" />
+            <span className="hidden sm:inline">Lista</span>
           </Button>
         </div>
+        
+        {/* Month Navigation - Only in calendar view */}
+        {viewMode === 'calendar' && (
+          <div className="flex items-center gap-1">
+            <Button 
+              variant="ghost" 
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium min-w-[100px] text-center capitalize">
+              {format(currentMonth, 'MMM yyyy', { locale: ptBR })}
+            </span>
+            <Button 
+              variant="ghost" 
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
       </div>
 
       {viewMode === 'calendar' ? (
         <div className="bg-card rounded-xl shadow-sm border overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 bg-primary text-primary-foreground">
-            <Button 
-              variant="ghost" 
-              size="icon"
-              className="text-primary-foreground hover:bg-primary-foreground/20"
-              onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </Button>
-            <div className="text-center">
-              <h2 className="text-lg font-semibold capitalize">
-                {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
-              </h2>
-              <p className="text-xs opacity-80">{thisMonthEvents} eventos</p>
-            </div>
-            <Button 
-              variant="ghost" 
-              size="icon"
-              className="text-primary-foreground hover:bg-primary-foreground/20"
-              onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-            >
-              <ChevronRight className="h-5 w-5" />
-            </Button>
-          </div>
-
           {/* Week days header */}
           <div className="grid grid-cols-7 bg-muted/50 border-b">
-            {weekDays.map(weekDay => (
-              <div key={weekDay} className="py-2 text-center text-xs font-medium text-muted-foreground">
-                {weekDay}
+            {weekDays.map((weekDay, i) => (
+              <div key={weekDay} className="py-2 md:py-3 text-center text-[10px] md:text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <span className="hidden md:inline">{weekDay}</span>
+                <span className="md:hidden">{weekDaysMobile[i]}</span>
               </div>
             ))}
           </div>
@@ -219,50 +219,54 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                 <div
                   key={idx}
                   className={cn(
-                    "min-h-[90px] border-b border-r p-1.5 transition-colors cursor-pointer",
-                    !isCurrentMonth && "bg-muted/20 text-muted-foreground/50",
-                    isCurrentMonth && "hover:bg-muted/30",
+                    "min-h-[70px] md:min-h-[100px] border-b border-r p-1 md:p-2 transition-all cursor-pointer group",
+                    !isCurrentMonth && "bg-muted/30 opacity-50",
+                    isCurrentMonth && "hover:bg-muted/50",
                     isFutureDay && isCurrentMonth && "bg-primary/5"
                   )}
                   onClick={() => onDayClick(day)}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between mb-1">
                     <span 
                       className={cn(
-                        "w-6 h-6 flex items-center justify-center text-xs font-medium rounded-full",
-                        isCurrentDay && "bg-primary text-primary-foreground font-bold"
+                        "w-6 h-6 md:w-7 md:h-7 flex items-center justify-center text-xs md:text-sm font-medium rounded-full transition-colors",
+                        isCurrentDay && "bg-primary text-primary-foreground font-bold shadow-md",
+                        !isCurrentDay && isCurrentMonth && "group-hover:bg-muted"
                       )}
                     >
                       {format(day, 'd')}
                     </span>
                     {dayCompromissos.length > 0 && (
-                      <span className="text-[10px] text-muted-foreground">
+                      <Badge variant="secondary" className="h-4 px-1 text-[9px] md:text-[10px]">
                         {dayCompromissos.length}
-                      </span>
+                      </Badge>
                     )}
                   </div>
                   
-                  {/* Events - Show dots for compact view */}
-                  <div className="mt-1 space-y-0.5">
-                    {dayCompromissos.slice(0, 2).map(compromisso => (
-                      <div
-                        key={compromisso.id}
-                        className={cn(
-                          "text-[9px] leading-tight px-1 py-0.5 rounded text-white truncate cursor-pointer transition-colors",
-                          TIPO_COLORS[compromisso.tipo] || TIPO_COLORS['Outro']
-                        )}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEventClick(compromisso);
-                        }}
-                        title={compromisso.titulo}
-                      >
-                        {compromisso.titulo}
-                      </div>
-                    ))}
+                  {/* Events */}
+                  <div className="space-y-0.5 md:space-y-1">
+                    {dayCompromissos.slice(0, 2).map(compromisso => {
+                      const colors = getColors(compromisso.tipo);
+                      return (
+                        <div
+                          key={compromisso.id}
+                          className={cn(
+                            "text-[8px] md:text-[10px] leading-tight px-1.5 py-0.5 md:py-1 rounded-md cursor-pointer transition-all hover:scale-[1.02]",
+                            colors.bg, colors.text
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEventClick(compromisso);
+                          }}
+                          title={compromisso.titulo}
+                        >
+                          <span className="font-medium truncate block">{compromisso.titulo}</span>
+                        </div>
+                      );
+                    })}
                     {dayCompromissos.length > 2 && (
-                      <div className="text-[9px] text-primary font-medium text-center">
-                        +{dayCompromissos.length - 2}
+                      <div className="text-[9px] md:text-[10px] text-primary font-semibold px-1">
+                        +{dayCompromissos.length - 2} mais
                       </div>
                     )}
                   </div>
@@ -272,107 +276,141 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Monthly List */}
-          <div className="bg-card rounded-xl border overflow-hidden">
-            <div className="flex items-center justify-between p-4 bg-primary text-primary-foreground">
-              <Button 
-                variant="ghost" 
-                size="icon"
-                className="text-primary-foreground hover:bg-primary-foreground/20"
-                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </Button>
-              <h3 className="font-semibold capitalize">
-                {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
-              </h3>
-              <Button 
-                variant="ghost" 
-                size="icon"
-                className="text-primary-foreground hover:bg-primary-foreground/20"
-                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-              >
-                <ChevronRight className="h-5 w-5" />
-              </Button>
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6">
+          {/* Monthly List - Takes more space */}
+          <div className="lg:col-span-3 bg-card rounded-xl border overflow-hidden">
+            <div className="flex items-center justify-between p-4 bg-gradient-to-r from-primary to-primary/80">
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  className="h-8 w-8 text-primary-foreground hover:bg-primary-foreground/20"
+                  onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <h3 className="font-semibold text-primary-foreground capitalize">
+                  {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
+                </h3>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  className="h-8 w-8 text-primary-foreground hover:bg-primary-foreground/20"
+                  onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+              <Badge className="bg-primary-foreground/20 text-primary-foreground border-0">
+                {thisMonthEvents} eventos
+              </Badge>
             </div>
-            <ScrollArea className="h-[400px]">
-              <div className="p-3 space-y-2">
+            <ScrollArea className="h-[450px] md:h-[500px]">
+              <div className="p-3 md:p-4 space-y-2 md:space-y-3">
                 {getCompromissosForMonth().length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">
-                    Nenhum evento neste mês
-                  </p>
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <CalendarIcon className="h-12 w-12 text-muted-foreground/30 mb-3" />
+                    <p className="text-muted-foreground">Nenhum evento neste mês</p>
+                    <p className="text-xs text-muted-foreground/70">Clique em "Novo" para adicionar</p>
+                  </div>
                 ) : (
-                  getCompromissosForMonth().map(compromisso => (
-                    <div
-                      key={compromisso.id}
-                      className="flex items-start gap-3 p-3 rounded-lg border hover:bg-muted/50 cursor-pointer transition-colors"
-                      onClick={() => onEventClick(compromisso)}
-                    >
-                      <div className={cn(
-                        "w-2 h-2 rounded-full mt-2 shrink-0",
-                        TIPO_DOTS[compromisso.tipo] || TIPO_DOTS['Outro']
-                      )} />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{compromisso.titulo}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(compromisso.data_inicio), "dd/MM 'às' HH:mm", { locale: ptBR })}
-                        </p>
-                        {compromisso.descricao && (
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                            {compromisso.descricao}
-                          </p>
+                  getCompromissosForMonth().map(compromisso => {
+                    const colors = getColors(compromisso.tipo);
+                    return (
+                      <div
+                        key={compromisso.id}
+                        className={cn(
+                          "flex items-start gap-3 md:gap-4 p-3 md:p-4 rounded-xl border cursor-pointer transition-all hover:shadow-md group",
+                          colors.bg
                         )}
+                        onClick={() => onEventClick(compromisso)}
+                      >
+                        <div className="text-center shrink-0 w-12 md:w-14 py-1">
+                          <p className="text-2xl md:text-3xl font-bold text-foreground">
+                            {format(new Date(compromisso.data_inicio), 'dd')}
+                          </p>
+                          <p className="text-[10px] md:text-xs text-muted-foreground uppercase font-medium">
+                            {format(new Date(compromisso.data_inicio), 'EEE', { locale: ptBR })}
+                          </p>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <p className="font-semibold text-sm md:text-base truncate">{compromisso.titulo}</p>
+                            <Badge variant="outline" className={cn("shrink-0 text-[10px] md:text-xs", colors.text)}>
+                              {compromisso.tipo}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {format(new Date(compromisso.data_inicio), "HH:mm")}
+                            </span>
+                            {compromisso.descricao && (
+                              <span className="flex items-center gap-1 truncate">
+                                <MapPin className="h-3 w-3 shrink-0" />
+                                <span className="truncate">{compromisso.descricao.slice(0, 30)}</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                       </div>
-                      <Badge variant="outline" className="shrink-0 text-xs">
-                        {compromisso.tipo}
-                      </Badge>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </ScrollArea>
           </div>
 
-          {/* Upcoming Events */}
-          <div className="bg-card rounded-xl border overflow-hidden">
-            <div className="p-4 bg-emerald-500 text-white">
-              <h3 className="font-semibold">Próximos Eventos</h3>
-              <p className="text-xs opacity-80">Eventos futuros</p>
+          {/* Upcoming Events - Sidebar */}
+          <div className="lg:col-span-2 bg-card rounded-xl border overflow-hidden">
+            <div className="p-4 bg-gradient-to-r from-emerald-500 to-emerald-600">
+              <h3 className="font-semibold text-white">Próximos Eventos</h3>
+              <p className="text-xs text-white/80">Agenda futura</p>
             </div>
-            <ScrollArea className="h-[400px]">
-              <div className="p-3 space-y-2">
+            <ScrollArea className="h-[350px] md:h-[500px]">
+              <div className="p-3 md:p-4 space-y-2">
                 {upcomingEvents.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">
-                    Nenhum evento futuro
-                  </p>
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <CalendarIcon className="h-10 w-10 text-muted-foreground/30 mb-3" />
+                    <p className="text-sm text-muted-foreground">Nenhum evento futuro</p>
+                  </div>
                 ) : (
-                  upcomingEvents.map(compromisso => (
-                    <div
-                      key={compromisso.id}
-                      className="flex items-start gap-3 p-3 rounded-lg border hover:bg-muted/50 cursor-pointer transition-colors"
-                      onClick={() => onEventClick(compromisso)}
-                    >
-                      <div className="text-center shrink-0 w-12">
-                        <p className="text-lg font-bold text-primary">
-                          {format(new Date(compromisso.data_inicio), 'dd')}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground uppercase">
-                          {format(new Date(compromisso.data_inicio), 'MMM', { locale: ptBR })}
-                        </p>
+                  upcomingEvents.map(compromisso => {
+                    const colors = getColors(compromisso.tipo);
+                    const isTodays = isToday(new Date(compromisso.data_inicio));
+                    return (
+                      <div
+                        key={compromisso.id}
+                        className={cn(
+                          "flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all hover:shadow-md",
+                          isTodays && "ring-2 ring-primary ring-offset-2"
+                        )}
+                        onClick={() => onEventClick(compromisso)}
+                      >
+                        <div className={cn(
+                          "text-center shrink-0 w-11 py-2 rounded-lg",
+                          isTodays ? "bg-primary text-primary-foreground" : "bg-muted"
+                        )}>
+                          <p className="text-lg font-bold">
+                            {format(new Date(compromisso.data_inicio), 'dd')}
+                          </p>
+                          <p className="text-[9px] uppercase font-medium opacity-70">
+                            {format(new Date(compromisso.data_inicio), 'MMM', { locale: ptBR })}
+                          </p>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{compromisso.titulo}</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Clock className="h-3 w-3" />
+                            <span>{format(new Date(compromisso.data_inicio), "HH:mm")}</span>
+                            <div className={cn("w-1.5 h-1.5 rounded-full", colors.dot)} />
+                            <span className={colors.text}>{compromisso.tipo}</span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{compromisso.titulo}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(compromisso.data_inicio), "EEEE 'às' HH:mm", { locale: ptBR })}
-                        </p>
-                      </div>
-                      <div className={cn(
-                        "w-2 h-2 rounded-full shrink-0 mt-2",
-                        TIPO_DOTS[compromisso.tipo] || TIPO_DOTS['Outro']
-                      )} />
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </ScrollArea>
