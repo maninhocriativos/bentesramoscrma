@@ -536,20 +536,56 @@ Ou digite outro horário de sua preferência.`;
 
       // Nova ação: confirmar agendamento após resposta do lead
       case 'confirmar_agendamento': {
-        const { lead_id, data_hora, titulo, tipo } = dados;
+        const { lead_id, data_hora, hora_escolhida, titulo, tipo, modalidade } = dados;
         
-        // Criar o compromisso
-        const dataInicio = new Date(data_hora);
+        // A IA deve enviar a hora no formato "YYYY-MM-DDTHH:mm" já em horário de Manaus
+        // Precisamos converter para UTC
+        let dataInicio: Date;
+        
+        if (hora_escolhida && typeof hora_escolhida === 'string') {
+          // Se recebemos hora_escolhida separadamente (ex: "09:00" com data)
+          const dataBase = data_hora ? new Date(data_hora) : new Date();
+          const [hora, minuto] = hora_escolhida.split(':').map(Number);
+          // Criar data em Manaus e converter para UTC
+          const dataManaus = `${dataBase.toISOString().split('T')[0]}T${hora_escolhida}:00-04:00`;
+          dataInicio = new Date(dataManaus);
+        } else if (data_hora) {
+          // Se data_hora já contém a data completa
+          // Assumir que a IA está enviando em formato ISO ou horário de Manaus
+          const dataStr = String(data_hora);
+          
+          // Se não tem timezone, assumir que é horário de Manaus
+          if (!dataStr.includes('Z') && !dataStr.includes('+') && !dataStr.match(/-\d{2}:\d{2}$/)) {
+            dataInicio = new Date(dataStr + '-04:00');
+          } else {
+            dataInicio = new Date(dataStr);
+          }
+        } else {
+          return { success: false, message: 'Data/hora não informada para agendamento' };
+        }
+        
         const dataFim = new Date(dataInicio.getTime() + 60 * 60 * 1000); // +1 hora
+        
+        // Determinar tipo de compromisso baseado na modalidade
+        const tipoCompromisso = modalidade === 'online' ? 'Reunião Online' : 
+                                modalidade === 'presencial' ? 'Reunião Presencial' : 
+                                tipo || 'Reunião';
+        
+        // Gerar descrição com a modalidade
+        const descricaoCompromisso = `Agendamento confirmado pelo cliente via chat.\n${
+          modalidade === 'online' ? '📹 Atendimento ONLINE (videoconferência)' :
+          modalidade === 'presencial' ? '🏢 Atendimento PRESENCIAL no escritório' :
+          ''
+        }`.trim();
         
         const { data, error } = await supabase
           .from('compromissos')
           .insert({
             titulo: titulo || 'Consulta agendada',
-            tipo: tipo || 'Reunião',
+            tipo: tipoCompromisso,
             data_inicio: dataInicio.toISOString(),
             data_fim: dataFim.toISOString(),
-            descricao: 'Agendamento confirmado pelo cliente via chat',
+            descricao: descricaoCompromisso,
             lead_id,
           })
           .select()
@@ -570,11 +606,21 @@ Ou digite outro horário de sua preferência.`;
           acao: 'agendamento_confirmado_lead',
           entidade_id: data.id,
           lead_id: lead_id,
-          dados: { titulo, tipo, data_inicio: dataInicio.toISOString() },
+          dados: { titulo, tipo: tipoCompromisso, modalidade, data_inicio: dataInicio.toISOString() },
           processado: true,
         });
         
-        return { success: true, message: `Reunião agendada para ${dataInicio.toLocaleDateString('pt-BR')} às ${dataInicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`, data };
+        // Formatar hora para Manaus
+        const horaManaus = dataInicio.toLocaleTimeString('pt-BR', { 
+          timeZone: 'America/Manaus',
+          hour: '2-digit', 
+          minute: '2-digit' 
+        });
+        const dataManaus = dataInicio.toLocaleDateString('pt-BR', { 
+          timeZone: 'America/Manaus' 
+        });
+        
+        return { success: true, message: `${tipoCompromisso} agendada para ${dataManaus} às ${horaManaus}`, data };
       }
 
       default:
@@ -742,13 +788,32 @@ AÇÕES DISPONÍVEIS:
 - solicitar_agendamento: Enviar opções de horário para o cliente escolher. Use quando ele quiser agendar.
   Dados: { "tipo_reuniao": "Consulta", "mensagem_personalizada": "opcional" }
 - confirmar_agendamento: Criar compromisso após cliente confirmar horário. Use quando ele responder escolhendo horário.
-  Dados: { "data_hora": "2025-01-06T09:00:00.000Z", "titulo": "Consulta com Nome", "tipo": "Reunião" }
+  IMPORTANTE SOBRE HORÁRIO: O cliente está no fuso horário de Manaus (UTC-4). Se ele disser "9h", envie "09:00" no campo hora_escolhida.
+  Dados: { 
+    "data_hora": "2026-01-08", 
+    "hora_escolhida": "09:00",
+    "titulo": "Consulta com Nome", 
+    "modalidade": "online" ou "presencial",
+    "tipo": "Reunião Online" ou "Reunião Presencial"
+  }
 - criar_tarefa: Criar tarefa de follow-up ou ação necessária
 
+MODALIDADE DE ATENDIMENTO:
+- Se o cliente mencionar "online", "videoconferência", "videochamada", "virtual" → modalidade: "online", tipo: "Reunião Online"
+- Se o cliente mencionar "presencial", "no escritório", "ir aí", "pessoalmente" → modalidade: "presencial", tipo: "Reunião Presencial"
+- Se não especificar, PERGUNTE se prefere atendimento online ou presencial antes de confirmar
+
 FLUXO DE AGENDAMENTO:
-1. Cliente demonstra interesse → Use "solicitar_agendamento"
-2. Cliente escolhe horário → Use "confirmar_agendamento" + resposta confirmando
-3. Cliente não escolhe → Pergunte novamente ou sugira ligar
+1. Cliente demonstra interesse → Pergunte se prefere atendimento online ou presencial
+2. Cliente informa modalidade → Use "solicitar_agendamento"
+3. Cliente escolhe horário (ex: "9h", "às 9", "9:00") → Use "confirmar_agendamento" com hora_escolhida: "09:00" e a modalidade
+4. Cliente não escolhe → Pergunte novamente ou sugira ligar
+
+IMPORTANTE SOBRE HORÁRIOS:
+- O cliente informa horários no fuso de Manaus (UTC-4)
+- Se ele disser "9h" ou "9 horas" ou "às 9", use hora_escolhida: "09:00"
+- Se ele disser "14h" ou "2 da tarde", use hora_escolhida: "14:00"
+- NUNCA converta o horário, envie exatamente o que o cliente escolheu
 
 EXTRAÇÃO DE DADOS:
 - Se a mensagem contiver um nome (ex: "Meu nome é João Silva"), extraia e use "atualizar_dados_lead"
