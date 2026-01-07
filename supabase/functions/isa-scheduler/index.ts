@@ -120,8 +120,8 @@ async function enviarLembreteCompromisso(
   }
   
   // Se falhou (provavelmente janela de 24h), tenta via Flow/Template
-  // Flows esperados no ManyChat: "lembrete_compromisso_1h" e "lembrete_compromisso_24h"
-  const flowNs = tipoLembrete === '1h' ? 'lembrete_compromisso_1h' : 'lembrete_compromisso_24h';
+  // Namespace do flow configurado no ManyChat
+  const flowNs = tipoLembrete === '1h' ? 'content20260107131615_826623' : 'content20260107131615_826623';
   
   console.log(`Tentando envio via template: ${flowNs}`);
   const resultFlow = await enviarViaFlow(subscriberId, flowNs, {
