@@ -125,6 +125,13 @@ export function useCompromissos() {
     // Auto-sync to Google Calendar (non-blocking)
     if (data?.id) {
       syncToGoogleCalendar(data.id);
+      
+      // Enviar confirmação imediata via WhatsApp (non-blocking)
+      if (compromisso.lead_id) {
+        supabase.functions.invoke('isa-scheduler', {
+          body: { task: 'confirmacao_imediata', compromissoId: data.id }
+        }).catch(err => console.log('Confirmação WhatsApp:', err));
+      }
     }
 
     return { data: data as Compromisso };
