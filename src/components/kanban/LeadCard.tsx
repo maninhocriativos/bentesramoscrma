@@ -172,9 +172,9 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra }: L
       </div>
 
       {/* Compact Body */}
-      <div className="px-2.5 pb-2 space-y-1">
-        {/* Value + Insights Row */}
-        <div className="flex items-center gap-1 flex-wrap">
+      <div className="px-2.5 pb-2 space-y-1.5">
+        {/* Value + Insights + Origin Row */}
+        <div className="flex items-center gap-1.5 flex-wrap">
           <span className={cn(
             "text-[10px] font-semibold px-1.5 py-0.5 rounded",
             lead.valor_causa ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-muted text-muted-foreground"
@@ -182,57 +182,42 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra }: L
             {formatShortCurrency(lead.valor_causa)}
           </span>
           
-          {sentimentoConfig && SentimentoIcon && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className={cn("inline-flex items-center px-1 py-0.5 rounded", sentimentoConfig.bg, sentimentoConfig.color)}>
-                  <SentimentoIcon className="w-2.5 h-2.5" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">
-                {sentimentoConfig.label}
-              </TooltipContent>
-            </Tooltip>
-          )}
-          
-          {urgenciaConfig && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className={cn(
-                  "inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-medium",
-                  urgenciaConfig.bg, urgenciaConfig.color,
-                  urgenciaConfig.pulse && "animate-pulse"
-                )}>
-                  <Zap className="w-2 h-2" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">
-                {urgenciaConfig.label}
-              </TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-
-        {/* Origin + Time Row */}
-        <div className="flex items-center justify-between gap-1">
           {lead.origem && (
             <span className={cn("inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium", origemConfig.bg, origemConfig.text)}>
               <OrigemIcon className="w-2.5 h-2.5" />
-              {lead.origem}
             </span>
           )}
+          
+          {sentimentoConfig && SentimentoIcon && (
+            <span className={cn("inline-flex items-center px-1 py-0.5 rounded", sentimentoConfig.bg, sentimentoConfig.color)}>
+              <SentimentoIcon className="w-2.5 h-2.5" />
+            </span>
+          )}
+          
+          {urgenciaConfig && (
+            <span className={cn(
+              "inline-flex items-center px-1 py-0.5 rounded",
+              urgenciaConfig.bg, urgenciaConfig.color,
+              urgenciaConfig.pulse && "animate-pulse"
+            )}>
+              <Zap className="w-2.5 h-2.5" />
+            </span>
+          )}
+
           {lead.link_contrato && (
             <FileSignature className="w-3 h-3 text-gold" />
           )}
-          <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 ml-auto">
-            <Clock className="w-2 h-2" />
-            {lastInteraction}
-          </span>
+        </div>
+
+        {/* Time Row */}
+        <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
+          <Clock className="w-2.5 h-2.5" />
+          {lastInteraction}
         </div>
 
         {/* Resumo da conversa para leads em atendimento */}
         {isEmAtendimento && ultimaInteracaoResumo && (
-          <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200/50 rounded-md p-1.5">
+          <div className="bg-blue-50/50 dark:bg-blue-900/10 rounded px-1.5 py-1">
             <p className="text-[9px] text-blue-700 dark:text-blue-300 line-clamp-2">
               <Sparkles className="w-2 h-2 inline mr-0.5" />
               {ultimaInteracaoResumo}
@@ -242,24 +227,17 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra }: L
 
         {/* Alerta de agendamento pendente */}
         {precisaAgendar && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 border border-amber-300/50 rounded-md px-1.5 py-1 animate-pulse">
-                <CalendarX className="w-3 h-3 text-amber-600" />
-                <span className="text-[9px] font-medium text-amber-700 dark:text-amber-400">
-                  Falta agendar atendimento
-                </span>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">
-              Este lead está em atendimento mas ainda não tem reunião agendada
-            </TooltipContent>
-          </Tooltip>
+          <div className="flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 rounded px-1.5 py-1 animate-pulse">
+            <CalendarX className="w-2.5 h-2.5 text-amber-600" />
+            <span className="text-[9px] font-medium text-amber-700 dark:text-amber-400">
+              Falta agendar
+            </span>
+          </div>
         )}
 
         {/* Próximo agendamento */}
         {leadExtra?.proximoAgendamento && (
-          <div className="flex items-center gap-1 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-200/50 rounded-md px-1.5 py-1">
+          <div className="flex items-center gap-1 bg-emerald-50/50 dark:bg-emerald-900/10 rounded px-1.5 py-1">
             <Calendar className="w-2.5 h-2.5 text-emerald-600" />
             <span className="text-[9px] text-emerald-700 dark:text-emerald-400 truncate">
               {new Date(leadExtra.proximoAgendamento.data).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
@@ -282,51 +260,39 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra }: L
         </div>
       )}
 
-      {/* Minimal Footer */}
-      <div className="flex items-center border-t border-border/30">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex-1 h-7 rounded-none text-[10px] text-muted-foreground gap-1 hover:text-green-600 hover:bg-green-50/50"
-              onClick={handleCall}
-              disabled={!lead.telefone}
-            >
-              <Phone className="w-3 h-3" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">Ligar</TooltipContent>
-        </Tooltip>
-        <div className="w-px h-4 bg-border/50" />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex-1 h-7 rounded-none text-[10px] text-muted-foreground gap-1 hover:text-emerald-600 hover:bg-emerald-50/50"
-              onClick={handleWhatsApp}
-              disabled={!lead.telefone}
-            >
-              <MessageCircle className="w-3 h-3" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">WhatsApp</TooltipContent>
-        </Tooltip>
-        <div className="w-px h-4 bg-border/50" />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex-1 h-7 rounded-none text-[10px] text-muted-foreground gap-1 hover:text-primary hover:bg-primary/5"
-              onClick={handleViewDetails}
-            >
-              <ExternalLink className="w-3 h-3" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">Detalhes</TooltipContent>
-        </Tooltip>
+      {/* Minimal Footer - 3 compact icons */}
+      <div className="flex items-center border-t border-border/30 bg-muted/20">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="flex-1 h-6 rounded-none text-muted-foreground hover:text-green-600 hover:bg-green-50/50 disabled:opacity-30"
+          onClick={handleCall}
+          disabled={!lead.telefone}
+          title="Ligar"
+        >
+          <Phone className="w-3 h-3" />
+        </Button>
+        <div className="w-px h-3 bg-border/40" />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="flex-1 h-6 rounded-none text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50/50 disabled:opacity-30"
+          onClick={handleWhatsApp}
+          disabled={!lead.telefone}
+          title="WhatsApp"
+        >
+          <MessageCircle className="w-3 h-3" />
+        </Button>
+        <div className="w-px h-3 bg-border/40" />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="flex-1 h-6 rounded-none text-muted-foreground hover:text-primary hover:bg-primary/5"
+          onClick={handleViewDetails}
+          title="Detalhes"
+        >
+          <ExternalLink className="w-3 h-3" />
+        </Button>
       </div>
 
       <EnviarContratoModal
