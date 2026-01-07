@@ -119,8 +119,8 @@ export function KanbanColumn({
         "flex flex-col rounded-xl overflow-hidden",
         "bg-card border shadow-sm",
         "transition-all duration-200 ease-out",
-        // Responsive width
-        "min-w-[220px] w-[220px] md:min-w-[260px] md:w-[260px]",
+        // Responsive width - larger on mobile for better readability
+        "min-w-[260px] w-[260px] md:min-w-[260px] md:w-[260px]",
         isDragOver && [
           "ring-2 ring-gold/60 shadow-md border-gold/40",
           "scale-[1.01]"
@@ -129,22 +129,21 @@ export function KanbanColumn({
     >
       {/* Header */}
       <div className={cn(
-        "flex items-center gap-2 px-2.5 md:px-3 py-2 md:py-2.5 border-b",
+        "flex items-center gap-2 px-3 py-2.5 border-b",
         statusStyle.headerBg, statusStyle.border
       )}>
         <div className={cn(
-          "w-2 h-2 md:w-2.5 md:h-2.5 rounded-full shrink-0",
+          "w-2.5 h-2.5 rounded-full shrink-0",
           statusStyle.indicator
         )} />
         
-        {/* Show short label on mobile, full on desktop */}
-        <h3 className="font-medium text-[11px] md:text-xs text-foreground flex-1 truncate">
-          <span className="md:hidden">{shortLabel}</span>
-          <span className="hidden md:inline">{status}</span>
+        {/* Always show full label for better context */}
+        <h3 className="font-medium text-xs text-foreground flex-1 truncate">
+          {status}
         </h3>
         
         <span className={cn(
-          "text-[9px] md:text-[10px] px-1.5 md:px-2 py-0.5 rounded-full font-semibold",
+          "text-[10px] px-2 py-0.5 rounded-full font-semibold",
           "bg-primary text-primary-foreground"
         )}>
           {columnLeads.length}
@@ -153,8 +152,8 @@ export function KanbanColumn({
 
       {/* Cards Container */}
       <div className={cn(
-        "flex flex-col gap-2 p-1.5 md:p-2 flex-1 overflow-y-auto",
-        "max-h-[calc(100vh-280px)] md:max-h-[calc(100vh-260px)]",
+        "flex flex-col gap-2 p-2 flex-1 overflow-y-auto",
+        "max-h-[calc(100vh-260px)]",
         "bg-gradient-to-b", statusStyle.gradient
       )}>
         {columnLeads.map((lead, index) => (
@@ -187,13 +186,13 @@ export function KanbanColumn({
         
         {columnLeads.length === 0 && (
           <div className={cn(
-            "flex-1 flex flex-col items-center justify-center min-h-[80px] md:min-h-[100px]",
+            "flex-1 flex flex-col items-center justify-center min-h-[100px]",
             "text-muted-foreground border border-dashed border-border/50 rounded-lg",
             "bg-card/50",
             isDragOver && "border-gold/50 bg-gold/5"
           )}>
-            <Inbox className="w-5 h-5 md:w-6 md:h-6 mb-1 opacity-30" />
-            <span className="text-[10px] md:text-xs text-center">
+            <Inbox className="w-6 h-6 mb-1 opacity-30" />
+            <span className="text-xs text-center">
               {isDragOver ? 'Solte aqui!' : 'Arraste leads'}
             </span>
           </div>
