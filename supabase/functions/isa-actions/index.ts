@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { formatarDataHora, formatarData, formatarHora } from '../_shared/timezone-helpers.ts';
+import { formatarDataHora, formatarData, formatarHora, getProximaSegundaUtc, isDataNaProximaSemana, getProximaSegundaFormatada } from '../_shared/timezone-helpers.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -290,8 +290,20 @@ serve(async (req) => {
       case 'criar_compromisso': {
         const { titulo, tipo, data_inicio, data_fim, descricao, lead_id, processo_id, responsavel_id } = data;
         
-        // Verificar conflito de horário antes de criar
+        // Verificar se data está na próxima semana (apenas para atendimentos de leads)
         const horaInicio = new Date(data_inicio);
+        
+        // Se tem lead_id, é atendimento e deve respeitar regra da próxima semana
+        if (lead_id && !isDataNaProximaSemana(horaInicio)) {
+          const proximaSegunda = getProximaSegundaFormatada();
+          console.log(`⚠️ Compromisso com lead rejeitado - data atual semana. Próxima: ${proximaSegunda}`);
+          result = {
+            success: false,
+            message: `⚠️ POLÍTICA DE AGENDAMENTO: Atendimentos com clientes devem ser agendados para a PRÓXIMA SEMANA (a partir de ${proximaSegunda}). Use verificar_disponibilidade para ver horários disponíveis na próxima semana.`
+          };
+          break;
+        }
+        
         const horaFim = data_fim ? new Date(data_fim) : new Date(horaInicio.getTime() + 60 * 60 * 1000); // +1h padrão
         
         const { data: conflitos } = await supabase
@@ -353,6 +365,18 @@ serve(async (req) => {
 
         if (!lead_id) {
           result = { success: false, message: 'lead_id não informado para agendar atendimento' };
+          break;
+        }
+
+        // REGRA: Só permitir agendamentos a partir da próxima semana
+        const dataAgendamento = new Date(data_inicio);
+        if (!isDataNaProximaSemana(dataAgendamento)) {
+          const proximaSegunda = getProximaSegundaFormatada();
+          console.log(`⚠️ Tentativa de agendar para esta semana. Próxima segunda: ${proximaSegunda}`);
+          result = {
+            success: false,
+            message: `⚠️ POLÍTICA DE AGENDAMENTO: Novos atendimentos devem ser agendados para a PRÓXIMA SEMANA (a partir de ${proximaSegunda}). Por favor, proponha um horário a partir de segunda-feira da próxima semana.`
+          };
           break;
         }
 

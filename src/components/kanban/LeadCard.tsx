@@ -101,10 +101,10 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra }: L
   const urgenciaConfig = isaInsight?.urgencia ? URGENCIA_CONFIG[isaInsight.urgencia] : null;
   const SentimentoIcon = sentimentoConfig?.icon;
   
-  // Verifica se é lead em atendimento e precisa mostrar extras
-  const isEmAtendimento = lead.status === 'Em Atendimento';
-  const precisaAgendar = isEmAtendimento && leadExtra && !leadExtra.temAgendamento;
-  const ultimaInteracaoResumo = leadExtra?.ultimaInteracao?.resumo 
+  // Verifica se é lead em atendimento/negociação e precisa mostrar extras
+  const precisaAgendamento = lead.status === 'Em Atendimento' || lead.status === 'Em Negociação';
+  const precisaAgendar = precisaAgendamento && leadExtra && !leadExtra.temAgendamento;
+  const ultimaInteracaoResumo = leadExtra?.ultimaInteracao?.resumo
     ? leadExtra.ultimaInteracao.resumo.length > 50 
       ? leadExtra.ultimaInteracao.resumo.substring(0, 50) + '...'
       : leadExtra.ultimaInteracao.resumo
@@ -215,8 +215,8 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra }: L
           {lastInteraction}
         </div>
 
-        {/* Resumo da conversa para leads em atendimento */}
-        {isEmAtendimento && ultimaInteracaoResumo && (
+        {/* Resumo da conversa para leads em atendimento/negociação */}
+        {precisaAgendamento && ultimaInteracaoResumo && (
           <div className="bg-blue-50/50 dark:bg-blue-900/10 rounded px-1.5 py-1">
             <p className="text-[9px] text-blue-700 dark:text-blue-300 line-clamp-2">
               <Sparkles className="w-2 h-2 inline mr-0.5" />
