@@ -16,8 +16,24 @@ const AVAILABLE_TOOLS = [
   {
     type: "function",
     function: {
+      name: "verificar_disponibilidade",
+      description: "OBRIGATÓRIO: Verifica se há horários disponíveis na agenda antes de propor ou criar um agendamento. SEMPRE use esta função ANTES de sugerir qualquer horário ao cliente. Retorna os compromissos existentes no período e indica se o horário está livre.",
+      parameters: {
+        type: "object",
+        properties: {
+          data: { type: "string", description: "Data para verificar no formato YYYY-MM-DD" },
+          hora_inicio: { type: "string", description: "Hora de início desejada no formato HH:mm (opcional, se não informado retorna toda a agenda do dia)" },
+          hora_fim: { type: "string", description: "Hora de término desejada no formato HH:mm (opcional)" },
+        },
+        required: ["data"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "criar_compromisso",
-      description: "Cria um novo compromisso/evento na agenda do escritório. Use para agendar reuniões, audiências, prazos, etc. Notifica automaticamente o responsável por email.",
+      description: "Cria um novo compromisso/evento na agenda do escritório. IMPORTANTE: Sempre use verificar_disponibilidade ANTES de criar um compromisso para garantir que não há conflitos. Notifica automaticamente o responsável por email.",
       parameters: {
         type: "object",
         properties: {

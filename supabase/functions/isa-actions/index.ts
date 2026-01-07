@@ -220,8 +220,96 @@ serve(async (req) => {
     }
 
     switch (action) {
+      case 'verificar_disponibilidade': {
+        const { data: dataParam, hora_inicio, hora_fim } = data;
+        
+        // Construir range de busca para o dia inteiro ou horário específico
+        const dataBase = dataParam; // YYYY-MM-DD
+        let inicioRange: string;
+        let fimRange: string;
+        
+        if (hora_inicio) {
+          // Horário específico - buscar conflitos em janela de 2 horas
+          inicioRange = `${dataBase}T${hora_inicio}:00`;
+          fimRange = hora_fim ? `${dataBase}T${hora_fim}:00` : `${dataBase}T${hora_inicio.split(':')[0]}:59:59`;
+        } else {
+          // Dia inteiro - horário comercial 08:00 às 20:00
+          inicioRange = `${dataBase}T08:00:00`;
+          fimRange = `${dataBase}T20:00:00`;
+        }
+        
+        // Buscar compromissos no range (considerando que datas estão em UTC, mas queremos Manaus -4h)
+        const { data: compromissos, error } = await supabase
+          .from('compromissos')
+          .select('id, titulo, tipo, data_inicio, data_fim, leads_juridicos(nome)')
+          .gte('data_inicio', inicioRange)
+          .lte('data_inicio', fimRange)
+          .order('data_inicio', { ascending: true });
+        
+        if (error) {
+          console.error('Erro ao verificar disponibilidade:', error);
+          result = { success: false, message: `Erro ao verificar agenda: ${error.message}` };
+        } else {
+          const compromissosFormatados = (compromissos || []).map((c: any) => ({
+            titulo: c.titulo,
+            tipo: c.tipo,
+            horario: formatarHoraManaus(c.data_inicio),
+            horario_fim: c.data_fim ? formatarHoraManaus(c.data_fim) : null,
+            cliente: c.leads_juridicos?.nome || null,
+          }));
+          
+          const temConflito = hora_inicio && compromissos && compromissos.length > 0;
+          const horariosOcupados = compromissosFormatados.map((c: any) => c.horario).join(', ');
+          
+          if (compromissos && compromissos.length === 0) {
+            result = { 
+              success: true, 
+              disponivel: true,
+              message: hora_inicio 
+                ? `✅ Horário ${hora_inicio} está DISPONÍVEL em ${formatarDataManaus(dataBase)}.`
+                : `✅ Agenda LIVRE em ${formatarDataManaus(dataBase)}. Sem compromissos agendados.`,
+              data: { compromissos: [], sugestao_horarios: ['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'] }
+            };
+          } else {
+            result = { 
+              success: true, 
+              disponivel: !temConflito,
+              message: hora_inicio && temConflito
+                ? `⚠️ CONFLITO: Já existe compromisso às ${horariosOcupados} em ${formatarDataManaus(dataBase)}. Escolha outro horário.`
+                : `📅 Agenda de ${formatarDataManaus(dataBase)}: ${compromissos?.length} compromisso(s) agendado(s) nos horários: ${horariosOcupados}`,
+              data: { 
+                compromissos: compromissosFormatados,
+                horarios_ocupados: compromissosFormatados.map((c: any) => c.horario),
+              }
+            };
+          }
+        }
+        break;
+      }
+
       case 'criar_compromisso': {
         const { titulo, tipo, data_inicio, data_fim, descricao, lead_id, processo_id, responsavel_id } = data;
+        
+        // Verificar conflito de horário antes de criar
+        const horaInicio = new Date(data_inicio);
+        const horaFim = data_fim ? new Date(data_fim) : new Date(horaInicio.getTime() + 60 * 60 * 1000); // +1h padrão
+        
+        const { data: conflitos } = await supabase
+          .from('compromissos')
+          .select('id, titulo, data_inicio')
+          .gte('data_inicio', new Date(horaInicio.getTime() - 60 * 60 * 1000).toISOString()) // 1h antes
+          .lte('data_inicio', horaFim.toISOString())
+          .limit(1);
+        
+        if (conflitos && conflitos.length > 0) {
+          const conflito = conflitos[0];
+          console.log('⚠️ Conflito de horário detectado:', conflito);
+          result = { 
+            success: false, 
+            message: `⚠️ CONFLITO: Já existe "${conflito.titulo}" agendado às ${formatarHoraManaus(conflito.data_inicio)}. Use verificar_disponibilidade para encontrar um horário livre.` 
+          };
+          break;
+        }
         
         const { data: compromisso, error } = await supabase
           .from('compromissos')
@@ -285,6 +373,28 @@ serve(async (req) => {
             success: false,
             message: `Este lead já possui um atendimento agendado: "${existente.titulo}" para ${formatarDataHoraManaus(existente.data_inicio)}. Verifique a agenda antes de criar novo agendamento.`,
             data: { compromisso_existente: existente },
+          };
+          break;
+        }
+
+        // Verificar conflito de horário na agenda geral
+        const horaInicio = new Date(data_inicio);
+        const horaFim = data_fim ? new Date(data_fim) : new Date(horaInicio.getTime() + 60 * 60 * 1000);
+        
+        const { data: conflitos } = await supabase
+          .from('compromissos')
+          .select('id, titulo, data_inicio, leads_juridicos(nome)')
+          .gte('data_inicio', new Date(horaInicio.getTime() - 60 * 60 * 1000).toISOString())
+          .lte('data_inicio', horaFim.toISOString())
+          .limit(1);
+        
+        if (conflitos && conflitos.length > 0) {
+          const conflito = conflitos[0] as any;
+          const clienteConflito = conflito.leads_juridicos?.nome || 'outro cliente';
+          console.log('⚠️ Conflito de horário detectado para atendimento:', conflito);
+          result = { 
+            success: false, 
+            message: `⚠️ CONFLITO DE HORÁRIO: Já existe atendimento com ${clienteConflito} às ${formatarHoraManaus(conflito.data_inicio)}. Use verificar_disponibilidade para encontrar um horário livre antes de propor ao cliente.` 
           };
           break;
         }
