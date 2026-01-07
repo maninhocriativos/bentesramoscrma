@@ -323,8 +323,14 @@ serve(async (req) => {
         .in('role', ['Administrador', 'Advogado', 'Gerente']);
 
       const hoje = new Date();
-      hoje.setHours(0, 0, 0, 0);
-      const amanha = new Date(hoje.getTime() + 24 * 60 * 60 * 1000);
+      const hojeManaus = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Manaus',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(hoje);
+      const inicioHojeUtc = new Date(`${hojeManaus}T00:00:00-04:00`);
+      const amanhaUtc = new Date(inicioHojeUtc.getTime() + 24 * 60 * 60 * 1000);
 
       const { data: compromissosHoje } = await supabase
         .from('compromissos')
@@ -332,23 +338,23 @@ serve(async (req) => {
           *,
           leads_juridicos!compromissos_lead_id_fkey (nome)
         `)
-        .gte('data_inicio', hoje.toISOString())
-        .lt('data_inicio', amanha.toISOString())
+        .gte('data_inicio', inicioHojeUtc.toISOString())
+        .lt('data_inicio', amanhaUtc.toISOString())
         .order('data_inicio');
 
       const { data: tarefasHoje } = await supabase
         .from('tarefas')
         .select('*')
-        .eq('data_limite', hoje.toISOString().split('T')[0])
+        .eq('data_limite', hojeManaus)
         .neq('status', 'concluida');
 
       if ((compromissosHoje?.length || 0) > 0 || (tarefasHoje?.length || 0) > 0) {
-        let conteudo = `<p style="color: #4a5568; font-size: 16px;">Bom dia! Aqui está sua agenda para hoje, ${hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}:</p>`;
+        let conteudo = `<p style="color: #4a5568; font-size: 16px;">Bom dia! Aqui está sua agenda para hoje, ${hoje.toLocaleDateString('pt-BR', { timeZone: 'America/Manaus', weekday: 'long', day: '2-digit', month: 'long' })}:</p>`;
 
         if (compromissosHoje?.length) {
           conteudo += `<h3 style="color: #2d3748; margin-top: 20px;">📅 Compromissos (${compromissosHoje.length})</h3><ul style="color: #4a5568;">`;
           for (const c of compromissosHoje) {
-            const hora = new Date(c.data_inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            const hora = new Date(c.data_inicio).toLocaleTimeString('pt-BR', { timeZone: 'America/Manaus', hour: '2-digit', minute: '2-digit' });
             conteudo += `<li><strong>${hora}</strong> - ${c.titulo} ${c.leads_juridicos?.nome ? `(${c.leads_juridicos.nome})` : ''}</li>`;
           }
           conteudo += '</ul>';
@@ -371,7 +377,7 @@ serve(async (req) => {
         if (emailsDestino.length > 0) {
           await enviarEmail(
             emailsDestino,
-            `📅 Sua Agenda para Hoje - ${hoje.toLocaleDateString('pt-BR')}`,
+            `📅 Sua Agenda para Hoje - ${hoje.toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' })}`,
             emailTemplate('Agenda do Dia', conteudo)
           );
 
@@ -426,7 +432,7 @@ serve(async (req) => {
           conteudo += `<tr>
             <td style="padding: 10px; border: 1px solid #e2e8f0;">${lead.nome || 'Sem nome'}</td>
             <td style="padding: 10px; border: 1px solid #e2e8f0;">${lead.status}</td>
-            <td style="padding: 10px; border: 1px solid #e2e8f0;">${new Date(dataRef).toLocaleDateString('pt-BR')}</td>
+            <td style="padding: 10px; border: 1px solid #e2e8f0;">${new Date(dataRef).toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' })}</td>
           </tr>`;
         }
         conteudo += '</table>';
@@ -495,7 +501,7 @@ serve(async (req) => {
 
           conteudo += `<tr style="background-color: ${corLinha};">
             <td style="padding: 10px; border: 1px solid #e2e8f0;">
-              <strong>${new Date(prazo.data_inicio).toLocaleDateString('pt-BR')}</strong>
+              <strong>${new Date(prazo.data_inicio).toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' })}</strong>
               <br><small style="color: ${diasRestantes <= 2 ? '#e53e3e' : '#718096'}">${diasRestantes} dia(s)</small>
             </td>
             <td style="padding: 10px; border: 1px solid #e2e8f0;">${prazo.titulo}</td>
@@ -592,7 +598,7 @@ serve(async (req) => {
       });
 
       let conteudo = `
-        <p style="color: #4a5568; font-size: 16px;">Aqui está o resumo da semana de ${semanaPassada.toLocaleDateString('pt-BR')} a ${hoje.toLocaleDateString('pt-BR')}:</p>
+        <p style="color: #4a5568; font-size: 16px;">Aqui está o resumo da semana de ${semanaPassada.toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' })} a ${hoje.toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' })}:</p>
         
         <div style="display: flex; flex-wrap: wrap; gap: 15px; margin: 20px 0;">
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; min-width: 120px; text-align: center;">
@@ -645,7 +651,7 @@ serve(async (req) => {
       if (emails.length > 0) {
         await enviarEmail(
           emails,
-          `📈 Relatório Semanal - ${semanaPassada.toLocaleDateString('pt-BR')} a ${hoje.toLocaleDateString('pt-BR')}`,
+          `📈 Relatório Semanal - ${semanaPassada.toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' })} a ${hoje.toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' })}`,
           emailTemplate('Relatório Semanal', conteudo)
         );
 
