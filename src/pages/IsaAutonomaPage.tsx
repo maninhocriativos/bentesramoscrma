@@ -9,12 +9,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Zap, Brain, CheckCircle2, XCircle, Clock, 
   Users, MessageSquare, ListTodo, 
-  Calendar, RefreshCw, Loader2, Activity, Target, Sparkles
+  Calendar, RefreshCw, Loader2, Activity, Target, Sparkles, Settings
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subDays, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { IsaAcoesPendentes } from '@/components/assistentes/IsaAcoesPendentes';
+import { IsaAutomacoesConfig } from '@/components/assistentes/IsaAutomacoesConfig';
 import isaAvatar from '@/assets/isa-avatar.png';
 
 interface Stats {
@@ -211,6 +212,10 @@ export default function IsaAutonomaPage() {
                 <Target className="h-4 w-4" />
                 Ações Pendentes
               </TabsTrigger>
+              <TabsTrigger value="automacoes" className="gap-2">
+                <Settings className="h-4 w-4" />
+                Automações
+              </TabsTrigger>
               <TabsTrigger value="historico" className="gap-2">
                 <Activity className="h-4 w-4" />
                 Histórico
@@ -223,6 +228,10 @@ export default function IsaAutonomaPage() {
 
             <TabsContent value="pendentes">
               <IsaAcoesPendentes />
+            </TabsContent>
+
+            <TabsContent value="automacoes">
+              <IsaAutomacoesConfig />
             </TabsContent>
 
             <TabsContent value="historico">
