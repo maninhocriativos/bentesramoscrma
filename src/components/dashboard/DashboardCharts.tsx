@@ -41,6 +41,7 @@ const ORIGEM_COLORS: Record<string, string> = {
 const STATUS_CONFIG = [
   { status: 'Lead Frio', color: '#64748B', label: 'Lead Frio' },
   { status: 'Em Atendimento', color: '#3B82F6', label: 'Em Atendimento' },
+  { status: 'Em Negociação', color: '#06B6D4', label: 'Em Negociação' },
   { status: 'Aguardando Contrato', color: '#F59E0B', label: 'Aguardando Contrato' },
   { status: 'Contrato Assinado', color: '#8B5CF6', label: 'Contrato Assinado' },
   { status: 'Ganho', color: '#10B981', label: 'Ganho' },

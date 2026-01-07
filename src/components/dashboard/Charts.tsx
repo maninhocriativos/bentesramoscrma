@@ -17,6 +17,7 @@ const ORIGEM_COLORS: Record<string, string> = {
 const STATUS_ORDER = [
   'Lead Frio',
   'Em Atendimento',
+  'Em Negociação',
   'Aguardando Contrato',
   'Contrato Assinado',
   'Ganho',

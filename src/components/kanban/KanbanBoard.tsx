@@ -17,6 +17,7 @@ interface KanbanBoardProps {
 const STATUSES: LeadStatus[] = [
   'Lead Frio',
   'Em Atendimento',
+  'Em Negociação',
   'Aguardando Contrato',
   'Contrato Assinado',
   'Ganho',
