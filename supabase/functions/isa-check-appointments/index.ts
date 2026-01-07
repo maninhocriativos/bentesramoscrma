@@ -17,18 +17,18 @@ Deno.serve(async (req) => {
 
     console.log('[ISA-CHECK] Iniciando verificação de agendamentos...');
 
-    // 1. Buscar todos os leads em "Em Atendimento"
+    // 1. Buscar todos os leads em "Em Atendimento" ou "Em Negociação"
     const { data: leadsEmAtendimento, error: leadsError } = await supabase
       .from('leads_juridicos')
-      .select('id, nome')
-      .eq('status', 'Em Atendimento');
+      .select('id, nome, status')
+      .in('status', ['Em Atendimento', 'Em Negociação']);
 
     if (leadsError) {
       console.error('[ISA-CHECK] Erro ao buscar leads:', leadsError);
       throw leadsError;
     }
 
-    console.log(`[ISA-CHECK] Encontrados ${leadsEmAtendimento?.length || 0} leads em atendimento`);
+    console.log(`[ISA-CHECK] Encontrados ${leadsEmAtendimento?.length || 0} leads em atendimento/negociação`);
 
     if (!leadsEmAtendimento || leadsEmAtendimento.length === 0) {
       return new Response(JSON.stringify({ 
