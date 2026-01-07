@@ -5,20 +5,21 @@ import { KanbanBoard } from '@/components/kanban/KanbanBoard';
 import { LeadModal } from '@/components/LeadModal';
 import { LeadFilters } from '@/components/leads/LeadFilters';
 import { RecentActivities } from '@/components/crm/RecentActivities';
-import { QuickTasks } from '@/components/crm/QuickTasks';
+import { DashboardTarefas } from '@/components/crm/DashboardTarefas';
 import { FollowupStatusPanel } from '@/components/crm/FollowupStatusPanel';
 import { useLeads } from '@/hooks/useLeads';
-import { useCompromissos } from '@/hooks/useCompromissos';
+
 import { usePerfil } from '@/hooks/usePerfil';
 import { Lead } from '@/types/leads';
 import { Loader2, ChevronDown, ChevronUp } from 'lucide-react';
-import { CompromissoModal } from '@/components/agenda/CompromissoModal';
+import { TarefaModal } from '@/components/tarefas/TarefaModal';
+
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export default function LeadsPage() {
   const { leads, loading } = useLeads();
-  const { compromissos } = useCompromissos();
+  
   const { canDelete } = usePerfil();
   
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -107,10 +108,7 @@ export default function LeadsPage() {
               )}>
                 <FollowupStatusPanel />
                 <RecentActivities leads={leads} />
-                <QuickTasks 
-                  compromissos={compromissos} 
-                  onNewTask={handleNewTask}
-                />
+                <DashboardTarefas onNewTask={handleNewTask} />
               </div>
             </div>
           </>
@@ -125,9 +123,9 @@ export default function LeadsPage() {
         canDelete={canDelete}
       />
 
-      <CompromissoModal
-        isOpen={isTaskModalOpen}
-        onClose={() => setIsTaskModalOpen(false)}
+      <TarefaModal 
+        open={isTaskModalOpen} 
+        onOpenChange={setIsTaskModalOpen} 
       />
     </AppLayout>
   );

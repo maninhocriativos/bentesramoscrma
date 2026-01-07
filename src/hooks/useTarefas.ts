@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Tarefa, Timesheet } from '@/types/tarefas';
 import { useToast } from '@/hooks/use-toast';
@@ -9,7 +9,7 @@ export function useTarefas(processoId?: string) {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const fetchTarefas = async () => {
+  const fetchTarefas = useCallback(async () => {
     setLoading(true);
     let query = supabase
       .from('tarefas')
@@ -28,7 +28,7 @@ export function useTarefas(processoId?: string) {
       setTarefas(data as Tarefa[]);
     }
     setLoading(false);
-  };
+  }, [processoId, toast]);
 
   const createTarefa = async (tarefa: Omit<Tarefa, 'id' | 'created_at' | 'updated_at'>) => {
     const { data, error } = await supabase
@@ -43,7 +43,6 @@ export function useTarefas(processoId?: string) {
     }
 
     toast({ title: 'Tarefa criada!' });
-    await fetchTarefas();
     return data;
   };
 
@@ -59,7 +58,6 @@ export function useTarefas(processoId?: string) {
     }
 
     toast({ title: 'Tarefa atualizada!' });
-    await fetchTarefas();
     return true;
   };
 
@@ -75,12 +73,51 @@ export function useTarefas(processoId?: string) {
     }
 
     toast({ title: 'Tarefa excluída!' });
-    await fetchTarefas();
     return true;
   };
 
+  // Initial fetch
   useEffect(() => {
     fetchTarefas();
+  }, [fetchTarefas]);
+
+  // Realtime subscriptions
+  useEffect(() => {
+    console.log('🔔 Tarefas: Configurando realtime...');
+    
+    const channel = supabase.channel('tarefas-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tarefas' }, (payload) => {
+        console.log('🆕 Tarefa inserida:', payload.new);
+        const newTarefa = payload.new as Tarefa;
+        if (!processoId || newTarefa.processo_id === processoId) {
+          setTarefas(prev => {
+            if (prev.some(t => t.id === newTarefa.id)) return prev;
+            return [...prev, newTarefa].sort((a, b) => {
+              if (!a.data_limite) return 1;
+              if (!b.data_limite) return -1;
+              return new Date(a.data_limite).getTime() - new Date(b.data_limite).getTime();
+            });
+          });
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tarefas' }, (payload) => {
+        console.log('✏️ Tarefa atualizada:', payload.new);
+        const updated = payload.new as Tarefa;
+        setTarefas(prev => prev.map(t => t.id === updated.id ? updated : t));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tarefas' }, (payload) => {
+        console.log('🗑️ Tarefa deletada:', payload.old);
+        const deleted = payload.old as { id: string };
+        setTarefas(prev => prev.filter(t => t.id !== deleted.id));
+      })
+      .subscribe((status) => {
+        console.log('📡 Tarefas channel status:', status);
+      });
+
+    return () => {
+      console.log('🔕 Tarefas: Removendo canal realtime');
+      supabase.removeChannel(channel);
+    };
   }, [processoId]);
 
   return { tarefas, loading, fetchTarefas, createTarefa, updateTarefa, deleteTarefa };
