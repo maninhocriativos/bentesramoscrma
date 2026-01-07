@@ -233,6 +233,33 @@ serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const agora = new Date();
   
+  // Modo de teste manual
+  let body: any = {};
+  try {
+    body = await req.json();
+  } catch { /* sem body */ }
+
+  // Teste manual do fluxo de retomada
+  if (body.test_retomada && body.subscriber_id) {
+    console.log(`[FOLLOWUP-TEST] Testando fluxo de retomada para subscriber: ${body.subscriber_id}`);
+    
+    const resultado = await enviarViaFlow(body.subscriber_id, RETOMADA_FLOW_NS, {
+      nome: body.nome || 'Cliente'
+    });
+    
+    console.log(`[FOLLOWUP-TEST] Resultado:`, JSON.stringify(resultado));
+    
+    return new Response(
+      JSON.stringify({ 
+        success: resultado.success, 
+        flow_ns: RETOMADA_FLOW_NS,
+        subscriber_id: body.subscriber_id,
+        resultado 
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+  
   console.log('[FOLLOWUP] Iniciando processamento de follow-ups:', agora.toISOString());
 
   try {
