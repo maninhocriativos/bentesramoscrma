@@ -22,11 +22,11 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY');
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 
-// Função para enviar mensagem WhatsApp via ManyChat
-async function enviarWhatsApp(subscriberId: string, mensagem: string): Promise<boolean> {
+// Função para enviar mensagem WhatsApp via ManyChat (dentro da janela de 24h)
+async function enviarWhatsApp(subscriberId: string, mensagem: string): Promise<{ success: boolean; usouTemplate: boolean }> {
   if (!MANYCHAT_API_KEY) {
     console.error('MANYCHAT_API_KEY não configurada');
-    return false;
+    return { success: false, usouTemplate: false };
   }
 
   try {
@@ -37,7 +37,7 @@ async function enviarWhatsApp(subscriberId: string, mensagem: string): Promise<b
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        subscriber_id: subscriberId,
+        subscriber_id: parseInt(subscriberId),
         data: {
           version: 'v2',
           content: {
@@ -48,12 +48,93 @@ async function enviarWhatsApp(subscriberId: string, mensagem: string): Promise<b
     });
 
     const result = await response.json();
-    console.log('WhatsApp enviado:', result);
-    return result.status === 'success';
+    console.log('WhatsApp sendContent:', result);
+    
+    // Se sucesso, retorna
+    if (result.status === 'success') {
+      return { success: true, usouTemplate: false };
+    }
+    
+    // Se falhou por janela de 24h (código 3011), retorna para tentar via Flow
+    if (result.code === 3011 || result.message?.includes('24 hours')) {
+      console.log('Janela de 24h expirada, precisa usar template');
+      return { success: false, usouTemplate: false };
+    }
+    
+    return { success: false, usouTemplate: false };
   } catch (error) {
     console.error('Erro ao enviar WhatsApp:', error);
+    return { success: false, usouTemplate: false };
+  }
+}
+
+// Função para enviar via Flow/Template (fora da janela de 24h)
+// Requer flows configurados no ManyChat: "lembrete_1h" e "lembrete_24h"
+async function enviarViaFlow(subscriberId: string, flowNs: string, dados: Record<string, any>): Promise<boolean> {
+  if (!MANYCHAT_API_KEY) {
+    console.error('MANYCHAT_API_KEY não configurada');
     return false;
   }
+
+  try {
+    console.log(`Enviando via Flow: subscriber=${subscriberId}, flow=${flowNs}, dados=`, dados);
+    
+    const response = await fetch('https://api.manychat.com/fb/sending/sendFlow', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        subscriber_id: parseInt(subscriberId),
+        flow_ns: flowNs,
+        external_data: dados
+      }),
+    });
+
+    const result = await response.json();
+    console.log('WhatsApp sendFlow:', result);
+    return result.status === 'success';
+  } catch (error) {
+    console.error('Erro ao enviar via Flow:', error);
+    return false;
+  }
+}
+
+// Enviar lembrete com fallback para template quando fora da janela de 24h
+async function enviarLembreteCompromisso(
+  subscriberId: string, 
+  tipoLembrete: '1h' | '24h',
+  dados: { nome: string; titulo: string; dataFormatada: string }
+): Promise<{ enviado: boolean; metodo: 'direto' | 'template' | 'falhou' }> {
+  
+  const mensagem = tipoLembrete === '1h'
+    ? `⏰ Olá ${dados.nome}! Lembrando que seu atendimento "${dados.titulo}" está marcado para daqui 1 hora (${dados.dataFormatada}). Até logo!`
+    : `📅 Olá ${dados.nome}! Passando para lembrar que amanhã você tem um atendimento "${dados.titulo}" marcado para ${dados.dataFormatada}. Confirma sua presença? ✅`;
+
+  // Tenta envio direto primeiro
+  const resultDireto = await enviarWhatsApp(subscriberId, mensagem);
+  
+  if (resultDireto.success) {
+    return { enviado: true, metodo: 'direto' };
+  }
+  
+  // Se falhou (provavelmente janela de 24h), tenta via Flow/Template
+  // Flows esperados no ManyChat: "lembrete_compromisso_1h" e "lembrete_compromisso_24h"
+  const flowNs = tipoLembrete === '1h' ? 'lembrete_compromisso_1h' : 'lembrete_compromisso_24h';
+  
+  console.log(`Tentando envio via template: ${flowNs}`);
+  const resultFlow = await enviarViaFlow(subscriberId, flowNs, {
+    nome: dados.nome,
+    titulo: dados.titulo,
+    data: dados.dataFormatada
+  });
+  
+  if (resultFlow) {
+    return { enviado: true, metodo: 'template' };
+  }
+  
+  return { enviado: false, metodo: 'falhou' };
 }
 
 // Função para enviar email via Resend
@@ -184,11 +265,16 @@ serve(async (req) => {
           if (subscriber?.subscriber_id) {
             const dataFormatada = formatarDataHoraExtenso(dataComp);
 
-            const mensagem = tipoLembrete === '1h'
-              ? `⏰ Olá ${lead.nome || 'Cliente'}! Lembrando que seu atendimento "${comp.titulo}" está marcado para daqui 1 hora (${dataFormatada}). Até logo!`
-              : `📅 Olá ${lead.nome || 'Cliente'}! Passando para lembrar que amanhã você tem um atendimento "${comp.titulo}" marcado para ${dataFormatada}. Confirma sua presença? ✅`;
-
-            const enviado = await enviarWhatsApp(subscriber.subscriber_id, mensagem);
+            // Usar a nova função que faz fallback para template
+            const resultado = await enviarLembreteCompromisso(
+              subscriber.subscriber_id,
+              tipoLembrete as '1h' | '24h',
+              {
+                nome: lead.nome || 'Cliente',
+                titulo: comp.titulo,
+                dataFormatada
+              }
+            );
 
             // Registrar evento
             await supabase.from('system_events').insert({
@@ -198,7 +284,12 @@ serve(async (req) => {
               entidade_tipo: 'compromisso',
               entidade_id: comp.id,
               lead_id: lead.id,
-              dados: { mensagem, enviado, tipoLembrete }
+              dados: { 
+                enviado: resultado.enviado, 
+                metodo: resultado.metodo,
+                tipoLembrete,
+                dataFormatada
+              }
             });
 
             results.actions.push({
@@ -206,7 +297,8 @@ serve(async (req) => {
               tipoLembrete,
               compromisso: comp.titulo,
               lead: lead.nome,
-              enviado
+              enviado: resultado.enviado,
+              metodo: resultado.metodo
             });
           }
         }
