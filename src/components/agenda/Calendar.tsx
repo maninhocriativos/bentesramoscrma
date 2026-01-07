@@ -467,11 +467,11 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                     const modalidade = getModalidadeIcon(compromisso);
                     const ModalidadeIcon = modalidade?.icon;
                     
-                    return (
+                      return (
                       <div
                         key={compromisso.id}
                         className={cn(
-                          "flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all hover:shadow-md hover:border-primary/30 bg-card group",
+                          "flex gap-3 p-3 rounded-xl border cursor-pointer transition-all hover:shadow-md hover:border-primary/30 bg-card group",
                           isTodays && "ring-2 ring-primary ring-offset-2 ring-offset-background"
                         )}
                         onClick={() => onEventClick(compromisso)}
@@ -490,22 +490,24 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                           </p>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-sm truncate group-hover:text-primary transition-colors">
+                          <p className="font-semibold text-sm line-clamp-2 group-hover:text-primary transition-colors leading-tight">
                             {compromisso.titulo}
                           </p>
-                          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                            <Clock className="h-3 w-3" />
-                            <span className="font-medium">{format(parseLocalDate(compromisso.data_inicio), "HH:mm")}</span>
+                          <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mt-1.5 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3 shrink-0" />
+                              <span className="font-medium">{format(parseLocalDate(compromisso.data_inicio), "HH:mm")}</span>
+                            </span>
                             {ModalidadeIcon ? (
-                              <>
-                                <ModalidadeIcon className={cn("h-3 w-3", modalidade.color)} />
-                                <span className={cn("font-medium", modalidade.color)}>{modalidade.label}</span>
-                              </>
+                              <span className={cn("flex items-center gap-1 font-medium", modalidade.color)}>
+                                <ModalidadeIcon className="h-3 w-3 shrink-0" />
+                                <span>{modalidade.label}</span>
+                              </span>
                             ) : (
-                              <>
-                                <div className={cn("w-1.5 h-1.5 rounded-full", colors.dot)} />
+                              <span className="flex items-center gap-1">
+                                <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", colors.dot)} />
                                 <span className={colors.text}>{compromisso.tipo}</span>
-                              </>
+                              </span>
                             )}
                           </div>
                         </div>
