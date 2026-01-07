@@ -6,6 +6,41 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Fuso horário de Manaus (UTC-4) - O escritório fica em Manaus
+const TIMEZONE_OFFSET = -4 * 60; // -4 horas em minutos
+
+// Formatar data/hora no horário de Manaus (sem mencionar UTC)
+function formatarDataHoraManaus(isoString: string): string {
+  const date = new Date(isoString);
+  // Ajustar para o fuso de Manaus (UTC-4)
+  const manausDate = new Date(date.getTime() + (date.getTimezoneOffset() + TIMEZONE_OFFSET) * 60 * 1000);
+  
+  return manausDate.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function formatarHoraManaus(isoString: string): string {
+  const date = new Date(isoString);
+  const manausDate = new Date(date.getTime() + (date.getTimezoneOffset() + TIMEZONE_OFFSET) * 60 * 1000);
+  
+  return manausDate.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function formatarDataManaus(isoString: string): string {
+  const date = new Date(isoString);
+  const manausDate = new Date(date.getTime() + (date.getTimezoneOffset() + TIMEZONE_OFFSET) * 60 * 1000);
+  
+  return manausDate.toLocaleDateString('pt-BR');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -96,7 +131,8 @@ serve(async (req) => {
       compromissos: compromissos?.map(c => ({
         titulo: c.titulo,
         tipo: c.tipo,
-        data: c.data_inicio,
+        data: formatarDataHoraManaus(c.data_inicio),
+        horario: formatarHoraManaus(c.data_inicio),
         cliente: c.leads_juridicos?.nome,
         descricao: c.descricao
       })) || [],
@@ -104,7 +140,7 @@ serve(async (req) => {
         titulo: t.titulo,
         status: t.status,
         prioridade: t.prioridade,
-        dataLimite: t.data_limite,
+        dataLimite: t.data_limite ? formatarDataManaus(t.data_limite) : null,
         cliente: t.leads_juridicos?.nome,
         processo: t.processos?.titulo_acao
       })) || [],
@@ -124,7 +160,7 @@ serve(async (req) => {
       parcelas: parcelas?.map(p => ({
         numero: p.numero,
         valor: p.valor,
-        dataVencimento: p.data_vencimento,
+        dataVencimento: formatarDataManaus(p.data_vencimento),
         status: p.status,
         cliente: p.honorarios?.leads_juridicos?.nome
       })) || [],
@@ -138,9 +174,11 @@ serve(async (req) => {
       interacoesRecentes: interacoes?.map(i => ({
         tipo: i.tipo,
         resumo: i.resumo,
-        data: i.data_interacao,
+        data: formatarDataHoraManaus(i.data_interacao),
         cliente: i.leads_juridicos?.nome
-      })) || []
+      })) || [],
+      // Nota: todos os horários estão no fuso de Manaus (UTC-4), horário local do escritório
+      fusoHorario: 'America/Manaus (UTC-4)'
     };
 
     return new Response(JSON.stringify(systemData), {

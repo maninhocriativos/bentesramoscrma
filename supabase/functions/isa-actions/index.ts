@@ -8,6 +8,41 @@ const corsHeaders = {
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 
+// Fuso horário de Manaus/Brasília (UTC-4)
+const TIMEZONE_OFFSET = -4 * 60; // -4 horas em minutos
+
+// Formatar data/hora no horário de Manaus (sem mencionar UTC)
+function formatarDataHoraManaus(isoString: string): string {
+  const date = new Date(isoString);
+  // Ajustar para o fuso de Manaus (UTC-4)
+  const manausDate = new Date(date.getTime() + (date.getTimezoneOffset() + TIMEZONE_OFFSET) * 60 * 1000);
+  
+  return manausDate.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function formatarDataManaus(isoString: string): string {
+  const date = new Date(isoString);
+  const manausDate = new Date(date.getTime() + (date.getTimezoneOffset() + TIMEZONE_OFFSET) * 60 * 1000);
+  
+  return manausDate.toLocaleDateString('pt-BR');
+}
+
+function formatarHoraManaus(isoString: string): string {
+  const date = new Date(isoString);
+  const manausDate = new Date(date.getTime() + (date.getTimezoneOffset() + TIMEZONE_OFFSET) * 60 * 1000);
+  
+  return manausDate.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
 // Função auxiliar para enviar email de notificação
 async function enviarNotificacaoEmail(
   destinatarioEmail: string,
@@ -60,7 +95,7 @@ function gerarEmailTarefa(tarefa: any, responsavel: any, tipo: 'nova' | 'atualiz
   const prioridadeCor = cores[tarefa.prioridade] || '#6b7280';
 
   const dataLimite = tarefa.data_limite 
-    ? new Date(tarefa.data_limite).toLocaleDateString('pt-BR')
+    ? formatarDataManaus(tarefa.data_limite)
     : 'Não definida';
 
   const titulos = {
@@ -125,9 +160,9 @@ function gerarEmailTarefa(tarefa: any, responsavel: any, tipo: 'nova' | 'atualiz
 }
 
 function gerarEmailCompromisso(compromisso: any, responsavel: any) {
-  const dataInicio = new Date(compromisso.data_inicio).toLocaleString('pt-BR');
+  const dataInicio = formatarDataHoraManaus(compromisso.data_inicio);
   const dataFim = compromisso.data_fim 
-    ? new Date(compromisso.data_fim).toLocaleString('pt-BR')
+    ? formatarDataHoraManaus(compromisso.data_fim)
     : null;
 
   return `
@@ -248,7 +283,7 @@ serve(async (req) => {
               );
             }
           }
-          result = { success: true, message: `Compromisso "${titulo}" criado com sucesso para ${new Date(data_inicio).toLocaleString('pt-BR')}. ${responsavel_id ? 'Notificação enviada ao responsável.' : ''}`, data: compromisso };
+          result = { success: true, message: `Compromisso "${titulo}" criado com sucesso para ${formatarDataHoraManaus(data_inicio)} (horário de Manaus). ${responsavel_id ? 'Notificação enviada ao responsável.' : ''}`, data: compromisso };
         }
         break;
       }
@@ -297,7 +332,7 @@ serve(async (req) => {
 
           result = {
             success: true,
-            message: `Atendimento "${titulo}" agendado com sucesso para ${new Date(data_inicio).toLocaleString('pt-BR')}. ${responsavel_id ? 'Notificação enviada ao responsável.' : ''}`,
+            message: `Atendimento "${titulo}" agendado com sucesso para ${formatarDataHoraManaus(data_inicio)} (horário de Manaus). ${responsavel_id ? 'Notificação enviada ao responsável.' : ''}`,
             data: compromisso,
           };
         }
