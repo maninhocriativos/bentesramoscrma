@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
+import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import {
   Dialog,
   DialogContent,
@@ -62,21 +63,26 @@ export function CompromissoModal({ isOpen, onClose, compromisso, selectedDate }:
     },
   });
 
+  const MANAUS_TZ = 'America/Manaus';
+
   useEffect(() => {
     if (compromisso) {
-      const dataInicio = new Date(compromisso.data_inicio);
+      // Converter UTC para horário de Manaus para exibição
+      const dataUtc = new Date(compromisso.data_inicio);
+      const dataManaus = toZonedTime(dataUtc, MANAUS_TZ);
       form.reset({
         titulo: compromisso.titulo,
         descricao: compromisso.descricao || '',
-        data_inicio: format(dataInicio, 'yyyy-MM-dd'),
-        hora_inicio: format(dataInicio, 'HH:mm'),
+        data_inicio: format(dataManaus, 'yyyy-MM-dd'),
+        hora_inicio: format(dataManaus, 'HH:mm'),
         tipo: compromisso.tipo as TipoCompromisso,
       });
     } else if (selectedDate) {
+      const dataManaus = toZonedTime(selectedDate, MANAUS_TZ);
       form.reset({
         titulo: '',
         descricao: '',
-        data_inicio: format(selectedDate, 'yyyy-MM-dd'),
+        data_inicio: format(dataManaus, 'yyyy-MM-dd'),
         hora_inicio: '09:00',
         tipo: 'Reunião',
       });
@@ -84,20 +90,23 @@ export function CompromissoModal({ isOpen, onClose, compromisso, selectedDate }:
   }, [compromisso, selectedDate, form]);
 
   const onSubmit = async (data: FormData) => {
-    const dataInicio = new Date(`${data.data_inicio}T${data.hora_inicio || '09:00'}:00`);
+    // Converter horário de Manaus para UTC antes de salvar
+    // O usuário digita 17:00 de Manaus, precisamos salvar como 21:00 UTC
+    const dataHoraLocal = `${data.data_inicio}T${data.hora_inicio || '09:00'}:00`;
+    const dataUtc = fromZonedTime(dataHoraLocal, MANAUS_TZ);
 
     if (compromisso) {
       await updateCompromisso(compromisso.id, {
         titulo: data.titulo,
         descricao: data.descricao || null,
-        data_inicio: dataInicio.toISOString(),
+        data_inicio: dataUtc.toISOString(),
         tipo: data.tipo,
       });
     } else {
       await createCompromisso({
         titulo: data.titulo,
         descricao: data.descricao || null,
-        data_inicio: dataInicio.toISOString(),
+        data_inicio: dataUtc.toISOString(),
         data_fim: null,
         tipo: data.tipo,
         lead_id: null,
