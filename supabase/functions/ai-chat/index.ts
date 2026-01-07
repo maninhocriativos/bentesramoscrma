@@ -167,11 +167,23 @@ const AVAILABLE_TOOLS = [
 // Função para executar ações
 async function executeAction(functionName: string, args: any): Promise<any> {
   console.log('Executando ação:', functionName, args);
-  
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/isa-actions`, {
+
+  if (!SUPABASE_URL) {
+    throw new Error('SUPABASE_URL não configurada');
+  }
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY não configurada');
+  }
+
+  const url = `${SUPABASE_URL}/functions/v1/isa-actions`;
+
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      // O gateway do Supabase costuma exigir apikey + Authorization.
+      // Como o verify_jwt está desativado no endpoint, usamos a service role key aqui.
+      'apikey': SUPABASE_SERVICE_ROLE_KEY,
       'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
     },
     body: JSON.stringify({
@@ -180,9 +192,29 @@ async function executeAction(functionName: string, args: any): Promise<any> {
     }),
   });
 
-  const result = await response.json();
-  console.log('Resultado da ação:', result);
-  return result;
+  const raw = await response.text();
+  let parsed: any;
+  try {
+    parsed = raw ? JSON.parse(raw) : null;
+  } catch {
+    parsed = { success: false, message: raw };
+  }
+
+  if (!response.ok) {
+    console.error('Falha ao executar ação:', {
+      functionName,
+      status: response.status,
+      raw,
+    });
+    return {
+      success: false,
+      message: `Falha ao executar ${functionName} (HTTP ${response.status})`,
+      data: parsed,
+    };
+  }
+
+  console.log('Resultado da ação:', parsed);
+  return parsed;
 }
 
 serve(async (req) => {
