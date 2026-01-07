@@ -326,96 +326,114 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6">
-          {/* Monthly List - Takes more space */}
-          <div className="lg:col-span-3 bg-card rounded-xl border overflow-hidden">
-            <div className="flex items-center justify-between p-4 bg-gradient-to-r from-primary to-primary/80">
-              <div className="flex items-center gap-2">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6">
+          {/* Monthly List - Main content */}
+          <div className="xl:col-span-2 bg-card rounded-2xl border shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-primary/90 via-primary to-primary/80 backdrop-blur-sm">
+              <div className="flex items-center gap-3">
                 <Button 
                   variant="ghost" 
                   size="icon"
-                  className="h-8 w-8 text-primary-foreground hover:bg-primary-foreground/20"
+                  className="h-9 w-9 text-primary-foreground hover:bg-primary-foreground/20 rounded-full"
                   onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
                 >
-                  <ChevronLeft className="h-4 w-4" />
+                  <ChevronLeft className="h-5 w-5" />
                 </Button>
-                <h3 className="font-semibold text-primary-foreground capitalize">
+                <h3 className="font-bold text-lg text-primary-foreground capitalize tracking-tight">
                   {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
                 </h3>
                 <Button 
                   variant="ghost" 
                   size="icon"
-                  className="h-8 w-8 text-primary-foreground hover:bg-primary-foreground/20"
+                  className="h-9 w-9 text-primary-foreground hover:bg-primary-foreground/20 rounded-full"
                   onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
                 >
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="h-5 w-5" />
                 </Button>
               </div>
-              <Badge className="bg-primary-foreground/20 text-primary-foreground border-0">
+              <Badge className="bg-primary-foreground/20 text-primary-foreground border-0 px-3 py-1 text-sm font-semibold">
                 {thisMonthEvents} eventos
               </Badge>
             </div>
-            <ScrollArea className="h-[450px] md:h-[500px]">
-              <div className="p-3 md:p-4 space-y-2 md:space-y-3">
+            <ScrollArea className="h-[500px] md:h-[550px]">
+              <div className="p-4 md:p-5 space-y-3">
                 {getCompromissosForMonth().length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <CalendarIcon className="h-12 w-12 text-muted-foreground/30 mb-3" />
-                    <p className="text-muted-foreground">Nenhum evento neste mês</p>
-                    <p className="text-xs text-muted-foreground/70">Clique em "Novo" para adicionar</p>
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <div className="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+                      <CalendarIcon className="h-10 w-10 text-muted-foreground/40" />
+                    </div>
+                    <p className="text-muted-foreground font-medium">Nenhum evento neste mês</p>
+                    <p className="text-xs text-muted-foreground/70 mt-1">Clique em "Novo" para adicionar</p>
                   </div>
                 ) : (
                   getCompromissosForMonth().map(compromisso => {
                     const colors = getColors(compromisso.tipo);
+                    const modalidade = getModalidadeIcon(compromisso);
+                    const ModalidadeIcon = modalidade?.icon;
+                    const confirmStatus = (compromisso.confirmacao_status || 'pendente') as ConfirmacaoStatus;
+                    const confirmConfig = compromisso.lead_id ? CONFIRMACAO_ICONS[confirmStatus] : null;
+                    const ConfirmIcon = confirmConfig?.icon;
+                    
                     return (
                       <div
                         key={compromisso.id}
-                        className={cn(
-                          "flex items-start gap-3 md:gap-4 p-3 md:p-4 rounded-xl border cursor-pointer transition-all hover:shadow-md group",
-                          colors.bg
-                        )}
+                        className="flex items-stretch gap-0 rounded-xl border bg-card overflow-hidden cursor-pointer transition-all hover:shadow-lg hover:border-primary/30 group"
                         onClick={() => onEventClick(compromisso)}
                       >
-                        <div className="text-center shrink-0 w-12 md:w-14 py-1">
-                          <p className="text-2xl md:text-3xl font-bold text-foreground">
+                        {/* Date column */}
+                        <div className="flex flex-col items-center justify-center w-20 md:w-24 py-4 bg-muted/40 border-r">
+                          <p className="text-3xl md:text-4xl font-bold text-foreground leading-none">
                             {format(parseLocalDate(compromisso.data_inicio), 'dd')}
                           </p>
-                          <p className="text-[10px] md:text-xs text-muted-foreground uppercase font-medium">
-                            {format(parseLocalDate(compromisso.data_inicio), 'EEE', { locale: ptBR })}
+                          <p className="text-xs text-muted-foreground uppercase font-semibold mt-1">
+                            {format(parseLocalDate(compromisso.data_inicio), 'EEEE', { locale: ptBR }).slice(0, 3)}
                           </p>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2 mb-1">
-                            <p className="font-semibold text-sm md:text-base truncate">{compromisso.titulo}</p>
-                            <Badge variant="outline" className={cn("shrink-0 text-[10px] md:text-xs", colors.text)}>
+                        
+                        {/* Content */}
+                        <div className="flex-1 p-4 min-w-0">
+                          <div className="flex items-start justify-between gap-3 mb-2">
+                            <h4 className="font-semibold text-base truncate group-hover:text-primary transition-colors">
+                              {compromisso.titulo}
+                            </h4>
+                            <Badge variant="outline" className={cn("shrink-0 text-xs font-medium", colors.text, colors.bg)}>
                               {compromisso.tipo}
                             </Badge>
                           </div>
-                          {(() => {
-                            const modalidade = getModalidadeIcon(compromisso);
-                            const ModalidadeIcon = modalidade?.icon;
-                            return (
-                              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                                <span className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  {format(parseLocalDate(compromisso.data_inicio), "HH:mm")}
-                                </span>
-                                {ModalidadeIcon && (
-                                  <span className={cn("flex items-center gap-1", modalidade.color)}>
-                                    <ModalidadeIcon className="h-3 w-3" />
-                                    <span className="text-[10px] font-medium">{modalidade.label}</span>
-                                  </span>
-                                )}
-                                {compromisso.descricao && !modalidade && (
-                                  <span className="flex items-center gap-1 truncate">
-                                    <MapPin className="h-3 w-3 shrink-0" />
-                                    <span className="truncate">{compromisso.descricao.slice(0, 30)}</span>
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })()}
+                          
+                          <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-1.5">
+                              <Clock className="h-3.5 w-3.5" />
+                              <span className="font-medium">{format(parseLocalDate(compromisso.data_inicio), "HH:mm")}</span>
+                            </span>
+                            
+                            {ModalidadeIcon && (
+                              <span className={cn("flex items-center gap-1.5 font-medium", modalidade.color)}>
+                                <ModalidadeIcon className="h-3.5 w-3.5" />
+                                <span>{modalidade.label}</span>
+                              </span>
+                            )}
+                            
+                            {ConfirmIcon && (
+                              <span className={cn("flex items-center gap-1.5", confirmConfig.color)}>
+                                <ConfirmIcon className="h-3.5 w-3.5" />
+                                <span className="capitalize text-xs">{confirmStatus}</span>
+                              </span>
+                            )}
+                            
+                            {compromisso.descricao && !modalidade && (
+                              <span className="flex items-center gap-1.5 truncate max-w-[200px]">
+                                <MapPin className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">{compromisso.descricao.slice(0, 40)}</span>
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                        
+                        {/* Arrow indicator */}
+                        <div className="flex items-center px-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                        </div>
                       </div>
                     );
                   })
@@ -425,49 +443,70 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
           </div>
 
           {/* Upcoming Events - Sidebar */}
-          <div className="lg:col-span-2 bg-card rounded-xl border overflow-hidden">
-            <div className="p-4 bg-gradient-to-r from-emerald-500 to-emerald-600">
-              <h3 className="font-semibold text-white">Próximos Eventos</h3>
-              <p className="text-xs text-white/80">Agenda futura</p>
+          <div className="xl:col-span-1 bg-card rounded-2xl border shadow-sm overflow-hidden">
+            <div className="p-5 bg-gradient-to-br from-emerald-500 via-emerald-500 to-teal-600">
+              <div className="flex items-center gap-2 mb-1">
+                <CalendarIcon className="h-5 w-5 text-white/90" />
+                <h3 className="font-bold text-lg text-white">Próximos Eventos</h3>
+              </div>
+              <p className="text-sm text-white/75">Sua agenda futura</p>
             </div>
-            <ScrollArea className="h-[350px] md:h-[500px]">
-              <div className="p-3 md:p-4 space-y-2">
+            <ScrollArea className="h-[400px] md:h-[494px]">
+              <div className="p-4 space-y-2.5">
                 {upcomingEvents.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <CalendarIcon className="h-10 w-10 text-muted-foreground/30 mb-3" />
-                    <p className="text-sm text-muted-foreground">Nenhum evento futuro</p>
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-3">
+                      <CalendarIcon className="h-8 w-8 text-muted-foreground/40" />
+                    </div>
+                    <p className="text-sm text-muted-foreground font-medium">Nenhum evento futuro</p>
                   </div>
                 ) : (
                   upcomingEvents.map(compromisso => {
                     const colors = getColors(compromisso.tipo);
                     const isTodays = isToday(parseLocalDate(compromisso.data_inicio));
+                    const modalidade = getModalidadeIcon(compromisso);
+                    const ModalidadeIcon = modalidade?.icon;
+                    
                     return (
                       <div
                         key={compromisso.id}
                         className={cn(
-                          "flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all hover:shadow-md",
-                          isTodays && "ring-2 ring-primary ring-offset-2"
+                          "flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all hover:shadow-md hover:border-primary/30 bg-card group",
+                          isTodays && "ring-2 ring-primary ring-offset-2 ring-offset-background"
                         )}
                         onClick={() => onEventClick(compromisso)}
                       >
                         <div className={cn(
-                          "text-center shrink-0 w-11 py-2 rounded-lg",
-                          isTodays ? "bg-primary text-primary-foreground" : "bg-muted"
+                          "text-center shrink-0 w-12 py-2.5 rounded-xl font-bold",
+                          isTodays 
+                            ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-md" 
+                            : "bg-muted/60"
                         )}>
-                          <p className="text-lg font-bold">
+                          <p className="text-xl leading-none">
                             {format(parseLocalDate(compromisso.data_inicio), 'dd')}
                           </p>
-                          <p className="text-[9px] uppercase font-medium opacity-70">
+                          <p className="text-[10px] uppercase mt-1 opacity-75">
                             {format(parseLocalDate(compromisso.data_inicio), 'MMM', { locale: ptBR })}
                           </p>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{compromisso.titulo}</p>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <p className="font-semibold text-sm truncate group-hover:text-primary transition-colors">
+                            {compromisso.titulo}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                             <Clock className="h-3 w-3" />
-                            <span>{format(parseLocalDate(compromisso.data_inicio), "HH:mm")}</span>
-                            <div className={cn("w-1.5 h-1.5 rounded-full", colors.dot)} />
-                            <span className={colors.text}>{compromisso.tipo}</span>
+                            <span className="font-medium">{format(parseLocalDate(compromisso.data_inicio), "HH:mm")}</span>
+                            {ModalidadeIcon ? (
+                              <>
+                                <ModalidadeIcon className={cn("h-3 w-3", modalidade.color)} />
+                                <span className={cn("font-medium", modalidade.color)}>{modalidade.label}</span>
+                              </>
+                            ) : (
+                              <>
+                                <div className={cn("w-1.5 h-1.5 rounded-full", colors.dot)} />
+                                <span className={colors.text}>{compromisso.tipo}</span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
