@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,28 +21,37 @@ import {
   Clock,
   AlertTriangle,
   RefreshCw,
-  Loader2
+  Loader2,
+  MessageSquare
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface AcaoPendente {
   id: string;
   created_at: string;
   lead_id: string | null;
+  acao: string;
+  fonte: string;
   dados: {
-    acao_sugerida: string;
-    dados_acao: any;
-    motivo: string;
-    mensagem_original: string;
-    analise: {
-      intencao: string;
-      sentimento: string;
-      urgencia: string;
+    acao_sugerida?: string;
+    dados_acao?: any;
+    motivo?: string;
+    mensagem_original?: string;
+    analise?: {
+      intencao?: string;
+      sentimento?: string;
+      urgencia?: string;
     };
+    lead_nome?: string;
   };
+  lead?: {
+    nome: string;
+    telefone?: string;
+    status?: string;
+  } | null;
 }
 
 const ACAO_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
@@ -76,11 +85,22 @@ const ACAO_CONFIG: Record<string, { label: string; icon: React.ReactNode; color:
     icon: <Calendar className="h-4 w-4" />, 
     color: 'bg-amber-500' 
   },
+  acao_sugerida: { 
+    label: 'Ação Sugerida', 
+    icon: <MessageSquare className="h-4 w-4" />, 
+    color: 'bg-indigo-500' 
+  },
+  alerta_agendamento: { 
+    label: 'Alerta de Agendamento', 
+    icon: <AlertTriangle className="h-4 w-4" />, 
+    color: 'bg-red-500' 
+  },
 };
 
 const URGENCIA_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   baixa: { label: 'Baixa', variant: 'secondary' },
   media: { label: 'Média', variant: 'default' },
+  média: { label: 'Média', variant: 'default' },
   alta: { label: 'Alta', variant: 'destructive' },
   urgente: { label: 'Urgente', variant: 'destructive' },
 };
@@ -96,58 +116,120 @@ export function IsaAcoesPendentes() {
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('10:00');
 
-  const fetchAcoes = async () => {
+  const fetchAcoes = useCallback(async () => {
     setLoading(true);
     try {
+      // Buscar ações pendentes com dados do lead
       const { data, error } = await supabase
         .from('system_events')
-        .select('*')
+        .select(`
+          id,
+          created_at,
+          lead_id,
+          acao,
+          fonte,
+          dados,
+          leads_juridicos!system_events_lead_id_fkey (
+            nome,
+            telefone,
+            status
+          )
+        `)
         .eq('tipo', 'acao_pendente')
-        .eq('processado', false)
+        .or('processado.eq.false,processado.is.null')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setAcoes(data as unknown as AcaoPendente[] || []);
+      if (error) {
+        console.error('Erro na query:', error);
+        throw error;
+      }
+
+      console.log('Ações pendentes encontradas:', data?.length, data);
+
+      // Mapear dados com informações do lead
+      const acoesComLead = (data || []).map((item: any) => ({
+        ...item,
+        lead: item.leads_juridicos,
+      })) as AcaoPendente[];
+
+      setAcoes(acoesComLead);
     } catch (error) {
       console.error('Erro ao buscar ações pendentes:', error);
+      toast.error('Erro ao carregar ações pendentes');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchAcoes();
 
-    // Realtime subscription
+    // Realtime subscription para ações pendentes
     const channel = supabase
-      .channel('isa-acoes-pendentes')
+      .channel('isa-acoes-realtime')
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'system_events',
-          filter: "tipo=eq.acao_pendente"
         },
-        () => {
-          fetchAcoes();
+        (payload) => {
+          console.log('🔔 Novo evento:', payload.new);
+          if ((payload.new as any)?.tipo === 'acao_pendente') {
+            fetchAcoes();
+          }
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'system_events',
+        },
+        (payload) => {
+          console.log('🔄 Evento atualizado:', payload.new);
+          if ((payload.new as any)?.tipo === 'acao_pendente') {
+            fetchAcoes();
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Realtime status:', status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [fetchAcoes]);
+
+  // Pega o tipo de ação sugerida (pode vir de diferentes campos)
+  const getAcaoSugerida = (acao: AcaoPendente): string => {
+    return acao.dados?.acao_sugerida || acao.acao || 'acao_sugerida';
+  };
 
   // Verifica se a ação é de agendamento
   const isAgendamentoAction = (acao: AcaoPendente) => {
-    return ['criar_compromisso', 'solicitar_agendamento', 'agendar_atendimento'].includes(acao.dados.acao_sugerida);
+    const acaoSugerida = getAcaoSugerida(acao);
+    return ['criar_compromisso', 'solicitar_agendamento', 'agendar_atendimento'].includes(acaoSugerida);
+  };
+
+  // Pega o nome do lead
+  const getLeadNome = (acao: AcaoPendente): string => {
+    return acao.lead?.nome || 
+           acao.dados?.dados_acao?.lead_nome || 
+           acao.dados?.lead_nome || 
+           'Cliente';
+  };
+
+  // Pega a urgência
+  const getUrgencia = (acao: AcaoPendente): string => {
+    return acao.dados?.analise?.urgencia || 'media';
   };
 
   const handleAprovar = (acao: AcaoPendente) => {
     if (isAgendamentoAction(acao)) {
-      // Abrir modal para escolher data
       setSelectedAcao(acao);
       setSelectedDate(format(new Date(), 'yyyy-MM-dd'));
       setSelectedTime('10:00');
@@ -168,14 +250,17 @@ export function IsaAcoesPendentes() {
       const dataHoraAgendamento = new Date(`${selectedDate}T${selectedTime}:00`);
       
       const dadosComData = {
-        ...selectedAcao.dados.dados_acao,
+        ...selectedAcao.dados?.dados_acao,
+        lead_id: selectedAcao.lead_id,
+        titulo: `Atendimento - ${getLeadNome(selectedAcao)}`,
+        tipo: 'Reunião',
         data_inicio: dataHoraAgendamento.toISOString(),
-        data_fim: new Date(dataHoraAgendamento.getTime() + 60 * 60 * 1000).toISOString(), // 1 hora depois
+        data_fim: new Date(dataHoraAgendamento.getTime() + 60 * 60 * 1000).toISOString(),
       };
 
       const { error } = await supabase.functions.invoke('isa-actions', {
         body: {
-          action: selectedAcao.dados.acao_sugerida,
+          action: 'criar_compromisso',
           data: dadosComData,
         },
       });
@@ -203,10 +288,15 @@ export function IsaAcoesPendentes() {
   const aprovarAcao = async (acao: AcaoPendente) => {
     setProcessing(acao.id);
     try {
+      const acaoSugerida = getAcaoSugerida(acao);
+      
       const { error } = await supabase.functions.invoke('isa-actions', {
         body: {
-          action: acao.dados.acao_sugerida,
-          data: acao.dados.dados_acao,
+          action: acaoSugerida,
+          data: {
+            ...acao.dados?.dados_acao,
+            lead_id: acao.lead_id,
+          },
         },
       });
 
@@ -231,7 +321,6 @@ export function IsaAcoesPendentes() {
   const rejeitarAcao = async (acao: AcaoPendente) => {
     setProcessing(acao.id);
     try {
-      // Marcar como processado (rejeitado)
       await supabase
         .from('system_events')
         .update({ 
@@ -255,6 +344,7 @@ export function IsaAcoesPendentes() {
       <Card className="border-dashed">
         <CardContent className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <span className="ml-2 text-muted-foreground">Carregando ações...</span>
         </CardContent>
       </Card>
     );
@@ -290,7 +380,7 @@ export function IsaAcoesPendentes() {
       <CardHeader className="pb-2 bg-gradient-to-r from-amber-500/10 to-orange-500/10 rounded-t-lg">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-amber-500 text-white">
+            <div className="p-2 rounded-lg bg-amber-500 text-white animate-pulse">
               <AlertTriangle className="h-4 w-4" />
             </div>
             <div>
@@ -299,11 +389,11 @@ export function IsaAcoesPendentes() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge className="bg-amber-500 text-white hover:bg-amber-600">
+            <Badge className="bg-amber-500 text-white hover:bg-amber-600 animate-pulse">
               {acoes.length}
             </Badge>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={fetchAcoes}>
-              <RefreshCw className="h-4 w-4" />
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={fetchAcoes} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
           </div>
         </div>
@@ -312,12 +402,15 @@ export function IsaAcoesPendentes() {
         <ScrollArea className="h-[420px]">
           <div className="p-3 space-y-3">
             {acoes.map((acao) => {
-              const config = ACAO_CONFIG[acao.dados.acao_sugerida] || {
-                label: acao.dados.acao_sugerida,
+              const acaoSugerida = getAcaoSugerida(acao);
+              const config = ACAO_CONFIG[acaoSugerida] || {
+                label: acaoSugerida.replace(/_/g, ' '),
                 icon: <AlertTriangle className="h-4 w-4" />,
                 color: 'bg-gray-500',
               };
-              const urgenciaConfig = URGENCIA_CONFIG[acao.dados.analise?.urgencia] || URGENCIA_CONFIG.media;
+              const urgencia = getUrgencia(acao);
+              const urgenciaConfig = URGENCIA_CONFIG[urgencia] || URGENCIA_CONFIG.media;
+              const leadNome = getLeadNome(acao);
 
               return (
                 <div 
@@ -334,7 +427,7 @@ export function IsaAcoesPendentes() {
                         <p className="font-medium text-sm truncate">{config.label}</p>
                         <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                           <Clock className="h-2.5 w-2.5" />
-                          {format(new Date(acao.created_at), "dd/MM 'às' HH:mm", { locale: ptBR })}
+                          {formatDistanceToNow(new Date(acao.created_at), { locale: ptBR, addSuffix: true })}
                         </p>
                       </div>
                     </div>
@@ -346,26 +439,42 @@ export function IsaAcoesPendentes() {
                     </Badge>
                   </div>
 
+                  {/* Lead Info */}
+                  <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-2 py-1.5">
+                    <User className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-xs font-medium">{leadNome}</span>
+                    {acao.lead?.status && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 ml-auto">
+                        {acao.lead.status}
+                      </Badge>
+                    )}
+                  </div>
+
                   {/* Motivo */}
-                  {acao.dados.motivo && (
+                  {acao.dados?.motivo && (
                     <p className="text-xs text-muted-foreground line-clamp-2">
                       {acao.dados.motivo}
                     </p>
                   )}
 
                   {/* Mensagem original */}
-                  <div className="bg-muted/50 rounded-lg p-2.5 text-xs">
-                    <p className="text-[10px] text-muted-foreground mb-0.5">Mensagem:</p>
-                    <p className="italic text-muted-foreground line-clamp-2">
-                      "{acao.dados.mensagem_original?.substring(0, 100)}{acao.dados.mensagem_original?.length > 100 ? '...' : ''}"
-                    </p>
-                  </div>
+                  {acao.dados?.mensagem_original && (
+                    <div className="bg-muted/50 rounded-lg p-2.5 text-xs">
+                      <p className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
+                        <MessageSquare className="h-2.5 w-2.5" />
+                        Mensagem:
+                      </p>
+                      <p className="italic text-muted-foreground line-clamp-2">
+                        "{acao.dados.mensagem_original?.substring(0, 120)}{(acao.dados.mensagem_original?.length || 0) > 120 ? '...' : ''}"
+                      </p>
+                    </div>
+                  )}
 
-                  {/* Detalhes compactos */}
-                  {acao.dados.dados_acao?.prioridade && (
+                  {/* Análise da IA */}
+                  {acao.dados?.analise?.intencao && (
                     <p className="text-xs">
-                      <span className="text-muted-foreground">Prioridade:</span>{' '}
-                      <span className="font-medium">{acao.dados.dados_acao.prioridade}</span>
+                      <span className="text-muted-foreground">Intenção:</span>{' '}
+                      <span className="font-medium">{acao.dados.analise.intencao}</span>
                     </p>
                   )}
 
@@ -387,7 +496,7 @@ export function IsaAcoesPendentes() {
                     <Button 
                       size="sm" 
                       variant="outline"
-                      className="flex-1 h-8 text-xs"
+                      className="flex-1 h-8 text-xs hover:bg-destructive/10 hover:text-destructive hover:border-destructive"
                       onClick={() => rejeitarAcao(acao)}
                       disabled={processing === acao.id}
                     >
@@ -437,7 +546,10 @@ export function IsaAcoesPendentes() {
             {selectedAcao && (
               <div className="bg-muted/50 rounded-lg p-3 text-sm">
                 <p className="text-muted-foreground text-xs mb-1">Lead:</p>
-                <p className="font-medium">{selectedAcao.dados.dados_acao?.titulo || 'Reunião com cliente'}</p>
+                <p className="font-medium">{getLeadNome(selectedAcao)}</p>
+                {selectedAcao.lead?.telefone && (
+                  <p className="text-xs text-muted-foreground mt-1">{selectedAcao.lead.telefone}</p>
+                )}
               </div>
             )}
           </div>
