@@ -56,9 +56,21 @@ serve(async (req: Request) => {
     // Buscar subscriber e lead vinculado para contexto
     const { data: subscriber } = await supabase
       .from('manychat_subscribers')
-      .select('lead_id, nome')
+      .select('lead_id, nome, atendimento_humano')
       .eq('subscriber_id', subscriberId)
       .maybeSingle();
+
+    // 🛑 VERIFICAR ATENDIMENTO HUMANO - Isa para de responder
+    if (subscriber?.atendimento_humano) {
+      console.log('[ISA-REPLY] ⏸️ Atendimento humano ativo, Isa não responde');
+      return new Response(JSON.stringify({ 
+        success: true, 
+        skipped: true,
+        reason: 'atendimento_humano_ativo' 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Buscar ou criar thread para o subscriber
     let threadId: string | null = null;

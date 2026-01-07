@@ -971,6 +971,26 @@ serve(async (req) => {
       });
     }
 
+    // 🛑 VERIFICAR ATENDIMENTO HUMANO - Isa para de processar
+    if (subscriber_id) {
+      const { data: subscriberCheck } = await supabase
+        .from('manychat_subscribers')
+        .select('atendimento_humano')
+        .eq('subscriber_id', subscriber_id)
+        .maybeSingle();
+      
+      if (subscriberCheck?.atendimento_humano) {
+        console.log('⏸️ Atendimento humano ativo, Isa não processa');
+        return new Response(JSON.stringify({ 
+          success: true, 
+          skipped: true,
+          reason: 'atendimento_humano_ativo' 
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     // Se for áudio, transcrever primeiro
     let mensagemProcessada = mensagem;
     let audioTranscrito = false;

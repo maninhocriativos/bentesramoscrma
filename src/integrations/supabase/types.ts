@@ -685,6 +685,8 @@ export type Database = {
       }
       manychat_subscribers: {
         Row: {
+          atendimento_humano: boolean | null
+          atendimento_humano_desde: string | null
           canal: string | null
           created_at: string
           email: string | null
@@ -698,6 +700,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          atendimento_humano?: boolean | null
+          atendimento_humano_desde?: string | null
           canal?: string | null
           created_at?: string
           email?: string | null
@@ -711,6 +715,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          atendimento_humano?: boolean | null
+          atendimento_humano_desde?: string | null
           canal?: string | null
           created_at?: string
           email?: string | null
