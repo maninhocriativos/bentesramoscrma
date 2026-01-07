@@ -5,6 +5,7 @@ import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
 import { DashboardFiltersBar, DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { ConversionMetrics } from '@/components/dashboard/ConversionMetrics';
+import { FollowupRetomadaPanel } from '@/components/dashboard/FollowupRetomadaPanel';
 import { AlertasWidget } from '@/components/AlertasWidget';
 import { useLeads } from '@/hooks/useLeads';
 import { useProcessos } from '@/hooks/useProcessos';
@@ -118,15 +119,16 @@ export default function DashboardPage() {
             <DashboardKPIs leads={filteredLeads} processos={processos} />
 
             <ConversionMetrics leads={leads} />
-            
-            <DashboardCharts leads={filteredLeads} />
 
-            <div className="mt-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <FollowupRetomadaPanel />
               <AlertasWidget 
                 alertas={alertas} 
                 onAlertClick={handleAlertClick}
               />
             </div>
+            
+            <DashboardCharts leads={filteredLeads} />
           </>
         )}
       </div>
