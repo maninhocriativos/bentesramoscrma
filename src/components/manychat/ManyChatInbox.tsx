@@ -410,9 +410,9 @@ const ManyChatInbox = () => {
   };
 
   return (
-    <div className="flex h-[calc(100vh-140px)] md:h-[calc(100vh-180px)] overflow-hidden rounded-lg shadow-xl">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#EFEAE2] dark:bg-[#0B141A]">
       {/* Sidebar - Lista de Conversas (WhatsApp Desktop Style) */}
-      <div className={`${showMobileChat ? 'hidden md:flex' : 'flex'} w-full md:w-[420px] flex-col bg-white dark:bg-[#111B21] border-r border-[#E9EDEF] dark:border-[#2A3942]`}>
+      <div className={`${showMobileChat ? 'hidden md:flex' : 'flex'} w-full md:w-[400px] lg:w-[420px] flex-col bg-white dark:bg-[#111B21] border-r border-[#E9EDEF] dark:border-[#222D34]`}>
         {/* Header com título "Conversas" */}
         <div className="h-[60px] px-4 flex items-center justify-between bg-[#F0F2F5] dark:bg-[#202C33]">
           <h1 className="text-[22px] font-semibold text-[#111B21] dark:text-[#E9EDEF]">
@@ -630,10 +630,9 @@ const ManyChatInbox = () => {
 
             {/* Área de Mensagens - WhatsApp Desktop Dark Pattern */}
             <div 
-              className="flex-1 overflow-y-auto px-3 md:px-[63px] py-4 dark:bg-[#0B141A]"
+              className="flex-1 overflow-y-auto px-4 md:px-16 lg:px-[63px] py-4 bg-[#EFEAE2] dark:bg-[#0B141A]"
               style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3Cpattern id='p' patternUnits='userSpaceOnUse' width='40' height='40' patternTransform='rotate(45)'%3E%3Crect width='1' height='1' fill='%23ffffff08'/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill='url(%23p)' width='100' height='100'/%3E%3C/svg%3E")`,
-                backgroundColor: 'var(--chat-bg, #ECE5DD)',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cg fill='%2300000008'%3E%3Ccircle cx='25' cy='25' r='3'/%3E%3Ccircle cx='75' cy='75' r='3'/%3E%3Ccircle cx='125' cy='25' r='3'/%3E%3Ccircle cx='175' cy='75' r='3'/%3E%3Ccircle cx='225' cy='25' r='3'/%3E%3Ccircle cx='275' cy='75' r='3'/%3E%3C/g%3E%3C/svg%3E")`,
               }}
             >
               {isLoadingMessages ? (
@@ -679,14 +678,11 @@ const ManyChatInbox = () => {
                             {/* Tail SVG */}
                             <span 
                               className={`absolute top-0 w-2 h-3 ${isOutgoing ? '-right-2' : '-left-2'}`}
-                              style={{
-                                color: isOutgoing ? '#D9FDD3' : '#FFFFFF',
-                              }}
                             >
                               {isOutgoing ? (
-                                <svg viewBox="0 0 8 13" className="fill-current"><path d="M5.188 0H0v11.193l6.467-8.625C7.526 1.156 6.958 0 5.188 0z"/></svg>
+                                <svg viewBox="0 0 8 13" className="fill-[#D9FDD3] dark:fill-[#005C4B]"><path d="M5.188 0H0v11.193l6.467-8.625C7.526 1.156 6.958 0 5.188 0z"/></svg>
                               ) : (
-                                <svg viewBox="0 0 8 13" className="fill-current"><path d="M1.533 3.568L8 12.193V0H2.812C1.042 0 .474 1.156 1.533 2.568z"/></svg>
+                                <svg viewBox="0 0 8 13" className="fill-white dark:fill-[#202C33]"><path d="M1.533 3.568L8 12.193V0H2.812C1.042 0 .474 1.156 1.533 2.568z"/></svg>
                               )}
                             </span>
                             
