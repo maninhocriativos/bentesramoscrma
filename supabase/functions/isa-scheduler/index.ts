@@ -153,10 +153,12 @@ serve(async (req) => {
         const diffMinutos = (dataComp.getTime() - agora.getTime()) / (1000 * 60);
         const lead = comp.leads_juridicos;
 
-        // Determinar tipo de lembrete
+        // Determinar tipo de lembrete baseado no tempo restante
+        // 24h: entre 23h e 25h antes (primeiro lembrete)
+        // 1h: entre 0 e 90 minutos antes (segundo lembrete - janela ampliada)
         let tipoLembrete = '';
-        if (diffMinutos <= 65 && diffMinutos >= 55) tipoLembrete = '1h';
-        else if (diffMinutos <= 24 * 60 + 30 && diffMinutos >= 24 * 60 - 30) tipoLembrete = '24h';
+        if (diffMinutos <= 90 && diffMinutos >= 0) tipoLembrete = '1h';
+        else if (diffMinutos <= 25 * 60 && diffMinutos >= 23 * 60) tipoLembrete = '24h';
 
         if (!tipoLembrete) continue;
 
