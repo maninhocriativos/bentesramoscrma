@@ -28,37 +28,53 @@ export function useLeads() {
 
   useEffect(() => {
     fetchLeads();
+  }, [fetchLeads]);
 
+  // Separate effect for realtime subscription to avoid re-subscribing on fetchLeads change
+  useEffect(() => {
     // Real-time subscription - ensures UI updates immediately
     const channel = supabase
-      .channel('leads-realtime-changes')
+      .channel('leads-dashboard-realtime')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'leads_juridicos' },
+        { event: 'INSERT', schema: 'public', table: 'leads_juridicos' },
         (payload) => {
-          console.log('Lead change detected:', payload.eventType, payload);
-          
-          if (payload.eventType === 'INSERT') {
-            setLeads(prev => [payload.new as Lead, ...prev]);
-          } else if (payload.eventType === 'UPDATE') {
-            setLeads(prev => 
-              prev.map(lead => 
-                lead.id === (payload.new as Lead).id ? (payload.new as Lead) : lead
-              )
-            );
-          } else if (payload.eventType === 'DELETE') {
-            setLeads(prev => prev.filter(lead => lead.id !== (payload.old as Lead).id));
-          }
+          console.log('🟢 Lead INSERT:', payload.new);
+          setLeads(prev => {
+            // Avoid duplicates
+            if (prev.some(l => l.id === (payload.new as Lead).id)) return prev;
+            return [payload.new as Lead, ...prev];
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'leads_juridicos' },
+        (payload) => {
+          console.log('🟡 Lead UPDATE:', payload.new);
+          setLeads(prev => 
+            prev.map(lead => 
+              lead.id === (payload.new as Lead).id ? (payload.new as Lead) : lead
+            )
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'leads_juridicos' },
+        (payload) => {
+          console.log('🔴 Lead DELETE:', payload.old);
+          setLeads(prev => prev.filter(lead => lead.id !== (payload.old as Lead).id));
         }
       )
       .subscribe((status) => {
-        console.log('Realtime subscription status:', status);
+        console.log('📡 Leads realtime status:', status);
       });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchLeads]);
+  }, []);
 
   const createLead = async (lead: Omit<Lead, 'id' | 'created_at'>) => {
     const { data, error } = await supabase

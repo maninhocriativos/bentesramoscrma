@@ -43,23 +43,51 @@ export function useProcessos() {
     if (user) {
       fetchProcessos();
     }
+  }, [user, isAdvogado, perfil?.nome]);
 
-    // Real-time subscription
+  // Separate effect for realtime subscription
+  useEffect(() => {
     const channel = supabase
-      .channel('processos-changes')
+      .channel('processos-dashboard-realtime')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'processos' },
-        () => {
-          fetchProcessos();
+        { event: 'INSERT', schema: 'public', table: 'processos' },
+        (payload) => {
+          console.log('🟢 Processo INSERT:', payload.new);
+          setProcessos(prev => {
+            if (prev.some(p => p.id === (payload.new as Processo).id)) return prev;
+            return [payload.new as Processo, ...prev];
+          });
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'processos' },
+        (payload) => {
+          console.log('🟡 Processo UPDATE:', payload.new);
+          setProcessos(prev => 
+            prev.map(p => 
+              p.id === (payload.new as Processo).id ? (payload.new as Processo) : p
+            )
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'processos' },
+        (payload) => {
+          console.log('🔴 Processo DELETE:', payload.old);
+          setProcessos(prev => prev.filter(p => p.id !== (payload.old as Processo).id));
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Processos realtime status:', status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, isAdvogado, perfil?.nome]);
+  }, []);
 
   const createProcesso = async (processo: Omit<Processo, 'id' | 'created_at'>) => {
     const { data, error } = await supabase

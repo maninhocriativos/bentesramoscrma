@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
@@ -18,6 +18,15 @@ export default function DashboardPage() {
   const { processos, loading: processosLoading } = useProcessos();
   const { alertas } = useAlertas(leads, processos);
   const navigate = useNavigate();
+  
+  // Debug: log when leads change
+  useEffect(() => {
+    console.log('📊 Dashboard: leads atualizados, total:', leads.length);
+  }, [leads]);
+
+  useEffect(() => {
+    console.log('📊 Dashboard: processos atualizados, total:', processos.length);
+  }, [processos]);
   
   const [filters, setFilters] = useState<DashboardFilters>({
     period: 'all',
