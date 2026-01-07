@@ -36,8 +36,24 @@ import {
   ArrowRight,
   CheckCircle2,
   AlertCircle,
-  XCircle
+  XCircle,
+  Video,
+  Building2
 } from 'lucide-react';
+
+// Helper para detectar modalidade do compromisso
+const getModalidadeIcon = (compromisso: Compromisso) => {
+  const tipo = compromisso.tipo?.toLowerCase() || '';
+  const descricao = compromisso.descricao?.toLowerCase() || '';
+  
+  if (tipo.includes('online') || descricao.includes('online') || descricao.includes('virtual') || descricao.includes('remoto')) {
+    return { icon: Video, color: 'text-blue-500', label: 'Online' };
+  }
+  if (tipo.includes('presencial') || descricao.includes('presencial') || descricao.includes('escritório') || descricao.includes('escritorio')) {
+    return { icon: Building2, color: 'text-amber-600', label: 'Presencial' };
+  }
+  return null;
+};
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -272,6 +288,9 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                       const confirmConfig = compromisso.lead_id ? CONFIRMACAO_ICONS[confirmStatus] : null;
                       const ConfirmIcon = confirmConfig?.icon;
                       
+                      const modalidade = getModalidadeIcon(compromisso);
+                      const ModalidadeIcon = modalidade?.icon;
+                      
                       return (
                         <div
                           key={compromisso.id}
@@ -283,9 +302,12 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                             e.stopPropagation();
                             onEventClick(compromisso);
                           }}
-                          title={compromisso.titulo}
+                          title={`${compromisso.titulo}${modalidade ? ` (${modalidade.label})` : ''}`}
                         >
-                          {ConfirmIcon && (
+                          {ModalidadeIcon && (
+                            <ModalidadeIcon className={cn("h-2.5 w-2.5 shrink-0", modalidade.color)} />
+                          )}
+                          {ConfirmIcon && !ModalidadeIcon && (
                             <ConfirmIcon className={cn("h-2.5 w-2.5 shrink-0", confirmConfig.color)} />
                           )}
                           <span className="font-medium truncate">{compromisso.titulo}</span>
@@ -368,18 +390,30 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                               {compromisso.tipo}
                             </Badge>
                           </div>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {format(parseLocalDate(compromisso.data_inicio), "HH:mm")}
-                            </span>
-                            {compromisso.descricao && (
-                              <span className="flex items-center gap-1 truncate">
-                                <MapPin className="h-3 w-3 shrink-0" />
-                                <span className="truncate">{compromisso.descricao.slice(0, 30)}</span>
-                              </span>
-                            )}
-                          </div>
+                          {(() => {
+                            const modalidade = getModalidadeIcon(compromisso);
+                            const ModalidadeIcon = modalidade?.icon;
+                            return (
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {format(parseLocalDate(compromisso.data_inicio), "HH:mm")}
+                                </span>
+                                {ModalidadeIcon && (
+                                  <span className={cn("flex items-center gap-1", modalidade.color)}>
+                                    <ModalidadeIcon className="h-3 w-3" />
+                                    <span className="text-[10px] font-medium">{modalidade.label}</span>
+                                  </span>
+                                )}
+                                {compromisso.descricao && !modalidade && (
+                                  <span className="flex items-center gap-1 truncate">
+                                    <MapPin className="h-3 w-3 shrink-0" />
+                                    <span className="truncate">{compromisso.descricao.slice(0, 30)}</span>
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                         <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                       </div>
