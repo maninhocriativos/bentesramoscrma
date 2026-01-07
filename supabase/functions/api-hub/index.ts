@@ -411,6 +411,62 @@ serve(async (req: Request) => {
             }
           }
         }
+        
+        // ===== DETECÇÃO DE RESPOSTA DE LEAD FRIO (RETOMADA) =====
+        // Verificar se o lead está em status "Lead Frio" e já recebeu mensagens de retomada
+        if (leadId) {
+          const { data: leadData } = await supabase
+            .from('leads_juridicos')
+            .select('id, nome, status')
+            .eq('id', leadId)
+            .maybeSingle();
+          
+          if (leadData && leadData.status === 'Lead Frio') {
+            // Verificar se já recebeu alguma mensagem de retomada
+            const { data: retomadaEvents } = await supabase
+              .from('system_events')
+              .select('id')
+              .eq('lead_id', leadId)
+              .eq('tipo', 'retomada')
+              .eq('acao', 'retomada_enviada')
+              .limit(1);
+            
+            const estaEmRetomada = retomadaEvents && retomadaEvents.length > 0;
+            
+            if (estaEmRetomada) {
+              console.log('[API-HUB] Lead frio em retomada RESPONDEU:', leadData.nome);
+              
+              // Criar alerta de resposta
+              await supabase.from('system_events').insert({
+                tipo: 'alerta',
+                fonte: 'retomada',
+                acao: 'lead_frio_respondeu',
+                entidade_tipo: 'lead',
+                entidade_id: leadId,
+                lead_id: leadId,
+                dados: { 
+                  nome: leadData.nome,
+                  mensagem: mensagem?.substring(0, 200),
+                  canal: canal,
+                  subscriber_id: subscriberId,
+                },
+                processado: false, // Não processado = precisa atenção
+              });
+              
+              // Atualizar followup como respondido
+              await supabase
+                .from('lead_followups')
+                .update({ 
+                  respondido: true, 
+                  respondido_em: new Date().toISOString(),
+                  status: 'respondido'
+                })
+                .eq('lead_id', leadId);
+              
+              console.log('[API-HUB] Alerta criado para lead frio que respondeu:', leadId);
+            }
+          }
+        }
       }
 
       response = { success: true, lead_id: leadId, lead_criado: !existingSubscriber?.lead_id && leadId ? true : false };

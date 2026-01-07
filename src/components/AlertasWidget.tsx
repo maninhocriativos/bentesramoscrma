@@ -15,6 +15,7 @@ const TIPO_CONFIG = {
   risco: { icon: AlertTriangle, color: 'text-red-500', bg: 'bg-red-500/10' },
   prazo: { icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
   tarefa: { icon: FileText, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+  resposta: { icon: AlertTriangle, color: 'text-green-500', bg: 'bg-green-500/10' },
 };
 
 const PRIORIDADE_BADGE = {
