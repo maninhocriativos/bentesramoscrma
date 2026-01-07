@@ -72,47 +72,39 @@ export default function LeadsPage() {
             {/* Filters */}
             <LeadFilters leads={leads} onFilterChange={handleFilterChange} />
             
-            {/* Mobile Panels Toggle */}
-            <div className="lg:hidden mb-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowMobilePanels(!showMobilePanels)}
-                className="w-full justify-between h-9"
-              >
-                <span className="text-xs font-medium">
-                  Painéis de Inteligência
-                </span>
-                {showMobilePanels ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-              </Button>
-              
-              {/* Mobile Panels */}
-              <div className={cn(
-                "grid gap-3 overflow-hidden transition-all duration-300",
-                showMobilePanels ? "mt-3 max-h-[600px] opacity-100" : "max-h-0 opacity-0"
-              )}>
-                <FollowupStatusPanel />
-                <RecentActivities leads={leads} />
-                <QuickTasks 
-                  compromissos={compromissos} 
-                  onNewTask={handleNewTask}
-                />
-              </div>
+            {/* Kanban Area - Full Width */}
+            <div className="flex-1 min-h-0 overflow-hidden mb-4">
+              <KanbanBoard leads={filteredLeads} onLeadClick={handleLeadClick} />
             </div>
             
-            {/* Main Content Grid */}
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 min-h-0">
-              {/* Kanban Area */}
-              <div className="min-h-0 h-full overflow-hidden">
-                <KanbanBoard leads={filteredLeads} onLeadClick={handleLeadClick} />
+            {/* Intelligence Panels - Below Kanban */}
+            <div className="border-t border-border/50 pt-4">
+              {/* Mobile Toggle */}
+              <div className="lg:hidden mb-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowMobilePanels(!showMobilePanels)}
+                  className="w-full justify-between h-9"
+                >
+                  <span className="text-xs font-medium">
+                    Painéis de Inteligência
+                  </span>
+                  {showMobilePanels ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </Button>
               </div>
               
-              {/* Sidebar - Intelligence Panels (Desktop Only) */}
-              <div className="hidden lg:flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-200px)]">
+              {/* Panels Grid */}
+              <div className={cn(
+                "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 transition-all duration-300",
+                // Mobile: collapsible
+                "lg:max-h-none lg:opacity-100",
+                showMobilePanels ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0 lg:max-h-none lg:opacity-100 overflow-hidden lg:overflow-visible"
+              )}>
                 <FollowupStatusPanel />
                 <RecentActivities leads={leads} />
                 <QuickTasks 
