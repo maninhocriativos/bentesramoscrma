@@ -109,12 +109,28 @@ export function IsaAcoesPendentes() {
   const [acoes, setAcoes] = useState<AcaoPendente[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
+  const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
   
   // Modal de agendamento
   const [showDateModal, setShowDateModal] = useState(false);
   const [selectedAcao, setSelectedAcao] = useState<AcaoPendente | null>(null);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('10:00');
+
+  const removeWithAnimation = (id: string, callback: () => Promise<void>) => {
+    setRemovingIds(prev => new Set(prev).add(id));
+    
+    // Aguarda a animação completar antes de executar a ação
+    setTimeout(async () => {
+      await callback();
+      setAcoes(prev => prev.filter(a => a.id !== id));
+      setRemovingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, 300);
+  };
 
   const fetchAcoes = useCallback(async () => {
     setLoading(true);
@@ -245,106 +261,107 @@ export function IsaAcoesPendentes() {
       return;
     }
 
-    setProcessing(selectedAcao.id);
-    try {
-      const dataHoraAgendamento = new Date(`${selectedDate}T${selectedTime}:00`);
-      
-      const dadosComData = {
-        ...selectedAcao.dados?.dados_acao,
-        lead_id: selectedAcao.lead_id,
-        titulo: `Atendimento - ${getLeadNome(selectedAcao)}`,
-        tipo: 'Reunião',
-        data_inicio: dataHoraAgendamento.toISOString(),
-        data_fim: new Date(dataHoraAgendamento.getTime() + 60 * 60 * 1000).toISOString(),
-      };
+    const acaoId = selectedAcao.id;
+    setProcessing(acaoId);
+    setShowDateModal(false);
+    
+    removeWithAnimation(acaoId, async () => {
+      try {
+        const dataHoraAgendamento = new Date(`${selectedDate}T${selectedTime}:00`);
+        
+        const dadosComData = {
+          ...selectedAcao.dados?.dados_acao,
+          lead_id: selectedAcao.lead_id,
+          titulo: `Atendimento - ${getLeadNome(selectedAcao)}`,
+          tipo: 'Reunião',
+          data_inicio: dataHoraAgendamento.toISOString(),
+          data_fim: new Date(dataHoraAgendamento.getTime() + 60 * 60 * 1000).toISOString(),
+        };
 
-      const { error } = await supabase.functions.invoke('isa-actions', {
-        body: {
-          action: 'criar_compromisso',
-          data: dadosComData,
-        },
-      });
+        const { error } = await supabase.functions.invoke('isa-actions', {
+          body: {
+            action: 'criar_compromisso',
+            data: dadosComData,
+          },
+        });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      // Marcar como processado
-      await supabase
-        .from('system_events')
-        .update({ processado: true })
-        .eq('id', selectedAcao.id);
+        // Marcar como processado
+        await supabase
+          .from('system_events')
+          .update({ processado: true })
+          .eq('id', acaoId);
 
-      toast.success(`Agendamento criado para ${format(dataHoraAgendamento, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`);
-      setShowDateModal(false);
-      setSelectedAcao(null);
-      fetchAcoes();
-    } catch (error) {
-      console.error('Erro ao aprovar ação com data:', error);
-      toast.error('Erro ao executar ação');
-    } finally {
-      setProcessing(null);
-    }
+        toast.success(`Agendamento criado para ${format(dataHoraAgendamento, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`);
+        setSelectedAcao(null);
+      } catch (error) {
+        console.error('Erro ao aprovar ação com data:', error);
+        toast.error('Erro ao executar ação');
+      } finally {
+        setProcessing(null);
+      }
+    });
   };
 
   const aprovarAcao = async (acao: AcaoPendente) => {
     setProcessing(acao.id);
-    try {
-      const acaoSugerida = getAcaoSugerida(acao);
-      
-      const { error } = await supabase.functions.invoke('isa-actions', {
-        body: {
-          action: acaoSugerida,
-          data: {
-            ...acao.dados?.dados_acao,
-            lead_id: acao.lead_id,
+    
+    removeWithAnimation(acao.id, async () => {
+      try {
+        const acaoSugerida = getAcaoSugerida(acao);
+        
+        const { error } = await supabase.functions.invoke('isa-actions', {
+          body: {
+            action: acaoSugerida,
+            data: {
+              ...acao.dados?.dados_acao,
+              lead_id: acao.lead_id,
+            },
           },
-        },
-      });
+        });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      // Marcar como processado
-      await supabase
-        .from('system_events')
-        .update({ processado: true })
-        .eq('id', acao.id);
+        // Marcar como processado
+        await supabase
+          .from('system_events')
+          .update({ processado: true })
+          .eq('id', acao.id);
 
-      toast.success('Ação executada com sucesso!');
-      fetchAcoes();
-    } catch (error) {
-      console.error('Erro ao aprovar ação:', error);
-      toast.error('Erro ao executar ação');
-    } finally {
-      setProcessing(null);
-    }
+        toast.success('Ação executada com sucesso!');
+      } catch (error) {
+        console.error('Erro ao aprovar ação:', error);
+        toast.error('Erro ao executar ação');
+      } finally {
+        setProcessing(null);
+      }
+    });
   };
 
   const rejeitarAcao = async (acao: AcaoPendente) => {
     setProcessing(acao.id);
-    try {
-      // Remover imediatamente da lista local para feedback instantâneo
-      setAcoes(prev => prev.filter(a => a.id !== acao.id));
+    
+    removeWithAnimation(acao.id, async () => {
+      try {
+        const { error } = await supabase
+          .from('system_events')
+          .update({ 
+            processado: true,
+            metadata: { rejeitado: true, rejeitado_em: new Date().toISOString() }
+          })
+          .eq('id', acao.id);
 
-      const { error } = await supabase
-        .from('system_events')
-        .update({ 
-          processado: true,
-          metadata: { rejeitado: true, rejeitado_em: new Date().toISOString() }
-        })
-        .eq('id', acao.id);
+        if (error) throw error;
 
-      if (error) {
-        // Restaurar a ação se houve erro
-        setAcoes(prev => [...prev, acao]);
-        throw error;
+        toast.info('Ação rejeitada');
+      } catch (error) {
+        console.error('Erro ao rejeitar ação:', error);
+        toast.error('Erro ao rejeitar ação');
+      } finally {
+        setProcessing(null);
       }
-
-      toast.info('Ação rejeitada');
-    } catch (error) {
-      console.error('Erro ao rejeitar ação:', error);
-      toast.error('Erro ao rejeitar ação');
-    } finally {
-      setProcessing(null);
-    }
+    });
   };
 
   if (loading) {
@@ -419,11 +436,14 @@ export function IsaAcoesPendentes() {
               const urgencia = getUrgencia(acao);
               const urgenciaConfig = URGENCIA_CONFIG[urgencia] || URGENCIA_CONFIG.media;
               const leadNome = getLeadNome(acao);
+              const isRemoving = removingIds.has(acao.id);
 
               return (
                 <div 
                   key={acao.id} 
-                  className="border rounded-xl p-3 space-y-2.5 bg-card hover:shadow-md transition-all"
+                  className={`border rounded-xl p-3 space-y-2.5 bg-card hover:shadow-md transition-all duration-300 ${
+                    isRemoving ? 'opacity-0 scale-95 -translate-x-4' : 'opacity-100 scale-100 translate-x-0'
+                  }`}
                 >
                   {/* Header */}
                   <div className="flex items-center justify-between gap-2">
