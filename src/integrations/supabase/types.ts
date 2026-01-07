@@ -40,6 +40,9 @@ export type Database = {
       }
       compromissos: {
         Row: {
+          confirmacao_resposta: string | null
+          confirmacao_status: string | null
+          confirmado_em: string | null
           created_at: string
           data_fim: string | null
           data_inicio: string
@@ -55,6 +58,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          confirmacao_resposta?: string | null
+          confirmacao_status?: string | null
+          confirmado_em?: string | null
           created_at?: string
           data_fim?: string | null
           data_inicio: string
@@ -70,6 +76,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          confirmacao_resposta?: string | null
+          confirmacao_status?: string | null
+          confirmado_em?: string | null
           created_at?: string
           data_fim?: string | null
           data_inicio?: string

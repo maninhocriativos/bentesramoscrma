@@ -352,6 +352,65 @@ serve(async (req: Request) => {
           lead_id: leadId
         });
         console.log('[API-HUB] Mensagem salva para subscriber:', subscriberId, 'tipo:', tipoMensagem);
+        
+        // ===== DETECÇÃO DE CONFIRMAÇÃO DE COMPROMISSO =====
+        if (leadId && mensagem) {
+          const msgNormalizada = mensagem.toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          
+          // Palavras-chave de confirmação
+          const confirmacaoKeywords = ['sim', 'confirmo', 'confirmado', 'ok', 'certo', 'combinado', 'vou sim', 'estarei la', 'pode ser', 'beleza', 'perfeito', 'fechado'];
+          // Palavras-chave de remarcação/cancelamento
+          const remarcacaoKeywords = ['remarcar', 'adiar', 'nao posso', 'nao vou', 'cancela', 'desmarcar', 'outro dia', 'outro horario', 'mudar data'];
+          
+          const isConfirmacao = confirmacaoKeywords.some(kw => msgNormalizada.includes(kw));
+          const isRemarcacao = remarcacaoKeywords.some(kw => msgNormalizada.includes(kw));
+          
+          if (isConfirmacao || isRemarcacao) {
+            // Buscar compromisso futuro pendente do lead
+            const agora = new Date().toISOString();
+            const { data: compromissosPendentes } = await supabase
+              .from('compromissos')
+              .select('id, titulo')
+              .eq('lead_id', leadId)
+              .eq('confirmacao_status', 'pendente')
+              .gte('data_inicio', agora)
+              .order('data_inicio')
+              .limit(1);
+            
+            if (compromissosPendentes && compromissosPendentes.length > 0) {
+              const compromisso = compromissosPendentes[0];
+              const novoStatus = isConfirmacao ? 'confirmado' : 'remarcado';
+              
+              await supabase
+                .from('compromissos')
+                .update({
+                  confirmacao_status: novoStatus,
+                  confirmado_em: new Date().toISOString(),
+                  confirmacao_resposta: mensagem
+                })
+                .eq('id', compromisso.id);
+              
+              console.log(`[API-HUB] Compromisso ${compromisso.id} marcado como ${novoStatus} pelo lead ${leadId}`);
+              
+              // Registrar evento
+              await supabase.from('system_events').insert({
+                tipo: 'compromisso',
+                fonte: 'manychat',
+                acao: `confirmacao_${novoStatus}`,
+                entidade_tipo: 'compromisso',
+                entidade_id: compromisso.id,
+                lead_id: leadId,
+                dados: { 
+                  status: novoStatus, 
+                  resposta: mensagem, 
+                  titulo: compromisso.titulo,
+                  canal: canal 
+                },
+                processado: true,
+              });
+            }
+          }
+        }
       }
 
       response = { success: true, lead_id: leadId, lead_criado: !existingSubscriber?.lead_id && leadId ? true : false };
