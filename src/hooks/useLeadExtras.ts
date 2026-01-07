@@ -77,7 +77,8 @@ export function useLeadExtras(leadIds: string[]) {
 
         // Lead info
         const leadInfo = leads?.find(l => l.id === leadId);
-        const isEmAtendimento = leadInfo?.status === 'Em Atendimento';
+        // Verificar se é lead que precisa de agendamento (Em Atendimento OU Em Negociação)
+        const precisaAgendamento = leadInfo?.status === 'Em Atendimento' || leadInfo?.status === 'Em Negociação';
         const temAgendamento = agendamentosLead.length > 0;
 
         extrasMap[leadId] = {
@@ -93,8 +94,8 @@ export function useLeadExtras(leadIds: string[]) {
           } : null
         };
 
-        // Criar alerta automático para Isa se lead em atendimento sem agendamento
-        if (isEmAtendimento && !temAgendamento && 
+        // Criar alerta automático para Isa se lead precisa de agendamento e não tem
+        if (precisaAgendamento && !temAgendamento && 
             !existingAlertLeadIds.has(leadId) && 
             !alertsCreatedRef.current.has(leadId)) {
           

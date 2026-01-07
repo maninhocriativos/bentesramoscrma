@@ -127,4 +127,44 @@ export function formatarDataAbreviada(date: Date | string): string {
   });
 }
 
+/**
+ * Retorna o início da próxima segunda-feira em Manaus como Date (UTC)
+ * Usado para garantir que agendamentos só sejam feitos a partir da próxima semana
+ */
+export function getProximaSegundaUtc(): Date {
+  const agora = new Date();
+  // Converter para hora de Manaus para pegar o dia correto
+  const hojeManaus = getHojeManaus();
+  const dataManaus = new Date(`${hojeManaus}T00:00:00-04:00`);
+  
+  // Dia da semana em Manaus (0 = domingo, 1 = segunda, ...)
+  const diaSemana = dataManaus.getDay();
+  
+  // Calcular quantos dias até a próxima segunda
+  // Se hoje é segunda (1), próxima segunda é em 7 dias
+  // Se hoje é terça (2), próxima segunda é em 6 dias
+  // Se hoje é domingo (0), próxima segunda é em 1 dia
+  const diasAteSegunda = diaSemana === 0 ? 1 : (8 - diaSemana);
+  
+  const proximaSegunda = new Date(dataManaus.getTime() + diasAteSegunda * 24 * 60 * 60 * 1000);
+  return proximaSegunda;
+}
+
+/**
+ * Verifica se uma data está na próxima semana ou posterior
+ */
+export function isDataNaProximaSemana(date: Date | string): boolean {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const proximaSegunda = getProximaSegundaUtc();
+  return d >= proximaSegunda;
+}
+
+/**
+ * Formata a data da próxima segunda para exibição
+ */
+export function getProximaSegundaFormatada(): string {
+  const proximaSegunda = getProximaSegundaUtc();
+  return formatarData(proximaSegunda);
+}
+
 export const MANAUS_TIMEZONE = TIMEZONE;

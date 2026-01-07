@@ -33,13 +33,13 @@ const AVAILABLE_TOOLS = [
     type: "function",
     function: {
       name: "criar_compromisso",
-      description: "Cria um novo compromisso/evento na agenda do escritório. IMPORTANTE: Sempre use verificar_disponibilidade ANTES de criar um compromisso para garantir que não há conflitos. Notifica automaticamente o responsável por email.",
+      description: "Cria um novo compromisso/evento na agenda do escritório. IMPORTANTE: 1) Sempre use verificar_disponibilidade ANTES para garantir que não há conflitos. 2) REGRA OBRIGATÓRIA: Novos atendimentos com clientes DEVEM ser agendados para a PRÓXIMA SEMANA em diante. Não agende para esta semana. Notifica automaticamente o responsável por email.",
       parameters: {
         type: "object",
         properties: {
           titulo: { type: "string", description: "Título do compromisso" },
           tipo: { type: "string", enum: ["Reunião", "Audiência", "Prazo", "Outro"], description: "Tipo do compromisso" },
-          data_inicio: { type: "string", description: "Data e hora de início no formato ISO (YYYY-MM-DDTHH:mm:ss)" },
+          data_inicio: { type: "string", description: "Data e hora de início no formato ISO (YYYY-MM-DDTHH:mm:ss). ATENÇÃO: Para atendimentos com clientes, use datas da PRÓXIMA SEMANA." },
           data_fim: { type: "string", description: "Data e hora de término no formato ISO (opcional)" },
           descricao: { type: "string", description: "Descrição detalhada do compromisso" },
           lead_id: { type: "string", description: "ID do lead/cliente relacionado (opcional)" },
