@@ -24,7 +24,7 @@ import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import PoliticaPrivacidadePage from "./pages/PoliticaPrivacidadePage";
 import TermosServicoPage from "./pages/TermosServicoPage";
-
+import InstallPage from "./pages/InstallPage";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -64,6 +64,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/politica-privacidade" element={<PoliticaPrivacidadePage />} />
             <Route path="/termos-servico" element={<TermosServicoPage />} />
+            <Route path="/install" element={<InstallPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </PerfilProvider>
