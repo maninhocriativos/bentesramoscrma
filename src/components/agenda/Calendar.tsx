@@ -14,12 +14,16 @@ import {
   isFuture,
   parseISO,
 } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
 
-// Helper para converter data UTC para local
+// Fuso horário de Manaus (UTC-4)
+const TIMEZONE = 'America/Manaus';
+
+// Helper para converter data UTC para fuso de Manaus
 const parseLocalDate = (dateString: string): Date => {
-  const date = parseISO(dateString);
-  return date;
+  const utcDate = parseISO(dateString);
+  return toZonedTime(utcDate, TIMEZONE);
 };
 import { 
   ChevronLeft, 
