@@ -268,6 +268,27 @@ serve(async (req) => {
           break;
         }
 
+        // Verificar se já existe compromisso futuro para este lead
+        const agora = new Date().toISOString();
+        const { data: compromissosExistentes } = await supabase
+          .from('compromissos')
+          .select('id, titulo, data_inicio')
+          .eq('lead_id', lead_id)
+          .gte('data_inicio', agora)
+          .order('data_inicio', { ascending: true })
+          .limit(1);
+
+        if (compromissosExistentes && compromissosExistentes.length > 0) {
+          const existente = compromissosExistentes[0];
+          console.log(`⚠️ Lead ${lead_id} já possui compromisso agendado: ${existente.titulo} em ${existente.data_inicio}`);
+          result = {
+            success: false,
+            message: `Este lead já possui um atendimento agendado: "${existente.titulo}" para ${formatarDataHoraManaus(existente.data_inicio)}. Verifique a agenda antes de criar novo agendamento.`,
+            data: { compromisso_existente: existente },
+          };
+          break;
+        }
+
         const titulo = data.titulo || `Atendimento - ${lead_nome || 'Lead'}`;
 
         const { data: compromisso, error } = await supabase
