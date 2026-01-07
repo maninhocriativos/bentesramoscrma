@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTheme } from 'next-themes';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -23,10 +24,18 @@ import {
   MoreVertical,
   Smile,
   Sun,
-  Moon
+  Moon,
+  Menu
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface Subscriber {
   id: string;
@@ -78,6 +87,7 @@ const ManyChatInbox = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
+  const navigate = useNavigate();
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [selectedSubscriber, setSelectedSubscriber] = useState<Subscriber | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -419,9 +429,57 @@ const ManyChatInbox = () => {
       <div className={`${showMobileChat ? 'hidden md:flex' : 'flex'} w-full md:w-[400px] lg:w-[420px] flex-col bg-white dark:bg-[#111B21] border-r border-[#E9EDEF] dark:border-[#222D34]`}>
         {/* Header com título "Conversas" */}
         <div className="h-[60px] px-4 flex items-center justify-between bg-[#F0F2F5] dark:bg-[#202C33]">
-          <h1 className="text-[22px] font-semibold text-[#111B21] dark:text-[#E9EDEF]">
-            Conversas
-          </h1>
+          <div className="flex items-center gap-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 rounded-full text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]"
+                  title="Menu do CRM"
+                >
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48">
+                <DropdownMenuItem onClick={() => navigate('/dashboard')}>
+                  Dashboard
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/leads')}>
+                  Leads
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/processos')}>
+                  Processos
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/tarefas')}>
+                  Tarefas
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/agenda')}>
+                  Agenda
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate('/financeiro')}>
+                  Financeiro
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/documentos')}>
+                  Documentos
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/contratos')}>
+                  Contratos
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate('/assistente')}>
+                  Isa Assistente
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/configuracoes')}>
+                  Configurações
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <h1 className="text-[22px] font-semibold text-[#111B21] dark:text-[#E9EDEF]">
+              Conversas
+            </h1>
+          </div>
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
@@ -441,13 +499,6 @@ const ManyChatInbox = () => {
               title="Sincronizar contatos"
             >
               <RefreshCw className={`h-5 w-5 ${isSyncing ? 'animate-spin' : ''}`} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 rounded-full text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]"
-            >
-              <MoreVertical className="h-5 w-5" />
             </Button>
           </div>
         </div>
