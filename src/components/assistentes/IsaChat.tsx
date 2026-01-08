@@ -83,6 +83,85 @@ export function IsaChat() {
     }
   }, [messages, threadId, conversationId]);
 
+  // Formata o contexto do sistema para enviar ao GPT
+  const formatSystemContext = (data: any): string => {
+    if (!data || data.error) return '';
+
+    const parts: string[] = [];
+    
+    parts.push(`📅 DATA/HORA ATUAL: ${data.dataConsulta} (${data.fusoHorario})`);
+    
+    // Resumo geral
+    parts.push(`\n📊 RESUMO DO SISTEMA:`);
+    parts.push(`- ${data.resumo.totalLeads} leads (${Object.entries(data.resumo.leadsPorStatus).map(([k, v]) => `${k}: ${v}`).join(', ')})`);
+    parts.push(`- ${data.resumo.totalProcessosAtivos} processos ativos`);
+    parts.push(`- ${data.resumo.totalTarefasPendentes} tarefas pendentes`);
+    parts.push(`- ${data.resumo.totalCompromissosProximos7Dias} compromissos nos próximos 7 dias`);
+    parts.push(`- ${data.resumo.totalParcelasPendentes} parcelas pendentes`);
+    parts.push(`- ${data.resumo.totalFollowupsPendentes} follow-ups pendentes`);
+    parts.push(`- ${data.resumo.totalEventosUltimas24h} eventos nas últimas 24h`);
+
+    // Compromissos próximos
+    if (data.compromissos?.length > 0) {
+      parts.push(`\n📅 AGENDA (próximos 7 dias):`);
+      data.compromissos.slice(0, 10).forEach((c: any) => {
+        parts.push(`- ${c.data} ${c.horarioInicio}: ${c.titulo}${c.cliente ? ` (${c.cliente})` : ''} [${c.tipo}]`);
+      });
+    }
+
+    // Tarefas urgentes
+    const tarefasUrgentes = data.tarefas?.filter((t: any) => t.prioridade === 'Urgente' || t.prioridade === 'Alta') || [];
+    if (tarefasUrgentes.length > 0) {
+      parts.push(`\n🔴 TAREFAS URGENTES/ALTA PRIORIDADE:`);
+      tarefasUrgentes.slice(0, 5).forEach((t: any) => {
+        parts.push(`- [${t.prioridade}] ${t.titulo}${t.dataLimite ? ` (prazo: ${t.dataLimite})` : ''}${t.cliente ? ` - ${t.cliente}` : ''}`);
+      });
+    }
+
+    // Follow-ups pendentes
+    if (data.followupsPendentes?.length > 0) {
+      parts.push(`\n📞 FOLLOW-UPS PENDENTES:`);
+      data.followupsPendentes.slice(0, 5).forEach((f: any) => {
+        parts.push(`- ${f.cliente}: ${f.tipo} tentativa ${f.tentativa} (próximo: ${f.proximoFollowup})`);
+      });
+    }
+
+    // Eventos recentes importantes
+    const eventosImportantes = data.eventosRecentes?.filter((e: any) => 
+      ['contrato', 'lead_status', 'agendamento', 'tarefa'].includes(e.tipo)
+    ) || [];
+    if (eventosImportantes.length > 0) {
+      parts.push(`\n🔔 EVENTOS RECENTES (últimas 24h):`);
+      eventosImportantes.slice(0, 8).forEach((e: any) => {
+        parts.push(`- [${e.fonte}] ${e.acao}${e.cliente ? ` - ${e.cliente}` : ''} (${e.data})`);
+      });
+    }
+
+    // Interações recentes
+    if (data.interacoesRecentes?.length > 0) {
+      parts.push(`\n💬 INTERAÇÕES RECENTES:`);
+      data.interacoesRecentes.slice(0, 5).forEach((i: any) => {
+        parts.push(`- ${i.data}: ${i.tipo} ${i.direcao === 'Entrada' ? '⬅️' : '➡️'} ${i.cliente}: ${i.resumo}`);
+      });
+    }
+
+    // Ações pendentes da Isa
+    if (data.acoesPendentesIsa?.length > 0) {
+      parts.push(`\n🤖 AÇÕES PENDENTES (aguardando aprovação):`);
+      data.acoesPendentesIsa.forEach((a: any) => {
+        parts.push(`- [${a.tipo}] ${a.titulo}${a.cliente ? ` - ${a.cliente}` : ''}`);
+      });
+    }
+
+    // Regras de agendamento
+    parts.push(`\n⚙️ REGRAS DE AGENDAMENTO:`);
+    parts.push(`- Dias: ${data.regrasAgendamento.diasPermitidos.join(', ')}`);
+    parts.push(`- Horários: ${data.regrasAgendamento.horariosPermitidos}`);
+    parts.push(`- Duração padrão: ${data.regrasAgendamento.duracao}`);
+
+    return `\n\n[CONTEXTO DO SISTEMA - DADOS EM TEMPO REAL]\n${parts.join('\n')}\n[FIM DO CONTEXTO]`;
+  };
+
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
 
@@ -100,17 +179,12 @@ export function IsaChat() {
     setTimeout(scrollToBottom, 50);
 
     try {
+      // Buscar contexto completo do sistema
       let systemContext = '';
       try {
         const { data: systemData } = await supabase.functions.invoke('isa-system-data');
         if (systemData && !systemData.error) {
-          systemContext = `\n\n[CONTEXTO DO SISTEMA - ${new Date().toLocaleDateString('pt-BR')}]
-Resumo: ${systemData.resumo.totalLeads} leads, ${systemData.resumo.totalProcessosAtivos} processos ativos, ${systemData.resumo.totalTarefasPendentes} tarefas pendentes, ${systemData.resumo.totalCompromissosProximos7Dias} compromissos nos próximos 7 dias.
-Leads por status: ${JSON.stringify(systemData.resumo.leadsPorStatus)}
-Compromissos próximos: ${JSON.stringify(systemData.compromissos?.slice(0, 5))}
-Tarefas pendentes: ${JSON.stringify(systemData.tarefas?.slice(0, 5))}
-Parcelas pendentes: ${systemData.resumo.totalParcelasPendentes}
-[FIM DO CONTEXTO]`;
+          systemContext = formatSystemContext(systemData);
         }
       } catch (e) {
         console.log('Não foi possível buscar contexto do sistema:', e);
