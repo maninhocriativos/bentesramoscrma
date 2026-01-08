@@ -4,10 +4,12 @@ import { useState } from 'react';
 import { Lead } from '@/types/leads';
 import { cn } from '@/lib/utils';
 import { getLeadIndicator } from '@/hooks/useAlertas';
+import { LeadFollowupInfo } from '@/hooks/useLeadFollowups';
 import { 
   MessageCircle, ExternalLink, User, Clock, FileSignature, 
   Instagram, Facebook, Phone, Globe, Users, Mail, Briefcase, Sparkles,
-  ThumbsUp, ThumbsDown, Minus, AlertTriangle, Zap, CalendarX, Calendar
+  ThumbsUp, ThumbsDown, Minus, AlertTriangle, Zap, CalendarX, Calendar,
+  Pause, Timer, Ban, Send
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -36,6 +38,7 @@ interface LeadCardProps {
     urgencia: 'baixa' | 'media' | 'alta' | 'urgente' | null;
   };
   leadExtra?: LeadExtra;
+  followupInfo?: LeadFollowupInfo;
 }
 
 const ORIGEM_CONFIG: Record<string, { bg: string; text: string; icon: React.ElementType }> = {
@@ -78,7 +81,81 @@ const formatShortCurrency = (value: number | null): string => {
   return `R$ ${value.toFixed(0)}`;
 };
 
-export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra }: LeadCardProps) {
+// Follow-up status badges component
+function FollowupBadges({ followupInfo }: { followupInfo: LeadFollowupInfo }) {
+  const { status, followupStageFast, followupStageSlow, followupLockReason, waitingReply, nextFollowupType } = followupInfo;
+
+  // Bloqueado/Concluído
+  if (status === 'concluido' || followupLockReason) {
+    return (
+      <div className="flex items-center gap-1">
+        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+          <Ban className="w-2.5 h-2.5" />
+          Bloqueado
+        </span>
+      </div>
+    );
+  }
+
+  // Aguardando resposta
+  if (waitingReply) {
+    return (
+      <div className="flex items-center gap-1">
+        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 animate-pulse">
+          <Pause className="w-2.5 h-2.5" />
+          Aguardando
+        </span>
+      </div>
+    );
+  }
+
+  const badges = [];
+
+  // FAST stage badge
+  if (followupStageFast !== null && followupStageFast >= 0 && followupStageFast < 3) {
+    const fastLabels = ['10min', '4h', '15h'];
+    badges.push(
+      <span key="fast" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+        <Zap className="w-2.5 h-2.5" />
+        FAST {followupStageFast + 1}/3
+      </span>
+    );
+  }
+
+  // SLOW stage badge
+  if (followupStageSlow !== null && followupStageSlow >= 0 && followupStageSlow < 3) {
+    badges.push(
+      <span key="slow" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">
+        <Timer className="w-2.5 h-2.5" />
+        SLOW {followupStageSlow + 1}/3
+      </span>
+    );
+  }
+
+  // Next follow-up type
+  if (nextFollowupType && badges.length === 0) {
+    const isfast = nextFollowupType === 'fast';
+    badges.push(
+      <span key="next" className={cn(
+        "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium",
+        isfast ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" : "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"
+      )}>
+        <Send className="w-2.5 h-2.5" />
+        {isfast ? 'FAST' : 'SLOW'}
+      </span>
+    );
+  }
+
+  if (badges.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {badges}
+    </div>
+  );
+}
+
+export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra, followupInfo }: LeadCardProps) {
   const navigate = useNavigate();
   const [isContratoModalOpen, setIsContratoModalOpen] = useState(false);
   
@@ -208,6 +285,11 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra }: L
             <FileSignature className="w-3 h-3 text-gold" />
           )}
         </div>
+
+        {/* Follow-up Badges */}
+        {followupInfo && (
+          <FollowupBadges followupInfo={followupInfo} />
+        )}
 
         {/* Time Row */}
         <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
