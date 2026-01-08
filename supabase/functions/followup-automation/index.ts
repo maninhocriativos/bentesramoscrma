@@ -275,6 +275,16 @@ serve(async (req: Request) => {
     let pendentesTemplate = 0;
     let pulados = 0;
 
+    // ======================================================
+    // REGRA ABSOLUTA DE BLOQUEIO POR STATUS (ESPECIFICAÇÃO)
+    // ======================================================
+    // Status bloqueados: NUNCA enviar follow-up
+    const STATUS_BLOQUEADOS = ['Contrato Assinado', 'Ganho'];
+    // Status que permitem APENAS SLOW (nunca FAST)
+    const STATUS_APENAS_SLOW = ['Em Atendimento', 'Em Negociação', 'Aguardando Contrato'];
+    // Status que permite FAST: apenas Lead Frio
+    const STATUS_PERMITE_FAST = ['Lead Frio'];
+
     for (const followup of followups || []) {
       const lead = followup.leads_juridicos;
       const primeiroContato = new Date(followup.primeiro_contato_em);
@@ -282,17 +292,36 @@ serve(async (req: Request) => {
       
       console.log(`[FOLLOWUP] Lead: ${lead.nome}, minutos: ${minutosDesdeContato.toFixed(0)}, status: ${lead.status}`);
 
-      // Verificar se lead respondeu (status diferente de Lead Frio)
-      if (lead.status !== 'Lead Frio') {
+      // 🛑 REGRA 1: Status bloqueados - NUNCA enviar follow-up
+      if (STATUS_BLOQUEADOS.includes(lead.status)) {
         await supabase
           .from('lead_followups')
           .update({ 
-            status: 'respondido', 
-            respondido: true, 
-            respondido_em: agora.toISOString() 
+            status: 'concluido',
+            followup_lock_reason: `Lead com status bloqueado: ${lead.status}`,
+            next_followup_at: null,
+            next_followup_type: null
           })
           .eq('id', followup.id);
-        console.log(`[FOLLOWUP] Lead ${lead.nome} respondeu (status: ${lead.status})`);
+        console.log(`[FOLLOWUP] 🛑 Lead ${lead.nome} tem status BLOQUEADO (${lead.status}), encerrando follow-ups`);
+        pulados++;
+        continue;
+      }
+
+      // 🛑 REGRA 2: Status que NÃO são Lead Frio - não enviar FAST (follow-up inicial)
+      // FAST é apenas para Lead Frio. Outros status só recebem SLOW (retomada)
+      if (!STATUS_PERMITE_FAST.includes(lead.status)) {
+        await supabase
+          .from('lead_followups')
+          .update({ 
+            status: 'concluido',
+            followup_lock_reason: `Follow-up FAST não permitido para status: ${lead.status}. Use retomada (SLOW).`,
+            next_followup_at: null,
+            next_followup_type: null
+          })
+          .eq('id', followup.id);
+        console.log(`[FOLLOWUP] ⚠️ Lead ${lead.nome} não é Lead Frio (status: ${lead.status}), FAST não permitido`);
+        pulados++;
         continue;
       }
 
