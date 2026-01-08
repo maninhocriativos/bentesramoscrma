@@ -27,7 +27,10 @@ import {
   Moon,
   Menu,
   Bot,
-  UserRound
+  UserRound,
+  Instagram,
+  Facebook,
+  MessageCircle
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -415,6 +418,51 @@ const ManyChatInbox = () => {
     return name.substring(0, 2).toUpperCase();
   };
 
+  // Componente para ícone do canal
+  const ChannelIcon = ({ canal, size = 'sm' }: { canal?: string; size?: 'sm' | 'md' }) => {
+    const normalizedCanal = canal?.toLowerCase() || '';
+    const iconSize = size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4';
+    
+    if (normalizedCanal.includes('instagram') || normalizedCanal === 'ig') {
+      return (
+        <div className={`${size === 'sm' ? 'p-0.5' : 'p-1'} rounded bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600`}>
+          <Instagram className={`${iconSize} text-white`} />
+        </div>
+      );
+    }
+    if (normalizedCanal.includes('facebook') || normalizedCanal === 'fb' || normalizedCanal.includes('messenger')) {
+      return (
+        <div className={`${size === 'sm' ? 'p-0.5' : 'p-1'} rounded bg-[#1877F2]`}>
+          <Facebook className={`${iconSize} text-white`} />
+        </div>
+      );
+    }
+    if (normalizedCanal.includes('whatsapp') || normalizedCanal === 'wa') {
+      return (
+        <div className={`${size === 'sm' ? 'p-0.5' : 'p-1'} rounded bg-[#25D366]`}>
+          <MessageCircle className={`${iconSize} text-white`} />
+        </div>
+      );
+    }
+    // Telegram ou outros
+    if (normalizedCanal.includes('telegram')) {
+      return (
+        <div className={`${size === 'sm' ? 'p-0.5' : 'p-1'} rounded bg-[#0088cc]`}>
+          <Send className={`${iconSize} text-white`} />
+        </div>
+      );
+    }
+    // SMS
+    if (normalizedCanal.includes('sms')) {
+      return (
+        <div className={`${size === 'sm' ? 'p-0.5' : 'p-1'} rounded bg-gray-500`}>
+          <MessageCircle className={`${iconSize} text-white`} />
+        </div>
+      );
+    }
+    return null;
+  };
+
   // Aplicar filtro de busca
   const searchFilteredSubscribers = subscribers.filter(sub =>
     sub.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -624,9 +672,12 @@ const ManyChatInbox = () => {
                   
                   <div className="flex-1 min-w-0 border-b border-[#E9EDEF] dark:border-[#222D34] pb-[10px]">
                     <div className="flex items-center justify-between">
-                      <span className="font-normal text-[17px] text-[#111B21] dark:text-[#E9EDEF] truncate">
-                        {getDisplayName(subscriber)}
-                      </span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <ChannelIcon canal={subscriber.canal} size="sm" />
+                        <span className="font-normal text-[17px] text-[#111B21] dark:text-[#E9EDEF] truncate">
+                          {getDisplayName(subscriber)}
+                        </span>
+                      </div>
                       <span className="text-[12px] text-[#667781] dark:text-[#8696A0] shrink-0 ml-2">
                         {subscriber.ultima_interacao && formatLastMessageTime(subscriber.ultima_interacao)}
                       </span>
@@ -668,9 +719,12 @@ const ManyChatInbox = () => {
               </Avatar>
               
               <div className="flex-1 min-w-0">
-                <h3 className="font-normal text-[16px] text-[#111B21] dark:text-[#E9EDEF] truncate">
-                  {getDisplayName(selectedSubscriber)}
-                </h3>
+                <div className="flex items-center gap-2">
+                  <ChannelIcon canal={selectedSubscriber.canal} size="md" />
+                  <h3 className="font-normal text-[16px] text-[#111B21] dark:text-[#E9EDEF] truncate">
+                    {getDisplayName(selectedSubscriber)}
+                  </h3>
+                </div>
                 <p className="text-[13px] text-[#667781] dark:text-[#8696A0] truncate">
                   {isTyping(selectedSubscriber.subscriber_id) 
                     ? 'digitando...' 
