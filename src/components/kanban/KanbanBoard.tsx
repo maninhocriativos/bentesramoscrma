@@ -5,6 +5,7 @@ import { useLeads } from '@/hooks/useLeads';
 import { useToast } from '@/hooks/use-toast';
 import { useIsaInsights } from '@/hooks/useIsaInsights';
 import { useLeadExtras } from '@/hooks/useLeadExtras';
+import { useLeadFollowups } from '@/hooks/useLeadFollowups';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -35,10 +36,11 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
-  // Buscar insights da Isa e extras para todos os leads
+  // Buscar insights da Isa, extras e followups para todos os leads
   const leadIds = useMemo(() => leads.map(l => l.id), [leads]);
   const { insights: isaInsights } = useIsaInsights(leadIds);
   const { extras: leadExtras } = useLeadExtras(leadIds);
+  const { followups: leadFollowups } = useLeadFollowups(leadIds);
 
   // Check scroll position
   const updateScrollButtons = useCallback(() => {
@@ -201,6 +203,7 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
                 isDragOver={dragOverStatus === status}
                 isaInsights={isaInsights}
                 leadExtras={leadExtras}
+                leadFollowups={leadFollowups}
               />
             </div>
           ))}

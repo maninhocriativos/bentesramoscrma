@@ -2,6 +2,7 @@ import { Lead, LeadStatus } from '@/types/leads';
 import { LeadCard } from './LeadCard';
 import { cn } from '@/lib/utils';
 import { Inbox } from 'lucide-react';
+import { LeadFollowupInfo } from '@/hooks/useLeadFollowups';
 
 interface IsaInsight {
   sentimento: 'positivo' | 'neutro' | 'negativo' | null;
@@ -32,6 +33,7 @@ interface KanbanColumnProps {
   isDragOver?: boolean;
   isaInsights?: Record<string, IsaInsight>;
   leadExtras?: Record<string, LeadExtra>;
+  leadFollowups?: Record<string, LeadFollowupInfo>;
 }
 
 const STATUS_COLORS: Record<LeadStatus, { 
@@ -114,6 +116,7 @@ export function KanbanColumn({
   isDragOver,
   isaInsights = {},
   leadExtras = {},
+  leadFollowups = {},
 }: KanbanColumnProps) {
   const columnLeads = leads.filter((lead) => lead.status === status);
   const statusStyle = STATUS_COLORS[status];
@@ -188,6 +191,7 @@ export function KanbanColumn({
               onClick={() => onLeadClick(lead)} 
               isaInsight={isaInsights[lead.id]} 
               leadExtra={leadExtras[lead.id]}
+              followupInfo={leadFollowups[lead.id]}
             />
           </div>
         ))}
