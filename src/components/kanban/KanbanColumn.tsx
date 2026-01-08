@@ -130,8 +130,8 @@ export function KanbanColumn({
         "flex flex-col rounded-xl overflow-hidden",
         "bg-card border shadow-sm",
         "transition-all duration-200 ease-out",
-        // Responsive width - larger on mobile for better readability
-        "min-w-[260px] w-[260px] md:min-w-[260px] md:w-[260px]",
+        // Narrower columns for more compact view
+        "min-w-[220px] w-[220px] md:min-w-[240px] md:w-[240px]",
         isDragOver && [
           "ring-2 ring-gold/60 shadow-md border-gold/40",
           "scale-[1.01]"

@@ -227,7 +227,7 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra, fol
       {indicatorStyle && (
         <div 
           className={cn(
-            "absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ring-2 ring-card z-10",
+            "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full ring-1 ring-card z-10",
             indicatorStyle.bg,
             indicatorStyle.pulse && "animate-pulse"
           )}
@@ -235,145 +235,94 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra, fol
         />
       )}
 
-      {/* Compact Header */}
-      <div className="flex items-center gap-2 p-2.5 pb-1.5">
-        <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-          <User className="w-3.5 h-3.5 text-primary" />
+      {/* Ultra Compact Header */}
+      <div className="flex items-center gap-1.5 p-2 pb-1">
+        <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center shrink-0">
+          <User className="w-3 h-3 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
-          <h4 className="font-medium text-xs text-foreground truncate group-hover:text-primary transition-colors">
+          <h4 className="font-medium text-[11px] text-foreground truncate leading-tight group-hover:text-primary transition-colors">
             {lead.nome || 'Sem nome'}
           </h4>
-          <p className="text-[10px] text-muted-foreground truncate">{lead.email || lead.telefone || '--'}</p>
         </div>
       </div>
 
       {/* Compact Body */}
-      <div className="px-2.5 pb-2 space-y-1.5">
-        {/* Value + Insights + Origin Row */}
-        <div className="flex items-center gap-1.5 flex-wrap">
+      <div className="px-2 pb-1.5 space-y-1">
+        {/* Value + Origin + Insights - Single Row */}
+        <div className="flex items-center gap-1 flex-wrap">
           <span className={cn(
-            "text-[10px] font-semibold px-1.5 py-0.5 rounded",
+            "text-[9px] font-semibold px-1 py-0.5 rounded",
             lead.valor_causa ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-muted text-muted-foreground"
           )}>
             {formatShortCurrency(lead.valor_causa)}
           </span>
           
           {lead.origem && (
-            <span className={cn("inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium", origemConfig.bg, origemConfig.text)}>
+            <span className={cn("inline-flex items-center px-1 py-0.5 rounded", origemConfig.bg, origemConfig.text)}>
               <OrigemIcon className="w-2.5 h-2.5" />
             </span>
           )}
           
           {sentimentoConfig && SentimentoIcon && (
-            <span className={cn("inline-flex items-center px-1 py-0.5 rounded", sentimentoConfig.bg, sentimentoConfig.color)}>
+            <span className={cn("inline-flex items-center px-0.5 py-0.5 rounded", sentimentoConfig.bg, sentimentoConfig.color)}>
               <SentimentoIcon className="w-2.5 h-2.5" />
-            </span>
-          )}
-          
-          {urgenciaConfig && (
-            <span className={cn(
-              "inline-flex items-center px-1 py-0.5 rounded",
-              urgenciaConfig.bg, urgenciaConfig.color,
-              urgenciaConfig.pulse && "animate-pulse"
-            )}>
-              <Zap className="w-2.5 h-2.5" />
             </span>
           )}
 
           {lead.link_contrato && (
-            <FileSignature className="w-3 h-3 text-gold" />
+            <FileSignature className="w-2.5 h-2.5 text-gold" />
           )}
         </div>
 
-        {/* Follow-up Badges */}
+        {/* Follow-up Badges - Compact */}
         {followupInfo && (
           <FollowupBadges followupInfo={followupInfo} />
         )}
 
-        {/* Time Row */}
-        <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
-          <Clock className="w-2.5 h-2.5" />
-          {lastInteraction}
+        {/* Time + Alert Row */}
+        <div className="flex items-center justify-between gap-1">
+          <div className="flex items-center gap-0.5 text-[8px] text-muted-foreground">
+            <Clock className="w-2 h-2" />
+            {lastInteraction}
+          </div>
+          
+          {precisaAgendar && (
+            <span className="flex items-center gap-0.5 text-[8px] text-amber-600 animate-pulse">
+              <CalendarX className="w-2 h-2" />
+            </span>
+          )}
+          
+          {leadExtra?.proximoAgendamento && (
+            <span className="flex items-center gap-0.5 text-[8px] text-emerald-600">
+              <Calendar className="w-2 h-2" />
+              {new Date(leadExtra.proximoAgendamento.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+            </span>
+          )}
         </div>
-
-        {/* Resumo da conversa para leads em atendimento/negociação */}
-        {precisaAgendamento && ultimaInteracaoResumo && (
-          <div className="bg-blue-50/50 dark:bg-blue-900/10 rounded px-1.5 py-1">
-            <p className="text-[9px] text-blue-700 dark:text-blue-300 line-clamp-2">
-              <Sparkles className="w-2 h-2 inline mr-0.5" />
-              {ultimaInteracaoResumo}
-            </p>
-          </div>
-        )}
-
-        {/* Alerta de agendamento pendente */}
-        {precisaAgendar && (
-          <div className="flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 rounded px-1.5 py-1 animate-pulse">
-            <CalendarX className="w-2.5 h-2.5 text-amber-600" />
-            <span className="text-[9px] font-medium text-amber-700 dark:text-amber-400">
-              Falta agendar
-            </span>
-          </div>
-        )}
-
-        {/* Próximo agendamento */}
-        {leadExtra?.proximoAgendamento && (
-          <div className="flex items-center gap-1 bg-emerald-50/50 dark:bg-emerald-900/10 rounded px-1.5 py-1">
-            <Calendar className="w-2.5 h-2.5 text-emerald-600" />
-            <span className="text-[9px] text-emerald-700 dark:text-emerald-400 truncate">
-              {new Date(leadExtra.proximoAgendamento.data).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
-            </span>
-          </div>
-        )}
       </div>
 
-      {/* Contract Button - Only when needed */}
-      {showContractButton && (
-        <div className="px-2.5 pb-2">
-          <Button
-            size="sm"
-            className="w-full h-6 text-[10px] gap-1 bg-gold hover:bg-gold/90 text-gold-foreground"
-            onClick={handleGenerateContract}
-          >
-            <FileSignature className="w-2.5 h-2.5" />
-            Gerar Contrato
-          </Button>
-        </div>
-      )}
-
-      {/* Minimal Footer - 3 compact icons */}
+      {/* Minimal Footer - 2 icons only */}
       <div className="flex items-center border-t border-border/30 bg-muted/20">
         <Button
           variant="ghost"
           size="sm"
-          className="flex-1 h-6 rounded-none text-muted-foreground hover:text-green-600 hover:bg-green-50/50 disabled:opacity-30"
-          onClick={handleCall}
-          disabled={!lead.telefone}
-          title="Ligar"
-        >
-          <Phone className="w-3 h-3" />
-        </Button>
-        <div className="w-px h-3 bg-border/40" />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="flex-1 h-6 rounded-none text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50/50 disabled:opacity-30"
+          className="flex-1 h-5 rounded-none text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50/50 disabled:opacity-30"
           onClick={handleWhatsApp}
           disabled={!lead.telefone}
           title="WhatsApp"
         >
-          <MessageCircle className="w-3 h-3" />
+          <MessageCircle className="w-2.5 h-2.5" />
         </Button>
-        <div className="w-px h-3 bg-border/40" />
+        <div className="w-px h-2.5 bg-border/40" />
         <Button
           variant="ghost"
           size="sm"
-          className="flex-1 h-6 rounded-none text-muted-foreground hover:text-primary hover:bg-primary/5"
+          className="flex-1 h-5 rounded-none text-muted-foreground hover:text-primary hover:bg-primary/5"
           onClick={handleViewDetails}
           title="Detalhes"
         >
-          <ExternalLink className="w-3 h-3" />
+          <ExternalLink className="w-2.5 h-2.5" />
         </Button>
       </div>
 
