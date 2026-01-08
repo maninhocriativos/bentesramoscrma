@@ -1,6 +1,19 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { formatarDataHora, formatarData, formatarHora, getProximaSegundaUtc, isDataNaProximaSemana, getProximaSegundaFormatada } from '../_shared/timezone-helpers.ts';
+import { 
+  formatarDataHora, 
+  formatarData, 
+  formatarHora, 
+  getProximaSegundaUtc, 
+  isDataNaProximaSemana, 
+  getProximaSegundaFormatada,
+  validarAgendamento,
+  getProximosDiasDisponiveis,
+  getSugestoesHorarios,
+  HORARIOS_DISPONIVEIS,
+  DIAS_PERMITIDOS,
+  NOMES_DIAS
+} from '../_shared/timezone-helpers.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,7 +23,6 @@ const corsHeaders = {
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 
 // Aliases para compatibilidade com código existente
-
 const formatarDataHoraManaus = formatarDataHora;
 const formatarDataManaus = formatarData;
 const formatarHoraManaus = formatarHora;
@@ -223,6 +235,24 @@ serve(async (req) => {
       case 'verificar_disponibilidade': {
         const { data: dataParam, hora_inicio, hora_fim } = data;
         
+        // Validar data conforme regras de agendamento
+        const dataVerificar = new Date(`${dataParam}T12:00:00-04:00`);
+        const validacao = validarAgendamento(dataVerificar, hora_inicio);
+        
+        if (!validacao.valido) {
+          result = {
+            success: false,
+            disponivel: false,
+            message: `⚠️ ${validacao.motivo}`,
+            data: {
+              sugestoes: validacao.sugestoes,
+              dias_disponiveis: getProximosDiasDisponiveis(3),
+              horarios_validos: HORARIOS_DISPONIVEIS
+            }
+          };
+          break;
+        }
+        
         // Construir range de busca para o dia inteiro ou horário específico
         const dataBase = dataParam; // YYYY-MM-DD
         let inicioRange: string;
@@ -230,15 +260,16 @@ serve(async (req) => {
         
         if (hora_inicio) {
           // Horário específico - buscar conflitos em janela de 2 horas
-          inicioRange = `${dataBase}T${hora_inicio}:00`;
-          fimRange = hora_fim ? `${dataBase}T${hora_fim}:00` : `${dataBase}T${hora_inicio.split(':')[0]}:59:59`;
+          inicioRange = `${dataBase}T${hora_inicio}:00-04:00`;
+          const horaFimCalc = hora_fim || `${(parseInt(hora_inicio.split(':')[0]) + 1).toString().padStart(2, '0')}:00`;
+          fimRange = `${dataBase}T${horaFimCalc}:00-04:00`;
         } else {
-          // Dia inteiro - horário comercial 08:00 às 20:00
-          inicioRange = `${dataBase}T08:00:00`;
-          fimRange = `${dataBase}T20:00:00`;
+          // Dia inteiro - horário comercial 09:00 às 17:00
+          inicioRange = `${dataBase}T09:00:00-04:00`;
+          fimRange = `${dataBase}T17:00:00-04:00`;
         }
         
-        // Buscar compromissos no range (considerando que datas estão em UTC, mas queremos Manaus -4h)
+        // Buscar compromissos no range
         const { data: compromissos, error } = await supabase
           .from('compromissos')
           .select('id, titulo, tipo, data_inicio, data_fim, leads_juridicos(nome)')
@@ -258,8 +289,9 @@ serve(async (req) => {
             cliente: c.leads_juridicos?.nome || null,
           }));
           
-          const temConflito = hora_inicio && compromissos && compromissos.length > 0;
-          const horariosOcupados = compromissosFormatados.map((c: any) => c.horario).join(', ');
+          const horariosOcupados = compromissosFormatados.map((c: any) => c.horario);
+          const horariosLivres = getSugestoesHorarios(dataVerificar, horariosOcupados);
+          const temConflito = hora_inicio && horariosOcupados.includes(hora_inicio);
           
           if (compromissos && compromissos.length === 0) {
             result = { 
@@ -267,19 +299,25 @@ serve(async (req) => {
               disponivel: true,
               message: hora_inicio 
                 ? `✅ Horário ${hora_inicio} está DISPONÍVEL em ${formatarDataManaus(dataBase)}.`
-                : `✅ Agenda LIVRE em ${formatarDataManaus(dataBase)}. Sem compromissos agendados.`,
-              data: { compromissos: [], sugestao_horarios: ['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'] }
+                : `✅ Agenda LIVRE em ${formatarDataManaus(dataBase)}. Horários disponíveis: ${HORARIOS_DISPONIVEIS.join(', ')}`,
+              data: { 
+                compromissos: [], 
+                sugestao_horarios: HORARIOS_DISPONIVEIS,
+                horarios_validos: HORARIOS_DISPONIVEIS
+              }
             };
           } else {
             result = { 
               success: true, 
               disponivel: !temConflito,
-              message: hora_inicio && temConflito
-                ? `⚠️ CONFLITO: Já existe compromisso às ${horariosOcupados} em ${formatarDataManaus(dataBase)}. Escolha outro horário.`
-                : `📅 Agenda de ${formatarDataManaus(dataBase)}: ${compromissos?.length} compromisso(s) agendado(s) nos horários: ${horariosOcupados}`,
+              message: temConflito
+                ? `⚠️ CONFLITO: Já existe compromisso às ${hora_inicio} em ${formatarDataManaus(dataBase)}. Horários livres: ${horariosLivres.join(', ') || 'Nenhum'}`
+                : `📅 Agenda de ${formatarDataManaus(dataBase)}: ${compromissos?.length} compromisso(s). Horários livres: ${horariosLivres.join(', ') || 'Nenhum'}`,
               data: { 
                 compromissos: compromissosFormatados,
-                horarios_ocupados: compromissosFormatados.map((c: any) => c.horario),
+                horarios_ocupados: horariosOcupados,
+                horarios_livres: horariosLivres,
+                horarios_validos: HORARIOS_DISPONIVEIS
               }
             };
           }
@@ -290,18 +328,24 @@ serve(async (req) => {
       case 'criar_compromisso': {
         const { titulo, tipo, data_inicio, data_fim, descricao, lead_id, processo_id, responsavel_id } = data;
         
-        // Verificar se data está na próxima semana (apenas para atendimentos de leads)
         const horaInicio = new Date(data_inicio);
+        const horaStr = formatarHoraManaus(horaInicio);
         
-        // Se tem lead_id, é atendimento e deve respeitar regra da próxima semana
-        if (lead_id && !isDataNaProximaSemana(horaInicio)) {
-          const proximaSegunda = getProximaSegundaFormatada();
-          console.log(`⚠️ Compromisso com lead rejeitado - data atual semana. Próxima: ${proximaSegunda}`);
-          result = {
-            success: false,
-            message: `⚠️ POLÍTICA DE AGENDAMENTO: Atendimentos com clientes devem ser agendados para a PRÓXIMA SEMANA (a partir de ${proximaSegunda}). Use verificar_disponibilidade para ver horários disponíveis na próxima semana.`
-          };
-          break;
+        // Se tem lead_id, é atendimento e deve respeitar todas as regras
+        if (lead_id) {
+          const validacao = validarAgendamento(horaInicio, horaStr);
+          if (!validacao.valido) {
+            console.log(`⚠️ Compromisso com lead rejeitado: ${validacao.motivo}`);
+            result = {
+              success: false,
+              message: `⚠️ POLÍTICA DE AGENDAMENTO: ${validacao.motivo}`,
+              data: { 
+                sugestoes: validacao.sugestoes,
+                dias_disponiveis: getProximosDiasDisponiveis(3)
+              }
+            };
+            break;
+          }
         }
         
         const horaFim = data_fim ? new Date(data_fim) : new Date(horaInicio.getTime() + 60 * 60 * 1000); // +1h padrão
@@ -368,14 +412,21 @@ serve(async (req) => {
           break;
         }
 
-        // REGRA: Só permitir agendamentos a partir da próxima semana
+        // Validar completamente o agendamento
         const dataAgendamento = new Date(data_inicio);
-        if (!isDataNaProximaSemana(dataAgendamento)) {
-          const proximaSegunda = getProximaSegundaFormatada();
-          console.log(`⚠️ Tentativa de agendar para esta semana. Próxima segunda: ${proximaSegunda}`);
+        const horaStr = formatarHoraManaus(dataAgendamento);
+        const validacao = validarAgendamento(dataAgendamento, horaStr);
+        
+        if (!validacao.valido) {
+          console.log(`⚠️ Agendamento rejeitado: ${validacao.motivo}`);
           result = {
             success: false,
-            message: `⚠️ POLÍTICA DE AGENDAMENTO: Novos atendimentos devem ser agendados para a PRÓXIMA SEMANA (a partir de ${proximaSegunda}). Por favor, proponha um horário a partir de segunda-feira da próxima semana.`
+            message: `⚠️ POLÍTICA DE AGENDAMENTO: ${validacao.motivo}`,
+            data: { 
+              sugestoes: validacao.sugestoes,
+              dias_disponiveis: getProximosDiasDisponiveis(3),
+              horarios_validos: HORARIOS_DISPONIVEIS
+            }
           };
           break;
         }

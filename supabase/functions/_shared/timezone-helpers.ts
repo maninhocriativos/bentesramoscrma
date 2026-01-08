@@ -167,4 +167,152 @@ export function getProximaSegundaFormatada(): string {
   return formatarData(proximaSegunda);
 }
 
+// ============================================================
+// REGRAS DE AGENDAMENTO (ESPECIFICAÇÃO OFICIAL)
+// ============================================================
+
+/**
+ * Dias permitidos para agendamento: Segunda (1), Quarta (3), Sexta (5)
+ */
+export const DIAS_PERMITIDOS = [1, 3, 5]; // 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sab
+
+/**
+ * Nomes dos dias da semana
+ */
+export const NOMES_DIAS: Record<number, string> = {
+  0: 'domingo',
+  1: 'segunda-feira',
+  2: 'terça-feira',
+  3: 'quarta-feira',
+  4: 'quinta-feira',
+  5: 'sexta-feira',
+  6: 'sábado'
+};
+
+/**
+ * Horário de funcionamento: 09:00 às 17:00
+ * Almoço (bloqueio): 12:00 às 14:00
+ * Duração: 1 hora
+ * Intervalo: 1 hora entre atendimentos
+ * 
+ * Slots válidos: 09:00, 10:00, 11:00, 14:00, 15:00, 16:00
+ */
+export const HORARIOS_DISPONIVEIS = ['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'];
+
+/**
+ * Verifica se o dia da semana é permitido para agendamento
+ */
+export function isDiaPermitido(date: Date | string): boolean {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  // Obter dia da semana em Manaus
+  const formatter = new Intl.DateTimeFormat('en-US', { 
+    timeZone: TIMEZONE, 
+    weekday: 'short' 
+  });
+  const diaSemanaStr = formatter.format(d);
+  const diasMap: Record<string, number> = { 'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6 };
+  const diaSemana = diasMap[diaSemanaStr] ?? 0;
+  
+  return DIAS_PERMITIDOS.includes(diaSemana);
+}
+
+/**
+ * Verifica se o horário está dentro do expediente e fora do almoço
+ */
+export function isHorarioValido(hora: string): boolean {
+  return HORARIOS_DISPONIVEIS.includes(hora);
+}
+
+/**
+ * Valida completamente um agendamento
+ */
+export interface ValidacaoAgendamento {
+  valido: boolean;
+  motivo?: string;
+  sugestoes?: string[];
+}
+
+export function validarAgendamento(date: Date | string, hora?: string): ValidacaoAgendamento {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  
+  // Verificar se está na próxima semana
+  if (!isDataNaProximaSemana(d)) {
+    const proximaSegunda = getProximaSegundaFormatada();
+    return {
+      valido: false,
+      motivo: `Agendamentos devem ser para a PRÓXIMA SEMANA (a partir de ${proximaSegunda}).`,
+      sugestoes: getProximosDiasDisponiveis(3)
+    };
+  }
+  
+  // Obter dia da semana em Manaus
+  const formatter = new Intl.DateTimeFormat('en-US', { 
+    timeZone: TIMEZONE, 
+    weekday: 'short' 
+  });
+  const diaSemanaStr = formatter.format(d);
+  const diasMap: Record<string, number> = { 'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6 };
+  const diaSemana = diasMap[diaSemanaStr] ?? d.getDay();
+  
+  // Verificar se é dia permitido
+  if (!DIAS_PERMITIDOS.includes(diaSemana)) {
+    const nomeDia = NOMES_DIAS[diaSemana];
+    return {
+      valido: false,
+      motivo: `${nomeDia.charAt(0).toUpperCase() + nomeDia.slice(1)} NÃO é dia de atendimento. Atendemos apenas Segunda, Quarta e Sexta.`,
+      sugestoes: getProximosDiasDisponiveis(3)
+    };
+  }
+  
+  // Verificar horário se informado
+  if (hora && !isHorarioValido(hora)) {
+    return {
+      valido: false,
+      motivo: `Horário ${hora} não disponível. Horários válidos: ${HORARIOS_DISPONIVEIS.join(', ')} (duração 1h, intervalo 1h, almoço 12-14h).`,
+      sugestoes: HORARIOS_DISPONIVEIS
+    };
+  }
+  
+  return { valido: true };
+}
+
+/**
+ * Retorna os próximos N dias disponíveis para agendamento
+ */
+export function getProximosDiasDisponiveis(quantidade: number = 3): string[] {
+  const dias: string[] = [];
+  const proximaSegunda = getProximaSegundaUtc();
+  let dataAtual = new Date(proximaSegunda);
+  
+  while (dias.length < quantidade) {
+    const formatter = new Intl.DateTimeFormat('en-US', { 
+      timeZone: TIMEZONE, 
+      weekday: 'short' 
+    });
+    const diaSemanaStr = formatter.format(dataAtual);
+    const diasMap: Record<string, number> = { 'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6 };
+    const diaSemana = diasMap[diaSemanaStr] ?? dataAtual.getDay();
+    
+    if (DIAS_PERMITIDOS.includes(diaSemana)) {
+      dias.push(formatarDataCurta(dataAtual) + ' (' + HORARIOS_DISPONIVEIS.join(', ') + ')');
+    }
+    
+    dataAtual = new Date(dataAtual.getTime() + 24 * 60 * 60 * 1000);
+  }
+  
+  return dias;
+}
+
+/**
+ * Gera sugestões de horários disponíveis para uma data
+ */
+export function getSugestoesHorarios(date: Date | string, horariosOcupados: string[] = []): string[] {
+  const validacao = validarAgendamento(date);
+  if (!validacao.valido) {
+    return [];
+  }
+  
+  return HORARIOS_DISPONIVEIS.filter(h => !horariosOcupados.includes(h));
+}
+
 export const MANAUS_TIMEZONE = TIMEZONE;
