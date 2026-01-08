@@ -12,23 +12,31 @@ export function useInteracoes(clienteId?: string) {
 
   const fetchInteracoes = async () => {
     setLoading(true);
-    let query = supabase
-      .from('interacoes')
-      .select('*')
-      .order('data_interacao', { ascending: false });
+    try {
+      let query = supabase
+        .from('interacoes')
+        .select('*')
+        .order('data_interacao', { ascending: false });
 
-    if (clienteId) {
-      query = query.eq('cliente_id', clienteId);
+      if (clienteId) {
+        query = query.eq('cliente_id', clienteId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Erro ao carregar interações:', error);
+        toast({ title: 'Erro ao carregar interações', description: error.message, variant: 'destructive' });
+      } else {
+        setInteracoes(data as Interacao[]);
+      }
+    } catch (err) {
+      console.error('Erro de conexão ao carregar interações:', err);
+      // Silently fail on network errors to avoid blocking the UI
+      setInteracoes([]);
+    } finally {
+      setLoading(false);
     }
-
-    const { data, error } = await query;
-
-    if (error) {
-      toast({ title: 'Erro ao carregar interações', description: error.message, variant: 'destructive' });
-    } else {
-      setInteracoes(data as Interacao[]);
-    }
-    setLoading(false);
   };
 
   const createInteracao = async (interacao: Omit<Interacao, 'id' | 'created_at'>) => {
