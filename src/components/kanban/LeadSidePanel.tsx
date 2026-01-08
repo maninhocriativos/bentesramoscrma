@@ -80,10 +80,8 @@ export function LeadSidePanel({ lead, isOpen, onClose, onOpenFullModal }: LeadSi
   const showContractButton = lead.status === 'Aguardando Contrato' && !lead.link_contrato;
 
   const handleWhatsApp = () => {
-    if (lead.telefone) {
-      const phone = lead.telefone.replace(/\D/g, '');
-      window.open(`https://wa.me/55${phone}`, '_blank');
-    }
+    // Navigate to the CRM chat (ManyChat inbox)
+    navigate('/manychat');
   };
 
   const handleCall = () => {
