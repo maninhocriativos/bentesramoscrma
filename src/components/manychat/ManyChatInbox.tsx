@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { useChatPresence } from '@/hooks/useChatPresence';
 import { useAuth } from '@/hooks/useAuth';
+import LeadContextPanel from './LeadContextPanel';
 import { 
   Send, 
   Search, 
@@ -30,7 +31,10 @@ import {
   UserRound,
   Instagram,
   Facebook,
-  MessageCircle
+  MessageCircle,
+  Sparkles,
+  PanelRightOpen,
+  PanelRightClose
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -111,6 +115,7 @@ const ManyChatInbox = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<ConversationFilter>('all');
   const [pendingLeadId, setPendingLeadId] = useState<string | null>(null);
+  const [showContextPanel, setShowContextPanel] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -819,6 +824,22 @@ const ManyChatInbox = () => {
                 >
                   {selectedSubscriber.atendimento_humano ? <UserRound className="h-5 w-5" /> : <Bot className="h-5 w-5" />}
                 </Button>
+                {/* Botão Contexto do Lead */}
+                {selectedSubscriber.lead_id && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => setShowContextPanel(!showContextPanel)}
+                    className={`hidden md:flex h-10 w-10 rounded-full transition-colors ${
+                      showContextPanel 
+                        ? 'text-[#00A884] bg-[#00A884]/10 hover:bg-[#00A884]/20' 
+                        : 'text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]'
+                    }`}
+                    title={showContextPanel ? 'Fechar contexto' : 'Ver contexto do lead'}
+                  >
+                    {showContextPanel ? <PanelRightClose className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}
+                  </Button>
+                )}
                 <Button variant="ghost" size="icon" className="hidden md:flex h-10 w-10 rounded-full text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]">
                   <Search className="h-5 w-5" />
                 </Button>
@@ -1020,6 +1041,15 @@ const ManyChatInbox = () => {
           </div>
         )}
       </div>
+
+      {/* Painel de Contexto do Lead */}
+      {showContextPanel && selectedSubscriber?.lead_id && (
+        <LeadContextPanel 
+          leadId={selectedSubscriber.lead_id}
+          onClose={() => setShowContextPanel(false)}
+          onNavigateToLead={() => navigate(`/leads/${selectedSubscriber.lead_id}`)}
+        />
+      )}
     </div>
   );
 };
