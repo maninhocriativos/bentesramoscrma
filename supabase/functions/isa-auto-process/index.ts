@@ -971,6 +971,22 @@ serve(async (req) => {
       });
     }
 
+    // 🔒 IGNORAR MENSAGENS DO BOT - Evitar loop de processamento
+    const mensagemLower = mensagem.toLowerCase().trim();
+    if (mensagemLower.startsWith('bot diz:') || 
+        mensagemLower.startsWith('isa diz:') ||
+        mensagemLower.startsWith('[bot]') ||
+        mensagemLower.startsWith('[isa]')) {
+      console.log('🔇 Mensagem do bot detectada, ignorando processamento');
+      return new Response(JSON.stringify({ 
+        success: true, 
+        skipped: true,
+        reason: 'mensagem_do_bot' 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // 🛑 VERIFICAR ATENDIMENTO HUMANO - Isa para de processar
     if (subscriber_id) {
       const { data: subscriberCheck } = await supabase
