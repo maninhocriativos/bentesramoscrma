@@ -423,7 +423,14 @@ serve(async (req) => {
         
         // 🤖 CHAMAR ISA AUTO-PROCESS para processar a mensagem automaticamente
         // Apenas para mensagens de entrada com lead vinculado
-        if (direcao === 'entrada' && leadId) {
+        // NÃO processar mensagens do próprio bot (evita loop)
+        const contentLower = messageContent?.toLowerCase().trim() || '';
+        const isOwnBotMessage = contentLower.startsWith('bot diz:') || 
+                                 contentLower.startsWith('isa diz:') ||
+                                 contentLower.startsWith('[bot]') ||
+                                 contentLower.startsWith('[isa]');
+        
+        if (direcao === 'entrada' && leadId && !isOwnBotMessage) {
           console.log('🤖 Acionando Isa Auto-Process...');
           try {
             const isaResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/isa-auto-process`, {
