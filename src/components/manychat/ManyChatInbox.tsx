@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTheme } from 'next-themes';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -92,6 +92,7 @@ const ManyChatInbox = () => {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [selectedSubscriber, setSelectedSubscriber] = useState<Subscriber | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -106,6 +107,7 @@ const ManyChatInbox = () => {
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<ConversationFilter>('all');
+  const [pendingLeadId, setPendingLeadId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -124,6 +126,31 @@ const ManyChatInbox = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Check for lead_id in URL params
+  useEffect(() => {
+    const leadId = searchParams.get('lead_id');
+    if (leadId) {
+      setPendingLeadId(leadId);
+      // Clear the param from URL to avoid re-selecting on refresh
+      setSearchParams({});
+    }
+  }, [searchParams, setSearchParams]);
+
+  // Auto-select conversation when subscribers load and we have a pending lead_id
+  useEffect(() => {
+    if (pendingLeadId && subscribers.length > 0) {
+      const subscriber = subscribers.find(s => s.lead_id === pendingLeadId);
+      if (subscriber) {
+        setSelectedSubscriber(subscriber);
+        setPendingLeadId(null);
+      } else {
+        // Lead might not have a subscriber yet
+        console.log('Subscriber não encontrado para lead_id:', pendingLeadId);
+        setPendingLeadId(null);
+      }
+    }
+  }, [pendingLeadId, subscribers]);
 
   useEffect(() => {
     loadSubscribers();
