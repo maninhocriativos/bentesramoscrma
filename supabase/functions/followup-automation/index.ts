@@ -10,18 +10,13 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const manychatApiKey = Deno.env.get('MANYCHAT_API_KEY')!;
 
-interface FollowupConfig {
-  titulo: string;
-  mensagem: string;
-  delay_minutos: number;
-  flow_ns: string;
-  requer_template?: boolean;
-}
-
-// Configuração de follow-ups com mensagens de alto impacto (dentro da janela 24h)
-const FOLLOWUP_CONFIG: Record<string, FollowupConfig> = {
-  followup_1: {
-    titulo: "Vitória recente para mostrar! 💰",
+// ============================================================
+// CONFIGURAÇÃO FOLLOW-UP FAST (apenas Lead Frio)
+// ============================================================
+const FAST_CONFIG = {
+  stage_1: {
+    delay_minutos: 10,
+    titulo: "Follow-up FAST 1 - 10 min",
     mensagem: `{{nome}}, acabei de ver seu contato! 
 
 ⚠️ Sabia que esta semana ganhamos uma causa onde o cliente recebeu *R$ 5.609,24* de volta?
@@ -33,11 +28,11 @@ const FOLLOWUP_CONFIG: Record<string, FollowupConfig> = {
 O banco cobrou dele o que não devia, e a Justiça mandou devolver TUDO!
 
 *Você pode estar na mesma situação.* Me conta o que está acontecendo? 👇`,
-    delay_minutos: 10,
-    flow_ns: 'followup_10min'
+    flow_ns: 'followup_fast_1'
   },
-  followup_2: {
-    titulo: "Alerta: Prazo para pedir devolução 📋",
+  stage_2: {
+    delay_minutos: 240, // 4 horas
+    titulo: "Follow-up FAST 2 - 4h",
     mensagem: `{{nome}}, você sabia que existe PRAZO para pedir o dinheiro de volta?
 
 ⚡ Cobranças indevidas dos últimos 5 anos podem ser recuperadas
@@ -49,16 +44,16 @@ O banco cobrou dele o que não devia, e a Justiça mandou devolver TUDO!
 Já ajudamos pessoas que nem sabiam que tinham direito!
 
 Quer que eu analise seu caso SEM COMPROMISSO? Só responder "SIM" 👇`,
-    delay_minutos: 60,
-    flow_ns: 'followup_1hora'
+    flow_ns: 'followup_fast_2'
   },
-  followup_3: {
-    titulo: "Última chance - Decisão real do Tribunal 📌",
-    mensagem: `{{nome}}, última mensagem... 
+  stage_3: {
+    delay_minutos: 900, // 15 horas
+    titulo: "Follow-up FAST 3 - 15h (Final FAST)",
+    mensagem: `{{nome}}, última mensagem do atendimento inicial... 
 
 Vi que você não respondeu, mas antes de encerrar, olha esse resultado que acabamos de conseguir:
 
-⚖️ *DECISÃO JUDICIAL - Junho/2025:*
+⚖️ *DECISÃO JUDICIAL:*
 ✅ Débito declarado INEXIGÍVEL
 ✅ Devolução em DOBRO: R$ 2.609,24
 ✅ Danos Morais: R$ 3.000,00
@@ -69,18 +64,66 @@ O cliente nem precisou ir na audiência!
 Se você tem financiamento, empréstimo ou cobrança bancária, pode ter dinheiro a receber.
 
 *Responda "QUERO ANALISAR"* e verificamos GRÁTIS se você tem direito! 🔍`,
-    delay_minutos: 1440,
-    flow_ns: 'followup_24h_template',
+    flow_ns: 'followup_fast_3'
+  }
+};
+
+// ============================================================
+// CONFIGURAÇÃO FOLLOW-UP SLOW (Lead Frio, Em Atendimento, Em Negociação, Aguardando Contrato)
+// Só inicia após 24h de silêncio
+// ============================================================
+const SLOW_CONFIG = {
+  stage_1: {
+    delay_minutos: 1440, // 24h
+    titulo: "Follow-up SLOW 1 - 24h",
+    mensagem: `Olá {{nome}}! 👋
+
+Passando para lembrar que estamos à disposição para analisar seu caso.
+
+Muitos clientes como você conseguiram recuperar valores cobrados indevidamente pelos bancos.
+
+Posso ajudar? Responda esta mensagem! 📩`,
+    flow_ns: 'content20260105140934_525890',
+    requer_template: true
+  },
+  stage_2: {
+    delay_minutos: 2880, // 48h
+    titulo: "Follow-up SLOW 2 - 48h",
+    mensagem: `{{nome}}, vi que ainda não conseguimos conversar.
+
+⏰ Lembre-se: existe prazo para pedir a devolução de cobranças indevidas!
+
+Ainda está interessado(a) em verificar se tem valores a receber? É gratuito e sem compromisso.
+
+Responda "SIM" para continuarmos! ✅`,
+    flow_ns: 'followup_slow_2',
+    requer_template: true
+  },
+  stage_3: {
+    delay_minutos: 4320, // 72h
+    titulo: "Follow-up SLOW 3 - 72h (Final)",
+    mensagem: `{{nome}}, esta é nossa última tentativa de contato.
+
+Se mudar de ideia sobre verificar possíveis cobranças indevidas no seu nome, é só responder esta mensagem.
+
+Estamos à disposição! 🤝
+
+Bentes & Ramos Advocacia`,
+    flow_ns: 'followup_slow_3',
     requer_template: true
   }
 };
 
-// Enviar mensagem direta via ManyChat (funciona dentro de 24h)
+// Status que permitem follow-up
+const STATUS_PERMITE_FAST = ['Lead Frio'];
+const STATUS_PERMITE_SLOW = ['Lead Frio', 'Em Atendimento', 'Em Negociação', 'Aguardando Contrato'];
+const STATUS_BLOQUEADOS = ['Contrato Assinado', 'Ganho'];
+
+// Enviar mensagem direta via ManyChat (dentro de 24h)
 async function enviarMensagemManyChat(subscriberId: string, mensagem: string, canal: string = 'whatsapp') {
   try {
     console.log(`[FOLLOWUP] Enviando mensagem direta: subscriber=${subscriberId}, canal=${canal}`);
     
-    // Tentar via sendContent primeiro
     const response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
       method: 'POST',
       headers: {
@@ -103,8 +146,6 @@ async function enviarMensagemManyChat(subscriberId: string, mensagem: string, ca
     if (!contentType?.includes('application/json')) {
       const text = await response.text();
       console.error('[FOLLOWUP] Resposta não-JSON:', text.substring(0, 300));
-      
-      // Tentar fallback com sendMessage
       return await tentarSendMessage(subscriberId, mensagem);
     }
 
@@ -115,7 +156,6 @@ async function enviarMensagemManyChat(subscriberId: string, mensagem: string, ca
       return { success: true, result };
     }
     
-    // Se falhou, tentar sendMessage como fallback
     console.log('[FOLLOWUP] sendContent falhou, tentando sendMessage...');
     return await tentarSendMessage(subscriberId, mensagem);
 
@@ -125,7 +165,7 @@ async function enviarMensagemManyChat(subscriberId: string, mensagem: string, ca
   }
 }
 
-// Fallback via sendMessage (endpoint mais simples)
+// Fallback via sendMessage
 async function tentarSendMessage(subscriberId: string, mensagem: string) {
   try {
     const response = await fetch('https://api.manychat.com/fb/subscriber/sendMessage', {
@@ -183,11 +223,7 @@ async function enviarViaFlow(subscriberId: string, flowNs: string, dados: Record
     const result = await response.json();
     console.log('[FOLLOWUP] sendFlow response:', JSON.stringify(result));
     
-    if (result.status === 'success') {
-      return { success: true, result };
-    }
-    
-    return { success: false, error: result.error || 'Erro desconhecido', fallback: true };
+    return { success: result.status === 'success', result, error: result.error };
 
   } catch (error: any) {
     console.error('[FOLLOWUP] Erro no sendFlow:', error);
@@ -195,44 +231,33 @@ async function enviarViaFlow(subscriberId: string, flowNs: string, dados: Record
   }
 }
 
-
-// Função principal de envio
-async function enviarFollowup(
-  subscriberId: string, 
-  templateKey: string, 
-  nome: string, 
-  canal: string,
-  minutosDesdeContato: number
-) {
-  const config = FOLLOWUP_CONFIG[templateKey as keyof typeof FOLLOWUP_CONFIG];
-  if (!config) {
-    return { success: false, error: 'Template não encontrado' };
+// Calcular próximo follow-up
+function calcularProximoFollowup(
+  stageFast: number, 
+  stageSlow: number, 
+  statusLead: string,
+  primeiroContatoEm: Date
+): { nextAt: Date | null; nextType: 'FAST' | 'SLOW' | null; nextStage: number } {
+  const agora = new Date();
+  
+  // Se ainda pode receber FAST (Lead Frio e stage < 3)
+  if (STATUS_PERMITE_FAST.includes(statusLead) && stageFast < 3) {
+    const nextStage = stageFast + 1;
+    const config = FAST_CONFIG[`stage_${nextStage}` as keyof typeof FAST_CONFIG];
+    const nextAt = new Date(primeiroContatoEm.getTime() + config.delay_minutos * 60 * 1000);
+    return { nextAt, nextType: 'FAST', nextStage };
   }
   
-  const mensagemPersonalizada = config.mensagem.replace(/\{\{nome\}\}/g, nome || 'cliente');
-  
-  // Se está fora da janela 24h e requer template
-  if (config.requer_template && minutosDesdeContato > 1440) {
-    console.log(`[FOLLOWUP] Follow-up ${templateKey} fora da janela 24h (${minutosDesdeContato.toFixed(0)} min)`);
-    
-    // Tentar via Flow primeiro (para templates aprovados)
-    const resultado = await enviarViaFlow(subscriberId, config.flow_ns, { 
-      nome: nome || 'cliente',
-      mensagem: mensagemPersonalizada 
-    });
-    
-    if (resultado.success) {
-      return resultado;
-    }
-    
-    // Se flow não existe, tentar envio direto mesmo assim (pode funcionar se janela ainda aberta no ManyChat)
-    console.log('[FOLLOWUP] Flow falhou, tentando envio direto...');
-    return await enviarMensagemManyChat(subscriberId, mensagemPersonalizada, canal);
+  // Se pode receber SLOW e stage < 3
+  if (STATUS_PERMITE_SLOW.includes(statusLead) && stageSlow < 3) {
+    const nextStage = stageSlow + 1;
+    const config = SLOW_CONFIG[`stage_${nextStage}` as keyof typeof SLOW_CONFIG];
+    const nextAt = new Date(primeiroContatoEm.getTime() + config.delay_minutos * 60 * 1000);
+    return { nextAt, nextType: 'SLOW', nextStage };
   }
   
-  // Dentro da janela 24h - enviar mensagem direta
-  console.log(`[FOLLOWUP] Dentro da janela 24h, enviando direto (${minutosDesdeContato.toFixed(0)} min)`);
-  return await enviarMensagemManyChat(subscriberId, mensagemPersonalizada, canal);
+  // Sem mais follow-ups
+  return { nextAt: null, nextType: null, nextStage: 0 };
 }
 
 serve(async (req: Request) => {
@@ -242,18 +267,11 @@ serve(async (req: Request) => {
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const agora = new Date();
-  
-  // Modo de teste manual
-  let body: any = {};
-  try {
-    body = await req.json();
-  } catch { /* sem body */ }
 
-  console.log('[FOLLOWUP] Iniciando processamento de follow-ups:', agora.toISOString());
-  console.log('[FOLLOWUP] Iniciando processamento de follow-ups:', agora.toISOString());
+  console.log('[FOLLOWUP] Iniciando processamento FAST/SLOW:', agora.toISOString());
 
   try {
-    // Buscar follow-ups pendentes de leads frios
+    // Buscar follow-ups pendentes
     const { data: followups, error: fetchError } = await supabase
       .from('lead_followups')
       .select(`
@@ -261,202 +279,266 @@ serve(async (req: Request) => {
         leads_juridicos!inner(id, nome, telefone, status)
       `)
       .in('status', ['aguardando', 'em_andamento', 'pendente'])
-      .eq('respondido', false);
+      .eq('respondido', false)
+      .or('next_followup_at.is.null,next_followup_at.lte.' + agora.toISOString());
 
     if (fetchError) {
       console.error('[FOLLOWUP] Erro ao buscar followups:', fetchError);
       throw fetchError;
     }
 
-    console.log(`[FOLLOWUP] Encontrados ${followups?.length || 0} follow-ups ativos`);
+    console.log(`[FOLLOWUP] Encontrados ${followups?.length || 0} follow-ups para processar`);
 
     let enviados = 0;
     let erros = 0;
-    let pendentesTemplate = 0;
     let pulados = 0;
-
-    // ======================================================
-    // REGRA ABSOLUTA DE BLOQUEIO POR STATUS (ESPECIFICAÇÃO)
-    // ======================================================
-    // Status bloqueados: NUNCA enviar follow-up
-    const STATUS_BLOQUEADOS = ['Contrato Assinado', 'Ganho'];
-    // Status que permitem APENAS SLOW (nunca FAST)
-    const STATUS_APENAS_SLOW = ['Em Atendimento', 'Em Negociação', 'Aguardando Contrato'];
-    // Status que permite FAST: apenas Lead Frio
-    const STATUS_PERMITE_FAST = ['Lead Frio'];
+    let agendados = 0;
 
     for (const followup of followups || []) {
       const lead = followup.leads_juridicos;
       const primeiroContato = new Date(followup.primeiro_contato_em);
       const minutosDesdeContato = (agora.getTime() - primeiroContato.getTime()) / (1000 * 60);
+      const stageFast = followup.followup_stage_fast || 0;
+      const stageSlow = followup.followup_stage_slow || 0;
       
-      console.log(`[FOLLOWUP] Lead: ${lead.nome}, minutos: ${minutosDesdeContato.toFixed(0)}, status: ${lead.status}`);
+      console.log(`[FOLLOWUP] Lead: ${lead.nome}, status: ${lead.status}, FAST: ${stageFast}/3, SLOW: ${stageSlow}/3, minutos: ${minutosDesdeContato.toFixed(0)}`);
 
-      // 🛑 REGRA 1: Status bloqueados - NUNCA enviar follow-up
+      // 🛑 REGRA 1: Status bloqueados - NUNCA enviar
       if (STATUS_BLOQUEADOS.includes(lead.status)) {
         await supabase
           .from('lead_followups')
           .update({ 
             status: 'concluido',
-            followup_lock_reason: `Lead com status bloqueado: ${lead.status}`,
+            followup_lock_reason: `Status bloqueado: ${lead.status}`,
             next_followup_at: null,
             next_followup_type: null
           })
           .eq('id', followup.id);
-        console.log(`[FOLLOWUP] 🛑 Lead ${lead.nome} tem status BLOQUEADO (${lead.status}), encerrando follow-ups`);
+        console.log(`[FOLLOWUP] 🛑 Lead ${lead.nome} BLOQUEADO (${lead.status})`);
         pulados++;
         continue;
       }
 
-      // 🛑 REGRA 2: Status que NÃO são Lead Frio - não enviar FAST (follow-up inicial)
-      // FAST é apenas para Lead Frio. Outros status só recebem SLOW (retomada)
-      if (!STATUS_PERMITE_FAST.includes(lead.status)) {
-        await supabase
-          .from('lead_followups')
-          .update({ 
-            status: 'concluido',
-            followup_lock_reason: `Follow-up FAST não permitido para status: ${lead.status}. Use retomada (SLOW).`,
-            next_followup_at: null,
-            next_followup_type: null
-          })
-          .eq('id', followup.id);
-        console.log(`[FOLLOWUP] ⚠️ Lead ${lead.nome} não é Lead Frio (status: ${lead.status}), FAST não permitido`);
-        pulados++;
-        continue;
-      }
-
-      // 🛑 Se o contato estiver em ATENDIMENTO HUMANO, nunca disparar follow-up automático
+      // 🛑 REGRA 2: Verificar atendimento humano
       if (followup.subscriber_id) {
-        const { data: subscriberCheck, error: subscriberCheckError } = await supabase
+        const { data: subscriber } = await supabase
           .from('manychat_subscribers')
-          .select('atendimento_humano, atendimento_humano_desde')
+          .select('atendimento_humano')
           .eq('subscriber_id', followup.subscriber_id)
           .maybeSingle();
 
-        if (subscriberCheckError) {
-          console.warn('[FOLLOWUP] Aviso ao checar atendimento humano:', subscriberCheckError);
-        }
-
-        if (subscriberCheck?.atendimento_humano) {
-          console.log(
-            `[FOLLOWUP] 🛑 Atendimento humano ativo (desde ${subscriberCheck.atendimento_humano_desde || 'N/A'}) para ${lead.nome} (subscriber: ${followup.subscriber_id}), pulando follow-up`
-          );
+        if (subscriber?.atendimento_humano) {
+          console.log(`[FOLLOWUP] 🛑 Atendimento humano ativo para ${lead.nome}`);
           pulados++;
           continue;
         }
       }
 
-      // ⚠️ VERIFICAR SE LEAD TEM MENSAGENS RECENTES DE ENTRADA (conversa ativa)
-      // Se o lead mandou mensagem nos últimos 30 minutos, NÃO enviar follow-up automático
-      const trintaMinutosAtras = new Date(agora.getTime() - 30 * 60 * 1000).toISOString();
-      
-      const { data: mensagensRecentes } = await supabase
+      // 🛑 REGRA 3: Verificar mensagens recentes (conversa ativa - 30 min)
+      const trintaMinAtras = new Date(agora.getTime() - 30 * 60 * 1000).toISOString();
+      const { data: msgRecentes } = await supabase
         .from('manychat_mensagens')
-        .select('id, created_at, direcao')
+        .select('id')
         .eq('lead_id', lead.id)
         .eq('direcao', 'entrada')
-        .gte('created_at', trintaMinutosAtras)
-        .order('created_at', { ascending: false })
+        .gte('created_at', trintaMinAtras)
         .limit(1);
 
-      if (mensagensRecentes && mensagensRecentes.length > 0) {
-        console.log(`[FOLLOWUP] ⏸️ Lead ${lead.nome} tem conversa ativa (última msg: ${mensagensRecentes[0].created_at}), pulando follow-up`);
+      if (msgRecentes && msgRecentes.length > 0) {
+        console.log(`[FOLLOWUP] ⏸️ Lead ${lead.nome} tem conversa ativa`);
         pulados++;
         continue;
       }
 
-      // Verificar também interações recentes (se o advogado está conversando com o lead)
+      // 🛑 REGRA 4: Verificar interações recentes
       const { data: interacoesRecentes } = await supabase
         .from('interacoes')
-        .select('id, data_interacao, tipo')
+        .select('id')
         .eq('cliente_id', lead.id)
-        .gte('data_interacao', trintaMinutosAtras)
-        .order('data_interacao', { ascending: false })
+        .gte('data_interacao', trintaMinAtras)
         .limit(1);
 
       if (interacoesRecentes && interacoesRecentes.length > 0) {
-        console.log(`[FOLLOWUP] ⏸️ Lead ${lead.nome} tem interação recente, pulando follow-up`);
+        console.log(`[FOLLOWUP] ⏸️ Lead ${lead.nome} tem interação recente`);
         pulados++;
         continue;
       }
 
-      // Determinar qual follow-up enviar
-      let templateKey: string | null = null;
-      let updateField: string | null = null;
+      // Determinar tipo e estágio do follow-up
+      let tipoEnvio: 'FAST' | 'SLOW' | null = null;
+      let stageEnvio = 0;
+      let config: any = null;
 
-      if (!followup.followup_1_enviado && minutosDesdeContato >= FOLLOWUP_CONFIG.followup_1.delay_minutos) {
-        templateKey = 'followup_1';
-        updateField = 'followup_1';
-      } else if (followup.followup_1_enviado && !followup.followup_2_enviado && minutosDesdeContato >= FOLLOWUP_CONFIG.followup_2.delay_minutos) {
-        templateKey = 'followup_2';
-        updateField = 'followup_2';
-      } else if (followup.followup_2_enviado && !followup.followup_3_enviado && minutosDesdeContato >= FOLLOWUP_CONFIG.followup_3.delay_minutos) {
-        templateKey = 'followup_3';
-        updateField = 'followup_3';
+      // FAST: apenas para Lead Frio
+      if (STATUS_PERMITE_FAST.includes(lead.status) && stageFast < 3) {
+        const nextStage = stageFast + 1;
+        const fastConfig = FAST_CONFIG[`stage_${nextStage}` as keyof typeof FAST_CONFIG];
+        
+        if (minutosDesdeContato >= fastConfig.delay_minutos) {
+          tipoEnvio = 'FAST';
+          stageEnvio = nextStage;
+          config = fastConfig;
+        }
       }
-
-      if (templateKey && followup.subscriber_id) {
-        console.log(`[FOLLOWUP] Enviando ${templateKey} para ${lead.nome} (subscriber: ${followup.subscriber_id})`);
-
-        const resultado = await enviarFollowup(
-          followup.subscriber_id,
-          templateKey,
-          lead.nome,
-          followup.canal || 'whatsapp',
-          minutosDesdeContato
-        );
-
-        if (resultado.success) {
-          const updateData: any = {
-            [`${updateField}_enviado`]: true,
-            [`${updateField}_enviado_em`]: agora.toISOString(),
-            status: 'em_andamento'
-          };
+      
+      // SLOW: se FAST terminou ou não é Lead Frio
+      if (!tipoEnvio && STATUS_PERMITE_SLOW.includes(lead.status) && stageSlow < 3) {
+        // SLOW só começa após 24h OU após FAST completo
+        const fastCompleto = stageFast >= 3 || !STATUS_PERMITE_FAST.includes(lead.status);
+        
+        if (fastCompleto) {
+          const nextStage = stageSlow + 1;
+          const slowConfig = SLOW_CONFIG[`stage_${nextStage}` as keyof typeof SLOW_CONFIG];
           
-          if (templateKey === 'followup_3') {
-            updateData.status = 'concluido';
-          }
-
-          await supabase
-            .from('lead_followups')
-            .update(updateData)
-            .eq('id', followup.id);
-
-          // Registrar interação
-          await supabase.from('interacoes').insert({
-            cliente_id: lead.id,
-            tipo: 'WhatsApp',
-            direcao: 'Saída',
-            resumo: `Follow-up automático ${templateKey.replace('_', ' ')} enviado pela Isa`,
-            detalhes: FOLLOWUP_CONFIG[templateKey as keyof typeof FOLLOWUP_CONFIG].mensagem.replace(/\{\{nome\}\}/g, lead.nome || 'cliente'),
-          });
-
-          await supabase.from('system_events').insert({
-            tipo: 'followup',
-            fonte: 'isa-automation',
-            acao: `${templateKey}_enviado`,
-            lead_id: lead.id,
-            entidade_tipo: 'lead_followup',
-            entidade_id: followup.id,
-            dados: { template: templateKey, subscriber_id: followup.subscriber_id },
-            processado: true
-          });
-
-          enviados++;
-          console.log(`[FOLLOWUP] ✅ ${templateKey} enviado para ${lead.nome}`);
-        } else {
-          if ((resultado as any).precisa_criar_flow) {
-            pendentesTemplate++;
-            console.warn(`[FOLLOWUP] ⚠️ ${templateKey} pendente: precisa criar flow no ManyChat`);
-          } else {
-            erros++;
-            console.error(`[FOLLOWUP] ❌ Erro ao enviar ${templateKey}: ${resultado.error}`);
+          if (minutosDesdeContato >= slowConfig.delay_minutos) {
+            tipoEnvio = 'SLOW';
+            stageEnvio = nextStage;
+            config = slowConfig;
           }
         }
       }
+
+      // Se não há follow-up para enviar agora, calcular próximo
+      if (!tipoEnvio || !config) {
+        const proximo = calcularProximoFollowup(stageFast, stageSlow, lead.status, primeiroContato);
+        
+        if (proximo.nextAt) {
+          await supabase
+            .from('lead_followups')
+            .update({
+              next_followup_at: proximo.nextAt.toISOString(),
+              next_followup_type: proximo.nextType
+            })
+            .eq('id', followup.id);
+          agendados++;
+        } else {
+          // Sem mais follow-ups
+          await supabase
+            .from('lead_followups')
+            .update({
+              status: 'concluido',
+              next_followup_at: null,
+              next_followup_type: null
+            })
+            .eq('id', followup.id);
+        }
+        continue;
+      }
+
+      // Enviar follow-up
+      if (!followup.subscriber_id) {
+        console.log(`[FOLLOWUP] ⚠️ Lead ${lead.nome} sem subscriber_id`);
+        pulados++;
+        continue;
+      }
+
+      console.log(`[FOLLOWUP] Enviando ${tipoEnvio} stage ${stageEnvio} para ${lead.nome}`);
+
+      const mensagem = config.mensagem.replace(/\{\{nome\}\}/g, lead.nome || 'cliente');
+      let resultado: any;
+
+      // SLOW sempre usa template (>24h)
+      if (tipoEnvio === 'SLOW' || config.requer_template) {
+        resultado = await enviarViaFlow(followup.subscriber_id, config.flow_ns, {
+          nome: lead.nome || 'cliente',
+          mensagem
+        });
+        
+        // Fallback para mensagem direta se flow falhar
+        if (!resultado.success) {
+          console.log('[FOLLOWUP] Flow falhou, tentando envio direto...');
+          resultado = await enviarMensagemManyChat(followup.subscriber_id, mensagem, followup.canal || 'whatsapp');
+        }
+      } else {
+        resultado = await enviarMensagemManyChat(followup.subscriber_id, mensagem, followup.canal || 'whatsapp');
+      }
+
+      if (resultado.success) {
+        // Atualizar campos
+        const updateData: any = {
+          status: 'em_andamento',
+          last_outbound_at: agora.toISOString(),
+          last_isa_outbound_at: agora.toISOString(),
+          waiting_reply: true
+        };
+
+        if (tipoEnvio === 'FAST') {
+          updateData.followup_stage_fast = stageEnvio;
+          // Mapear para campos legados
+          if (stageEnvio === 1) {
+            updateData.followup_1_enviado = true;
+            updateData.followup_1_enviado_em = agora.toISOString();
+          } else if (stageEnvio === 2) {
+            updateData.followup_2_enviado = true;
+            updateData.followup_2_enviado_em = agora.toISOString();
+          } else if (stageEnvio === 3) {
+            updateData.followup_3_enviado = true;
+            updateData.followup_3_enviado_em = agora.toISOString();
+          }
+        } else {
+          updateData.followup_stage_slow = stageEnvio;
+          // Mapear para campos legados de retomada
+          if (stageEnvio === 1) {
+            updateData.retomada_1_enviado = true;
+            updateData.retomada_1_enviado_em = agora.toISOString();
+          } else if (stageEnvio === 2) {
+            updateData.retomada_2_enviado = true;
+            updateData.retomada_2_enviado_em = agora.toISOString();
+          } else if (stageEnvio === 3) {
+            updateData.retomada_3_enviado = true;
+            updateData.retomada_3_enviado_em = agora.toISOString();
+          }
+        }
+
+        // Calcular próximo follow-up
+        const proximo = calcularProximoFollowup(
+          tipoEnvio === 'FAST' ? stageEnvio : stageFast,
+          tipoEnvio === 'SLOW' ? stageEnvio : stageSlow,
+          lead.status,
+          primeiroContato
+        );
+
+        if (proximo.nextAt) {
+          updateData.next_followup_at = proximo.nextAt.toISOString();
+          updateData.next_followup_type = proximo.nextType;
+        } else {
+          updateData.status = 'concluido';
+          updateData.next_followup_at = null;
+          updateData.next_followup_type = null;
+        }
+
+        await supabase.from('lead_followups').update(updateData).eq('id', followup.id);
+
+        // Registrar interação
+        await supabase.from('interacoes').insert({
+          cliente_id: lead.id,
+          tipo: 'WhatsApp',
+          direcao: 'Saída',
+          resumo: `${tipoEnvio} ${stageEnvio}/3 enviado automaticamente`,
+          detalhes: mensagem,
+        });
+
+        // Registrar evento
+        await supabase.from('system_events').insert({
+          tipo: 'followup',
+          fonte: 'followup-automation',
+          acao: `${tipoEnvio.toLowerCase()}_${stageEnvio}_enviado`,
+          lead_id: lead.id,
+          entidade_tipo: 'lead_followup',
+          entidade_id: followup.id,
+          dados: { tipo: tipoEnvio, stage: stageEnvio, subscriber_id: followup.subscriber_id },
+          processado: true
+        });
+
+        enviados++;
+        console.log(`[FOLLOWUP] ✅ ${tipoEnvio} ${stageEnvio}/3 enviado para ${lead.nome}`);
+      } else {
+        erros++;
+        console.error(`[FOLLOWUP] ❌ Erro ao enviar: ${resultado.error}`);
+      }
     }
 
-    console.log(`[FOLLOWUP] Concluído. Enviados: ${enviados}, Erros: ${erros}, Pulados (conversa ativa): ${pulados}, Pendentes template: ${pendentesTemplate}`);
+    console.log(`[FOLLOWUP] Concluído. Enviados: ${enviados}, Erros: ${erros}, Pulados: ${pulados}, Agendados: ${agendados}`);
 
     return new Response(
       JSON.stringify({ 
@@ -464,27 +546,18 @@ serve(async (req: Request) => {
         processados: followups?.length || 0,
         enviados,
         erros,
-        pulados_conversa_ativa: pulados,
-        pendentes_template: pendentesTemplate,
-        timestamp: agora.toISOString(),
-        instrucoes: pendentesTemplate > 0 
-          ? 'Crie flows no ManyChat (followup_10min, followup_1hora, followup_24h_template) com Message Templates aprovados para envio fora da janela 24h.'
-          : null
+        pulados,
+        agendados,
+        timestamp: agora.toISOString()
       }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200 
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
 
   } catch (error: any) {
     console.error('[FOLLOWUP] Erro geral:', error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500 
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
 });
