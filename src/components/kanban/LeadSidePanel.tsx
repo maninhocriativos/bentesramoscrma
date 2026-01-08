@@ -5,18 +5,21 @@ import {
   X, User, Phone, Mail, Briefcase, DollarSign, Calendar, 
   MessageCircle, FileSignature, Clock, Tag,
   Sparkles, ChevronRight, ArrowDownLeft, ArrowUpRight,
-  Video, FileText, Loader2, MessageSquare
+  Video, FileText, Loader2, MessageSquare, Zap, ZapOff
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { EnviarContratoModal } from '@/components/contratos/EnviarContratoModal';
 import { useInteracoes } from '@/hooks/useInteracoes';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface LeadSidePanelProps {
   lead: Lead | null;
@@ -62,17 +65,81 @@ export function LeadSidePanel({ lead, isOpen, onClose, onOpenFullModal }: LeadSi
   const navigate = useNavigate();
   const [isContratoModalOpen, setIsContratoModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('info');
+  const [followupActive, setFollowupActive] = useState(true);
+  const [loadingFollowup, setLoadingFollowup] = useState(false);
   
   // Fetch interactions when lead changes
   const { interacoes, loading: loadingInteracoes, fetchInteracoes } = useInteracoes(lead?.id);
 
-  // Reset tab and refetch when lead changes
+  // Fetch followup status when lead changes
   useEffect(() => {
     if (lead?.id && isOpen) {
       setActiveTab('info');
       fetchInteracoes();
+      fetchFollowupStatus();
     }
   }, [lead?.id, isOpen]);
+
+  const fetchFollowupStatus = async () => {
+    if (!lead?.id) return;
+    
+    const { data } = await supabase
+      .from('lead_followups')
+      .select('followup_lock_reason')
+      .eq('lead_id', lead.id)
+      .maybeSingle();
+    
+    // If lock_reason is 'manual_pause', followup is disabled
+    setFollowupActive(data?.followup_lock_reason !== 'manual_pause');
+  };
+
+  const toggleFollowup = async () => {
+    if (!lead?.id) return;
+    setLoadingFollowup(true);
+    
+    try {
+      const newLockReason = followupActive ? 'manual_pause' : null;
+      
+      // Check if followup record exists
+      const { data: existing } = await supabase
+        .from('lead_followups')
+        .select('id')
+        .eq('lead_id', lead.id)
+        .maybeSingle();
+      
+      if (existing) {
+        // Update existing record
+        const { error } = await supabase
+          .from('lead_followups')
+          .update({ 
+            followup_lock_reason: newLockReason,
+            updated_at: new Date().toISOString()
+          })
+          .eq('lead_id', lead.id);
+        
+        if (error) throw error;
+      } else {
+        // Create new record with the lock
+        const { error } = await supabase
+          .from('lead_followups')
+          .insert({ 
+            lead_id: lead.id,
+            followup_lock_reason: newLockReason,
+            primeiro_contato_em: new Date().toISOString()
+          });
+        
+        if (error) throw error;
+      }
+      
+      setFollowupActive(!followupActive);
+      toast.success(followupActive ? 'Follow-up pausado' : 'Follow-up reativado');
+    } catch (error) {
+      console.error('Erro ao alterar follow-up:', error);
+      toast.error('Erro ao alterar status do follow-up');
+    } finally {
+      setLoadingFollowup(false);
+    }
+  };
 
   if (!lead) return null;
 
@@ -173,6 +240,28 @@ export function LeadSidePanel({ lead, isOpen, onClose, onOpenFullModal }: LeadSi
               <Mail className="w-4 h-4 text-blue-600" />
               <span className="text-[10px]">Email</span>
             </Button>
+          </div>
+
+          {/* Follow-up Toggle */}
+          <div className="mt-3 flex items-center justify-between p-3 rounded-lg bg-muted/50 border">
+            <div className="flex items-center gap-2">
+              {followupActive ? (
+                <Zap className="w-4 h-4 text-amber-500" />
+              ) : (
+                <ZapOff className="w-4 h-4 text-muted-foreground" />
+              )}
+              <div>
+                <p className="text-sm font-medium">Follow-up automático</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {followupActive ? 'Ativo - enviando mensagens' : 'Pausado - sem envios'}
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={followupActive}
+              onCheckedChange={toggleFollowup}
+              disabled={loadingFollowup}
+            />
           </div>
 
           {/* Contract Button */}
