@@ -533,14 +533,29 @@ export type Database = {
           followup_2_enviado_em: string | null
           followup_3_enviado: boolean | null
           followup_3_enviado_em: string | null
+          followup_lock_reason: string | null
+          followup_stage_fast: number | null
+          followup_stage_slow: number | null
           id: string
+          last_inbound_at: string | null
+          last_isa_outbound_at: string | null
+          last_outbound_at: string | null
           lead_id: string
+          next_followup_at: string | null
+          next_followup_type: string | null
           primeiro_contato_em: string
           respondido: boolean | null
           respondido_em: string | null
+          retomada_1_enviado: boolean | null
+          retomada_1_enviado_em: string | null
+          retomada_2_enviado: boolean | null
+          retomada_2_enviado_em: string | null
+          retomada_3_enviado: boolean | null
+          retomada_3_enviado_em: string | null
           status: string | null
           subscriber_id: string | null
           updated_at: string
+          waiting_reply: boolean | null
         }
         Insert: {
           canal?: string | null
@@ -551,14 +566,29 @@ export type Database = {
           followup_2_enviado_em?: string | null
           followup_3_enviado?: boolean | null
           followup_3_enviado_em?: string | null
+          followup_lock_reason?: string | null
+          followup_stage_fast?: number | null
+          followup_stage_slow?: number | null
           id?: string
+          last_inbound_at?: string | null
+          last_isa_outbound_at?: string | null
+          last_outbound_at?: string | null
           lead_id: string
+          next_followup_at?: string | null
+          next_followup_type?: string | null
           primeiro_contato_em?: string
           respondido?: boolean | null
           respondido_em?: string | null
+          retomada_1_enviado?: boolean | null
+          retomada_1_enviado_em?: string | null
+          retomada_2_enviado?: boolean | null
+          retomada_2_enviado_em?: string | null
+          retomada_3_enviado?: boolean | null
+          retomada_3_enviado_em?: string | null
           status?: string | null
           subscriber_id?: string | null
           updated_at?: string
+          waiting_reply?: boolean | null
         }
         Update: {
           canal?: string | null
@@ -569,14 +599,29 @@ export type Database = {
           followup_2_enviado_em?: string | null
           followup_3_enviado?: boolean | null
           followup_3_enviado_em?: string | null
+          followup_lock_reason?: string | null
+          followup_stage_fast?: number | null
+          followup_stage_slow?: number | null
           id?: string
+          last_inbound_at?: string | null
+          last_isa_outbound_at?: string | null
+          last_outbound_at?: string | null
           lead_id?: string
+          next_followup_at?: string | null
+          next_followup_type?: string | null
           primeiro_contato_em?: string
           respondido?: boolean | null
           respondido_em?: string | null
+          retomada_1_enviado?: boolean | null
+          retomada_1_enviado_em?: string | null
+          retomada_2_enviado?: boolean | null
+          retomada_2_enviado_em?: string | null
+          retomada_3_enviado?: boolean | null
+          retomada_3_enviado_em?: string | null
           status?: string | null
           subscriber_id?: string | null
           updated_at?: string
+          waiting_reply?: boolean | null
         }
         Relationships: [
           {
