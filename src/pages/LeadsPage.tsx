@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
 import { LeadModal } from '@/components/LeadModal';
+import { LeadSidePanel } from '@/components/kanban/LeadSidePanel';
 import { LeadFilters } from '@/components/leads/LeadFilters';
 import { RecentActivities } from '@/components/crm/RecentActivities';
 import { DashboardTarefas } from '@/components/crm/DashboardTarefas';
@@ -24,6 +25,7 @@ export default function LeadsPage() {
   
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
   const [isNewLead, setIsNewLead] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
@@ -33,8 +35,15 @@ export default function LeadsPage() {
     setFilteredLeads(leads);
   }, []);
 
+  // Click on card opens side panel for quick view
   const handleLeadClick = (lead: Lead) => {
     setSelectedLead(lead);
+    setIsSidePanelOpen(true);
+  };
+
+  // Open full modal for editing
+  const handleOpenFullModal = () => {
+    setIsSidePanelOpen(false);
     setIsNewLead(false);
     setIsModalOpen(true);
   };
@@ -49,6 +58,10 @@ export default function LeadsPage() {
     setIsModalOpen(false);
     setSelectedLead(null);
     setIsNewLead(false);
+  };
+
+  const handleCloseSidePanel = () => {
+    setIsSidePanelOpen(false);
   };
 
   const handleNewTask = () => {
@@ -115,6 +128,15 @@ export default function LeadsPage() {
         )}
       </div>
 
+      {/* Side Panel for Quick View */}
+      <LeadSidePanel
+        lead={selectedLead}
+        isOpen={isSidePanelOpen}
+        onClose={handleCloseSidePanel}
+        onOpenFullModal={handleOpenFullModal}
+      />
+
+      {/* Full Modal for Editing */}
       <LeadModal
         lead={selectedLead}
         isOpen={isModalOpen}
