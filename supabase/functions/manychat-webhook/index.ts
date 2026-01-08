@@ -8,7 +8,7 @@ const corsHeaders = {
 
 // Função para detectar automaticamente o canal baseado no payload
 function detectChannel(payload: Record<string, unknown>): string {
-  // 1. Campo explícito de canal
+  // 1. Campo explícito de canal (prioridade máxima)
   if (payload.canal) {
     return normalizeChannel(String(payload.canal));
   }
@@ -22,20 +22,37 @@ function detectChannel(payload: Record<string, unknown>): string {
     if (subscriber.source) return normalizeChannel(String(subscriber.source));
     if (subscriber.channel) return normalizeChannel(String(subscriber.channel));
     
-    // Detectar por campos específicos do subscriber
+    // IMPORTANTE: WhatsApp tem prioridade quando wa_id está presente
+    if (subscriber.whatsapp_phone || subscriber.wa_phone || subscriber.wa_id) return 'whatsapp';
     if (subscriber.ig_id || subscriber.instagram_id) return 'instagram';
-    if (subscriber.whatsapp_phone || subscriber.wa_phone) return 'whatsapp';
     if (subscriber.messenger_id || subscriber.psid) return 'facebook';
   }
 
   // 3. Verificar por campos específicos de cada plataforma no payload raiz
+  // PRIORIZAR WhatsApp quando tem telefone brasileiro (começa com 55)
+  const telefone = payload.telefone || payload.phone || payload['Numero Whatsapp'] || 
+    (subscriber as Record<string, unknown>)?.phone || 
+    (subscriber as Record<string, unknown>)?.whatsapp_phone;
+  
+  if (telefone) {
+    const tel = String(telefone).replace(/\D/g, '');
+    // Telefone brasileiro (55) ou com formato internacional típico de WhatsApp
+    if (tel.startsWith('55') && tel.length >= 12) {
+      return 'whatsapp';
+    }
+    // Qualquer telefone com 10+ dígitos provavelmente é WhatsApp
+    if (tel.length >= 10) {
+      return 'whatsapp';
+    }
+  }
+
+  // WhatsApp explícito
+  if (payload.wa_id || payload.whatsapp_id || payload['Numero Whatsapp'] || payload.whatsapp_phone) {
+    return 'whatsapp';
+  }
   // Instagram
   if (payload.ig_id || payload.instagram_id || payload.ig_user_id) {
     return 'instagram';
-  }
-  // WhatsApp
-  if (payload.wa_id || payload.whatsapp_id || payload['Numero Whatsapp'] || payload.whatsapp_phone) {
-    return 'whatsapp';
   }
   // Facebook Messenger
   if (payload.psid || payload.messenger_id || payload.page_id) {
@@ -49,32 +66,30 @@ function detectChannel(payload: Record<string, unknown>): string {
     if (message.channel) return normalizeChannel(String(message.channel));
   }
 
-  // 5. Verificar por padrão de telefone (WhatsApp geralmente tem telefone)
-  const telefone = payload.telefone || payload.phone || payload['Numero Whatsapp'];
-  if (telefone && String(telefone).match(/^\+?\d{10,15}$/)) {
-    return 'whatsapp';
-  }
-
-  // 6. Verificar custom_fields
+  // 5. Verificar custom_fields
   const customFields = payload.custom_fields as Record<string, unknown> | undefined;
   if (customFields) {
     if (customFields.channel) return normalizeChannel(String(customFields.channel));
     if (customFields.source) return normalizeChannel(String(customFields.source));
   }
 
-  // 7. Verificar por palavras-chave no payload inteiro
+  // 6. Verificar por palavras-chave no payload inteiro (último recurso)
   const payloadStr = JSON.stringify(payload).toLowerCase();
+  if (payloadStr.includes('"wa_') || payloadStr.includes('whatsapp')) {
+    return 'whatsapp';
+  }
   if (payloadStr.includes('instagram') || payloadStr.includes('"ig_')) {
     return 'instagram';
   }
-  if (payloadStr.includes('whatsapp') || payloadStr.includes('"wa_')) {
-    return 'whatsapp';
-  }
-  if (payloadStr.includes('messenger') || payloadStr.includes('facebook')) {
+  if (payloadStr.includes('messenger')) {
     return 'facebook';
   }
 
-  // Default
+  // Default: se tem telefone, assume WhatsApp (mais comum)
+  if (telefone) {
+    return 'whatsapp';
+  }
+
   return 'facebook';
 }
 

@@ -292,6 +292,7 @@ const ManyChatInbox = () => {
 
     setIsSending(true);
     try {
+      // Enviar via ManyChat
       await supabase.functions.invoke('manychat', {
         body: {
           action: 'enviar_mensagem',
@@ -301,6 +302,7 @@ const ManyChatInbox = () => {
         },
       });
 
+      // Salvar mensagem no banco
       await supabase.from('manychat_mensagens' as any).insert({
         subscriber_id: selectedSubscriber.subscriber_id,
         subscriber_nome: selectedSubscriber.nome,
@@ -310,6 +312,18 @@ const ManyChatInbox = () => {
         direcao: 'saida',
         lead_id: selectedSubscriber.lead_id,
       } as any);
+
+      // Registrar interação se tem lead vinculado
+      if (selectedSubscriber.lead_id) {
+        await supabase.from('interacoes').insert({
+          cliente_id: selectedSubscriber.lead_id,
+          tipo: 'Chat',
+          resumo: `Mensagem enviada via ${selectedSubscriber.canal}: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`,
+          detalhes: content,
+          direcao: 'saida',
+          data_interacao: new Date().toISOString(),
+        });
+      }
 
       setNewMessage('');
       setSelectedFile(null);
