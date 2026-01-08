@@ -179,13 +179,17 @@ serve(async (req) => {
     else if (payload.subscriber) {
       const { subscriber, message, page_id, last_input_text, custom_fields } = payload;
       subscriberId = subscriber.id?.toString() || subscriber.user_id?.toString();
-      subscriberNome = subscriber.name || 
-        `${subscriber.first_name || ''} ${subscriber.last_name || ''}`.trim() || 
+      
+      // Limpar colchetes que vem do ManyChat
+      const cleanBrackets = (val: unknown) => typeof val === 'string' ? val.replace(/^\[|\]$/g, '').trim() : val;
+      
+      subscriberNome = cleanBrackets(subscriber.name) as string || 
+        `${cleanBrackets(subscriber.first_name) || ''} ${cleanBrackets(subscriber.last_name) || ''}`.trim() || 
         'Desconhecido';
-      telefone = subscriber.phone || subscriber.whatsapp_phone || custom_fields?.phone;
-      email = subscriber.email || custom_fields?.email;
-      subscriberFoto = subscriber.profile_pic || subscriber.picture || subscriber.avatar;
-      messageContent = last_input_text || message?.text || message?.content;
+      telefone = (cleanBrackets(subscriber.phone) || cleanBrackets(subscriber.whatsapp_phone) || cleanBrackets(custom_fields?.phone)) as string | undefined;
+      email = (cleanBrackets(subscriber.email) || cleanBrackets(custom_fields?.email)) as string | undefined;
+      subscriberFoto = (subscriber.profile_pic || subscriber.picture || subscriber.avatar) as string | undefined;
+      messageContent = (cleanBrackets(last_input_text) || cleanBrackets(message?.text) || cleanBrackets(message?.content)) as string | undefined;
       
       metadata = {
         page_id,
@@ -200,17 +204,25 @@ serve(async (req) => {
     }
     // Formato simplificado / genérico
     else {
-      subscriberId = payload.subscriber_id?.toString() || payload.id?.toString() || `manual_${Date.now()}`;
+      // Função para limpar colchetes
+      const cleanBrackets = (val: unknown) => typeof val === 'string' ? val.replace(/^\[|\]$/g, '').trim() : val;
+      
+      const rawSubscriberId = payload.subscriber_id?.toString() || payload.id?.toString();
+      subscriberId = rawSubscriberId ? cleanBrackets(rawSubscriberId) as string : `manual_${Date.now()}`;
+      
       // Suportar first_name + last_name além de nome/name
-      const firstName = payload.first_name || '';
-      const lastName = payload.last_name || '';
-      subscriberNome = payload.nome || payload.name || 
+      const firstName = cleanBrackets(payload.first_name || payload.name?.split(' ')[0]) as string || '';
+      const lastName = cleanBrackets(payload.last_name || '') as string || '';
+      const fullName = cleanBrackets(payload.nome || payload.name || payload.full_name) as string;
+      
+      subscriberNome = fullName || 
         (firstName || lastName ? `${firstName} ${lastName}`.trim() : 'Desconhecido');
-      telefone = payload.telefone || payload.phone || payload.whatsapp;
-      email = payload.email;
-      subscriberFoto = payload.foto || payload.picture || payload.avatar;
-      messageContent = payload.mensagem || payload.message || payload.pergunta || payload.text;
-      direcao = payload.direcao || payload.direction || 'entrada';
+      
+      telefone = cleanBrackets(payload.telefone || payload.phone || payload.whatsapp || payload['Numero Whatsapp']) as string | undefined;
+      email = cleanBrackets(payload.email) as string | undefined;
+      subscriberFoto = (payload.foto || payload.picture || payload.avatar) as string | undefined;
+      messageContent = cleanBrackets(payload.mensagem || payload.message || payload.pergunta || payload.text || payload.last_input_text) as string | undefined;
+      direcao = (payload.direcao || payload.direction || 'entrada') as string;
       
       metadata = { 
         raw: payload,

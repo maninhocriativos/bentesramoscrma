@@ -87,8 +87,28 @@ serve(async (req) => {
           headers,
         });
         
-        result = await response.json();
-        console.log('Subscriber info:', result);
+        const data = await response.json();
+        console.log('Subscriber info raw:', JSON.stringify(data));
+        
+        // Normalizar resposta para extrair nome corretamente
+        if (data.status === 'success' && data.data) {
+          const sub = data.data;
+          const nome = sub.name || `${sub.first_name || ''} ${sub.last_name || ''}`.trim() || null;
+          const telefone = sub.whatsapp_phone || sub.phone || sub.wa_id || null;
+          
+          result = {
+            status: 'success',
+            data: {
+              ...sub,
+              nome,
+              name: nome,
+              telefone,
+              phone: telefone,
+            }
+          };
+        } else {
+          result = data;
+        }
         break;
       }
 
