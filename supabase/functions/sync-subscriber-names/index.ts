@@ -18,15 +18,16 @@ serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    // Buscar subscribers com nome "Desconhecido" ou sem nome (excluindo IDs manuais/teste)
+    // Buscar subscribers com nome "Desconhecido" ou sem nome, ou com nome com colchetes
     const { data: subscribers, error } = await supabase
       .from('manychat_subscribers')
       .select('*')
-      .or('nome.is.null,nome.eq.Desconhecido,nome.eq.Sem nome')
+      .or('nome.is.null,nome.eq.Desconhecido,nome.eq.Sem nome,nome.like.[%]')
       .not('subscriber_id', 'like', 'manual_%')
       .not('subscriber_id', 'like', 'test_%')
       .not('subscriber_id', 'like', 'api_%')
-      .not('subscriber_id', 'like', 'teste_%');
+      .not('subscriber_id', 'like', 'teste_%')
+      .not('subscriber_id', 'like', 'webhook_%');
 
     if (error) throw error;
 
@@ -58,15 +59,29 @@ serve(async (req: Request) => {
         
         if (mcData.status === 'success' && mcData.data) {
           const data = mcData.data;
-          const nome = data.name || `${data.first_name || ''} ${data.last_name || ''}`.trim();
-          const telefone = data.whatsapp_phone || data.phone || sub.telefone;
+          // Limpar colchetes do nome
+          let nome = data.name || `${data.first_name || ''} ${data.last_name || ''}`.trim();
+          if (nome) nome = nome.replace(/^\[|\]$/g, '').trim();
           
-          if (nome && nome !== '') {
+          let telefone = data.whatsapp_phone || data.phone || sub.telefone;
+          if (telefone) telefone = String(telefone).replace(/^\[|\]$/g, '').trim();
+          
+          // Detectar canal correto baseado no telefone
+          let canal = sub.canal;
+          if (telefone) {
+            const telLimpo = telefone.replace(/\D/g, '');
+            if (telLimpo.startsWith('55') && telLimpo.length >= 12) {
+              canal = 'whatsapp';
+            }
+          }
+          
+          if (nome && nome !== '' && nome !== 'Desconhecido') {
             const { error: updateError } = await supabase
               .from('manychat_subscribers')
               .update({ 
                 nome, 
                 telefone,
+                canal,
                 foto: data.profile_pic || sub.foto,
                 updated_at: new Date().toISOString() 
               })
@@ -74,8 +89,8 @@ serve(async (req: Request) => {
 
             if (!updateError) {
               updated++;
-              results.push({ subscriber_id: sub.subscriber_id, nome, telefone });
-              console.log(`[SYNC] ✅ Atualizado: ${sub.subscriber_id} -> ${nome}`);
+              results.push({ subscriber_id: sub.subscriber_id, nome, telefone, canal });
+              console.log(`[SYNC] ✅ Atualizado: ${sub.subscriber_id} -> ${nome} (${canal})`);
             }
           }
         }

@@ -107,13 +107,20 @@ serve(async (req) => {
       .order('proximo_followup', { ascending: true })
       .limit(20);
 
-    // Buscar ações pendentes da Isa - NOVO
-    const { data: acoesPendentes } = await supabase
-      .from('isa_pending_actions')
-      .select('*, leads_juridicos(nome)')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false })
-      .limit(10);
+    // Buscar ações pendentes da Isa - Verificar se tabela existe
+    let acoesPendentes: any[] = [];
+    try {
+      const { data, error } = await supabase
+        .from('isa_pending_actions')
+        .select('*, leads_juridicos(nome)')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (!error) acoesPendentes = data || [];
+    } catch (e) {
+      // Tabela pode não existir ainda
+      console.log('Tabela isa_pending_actions não encontrada');
+    }
 
     // Buscar configurações de automação - NOVO
     const { data: automacoesConfig } = await supabase
