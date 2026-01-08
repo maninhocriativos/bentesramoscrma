@@ -329,7 +329,7 @@ serve(async (req: Request) => {
         // Detectar tipo de conteúdo pela URL
         let tipoMensagem = 'text';
         const mensagemLower = mensagem.toString().toLowerCase();
-        
+
         if (mensagemLower.match(/\.(ogg|mp3|wav|m4a|aac)(\?|$)/)) {
           tipoMensagem = 'audio';
         } else if (mensagemLower.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/)) {
@@ -339,9 +339,9 @@ serve(async (req: Request) => {
         } else if (mensagemLower.match(/\.(pdf|doc|docx|xls|xlsx)(\?|$)/)) {
           tipoMensagem = 'document';
         }
-        
+
         console.log('[API-HUB] Tipo detectado:', tipoMensagem, '- Mensagem:', mensagem.substring(0, 100));
-        
+
         await supabase.from('manychat_mensagens').insert({
           subscriber_id: subscriberId,
           subscriber_nome: nome,
@@ -352,19 +352,57 @@ serve(async (req: Request) => {
           lead_id: leadId
         });
         console.log('[API-HUB] Mensagem salva para subscriber:', subscriberId, 'tipo:', tipoMensagem);
-        
+
+        // ✅ Critério: follow-up só para Lead Frio.
+        // Se o LEAD mandou qualquer mensagem (não "Bot diz:"), consideramos que já entrou em atendimento.
+        const msgTrim = mensagem.toString().trim();
+        const isBotMessage = msgTrim.toLowerCase().startsWith('bot diz:');
+
+        if (leadId && msgTrim && !isBotMessage) {
+          const agoraIso = new Date().toISOString();
+
+          // 1) Marcar follow-up como respondido para não disparar no primeiro atendimento
+          await supabase
+            .from('lead_followups')
+            .update({
+              respondido: true,
+              respondido_em: agoraIso,
+              status: 'respondido'
+            })
+            .eq('lead_id', leadId)
+            .eq('respondido', false);
+
+          // 2) Se ainda está como Lead Frio, mover para Em Atendimento
+          const { data: leadStatusData, error: leadStatusError } = await supabase
+            .from('leads_juridicos')
+            .select('status')
+            .eq('id', leadId)
+            .maybeSingle();
+
+          if (leadStatusError) {
+            console.warn('[API-HUB] Aviso ao checar status do lead:', leadStatusError);
+          }
+
+          if (!leadStatusData?.status || leadStatusData.status === 'Lead Frio') {
+            await supabase
+              .from('leads_juridicos')
+              .update({ status: 'Em Atendimento' })
+              .eq('id', leadId);
+          }
+        }
+
         // ===== DETECÇÃO DE CONFIRMAÇÃO DE COMPROMISSO =====
         if (leadId && mensagem) {
           const msgNormalizada = mensagem.toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-          
+
           // Palavras-chave de confirmação
           const confirmacaoKeywords = ['sim', 'confirmo', 'confirmado', 'ok', 'certo', 'combinado', 'vou sim', 'estarei la', 'pode ser', 'beleza', 'perfeito', 'fechado'];
           // Palavras-chave de remarcação/cancelamento
           const remarcacaoKeywords = ['remarcar', 'adiar', 'nao posso', 'nao vou', 'cancela', 'desmarcar', 'outro dia', 'outro horario', 'mudar data'];
-          
+
           const isConfirmacao = confirmacaoKeywords.some(kw => msgNormalizada.includes(kw));
           const isRemarcacao = remarcacaoKeywords.some(kw => msgNormalizada.includes(kw));
-          
+
           if (isConfirmacao || isRemarcacao) {
             // Buscar compromisso futuro pendente do lead
             const agora = new Date().toISOString();
@@ -376,11 +414,11 @@ serve(async (req: Request) => {
               .gte('data_inicio', agora)
               .order('data_inicio')
               .limit(1);
-            
+
             if (compromissosPendentes && compromissosPendentes.length > 0) {
               const compromisso = compromissosPendentes[0];
               const novoStatus = isConfirmacao ? 'confirmado' : 'remarcado';
-              
+
               await supabase
                 .from('compromissos')
                 .update({
@@ -389,9 +427,9 @@ serve(async (req: Request) => {
                   confirmacao_resposta: mensagem
                 })
                 .eq('id', compromisso.id);
-              
+
               console.log(`[API-HUB] Compromisso ${compromisso.id} marcado como ${novoStatus} pelo lead ${leadId}`);
-              
+
               // Registrar evento
               await supabase.from('system_events').insert({
                 tipo: 'compromisso',
@@ -400,18 +438,18 @@ serve(async (req: Request) => {
                 entidade_tipo: 'compromisso',
                 entidade_id: compromisso.id,
                 lead_id: leadId,
-                dados: { 
-                  status: novoStatus, 
-                  resposta: mensagem, 
+                dados: {
+                  status: novoStatus,
+                  resposta: mensagem,
                   titulo: compromisso.titulo,
-                  canal: canal 
+                  canal: canal
                 },
                 processado: true,
               });
             }
           }
         }
-        
+
         // ===== DETECÇÃO DE RESPOSTA DE LEAD FRIO (RETOMADA) =====
         // Verificar se o lead está em status "Lead Frio" e já recebeu mensagens de retomada
         if (leadId) {
@@ -420,7 +458,7 @@ serve(async (req: Request) => {
             .select('id, nome, status')
             .eq('id', leadId)
             .maybeSingle();
-          
+
           if (leadData && leadData.status === 'Lead Frio') {
             // Verificar se já recebeu alguma mensagem de retomada
             const { data: retomadaEvents } = await supabase
@@ -430,12 +468,12 @@ serve(async (req: Request) => {
               .eq('tipo', 'retomada')
               .eq('acao', 'retomada_enviada')
               .limit(1);
-            
+
             const estaEmRetomada = retomadaEvents && retomadaEvents.length > 0;
-            
+
             if (estaEmRetomada) {
               console.log('[API-HUB] Lead frio em retomada RESPONDEU:', leadData.nome);
-              
+
               // Criar alerta de resposta
               await supabase.from('system_events').insert({
                 tipo: 'alerta',
@@ -444,7 +482,7 @@ serve(async (req: Request) => {
                 entidade_tipo: 'lead',
                 entidade_id: leadId,
                 lead_id: leadId,
-                dados: { 
+                dados: {
                   nome: leadData.nome,
                   mensagem: mensagem?.substring(0, 200),
                   canal: canal,
@@ -452,17 +490,17 @@ serve(async (req: Request) => {
                 },
                 processado: false, // Não processado = precisa atenção
               });
-              
+
               // Atualizar followup como respondido
               await supabase
                 .from('lead_followups')
-                .update({ 
-                  respondido: true, 
+                .update({
+                  respondido: true,
                   respondido_em: new Date().toISOString(),
                   status: 'respondido'
                 })
                 .eq('lead_id', leadId);
-              
+
               console.log('[API-HUB] Alerta criado para lead frio que respondeu:', leadId);
             }
           }
