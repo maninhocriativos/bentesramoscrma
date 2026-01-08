@@ -147,8 +147,8 @@ export function LeadSidePanel({ lead, isOpen, onClose, onOpenFullModal }: LeadSi
   const showContractButton = lead.status === 'Aguardando Contrato' && !lead.link_contrato;
 
   const handleWhatsApp = () => {
-    // Navigate to the CRM chat (ManyChat inbox)
-    navigate('/manychat');
+    // Navigate to the CRM chat with lead_id to auto-select conversation
+    navigate(`/manychat?lead_id=${lead.id}`);
   };
 
   const handleCall = () => {
