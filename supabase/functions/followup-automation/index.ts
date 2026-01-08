@@ -296,6 +296,27 @@ serve(async (req: Request) => {
         continue;
       }
 
+      // 🛑 Se o contato estiver em ATENDIMENTO HUMANO, nunca disparar follow-up automático
+      if (followup.subscriber_id) {
+        const { data: subscriberCheck, error: subscriberCheckError } = await supabase
+          .from('manychat_subscribers')
+          .select('atendimento_humano, atendimento_humano_desde')
+          .eq('subscriber_id', followup.subscriber_id)
+          .maybeSingle();
+
+        if (subscriberCheckError) {
+          console.warn('[FOLLOWUP] Aviso ao checar atendimento humano:', subscriberCheckError);
+        }
+
+        if (subscriberCheck?.atendimento_humano) {
+          console.log(
+            `[FOLLOWUP] 🛑 Atendimento humano ativo (desde ${subscriberCheck.atendimento_humano_desde || 'N/A'}) para ${lead.nome} (subscriber: ${followup.subscriber_id}), pulando follow-up`
+          );
+          pulados++;
+          continue;
+        }
+      }
+
       // ⚠️ VERIFICAR SE LEAD TEM MENSAGENS RECENTES DE ENTRADA (conversa ativa)
       // Se o lead mandou mensagem nos últimos 30 minutos, NÃO enviar follow-up automático
       const trintaMinutosAtras = new Date(agora.getTime() - 30 * 60 * 1000).toISOString();
