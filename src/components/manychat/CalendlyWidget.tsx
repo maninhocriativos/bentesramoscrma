@@ -99,6 +99,30 @@ const CalendlyWidget = ({
           },
         });
 
+        // Enviar mensagem de confirmação para o ManyChat
+        try {
+          await supabase.functions.invoke('manychat', {
+            body: {
+              action: 'enviar_mensagem',
+              subscriberId: subscriberId,
+              message: `✅ Agendamento confirmado!\n\nSua consulta jurídica foi agendada com sucesso. Você receberá um e-mail com os detalhes.\n\nAguardamos você! 📅`,
+              type: 'text',
+            },
+          });
+          
+          // Salvar mensagem no histórico
+          await supabase.from('manychat_mensagens').insert({
+            subscriber_id: subscriberId,
+            subscriber_nome: subscriberName,
+            conteudo: `✅ Agendamento confirmado!\n\nSua consulta jurídica foi agendada com sucesso. Você receberá um e-mail com os detalhes.\n\nAguardamos você! 📅`,
+            tipo: 'text',
+            direcao: 'saida',
+            lead_id: leadId,
+          });
+        } catch (msgError) {
+          console.error('Erro ao enviar confirmação ManyChat:', msgError);
+        }
+
         setIsScheduled(true);
         toast({
           title: '✅ Consulta Agendada!',
