@@ -34,8 +34,10 @@ import {
   MessageCircle,
   Sparkles,
   PanelRightOpen,
-  PanelRightClose
+  PanelRightClose,
+  Calendar
 } from 'lucide-react';
+import CalendlyWidget from './CalendlyWidget';
 import { format, isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -824,6 +826,21 @@ const ManyChatInbox = () => {
                 >
                   {selectedSubscriber.atendimento_humano ? <UserRound className="h-5 w-5" /> : <Bot className="h-5 w-5" />}
                 </Button>
+                {/* Botão Agendar Calendly */}
+                <CalendlyWidget
+                  subscriberId={selectedSubscriber.subscriber_id}
+                  subscriberName={getDisplayName(selectedSubscriber)}
+                  subscriberEmail={selectedSubscriber.email}
+                  subscriberPhone={selectedSubscriber.telefone}
+                  leadId={selectedSubscriber.lead_id}
+                  onScheduled={(data) => {
+                    console.log('Agendamento realizado:', data);
+                    toast({
+                      title: '📅 Consulta Agendada',
+                      description: `${getDisplayName(selectedSubscriber)} agendou uma consulta!`,
+                    });
+                  }}
+                />
                 {/* Botão Contexto do Lead */}
                 {selectedSubscriber.lead_id && (
                   <Button 
