@@ -4,13 +4,14 @@ import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { ProcessosTable } from '@/components/processos/ProcessosTable';
 import { ProcessoModal } from '@/components/processos/ProcessoModal';
+import { ConsultaProcessoExterno } from '@/components/processos/ConsultaProcessoExterno';
 import { useProcessos } from '@/hooks/useProcessos';
 import { usePerfil } from '@/hooks/usePerfil';
 import { useLeads } from '@/hooks/useLeads';
 import { Processo } from '@/types/processos';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Search } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function ProcessosPage() {
   const navigate = useNavigate();
@@ -82,28 +83,41 @@ export default function ProcessosPage() {
       />
       
       <div className="flex-1 p-4 md:p-6 space-y-4 animate-fade-in">
-        {/* Search */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por número, título ou advogado..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 rounded-xl shadow-soft border-0"
-          />
-        </div>
+        <Tabs defaultValue="internos" className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="internos">Processos do Escritório</TabsTrigger>
+            <TabsTrigger value="consulta">Consultar CNJ</TabsTrigger>
+          </TabsList>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : (
-          <ProcessosTable 
-            processos={filteredProcessos} 
-            onProcessoClick={handleProcessoClick}
-            leads={leads}
-          />
-        )}
+          <TabsContent value="internos" className="space-y-4">
+            {/* Search */}
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por número, título ou advogado..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 rounded-xl shadow-soft border-0"
+              />
+            </div>
+
+            {loading ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : (
+              <ProcessosTable 
+                processos={filteredProcessos} 
+                onProcessoClick={handleProcessoClick}
+                leads={leads}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="consulta">
+            <ConsultaProcessoExterno />
+          </TabsContent>
+        </Tabs>
       </div>
 
       <ProcessoModal
