@@ -623,6 +623,48 @@ Ou digite outro horário de sua preferência.`;
         return { success: true, message: `${tipoCompromisso} agendada para ${dataManaus} às ${horaManaus}`, data };
       }
 
+      case 'consultar_processo': {
+        const { numero_processo, tribunal } = dados;
+        
+        if (!numero_processo) {
+          return { success: false, message: 'Número do processo não informado' };
+        }
+        
+        console.log('🔍 Consultando processo:', numero_processo);
+        
+        try {
+          const response = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/consulta-processos`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+            },
+            body: JSON.stringify({ numeroProcesso: numero_processo, tribunal }),
+          });
+          
+          const resultado = await response.json();
+          
+          if (!resultado.encontrado) {
+            return { success: false, message: resultado.mensagem || 'Processo não encontrado' };
+          }
+          
+          const p = resultado.processo;
+          const ultimoMovimento = p.movimentos?.[0];
+          
+          // Formatar resposta amigável
+          const resumo = `📋 PROCESSO: ${p.numeroProcesso}\n` +
+            `📊 Classe: ${p.classe}\n` +
+            `🏛️ Tribunal: ${p.tribunal}\n` +
+            `📅 Ajuizado em: ${new Date(p.dataAjuizamento).toLocaleDateString('pt-BR')}\n` +
+            (ultimoMovimento ? `\n⚖️ Última movimentação (${new Date(ultimoMovimento.dataHora).toLocaleDateString('pt-BR')}):\n${ultimoMovimento.nome}${ultimoMovimento.complemento ? ` - ${ultimoMovimento.complemento}` : ''}` : '');
+          
+          return { success: true, message: resumo, data: resultado.processo };
+        } catch (error) {
+          console.error('❌ Erro ao consultar processo:', error);
+          return { success: false, message: 'Não foi possível consultar o processo no momento' };
+        }
+      }
+
       default:
         return { success: false, message: `Ação "${acao}" não reconhecida` };
     }
@@ -783,17 +825,19 @@ COMO RESPONDER:
 1. Se for sobre NOSSAS ÁREAS DE ATUAÇÃO:
    - "Sim, podemos ajudar! Podemos agendar uma consulta para analisar seu caso. Qual melhor horário para você?"
 
-2. Se for FORA da nossa área (ex: dinheiro esquecido em bancos, consulta de CPF, outros):
-   - "Para verificar isso, você precisa consultar diretamente [órgão competente]. Se tiver alguma questão jurídica relacionada, posso ajudar!"
+2. Se for FORA da nossa área (ex: dinheiro esquecido em bancos, consulta de CPF):
+   - "Isso não é da nossa área de atuação. Posso ajudar com questões de direito previdenciário, trabalhista, consumidor ou civil?"
 
 3. Se perguntar sobre VALORES/PREÇOS:
    - "Trabalhamos com valores acessíveis e parcelados. Que tal agendar uma consulta gratuita para avaliarmos seu caso?"
 
-4. Se demonstrar INTERESSE:
-   - "Ótimo! Posso agendar uma consulta agora. Prefere atendimento online ou presencial?"
+4. Se demonstrar INTERESSE em agendar:
+   - Envie SEMPRE este link: "Você pode agendar sua consulta aqui: https://calendly.com/bentesramos-adv/consulta-juridica"
 
-5. Para AGENDAMENTOS:
-   - Use o link do Calendly: "Você pode agendar direto por aqui: https://calendly.com/bentesramos-adv/consulta-juridica"
+5. Se perguntar sobre PROCESSOS/ANDAMENTOS:
+   - "Posso consultar o andamento do seu processo. Pode me informar o número do processo?"
+
+⚠️ NUNCA invente números de telefone, WhatsApp ou informações. Se não souber algo, direcione para agendar uma consulta.
 
 AÇÕES DISPONÍVEIS:
 - classificar_lead: Atualizar status (Lead Frio → Em Atendimento → Em Negociação → Aguardando Contrato)
@@ -803,6 +847,7 @@ AÇÕES DISPONÍVEIS:
 - solicitar_agendamento: Enviar opções de horário OU link do Calendly
 - confirmar_agendamento: Criar compromisso após cliente confirmar horário
 - criar_tarefa: Criar tarefa de follow-up
+- consultar_processo: Buscar andamento de processo judicial (requer número do processo)
 
 Responda em JSON:
 {
