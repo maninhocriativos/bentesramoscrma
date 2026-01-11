@@ -181,6 +181,10 @@ const ACOES_AUTOMATICAS = [
   'atualizar_dados_lead', // Atualizar nome/telefone do lead
   'solicitar_agendamento', // Enviar opções de horário para lead confirmar
   'confirmar_agendamento', // Confirmar agendamento após resposta do lead
+  'verificar_followup', // Verificar e executar follow-ups pendentes
+  'executar_followup', // Disparar follow-up manualmente
+  'pausar_followup', // Pausar automação
+  'retomar_followup', // Retomar automação
 ];
 
 // Ações que precisam de confirmação do USUÁRIO INTERNO (híbrido)
@@ -191,6 +195,25 @@ const ACOES_CONFIRMACAO = [
   'enviar_contrato',
 ];
 
+// Status que permitem follow-up
+const STATUS_PERMITE_FAST = ['Lead Frio'];
+const STATUS_PERMITE_SLOW = ['Lead Frio', 'Em Atendimento', 'Em Negociação', 'Aguardando Contrato'];
+const STATUS_BLOQUEADOS = ['Contrato Assinado', 'Ganho'];
+
+// Configuração FAST (apenas Lead Frio)
+const FAST_CONFIG = {
+  stage_1: { delay_minutos: 10, titulo: "Follow-up FAST 1 - 10 min" },
+  stage_2: { delay_minutos: 240, titulo: "Follow-up FAST 2 - 4h" },
+  stage_3: { delay_minutos: 900, titulo: "Follow-up FAST 3 - 15h" }
+};
+
+// Configuração SLOW (Lead Frio, Em Atendimento, Em Negociação, Aguardando Contrato)
+const SLOW_CONFIG = {
+  stage_1: { delay_minutos: 1440, titulo: "Follow-up SLOW 1 - 24h" },
+  stage_2: { delay_minutos: 2880, titulo: "Follow-up SLOW 2 - 48h" },
+  stage_3: { delay_minutos: 4320, titulo: "Follow-up SLOW 3 - 72h" }
+};
+
 interface LeadContext {
   lead: any;
   mensagens: any[];
@@ -200,9 +223,10 @@ interface LeadContext {
   processos: any[];
   honorarios: any[];
   parcelas: any[];
+  followup?: any; // Dados do follow-up do lead
 }
 
-// Buscar contexto completo do lead
+// Buscar contexto completo do lead INCLUINDO follow-up
 async function buscarContextoLead(supabase: any, leadId: string): Promise<LeadContext | null> {
   const [
     { data: lead },
@@ -212,6 +236,7 @@ async function buscarContextoLead(supabase: any, leadId: string): Promise<LeadCo
     { data: compromissos },
     { data: processos },
     { data: honorarios },
+    { data: followup },
   ] = await Promise.all([
     supabase.from('leads_juridicos').select('*').eq('id', leadId).single(),
     supabase.from('manychat_mensagens').select('*').eq('lead_id', leadId).order('created_at', { ascending: false }).limit(20),
@@ -220,13 +245,145 @@ async function buscarContextoLead(supabase: any, leadId: string): Promise<LeadCo
     supabase.from('compromissos').select('*').eq('lead_id', leadId).order('data_inicio', { ascending: false }).limit(5),
     supabase.from('processos').select('*').eq('cliente_id', leadId),
     supabase.from('honorarios').select('*, parcelas(*)').eq('cliente_id', leadId),
+    supabase.from('lead_followups').select('*').eq('lead_id', leadId).maybeSingle(),
   ]);
 
   if (!lead) return null;
 
   const parcelas = honorarios?.flatMap((h: any) => h.parcelas || []) || [];
 
-  return { lead, mensagens: mensagens || [], interacoes: interacoes || [], tarefas: tarefas || [], compromissos: compromissos || [], processos: processos || [], honorarios: honorarios || [], parcelas };
+  return { 
+    lead, 
+    mensagens: mensagens || [], 
+    interacoes: interacoes || [], 
+    tarefas: tarefas || [], 
+    compromissos: compromissos || [], 
+    processos: processos || [], 
+    honorarios: honorarios || [], 
+    parcelas,
+    followup: followup || null
+  };
+}
+
+// Verificar status do follow-up
+async function verificarFollowupStatus(supabase: any, leadId: string, followup: any) {
+  const agora = new Date();
+  
+  if (!followup) {
+    return { 
+      status: 'sem_followup', 
+      pode_enviar: false, 
+      motivo: 'Lead não tem follow-up configurado' 
+    };
+  }
+
+  // Status bloqueados
+  const { data: lead } = await supabase
+    .from('leads_juridicos')
+    .select('status')
+    .eq('id', leadId)
+    .single();
+
+  if (STATUS_BLOQUEADOS.includes(lead?.status)) {
+    return { 
+      status: 'bloqueado', 
+      pode_enviar: false, 
+      motivo: `Lead com status ${lead?.status} - automações bloqueadas` 
+    };
+  }
+
+  // Verificar atendimento humano
+  if (followup.subscriber_id) {
+    const { data: subscriber } = await supabase
+      .from('manychat_subscribers')
+      .select('atendimento_humano')
+      .eq('subscriber_id', followup.subscriber_id)
+      .maybeSingle();
+
+    if (subscriber?.atendimento_humano) {
+      return { 
+        status: 'atendimento_humano', 
+        pode_enviar: false, 
+        motivo: 'Atendimento humano ativo' 
+      };
+    }
+  }
+
+  // Verificar respondido
+  if (followup.respondido) {
+    return { 
+      status: 'respondido', 
+      pode_enviar: false, 
+      motivo: 'Lead já respondeu' 
+    };
+  }
+
+  // Verificar conversa ativa (últimos 30 min)
+  const trintaMinAtras = new Date(agora.getTime() - 30 * 60 * 1000).toISOString();
+  const { data: msgRecentes } = await supabase
+    .from('manychat_mensagens')
+    .select('id')
+    .eq('lead_id', leadId)
+    .eq('direcao', 'entrada')
+    .gte('created_at', trintaMinAtras)
+    .limit(1);
+
+  if (msgRecentes && msgRecentes.length > 0) {
+    return { 
+      status: 'conversa_ativa', 
+      pode_enviar: false, 
+      motivo: 'Lead tem mensagens recentes (últimos 30 min)' 
+    };
+  }
+
+  // Calcular próximo follow-up
+  const stageFast = followup.followup_stage_fast || 0;
+  const stageSlow = followup.followup_stage_slow || 0;
+  const primeiroContato = new Date(followup.primeiro_contato_em);
+  const minutosDesdeContato = (agora.getTime() - primeiroContato.getTime()) / (1000 * 60);
+
+  let proximo = { tipo: null as string | null, stage: 0, config: null as any };
+
+  // Verificar FAST
+  if (STATUS_PERMITE_FAST.includes(lead?.status) && stageFast < 3) {
+    const nextStage = stageFast + 1;
+    const config = FAST_CONFIG[`stage_${nextStage}` as keyof typeof FAST_CONFIG];
+    if (minutosDesdeContato >= config.delay_minutos) {
+      proximo = { tipo: 'FAST', stage: nextStage, config };
+    }
+  }
+
+  // Verificar SLOW se FAST terminou
+  if (!proximo.tipo && STATUS_PERMITE_SLOW.includes(lead?.status) && stageSlow < 3) {
+    const fastCompleto = stageFast >= 3 || !STATUS_PERMITE_FAST.includes(lead?.status);
+    if (fastCompleto) {
+      const nextStage = stageSlow + 1;
+      const config = SLOW_CONFIG[`stage_${nextStage}` as keyof typeof SLOW_CONFIG];
+      if (minutosDesdeContato >= config.delay_minutos) {
+        proximo = { tipo: 'SLOW', stage: nextStage, config };
+      }
+    }
+  }
+
+  if (proximo.tipo) {
+    return {
+      status: 'pronto_para_enviar',
+      pode_enviar: true,
+      tipo: proximo.tipo,
+      stage: proximo.stage,
+      titulo: proximo.config?.titulo,
+      motivo: `Follow-up ${proximo.tipo} stage ${proximo.stage} pronto para envio`
+    };
+  }
+
+  return {
+    status: 'aguardando',
+    pode_enviar: false,
+    stage_fast: stageFast,
+    stage_slow: stageSlow,
+    next_followup_at: followup.next_followup_at,
+    motivo: 'Aguardando tempo para próximo follow-up'
+  };
 }
 
 // Executar ação no sistema
@@ -665,6 +822,183 @@ Ou digite outro horário de sua preferência.`;
         }
       }
 
+      // ============================================================
+      // NOVAS AÇÕES DE FOLLOW-UP INTELIGENTE
+      // ============================================================
+      
+      case 'verificar_followup': {
+        const { lead_id } = dados;
+        
+        // Buscar follow-up do lead
+        const { data: followup } = await supabase
+          .from('lead_followups')
+          .select('*')
+          .eq('lead_id', lead_id)
+          .maybeSingle();
+        
+        const status = await verificarFollowupStatus(supabase, lead_id, followup);
+        
+        console.log(`📊 Status follow-up lead ${lead_id}:`, status);
+        
+        return { 
+          success: true, 
+          message: status.motivo,
+          data: status
+        };
+      }
+
+      case 'executar_followup': {
+        const { lead_id, tipo_forcado } = dados;
+        
+        // Buscar dados do follow-up
+        const { data: followup } = await supabase
+          .from('lead_followups')
+          .select('*, leads_juridicos!inner(id, nome, telefone, status)')
+          .eq('lead_id', lead_id)
+          .maybeSingle();
+        
+        if (!followup) {
+          return { success: false, message: 'Follow-up não encontrado para este lead' };
+        }
+
+        if (!followup.subscriber_id) {
+          return { success: false, message: 'Lead sem subscriber vinculado' };
+        }
+
+        const lead = followup.leads_juridicos;
+        
+        // Verificar se pode enviar
+        const status = await verificarFollowupStatus(supabase, lead_id, followup);
+        
+        if (!status.pode_enviar && !tipo_forcado) {
+          return { success: false, message: status.motivo };
+        }
+
+        // Determinar mensagem
+        const stageFast = followup.followup_stage_fast || 0;
+        const stageSlow = followup.followup_stage_slow || 0;
+        
+        // Mensagem simples de acompanhamento
+        const mensagem = `Olá ${lead.nome || 'cliente'}! 👋\n\nPassando para saber se posso ajudar com sua questão.\n\nEstamos à disposição para analisar seu caso!\n\n📅 Agende sua consulta: https://calendly.com/bentesramos-adv/consulta-juridica`;
+        
+        // Enviar via ManyChat
+        const enviado = await enviarRespostaManyChat(followup.subscriber_id, mensagem);
+        
+        if (enviado) {
+          const agora = new Date().toISOString();
+          
+          // Atualizar follow-up
+          await supabase
+            .from('lead_followups')
+            .update({
+              last_outbound_at: agora,
+              last_isa_outbound_at: agora,
+              waiting_reply: true
+            })
+            .eq('id', followup.id);
+          
+          // Registrar interação
+          await supabase.from('interacoes').insert({
+            cliente_id: lead_id,
+            tipo: 'WhatsApp',
+            direcao: 'Saída',
+            resumo: 'Follow-up enviado pela Isa (inteligente)',
+            detalhes: mensagem
+          });
+          
+          // Registrar evento
+          await supabase.from('system_events').insert({
+            tipo: 'followup',
+            fonte: 'isa_inteligente',
+            acao: 'followup_enviado_manual',
+            lead_id: lead_id,
+            dados: { stage_fast: stageFast, stage_slow: stageSlow },
+            processado: true
+          });
+          
+          return { success: true, message: `Follow-up enviado para ${lead.nome}` };
+        }
+        
+        return { success: false, message: 'Falha ao enviar follow-up' };
+      }
+
+      case 'pausar_followup': {
+        const { lead_id, motivo } = dados;
+        
+        const { error } = await supabase
+          .from('lead_followups')
+          .update({
+            status: 'pausado',
+            followup_lock_reason: motivo || 'Pausado pela Isa'
+          })
+          .eq('lead_id', lead_id);
+        
+        if (error) throw error;
+        
+        // Ativar atendimento humano se tiver subscriber
+        const { data: followup } = await supabase
+          .from('lead_followups')
+          .select('subscriber_id')
+          .eq('lead_id', lead_id)
+          .maybeSingle();
+        
+        if (followup?.subscriber_id) {
+          await supabase
+            .from('manychat_subscribers')
+            .update({ atendimento_humano: true, atendimento_humano_desde: new Date().toISOString() })
+            .eq('subscriber_id', followup.subscriber_id);
+        }
+        
+        await supabase.from('system_events').insert({
+          tipo: 'followup',
+          fonte: 'isa_inteligente',
+          acao: 'followup_pausado',
+          lead_id: lead_id,
+          dados: { motivo },
+          processado: true
+        });
+        
+        return { success: true, message: 'Follow-up pausado com sucesso' };
+      }
+
+      case 'retomar_followup': {
+        const { lead_id } = dados;
+        
+        const { error } = await supabase
+          .from('lead_followups')
+          .update({
+            status: 'em_andamento',
+            followup_lock_reason: null
+          })
+          .eq('lead_id', lead_id);
+        
+        if (error) throw error;
+        
+        // Desativar atendimento humano
+        const { data: followup } = await supabase
+          .from('lead_followups')
+          .select('subscriber_id')
+          .eq('lead_id', lead_id)
+          .maybeSingle();
+        
+        if (followup?.subscriber_id) {
+          await supabase
+            .from('manychat_subscribers')
+            .update({ atendimento_humano: false, atendimento_humano_desde: null })
+            .eq('subscriber_id', followup.subscriber_id);
+        }
+        
+        await supabase.from('system_events').insert({
+          tipo: 'followup',
+          fonte: 'isa_inteligente',
+          acao: 'followup_retomado',
+          lead_id: lead_id,
+          processado: true
+        });
+        
+        return { success: true, message: 'Follow-up retomado com sucesso' };
+      }
+
       default:
         return { success: false, message: `Ação "${acao}" não reconhecida` };
     }
@@ -778,6 +1112,24 @@ async function processarComIA(contexto: LeadContext, mensagem: string, subscribe
   const temAgendamentoPendente = !!agendamentoPendente;
   const opcoesAgendamento = agendamentoPendente?.dados?.opcoes_oferecidas || [];
 
+  // Verificar status do follow-up
+  let followupInfo = '';
+  if (contexto.followup) {
+    const statusFollowup = await verificarFollowupStatus(supabaseClient, contexto.lead.id, contexto.followup);
+    const stageFast = contexto.followup.followup_stage_fast || 0;
+    const stageSlow = contexto.followup.followup_stage_slow || 0;
+    
+    followupInfo = `
+📊 STATUS DO FOLLOW-UP:
+- Estágio FAST: ${stageFast}/3 ${stageFast >= 3 ? '(completo)' : ''}
+- Estágio SLOW: ${stageSlow}/3 ${stageSlow >= 3 ? '(completo)' : ''}
+- Respondeu: ${contexto.followup.respondido ? 'SIM ✅' : 'NÃO'}
+- Aguardando resposta: ${contexto.followup.waiting_reply ? 'SIM' : 'NÃO'}
+- Status: ${statusFollowup.status}
+${statusFollowup.pode_enviar ? '⚡ PODE ENVIAR FOLLOW-UP AGORA' : `⏸️ ${statusFollowup.motivo}`}
+`;
+  }
+
   const systemPrompt = `Você é Isa, a assistente inteligente do escritório de advocacia Bentes & Ramos.
 
 🎯 SEU OBJETIVO PRINCIPAL: CONVERTER leads em clientes. Seja OBJETIVA, DIRETA e FOCADA.
@@ -829,6 +1181,15 @@ async function processarComIA(contexto: LeadContext, mensagem: string, subscribe
 
 ⚠️ NUNCA invente informações, telefones ou números. Se não souber, direcione para agendar uma consulta.
 
+🔄 INTELIGÊNCIA DE FOLLOW-UPS:
+- Você tem acesso ao status de follow-up do lead
+- Se o lead não respondeu aos follow-ups, seja mais incisiva na conversão
+- NUNCA envie follow-up se o lead acabou de responder (conversa ativa)
+- Se o lead tem status "Contrato Assinado" ou "Ganho", NÃO envie follow-ups
+- Use "verificar_followup" para checar se pode enviar
+- Use "pausar_followup" se perceber que o lead quer parar de receber mensagens
+- Use "retomar_followup" se o lead demonstrar interesse novamente
+
 CONTEXTO DO LEAD:
 ${JSON.stringify({
   nome: contexto.lead.nome,
@@ -840,6 +1201,7 @@ ${JSON.stringify({
   valor_causa: contexto.lead.valor_causa,
   resumo: contexto.lead.resumo_ia,
 }, null, 2)}
+${followupInfo}
 
 HISTÓRICO DE MENSAGENS (últimas 10):
 ${contexto.mensagens.slice(0, 10).map(m => `[${m.direcao}] ${m.subscriber_nome || 'Cliente'}: ${m.conteudo}`).join('\n')}
@@ -859,6 +1221,10 @@ AÇÕES DISPONÍVEIS:
 - confirmar_agendamento: Criar compromisso após cliente confirmar horário
 - criar_tarefa: Criar tarefa de follow-up
 - consultar_processo: Buscar andamento de processo judicial (requer número do processo)
+- verificar_followup: Verificar status do follow-up do lead
+- executar_followup: Enviar follow-up manualmente (usar com cautela)
+- pausar_followup: Pausar automação de follow-up para este lead
+- retomar_followup: Retomar automação de follow-up
 
 Responda em JSON:
 {
@@ -876,7 +1242,6 @@ Responda em JSON:
     }
   ]
 }`;
-
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -1089,6 +1454,65 @@ serve(async (req) => {
     }
 
     console.log('📊 Contexto carregado para:', contexto.lead.nome);
+
+    // ============================================================
+    // 🔄 INTELIGÊNCIA DE FOLLOW-UP: Marcar como respondido
+    // ============================================================
+    const agora = new Date().toISOString();
+    
+    if (contexto.followup) {
+      // Lead respondeu! Marcar follow-up como respondido
+      if (!contexto.followup.respondido) {
+        console.log('✅ Lead respondeu! Marcando follow-up como respondido');
+        
+        await supabase
+          .from('lead_followups')
+          .update({
+            respondido: true,
+            respondido_em: agora,
+            waiting_reply: false,
+            last_inbound_at: agora,
+            status: 'respondido'
+          })
+          .eq('id', contexto.followup.id);
+        
+        // Registrar evento de resposta
+        await supabase.from('system_events').insert({
+          tipo: 'followup',
+          fonte: 'isa_inteligente',
+          acao: 'lead_respondeu',
+          lead_id: lead_id,
+          dados: {
+            followup_id: contexto.followup.id,
+            stage_fast: contexto.followup.followup_stage_fast,
+            stage_slow: contexto.followup.followup_stage_slow
+          },
+          processado: true
+        });
+        
+        // Se era Lead Frio, atualizar para Em Atendimento
+        if (contexto.lead.status === 'Lead Frio') {
+          console.log('📈 Lead Frio respondeu - atualizando para Em Atendimento');
+          
+          await supabase
+            .from('leads_juridicos')
+            .update({ status: 'Em Atendimento' })
+            .eq('id', lead_id);
+          
+          // Atualizar contexto local
+          contexto.lead.status = 'Em Atendimento';
+        }
+      } else {
+        // Atualizar apenas o timestamp de última mensagem recebida
+        await supabase
+          .from('lead_followups')
+          .update({
+            last_inbound_at: agora,
+            waiting_reply: false
+          })
+          .eq('id', contexto.followup.id);
+      }
+    }
 
     // Processar com IA (usando mensagem transcrita se for áudio)
     const resultado = await processarComIA(contexto, mensagemProcessada, subscriber_id);
