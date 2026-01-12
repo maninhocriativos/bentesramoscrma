@@ -185,6 +185,7 @@ const ACOES_AUTOMATICAS = [
   'executar_followup', // Disparar follow-up manualmente
   'pausar_followup', // Pausar automação
   'retomar_followup', // Retomar automação
+  'analisar_documentos_conversa', // Analisar conversas para detectar documentos pendentes
 ];
 
 // Ações que precisam de confirmação do USUÁRIO INTERNO (híbrido)
@@ -1190,6 +1191,15 @@ ${statusFollowup.pode_enviar ? '⚡ PODE ENVIAR FOLLOW-UP AGORA' : `⏸️ ${sta
 - Use "pausar_followup" se perceber que o lead quer parar de receber mensagens
 - Use "retomar_followup" se o lead demonstrar interesse novamente
 
+📄 MONITORAMENTO DE DOCUMENTOS:
+- Você monitora TODAS as conversas (suas E da equipe humana) para detectar documentos pendentes
+- Se perceber que o cliente foi solicitado a enviar documentos mas ainda não enviou, use "analisar_documentos_conversa"
+- Se detectar documento pendente, adicione à análise e sinalize à equipe
+- Exemplos de frases que indicam documentos pendentes:
+  * "preciso do seu contrato", "envie o extrato", "mande os comprovantes"
+  * "pode me enviar", "preciso que você me mande", "falta a documentação"
+- Se o lead está em "Em Negociação" ou "Aguardando Contrato" há mais de 3 dias sem documentos, sinalize urgência
+
 CONTEXTO DO LEAD:
 ${JSON.stringify({
   nome: contexto.lead.nome,
@@ -1225,6 +1235,7 @@ AÇÕES DISPONÍVEIS:
 - executar_followup: Enviar follow-up manualmente (usar com cautela)
 - pausar_followup: Pausar automação de follow-up para este lead
 - retomar_followup: Retomar automação de follow-up
+- analisar_documentos_conversa: Analisar se há documentos pendentes nas conversas (bot + humano)
 
 Responda em JSON:
 {
