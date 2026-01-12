@@ -797,6 +797,220 @@ serve(async (req) => {
         }
         break;
       }
+
+      case 'notificar_documento_pendente': {
+        const { lead_id, subscriber_id, tipo_documento } = data;
+        const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY');
+        
+        if (!subscriber_id) {
+          result = { success: false, message: 'Subscriber ID não fornecido' };
+          break;
+        }
+
+        if (!MANYCHAT_API_KEY) {
+          result = { success: false, message: 'MANYCHAT_API_KEY não configurada' };
+          break;
+        }
+
+        // Buscar dados do lead
+        const { data: lead } = await supabase
+          .from('leads_juridicos')
+          .select('nome, status')
+          .eq('id', lead_id)
+          .single();
+
+        const nomeCliente = lead?.nome || 'cliente';
+        const tipoDoc = tipo_documento || 'os documentos necessários';
+
+        // Mensagem de lembrete de documento
+        const mensagem = `Olá ${nomeCliente}! 👋
+
+Passando para lembrar sobre ${tipoDoc} que precisamos para dar continuidade ao seu processo.
+
+📄 A documentação é essencial para analisarmos seu caso com precisão.
+
+Precisa de ajuda para enviar? Pode responder essa mensagem que te orientamos! 📲`;
+
+        // Enviar via ManyChat
+        try {
+          const response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
+            },
+            body: JSON.stringify({
+              subscriber_id,
+              data: {
+                version: 'v2',
+                content: {
+                  messages: [{ type: 'text', text: mensagem }],
+                },
+              },
+              message_tag: 'ACCOUNT_UPDATE',
+            }),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Erro ManyChat:', errorText);
+            result = { success: false, message: 'Falha ao enviar mensagem via ManyChat' };
+            break;
+          }
+
+          // Registrar interação
+          await supabase.from('interacoes').insert({
+            cliente_id: lead_id,
+            tipo: 'WhatsApp',
+            direcao: 'Saída',
+            resumo: 'Lembrete de documento pendente enviado pela Isa',
+            detalhes: mensagem,
+            data_interacao: new Date().toISOString(),
+          });
+
+          // Registrar evento
+          await supabase.from('system_events').insert({
+            tipo: 'documento',
+            fonte: 'isa_actions',
+            acao: 'lembrete_documento_enviado',
+            entidade_id: lead_id,
+            lead_id: lead_id,
+            dados: { tipo_documento, mensagem_enviada: true },
+            processado: true,
+          });
+
+          result = { 
+            success: true, 
+            message: `Lembrete de documento enviado para ${nomeCliente}`,
+            data: { lead_id, mensagem }
+          };
+        } catch (error) {
+          console.error('Erro ao enviar lembrete:', error);
+          result = { success: false, message: 'Erro ao enviar lembrete de documento' };
+        }
+        break;
+      }
+
+      case 'analisar_documentos_conversa': {
+        const { lead_id } = data;
+        
+        // Buscar últimas mensagens do lead
+        const { data: mensagens } = await supabase
+          .from('manychat_mensagens')
+          .select('conteudo, direcao, created_at')
+          .eq('lead_id', lead_id)
+          .order('created_at', { ascending: false })
+          .limit(30);
+
+        // Buscar interações
+        const { data: interacoes } = await supabase
+          .from('interacoes')
+          .select('resumo, detalhes, tipo')
+          .eq('cliente_id', lead_id)
+          .order('data_interacao', { ascending: false })
+          .limit(20);
+
+        // Verificar documentos já enviados
+        const { data: documentos, count: qtdDocs } = await supabase
+          .from('documentos')
+          .select('nome, tipo', { count: 'exact' })
+          .eq('cliente_id', lead_id);
+
+        // Analisar conversas com GPT para detectar menções a documentos
+        const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+        
+        if (!OPENAI_API_KEY) {
+          result = { 
+            success: true, 
+            message: 'Análise básica: sem API OpenAI',
+            data: { 
+              documentos_enviados: qtdDocs || 0,
+              aguardando_documentos: (qtdDocs || 0) < 3,
+              analise_ia: null
+            }
+          };
+          break;
+        }
+
+        const conversaTexto = (mensagens || [])
+          .map(m => `${m.direcao === 'entrada' ? 'Cliente' : 'Equipe'}: ${m.conteudo}`)
+          .join('\n');
+
+        const promptAnalise = `Analise esta conversa com um lead jurídico e identifique:
+1. Se há documentos pendentes mencionados
+2. Quais tipos de documentos foram solicitados
+3. Se o cliente já confirmou envio ou se ainda está pendente
+
+Conversa:
+${conversaTexto}
+
+Documentos já cadastrados no sistema: ${documentos?.map(d => d.nome).join(', ') || 'Nenhum'}
+
+Responda em JSON:
+{
+  "aguardando_documentos": boolean,
+  "documentos_pendentes": ["lista de documentos"],
+  "cliente_confirmou_envio": boolean,
+  "urgencia": "baixa|media|alta",
+  "resumo": "breve resumo da situação"
+}`;
+
+        try {
+          const gptResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            },
+            body: JSON.stringify({
+              model: 'gpt-4o-mini',
+              messages: [{ role: 'user', content: promptAnalise }],
+              temperature: 0.3,
+              response_format: { type: 'json_object' },
+            }),
+          });
+
+          const gptData = await gptResponse.json();
+          const analise = JSON.parse(gptData.choices[0].message.content);
+
+          // Se detectou documentos pendentes, criar evento
+          if (analise.aguardando_documentos) {
+            await supabase.from('system_events').insert({
+              tipo: 'documento',
+              fonte: 'isa_analise',
+              acao: 'aguardando_documento',
+              entidade_id: lead_id,
+              lead_id: lead_id,
+              dados: {
+                documentos_pendentes: analise.documentos_pendentes,
+                urgencia: analise.urgencia,
+                status_doc: 'pendente',
+                tipo_documento: analise.documentos_pendentes?.join(', ') || 'Documentos gerais',
+              },
+              processado: false,
+            });
+          }
+
+          result = {
+            success: true,
+            message: analise.aguardando_documentos 
+              ? `Detectados ${analise.documentos_pendentes?.length || 0} documento(s) pendente(s)`
+              : 'Nenhum documento pendente detectado',
+            data: {
+              documentos_enviados: qtdDocs || 0,
+              ...analise
+            }
+          };
+        } catch (error) {
+          console.error('Erro na análise GPT:', error);
+          result = { 
+            success: false, 
+            message: 'Erro ao analisar conversas',
+            data: { documentos_enviados: qtdDocs || 0 }
+          };
+        }
+        break;
+      }
     }
 
     console.log('Resultado:', result);

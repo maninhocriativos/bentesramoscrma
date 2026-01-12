@@ -8,6 +8,7 @@ import { LeadFilters } from '@/components/leads/LeadFilters';
 import { RecentActivities } from '@/components/crm/RecentActivities';
 import { DashboardTarefas } from '@/components/crm/DashboardTarefas';
 import { FollowupStatusPanel } from '@/components/crm/FollowupStatusPanel';
+import { AguardandoDocumentosPanel } from '@/components/crm/AguardandoDocumentosPanel';
 import { useLeads } from '@/hooks/useLeads';
 
 import { usePerfil } from '@/hooks/usePerfil';
@@ -114,12 +115,13 @@ export default function LeadsPage() {
               
               {/* Panels Grid */}
               <div className={cn(
-                "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 transition-all duration-300",
+                "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 transition-all duration-300",
                 // Mobile: collapsible
                 "lg:max-h-none lg:opacity-100",
                 showMobilePanels ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0 lg:max-h-none lg:opacity-100 overflow-hidden lg:overflow-visible"
               )}>
                 <FollowupStatusPanel />
+                <AguardandoDocumentosPanel />
                 <RecentActivities leads={leads} />
                 <DashboardTarefas onNewTask={handleNewTask} />
               </div>
