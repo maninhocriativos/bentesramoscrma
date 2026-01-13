@@ -1,6 +1,15 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { 
+  DIAS_PERMITIDOS, 
+  HORARIOS_DISPONIVEIS, 
+  NOMES_DIAS,
+  formatarData,
+  formatarDataCurta,
+  getProximaSegundaUtc,
+  validarAgendamento
+} from '../_shared/timezone-helpers.ts';
 
 
 const corsHeaders = {
@@ -179,8 +188,10 @@ const ACOES_AUTOMATICAS = [
   'buscar_lead',
   'buscar_historico',
   'atualizar_dados_lead', // Atualizar nome/telefone do lead
+  'verificar_agenda', // Consultar agenda e horários disponíveis
   'solicitar_agendamento', // Enviar opções de horário para lead confirmar
   'confirmar_agendamento', // Confirmar agendamento após resposta do lead
+  'agendar_direto', // Agendar compromisso diretamente no sistema
   'verificar_followup', // Verificar e executar follow-ups pendentes
   'executar_followup', // Disparar follow-up manualmente
   'pausar_followup', // Pausar automação
@@ -498,16 +509,24 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
           };
         }
         
-        // Gerar opções de horários (próximos 3 dias úteis)
-        const opcoes = gerarOpcoesHorario();
+        // Gerar opções de horários consultando agenda real
+        const opcoes = await gerarOpcoesHorario(supabase, lead_id);
+        
+        if (opcoes.length === 0) {
+          return { 
+            success: false, 
+            message: 'Não há horários disponíveis no momento. Tente novamente mais tarde.',
+            data: null
+          };
+        }
         
         const mensagem = mensagem_personalizada || `Ótimo! Vamos agendar sua consulta. 📅
 
 Por favor, escolha um dos horários disponíveis:
 
-${opcoes.map((o, i) => `${i + 1}️⃣ ${o.label}`).join('\n')}
+${opcoes.map((o: { label: string }, i: number) => `${i + 1}️⃣ ${o.label}`).join('\n')}
 
-Ou digite outro horário de sua preferência.`;
+Ou acesse nosso Calendly: https://calendly.com/bentesramos-adv/consulta-juridica`;
 
         // Enviar via ManyChat com botões
         const response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
@@ -522,7 +541,7 @@ Ou digite outro horário de sua preferência.`;
               version: 'v2',
               content: {
                 messages: [{ type: 'text', text: mensagem }],
-                quick_replies: opcoes.slice(0, 3).map(o => ({
+                quick_replies: opcoes.slice(0, 3).map((o: { short: string }) => ({
                   type: 'text',
                   title: o.short
                 }))
@@ -824,7 +843,165 @@ Ou digite outro horário de sua preferência.`;
       }
 
       // ============================================================
-      // NOVAS AÇÕES DE FOLLOW-UP INTELIGENTE
+      // AÇÕES DE AGENDA E AGENDAMENTO
+      // ============================================================
+      
+      case 'verificar_agenda': {
+        const { lead_id, data_especifica, horario_especifico } = dados;
+        
+        // Se data específica foi informada, verificar disponibilidade
+        if (data_especifica) {
+          let dataVerificar: Date;
+          
+          if (horario_especifico) {
+            const dataStr = `${data_especifica}T${horario_especifico}:00-04:00`;
+            dataVerificar = new Date(dataStr);
+          } else {
+            dataVerificar = new Date(`${data_especifica}T09:00:00-04:00`);
+          }
+          
+          const disponibilidade = await verificarDisponibilidadeHorario(supabase, dataVerificar);
+          
+          if (!disponibilidade.disponivel) {
+            // Gerar alternativas
+            const alternativas = await gerarOpcoesHorario(supabase, lead_id);
+            return {
+              success: false,
+              message: disponibilidade.motivo || 'Horário indisponível',
+              data: { 
+                disponivel: false,
+                alternativas: alternativas.slice(0, 3).map((a: { label: string }) => a.label)
+              }
+            };
+          }
+          
+          return {
+            success: true,
+            message: `Horário ${horario_especifico || '09:00'} em ${data_especifica} está DISPONÍVEL!`,
+            data: { disponivel: true, data: data_especifica, horario: horario_especifico }
+          };
+        }
+        
+        // Retornar opções disponíveis
+        const opcoes = await gerarOpcoesHorario(supabase, lead_id);
+        
+        return {
+          success: true,
+          message: `${opcoes.length} horários disponíveis encontrados`,
+          data: { 
+            horarios_disponiveis: opcoes.map((o: { label: string; datetime: string }) => ({ 
+              label: o.label, 
+              datetime: o.datetime 
+            })),
+            regras: {
+              dias: 'Segunda, Quarta e Sexta',
+              horarios: HORARIOS_DISPONIVEIS.join(', '),
+              observacao: 'Agendamentos apenas para próxima semana'
+            }
+          }
+        };
+      }
+      
+      case 'agendar_direto': {
+        const { lead_id, data_hora, titulo, modalidade, confirmar_cliente } = dados;
+        
+        if (!data_hora) {
+          return { success: false, message: 'Data e hora são obrigatórios para agendar' };
+        }
+        
+        // Converter data para UTC
+        let dataAgendamento: Date;
+        const dataStr = String(data_hora);
+        
+        if (!dataStr.includes('Z') && !dataStr.includes('+') && !dataStr.match(/-\d{2}:\d{2}$/)) {
+          dataAgendamento = new Date(dataStr + '-04:00'); // Assumir Manaus
+        } else {
+          dataAgendamento = new Date(dataStr);
+        }
+        
+        // Verificar disponibilidade
+        const disponibilidade = await verificarDisponibilidadeHorario(supabase, dataAgendamento);
+        
+        if (!disponibilidade.disponivel) {
+          const alternativas = await gerarOpcoesHorario(supabase, lead_id);
+          return {
+            success: false,
+            message: disponibilidade.motivo || 'Horário indisponível',
+            data: { 
+              alternativas: alternativas.slice(0, 3).map((a: { label: string; datetime: string }) => ({ 
+                label: a.label, 
+                datetime: a.datetime 
+              }))
+            }
+          };
+        }
+        
+        const dataFim = new Date(dataAgendamento.getTime() + 60 * 60 * 1000); // +1 hora
+        const tipoCompromisso = modalidade === 'online' ? 'Reunião Online' : 
+                                modalidade === 'presencial' ? 'Reunião Presencial' : 'Consulta';
+        
+        // Criar compromisso
+        const { data: compromisso, error } = await supabase
+          .from('compromissos')
+          .insert({
+            titulo: titulo || 'Consulta Jurídica',
+            tipo: tipoCompromisso,
+            data_inicio: dataAgendamento.toISOString(),
+            data_fim: dataFim.toISOString(),
+            descricao: `Agendamento feito pela Isa.\n${modalidade === 'online' ? '📹 ONLINE' : '🏢 PRESENCIAL'}`,
+            lead_id,
+            confirmacao_status: 'pendente'
+          })
+          .select()
+          .single();
+        
+        if (error) throw error;
+        
+        // Atualizar status do lead
+        await supabase
+          .from('leads_juridicos')
+          .update({ status: 'Em Negociação' })
+          .eq('id', lead_id);
+        
+        // Registrar evento
+        await supabase.from('system_events').insert({
+          tipo: 'compromisso',
+          fonte: 'isa_auto',
+          acao: 'agendamento_criado_isa',
+          entidade_id: compromisso.id,
+          lead_id: lead_id,
+          dados: { titulo, tipo: tipoCompromisso, modalidade, data_inicio: dataAgendamento.toISOString() },
+          processado: true,
+        });
+        
+        // Formatar hora para resposta
+        const horaManaus = dataAgendamento.toLocaleTimeString('pt-BR', { 
+          timeZone: 'America/Manaus',
+          hour: '2-digit', 
+          minute: '2-digit' 
+        });
+        const dataManaus = dataAgendamento.toLocaleDateString('pt-BR', { 
+          timeZone: 'America/Manaus',
+          weekday: 'long',
+          day: '2-digit',
+          month: '2-digit'
+        });
+        
+        console.log(`✅ Compromisso criado: ${tipoCompromisso} em ${dataManaus} às ${horaManaus}`);
+        
+        return { 
+          success: true, 
+          message: `✅ Agendado: ${tipoCompromisso} para ${dataManaus} às ${horaManaus}`,
+          data: { 
+            compromisso_id: compromisso.id,
+            data_formatada: `${dataManaus} às ${horaManaus}`,
+            tipo: tipoCompromisso
+          }
+        };
+      }
+
+      // ============================================================
+      // AÇÕES DE FOLLOW-UP INTELIGENTE
       // ============================================================
       
       case 'verificar_followup': {
@@ -1010,43 +1187,112 @@ Ou digite outro horário de sua preferência.`;
   }
 }
 
-// Gerar opções de horários para agendamento
-function gerarOpcoesHorario(): Array<{ label: string; short: string; datetime: string }> {
-  const opcoes = [];
-  const agora = new Date();
-  let diasAdicionados = 0;
-  let dia = new Date(agora);
+// Gerar opções de horários para agendamento consultando a agenda real
+async function gerarOpcoesHorario(supabase: any, leadId?: string): Promise<Array<{ label: string; short: string; datetime: string; disponivel: boolean }>> {
+  const opcoes: Array<{ label: string; short: string; datetime: string; disponivel: boolean }> = [];
   
-  while (diasAdicionados < 3) {
-    dia.setDate(dia.getDate() + 1);
-    const diaSemana = dia.getDay();
-    
-    // Pular fins de semana
-    if (diaSemana === 0 || diaSemana === 6) continue;
-    
-    diasAdicionados++;
-    
-    const dataStr = dia.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
-    
-    // Horários disponíveis
-    const horarios = ['09:00', '10:00', '14:00', '15:00', '16:00'];
-    
-    for (const horario of horarios.slice(0, 2)) { // Pegar só 2 por dia
-      const [hora, minuto] = horario.split(':').map(Number);
-      const dataHora = new Date(dia);
-      dataHora.setHours(hora, minuto, 0, 0);
-      
-      if (opcoes.length < 5) {
-        opcoes.push({
-          label: `${dataStr.charAt(0).toUpperCase() + dataStr.slice(1)} às ${horario}`,
-          short: `${dia.getDate()}/${dia.getMonth() + 1} ${horario}`,
-          datetime: dataHora.toISOString(),
-        });
-      }
+  // Calcular período: próxima semana + 2 semanas
+  const proximaSegunda = getProximaSegundaUtc();
+  const fimPeriodo = new Date(proximaSegunda.getTime() + 21 * 24 * 60 * 60 * 1000); // 3 semanas
+  
+  // Buscar compromissos existentes no período
+  const { data: compromissosExistentes } = await supabase
+    .from('compromissos')
+    .select('data_inicio, data_fim')
+    .gte('data_inicio', proximaSegunda.toISOString())
+    .lte('data_inicio', fimPeriodo.toISOString());
+  
+  // Criar set de horários ocupados (formato: "YYYY-MM-DD HH:mm")
+  const horariosOcupados = new Set<string>();
+  if (compromissosExistentes) {
+    for (const c of compromissosExistentes) {
+      const dataInicio = new Date(c.data_inicio);
+      // Formatar em horário de Manaus
+      const dataStr = dataInicio.toISOString().split('T')[0];
+      const horaManaus = dataInicio.toLocaleTimeString('pt-BR', { 
+        timeZone: 'America/Manaus',
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+      horariosOcupados.add(`${dataStr} ${horaManaus}`);
     }
   }
   
+  console.log('📅 Horários ocupados:', Array.from(horariosOcupados));
+  
+  // Iterar pelos dias permitidos da próxima semana
+  let diaAtual = new Date(proximaSegunda);
+  let diasProcessados = 0;
+  const maxDias = 9; // Processar até 9 dias (3 semanas de Seg/Qua/Sex)
+  
+  while (diasProcessados < maxDias && opcoes.length < 6) {
+    const diaSemana = diaAtual.getDay();
+    
+    // Verificar se é dia permitido (Seg=1, Qua=3, Sex=5)
+    if (DIAS_PERMITIDOS.includes(diaSemana)) {
+      diasProcessados++;
+      
+      const dataStrISO = diaAtual.toISOString().split('T')[0];
+      const nomeDia = NOMES_DIAS[diaSemana];
+      const dataFormatada = formatarDataCurta(diaAtual);
+      
+      // Verificar cada horário disponível
+      for (const horario of HORARIOS_DISPONIVEIS) {
+        const chave = `${dataStrISO} ${horario}`;
+        const ocupado = horariosOcupados.has(chave);
+        
+        if (!ocupado && opcoes.length < 6) {
+          // Criar datetime em UTC (Manaus = UTC-4)
+          const dataHoraManaus = `${dataStrISO}T${horario}:00-04:00`;
+          const dataHoraUtc = new Date(dataHoraManaus);
+          
+          opcoes.push({
+            label: `${nomeDia.charAt(0).toUpperCase() + nomeDia.slice(1)}, ${formatarData(diaAtual)} às ${horario}`,
+            short: `${diaAtual.getDate()}/${diaAtual.getMonth() + 1} ${horario}`,
+            datetime: dataHoraUtc.toISOString(),
+            disponivel: true
+          });
+        }
+      }
+    }
+    
+    // Avançar para o próximo dia
+    diaAtual = new Date(diaAtual.getTime() + 24 * 60 * 60 * 1000);
+  }
+  
+  console.log(`📅 Geradas ${opcoes.length} opções de horário disponíveis`);
   return opcoes;
+}
+
+// Verificar disponibilidade de um horário específico
+async function verificarDisponibilidadeHorario(supabase: any, dataHora: Date): Promise<{ disponivel: boolean; motivo?: string }> {
+  // Validar regras de agendamento
+  const horaManaus = dataHora.toLocaleTimeString('pt-BR', { 
+    timeZone: 'America/Manaus',
+    hour: '2-digit', 
+    minute: '2-digit' 
+  });
+  
+  const validacao = validarAgendamento(dataHora, horaManaus);
+  if (!validacao.valido) {
+    return { disponivel: false, motivo: validacao.motivo };
+  }
+  
+  // Verificar conflitos na agenda
+  const inicioSlot = dataHora.toISOString();
+  const fimSlot = new Date(dataHora.getTime() + 60 * 60 * 1000).toISOString(); // +1 hora
+  
+  const { data: conflitos } = await supabase
+    .from('compromissos')
+    .select('id, titulo')
+    .or(`and(data_inicio.lt.${fimSlot},data_fim.gt.${inicioSlot})`)
+    .limit(1);
+  
+  if (conflitos && conflitos.length > 0) {
+    return { disponivel: false, motivo: 'Horário já ocupado por outro compromisso' };
+  }
+  
+  return { disponivel: true };
 }
 
 // Enviar resposta via ManyChat
@@ -1199,11 +1445,30 @@ Posso ajudar com algo nessas áreas?"
 
 📋 REGRAS DE RESPOSTA:
 
-1. Se for NOSSA ÁREA → Converta! Envie: "Agende sua consulta: https://calendly.com/bentesramos-adv/consulta-juridica"
+1. Se for NOSSA ÁREA → Converta! Ofereça agendamento
 2. Se NÃO for nossa área → Use a resposta padrão de recusa acima
 3. Mensagens CURTAS (máximo 4 linhas)
 4. SEMPRE termine com chamada para ação
 5. NUNCA invente informações
+
+📅 REGRAS DE AGENDAMENTO (MUITO IMPORTANTE):
+- Dias: APENAS Segunda, Quarta e Sexta-feira
+- Horários: ${HORARIOS_DISPONIVEIS.join(', ')} (duração 1h, intervalo 1h)
+- Almoço: 12h às 14h (NÃO AGENDAR)
+- Timezone: America/Manaus (UTC-4)
+- Agendamentos: APENAS a partir da PRÓXIMA SEMANA
+
+QUANDO O CLIENTE QUISER AGENDAR:
+1. PRIMEIRO use "verificar_agenda" para ver horários disponíveis
+2. Se cliente escolher um horário válido, use "agendar_direto" para criar o compromisso
+3. Se o horário não estiver disponível, ofereça alternativas
+4. OU envie o link do Calendly: https://calendly.com/bentesramos-adv/consulta-juridica
+
+${temAgendamentoPendente ? `
+⚠️ AGENDAMENTO PENDENTE: Existe solicitação aguardando resposta do cliente.
+Opções oferecidas: ${JSON.stringify(opcoesAgendamento.map((o: { label: string }) => o.label))}
+Se o cliente confirmar um horário, use "confirmar_agendamento" ou "agendar_direto".
+` : ''}
 
 🔄 INTELIGÊNCIA DE FOLLOW-UPS:
 ${followupInfo || '(Sem dados de follow-up)'}
@@ -1225,17 +1490,27 @@ Resumo IA: ${contexto.lead.resumo_ia || 'Sem resumo'}
 ${historicoFormatado || '(Sem histórico)'}
 
 ⚙️ AÇÕES DISPONÍVEIS:
+
+📅 AGENDA:
+- verificar_agenda: Consultar horários disponíveis (dados: { lead_id, data_especifica?, horario_especifico? })
+- agendar_direto: Criar compromisso no sistema (dados: { lead_id, data_hora, titulo?, modalidade: "online"|"presencial" })
+- solicitar_agendamento: Enviar opções de horário via chat
+- confirmar_agendamento: Confirmar após cliente escolher
+
+📋 LEAD:
 - classificar_lead: Atualizar status do lead
 - criar_interacao: Registrar interação no histórico
 - atualizar_resumo_lead: Atualizar resumo do lead
 - atualizar_dados_lead: Atualizar nome, telefone ou email
-- solicitar_agendamento: Enviar link do Calendly
-- confirmar_agendamento: Criar compromisso após confirmação
 - criar_tarefa: Criar tarefa (precisa aprovação)
-- consultar_processo: Buscar processo judicial
+
+🔄 FOLLOW-UP:
 - verificar_followup: Checar status do follow-up
 - pausar_followup: Pausar automação
 - retomar_followup: Retomar automação
+
+📑 OUTROS:
+- consultar_processo: Buscar processo judicial
 - analisar_documentos_conversa: Detectar documentos pendentes
 
 Responda em JSON:
