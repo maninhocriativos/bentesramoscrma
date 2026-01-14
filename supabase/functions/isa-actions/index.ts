@@ -1011,6 +1011,136 @@ Responda em JSON:
         }
         break;
       }
+
+      case 'buscar_horarios_calcom': {
+        // Chamar a edge function calcom-integration
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        
+        try {
+          const response = await fetch(`${supabaseUrl}/functions/v1/calcom-integration`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+            },
+            body: JSON.stringify({ action: 'buscar_horarios' }),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Erro calcom-integration:', errorText);
+            result = { 
+              success: false, 
+              message: 'Erro ao buscar horários no Cal.com. Tente novamente.',
+              data: { sugestao: 'Use verificar_disponibilidade para ver a agenda local' }
+            };
+            break;
+          }
+
+          const calcomData = await response.json();
+          
+          if (calcomData.success && calcomData.slots?.length > 0) {
+            const horariosFormatados = calcomData.slots.map((s: any) => s.formatted).join('\n• ');
+            result = {
+              success: true,
+              message: `📅 Horários disponíveis para agendamento:\n\n• ${horariosFormatados}\n\nQual horário você prefere?`,
+              data: {
+                slots: calcomData.slots,
+                total_opcoes: calcomData.slots.length
+              }
+            };
+          } else {
+            result = {
+              success: true,
+              message: '😔 Não encontrei horários disponíveis para os próximos dias. Posso verificar outras datas?',
+              data: { slots: [] }
+            };
+          }
+        } catch (error) {
+          console.error('Erro ao chamar calcom-integration:', error);
+          result = { 
+            success: false, 
+            message: 'Erro ao verificar horários. Use verificar_disponibilidade para ver a agenda local.'
+          };
+        }
+        break;
+      }
+
+      case 'agendar_calcom': {
+        const { lead_id, nome, email, telefone, datetime, titulo, modalidade } = data;
+        
+        if (!nome || !email || !datetime || !titulo) {
+          result = { 
+            success: false, 
+            message: 'Dados incompletos para agendamento. Preciso do nome, email, data/hora e título.'
+          };
+          break;
+        }
+
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        
+        try {
+          const response = await fetch(`${supabaseUrl}/functions/v1/calcom-integration`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+            },
+            body: JSON.stringify({
+              action: 'agendar',
+              lead_id,
+              nome,
+              email,
+              telefone,
+              datetime,
+              titulo,
+              modalidade: modalidade || 'online'
+            }),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Erro ao agendar no Cal.com:', errorText);
+            result = { 
+              success: false, 
+              message: 'Erro ao criar agendamento. Por favor, tente novamente.'
+            };
+            break;
+          }
+
+          const agendamentoData = await response.json();
+          
+          if (agendamentoData.success) {
+            // Formatar a data para exibição
+            const dataAgendamento = new Date(datetime);
+            const dataFormatada = formatarDataHoraManaus(dataAgendamento);
+            
+            result = {
+              success: true,
+              message: `✅ Agendamento confirmado!\n\n📅 ${titulo}\n🗓️ ${dataFormatada}\n📍 ${modalidade === 'online' ? 'Reunião Online (link será enviado por email)' : 'Presencial no escritório'}\n\nUm email de confirmação foi enviado para ${email}.`,
+              data: {
+                booking_id: agendamentoData.booking?.id,
+                compromisso_id: agendamentoData.compromisso_id,
+                meet_link: agendamentoData.booking?.meetLink
+              }
+            };
+          } else {
+            result = { 
+              success: false, 
+              message: agendamentoData.error || 'Erro ao criar agendamento. Por favor, tente novamente.'
+            };
+          }
+        } catch (error) {
+          console.error('Erro ao agendar:', error);
+          result = { 
+            success: false, 
+            message: 'Erro ao processar agendamento. Tente novamente ou use o link direto: https://cal.com/bentes-ramos-advocacia-1ucmau/agendamentos-crm'
+          };
+        }
+        break;
+      }
     }
 
     console.log('Resultado:', result);

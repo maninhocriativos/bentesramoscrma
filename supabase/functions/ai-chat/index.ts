@@ -16,8 +16,40 @@ const AVAILABLE_TOOLS = [
   {
     type: "function",
     function: {
+      name: "buscar_horarios_calcom",
+      description: "Busca horários disponíveis para agendamento via Cal.com. SEMPRE use esta função quando o cliente pedir para agendar ou quiser marcar um horário. Retorna até 6 opções de horários formatados para os próximos dias permitidos (Segunda, Quarta e Sexta, das 09h às 17h, exceto 12h-14h).",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "agendar_calcom",
+      description: "Agenda uma reunião via Cal.com quando o cliente confirmar um horário. Use após o cliente escolher um dos horários oferecidos. Cria o compromisso no Cal.com e no CRM automaticamente.",
+      parameters: {
+        type: "object",
+        properties: {
+          lead_id: { type: "string", description: "ID do lead no CRM" },
+          nome: { type: "string", description: "Nome do cliente" },
+          email: { type: "string", description: "Email do cliente" },
+          telefone: { type: "string", description: "Telefone do cliente" },
+          datetime: { type: "string", description: "Data e hora selecionada no formato ISO (YYYY-MM-DDTHH:mm:ss.000Z em UTC)" },
+          titulo: { type: "string", description: "Título da reunião (ex: Consulta Jurídica - Direito Bancário)" },
+          modalidade: { type: "string", enum: ["online", "presencial"], description: "Modalidade da reunião" },
+        },
+        required: ["nome", "email", "datetime", "titulo"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "verificar_disponibilidade",
-      description: "OBRIGATÓRIO: Verifica se há horários disponíveis na agenda antes de propor ou criar um agendamento. SEMPRE use esta função ANTES de sugerir qualquer horário ao cliente. Retorna os compromissos existentes no período e indica se o horário está livre.",
+      description: "Verifica se há horários disponíveis na agenda antes de propor ou criar um agendamento. SEMPRE use esta função ANTES de sugerir qualquer horário ao cliente. Retorna os compromissos existentes no período e indica se o horário está livre.",
       parameters: {
         type: "object",
         properties: {
@@ -33,13 +65,13 @@ const AVAILABLE_TOOLS = [
     type: "function",
     function: {
       name: "criar_compromisso",
-      description: "Cria um novo compromisso/evento na agenda do escritório. IMPORTANTE: 1) Sempre use verificar_disponibilidade ANTES para garantir que não há conflitos. 2) REGRA OBRIGATÓRIA: Novos atendimentos com clientes DEVEM ser agendados para a PRÓXIMA SEMANA em diante. Não agende para esta semana. Notifica automaticamente o responsável por email.",
+      description: "Cria um novo compromisso/evento na agenda do escritório. IMPORTANTE: Prefira usar agendar_calcom para agendamentos com clientes, pois já integra com Cal.com. Use esta função apenas para compromissos internos.",
       parameters: {
         type: "object",
         properties: {
           titulo: { type: "string", description: "Título do compromisso" },
           tipo: { type: "string", enum: ["Reunião", "Audiência", "Prazo", "Outro"], description: "Tipo do compromisso" },
-          data_inicio: { type: "string", description: "Data e hora de início no formato ISO (YYYY-MM-DDTHH:mm:ss). ATENÇÃO: Para atendimentos com clientes, use datas da PRÓXIMA SEMANA." },
+          data_inicio: { type: "string", description: "Data e hora de início no formato ISO (YYYY-MM-DDTHH:mm:ss)." },
           data_fim: { type: "string", description: "Data e hora de término no formato ISO (opcional)" },
           descricao: { type: "string", description: "Descrição detalhada do compromisso" },
           lead_id: { type: "string", description: "ID do lead/cliente relacionado (opcional)" },
