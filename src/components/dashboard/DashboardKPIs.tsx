@@ -1,4 +1,5 @@
-import { Users, Scale, TrendingUp, Briefcase, ArrowUpRight, ArrowDownRight, Sparkles } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Users, Scale, TrendingUp, Briefcase, ArrowUpRight, ArrowDownRight, Sparkles, Activity } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Lead } from '@/types/leads';
 import { Processo } from '@/types/processos';
@@ -10,7 +11,12 @@ interface DashboardKPIsProps {
   processos: Processo[];
 }
 
+// Track previous values for trend comparison
+let previousValues: { [key: string]: number } = {};
+
 export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
+  const [recentChange, setRecentChange] = useState<string | null>(null);
+  
   const totalLeads = leads.length;
   const totalProcessos = processos.length;
   const leadsGanhos = leads.filter(l => l.status === 'Ganho').length;
@@ -18,26 +24,52 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
   const leadsEmAtendimento = leads.filter(l => l.status === 'Em Atendimento').length;
   const processosAtivos = processos.filter(p => p.status === 'Em Andamento').length;
   
+  // Calculate leads entering today
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const leadsHoje = leads.filter(l => new Date(l.created_at) >= today).length;
+
+  // Detect changes for visual feedback
+  useEffect(() => {
+    const currentValues: { [key: string]: number } = {
+      totalLeads,
+      leadsEmAtendimento,
+      leadsGanhos
+    };
+
+    // Check for changes
+    Object.keys(currentValues).forEach(key => {
+      if (previousValues[key] !== undefined && previousValues[key] !== currentValues[key]) {
+        setRecentChange(key);
+        setTimeout(() => setRecentChange(null), 2000);
+      }
+    });
+
+    previousValues = { ...currentValues };
+  }, [totalLeads, leadsEmAtendimento, leadsGanhos]);
+  
   const leadsFinalizados = leadsGanhos + leadsPerdidos;
   const taxaConversao = leadsFinalizados > 0 ? Math.round((leadsGanhos / leadsFinalizados) * 100) : 0;
 
   const kpis = [
     {
+      id: 'totalLeads',
       title: 'Total de Leads',
       value: totalLeads,
       icon: Users,
-      trend: '+12%',
-      trendUp: true,
+      trend: leadsHoje > 0 ? `+${leadsHoje} hoje` : '+0 hoje',
+      trendUp: leadsHoje > 0,
       description: 'Leads captados',
       gradient: 'from-blue-500/20 via-blue-400/10 to-transparent',
       iconBg: 'bg-blue-500/15 group-hover:bg-blue-500/25',
       iconColor: 'text-blue-600',
     },
     {
+      id: 'leadsEmAtendimento',
       title: 'Em Atendimento',
       value: leadsEmAtendimento,
       icon: TrendingUp,
-      trend: leadsEmAtendimento > 0 ? '+' + leadsEmAtendimento : '0',
+      trend: leadsEmAtendimento > 0 ? 'Ativos' : 'Nenhum',
       trendUp: leadsEmAtendimento > 0,
       description: 'Leads ativos agora',
       gradient: 'from-orange-500/20 via-orange-400/10 to-transparent',
@@ -45,11 +77,12 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
       iconColor: 'text-orange-600',
     },
     {
+      id: 'taxaConversao',
       title: 'Taxa de Conversão',
       value: taxaConversao,
       isPercentage: true,
       icon: Scale,
-      trend: taxaConversao >= 50 ? '+5%' : '-3%',
+      trend: taxaConversao >= 50 ? 'Excelente' : 'Em progresso',
       trendUp: taxaConversao >= 50,
       description: 'Leads convertidos',
       gradient: 'from-gold/20 via-gold/10 to-transparent',
@@ -57,10 +90,11 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
       iconColor: 'text-gold',
     },
     {
+      id: 'leadsGanhos',
       title: 'Leads Ganhos',
       value: leadsGanhos,
       icon: Briefcase,
-      trend: leadsGanhos > 0 ? '+8%' : '0%',
+      trend: leadsGanhos > 0 ? 'Contratos' : '0',
       trendUp: leadsGanhos > 0,
       description: 'Contratos fechados',
       gradient: 'from-success/20 via-success/10 to-transparent',
@@ -70,17 +104,33 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
   ];
 
   return (
-    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 stagger-children">
-      {kpis.map((kpi, index) => (
-        <Card 
-          key={kpi.title} 
-          className={cn(
-            "group relative rounded-xl border border-border/50 overflow-hidden bg-card",
-            "transition-all duration-300 ease-out",
-            "hover:shadow-card-hover hover:-translate-y-1 hover:border-border"
-          )}
-          style={{ animationDelay: `${index * 80}ms` }}
-        >
+    <div className="space-y-2">
+      {/* Real-time indicator */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+          <span className="text-xs text-muted-foreground">Atualização em tempo real</span>
+        </div>
+        {recentChange && (
+          <span className="text-xs text-success animate-fade-in flex items-center gap-1">
+            <Activity className="w-3 h-3" />
+            Dados atualizados
+          </span>
+        )}
+      </div>
+      
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 stagger-children">
+        {kpis.map((kpi, index) => (
+          <Card 
+            key={kpi.title} 
+            className={cn(
+              "group relative rounded-xl border border-border/50 overflow-hidden bg-card",
+              "transition-all duration-300 ease-out",
+              "hover:shadow-card-hover hover:-translate-y-1 hover:border-border",
+              recentChange === kpi.id && "ring-2 ring-success/50 animate-pulse"
+            )}
+            style={{ animationDelay: `${index * 80}ms` }}
+          >
           {/* Gradient overlay */}
           <div className={cn(
             "absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-100 transition-opacity duration-500",
@@ -135,8 +185,9 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
               </div>
             </div>
           </CardContent>
-        </Card>
-      ))}
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
