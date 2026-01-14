@@ -37,7 +37,7 @@ import {
   PanelRightClose,
   Calendar
 } from 'lucide-react';
-import CalendlyWidget from './CalendlyWidget';
+import CalWidget from './CalWidget';
 import { format, isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -866,8 +866,8 @@ const ManyChatInbox = () => {
                 >
                   {selectedSubscriber.atendimento_humano ? <UserRound className="h-5 w-5" /> : <Bot className="h-5 w-5" />}
                 </Button>
-                {/* Botão Agendar Calendly */}
-                <CalendlyWidget
+                {/* Botão Agendar Cal.com */}
+                <CalWidget
                   subscriberId={selectedSubscriber.subscriber_id}
                   subscriberName={getDisplayName(selectedSubscriber)}
                   subscriberEmail={selectedSubscriber.email}

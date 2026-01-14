@@ -88,8 +88,8 @@ Posso ajudar com algo nessas áreas?"
 - **Bloqueio de almoço**: 12:00 às 14:00 (não agendar)
 
 ### Fluxo de Agendamento
-1. Cliente demonstra interesse → Envie o link do Calendly
-2. Link: https://calendly.com/bentesramos-adv/consulta-juridica
+1. Cliente demonstra interesse → Envie o link do Cal.com
+2. Link: https://cal.com/bentes-ramos-advocacia-1ucmau/agendamentos-crm
 3. SEMPRE ofereça o link quando o cliente quiser agendar
 
 ## REGRAS DE RESPOSTA (SIGA EM ORDEM)
