@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ArrowLeft, ArrowRight, MessageSquare, Calculator, Sparkles, Zap, Brain, TrendingUp } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, MessageSquare, Calculator, Sparkles, Zap, Brain, TrendingUp, FileText } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,6 +16,7 @@ interface Agent {
   description: string;
   icon: React.ReactNode;
   gradient: string;
+  route?: string;
 }
 
 const agents: Agent[] = [
@@ -32,6 +34,14 @@ const agents: Agent[] = [
     icon: <Calculator className="h-5 w-5" />,
     gradient: 'from-emerald-500 to-teal-600',
   },
+  {
+    id: 'peticoes',
+    name: 'Gerador de Petições',
+    description: 'Crie petições JEC em minutos com revisão da Isa.',
+    icon: <FileText className="h-5 w-5" />,
+    gradient: 'from-amber-500 to-orange-600',
+    route: '/peticoes',
+  },
 ];
 
 const capabilities = [
@@ -41,7 +51,16 @@ const capabilities = [
 ];
 
 export default function AssistentePage() {
+  const navigate = useNavigate();
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+
+  const handleAgentClick = (agent: Agent) => {
+    if (agent.route) {
+      navigate(agent.route);
+    } else {
+      setSelectedAgent(agent.id);
+    }
+  };
 
   const renderAgentChat = () => {
     switch (selectedAgent) {
@@ -130,7 +149,7 @@ export default function AssistentePage() {
                 <Card
                   key={agent.id}
                   className="group cursor-pointer hover:shadow-xl hover:border-primary/40 transition-all hover:-translate-y-1 overflow-hidden"
-                  onClick={() => setSelectedAgent(agent.id)}
+                  onClick={() => handleAgentClick(agent)}
                 >
                   <CardContent className="p-0">
                     <div className={cn("p-4 bg-gradient-to-r text-white", agent.gradient)}>
