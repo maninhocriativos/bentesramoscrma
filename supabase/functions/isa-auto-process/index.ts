@@ -526,7 +526,7 @@ Por favor, escolha um dos horários disponíveis:
 
 ${opcoes.map((o: { label: string }, i: number) => `${i + 1}️⃣ ${o.label}`).join('\n')}
 
-Ou acesse nosso Calendly: https://calendly.com/bentesramos-adv/consulta-juridica`;
+Ou acesse nosso link de agendamento: https://cal.com/bentes-ramos-advocacia-1ucmau/agendamentos-crm`;
 
         // Enviar via ManyChat com botões
         const response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
@@ -1057,7 +1057,7 @@ Ou acesse nosso Calendly: https://calendly.com/bentesramos-adv/consulta-juridica
         const stageSlow = followup.followup_stage_slow || 0;
         
         // Mensagem simples de acompanhamento
-        const mensagem = `Olá ${lead.nome || 'cliente'}! 👋\n\nPassando para saber se posso ajudar com sua questão.\n\nEstamos à disposição para analisar seu caso!\n\n📅 Agende sua consulta: https://calendly.com/bentesramos-adv/consulta-juridica`;
+        const mensagem = `Olá ${lead.nome || 'cliente'}! 👋\n\nPassando para saber se posso ajudar com sua questão.\n\nEstamos à disposição para analisar seu caso!\n\n📅 Agende sua consulta: https://cal.com/bentes-ramos-advocacia-1ucmau/agendamentos-crm`;
         
         // Enviar via ManyChat
         const enviado = await enviarRespostaManyChat(followup.subscriber_id, mensagem);
@@ -1476,7 +1476,7 @@ QUANDO O CLIENTE QUISER AGENDAR:
 1. PRIMEIRO use "verificar_agenda" para ver horários disponíveis
 2. Se cliente escolher um horário válido, use "agendar_direto" para criar o compromisso
 3. Se o horário não estiver disponível, ofereça alternativas
-4. OU envie o link do Calendly: https://calendly.com/bentesramos-adv/consulta-juridica
+4. OU envie o link do Cal.com: https://cal.com/bentes-ramos-advocacia-1ucmau/agendamentos-crm
 
 ${temAgendamentoPendente ? `
 ⚠️ AGENDAMENTO PENDENTE: Existe solicitação aguardando resposta do cliente.
