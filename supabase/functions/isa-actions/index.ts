@@ -1114,27 +1114,35 @@ Responda em JSON:
           }
 
           const agendamentoData = await response.json();
+          console.log('Resposta do calcom-integration:', JSON.stringify(agendamentoData, null, 2));
           
           if (agendamentoData.success) {
             // Formatar a data para exibição
             const dataAgendamento = new Date(datetime);
             const dataFormatada = formatarDataHoraManaus(dataAgendamento);
-            const meetLink = agendamentoData.booking?.meetLink;
+            
+            // O Cal.com pode retornar o link como meetingUrl, meetLink ou meeting_url
+            const meetLink = agendamentoData.booking?.meetingUrl || 
+                             agendamentoData.booking?.meetLink || 
+                             agendamentoData.booking?.meeting_url;
             const isOnline = modalidade === 'online';
+            
+            console.log('Meet Link detectado:', meetLink);
             
             // Montar mensagem de confirmação com link do Meet se online
             let confirmMessage = `✅ Agendamento confirmado!\n\n📅 ${titulo}\n🗓️ ${dataFormatada}`;
             
             if (isOnline && meetLink) {
-              confirmMessage += `\n\n📹 **Link da Reunião:**\n${meetLink}`;
+              confirmMessage += `\n\n📹 *Link da Reunião:*\n${meetLink}`;
               confirmMessage += `\n\n💡 Clique no link acima no horário agendado para entrar na videochamada.`;
             } else if (isOnline) {
-              confirmMessage += `\n📍 Reunião Online (link será enviado por email)`;
+              confirmMessage += `\n📍 Reunião Online`;
+              confirmMessage += `\n\n📧 O link da videochamada será enviado para ${email}`;
             } else {
               confirmMessage += `\n📍 Presencial no escritório`;
             }
             
-            confirmMessage += `\n\nUm email de confirmação também foi enviado para ${email}.`;
+            confirmMessage += `\n\n✉️ Um email de confirmação também foi enviado.`;
             
             result = {
               success: true,
@@ -1143,7 +1151,7 @@ Responda em JSON:
                 booking_id: agendamentoData.booking?.id,
                 compromisso_id: agendamentoData.compromisso_id,
                 meet_link: meetLink,
-                send_via_manychat: true // Flag para Isa saber que deve enviar essa mensagem
+                send_via_manychat: true
               }
             };
           } else {
