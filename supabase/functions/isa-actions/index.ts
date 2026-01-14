@@ -1040,14 +1040,17 @@ Responda em JSON:
 
           const calcomData = await response.json();
           
-          if (calcomData.success && calcomData.slots?.length > 0) {
-            const horariosFormatados = calcomData.slots.map((s: any) => s.formatted).join('\n• ');
+          // Cal.com retorna 'horarios' com campos label, short, datetime
+          const horarios = calcomData.horarios || calcomData.slots || [];
+          
+          if (calcomData.success && horarios.length > 0) {
+            const horariosFormatados = horarios.map((s: any) => s.label || s.formatted || s.short).join('\n• ');
             result = {
               success: true,
               message: `📅 Horários disponíveis para agendamento:\n\n• ${horariosFormatados}\n\nQual horário você prefere?`,
               data: {
-                slots: calcomData.slots,
-                total_opcoes: calcomData.slots.length
+                slots: horarios,
+                total_opcoes: horarios.length
               }
             };
           } else {
