@@ -1119,14 +1119,31 @@ Responda em JSON:
             // Formatar a data para exibição
             const dataAgendamento = new Date(datetime);
             const dataFormatada = formatarDataHoraManaus(dataAgendamento);
+            const meetLink = agendamentoData.booking?.meetLink;
+            const isOnline = modalidade === 'online';
+            
+            // Montar mensagem de confirmação com link do Meet se online
+            let confirmMessage = `✅ Agendamento confirmado!\n\n📅 ${titulo}\n🗓️ ${dataFormatada}`;
+            
+            if (isOnline && meetLink) {
+              confirmMessage += `\n\n📹 **Link da Reunião:**\n${meetLink}`;
+              confirmMessage += `\n\n💡 Clique no link acima no horário agendado para entrar na videochamada.`;
+            } else if (isOnline) {
+              confirmMessage += `\n📍 Reunião Online (link será enviado por email)`;
+            } else {
+              confirmMessage += `\n📍 Presencial no escritório`;
+            }
+            
+            confirmMessage += `\n\nUm email de confirmação também foi enviado para ${email}.`;
             
             result = {
               success: true,
-              message: `✅ Agendamento confirmado!\n\n📅 ${titulo}\n🗓️ ${dataFormatada}\n📍 ${modalidade === 'online' ? 'Reunião Online (link será enviado por email)' : 'Presencial no escritório'}\n\nUm email de confirmação foi enviado para ${email}.`,
+              message: confirmMessage,
               data: {
                 booking_id: agendamentoData.booking?.id,
                 compromisso_id: agendamentoData.compromisso_id,
-                meet_link: agendamentoData.booking?.meetLink
+                meet_link: meetLink,
+                send_via_manychat: true // Flag para Isa saber que deve enviar essa mensagem
               }
             };
           } else {
