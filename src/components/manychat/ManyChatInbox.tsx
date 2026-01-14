@@ -172,35 +172,75 @@ const ManyChatInbox = () => {
     typingTimeoutRef.current = setTimeout(() => setTyping(false), 2000);
   }, [setTyping]);
 
-  // Realtime subscriptions
+  // Realtime subscriptions - Escutar novos subscribers e mensagens
   useEffect(() => {
+    console.log('[ManyChatInbox] Iniciando subscriptions realtime...');
+    
     const messagesChannel = supabase
-      .channel('manychat-messages-live')
+      .channel('manychat-messages-live-v2')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'manychat_mensagens' },
         (payload) => {
+          console.log('[ManyChatInbox] Nova mensagem recebida:', payload.new);
           const newMsg = payload.new as Message & { subscriber_id: string };
+          
+          // Se é mensagem do subscriber selecionado, adicionar à lista
           if (selectedSubscriber && newMsg.subscriber_id === selectedSubscriber.subscriber_id) {
             setMessages(prev => prev.some(m => m.id === newMsg.id) ? prev : [...prev, newMsg]);
           }
+          
+          // Atualizar lista de subscribers - mover para o topo
           setSubscribers(prev => {
             const idx = prev.findIndex(s => s.subscriber_id === newMsg.subscriber_id);
-            if (idx === -1) { loadSubscribers(); return prev; }
+            if (idx === -1) { 
+              // Subscriber não existe na lista - recarregar toda a lista
+              console.log('[ManyChatInbox] Novo subscriber detectado, recarregando lista...');
+              loadSubscribers(); 
+              return prev; 
+            }
             const updated = [...prev];
             const [subscriber] = updated.splice(idx, 1);
             return [{ ...subscriber, ultima_interacao: new Date().toISOString() }, ...updated];
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[ManyChatInbox] Status mensagens channel:', status);
+      });
 
+    // Escutar INSERT e UPDATE de subscribers para detectar novos contatos
     const subscribersChannel = supabase
-      .channel('manychat-subscribers-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'manychat_subscribers' },
-        () => loadSubscribers()
+      .channel('manychat-subscribers-live-v2')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'manychat_subscribers' },
+        (payload) => {
+          console.log('[ManyChatInbox] Novo subscriber inserido:', payload.new);
+          const newSub = payload.new as Subscriber;
+          // Adicionar novo subscriber ao topo da lista
+          setSubscribers(prev => {
+            const exists = prev.some(s => s.subscriber_id === newSub.subscriber_id);
+            if (exists) return prev;
+            return [newSub, ...prev];
+          });
+        }
       )
-      .subscribe();
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'manychat_subscribers' },
+        (payload) => {
+          console.log('[ManyChatInbox] Subscriber atualizado:', payload.new);
+          const updatedSub = payload.new as Subscriber;
+          setSubscribers(prev => {
+            const idx = prev.findIndex(s => s.subscriber_id === updatedSub.subscriber_id);
+            if (idx === -1) return prev;
+            const updated = [...prev];
+            updated[idx] = { ...updated[idx], ...updatedSub };
+            return updated;
+          });
+        }
+      )
+      .subscribe((status) => {
+        console.log('[ManyChatInbox] Status subscribers channel:', status);
+      });
 
     return () => {
+      console.log('[ManyChatInbox] Removendo channels realtime...');
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(subscribersChannel);
     };

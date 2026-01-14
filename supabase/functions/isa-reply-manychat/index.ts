@@ -85,17 +85,60 @@ serve(async (req: Request) => {
       console.log('[ISA-REPLY] Thread existente encontrada:', threadId);
     }
 
-    // Buscar contexto do lead para enriquecer a mensagem
+    // Buscar contexto COMPLETO do lead para enriquecer a mensagem
     let contextPrefix = '';
+    let historicoConversa = '';
+    
     if (subscriber?.lead_id) {
+      // Buscar dados do lead
       const { data: lead } = await supabase
         .from('leads_juridicos')
         .select('nome, status, tipo_acao, resumo_ia, telefone, email')
         .eq('id', subscriber.lead_id)
         .maybeSingle();
 
+      // Buscar histórico de mensagens (últimas 25)
+      const { data: mensagensHist } = await supabase
+        .from('manychat_mensagens')
+        .select('conteudo, direcao, created_at')
+        .eq('lead_id', subscriber.lead_id)
+        .order('created_at', { ascending: false })
+        .limit(25);
+      
+      // Buscar histórico de interações (últimas 10)
+      const { data: interacoesHist } = await supabase
+        .from('interacoes')
+        .select('tipo, resumo, detalhes, direcao, data_interacao')
+        .eq('cliente_id', subscriber.lead_id)
+        .order('data_interacao', { ascending: false })
+        .limit(10);
+
       if (lead) {
-        contextPrefix = `[CONTEXTO DO CLIENTE - Nome: ${lead.nome || nome}, Status: ${lead.status || 'Novo'}, Tipo de Ação: ${lead.tipo_acao || 'Não definido'}]\n\n`;
+        contextPrefix = `[CONTEXTO DO CLIENTE]
+Nome: ${lead.nome || nome}
+Status: ${lead.status || 'Lead Frio'}
+Tipo de Ação: ${lead.tipo_acao || 'NÃO IDENTIFICADO AINDA'}
+Resumo: ${lead.resumo_ia || 'Sem resumo - PRECISA ENTENDER O CASO PRIMEIRO'}
+`;
+      }
+
+      // Formatar histórico completo
+      const historicoCompleto = [
+        ...(mensagensHist || []).map(m => ({
+          origem: m.direcao === 'entrada' ? 'CLIENTE' : 'BOT/EQUIPE',
+          conteudo: m.conteudo,
+          data: m.created_at,
+        })),
+        ...(interacoesHist || []).map(i => ({
+          origem: i.direcao === 'entrada' ? 'CLIENTE' : 'EQUIPE',
+          conteudo: `[${i.tipo}] ${i.resumo}${i.detalhes ? ': ' + i.detalhes : ''}`,
+          data: i.data_interacao,
+        })),
+      ].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+
+      if (historicoCompleto.length > 0) {
+        historicoConversa = '\n[HISTÓRICO DA CONVERSA - Leia TUDO para entender o contexto]\n' + 
+          historicoCompleto.slice(-25).map(h => `[${h.origem}] ${h.conteudo}`).join('\n') + '\n';
       }
     }
 
@@ -103,8 +146,33 @@ serve(async (req: Request) => {
     const isMedia = mensagem.match(/\.(ogg|mp3|wav|jpg|jpeg|png|gif|mp4|webm|pdf)/i);
     const mediaNote = isMedia ? '[O cliente enviou um arquivo de mídia/áudio. Peça para descrever em texto]\n\n' : '';
 
-    // Montar mensagem com contexto
-    const mensagemCompleta = `${contextPrefix}${mediaNote}[Mensagem do cliente via WhatsApp - responda de forma curta, máximo 300 caracteres]\n\nCliente (${nome}): ${mensagem}`;
+    // Regras de comportamento inteligente
+    const regrasComportamento = `
+⚠️ REGRAS CRÍTICAS DE COMPORTAMENTO:
+
+1. SE O TIPO DE AÇÃO AINDA NÃO FOI IDENTIFICADO:
+   - NÃO sugira agendamento imediatamente!
+   - PRIMEIRO pergunte qual é o problema/questão do cliente
+   - Exemplo: "Olá! Como posso ajudá-lo hoje? Tem alguma questão sobre Direito Bancário ou problemas com voos?"
+
+2. APÓS ENTENDER O CASO:
+   - Se for área que atendemos (Bancário/Aéreo) → Qualifique e sugira agendamento
+   - Se NÃO for nossa área → Decline educadamente com a mensagem padrão de recusa
+
+3. NOSSO ESCRITÓRIO ATENDE APENAS:
+   ✅ Direito Bancário (juros abusivos, financiamentos, seguro prestamista)
+   ✅ Questões Aéreas (cancelamentos, atrasos, bagagens)
+
+4. NÃO ATENDEMOS (RECUSE IMEDIATAMENTE):
+   ❌ Trabalhista, Previdenciário, Família, Criminal, Imobiliário
+
+5. RESPONDA SEMPRE DE FORMA CURTA (máximo 3-4 linhas)
+`;
+
+    // Montar mensagem com contexto completo
+    const mensagemCompleta = `${contextPrefix}${historicoConversa}${regrasComportamento}${mediaNote}
+[NOVA MENSAGEM DO CLIENTE - Analise o histórico acima antes de responder]
+Cliente (${nome}): ${mensagem}`;
 
     console.log('[ISA-REPLY] Chamando ai-chat com o agente GPT...');
 
