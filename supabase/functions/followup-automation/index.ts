@@ -101,7 +101,7 @@ Responda "SIM" para continuarmos! ✅`,
   },
   stage_3: {
     delay_minutos: 4320, // 72h
-    titulo: "Follow-up SLOW 3 - 72h (Final)",
+    titulo: "Follow-up SLOW 3 - 72h",
     mensagem: `{{nome}}, esta é nossa última tentativa de contato.
 
 Se mudar de ideia sobre verificar possíveis cobranças indevidas no seu nome, é só responder esta mensagem.
@@ -110,6 +110,24 @@ Estamos à disposição! 🤝
 
 Bentes & Ramos Advocacia`,
     flow_ns: 'followup_slow_3',
+    requer_template: true
+  },
+  stage_4: {
+    delay_minutos: 7200, // 5 dias (72h + 48h = 120h = 5 dias)
+    titulo: "Follow-up SLOW 4 - 5 dias (Final)",
+    mensagem: `{{nome}}, sei que o tempo passa rápido e às vezes deixamos algumas coisas de lado...
+
+Mas queria te lembrar que muitos clientes nossos já recuperaram dinheiro de cobranças indevidas dos bancos.
+
+📌 *Exemplo real:*
+Cliente recuperou R$ 5.609,24 em ação contra o banco!
+
+Se quiser, posso verificar gratuitamente se você também tem valores a receber.
+
+É só responder "QUERO" 👇
+
+Bentes & Ramos Advocacia`,
+    flow_ns: 'content20260113164223_086496',
     requer_template: true
   }
 };
@@ -244,16 +262,20 @@ function calcularProximoFollowup(
   if (STATUS_PERMITE_FAST.includes(statusLead) && stageFast < 3) {
     const nextStage = stageFast + 1;
     const config = FAST_CONFIG[`stage_${nextStage}` as keyof typeof FAST_CONFIG];
-    const nextAt = new Date(primeiroContatoEm.getTime() + config.delay_minutos * 60 * 1000);
-    return { nextAt, nextType: 'FAST', nextStage };
+    if (config) {
+      const nextAt = new Date(primeiroContatoEm.getTime() + config.delay_minutos * 60 * 1000);
+      return { nextAt, nextType: 'FAST', nextStage };
+    }
   }
   
-  // Se pode receber SLOW e stage < 3
-  if (STATUS_PERMITE_SLOW.includes(statusLead) && stageSlow < 3) {
+  // Se pode receber SLOW e stage < 4 (agora temos 4 estágios)
+  if (STATUS_PERMITE_SLOW.includes(statusLead) && stageSlow < 4) {
     const nextStage = stageSlow + 1;
     const config = SLOW_CONFIG[`stage_${nextStage}` as keyof typeof SLOW_CONFIG];
-    const nextAt = new Date(primeiroContatoEm.getTime() + config.delay_minutos * 60 * 1000);
-    return { nextAt, nextType: 'SLOW', nextStage };
+    if (config) {
+      const nextAt = new Date(primeiroContatoEm.getTime() + config.delay_minutos * 60 * 1000);
+      return { nextAt, nextType: 'SLOW', nextStage };
+    }
   }
   
   // Sem mais follow-ups
@@ -381,8 +403,8 @@ serve(async (req: Request) => {
         }
       }
       
-      // SLOW: se FAST terminou ou não é Lead Frio
-      if (!tipoEnvio && STATUS_PERMITE_SLOW.includes(lead.status) && stageSlow < 3) {
+      // SLOW: se FAST terminou ou não é Lead Frio (agora com 4 estágios)
+      if (!tipoEnvio && STATUS_PERMITE_SLOW.includes(lead.status) && stageSlow < 4) {
         // SLOW só começa após 24h OU após FAST completo
         const fastCompleto = stageFast >= 3 || !STATUS_PERMITE_FAST.includes(lead.status);
         
@@ -390,7 +412,7 @@ serve(async (req: Request) => {
           const nextStage = stageSlow + 1;
           const slowConfig = SLOW_CONFIG[`stage_${nextStage}` as keyof typeof SLOW_CONFIG];
           
-          if (minutosDesdeContato >= slowConfig.delay_minutos) {
+          if (slowConfig && minutosDesdeContato >= slowConfig.delay_minutos) {
             tipoEnvio = 'SLOW';
             stageEnvio = nextStage;
             config = slowConfig;
@@ -488,6 +510,7 @@ serve(async (req: Request) => {
             updateData.retomada_3_enviado = true;
             updateData.retomada_3_enviado_em = agora.toISOString();
           }
+          // Stage 4 é rastreado apenas pelo followup_stage_slow (sem campo legado)
         }
 
         // Calcular próximo follow-up
