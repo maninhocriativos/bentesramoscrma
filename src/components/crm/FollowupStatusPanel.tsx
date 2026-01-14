@@ -28,6 +28,8 @@ interface LeadFollowup {
   followup_2_enviado_em: string | null;
   followup_3_enviado: boolean | null;
   followup_3_enviado_em: string | null;
+  followup_stage_fast: number | null;
+  followup_stage_slow: number | null;
   respondido: boolean | null;
   respondido_em: string | null;
   lead_nome?: string;
@@ -98,11 +100,9 @@ export function FollowupStatusPanel() {
   };
 
   const getFollowupProgress = (followup: LeadFollowup) => {
-    let count = 0;
-    if (followup.followup_1_enviado) count++;
-    if (followup.followup_2_enviado) count++;
-    if (followup.followup_3_enviado) count++;
-    return count;
+    const fastCount = followup.followup_stage_fast || 0;
+    const slowCount = followup.followup_stage_slow || 0;
+    return { fast: fastCount, slow: slowCount };
   };
 
   return (
@@ -152,23 +152,32 @@ export function FollowupStatusPanel() {
                       {getStatusBadge(followup)}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
+                      {/* FAST Progress (3 stages) */}
                       <div className="flex gap-0.5">
-                        {[1, 2, 3].map((step) => {
-                          const sent = step === 1 ? followup.followup_1_enviado :
-                                       step === 2 ? followup.followup_2_enviado :
-                                       followup.followup_3_enviado;
-                          return (
-                            <div
-                              key={step}
-                              className={`h-1.5 w-4 rounded-full ${
-                                sent ? 'bg-primary' : 'bg-muted'
-                              }`}
-                            />
-                          );
-                        })}
+                        {[1, 2, 3].map((step) => (
+                          <div
+                            key={`fast-${step}`}
+                            className={`h-1.5 w-3 rounded-full ${
+                              (getFollowupProgress(followup).fast >= step) ? 'bg-blue-500' : 'bg-muted'
+                            }`}
+                            title={`FAST ${step}`}
+                          />
+                        ))}
+                      </div>
+                      {/* SLOW Progress (4 stages) */}
+                      <div className="flex gap-0.5">
+                        {[1, 2, 3, 4].map((step) => (
+                          <div
+                            key={`slow-${step}`}
+                            className={`h-1.5 w-3 rounded-full ${
+                              (getFollowupProgress(followup).slow >= step) ? 'bg-amber-500' : 'bg-muted'
+                            }`}
+                            title={`SLOW ${step}`}
+                          />
+                        ))}
                       </div>
                       <span className="text-[10px] text-muted-foreground">
-                        {getFollowupProgress(followup)}/3 enviados
+                        {getFollowupProgress(followup).fast}/3 + {getFollowupProgress(followup).slow}/4
                       </span>
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-0.5">

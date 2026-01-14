@@ -20,10 +20,11 @@ interface FollowupStats {
   aguardando_followup_3: number;
   followup_concluido: number;
   
-  // Retomada (24h, 48h, 6 dias após follow-up)
+  // Retomada (24h, 48h, 72h, 5 dias)
   aguardando_retomada_1: number;
   aguardando_retomada_2: number;
   aguardando_retomada_3: number;
+  aguardando_retomada_4: number;
   retomada_concluida: number;
   
   // Geral
@@ -40,6 +41,7 @@ export function FollowupRetomadaPanel() {
     aguardando_retomada_1: 0,
     aguardando_retomada_2: 0,
     aguardando_retomada_3: 0,
+    aguardando_retomada_4: 0,
     retomada_concluida: 0,
     total_leads_frios: 0,
     responderam: 0,
@@ -65,7 +67,7 @@ export function FollowupRetomadaPanel() {
         .from('system_events')
         .select('lead_id, acao')
         .eq('tipo', 'retomada')
-        .in('acao', ['retomada_1_enviado', 'retomada_2_enviado', 'retomada_3_enviado']);
+        .in('acao', ['retomada_1_enviado', 'retomada_2_enviado', 'retomada_3_enviado', 'retomada_4_enviado']);
 
       // Mapear retomadas por lead
       const retomadaPorLead: Record<string, Set<string>> = {};
@@ -86,6 +88,7 @@ export function FollowupRetomadaPanel() {
         aguardando_retomada_1: 0,
         aguardando_retomada_2: 0,
         aguardando_retomada_3: 0,
+        aguardando_retomada_4: 0,
         retomada_concluida: 0,
         total_leads_frios: 0,
         responderam: 0,
@@ -124,6 +127,8 @@ export function FollowupRetomadaPanel() {
             newStats.aguardando_retomada_2++;
           } else if (!retomadas.has('retomada_3_enviado')) {
             newStats.aguardando_retomada_3++;
+          } else if (!retomadas.has('retomada_4_enviado')) {
+            newStats.aguardando_retomada_4++;
           } else {
             newStats.retomada_concluida++;
           }
@@ -155,7 +160,8 @@ export function FollowupRetomadaPanel() {
   const retomadaSteps = [
     { label: '24h', value: stats.aguardando_retomada_1, color: 'bg-amber-500' },
     { label: '48h', value: stats.aguardando_retomada_2, color: 'bg-amber-400' },
-    { label: '6 dias', value: stats.aguardando_retomada_3, color: 'bg-amber-300' },
+    { label: '72h', value: stats.aguardando_retomada_3, color: 'bg-amber-300' },
+    { label: '5d', value: stats.aguardando_retomada_4, color: 'bg-amber-200' },
   ];
 
   return (
@@ -220,7 +226,7 @@ export function FollowupRetomadaPanel() {
             <RotateCcw className="h-4 w-4 text-amber-500" />
             <span className="text-sm font-medium text-foreground">Retomada</span>
             <Badge variant="outline" className="ml-auto text-[10px]">
-              24h → 48h → 6 dias
+              24h → 48h → 72h → 5d
             </Badge>
           </div>
           <div className="flex gap-2">
