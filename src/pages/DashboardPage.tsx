@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
@@ -6,6 +6,7 @@ import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
 import { DashboardFiltersBar, DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { ConversionMetrics } from '@/components/dashboard/ConversionMetrics';
 import { FollowupRetomadaPanel } from '@/components/dashboard/FollowupRetomadaPanel';
+import { RealtimeLeadsMonitor } from '@/components/dashboard/RealtimeLeadsMonitor';
 import { AlertasWidget } from '@/components/AlertasWidget';
 import { useLeads } from '@/hooks/useLeads';
 import { useProcessos } from '@/hooks/useProcessos';
@@ -15,10 +16,16 @@ import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, isA
 import { useNavigate } from 'react-router-dom';
 
 export default function DashboardPage() {
-  const { leads, loading: leadsLoading } = useLeads();
+  const { leads, loading: leadsLoading, fetchLeads } = useLeads();
   const { processos, loading: processosLoading } = useProcessos();
   const { alertas } = useAlertas(leads, processos);
   const navigate = useNavigate();
+
+  // Callback for manual refresh from monitor
+  const handleRefreshLeads = useCallback(() => {
+    console.log('🔄 Dashboard: Solicitando atualização manual dos leads');
+    fetchLeads();
+  }, [fetchLeads]);
   
   // Debug: log when leads change
   useEffect(() => {
@@ -119,6 +126,9 @@ export default function DashboardPage() {
             <DashboardKPIs leads={filteredLeads} processos={processos} />
 
             <ConversionMetrics leads={leads} />
+
+            {/* Real-time Leads Monitor */}
+            <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <FollowupRetomadaPanel />

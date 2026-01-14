@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react';
 import { Lead, LeadStatus } from '@/types/leads';
 import { LeadCard } from './LeadCard';
 import { cn } from '@/lib/utils';
@@ -121,6 +122,19 @@ export function KanbanColumn({
   const columnLeads = leads.filter((lead) => lead.status === status);
   const statusStyle = STATUS_COLORS[status];
   const shortLabel = STATUS_SHORT_LABELS[status];
+  
+  // Track count changes for animation
+  const [showCountChange, setShowCountChange] = useState(false);
+  const prevCountRef = useRef(columnLeads.length);
+  
+  useEffect(() => {
+    if (prevCountRef.current !== columnLeads.length) {
+      setShowCountChange(true);
+      const timer = setTimeout(() => setShowCountChange(false), 1500);
+      prevCountRef.current = columnLeads.length;
+      return () => clearTimeout(timer);
+    }
+  }, [columnLeads.length]);
 
   return (
     <div
@@ -154,8 +168,9 @@ export function KanbanColumn({
         </h3>
         
         <span className={cn(
-          "text-[10px] px-2 py-0.5 rounded-full font-semibold",
-          "bg-primary text-primary-foreground"
+          "text-[10px] px-2 py-0.5 rounded-full font-semibold transition-all duration-300",
+          "bg-primary text-primary-foreground",
+          showCountChange && "ring-2 ring-success ring-offset-1 animate-pulse scale-110"
         )}>
           {columnLeads.length}
         </span>
