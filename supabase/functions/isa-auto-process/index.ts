@@ -849,155 +849,215 @@ Ou acesse nosso link de agendamento: https://cal.com/bentes-ramos-advocacia-1ucm
       case 'verificar_agenda': {
         const { lead_id, data_especifica, horario_especifico } = dados;
         
-        // Se data específica foi informada, verificar disponibilidade
-        if (data_especifica) {
-          let dataVerificar: Date;
-          
-          if (horario_especifico) {
-            const dataStr = `${data_especifica}T${horario_especifico}:00-04:00`;
-            dataVerificar = new Date(dataStr);
-          } else {
-            dataVerificar = new Date(`${data_especifica}T09:00:00-04:00`);
-          }
-          
-          const disponibilidade = await verificarDisponibilidadeHorario(supabase, dataVerificar);
-          
-          if (!disponibilidade.disponivel) {
-            // Gerar alternativas
-            const alternativas = await gerarOpcoesHorario(supabase, lead_id);
+        try {
+          // Chamar API do Cal.com para buscar horários disponíveis
+          const calcomResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/calcom-integration`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            },
+            body: JSON.stringify({
+              action: data_especifica ? 'verificar_disponibilidade' : 'buscar_horarios',
+              datetime: data_especifica && horario_especifico ? `${data_especifica}T${horario_especifico}:00` : undefined,
+            }),
+          });
+
+          const calcomData = await calcomResponse.json();
+          console.log('📅 Resposta Cal.com (verificar_agenda):', JSON.stringify(calcomData, null, 2));
+
+          if (!calcomData.success) {
+            // Fallback para geração local
+            const opcoes = await gerarOpcoesHorario(supabase, lead_id);
             return {
-              success: false,
-              message: disponibilidade.motivo || 'Horário indisponível',
+              success: true,
+              message: `${opcoes.length} horários disponíveis encontrados (local)`,
               data: { 
-                disponivel: false,
-                alternativas: alternativas.slice(0, 3).map((a: { label: string }) => a.label)
+                horarios_disponiveis: opcoes.map((o: { label: string; datetime: string }) => ({ 
+                  label: o.label, 
+                  datetime: o.datetime 
+                })),
+                regras: {
+                  dias: 'Segunda, Quarta e Sexta',
+                  horarios: HORARIOS_DISPONIVEIS.join(', '),
+                  observacao: 'Agendamentos apenas para próxima semana'
+                }
               }
             };
           }
-          
+
+          if (data_especifica) {
+            // Verificação de disponibilidade específica
+            if (!calcomData.disponivel) {
+              return {
+                success: false,
+                message: 'Horário indisponível no Cal.com',
+                data: { 
+                  disponivel: false,
+                  alternativas: (calcomData.horarios_alternativos || []).map((a: { label: string }) => a.label)
+                }
+              };
+            }
+            
+            return {
+              success: true,
+              message: `Horário ${horario_especifico || '09:00'} em ${data_especifica} está DISPONÍVEL!`,
+              data: { disponivel: true, data: data_especifica, horario: horario_especifico }
+            };
+          }
+
+          // Lista de horários disponíveis
+          const horarios = calcomData.horarios || [];
           return {
             success: true,
-            message: `Horário ${horario_especifico || '09:00'} em ${data_especifica} está DISPONÍVEL!`,
-            data: { disponivel: true, data: data_especifica, horario: horario_especifico }
+            message: calcomData.mensagem || `${horarios.length} horários disponíveis encontrados`,
+            data: { 
+              horarios_disponiveis: horarios,
+              regras: {
+                dias: 'Segunda, Quarta e Sexta',
+                horarios: HORARIOS_DISPONIVEIS.join(', '),
+                observacao: 'Agendamentos apenas para próxima semana'
+              }
+            }
+          };
+        } catch (error) {
+          console.error('❌ Erro ao verificar agenda Cal.com:', error);
+          // Fallback para geração local
+          const opcoes = await gerarOpcoesHorario(supabase, lead_id);
+          return {
+            success: true,
+            message: `${opcoes.length} horários disponíveis (fallback)`,
+            data: { horarios_disponiveis: opcoes }
           };
         }
-        
-        // Retornar opções disponíveis
-        const opcoes = await gerarOpcoesHorario(supabase, lead_id);
-        
-        return {
-          success: true,
-          message: `${opcoes.length} horários disponíveis encontrados`,
-          data: { 
-            horarios_disponiveis: opcoes.map((o: { label: string; datetime: string }) => ({ 
-              label: o.label, 
-              datetime: o.datetime 
-            })),
-            regras: {
-              dias: 'Segunda, Quarta e Sexta',
-              horarios: HORARIOS_DISPONIVEIS.join(', '),
-              observacao: 'Agendamentos apenas para próxima semana'
-            }
-          }
-        };
       }
       
       case 'agendar_direto': {
-        const { lead_id, data_hora, titulo, modalidade, confirmar_cliente } = dados;
+        const { lead_id, data_hora, titulo, modalidade } = dados;
         
         if (!data_hora) {
           return { success: false, message: 'Data e hora são obrigatórios para agendar' };
         }
         
-        // Converter data para UTC
-        let dataAgendamento: Date;
+        // Buscar dados do lead para agendar no Cal.com
+        const { data: lead } = await supabase
+          .from('leads_juridicos')
+          .select('nome, email, telefone')
+          .eq('id', lead_id)
+          .single();
+
+        if (!lead) {
+          return { success: false, message: 'Lead não encontrado' };
+        }
+
+        // Converter data para formato correto
+        let dataAgendamento: string = data_hora;
         const dataStr = String(data_hora);
         
         if (!dataStr.includes('Z') && !dataStr.includes('+') && !dataStr.match(/-\d{2}:\d{2}$/)) {
-          dataAgendamento = new Date(dataStr + '-04:00'); // Assumir Manaus
-        } else {
-          dataAgendamento = new Date(dataStr);
+          // Assumir Manaus (UTC-4) e converter para ISO
+          const tempDate = new Date(dataStr + '-04:00');
+          dataAgendamento = tempDate.toISOString();
         }
+
+        // Verificar se lead tem email (obrigatório para Cal.com)
+        const email = lead.email || `${(lead.telefone || '').replace(/\D/g, '')}@placeholder.com`;
         
-        // Verificar disponibilidade
-        const disponibilidade = await verificarDisponibilidadeHorario(supabase, dataAgendamento);
-        
-        if (!disponibilidade.disponivel) {
-          const alternativas = await gerarOpcoesHorario(supabase, lead_id);
-          return {
-            success: false,
-            message: disponibilidade.motivo || 'Horário indisponível',
+        try {
+          // Chamar API do Cal.com para criar agendamento
+          const calcomResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/calcom-integration`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            },
+            body: JSON.stringify({
+              action: 'agendar',
+              datetime: dataAgendamento,
+              nome: lead.nome || 'Cliente',
+              email: email,
+              telefone: lead.telefone,
+              leadId: lead_id,
+              subscriberId: subscriberId,
+              notas: modalidade === 'online' ? 'Atendimento ONLINE' : 'Atendimento PRESENCIAL',
+            }),
+          });
+
+          const calcomData = await calcomResponse.json();
+          console.log('📅 Resposta Cal.com (agendar_direto):', JSON.stringify(calcomData, null, 2));
+
+          if (!calcomData.success) {
+            // Se falhou no Cal.com, tentar criar localmente
+            console.log('⚠️ Falha no Cal.com, criando agendamento local...');
+            
+            const dataFim = new Date(new Date(dataAgendamento).getTime() + 60 * 60 * 1000);
+            const tipoCompromisso = modalidade === 'online' ? 'Reunião Online' : 
+                                    modalidade === 'presencial' ? 'Reunião Presencial' : 'Consulta';
+            
+            const { data: compromisso, error } = await supabase
+              .from('compromissos')
+              .insert({
+                titulo: titulo || 'Consulta Jurídica',
+                tipo: tipoCompromisso,
+                data_inicio: dataAgendamento,
+                data_fim: dataFim.toISOString(),
+                descricao: `Agendamento feito pela Isa (local).\n${modalidade === 'online' ? '📹 ONLINE' : '🏢 PRESENCIAL'}`,
+                lead_id,
+                confirmacao_status: 'pendente',
+                origem: 'isa',
+              })
+              .select()
+              .single();
+            
+            if (error) throw error;
+            
+            await supabase
+              .from('leads_juridicos')
+              .update({ status: 'Em Negociação' })
+              .eq('id', lead_id);
+            
+            const dataObj = new Date(dataAgendamento);
+            const horaManaus = dataObj.toLocaleTimeString('pt-BR', { 
+              timeZone: 'America/Manaus',
+              hour: '2-digit', 
+              minute: '2-digit' 
+            });
+            const dataManaus = dataObj.toLocaleDateString('pt-BR', { 
+              timeZone: 'America/Manaus',
+              weekday: 'long',
+              day: '2-digit',
+              month: '2-digit'
+            });
+            
+            return { 
+              success: true, 
+              message: `✅ Agendado (local): ${tipoCompromisso} para ${dataManaus} às ${horaManaus}`,
+              data: { 
+                compromisso_id: compromisso.id,
+                data_formatada: `${dataManaus} às ${horaManaus}`,
+                tipo: tipoCompromisso
+              }
+            };
+          }
+
+          // Sucesso no Cal.com
+          return { 
+            success: true, 
+            message: calcomData.mensagem,
             data: { 
-              alternativas: alternativas.slice(0, 3).map((a: { label: string; datetime: string }) => ({ 
-                label: a.label, 
-                datetime: a.datetime 
-              }))
+              booking: calcomData.booking,
+              compromisso_id: calcomData.compromisso_id,
+              data_formatada: calcomData.booking?.dataFormatada,
             }
           };
+        } catch (error) {
+          console.error('❌ Erro ao agendar no Cal.com:', error);
+          return { 
+            success: false, 
+            message: 'Erro ao criar agendamento. Tente novamente.',
+            data: null
+          };
         }
-        
-        const dataFim = new Date(dataAgendamento.getTime() + 60 * 60 * 1000); // +1 hora
-        const tipoCompromisso = modalidade === 'online' ? 'Reunião Online' : 
-                                modalidade === 'presencial' ? 'Reunião Presencial' : 'Consulta';
-        
-        // Criar compromisso
-        const { data: compromisso, error } = await supabase
-          .from('compromissos')
-          .insert({
-            titulo: titulo || 'Consulta Jurídica',
-            tipo: tipoCompromisso,
-            data_inicio: dataAgendamento.toISOString(),
-            data_fim: dataFim.toISOString(),
-            descricao: `Agendamento feito pela Isa.\n${modalidade === 'online' ? '📹 ONLINE' : '🏢 PRESENCIAL'}`,
-            lead_id,
-            confirmacao_status: 'pendente'
-          })
-          .select()
-          .single();
-        
-        if (error) throw error;
-        
-        // Atualizar status do lead
-        await supabase
-          .from('leads_juridicos')
-          .update({ status: 'Em Negociação' })
-          .eq('id', lead_id);
-        
-        // Registrar evento
-        await supabase.from('system_events').insert({
-          tipo: 'compromisso',
-          fonte: 'isa_auto',
-          acao: 'agendamento_criado_isa',
-          entidade_id: compromisso.id,
-          lead_id: lead_id,
-          dados: { titulo, tipo: tipoCompromisso, modalidade, data_inicio: dataAgendamento.toISOString() },
-          processado: true,
-        });
-        
-        // Formatar hora para resposta
-        const horaManaus = dataAgendamento.toLocaleTimeString('pt-BR', { 
-          timeZone: 'America/Manaus',
-          hour: '2-digit', 
-          minute: '2-digit' 
-        });
-        const dataManaus = dataAgendamento.toLocaleDateString('pt-BR', { 
-          timeZone: 'America/Manaus',
-          weekday: 'long',
-          day: '2-digit',
-          month: '2-digit'
-        });
-        
-        console.log(`✅ Compromisso criado: ${tipoCompromisso} em ${dataManaus} às ${horaManaus}`);
-        
-        return { 
-          success: true, 
-          message: `✅ Agendado: ${tipoCompromisso} para ${dataManaus} às ${horaManaus}`,
-          data: { 
-            compromisso_id: compromisso.id,
-            data_formatada: `${dataManaus} às ${horaManaus}`,
-            tipo: tipoCompromisso
-          }
-        };
       }
 
       // ============================================================
