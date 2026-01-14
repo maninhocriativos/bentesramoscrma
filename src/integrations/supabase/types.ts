@@ -784,6 +784,51 @@ export type Database = {
           },
         ]
       }
+      model_chunks: {
+        Row: {
+          chunk_type: string | null
+          content: string
+          created_at: string
+          embedding: string | null
+          id: string
+          model_id: string | null
+          petition_type_slug: string | null
+        }
+        Insert: {
+          chunk_type?: string | null
+          content: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          model_id?: string | null
+          petition_type_slug?: string | null
+        }
+        Update: {
+          chunk_type?: string | null
+          content?: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          model_id?: string | null
+          petition_type_slug?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model_chunks_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "petition_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "model_chunks_petition_type_slug_fkey"
+            columns: ["petition_type_slug"]
+            isOneToOne: false
+            referencedRelation: "petition_types"
+            referencedColumns: ["slug"]
+          },
+        ]
+      }
       modelos_contratos: {
         Row: {
           arquivo_nome: string
@@ -889,6 +934,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      office_settings: {
+        Row: {
+          address_main: string | null
+          address_secondary: string | null
+          city: string | null
+          created_at: string
+          email: string | null
+          id: string
+          instagram: string | null
+          lawyer_name: string | null
+          logo_url: string | null
+          oab_main: string | null
+          oab_secondary: string | null
+          office_name: string | null
+          state: string | null
+          updated_at: string
+        }
+        Insert: {
+          address_main?: string | null
+          address_secondary?: string | null
+          city?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          instagram?: string | null
+          lawyer_name?: string | null
+          logo_url?: string | null
+          oab_main?: string | null
+          oab_secondary?: string | null
+          office_name?: string | null
+          state?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address_main?: string | null
+          address_secondary?: string | null
+          city?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          instagram?: string | null
+          lawyer_name?: string | null
+          logo_url?: string | null
+          oab_main?: string | null
+          oab_secondary?: string | null
+          office_name?: string | null
+          state?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       parcelas: {
         Row: {
@@ -996,6 +1092,246 @@ export type Database = {
           telefone?: string | null
         }
         Relationships: []
+      }
+      petition_audit_log: {
+        Row: {
+          action: string
+          actor: string | null
+          created_at: string
+          id: string
+          meta: Json | null
+          petition_id: string | null
+        }
+        Insert: {
+          action: string
+          actor?: string | null
+          created_at?: string
+          id?: string
+          meta?: Json | null
+          petition_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor?: string | null
+          created_at?: string
+          id?: string
+          meta?: Json | null
+          petition_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "petition_audit_log_petition_id_fkey"
+            columns: ["petition_id"]
+            isOneToOne: false
+            referencedRelation: "petitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      petition_documents: {
+        Row: {
+          created_at: string
+          docx_url: string | null
+          generated_by: string | null
+          html_content: string | null
+          id: string
+          notes: string | null
+          pdf_url: string | null
+          petition_id: string
+          version: number | null
+        }
+        Insert: {
+          created_at?: string
+          docx_url?: string | null
+          generated_by?: string | null
+          html_content?: string | null
+          id?: string
+          notes?: string | null
+          pdf_url?: string | null
+          petition_id: string
+          version?: number | null
+        }
+        Update: {
+          created_at?: string
+          docx_url?: string | null
+          generated_by?: string | null
+          html_content?: string | null
+          id?: string
+          notes?: string | null
+          pdf_url?: string | null
+          petition_id?: string
+          version?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "petition_documents_petition_id_fkey"
+            columns: ["petition_id"]
+            isOneToOne: false
+            referencedRelation: "petitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      petition_models: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          extracted_sections: Json | null
+          extracted_text: string | null
+          file_type: string | null
+          file_url: string
+          id: string
+          is_active: boolean | null
+          is_default: boolean | null
+          petition_type_slug: string | null
+          tags: string | null
+          title: string
+          updated_at: string
+          variables_map: Json | null
+          version: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          extracted_sections?: Json | null
+          extracted_text?: string | null
+          file_type?: string | null
+          file_url: string
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          petition_type_slug?: string | null
+          tags?: string | null
+          title: string
+          updated_at?: string
+          variables_map?: Json | null
+          version?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          extracted_sections?: Json | null
+          extracted_text?: string | null
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          petition_type_slug?: string | null
+          tags?: string | null
+          title?: string
+          updated_at?: string
+          variables_map?: Json | null
+          version?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "petition_models_petition_type_slug_fkey"
+            columns: ["petition_type_slug"]
+            isOneToOne: false
+            referencedRelation: "petition_types"
+            referencedColumns: ["slug"]
+          },
+        ]
+      }
+      petition_types: {
+        Row: {
+          created_at: string
+          description: string | null
+          enabled: boolean | null
+          icon: string | null
+          slug: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          enabled?: boolean | null
+          icon?: string | null
+          slug: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          enabled?: boolean | null
+          icon?: string | null
+          slug?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      petitions: {
+        Row: {
+          client_cpf: string | null
+          client_name: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          lead_id: string | null
+          model_id: string | null
+          payload: Json | null
+          petition_type_slug: string | null
+          status: string | null
+          step_current: number | null
+          summary_isa: string | null
+          updated_at: string
+          updated_by: string | null
+          validation_isa: Json | null
+        }
+        Insert: {
+          client_cpf?: string | null
+          client_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lead_id?: string | null
+          model_id?: string | null
+          payload?: Json | null
+          petition_type_slug?: string | null
+          status?: string | null
+          step_current?: number | null
+          summary_isa?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          validation_isa?: Json | null
+        }
+        Update: {
+          client_cpf?: string | null
+          client_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lead_id?: string | null
+          model_id?: string | null
+          payload?: Json | null
+          petition_type_slug?: string | null
+          status?: string | null
+          step_current?: number | null
+          summary_isa?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          validation_isa?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "petitions_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "petitions_petition_type_slug_fkey"
+            columns: ["petition_type_slug"]
+            isOneToOne: false
+            referencedRelation: "petition_types"
+            referencedColumns: ["slug"]
+          },
+        ]
       }
       processos: {
         Row: {
@@ -1260,6 +1596,21 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      match_chunks: {
+        Args: {
+          filter_type?: string
+          match_count?: number
+          match_threshold?: number
+          query_embedding: string
+        }
+        Returns: {
+          chunk_type: string
+          content: string
+          id: string
+          model_id: string
+          similarity: number
+        }[]
       }
     }
     Enums: {
