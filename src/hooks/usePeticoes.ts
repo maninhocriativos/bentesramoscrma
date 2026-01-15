@@ -219,7 +219,8 @@ export function usePeticoes() {
   useEffect(() => {
     fetchPetitionTypes();
     fetchPetitions();
-  }, [fetchPetitionTypes, fetchPetitions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return {
     petitions,
