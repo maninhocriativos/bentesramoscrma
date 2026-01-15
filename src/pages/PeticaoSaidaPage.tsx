@@ -2,18 +2,18 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Download, FileText, RefreshCw, 
-  Loader2, Clock, CheckCircle2 
+  Loader2, Clock, CheckCircle2, Edit3, FileDown
 } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { usePeticoes } from '@/hooks/usePeticoes';
 import { supabase } from '@/integrations/supabase/client';
+import { HtmlPreviewEditor } from '@/components/peticoes/HtmlPreviewEditor';
 import type { Petition, PetitionDocument } from '@/types/peticoes';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -28,6 +28,8 @@ export default function PeticaoSaidaPage() {
   const [documents, setDocuments] = useState<PetitionDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [savingHtml, setSavingHtml] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -83,6 +85,41 @@ export default function PeticaoSaidaPage() {
     setGeneratingPdf(false);
   };
 
+  const handleSaveHtml = async (newHtml: string) => {
+    if (!latestDoc) return;
+    setSavingHtml(true);
+
+    try {
+      const { error } = await supabase
+        .from('petition_documents')
+        .update({ html_content: newHtml })
+        .eq('id', latestDoc.id);
+
+      if (error) throw error;
+
+      // Atualizar estado local
+      setDocuments(prev => prev.map(doc => 
+        doc.id === latestDoc.id ? { ...doc, html_content: newHtml } : doc
+      ));
+
+      toast({
+        title: 'Alterações salvas!',
+        description: 'O HTML foi atualizado com sucesso.',
+      });
+
+      setEditMode(false);
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: 'Erro ao salvar',
+        description: 'Tente novamente',
+        variant: 'destructive',
+      });
+    }
+
+    setSavingHtml(false);
+  };
+
   const handleDownload = (url: string, filename: string) => {
     const link = document.createElement('a');
     link.href = url;
@@ -123,17 +160,36 @@ export default function PeticaoSaidaPage() {
             </Button>
             
             <div className="flex items-center gap-2">
+              {latestDoc?.html_content && !editMode && (
+                <Button
+                  variant="outline"
+                  onClick={() => setEditMode(true)}
+                >
+                  <Edit3 className="mr-2 h-4 w-4" />
+                  Editar HTML
+                </Button>
+              )}
+              
+              {editMode && (
+                <Button
+                  variant="ghost"
+                  onClick={() => setEditMode(false)}
+                >
+                  Cancelar
+                </Button>
+              )}
+
               <Button
                 variant="outline"
                 onClick={handleGeneratePdf}
-                disabled={generatingPdf}
+                disabled={generatingPdf || editMode}
               >
                 {generatingPdf ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
-                  <RefreshCw className="mr-2 h-4 w-4" />
+                  <FileDown className="mr-2 h-4 w-4" />
                 )}
-                {latestDoc ? 'Gerar Nova Versão' : 'Gerar PDF'}
+                {latestDoc?.pdf_url ? 'Regerar PDF' : 'Gerar PDF'}
               </Button>
               
               {latestDoc?.pdf_url && (
@@ -146,40 +202,59 @@ export default function PeticaoSaidaPage() {
           </div>
 
           <div className="grid lg:grid-cols-3 gap-6">
-            {/* Preview */}
+            {/* Preview / Editor */}
             <div className="lg:col-span-2">
-              <Card className="h-[600px] overflow-hidden">
-                <CardHeader className="border-b">
+              <Card className="h-[650px] overflow-hidden">
+                <CardHeader className="border-b py-3">
                   <CardTitle className="flex items-center gap-2 text-base">
                     <FileText className="h-5 w-5" />
-                    Prévia do Documento
+                    {editMode ? 'Editor de Petição' : 'Prévia do Documento'}
                     {latestDoc && (
                       <Badge variant="outline" className="ml-auto">
                         v{latestDoc.version}
                       </Badge>
                     )}
+                    {editMode && (
+                      <Badge className="bg-yellow-500/20 text-yellow-700 border-yellow-500/30">
+                        Modo Edição
+                      </Badge>
+                    )}
                   </CardTitle>
                 </CardHeader>
-                <ScrollArea className="h-[calc(100%-60px)]">
-                  <CardContent className="p-6">
-                    {latestDoc?.html_content ? (
-                      <div 
-                        className="prose prose-sm max-w-none"
-                        dangerouslySetInnerHTML={{ __html: latestDoc.html_content }}
-                      />
-                    ) : (
-                      <div className="text-center py-12">
-                        <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                        <p className="text-muted-foreground">
-                          Nenhum documento gerado ainda.
-                        </p>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Clique em "Gerar PDF" para criar o documento.
-                        </p>
-                      </div>
-                    )}
-                  </CardContent>
-                </ScrollArea>
+                
+                {editMode && latestDoc?.html_content ? (
+                  <HtmlPreviewEditor 
+                    initialHtml={latestDoc.html_content}
+                    onSave={handleSaveHtml}
+                    saving={savingHtml}
+                  />
+                ) : (
+                  <ScrollArea className="h-[calc(100%-52px)]">
+                    <CardContent className="p-6">
+                      {latestDoc?.html_content ? (
+                        <div 
+                          className="prose prose-sm max-w-none"
+                          dangerouslySetInnerHTML={{ __html: latestDoc.html_content }}
+                          style={{ 
+                            fontFamily: 'Times New Roman, serif',
+                            fontSize: '12pt',
+                            lineHeight: '1.5',
+                          }}
+                        />
+                      ) : (
+                        <div className="text-center py-12">
+                          <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                          <p className="text-muted-foreground">
+                            Nenhum documento gerado ainda.
+                          </p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Volte à revisão e clique em "Gerar Petição" para criar o documento.
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </ScrollArea>
+                )}
               </Card>
             </div>
 
