@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Package, TrendingUp, CreditCard, AlertTriangle, Ban,
-  Plus, Search, Filter, MoreHorizontal, Eye, Copy, FileText, Archive
+  Package, TrendingUp, CreditCard, AlertTriangle, Ban, ShoppingCart,
+  Plus, Search, Filter, MoreHorizontal, Eye, Copy, FileText, Archive, ArrowLeft
 } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
@@ -37,6 +37,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   AlertTriangle: <AlertTriangle className="h-6 w-6" />,
   Ban: <Ban className="h-6 w-6" />,
   FileText: <FileText className="h-6 w-6" />,
+  ShoppingCart: <ShoppingCart className="h-6 w-6" />,
 };
 
 const TYPE_COLORS: Record<string, string> = {
@@ -45,6 +46,7 @@ const TYPE_COLORS: Record<string, string> = {
   rmc_rcc: 'from-amber-500 to-orange-600',
   negativacao_indevida: 'from-purple-500 to-violet-600',
   emprestimo_nao_reconhecido: 'from-emerald-500 to-teal-600',
+  vendas_casadas: 'from-pink-500 to-fuchsia-600',
 };
 
 export default function PeticoesPage() {
@@ -52,16 +54,19 @@ export default function PeticoesPage() {
   const { petitions, petitionTypes, loading, duplicatePetition, archivePetition } = usePeticoes();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState('lista');
 
-  const filteredPetitions = petitions.filter(p => {
-    const matchesSearch = !searchTerm || 
-      p.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.petition_types?.title?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+  const filteredPetitions = useMemo(() => {
+    return petitions.filter(p => {
+      const matchesSearch = !searchTerm || 
+        p.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.petition_types?.title?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
+      
+      return matchesSearch && matchesStatus;
+    });
+  }, [petitions, searchTerm, statusFilter]);
 
   const handleCreatePetition = (typeSlug: string) => {
     navigate(`/peticoes/nova?type=${typeSlug}`);
@@ -82,8 +87,18 @@ export default function PeticoesPage() {
       <AppHeader title="Gerador de Petições" />
       
       <div className="flex-1 p-6 space-y-6 overflow-auto">
-        <Tabs defaultValue="lista" className="space-y-6">
-          <div className="flex items-center justify-between">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <div className="flex items-center gap-4">
+            {activeTab === 'nova' && (
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => setActiveTab('lista')}
+                className="shrink-0"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            )}
             <TabsList>
               <TabsTrigger value="lista">Minhas Petições</TabsTrigger>
               <TabsTrigger value="nova">Nova Petição</TabsTrigger>
