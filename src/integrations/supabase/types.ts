@@ -937,6 +937,7 @@ export type Database = {
       }
       office_settings: {
         Row: {
+          address: string | null
           address_main: string | null
           address_secondary: string | null
           city: string | null
@@ -947,12 +948,18 @@ export type Database = {
           lawyer_name: string | null
           logo_url: string | null
           oab_main: string | null
+          oab_number: string | null
           oab_secondary: string | null
+          oab_state: string | null
           office_name: string | null
+          phone: string | null
           state: string | null
           updated_at: string
+          website: string | null
+          zip_code: string | null
         }
         Insert: {
+          address?: string | null
           address_main?: string | null
           address_secondary?: string | null
           city?: string | null
@@ -963,12 +970,18 @@ export type Database = {
           lawyer_name?: string | null
           logo_url?: string | null
           oab_main?: string | null
+          oab_number?: string | null
           oab_secondary?: string | null
+          oab_state?: string | null
           office_name?: string | null
+          phone?: string | null
           state?: string | null
           updated_at?: string
+          website?: string | null
+          zip_code?: string | null
         }
         Update: {
+          address?: string | null
           address_main?: string | null
           address_secondary?: string | null
           city?: string | null
@@ -979,10 +992,15 @@ export type Database = {
           lawyer_name?: string | null
           logo_url?: string | null
           oab_main?: string | null
+          oab_number?: string | null
           oab_secondary?: string | null
+          oab_state?: string | null
           office_name?: string | null
+          phone?: string | null
           state?: string | null
           updated_at?: string
+          website?: string | null
+          zip_code?: string | null
         }
         Relationships: []
       }
