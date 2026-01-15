@@ -8,7 +8,8 @@ import { usePerfil } from '@/hooks/usePerfil';
 import { UsersTable } from '@/components/configuracoes/UsersTable';
 import { SystemStatusTab } from '@/components/configuracoes/SystemStatusTab';
 import { IntegracoesTab } from '@/components/configuracoes/IntegracoesTab';
-import { Users, Server, Shield, Plug } from 'lucide-react';
+import { OfficeSettingsTab } from '@/components/configuracoes/OfficeSettingsTab';
+import { Users, Server, Shield, Plug, Building2 } from 'lucide-react';
 
 export default function ConfiguracoesPage() {
   const navigate = useNavigate();
@@ -50,6 +51,13 @@ export default function ConfiguracoesPage() {
         <Tabs defaultValue="usuarios" className="space-y-6">
           <TabsList className="rounded-xl bg-card shadow-soft p-1 h-auto flex-wrap">
             <TabsTrigger 
+              value="escritorio" 
+              className="rounded-lg gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground py-2.5 px-4"
+            >
+              <Building2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Escritório</span>
+            </TabsTrigger>
+            <TabsTrigger 
               value="usuarios" 
               className="rounded-lg gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground py-2.5 px-4"
             >
@@ -78,6 +86,10 @@ export default function ConfiguracoesPage() {
               <span className="hidden sm:inline">Permissões</span>
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="escritorio" className="animate-fade-in">
+            <OfficeSettingsTab />
+          </TabsContent>
 
           <TabsContent value="usuarios" className="space-y-4 animate-fade-in">
             <Card className="rounded-xl shadow-enterprise border-0 overflow-hidden">
