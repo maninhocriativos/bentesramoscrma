@@ -115,12 +115,15 @@ export interface PetitionModel {
   file_type: 'docx' | 'pdf';
   extracted_text: string | null;
   extracted_sections: Record<string, string> | null;
-  variables_map: Record<string, string>;
+  variables_map: VariablesMap | null;
   tags: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
 }
+
+// Mapeamento de variáveis do modelo para campos do payload
+export type VariablesMap = Record<string, string>;
 
 export interface ModelChunk {
   id: string;
