@@ -140,14 +140,20 @@ export interface OfficeSettings {
   office_name: string;
   logo_url: string | null;
   lawyer_name: string | null;
+  oab_number: string | null;
+  oab_state: string | null;
   oab_main: string | null;
   oab_secondary: string | null;
   email: string | null;
+  phone: string | null;
+  website: string | null;
   instagram: string | null;
+  address: string | null;
   address_main: string | null;
   address_secondary: string | null;
   city: string | null;
   state: string | null;
+  zip_code: string | null;
   created_at: string;
   updated_at: string;
 }
