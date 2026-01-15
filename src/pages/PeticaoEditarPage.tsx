@@ -22,6 +22,7 @@ import {
   ESTADOS_CIVIS, 
   PRODUTOS_BANCARIOS, 
   UFS_BRASIL,
+  BANCOS_BRASIL,
   TIPOS_PEDIDOS,
   type Petition,
   type PetitionPayload 
@@ -369,21 +370,19 @@ export default function PeticaoEditarPage() {
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div className="sm:col-span-2">
                       <Label htmlFor="banco_nome">Nome do Banco *</Label>
-                      <Input
-                        id="banco_nome"
+                      <Select
                         value={payload.banco?.banco_nome || ''}
-                        onChange={(e) => updateField('banco', 'banco_nome', e.target.value)}
-                        placeholder="Ex: Banco do Brasil, Itaú, etc"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="banco_cnpj">CNPJ do Banco</Label>
-                      <Input
-                        id="banco_cnpj"
-                        value={payload.banco?.banco_cnpj || ''}
-                        onChange={(e) => updateField('banco', 'banco_cnpj', e.target.value)}
-                        placeholder="00.000.000/0000-00"
-                      />
+                        onValueChange={(value) => updateField('banco', 'banco_nome', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o banco" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {BANCOS_BRASIL.map((banco) => (
+                            <SelectItem key={banco} value={banco}>{banco}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div>
                       <Label htmlFor="produto">Tipo de Produto</Label>
