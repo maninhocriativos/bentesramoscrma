@@ -409,7 +409,7 @@ ${template.pedidos.map(p => `<li>${p};</li>`).join("\n")}
   return buildFullHTML(content, officeSettings, tipoLabel);
 }
 
-// Montar HTML completo com cabeçalho e assinatura
+// Montar HTML completo com layout profissional estilo Bentes Ramos
 function buildFullHTML(
   content: string,
   officeSettings: Record<string, unknown> | null,
@@ -417,62 +417,47 @@ function buildFullHTML(
 ): string {
   const office = officeSettings || {};
   
-  const logoUrl = office.logo_url as string || "";
-  const officeName = office.office_name as string || "Escritório de Advocacia";
   const lawyerName = office.lawyer_name as string || "Advogado(a)";
   const oabMain = office.oab_main as string || "";
   const oabSecondary = office.oab_secondary as string || "";
-  const addressMain = office.address_main as string || "";
-  const email = office.email as string || "";
+  const city = office.city as string || "Manaus";
+  const state = office.state as string || "AM";
 
-  const header = `
-<div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1a365d; padding-bottom: 20px;">
-  ${logoUrl ? `<img src="${logoUrl}" alt="Logo" style="max-height: 80px; margin-bottom: 10px;" />` : ""}
-  <h1 style="font-size: 18px; color: #1a365d; margin: 0;">${officeName}</h1>
-  ${addressMain ? `<p style="font-size: 12px; color: #666; margin: 5px 0;">${addressMain}</p>` : ""}
-  ${email ? `<p style="font-size: 12px; color: #666; margin: 5px 0;">${email}</p>` : ""}
-</div>
-<p style="text-align: right; font-size: 12px; color: #666;">Exmo(a). Sr(a). Juiz(a) de Direito do Juizado Especial Cível</p>
+  // Cabeçalho de endereçamento
+  const enderecamento = `
+<p class="enderecamento">AO JUÍZO DE DIREITO DA __ VARA DO JUIZADO ESPECIAL CÍVEL<br/>DA COMARCA DE ${city.toUpperCase()}/${state}</p>
 `;
 
+  // Título da ação com destaque visual
+  const tituloAcao = `
+<div class="titulo-acao">
+  <h1>AÇÃO DE ${tipoLabel.toUpperCase().replace('AÇÃO ', '').replace('AÇÃO DE ', '')}</h1>
+</div>
+`;
+
+  // Assinatura do advogado
   const signature = `
-<div style="margin-top: 60px; text-align: center;">
-  <div style="border-top: 1px solid #333; width: 300px; margin: 0 auto; padding-top: 10px;">
-    <p style="margin: 0; font-weight: bold;">${lawyerName}</p>
-    ${oabMain ? `<p style="margin: 0; font-size: 12px;">OAB/${oabMain}</p>` : ""}
-    ${oabSecondary ? `<p style="margin: 0; font-size: 12px;">OAB/${oabSecondary}</p>` : ""}
+<div class="signature">
+  <div class="signature-line">
+    <p class="signature-name">${lawyerName}</p>
+    ${oabMain ? `<p class="signature-oab">OAB/${oabMain}</p>` : ""}
+    ${oabSecondary ? `<p class="signature-oab">OAB/${oabSecondary}</p>` : ""}
   </div>
 </div>
 `;
 
-  return `
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <title>Petição - ${tipoLabel}</title>
-  <style>
-    body {
-      font-family: 'Times New Roman', Times, serif;
-      font-size: 14px;
-      line-height: 1.8;
-      color: #333;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 40px;
-    }
-    h1 { font-size: 18px; }
-    h2 { font-size: 14px; font-weight: bold; margin-top: 30px; margin-bottom: 15px; }
-    p { text-align: justify; margin-bottom: 15px; }
-    ol, ul { margin-left: 20px; }
-    li { margin-bottom: 10px; }
-  </style>
-</head>
-<body>
-${header}
-${content}
-${signature}
-</body>
-</html>
-`;
+  // Inserir o título da ação antes do conteúdo (após a qualificação das partes)
+  let finalContent = content;
+  
+  // Se já tiver a estrutura antiga, substituir
+  if (finalContent.includes('<strong>AÇÃO')) {
+    finalContent = finalContent.replace(
+      /<p style="text-align: center;"><strong>AÇÃO[^<]*<\/strong><\/p>/,
+      tituloAcao
+    );
+  }
+
+  return `${enderecamento}
+${finalContent}
+${signature}`;
 }
