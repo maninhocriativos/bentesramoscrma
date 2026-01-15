@@ -77,6 +77,32 @@ O Superior Tribunal de Justiça tem decidido pela ilegalidade da cobrança de ta
       "A obrigação de não fazer, cessando as cobranças indevidas",
     ],
   },
+  vendas_casadas: {
+    fatos: `O Autor procurou a instituição financeira Ré para contratação de {{produto_principal}}, no valor de {{valor_total}}. Contudo, para a liberação do crédito/serviço, foi condicionado pelo Réu à contratação obrigatória de produtos adicionais não desejados pelo Autor, tais como: {{produtos_casados}}.
+
+O Autor foi induzido a aceitar tais condições sob pena de não obter o produto/serviço principal que necessitava, configurando a prática abusiva conhecida como "venda casada".
+
+O valor dos produtos impostos totaliza {{valor_produtos_casados}}, valor este que foi cobrado indevidamente do consumidor.`,
+    fundamentos: `A prática de venda casada é expressamente vedada pelo Código de Defesa do Consumidor, conforme artigo 39, inciso I: "É vedado ao fornecedor de produtos ou serviços, dentre outras práticas abusivas: I - condicionar o fornecimento de produto ou de serviço ao fornecimento de outro produto ou serviço, bem como, sem justa causa, a limites quantitativos."
+
+O artigo 6º, inciso II, do CDC assegura ao consumidor a liberdade de escolha e a igualdade nas contratações.
+
+A Súmula 473 do STJ estabelece: "O mutuário do SFH não pode ser compelido a contratar o seguro habitacional obrigatório com a instituição financeira mutuante ou com a seguradora por ela indicada."
+
+Tal entendimento é aplicável por analogia às demais contratações bancárias onde há imposição de produtos não essenciais.
+
+A Resolução CMN nº 4.949/2021 veda às instituições financeiras a oferta ou realização de operações de crédito condicionadas à aquisição de outros produtos ou serviços.
+
+Configura-se, portanto, prática abusiva passível de nulidade, com direito à restituição em dobro dos valores cobrados (art. 42, parágrafo único, CDC) e indenização por danos morais.`,
+    pedidos: [
+      "A declaração de nulidade dos contratos referentes aos produtos casados não desejados",
+      "A restituição em dobro dos valores cobrados pelos produtos impostos, nos termos do art. 42, parágrafo único, do CDC",
+      "A condenação do Réu ao pagamento de indenização por danos morais, em valor a ser arbitrado por Vossa Excelência",
+      "A manutenção do contrato principal sem a vinculação aos produtos casados",
+      "A obrigação de não fazer, cessando qualquer cobrança relacionada aos produtos impostos",
+      "A concessão de tutela de urgência para suspensão das cobranças dos produtos casados",
+    ],
+  },
 };
 
 Deno.serve(async (req) => {

@@ -216,6 +216,46 @@ export function usePeticoes() {
     return success;
   }, [updatePetition, fetchPetitions, toast]);
 
+  const deletePetition = useCallback(async (id: string): Promise<boolean> => {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Excluir documentos relacionados primeiro
+    await supabase
+      .from('petition_documents')
+      .delete()
+      .eq('petition_id', id);
+
+    // Excluir logs de auditoria
+    await supabase
+      .from('petition_audit_log')
+      .delete()
+      .eq('petition_id', id);
+
+    // Excluir a petição
+    const { error } = await supabase
+      .from('petitions')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Erro ao excluir petição:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível excluir a petição',
+        variant: 'destructive',
+      });
+      return false;
+    }
+
+    toast({
+      title: 'Excluído',
+      description: 'Petição excluída permanentemente',
+    });
+
+    fetchPetitions();
+    return true;
+  }, [fetchPetitions, toast]);
+
   useEffect(() => {
     fetchPetitionTypes();
     fetchPetitions();
@@ -234,5 +274,6 @@ export function usePeticoes() {
     getDocuments,
     duplicatePetition,
     archivePetition,
+    deletePetition,
   };
 }

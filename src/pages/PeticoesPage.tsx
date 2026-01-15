@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Package, TrendingUp, CreditCard, AlertTriangle, Ban, ShoppingCart,
-  Plus, Search, Filter, MoreHorizontal, Eye, Copy, FileText, Archive, ArrowLeft
+  Plus, Search, Filter, MoreHorizontal, Eye, Copy, FileText, Archive, ArrowLeft, Trash2
 } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
@@ -51,7 +51,7 @@ const TYPE_COLORS: Record<string, string> = {
 
 export default function PeticoesPage() {
   const navigate = useNavigate();
-  const { petitions, petitionTypes, loading, duplicatePetition, archivePetition } = usePeticoes();
+  const { petitions, petitionTypes, loading, duplicatePetition, archivePetition, deletePetition } = usePeticoes();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('lista');
@@ -202,6 +202,13 @@ export default function PeticoesPage() {
                                 <DropdownMenuItem onClick={() => archivePetition(petition.id)}>
                                   <Archive className="mr-2 h-4 w-4" />
                                   Arquivar
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => deletePetition(petition.id)}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Excluir
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
