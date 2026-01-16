@@ -177,22 +177,24 @@ Deno.serve(async (req) => {
     const typeSlug = petition.petition_type_slug || "juros_abusivos";
     const tipoLabel = petition.petition_types?.title || typeSlug;
 
-    // Gerar conteúdo HTML
+    // SEMPRE usar OpenAI/Isa para gerar petição completa
     let htmlContent = "";
 
-    if (openaiKey && ragChunks.length > 0) {
-      // Usar OpenAI com RAG
-      htmlContent = await generateWithAI(
+    if (openaiKey) {
+      console.log(`[petition-generate] Usando Isa/GPT para gerar petição completa`);
+      htmlContent = await generateWithIsa(
         openaiKey,
         petition,
         payload,
+        typeSlug,
         tipoLabel,
         officeSettings,
         ragChunks,
         modelData?.variables_map
       );
     } else {
-      // Fallback: usar templates
+      // Fallback: usar templates (só se não tiver OpenAI)
+      console.log(`[petition-generate] Fallback para templates (OpenAI não configurado)`);
       htmlContent = generateFromTemplate(
         petition,
         payload,
@@ -220,9 +222,9 @@ Deno.serve(async (req) => {
         petition_id: petitionId,
         version: newVersion,
         html_content: htmlContent,
-        generated_by: ragChunks.length > 0 ? "isa_rag" : "template",
-        notes: ragChunks.length > 0 
-          ? `Gerado com RAG usando ${ragChunks.length} chunks do modelo`
+        generated_by: openaiKey ? "isa_gpt" : "template",
+        notes: openaiKey 
+          ? `Gerado pela Isa (GPT-4o) com argumentação jurídica completa`
           : "Gerado a partir de template padrão",
       })
       .select("id")
@@ -241,7 +243,7 @@ Deno.serve(async (req) => {
       meta: { 
         document_id: newDoc.id,
         version: newVersion,
-        method: ragChunks.length > 0 ? "rag" : "template",
+        method: openaiKey ? "isa_gpt" : "template",
       },
     });
 
@@ -265,20 +267,21 @@ Deno.serve(async (req) => {
   }
 });
 
-// Gerar com OpenAI e RAG
-async function generateWithAI(
+// Gerar petição completa com Isa/GPT
+async function generateWithIsa(
   apiKey: string,
   petition: Record<string, unknown>,
   payload: Record<string, unknown>,
+  typeSlug: string,
   tipoLabel: string,
   officeSettings: Record<string, unknown> | null,
   ragChunks: Array<{ chunk_type: string; content: string }>,
   variablesMap: Record<string, string> | null
 ): Promise<string> {
-  // Montar contexto dos chunks
-  const chunksContext = ragChunks
-    .map(c => `[${c.chunk_type?.toUpperCase()}]\n${c.content}`)
-    .join("\n\n---\n\n");
+  // Montar contexto dos chunks (se houver modelo)
+  const chunksContext = ragChunks.length > 0
+    ? ragChunks.map(c => `[${c.chunk_type?.toUpperCase()}]\n${c.content}`).join("\n\n---\n\n")
+    : "";
 
   // Montar dados do caso
   const client = payload.client as Record<string, string> || {};
@@ -286,59 +289,194 @@ async function generateWithAI(
   const banco = payload.banco as Record<string, string> || {};
   const valores = payload.valores as Record<string, unknown> || {};
 
+  // Template específico do tipo
+  const template = SECTION_TEMPLATES[typeSlug] || SECTION_TEMPLATES.juros_abusivos;
+  
+  const office = officeSettings || {};
+  const city = office.city as string || "Manaus";
+  const state = office.state as string || "AM";
+  const lawyerName = office.lawyer_name as string || "Advogado(a)";
+  const oabMain = office.oab_main as string || "";
+  const oabSecondary = office.oab_secondary as string || "";
+
   const dadosCaso = `
-DADOS DO AUTOR:
-- Nome: ${client.nome_completo || "Não informado"}
-- CPF: ${client.cpf || "Não informado"}
-- Estado Civil: ${client.estado_civil || "Não informado"}
-- Profissão: ${client.profissao || "Não informado"}
-- Nacionalidade: ${client.nacionalidade || "brasileira"}
-- Endereço: ${endereco.rua || ""}, ${endereco.numero || ""}, ${endereco.complemento || ""}, ${endereco.bairro || ""}, ${endereco.cidade || ""}-${endereco.uf || ""}, CEP: ${endereco.cep || ""}
+## DADOS DO CASO
 
-DADOS DO RÉU:
-- Banco: ${banco.banco_nome || "Não informado"}
-- CNPJ: ${banco.banco_cnpj || "Não informado"}
-- Produto: ${banco.produto || "Não informado"}
+### AUTOR (Cliente)
+- Nome Completo: ${client.nome_completo || "NÃO INFORMADO"}
+- CPF: ${client.cpf || "NÃO INFORMADO"}
+- RG: ${client.rg || "NÃO INFORMADO"}
+- Estado Civil: ${client.estado_civil || "solteiro(a)"}
+- Profissão: ${client.profissao || "NÃO INFORMADO"}
+- Nacionalidade: ${client.nacionalidade || "brasileiro(a)"}
 
-VALORES:
-- Valor Cobrado: R$ ${valores.valor_cobrado || "Não informado"}
-- Valor Total: R$ ${valores.valor_total || "Não informado"}
-- Período: ${valores.periodo_inicio || ""} a ${valores.periodo_fim || ""}
-- Parcelas: ${valores.parcelas || "Não informado"}
-- Observações: ${valores.observacoes || "Nenhuma"}
+### ENDEREÇO DO AUTOR
+- Rua: ${endereco.rua || "NÃO INFORMADO"}
+- Número: ${endereco.numero || "S/N"}
+- Complemento: ${endereco.complemento || ""}
+- Bairro: ${endereco.bairro || "NÃO INFORMADO"}
+- Cidade: ${endereco.cidade || "NÃO INFORMADO"}
+- UF: ${endereco.uf || "NÃO INFORMADO"}
+- CEP: ${endereco.cep || "NÃO INFORMADO"}
 
-PEDIDOS SELECIONADOS: ${(valores.pedidos_selecionados as string[] || []).join(", ") || "Nenhum específico"}
+### RÉU (Instituição Financeira)
+- Nome/Razão Social: ${banco.banco_nome || "NÃO INFORMADO"}
+- Agência: ${banco.agencia || "NÃO INFORMADO"}
+- Conta: ${banco.conta || "NÃO INFORMADO"}
+- Produto Contratado: ${banco.produto || "empréstimo/financiamento"}
+${typeSlug === 'vendas_casadas' ? `- Produtos Casados Impostos: ${valores.produtos_casados || "seguro prestamista, título de capitalização"}` : ''}
+
+### VALORES E DANOS
+- Valor do Contrato/Causa: R$ ${valores.valor_total || "a ser calculado"}
+- Valor Cobrado Indevidamente: R$ ${valores.valor_cobrado || "a ser calculado"}
+${typeSlug === 'vendas_casadas' ? `- Valor dos Produtos Casados: R$ ${valores.valor_produtos_casados || "a ser calculado"}` : ''}
+- Período: ${valores.periodo_inicio || "___"} até ${valores.periodo_fim || "presente data"}
+- Parcelas: ${valores.parcelas || "___"}
+- Observações do Caso: ${valores.observacoes || "Nenhuma observação adicional"}
+
+### PEDIDOS SELECIONADOS
+${(valores.pedidos_selecionados as string[] || []).map(p => `- ${p}`).join("\n") || "Nenhum pedido específico selecionado"}
+
+### COMARCA
+- Cidade: ${city}
+- Estado: ${state}
+
+### ADVOGADO RESPONSÁVEL
+- Nome: ${lawyerName}
+- OAB Principal: ${oabMain}
+${oabSecondary ? `- OAB Secundária: ${oabSecondary}` : ''}
 `;
 
-  const systemPrompt = `Você é um advogado especialista em Direito do Consumidor e Bancário, redator de petições para o Juizado Especial Cível (JEC).
+  const fundamentosBase = template.fundamentos;
+  const pedidosBase = template.pedidos;
 
-Utilize os trechos do modelo do escritório fornecidos como referência para estilo e estrutura.
+  const systemPrompt = `Você é a ISA, uma advogada especialista em Direito do Consumidor e Bancário, com vasta experiência em petições para Juizados Especiais Cíveis.
 
-REGRAS:
-1. Gere uma petição inicial COMPLETA em formato HTML
-2. Use os dados do caso fornecidos - NUNCA invente dados
-3. Siga a estrutura: Qualificação → Fatos → Fundamentos → Pedidos → Provas → Valor da Causa
-4. O valor da causa deve ser até 40 salários mínimos (JEC)
-5. Mantenha linguagem formal jurídica
-6. Inclua os fundamentos legais apropriados (CDC, CC, Súmulas do STJ)
-7. Os pedidos devem ser numerados e específicos
+## SUA MISSÃO
+Redigir uma PETIÇÃO INICIAL COMPLETA, PROFISSIONAL e JURIDICAMENTE ROBUSTA para o caso apresentado.
 
-FORMATO HTML:
-- Use <h2> para títulos de seção
-- Use <p> para parágrafos
-- Use <ol> ou <ul> para listas
-- Use <strong> para destaques
-- NÃO inclua CSS inline
-- NÃO inclua cabeçalho do documento (será adicionado depois)`;
+## ESTRUTURA OBRIGATÓRIA DA PETIÇÃO
 
-  const userPrompt = `TIPO DE AÇÃO: ${tipoLabel}
+A petição DEVE conter TODAS as seguintes seções, bem desenvolvidas:
+
+### 1. ENDEREÇAMENTO
+- "AO JUÍZO DE DIREITO DA __ VARA DO JUIZADO ESPECIAL CÍVEL DA COMARCA DE [CIDADE]/[UF]"
+
+### 2. QUALIFICAÇÃO DAS PARTES (I - DA QUALIFICAÇÃO DAS PARTES)
+- Qualificação COMPLETA do Autor com TODOS os dados
+- Qualificação do Réu (banco/instituição financeira)
+- Usar dados reais fornecidos - NUNCA inventar
+
+### 3. DOS FATOS (II - DOS FATOS)
+- Narrativa DETALHADA e CRONOLÓGICA dos fatos
+- Mínimo de 3-4 parágrafos bem desenvolvidos
+- Descrever o que aconteceu, quando, como e as consequências
+- Incluir valores específicos quando disponíveis
+- Tom assertivo mas respeitoso
+
+### 4. DO DIREITO (III - DO DIREITO / DOS FUNDAMENTOS JURÍDICOS)
+- Fundamentos legais COMPLETOS e ESPECÍFICOS
+- Citar artigos de lei com precisão (CDC, CC, CF)
+- Incluir Súmulas relevantes do STJ/STF
+- Incluir jurisprudência pertinente
+- Mínimo de 4-5 parágrafos de argumentação jurídica sólida
+- Demonstrar nexo causal e dano
+
+### 5. DOS PEDIDOS (IV - DOS PEDIDOS)
+- Lista NUMERADA de pedidos específicos
+- Incluir tutela de urgência quando cabível
+- Pedido de inversão do ônus da prova
+- Pedido de danos morais E materiais quando aplicável
+- Pedido de custas e honorários
+
+### 6. DAS PROVAS (V - DAS PROVAS)
+- Protesto pela produção de provas
+- Listar documentos anexos
+- Mencionar outras provas cabíveis
+
+### 7. DO VALOR DA CAUSA (VI - DO VALOR DA CAUSA)
+- Valor até 40 salários mínimos (JEC)
+- Justificar brevemente
+
+### 8. FECHAMENTO
+- "Nestes termos, pede deferimento."
+- Local e data
+- Espaço para assinatura do advogado
+
+## REGRAS DE FORMATAÇÃO HTML
+
+Use EXATAMENTE esta estrutura HTML:
+
+\`\`\`html
+<p class="enderecamento">AO JUÍZO DE DIREITO DA __ VARA DO JUIZADO ESPECIAL CÍVEL<br/>DA COMARCA DE [CIDADE]/[UF]</p>
+
+<div class="titulo-acao">
+  <h1>AÇÃO DE [TIPO DA AÇÃO]</h1>
+</div>
+
+<h2>I - DA QUALIFICAÇÃO DAS PARTES</h2>
+<p>...</p>
+
+<h2>II - DOS FATOS</h2>
+<p>...</p>
+<p>...</p>
+
+<h2>III - DO DIREITO</h2>
+<p>...</p>
+
+<h2>IV - DOS PEDIDOS</h2>
+<p>Diante do exposto, requer:</p>
+<ol>
+<li>...</li>
+</ol>
+
+<h2>V - DAS PROVAS</h2>
+<p>...</p>
+
+<h2>VI - DO VALOR DA CAUSA</h2>
+<p>...</p>
+
+<p>Nestes termos,<br/>Pede deferimento.</p>
+
+<p class="date-location">[Cidade], [data por extenso].</p>
+
+<div class="signature">
+  <div class="signature-line">
+    <p class="signature-name">[Nome do Advogado]</p>
+    <p class="signature-oab">OAB/[Estado] [Número]</p>
+  </div>
+</div>
+\`\`\`
+
+## REGRAS IMPORTANTES
+
+1. Use TODOS os dados fornecidos - dados reais, não placeholder
+2. Linguagem FORMAL e TÉCNICA jurídica
+3. Argumentação CONVINCENTE e bem fundamentada
+4. Parágrafos DESENVOLVIDOS (não superficiais)
+5. Citações legais PRECISAS e ATUALIZADAS
+6. NÃO use CSS inline - use apenas as classes definidas
+7. Retorne APENAS o HTML, sem explicações
+8. Data deve ser formatada: "[Cidade], [dia] de [mês] de [ano]"
+
+## FUNDAMENTOS JURÍDICOS DISPONÍVEIS PARA ESTE TIPO DE AÇÃO:
+${fundamentosBase}
+
+## PEDIDOS BASE SUGERIDOS:
+${pedidosBase.map((p, i) => `${i + 1}. ${p}`).join("\n")}
+`;
+
+  const userPrompt = `Gere a PETIÇÃO INICIAL COMPLETA para:
+
+**TIPO DE AÇÃO:** ${tipoLabel.toUpperCase()}
 
 ${dadosCaso}
 
-TRECHOS DO MODELO DO ESCRITÓRIO:
-${chunksContext}
+${chunksContext ? `\n## MODELO DO ESCRITÓRIO (use como referência de estilo):\n${chunksContext}\n` : ''}
 
-Gere a petição inicial completa em HTML, preenchendo com os dados do caso.`;
+IMPORTANTE: Gere uma petição ROBUSTA, COMPLETA e PROFISSIONAL. Desenvolva cada seção com argumentação jurídica sólida. Use TODOS os dados fornecidos. Retorne APENAS o HTML.`;
+
+  console.log(`[petition-generate] Chamando GPT-4o para gerar petição...`);
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -352,19 +490,32 @@ Gere a petição inicial completa em HTML, preenchendo com os dados do caso.`;
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      max_tokens: 4000,
-      temperature: 0.3,
+      max_tokens: 8000,
+      temperature: 0.4,
     }),
   });
 
   const data = await response.json();
-  const generatedContent = data.choices?.[0]?.message?.content || "";
+  
+  if (!response.ok) {
+    console.error("[petition-generate] Erro OpenAI:", data);
+    throw new Error(data.error?.message || "Erro ao gerar com OpenAI");
+  }
 
-  // Montar HTML final com cabeçalho e rodapé
-  return buildFullHTML(generatedContent, officeSettings, tipoLabel);
+  const generatedContent = data.choices?.[0]?.message?.content || "";
+  
+  // Limpar possíveis blocos de código markdown
+  let cleanHtml = generatedContent
+    .replace(/```html\n?/gi, '')
+    .replace(/```\n?/gi, '')
+    .trim();
+
+  console.log(`[petition-generate] Petição gerada com ${cleanHtml.length} caracteres`);
+
+  return cleanHtml;
 }
 
-// Gerar a partir de template
+// Gerar a partir de template (fallback)
 function generateFromTemplate(
   petition: Record<string, unknown>,
   payload: Record<string, unknown>,
@@ -378,30 +529,43 @@ function generateFromTemplate(
   const endereco = payload.endereco as Record<string, string> || {};
   const banco = payload.banco as Record<string, string> || {};
   const valores = payload.valores as Record<string, unknown> || {};
+  const office = officeSettings || {};
+  
+  const city = office.city as string || "Manaus";
+  const state = office.state as string || "AM";
+  const lawyerName = office.lawyer_name as string || "Advogado(a)";
+  const oabMain = office.oab_main as string || "";
+  const oabSecondary = office.oab_secondary as string || "";
 
   // Substituir variáveis nos templates
   let fatos = template.fatos
     .replace("{{produto}}", banco.produto || "produto bancário")
+    .replace("{{produto_principal}}", banco.produto || "empréstimo/financiamento")
     .replace("{{valor_total}}", `R$ ${valores.valor_total || "___"}`)
     .replace("{{valor_cobrado}}", `R$ ${valores.valor_cobrado || "___"}`)
+    .replace("{{valor_produtos_casados}}", `R$ ${valores.valor_produtos_casados || "___"}`)
+    .replace("{{produtos_casados}}", valores.produtos_casados as string || "seguro prestamista, título de capitalização")
     .replace("{{periodo_inicio}}", valores.periodo_inicio as string || "___");
+
+  const enderecamento = `<p class="enderecamento">AO JUÍZO DE DIREITO DA __ VARA DO JUIZADO ESPECIAL CÍVEL<br/>DA COMARCA DE ${city.toUpperCase()}/${state}</p>`;
+
+  const tituloAcao = `<div class="titulo-acao"><h1>AÇÃO DE ${tipoLabel.toUpperCase().replace('AÇÃO ', '').replace('AÇÃO DE ', '')}</h1></div>`;
 
   const qualificacao = `
 <h2>I - DA QUALIFICAÇÃO DAS PARTES</h2>
-<p><strong>${client.nome_completo || "___"}</strong>, ${client.nacionalidade || "brasileiro(a)"}, ${client.estado_civil || "___"}, ${client.profissao || "___"}, inscrito(a) no CPF sob o nº ${client.cpf || "___"}, portador(a) do RG nº ${client.rg || "___"}, residente e domiciliado(a) na ${endereco.rua || "___"}, nº ${endereco.numero || "___"}${endereco.complemento ? ", " + endereco.complemento : ""}, Bairro ${endereco.bairro || "___"}, ${endereco.cidade || "___"}-${endereco.uf || "___"}, CEP ${endereco.cep || "___"}, vem, respeitosamente, à presença de Vossa Excelência, propor a presente</p>
-<p style="text-align: center;"><strong>AÇÃO ${tipoLabel.toUpperCase()}</strong></p>
-<p>em face de <strong>${banco.banco_nome || "___"}</strong>, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº ${banco.banco_cnpj || "___"}, pelos fatos e fundamentos a seguir expostos.</p>
+<p><strong>${client.nome_completo || "___"}</strong>, ${client.nacionalidade || "brasileiro(a)"}, ${client.estado_civil || "___"}, ${client.profissao || "___"}, inscrito(a) no CPF sob o nº ${client.cpf || "___"}, portador(a) do RG nº ${client.rg || "___"}, residente e domiciliado(a) na ${endereco.rua || "___"}, nº ${endereco.numero || "___"}${endereco.complemento ? ", " + endereco.complemento : ""}, Bairro ${endereco.bairro || "___"}, ${endereco.cidade || "___"}-${endereco.uf || "___"}, CEP ${endereco.cep || "___"}, vem, respeitosamente, à presença de Vossa Excelência, propor a presente ação</p>
+<p>em face de <strong>${banco.banco_nome || "___"}</strong>, pessoa jurídica de direito privado, pelos fatos e fundamentos a seguir expostos.</p>
 `;
 
   const fatosSection = `
 <h2>II - DOS FATOS</h2>
 <p>${fatos}</p>
-<p>${valores.observacoes || ""}</p>
+${valores.observacoes ? `<p>${valores.observacoes}</p>` : ""}
 `;
 
   const fundamentosSection = `
 <h2>III - DO DIREITO</h2>
-<p>${template.fundamentos}</p>
+<p>${template.fundamentos.split('\n\n').join('</p><p>')}</p>
 `;
 
   const pedidosSection = `
@@ -409,6 +573,7 @@ function generateFromTemplate(
 <p>Diante do exposto, requer:</p>
 <ol>
 ${template.pedidos.map(p => `<li>${p};</li>`).join("\n")}
+<li>A inversão do ônus da prova, nos termos do art. 6º, VIII, do CDC;</li>
 <li>A condenação do Réu ao pagamento das custas processuais e honorários advocatícios;</li>
 <li>A produção de todas as provas admitidas em direito.</li>
 </ol>
@@ -423,46 +588,13 @@ ${template.pedidos.map(p => `<li>${p};</li>`).join("\n")}
     ? `R$ ${Number(valores.valor_total).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
     : "R$ ___";
 
+  const dataAtual = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+
   const fechamento = `
 <h2>VI - DO VALOR DA CAUSA</h2>
 <p>Dá-se à causa o valor de <strong>${valorCausa}</strong>.</p>
 <p>Nestes termos,<br/>Pede deferimento.</p>
-<p>${endereco.cidade || "___"}, ${new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}.</p>
-`;
-
-  const content = qualificacao + fatosSection + fundamentosSection + pedidosSection + provasSection + fechamento;
-
-  return buildFullHTML(content, officeSettings, tipoLabel);
-}
-
-// Montar HTML completo com layout profissional estilo Bentes Ramos
-function buildFullHTML(
-  content: string,
-  officeSettings: Record<string, unknown> | null,
-  tipoLabel: string
-): string {
-  const office = officeSettings || {};
-  
-  const lawyerName = office.lawyer_name as string || "Advogado(a)";
-  const oabMain = office.oab_main as string || "";
-  const oabSecondary = office.oab_secondary as string || "";
-  const city = office.city as string || "Manaus";
-  const state = office.state as string || "AM";
-
-  // Cabeçalho de endereçamento
-  const enderecamento = `
-<p class="enderecamento">AO JUÍZO DE DIREITO DA __ VARA DO JUIZADO ESPECIAL CÍVEL<br/>DA COMARCA DE ${city.toUpperCase()}/${state}</p>
-`;
-
-  // Título da ação com destaque visual
-  const tituloAcao = `
-<div class="titulo-acao">
-  <h1>AÇÃO DE ${tipoLabel.toUpperCase().replace('AÇÃO ', '').replace('AÇÃO DE ', '')}</h1>
-</div>
-`;
-
-  // Assinatura do advogado
-  const signature = `
+<p class="date-location">${city}, ${dataAtual}.</p>
 <div class="signature">
   <div class="signature-line">
     <p class="signature-name">${lawyerName}</p>
@@ -472,18 +604,5 @@ function buildFullHTML(
 </div>
 `;
 
-  // Inserir o título da ação antes do conteúdo (após a qualificação das partes)
-  let finalContent = content;
-  
-  // Se já tiver a estrutura antiga, substituir
-  if (finalContent.includes('<strong>AÇÃO')) {
-    finalContent = finalContent.replace(
-      /<p style="text-align: center;"><strong>AÇÃO[^<]*<\/strong><\/p>/,
-      tituloAcao
-    );
-  }
-
-  return `${enderecamento}
-${finalContent}
-${signature}`;
+  return enderecamento + tituloAcao + qualificacao + fatosSection + fundamentosSection + pedidosSection + provasSection + fechamento;
 }

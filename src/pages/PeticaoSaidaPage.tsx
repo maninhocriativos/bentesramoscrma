@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft, Download, FileText, RefreshCw, 
+  ArrowLeft, Download, FileText, 
   Loader2, Clock, CheckCircle2, Edit3, FileDown
 } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
@@ -13,10 +13,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { usePeticoes } from '@/hooks/usePeticoes';
 import { supabase } from '@/integrations/supabase/client';
-import { HtmlPreviewEditor } from '@/components/peticoes/HtmlPreviewEditor';
+import { PetitionEditor } from '@/components/peticoes/PetitionEditor';
 import type { Petition, PetitionDocument } from '@/types/peticoes';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import jsPDF from 'jspdf';
 
 export default function PeticaoSaidaPage() {
   const { id } = useParams<{ id: string }>();
@@ -53,15 +54,55 @@ export default function PeticaoSaidaPage() {
   }, [id, getPetition, getDocuments, navigate]);
 
   const handleGeneratePdf = async () => {
-    if (!petition) return;
+    if (!petition || !latestDoc?.html_content) return;
     setGeneratingPdf(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('petition-pdf', {
-        body: { petitionId: petition.id },
+      // Gerar PDF no cliente usando jsPDF
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
       });
 
-      if (error) throw error;
+      // Configurar fonte
+      doc.setFont('times', 'normal');
+      doc.setFontSize(12);
+
+      // Converter HTML para texto simples para o PDF
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = latestDoc.html_content;
+      const text = tempDiv.innerText || tempDiv.textContent || '';
+
+      // Adicionar texto com quebra automática
+      const lines = doc.splitTextToSize(text, 160);
+      let y = 25;
+      const pageHeight = 280;
+
+      for (const line of lines) {
+        if (y > pageHeight) {
+          doc.addPage();
+          y = 25;
+        }
+        doc.text(line, 25, y);
+        y += 6;
+      }
+
+      // Salvar PDF
+      const pdfBlob = doc.output('blob');
+      const fileName = `peticao-${petition.id}-v${latestDoc.version}.pdf`;
+
+      // Upload para Supabase Storage
+      const filePath = `petitions/${petition.id}/${fileName}`;
+      await supabase.storage.from('documentos').upload(filePath, pdfBlob, {
+        contentType: 'application/pdf',
+        upsert: true,
+      });
+
+      const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(filePath);
+      
+      // Atualizar documento com URL
+      await supabase.from('petition_documents').update({ pdf_url: urlData.publicUrl }).eq('id', latestDoc.id);
 
       // Recarregar documentos
       const docsData = await getDocuments(petition.id);
@@ -166,7 +207,7 @@ export default function PeticaoSaidaPage() {
                   onClick={() => setEditMode(true)}
                 >
                   <Edit3 className="mr-2 h-4 w-4" />
-                  Editar HTML
+                  Editar Petição
                 </Button>
               )}
               
@@ -223,7 +264,7 @@ export default function PeticaoSaidaPage() {
                 </CardHeader>
                 
                 {editMode && latestDoc?.html_content ? (
-                  <HtmlPreviewEditor 
+                  <PetitionEditor 
                     initialHtml={latestDoc.html_content}
                     onSave={handleSaveHtml}
                     saving={savingHtml}
