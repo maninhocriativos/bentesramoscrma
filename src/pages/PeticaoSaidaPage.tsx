@@ -12,18 +12,20 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { usePeticoes } from '@/hooks/usePeticoes';
+import { useOfficeSettings } from '@/hooks/useOfficeSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { PetitionEditor } from '@/components/peticoes/PetitionEditor';
+import { generatePetitionPdf } from '@/lib/pdfPetitionGenerator';
 import type { Petition, PetitionDocument } from '@/types/peticoes';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import jsPDF from 'jspdf';
 
 export default function PeticaoSaidaPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { getPetition, getDocuments, updatePetition } = usePeticoes();
+  const { settings: officeSettings } = useOfficeSettings();
 
   const [petition, setPetition] = useState<Petition | null>(null);
   const [documents, setDocuments] = useState<PetitionDocument[]>([]);
@@ -58,38 +60,14 @@ export default function PeticaoSaidaPage() {
     setGeneratingPdf(true);
 
     try {
-      // Gerar PDF no cliente usando jsPDF
-      const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
+      // Gerar PDF profissional com cabeçalho e rodapé
+      const pdfBlob = await generatePetitionPdf({
+        htmlContent: latestDoc.html_content,
+        officeSettings,
+        petitionId: petition.id,
+        version: latestDoc.version || 1,
       });
 
-      // Configurar fonte
-      doc.setFont('times', 'normal');
-      doc.setFontSize(12);
-
-      // Converter HTML para texto simples para o PDF
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = latestDoc.html_content;
-      const text = tempDiv.innerText || tempDiv.textContent || '';
-
-      // Adicionar texto com quebra automática
-      const lines = doc.splitTextToSize(text, 160);
-      let y = 25;
-      const pageHeight = 280;
-
-      for (const line of lines) {
-        if (y > pageHeight) {
-          doc.addPage();
-          y = 25;
-        }
-        doc.text(line, 25, y);
-        y += 6;
-      }
-
-      // Salvar PDF
-      const pdfBlob = doc.output('blob');
       const fileName = `peticao-${petition.id}-v${latestDoc.version}.pdf`;
 
       // Upload para Supabase Storage
