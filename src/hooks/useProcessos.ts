@@ -89,7 +89,7 @@ export function useProcessos() {
     };
   }, []);
 
-  const createProcesso = async (processo: Omit<Processo, 'id' | 'created_at'>) => {
+  const createProcesso = async (processo: Partial<Omit<Processo, 'id' | 'created_at'>>) => {
     const { data, error } = await supabase
       .from('processos')
       .insert(processo)
