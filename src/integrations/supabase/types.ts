@@ -74,6 +74,63 @@ export type Database = {
         }
         Relationships: []
       }
+      cnj_assuntos: {
+        Row: {
+          codigo: string
+          created_at: string | null
+          nome: string
+        }
+        Insert: {
+          codigo: string
+          created_at?: string | null
+          nome: string
+        }
+        Update: {
+          codigo?: string
+          created_at?: string | null
+          nome?: string
+        }
+        Relationships: []
+      }
+      cnj_classes: {
+        Row: {
+          codigo: string
+          created_at: string | null
+          nome: string
+        }
+        Insert: {
+          codigo: string
+          created_at?: string | null
+          nome: string
+        }
+        Update: {
+          codigo?: string
+          created_at?: string | null
+          nome?: string
+        }
+        Relationships: []
+      }
+      cnj_movimentos: {
+        Row: {
+          codigo: string
+          created_at: string | null
+          descricao_padrao: string | null
+          titulo: string
+        }
+        Insert: {
+          codigo: string
+          created_at?: string | null
+          descricao_padrao?: string | null
+          titulo: string
+        }
+        Update: {
+          codigo?: string
+          created_at?: string | null
+          descricao_padrao?: string | null
+          titulo?: string
+        }
+        Relationships: []
+      }
       compromissos: {
         Row: {
           confirmacao_resposta: string | null
@@ -1707,42 +1764,148 @@ export type Database = {
           },
         ]
       }
+      processo_assuntos: {
+        Row: {
+          assunto_cnj_codigo: string | null
+          assunto_nome: string
+          created_at: string | null
+          id: string
+          processo_id: string
+        }
+        Insert: {
+          assunto_cnj_codigo?: string | null
+          assunto_nome: string
+          created_at?: string | null
+          id?: string
+          processo_id: string
+        }
+        Update: {
+          assunto_cnj_codigo?: string | null
+          assunto_nome?: string
+          created_at?: string | null
+          id?: string
+          processo_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processo_assuntos_processo_id_fkey"
+            columns: ["processo_id"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processo_movimentacoes: {
+        Row: {
+          created_at: string | null
+          data_movimento: string | null
+          id: string
+          movimento_cnj_codigo: string | null
+          movimento_descricao: string | null
+          movimento_titulo: string
+          ordem: number | null
+          processo_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          data_movimento?: string | null
+          id?: string
+          movimento_cnj_codigo?: string | null
+          movimento_descricao?: string | null
+          movimento_titulo: string
+          ordem?: number | null
+          processo_id: string
+        }
+        Update: {
+          created_at?: string | null
+          data_movimento?: string | null
+          id?: string
+          movimento_cnj_codigo?: string | null
+          movimento_descricao?: string | null
+          movimento_titulo?: string
+          ordem?: number | null
+          processo_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processo_movimentacoes_processo_id_fkey"
+            columns: ["processo_id"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       processos: {
         Row: {
           advogado_responsavel: string | null
+          ajuizado_em: string | null
+          classe_cnj_codigo: string | null
+          classe_cnj_nome: string | null
           cliente_id: string | null
           created_at: string | null
+          fonte_raw: Json | null
           frequencia_notificacao_dias: number | null
+          grau_formato: string | null
           id: string
           notificacao_ativa: boolean | null
           numero_processo: string | null
+          orgao_julgador: string | null
+          sigilo: string | null
+          sistema: string | null
           status: string | null
           titulo_acao: string | null
+          tribunal: string | null
+          ultima_atualizacao: string | null
           ultima_notificacao_at: string | null
+          updated_at: string | null
         }
         Insert: {
           advogado_responsavel?: string | null
+          ajuizado_em?: string | null
+          classe_cnj_codigo?: string | null
+          classe_cnj_nome?: string | null
           cliente_id?: string | null
           created_at?: string | null
+          fonte_raw?: Json | null
           frequencia_notificacao_dias?: number | null
+          grau_formato?: string | null
           id?: string
           notificacao_ativa?: boolean | null
           numero_processo?: string | null
+          orgao_julgador?: string | null
+          sigilo?: string | null
+          sistema?: string | null
           status?: string | null
           titulo_acao?: string | null
+          tribunal?: string | null
+          ultima_atualizacao?: string | null
           ultima_notificacao_at?: string | null
+          updated_at?: string | null
         }
         Update: {
           advogado_responsavel?: string | null
+          ajuizado_em?: string | null
+          classe_cnj_codigo?: string | null
+          classe_cnj_nome?: string | null
           cliente_id?: string | null
           created_at?: string | null
+          fonte_raw?: Json | null
           frequencia_notificacao_dias?: number | null
+          grau_formato?: string | null
           id?: string
           notificacao_ativa?: boolean | null
           numero_processo?: string | null
+          orgao_julgador?: string | null
+          sigilo?: string | null
+          sistema?: string | null
           status?: string | null
           titulo_acao?: string | null
+          tribunal?: string | null
+          ultima_atualizacao?: string | null
           ultima_notificacao_at?: string | null
+          updated_at?: string | null
         }
         Relationships: [
           {
