@@ -109,7 +109,19 @@ const TRIBUNAIS: Record<string, string> = {
 };
 
 // Lista de tribunais para busca por CPF (busca em múltiplos)
-const TRIBUNAIS_PARA_BUSCA_CPF = ['trt11', 'tjam', 'trf1'];
+// Obs: aumentar cobertura implica mais requisições; mantemos um conjunto amplo dos mais comuns.
+const TRIBUNAIS_PARA_BUSCA_CPF = [
+  'trt11',
+  'tjam',
+  'trf1',
+  'trf2',
+  'trf3',
+  'tjmg',
+  'tjrj',
+  'tjsp',
+  'tjrs',
+  'tjpr',
+];
 
 // Detecta se a entrada é CPF (11 dígitos numéricos)
 function isCPF(input: string): boolean {

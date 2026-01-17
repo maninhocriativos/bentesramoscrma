@@ -380,7 +380,7 @@ export function ConsultaProcessoExterno() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Busca processos por CPF em TRT11, TJAM e TRF1
+              Busca processos por CPF em TRT11, TJAM, TRF1-3, TJMG, TJRJ, TJSP, TJRS e TJPR
             </p>
           </TabsContent>
         </Tabs>
