@@ -1,0 +1,428 @@
+import "npm:@supabase/supabase-js@2";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const DATAJUD_API_KEY = Deno.env.get('DATAJUD_API_KEY');
+const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY');
+
+// Lista de tribunais disponíveis
+const TRIBUNAIS: Record<string, string> = {
+  'trt1': 'api_publica_trt1', 'trt2': 'api_publica_trt2', 'trt3': 'api_publica_trt3',
+  'trt4': 'api_publica_trt4', 'trt5': 'api_publica_trt5', 'trt6': 'api_publica_trt6',
+  'trt7': 'api_publica_trt7', 'trt8': 'api_publica_trt8', 'trt9': 'api_publica_trt9',
+  'trt10': 'api_publica_trt10', 'trt11': 'api_publica_trt11', 'trt12': 'api_publica_trt12',
+  'trt13': 'api_publica_trt13', 'trt14': 'api_publica_trt14', 'trt15': 'api_publica_trt15',
+  'trt16': 'api_publica_trt16', 'trt17': 'api_publica_trt17', 'trt18': 'api_publica_trt18',
+  'trt19': 'api_publica_trt19', 'trt20': 'api_publica_trt20', 'trt21': 'api_publica_trt21',
+  'trt22': 'api_publica_trt22', 'trt23': 'api_publica_trt23', 'trt24': 'api_publica_trt24',
+  'tjac': 'api_publica_tjac', 'tjal': 'api_publica_tjal', 'tjam': 'api_publica_tjam',
+  'tjap': 'api_publica_tjap', 'tjba': 'api_publica_tjba', 'tjce': 'api_publica_tjce',
+  'tjdft': 'api_publica_tjdft', 'tjes': 'api_publica_tjes', 'tjgo': 'api_publica_tjgo',
+  'tjma': 'api_publica_tjma', 'tjmg': 'api_publica_tjmg', 'tjms': 'api_publica_tjms',
+  'tjmt': 'api_publica_tjmt', 'tjpa': 'api_publica_tjpa', 'tjpb': 'api_publica_tjpb',
+  'tjpe': 'api_publica_tjpe', 'tjpi': 'api_publica_tjpi', 'tjpr': 'api_publica_tjpr',
+  'tjrj': 'api_publica_tjrj', 'tjrn': 'api_publica_tjrn', 'tjro': 'api_publica_tjro',
+  'tjrr': 'api_publica_tjrr', 'tjrs': 'api_publica_tjrs', 'tjsc': 'api_publica_tjsc',
+  'tjse': 'api_publica_tjse', 'tjsp': 'api_publica_tjsp', 'tjto': 'api_publica_tjto',
+  'trf1': 'api_publica_trf1', 'trf2': 'api_publica_trf2', 'trf3': 'api_publica_trf3',
+  'trf4': 'api_publica_trf4', 'trf5': 'api_publica_trf5', 'trf6': 'api_publica_trf6',
+  'stj': 'api_publica_stj', 'tst': 'api_publica_tst',
+};
+
+// Detecta tribunal pelo número do processo
+function detectarTribunal(numeroProcesso: string): string | null {
+  const match = numeroProcesso.match(/\d{7}-\d{2}\.\d{4}\.(\d)\.(\d{2})\.\d{4}/);
+  if (!match) return null;
+  
+  const justica = match[1];
+  const tribunal = match[2];
+  
+  if (justica === '5') {
+    const trtNum = parseInt(tribunal);
+    if (trtNum >= 1 && trtNum <= 24) return `trt${trtNum}`;
+  }
+  
+  if (justica === '4') {
+    const trfNum = parseInt(tribunal);
+    if (trfNum >= 1 && trfNum <= 6) return `trf${trfNum}`;
+  }
+  
+  if (justica === '8') {
+    const tjNum = parseInt(tribunal);
+    const TJ_CODES: Record<number, string> = {
+      1: 'tjac', 2: 'tjal', 3: 'tjap', 4: 'tjam', 5: 'tjba',
+      6: 'tjce', 7: 'tjdft', 8: 'tjes', 9: 'tjgo', 10: 'tjma',
+      11: 'tjmt', 12: 'tjms', 13: 'tjmg', 14: 'tjpa', 15: 'tjpb',
+      16: 'tjpr', 17: 'tjpe', 18: 'tjpi', 19: 'tjrj', 20: 'tjrn',
+      21: 'tjrs', 22: 'tjro', 23: 'tjrr', 24: 'tjsc', 25: 'tjsp',
+      26: 'tjse', 27: 'tjto'
+    };
+    if (TJ_CODES[tjNum]) return TJ_CODES[tjNum];
+  }
+  
+  return null;
+}
+
+// Formata data
+function formatarData(dataStr: string | null | undefined): string {
+  if (!dataStr) return 'Não informado';
+  try {
+    if (dataStr.includes('-')) {
+      const date = new Date(dataStr);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString('pt-BR', { 
+          day: '2-digit', month: '2-digit', year: 'numeric',
+          timeZone: 'America/Sao_Paulo'
+        });
+      }
+    }
+    if (dataStr.includes('/')) return dataStr;
+  } catch { /* ignore */ }
+  return dataStr;
+}
+
+// Determina status do processo
+function determinarStatus(processo: any): string {
+  if (processo.situacao) return processo.situacao;
+  const movimentos = processo.movimentos || [];
+  if (movimentos.length > 0) {
+    const ultima = movimentos[0].nome?.toLowerCase() || '';
+    if (ultima.includes('arquiv')) return 'Arquivado';
+    if (ultima.includes('baixa') || ultima.includes('trânsito')) return 'Transitado em Julgado';
+    if (ultima.includes('sentença')) return 'Com Sentença';
+    if (ultima.includes('suspen')) return 'Suspenso';
+    if (ultima.includes('recurso') || ultima.includes('apelação')) return 'Em Grau Recursal';
+    if (ultima.includes('audiência')) return 'Aguardando Audiência';
+    if (ultima.includes('conclus')) return 'Concluso para Decisão';
+  }
+  return 'Em Andamento';
+}
+
+// Busca processo no DataJud
+async function buscarProcesso(numeroProcesso: string, tribunal: string): Promise<any> {
+  if (!DATAJUD_API_KEY) throw new Error('DATAJUD_API_KEY não configurada');
+  
+  const apiName = TRIBUNAIS[tribunal];
+  if (!apiName) throw new Error(`Tribunal ${tribunal} não suportado`);
+  
+  const url = `https://api-publica.datajud.cnj.jus.br/${apiName}/_search`;
+  const numeroLimpo = numeroProcesso.replace(/[^\d]/g, '');
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `APIKey ${DATAJUD_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      query: { match: { numeroProcesso: numeroLimpo } },
+      size: 1
+    }),
+  });
+  
+  if (!response.ok) throw new Error(`Erro na API: ${response.status}`);
+  return await response.json();
+}
+
+// Formata mensagem de atualização para o lead
+function formatarMensagemAtualizacao(processo: any, nomeCliente: string): string {
+  const status = determinarStatus(processo);
+  const classe = processo.classe?.nome || 'Não informado';
+  const ultimaMovimentacao = processo.movimentos?.[0];
+  
+  let mensagem = `📋 *Atualização do seu Processo*\n\n`;
+  mensagem += `Olá, ${nomeCliente}!\n\n`;
+  mensagem += `Segue a atualização semanal do seu processo:\n\n`;
+  mensagem += `📌 *Número:* ${processo.numeroProcesso}\n`;
+  mensagem += `📁 *Classe:* ${classe}\n`;
+  mensagem += `📊 *Status Atual:* ${status}\n\n`;
+  
+  if (ultimaMovimentacao) {
+    mensagem += `🔄 *Última Movimentação:*\n`;
+    mensagem += `📅 Data: ${formatarData(ultimaMovimentacao.dataHora)}\n`;
+    mensagem += `📝 ${ultimaMovimentacao.nome || 'Movimentação'}\n`;
+    if (ultimaMovimentacao.complementosTabelados?.length > 0) {
+      const complemento = ultimaMovimentacao.complementosTabelados.map((c: any) => c.nome).join(', ');
+      mensagem += `ℹ️ ${complemento}\n`;
+    }
+  }
+  
+  mensagem += `\n💼 *Bentes & Ramos Advocacia*\n`;
+  mensagem += `Qualquer dúvida, estamos à disposição!`;
+  
+  return mensagem;
+}
+
+// Envia mensagem via ManyChat
+async function enviarMensagemManyChat(subscriberId: string, mensagem: string): Promise<boolean> {
+  if (!MANYCHAT_API_KEY) {
+    console.log('⚠️ MANYCHAT_API_KEY não configurada');
+    return false;
+  }
+  
+  try {
+    const response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        subscriber_id: subscriberId,
+        data: {
+          version: "v2",
+          content: {
+            messages: [{ type: "text", text: mensagem }]
+          }
+        },
+        message_tag: "ACCOUNT_UPDATE"
+      }),
+    });
+    
+    return response.ok;
+  } catch (error) {
+    console.error('❌ Erro ao enviar ManyChat:', error);
+    return false;
+  }
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { action, lead_id, numero_processo, subscriber_id } = await req.json();
+    
+    // Ação: Consulta de processo sob demanda (quando lead pede)
+    if (action === 'consultar_para_lead') {
+      console.log(`🔍 Consultando processo ${numero_processo} para lead ${lead_id}`);
+      
+      if (!numero_processo) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Número do processo não informado' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Buscar dados do lead
+      const { data: lead } = await supabase
+        .from('leads_juridicos')
+        .select('nome')
+        .eq('id', lead_id)
+        .single();
+      
+      // Detectar tribunal
+      let tribunal = detectarTribunal(numero_processo);
+      if (!tribunal) tribunal = 'tjam'; // Default
+      
+      try {
+        const resultado = await buscarProcesso(numero_processo, tribunal);
+        
+        if (!resultado.hits || resultado.hits.total.value === 0) {
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              mensagem: `Não encontrei o processo ${numero_processo} no ${tribunal.toUpperCase()}. Verifique o número e tente novamente.` 
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        const processo = resultado.hits.hits[0]._source;
+        const mensagem = formatarMensagemAtualizacao(processo, lead?.nome || 'Cliente');
+        
+        // Registrar evento
+        await supabase.from('system_events').insert({
+          tipo: 'processo',
+          fonte: 'isa_consulta',
+          acao: 'processo_consultado_lead',
+          lead_id,
+          dados: { numero_processo, tribunal, status: determinarStatus(processo) },
+        });
+        
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            mensagem,
+            dados: {
+              numero: processo.numeroProcesso,
+              classe: processo.classe?.nome,
+              status: determinarStatus(processo),
+              tribunal: tribunal.toUpperCase(),
+              ultimaMovimentacao: processo.movimentos?.[0]
+            }
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (err) {
+        console.error('❌ Erro ao consultar processo:', err);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            mensagem: 'Ocorreu um erro ao consultar o processo. Tente novamente mais tarde.' 
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+    
+    // Ação: Monitoramento automático (cron job a cada 7 dias)
+    if (action === 'monitor_semanal') {
+      console.log('📋 Iniciando monitoramento semanal de processos...');
+      
+      // Buscar todos os processos ativos com leads vinculados
+      const { data: processos } = await supabase
+        .from('processos')
+        .select(`
+          id,
+          numero_processo,
+          titulo_acao,
+          status,
+          cliente_id,
+          leads_juridicos!inner (
+            id,
+            nome,
+            telefone
+          )
+        `)
+        .in('status', ['Em Andamento', 'Suspenso'])
+        .not('numero_processo', 'is', null);
+      
+      if (!processos || processos.length === 0) {
+        console.log('📭 Nenhum processo ativo para monitorar');
+        return new Response(
+          JSON.stringify({ success: true, processados: 0, mensagem: 'Nenhum processo ativo' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      console.log(`📊 ${processos.length} processos para monitorar`);
+      
+      let enviados = 0;
+      let erros = 0;
+      
+      for (const proc of processos) {
+        if (!proc.numero_processo) continue;
+        
+        const leadId = proc.cliente_id;
+        const lead = proc.leads_juridicos as any;
+        
+        try {
+          // Detectar tribunal e buscar dados atualizados
+          let tribunal = detectarTribunal(proc.numero_processo);
+          if (!tribunal) tribunal = 'tjam';
+          
+          const resultado = await buscarProcesso(proc.numero_processo, tribunal);
+          
+          if (resultado.hits && resultado.hits.total.value > 0) {
+            const processoAtualizado = resultado.hits.hits[0]._source;
+            const novoStatus = determinarStatus(processoAtualizado);
+            
+            // Verificar se houve movimentação recente (últimos 7 dias)
+            const ultimaMovimentacao = processoAtualizado.movimentos?.[0];
+            let houveMudanca = false;
+            
+            if (ultimaMovimentacao?.dataHora) {
+              const dataMovimentacao = new Date(ultimaMovimentacao.dataHora);
+              const seteDiasAtras = new Date();
+              seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
+              houveMudanca = dataMovimentacao > seteDiasAtras;
+            }
+            
+            // Atualizar status do processo no banco se mudou
+            if (novoStatus !== proc.status) {
+              await supabase
+                .from('processos')
+                .update({ status: novoStatus })
+                .eq('id', proc.id);
+            }
+            
+            // Buscar subscriber_id do lead para enviar mensagem
+            const { data: subscriber } = await supabase
+              .from('manychat_subscribers')
+              .select('subscriber_id')
+              .eq('lead_id', leadId)
+              .maybeSingle();
+            
+            if (subscriber?.subscriber_id) {
+              // Gerar mensagem personalizada
+              const mensagem = formatarMensagemAtualizacao(processoAtualizado, lead?.nome || 'Cliente');
+              
+              // Enviar via ManyChat
+              const enviado = await enviarMensagemManyChat(subscriber.subscriber_id, mensagem);
+              
+              if (enviado) {
+                enviados++;
+                console.log(`✅ Atualização enviada para ${lead?.nome} (${proc.numero_processo})`);
+                
+                // Registrar evento
+                await supabase.from('system_events').insert({
+                  tipo: 'processo',
+                  fonte: 'isa_monitor',
+                  acao: 'atualizacao_processo_enviada',
+                  lead_id: leadId,
+                  dados: { 
+                    numero_processo: proc.numero_processo, 
+                    status: novoStatus,
+                    houve_mudanca: houveMudanca
+                  },
+                });
+                
+                // Registrar interação
+                await supabase.from('interacoes').insert({
+                  cliente_id: leadId,
+                  tipo: 'Mensagem',
+                  resumo: `Atualização semanal do processo ${proc.numero_processo}`,
+                  detalhes: `Status: ${novoStatus}. ${houveMudanca ? 'Houve movimentação recente.' : 'Sem novas movimentações.'}`,
+                  direcao: 'saida',
+                });
+              }
+            }
+          }
+          
+          // Delay entre requisições para não sobrecarregar a API
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+        } catch (err) {
+          console.error(`❌ Erro ao processar ${proc.numero_processo}:`, err);
+          erros++;
+        }
+      }
+      
+      console.log(`📊 Monitoramento concluído: ${enviados} atualizações enviadas, ${erros} erros`);
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          processados: processos.length,
+          enviados,
+          erros
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    return new Response(
+      JSON.stringify({ error: 'Ação não reconhecida' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+    
+  } catch (error: unknown) {
+    console.error('❌ Erro na função:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Erro interno';
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});

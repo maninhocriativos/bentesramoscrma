@@ -12,14 +12,32 @@ interface ProcessoResponse {
   assuntos: string[];
   tribunal: string;
   dataAjuizamento: string;
+  // Campos adicionais detalhados
+  grau: string;
+  nivelSigilo: string;
+  formato: string;
+  sistemaProcessual: string;
+  orgaoJulgador: string;
+  status: string;
+  ultimaAtualizacao: string;
+  valorCausa: number | null;
+  prioridade: string[];
   movimentos: Array<{
     dataHora: string;
     nome: string;
     complemento?: string;
+    codigo?: number;
   }>;
   partes: Array<{
     nome: string;
     tipo: string;
+    polo: string;
+    tipoPessoa: string;
+    documento?: string;
+    advogados?: Array<{
+      nome: string;
+      oab?: string;
+    }>;
   }>;
 }
 
@@ -261,22 +279,150 @@ async function buscarPorCPF(cpf: string, tribunais: string[]): Promise<any[]> {
   return resultados;
 }
 
+// Formata data de diferentes formatos possíveis
+function formatarData(dataStr: string | null | undefined): string {
+  if (!dataStr) return 'Não informado';
+  
+  // Tenta diferentes formatos
+  try {
+    // Formato ISO: 2023-10-17T00:00:00.000Z ou 2023-10-17
+    if (dataStr.includes('-')) {
+      const date = new Date(dataStr);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString('pt-BR', { 
+          day: '2-digit', 
+          month: '2-digit', 
+          year: 'numeric',
+          timeZone: 'America/Sao_Paulo'
+        });
+      }
+    }
+    // Formato dd/mm/yyyy
+    if (dataStr.includes('/')) {
+      return dataStr;
+    }
+    // Formato timestamp em ms
+    const timestamp = parseInt(dataStr);
+    if (!isNaN(timestamp)) {
+      const date = new Date(timestamp);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString('pt-BR', { 
+          day: '2-digit', 
+          month: '2-digit', 
+          year: 'numeric',
+          timeZone: 'America/Sao_Paulo'
+        });
+      }
+    }
+  } catch (e) {
+    console.error('Erro ao formatar data:', e);
+  }
+  
+  return dataStr;
+}
+
+// Determina o status do processo baseado nas movimentações e campos
+function determinarStatus(processo: any): string {
+  // Verificar campo situação se existir
+  if (processo.situacao) return processo.situacao;
+  
+  // Verificar última movimentação para inferir status
+  const movimentos = processo.movimentos || [];
+  if (movimentos.length > 0) {
+    const ultimaMovimentacao = movimentos[0].nome?.toLowerCase() || '';
+    
+    if (ultimaMovimentacao.includes('arquiv')) return 'Arquivado';
+    if (ultimaMovimentacao.includes('baixa') || ultimaMovimentacao.includes('trânsito em julgado')) return 'Transitado em Julgado';
+    if (ultimaMovimentacao.includes('sentença')) return 'Com Sentença';
+    if (ultimaMovimentacao.includes('suspen')) return 'Suspenso';
+    if (ultimaMovimentacao.includes('recurso') || ultimaMovimentacao.includes('apelação')) return 'Em Grau Recursal';
+    if (ultimaMovimentacao.includes('audiência')) return 'Aguardando Audiência';
+    if (ultimaMovimentacao.includes('pericia') || ultimaMovimentacao.includes('perícia')) return 'Em Perícia';
+    if (ultimaMovimentacao.includes('conclus')) return 'Concluso para Decisão';
+    if (ultimaMovimentacao.includes('citação') || ultimaMovimentacao.includes('intimação')) return 'Aguardando Citação/Intimação';
+    if (ultimaMovimentacao.includes('distribuí')) return 'Distribuído';
+  }
+  
+  return 'Em Andamento';
+}
+
 function formatarProcesso(processo: any, tribunalFallback: string): ProcessoResponse {
+  // Extrair última atualização das movimentações
+  const movimentos = processo.movimentos || [];
+  const ultimaAtualizacao = movimentos.length > 0 ? movimentos[0].dataHora : null;
+  
+  // Extrair prioridades
+  const prioridades: string[] = [];
+  if (processo.prioridades) {
+    prioridades.push(...processo.prioridades.map((p: any) => p.nome || p));
+  }
+  
+  // Mapear grau do processo
+  const grauMap: Record<string, string> = {
+    'G1': '1º Grau',
+    'G2': '2º Grau', 
+    'SUP': 'Superior',
+    'ORI': 'Originário'
+  };
+  
+  // Mapear polo das partes
+  const poloMap: Record<string, string> = {
+    'AT': 'Autor',
+    'PA': 'Autor', 
+    'AUTOR': 'Autor',
+    'RÉU': 'Réu',
+    'REU': 'Réu',
+    'PP': 'Réu',
+    'PASSIVE': 'Réu',
+    'TE': 'Terceiro',
+    'TERCEIRO': 'Terceiro',
+    'VI': 'Vítima',
+    'FL': 'Falido'
+  };
+  
   return {
     numeroProcesso: processo.numeroProcesso,
-    classe: processo.classe?.nome || 'Não informado',
-    assuntos: processo.assuntos?.map((a: any) => a.nome) || [],
-    tribunal: processo.tribunal || tribunalFallback.toUpperCase(),
-    dataAjuizamento: processo.dataAjuizamento,
-    movimentos: (processo.movimentos || []).slice(0, 10).map((m: any) => ({
-      dataHora: m.dataHora,
-      nome: m.nome,
-      complemento: m.complementosTabelados?.map((c: any) => c.nome).join(', ') || undefined
+    classe: processo.classe?.nome || processo.classeProcessual?.nome || 'Não informado',
+    assuntos: (processo.assuntos || processo.assuntosProcessuais || []).map((a: any) => a.nome || a),
+    tribunal: processo.tribunal || processo.siglaTribunal || tribunalFallback.toUpperCase(),
+    dataAjuizamento: formatarData(processo.dataAjuizamento || processo.dataDistribuicao || processo.dataHoraUltimaAtualizacao),
+    // Campos detalhados
+    grau: grauMap[processo.grau] || processo.grau || '1º Grau',
+    nivelSigilo: processo.nivelSigilo === 0 ? 'Público' : processo.nivelSigilo === 1 ? 'Segredo de Justiça' : `Nível ${processo.nivelSigilo || 0}`,
+    formato: processo.formato?.nome || processo.formato || 'Eletrônico',
+    sistemaProcessual: processo.sistema?.nome || processo.sistemaProcessual || 'PJe',
+    orgaoJulgador: processo.orgaoJulgador?.nome || processo.vara || processo.unidadeJudiciaria?.nome || 'Não informado',
+    status: determinarStatus(processo),
+    ultimaAtualizacao: formatarData(ultimaAtualizacao),
+    valorCausa: processo.valorCausa || null,
+    prioridade: prioridades,
+    movimentos: movimentos.slice(0, 15).map((m: any) => ({
+      dataHora: formatarData(m.dataHora),
+      nome: m.nome || m.movimentoNacional?.nome || 'Movimentação',
+      complemento: m.complementosTabelados?.map((c: any) => c.nome || c.descricao).join(', ') 
+        || m.complemento 
+        || undefined,
+      codigo: m.codigo || m.movimentoNacional?.codigo
     })),
-    partes: (processo.partes || []).map((p: any) => ({
-      nome: p.nome || 'Nome não informado',
-      tipo: p.polo === 'PA' ? 'Autor' : p.polo === 'PP' ? 'Réu' : p.polo
-    }))
+    partes: (processo.partes || []).map((p: any) => {
+      // Extrair advogados da parte
+      const advogados = (p.advogados || []).map((adv: any) => ({
+        nome: adv.nome || 'Advogado não identificado',
+        oab: adv.inscricao ? `OAB/${adv.inscricao.unidadeFederativa || ''} ${adv.inscricao.numero || ''}`.trim() : undefined
+      }));
+      
+      const poloOriginal = (p.polo || p.tipoParte || '').toUpperCase();
+      
+      return {
+        nome: p.nome || p.pessoa?.nome || 'Nome não informado',
+        tipo: poloMap[poloOriginal] || p.polo || 'Parte',
+        polo: p.polo || 'Não informado',
+        tipoPessoa: p.tipoPessoa === 'FISICA' || p.pessoa?.tipoPessoa === 'FISICA' ? 'Pessoa Física' : 
+                    p.tipoPessoa === 'JURIDICA' || p.pessoa?.tipoPessoa === 'JURIDICA' ? 'Pessoa Jurídica' : 'Não informado',
+        documento: p.numeroDocumentoPrincipal || p.pessoa?.numeroDocumentoPrincipal || undefined,
+        advogados: advogados.length > 0 ? advogados : undefined
+      };
+    })
   };
 }
 

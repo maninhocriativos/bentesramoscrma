@@ -77,3 +77,6 @@ verify_jwt = false
 
 [functions.isa-multimodal]
 verify_jwt = false
+
+[functions.processo-status-monitor]
+verify_jwt = false
