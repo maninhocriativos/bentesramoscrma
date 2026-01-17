@@ -3,11 +3,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Loader2, Scale, Calendar, Users, FileText, AlertCircle, User, Building, Gavel, Clock, DollarSign, Shield, Briefcase, ChevronRight, Save, CheckCircle2 } from 'lucide-react';
+import { Search, Loader2, Scale, Calendar, Users, FileText, AlertCircle, User, Building, Gavel, Clock, DollarSign, Shield, Briefcase, ChevronRight, Save, CheckCircle2, BadgeCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MovimentoDetailModal } from './MovimentoDetailModal';
+import { usePerfil } from '@/hooks/usePerfil';
 
 interface Assunto {
   nome: string;
@@ -68,6 +69,8 @@ export function ConsultaProcessoExterno() {
   const [selectedMovimento, setSelectedMovimento] = useState<Movimento | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tempoConsulta, setTempoConsulta] = useState<number | null>(null);
+
+  const { fullName } = usePerfil();
 
   const formatCPF = (value: string) => {
     const digits = value.replace(/\D/g, '').slice(0, 11);
@@ -130,11 +133,12 @@ export function ConsultaProcessoExterno() {
   const handleImportar = async (proc: ProcessoExterno) => {
     setSaving(true);
     try {
-      const { data, error } = await supabase.functions.invoke('consulta-processos', { 
-        body: { 
+      const { data, error } = await supabase.functions.invoke('consulta-processos', {
+        body: {
           numeroProcesso: proc.numeroProcesso,
-          persistir: true 
-        } 
+          persistir: true,
+          advogadoResponsavel: fullName,
+        }
       });
 
       if (error) throw error;
@@ -297,33 +301,61 @@ export function ConsultaProcessoExterno() {
             <p className="text-sm font-medium">Partes do Processo ({proc.partes.length})</p>
           </div>
           <div className="space-y-3">
-            {proc.partes.slice(0, 8).map((parte, i) => (
-              <div key={i} className="p-2 bg-background/50 rounded border">
-                <div className="flex justify-between items-start mb-1">
-                  <span className="font-medium text-sm">{parte.nome}</span>
-                  <div className="flex gap-1">
-                    <Badge variant="outline" className="text-xs">{parte.tipo}</Badge>
-                    <Badge variant="secondary" className="text-xs">{parte.tipoPessoa}</Badge>
+            {proc.partes.slice(0, 8).map((parte, i) => {
+              const tipoLower = (parte.tipo || '').toLowerCase();
+              const poloVariant = tipoLower.includes('autor')
+                ? 'success'
+                : tipoLower.includes('réu') || tipoLower.includes('reu')
+                  ? 'destructive'
+                  : 'secondary';
+
+              const poloClasses =
+                poloVariant === 'success'
+                  ? 'bg-success/15 text-success border-success/30'
+                  : poloVariant === 'destructive'
+                    ? 'bg-destructive/15 text-destructive border-destructive/30'
+                    : 'bg-secondary/25 text-secondary-foreground border-secondary/30';
+
+              return (
+                <div key={i} className="p-2 bg-background/50 rounded border">
+                  <div className="flex justify-between items-start mb-1 gap-2">
+                    <div className="min-w-0">
+                      <span className="font-medium text-sm line-clamp-1">{parte.nome}</span>
+                    </div>
+                    <div className="flex gap-1 flex-wrap justify-end">
+                      <Badge variant="outline" className={`text-xs ${poloClasses}`}>{parte.tipo}</Badge>
+                      <Badge variant="secondary" className="text-xs">{parte.tipoPessoa}</Badge>
+                    </div>
                   </div>
-                </div>
-                {parte.documento && (
-                  <p className="text-xs text-muted-foreground">Doc: {parte.documento}</p>
-                )}
-                {parte.advogados && parte.advogados.length > 0 && (
-                  <div className="mt-2 pl-3 border-l-2 border-primary/30">
-                    <p className="text-xs text-muted-foreground mb-1">
-                      <Briefcase className="h-3 w-3 inline mr-1" />
-                      Advogado(s):
-                    </p>
-                    {parte.advogados.map((adv, j) => (
-                      <p key={j} className="text-xs">
-                        {adv.nome} {adv.oab && <span className="text-muted-foreground">({adv.oab})</span>}
+
+                  {parte.documento && (
+                    <p className="text-xs text-muted-foreground">Doc: {parte.documento}</p>
+                  )}
+
+                  {parte.advogados && parte.advogados.length > 0 && (
+                    <div className="mt-2 pl-3 border-l-2 border-primary/30">
+                      <p className="text-xs text-muted-foreground mb-1 inline-flex items-center gap-1">
+                        <Briefcase className="h-3 w-3" />
+                        Advogado(s)
                       </p>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+                      <div className="space-y-1">
+                        {parte.advogados.map((adv, j) => (
+                          <div key={j} className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium">{adv.nome}</p>
+                            {adv.oab && (
+                              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                <BadgeCheck className="h-3 w-3 text-primary" />
+                                {adv.oab}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

@@ -54,9 +54,14 @@ export function useProcessos() {
         { event: 'INSERT', schema: 'public', table: 'processos' },
         (payload) => {
           console.log('🟢 Processo INSERT:', payload.new);
-          setProcessos(prev => {
-            if (prev.some(p => p.id === (payload.new as Processo).id)) return prev;
-            return [payload.new as Processo, ...prev];
+          const next = payload.new as Processo;
+
+          // respeita o filtro do advogado (mesma regra do fetch)
+          if (isAdvogado && perfil?.nome && next.advogado_responsavel !== perfil.nome) return;
+
+          setProcessos((prev) => {
+            if (prev.some((p) => p.id === next.id)) return prev;
+            return [next, ...prev];
           });
         }
       )
@@ -65,11 +70,16 @@ export function useProcessos() {
         { event: 'UPDATE', schema: 'public', table: 'processos' },
         (payload) => {
           console.log('🟡 Processo UPDATE:', payload.new);
-          setProcessos(prev => 
-            prev.map(p => 
-              p.id === (payload.new as Processo).id ? (payload.new as Processo) : p
-            )
-          );
+          const next = payload.new as Processo;
+
+          // respeita o filtro do advogado (mesma regra do fetch)
+          if (isAdvogado && perfil?.nome && next.advogado_responsavel !== perfil.nome) return;
+
+          setProcessos((prev) => {
+            const exists = prev.some((p) => p.id === next.id);
+            if (!exists) return [next, ...prev];
+            return prev.map((p) => (p.id === next.id ? next : p));
+          });
         }
       )
       .on(
@@ -77,7 +87,7 @@ export function useProcessos() {
         { event: 'DELETE', schema: 'public', table: 'processos' },
         (payload) => {
           console.log('🔴 Processo DELETE:', payload.old);
-          setProcessos(prev => prev.filter(p => p.id !== (payload.old as Processo).id));
+          setProcessos((prev) => prev.filter((p) => p.id !== (payload.old as Processo).id));
         }
       )
       .subscribe((status) => {
@@ -87,7 +97,7 @@ export function useProcessos() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [isAdvogado, perfil?.nome]);
 
   const createProcesso = async (processo: Partial<Omit<Processo, 'id' | 'created_at'>>) => {
     const { data, error } = await supabase

@@ -629,7 +629,7 @@ serve(async (req) => {
   const startTime = Date.now();
 
   try {
-    const { numeroProcesso, cpf, tribunal, persistir } = await req.json();
+    const { numeroProcesso, cpf, tribunal, persistir, advogadoResponsavel } = await req.json();
     
     // Criar cliente Supabase para persistência
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -757,7 +757,9 @@ serve(async (req) => {
         const { data: processoDb, error: processoError } = await supabase
           .from('processos')
           .upsert({
-            numero_processo: processoFormatado.numeroProcesso,
+            // usa o número digitado pelo usuário (mantém máscara/pontuação), para bater com a busca do sistema
+            numero_processo: numeroLimpo,
+            advogado_responsavel: advogadoResponsavel || null,
             tribunal: processoFormatado.tribunal,
             sistema: processoFormatado.sistemaProcessual,
             sigilo: processoFormatado.nivelSigilo,
@@ -771,7 +773,7 @@ serve(async (req) => {
             ultima_atualizacao: parseDataParaTimestamp(processoRaw.movimentos?.[0]?.dataHora),
             fonte_raw: processoRaw,
             updated_at: new Date().toISOString()
-          }, { 
+          }, {
             onConflict: 'numero_processo',
             ignoreDuplicates: false
           })
