@@ -239,28 +239,39 @@ async function buscarPorCPF(cpf: string, tribunais: string[]): Promise<any[]> {
     try {
       console.log(`📡 Consultando ${tribunal.toUpperCase()}...`);
       
+      // Busca mais abrangente incluindo vários campos possíveis
+      const queryBody = {
+        query: {
+          bool: {
+            should: [
+              { match: { "partes.numeroDocumentoPrincipal": cpfLimpo } },
+              { match: { "partes.pessoa.numeroDocumentoPrincipal": cpfLimpo } },
+              { wildcard: { "partes.numeroDocumentoPrincipal": `*${cpfLimpo}*` } },
+              { term: { "partes.numeroDocumentoPrincipal": cpfLimpo } }
+            ],
+            minimum_should_match: 1
+          }
+        },
+        size: 30
+      };
+      
+      console.log(`📝 Query:`, JSON.stringify(queryBody));
+      
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `APIKey ${DATAJUD_API_KEY}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          query: {
-            bool: {
-              should: [
-                { match: { "partes.numeroDocumentoPrincipal": cpfLimpo } },
-                { match: { "partes.cpf": cpfLimpo } }
-              ],
-              minimum_should_match: 1
-            }
-          },
-          size: 20
-        }),
+        body: JSON.stringify(queryBody),
       });
+      
+      console.log(`📊 Response status ${tribunal.toUpperCase()}: ${response.status}`);
       
       if (response.ok) {
         const data = await response.json();
+        console.log(`📊 Total hits ${tribunal.toUpperCase()}: ${data.hits?.total?.value || 0}`);
+        
         if (data.hits?.hits?.length > 0) {
           console.log(`✅ Encontrados ${data.hits.hits.length} processos no ${tribunal.toUpperCase()}`);
           for (const hit of data.hits.hits) {
@@ -269,7 +280,12 @@ async function buscarPorCPF(cpf: string, tribunais: string[]): Promise<any[]> {
               tribunal: tribunal.toUpperCase()
             });
           }
+        } else {
+          console.log(`ℹ️ Nenhum processo encontrado no ${tribunal.toUpperCase()}`);
         }
+      } else {
+        const errorText = await response.text();
+        console.error(`❌ Erro ${tribunal.toUpperCase()}: ${response.status} - ${errorText}`);
       }
     } catch (err) {
       console.error(`⚠️ Erro ao consultar ${tribunal}:`, err);
