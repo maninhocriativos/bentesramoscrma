@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_prompts: {
+        Row: {
+          content: string
+          created_at: string
+          greeting_message: string | null
+          id: string
+          name: string
+          strict_mode: boolean | null
+          updated_at: string
+          updated_by: string | null
+          version: number
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          greeting_message?: string | null
+          id?: string
+          name: string
+          strict_mode?: boolean | null
+          updated_at?: string
+          updated_by?: string | null
+          version?: number
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          greeting_message?: string | null
+          id?: string
+          name?: string
+          strict_mode?: boolean | null
+          updated_at?: string
+          updated_by?: string | null
+          version?: number
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           created_at: string
@@ -469,6 +505,92 @@ export type Database = {
           },
         ]
       }
+      integration_logs: {
+        Row: {
+          created_at: string
+          direction: string
+          duration_ms: number | null
+          endpoint: string | null
+          error_message: string | null
+          id: string
+          lead_id: string | null
+          payload_json: Json | null
+          provider: string
+          response_json: Json | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          direction: string
+          duration_ms?: number | null
+          endpoint?: string | null
+          error_message?: string | null
+          id?: string
+          lead_id?: string | null
+          payload_json?: Json | null
+          provider: string
+          response_json?: Json | null
+          status: string
+        }
+        Update: {
+          created_at?: string
+          direction?: string
+          duration_ms?: number | null
+          endpoint?: string | null
+          error_message?: string | null
+          id?: string
+          lead_id?: string | null
+          payload_json?: Json | null
+          provider?: string
+          response_json?: Json | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integration_logs_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      integrations_config: {
+        Row: {
+          config_json: Json
+          created_at: string
+          id: string
+          is_active: boolean | null
+          last_test_at: string | null
+          last_test_status: string | null
+          provider: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          config_json?: Json
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_test_at?: string | null
+          last_test_status?: string | null
+          provider: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          config_json?: Json
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_test_at?: string | null
+          last_test_status?: string | null
+          provider?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       interacoes: {
         Row: {
           cliente_id: string | null
@@ -519,6 +641,175 @@ export type Database = {
             columns: ["processo_id"]
             isOneToOne: false
             referencedRelation: "processos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_classifications: {
+        Row: {
+          case_type: string
+          classified_by: string | null
+          confidence_score: number | null
+          created_at: string
+          id: string
+          lead_id: string
+          recommended_docs: string[] | null
+          sub_type: string | null
+          summary: string | null
+          updated_at: string
+        }
+        Insert: {
+          case_type: string
+          classified_by?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          id?: string
+          lead_id: string
+          recommended_docs?: string[] | null
+          sub_type?: string | null
+          summary?: string | null
+          updated_at?: string
+        }
+        Update: {
+          case_type?: string
+          classified_by?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          id?: string
+          lead_id?: string
+          recommended_docs?: string[] | null
+          sub_type?: string | null
+          summary?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_classifications_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: true
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_contract_data: {
+        Row: {
+          cep: string | null
+          cidade: string | null
+          cpf: string | null
+          created_at: string
+          dados_extras: Json | null
+          data_nascimento: string | null
+          endereco: string | null
+          estado_civil: string | null
+          id: string
+          lead_id: string
+          nacionalidade: string | null
+          nome_mae: string | null
+          profissao: string | null
+          rg: string | null
+          uf: string | null
+          updated_at: string
+        }
+        Insert: {
+          cep?: string | null
+          cidade?: string | null
+          cpf?: string | null
+          created_at?: string
+          dados_extras?: Json | null
+          data_nascimento?: string | null
+          endereco?: string | null
+          estado_civil?: string | null
+          id?: string
+          lead_id: string
+          nacionalidade?: string | null
+          nome_mae?: string | null
+          profissao?: string | null
+          rg?: string | null
+          uf?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cep?: string | null
+          cidade?: string | null
+          cpf?: string | null
+          created_at?: string
+          dados_extras?: Json | null
+          data_nascimento?: string | null
+          endereco?: string | null
+          estado_civil?: string | null
+          id?: string
+          lead_id?: string
+          nacionalidade?: string | null
+          nome_mae?: string | null
+          profissao?: string | null
+          rg?: string | null
+          uf?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_contract_data_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: true
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_docs_checklist: {
+        Row: {
+          created_at: string
+          doc_label: string
+          doc_type: string
+          file_id: string | null
+          id: string
+          is_required: boolean | null
+          lead_id: string
+          notes: string | null
+          received: boolean | null
+          received_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          doc_label: string
+          doc_type: string
+          file_id?: string | null
+          id?: string
+          is_required?: boolean | null
+          lead_id: string
+          notes?: string | null
+          received?: boolean | null
+          received_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          doc_label?: string
+          doc_type?: string
+          file_id?: string | null
+          id?: string
+          is_required?: boolean | null
+          lead_id?: string
+          notes?: string | null
+          received?: boolean | null
+          received_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_docs_checklist_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "documentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_docs_checklist_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
             referencedColumns: ["id"]
           },
         ]
@@ -633,46 +924,111 @@ export type Database = {
           },
         ]
       }
+      lead_state_history: {
+        Row: {
+          changed_by: string
+          created_at: string
+          from_state: string | null
+          id: string
+          lead_id: string
+          reason: string | null
+          to_state: string
+        }
+        Insert: {
+          changed_by?: string
+          created_at?: string
+          from_state?: string | null
+          id?: string
+          lead_id: string
+          reason?: string | null
+          to_state: string
+        }
+        Update: {
+          changed_by?: string
+          created_at?: string
+          from_state?: string | null
+          id?: string
+          lead_id?: string
+          reason?: string | null
+          to_state?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_state_history_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads_juridicos: {
         Row: {
+          contract_sent_at: string | null
+          contract_signed_at: string | null
           created_at: string
           email: string | null
           id: string
+          is_lost: boolean | null
+          last_contact_at: string | null
+          lead_state: string | null
           link_contrato: string | null
+          lost_at: string | null
+          lost_reason: string | null
           nome: string | null
           origem: string | null
           resumo_ia: string | null
+          state_updated_at: string | null
           status: string | null
           telefone: string | null
           tipo_acao: string | null
+          triage_started_at: string | null
           updated_at: string | null
           valor_causa: number | null
         }
         Insert: {
+          contract_sent_at?: string | null
+          contract_signed_at?: string | null
           created_at?: string
           email?: string | null
           id?: string
+          is_lost?: boolean | null
+          last_contact_at?: string | null
+          lead_state?: string | null
           link_contrato?: string | null
+          lost_at?: string | null
+          lost_reason?: string | null
           nome?: string | null
           origem?: string | null
           resumo_ia?: string | null
+          state_updated_at?: string | null
           status?: string | null
           telefone?: string | null
           tipo_acao?: string | null
+          triage_started_at?: string | null
           updated_at?: string | null
           valor_causa?: number | null
         }
         Update: {
+          contract_sent_at?: string | null
+          contract_signed_at?: string | null
           created_at?: string
           email?: string | null
           id?: string
+          is_lost?: boolean | null
+          last_contact_at?: string | null
+          lead_state?: string | null
           link_contrato?: string | null
+          lost_at?: string | null
+          lost_reason?: string | null
           nome?: string | null
           origem?: string | null
           resumo_ia?: string | null
+          state_updated_at?: string | null
           status?: string | null
           telefone?: string | null
           tipo_acao?: string | null
+          triage_started_at?: string | null
           updated_at?: string | null
           valor_causa?: number | null
         }
@@ -1615,6 +1971,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      mark_inactive_leads_as_lost: { Args: never; Returns: number }
       match_chunks: {
         Args: {
           filter_type?: string
@@ -1629,6 +1986,15 @@ export type Database = {
           model_id: string
           similarity: number
         }[]
+      }
+      update_lead_state: {
+        Args: {
+          p_changed_by?: string
+          p_lead_id: string
+          p_reason?: string
+          p_to_state: string
+        }
+        Returns: Json
       }
     }
     Enums: {

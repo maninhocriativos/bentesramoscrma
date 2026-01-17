@@ -9,7 +9,10 @@ import { UsersTable } from '@/components/configuracoes/UsersTable';
 import { SystemStatusTab } from '@/components/configuracoes/SystemStatusTab';
 import { IntegracoesTab } from '@/components/configuracoes/IntegracoesTab';
 import { OfficeSettingsTab } from '@/components/configuracoes/OfficeSettingsTab';
-import { Users, Server, Shield, Plug, Building2 } from 'lucide-react';
+import { IsaPromptEditor } from '@/components/configuracoes/IsaPromptEditor';
+import { ZApiIntegrationCard } from '@/components/configuracoes/ZApiIntegrationCard';
+import { FiqOnIntegrationCard } from '@/components/configuracoes/FiqOnIntegrationCard';
+import { Users, Server, Shield, Plug, Building2, Bot } from 'lucide-react';
 
 export default function ConfiguracoesPage() {
   const navigate = useNavigate();
@@ -85,7 +88,13 @@ export default function ConfiguracoesPage() {
               <Shield className="h-4 w-4" />
               <span className="hidden sm:inline">Permissões</span>
             </TabsTrigger>
-          </TabsList>
+            <TabsTrigger 
+              value="isa" 
+              className="rounded-lg gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground py-2.5 px-4"
+            >
+              <Bot className="h-4 w-4" />
+              <span className="hidden sm:inline">Isa IA</span>
+            </TabsTrigger>
 
           <TabsContent value="escritorio" className="animate-fade-in">
             <OfficeSettingsTab />
@@ -105,8 +114,12 @@ export default function ConfiguracoesPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="integracoes" className="animate-fade-in">
+          <TabsContent value="integracoes" className="animate-fade-in space-y-6">
             <IntegracoesTab />
+            <div className="grid gap-6 md:grid-cols-2">
+              <ZApiIntegrationCard />
+              <FiqOnIntegrationCard />
+            </div>
           </TabsContent>
 
           <TabsContent value="sistema" className="animate-fade-in">
@@ -166,8 +179,14 @@ export default function ConfiguracoesPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="isa" className="animate-fade-in">
+            <IsaPromptEditor />
+          </TabsContent>
         </Tabs>
       </div>
     </AppLayout>
+  );
+}
   );
 }
