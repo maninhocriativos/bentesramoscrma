@@ -1,5 +1,6 @@
 import "npm:@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,7 +10,8 @@ const corsHeaders = {
 interface ProcessoResponse {
   numeroProcesso: string;
   classe: string;
-  assuntos: string[];
+  classeCodigo?: string;
+  assuntos: Array<{ nome: string; codigo?: string }>;
   tribunal: string;
   dataAjuizamento: string;
   // Campos adicionais detalhados
@@ -24,6 +26,7 @@ interface ProcessoResponse {
   prioridade: string[];
   movimentos: Array<{
     dataHora: string;
+    dataHoraRaw?: string;
     nome: string;
     complemento?: string;
     codigo?: number;
@@ -39,6 +42,8 @@ interface ProcessoResponse {
       oab?: string;
     }>;
   }>;
+  // Dados brutos para debug
+  fonteRaw?: any;
 }
 
 // Lista de tribunais disponíveis na API DataJud
@@ -108,8 +113,7 @@ const TRIBUNAIS: Record<string, string> = {
   'tst': 'api_publica_tst',
 };
 
-// Lista de tribunais para busca por CPF (busca em múltiplos)
-// Obs: aumentar cobertura implica mais requisições; mantemos um conjunto amplo dos mais comuns.
+// Lista de tribunais para busca por CPF
 const TRIBUNAIS_PARA_BUSCA_CPF = [
   'trt11',
   'tjam',
@@ -138,10 +142,6 @@ function formatCPF(cpf: string): string {
 
 // Detecta tribunal pelo número do processo
 function detectarTribunal(numeroProcesso: string): string | null {
-  // Formato CNJ: NNNNNNN-DD.AAAA.J.TR.OOOO
-  // J = Justiça (5 = Trabalho, 8 = Estadual, 4 = Federal)
-  // TR = Tribunal (ex: 11 = TRT11 ou TJ da região)
-  
   const match = numeroProcesso.match(/\d{7}-\d{2}\.\d{4}\.(\d)\.(\d{2})\.\d{4}/);
   if (!match) return null;
   
@@ -164,10 +164,9 @@ function detectarTribunal(numeroProcesso: string): string | null {
     }
   }
   
-  // Justiça Estadual - mapear por código do tribunal
+  // Justiça Estadual
   if (justica === '8') {
     const tjNum = parseInt(tribunal);
-    // Mapeamento de código para sigla do TJ
     const TJ_CODES: Record<number, string> = {
       1: 'tjac', 2: 'tjal', 3: 'tjap', 4: 'tjam', 5: 'tjba',
       6: 'tjce', 7: 'tjdft', 8: 'tjes', 9: 'tjgo', 10: 'tjma',
@@ -199,9 +198,7 @@ async function buscarProcesso(numeroProcesso: string, tribunal: string): Promise
   const url = `https://api-publica.datajud.cnj.jus.br/${apiName}/_search`;
   
   console.log(`🔍 Buscando processo ${numeroProcesso} no tribunal ${tribunal}...`);
-  console.log(`📡 URL: ${url}`);
   
-  // Remover formatação do número, mantendo apenas dígitos
   const numeroLimpo = numeroProcesso.replace(/[^\d]/g, '');
   
   const response = await fetch(url, {
@@ -251,7 +248,6 @@ async function buscarPorCPF(cpf: string, tribunais: string[]): Promise<any[]> {
     try {
       console.log(`📡 Consultando ${tribunal.toUpperCase()}...`);
       
-      // Busca mais abrangente incluindo vários campos possíveis
       const queryBody = {
         query: {
           bool: {
@@ -267,8 +263,6 @@ async function buscarPorCPF(cpf: string, tribunais: string[]): Promise<any[]> {
         size: 30
       };
       
-      console.log(`📝 Query:`, JSON.stringify(queryBody));
-      
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -278,26 +272,18 @@ async function buscarPorCPF(cpf: string, tribunais: string[]): Promise<any[]> {
         body: JSON.stringify(queryBody),
       });
       
-      console.log(`📊 Response status ${tribunal.toUpperCase()}: ${response.status}`);
-      
       if (response.ok) {
         const data = await response.json();
         console.log(`📊 Total hits ${tribunal.toUpperCase()}: ${data.hits?.total?.value || 0}`);
         
         if (data.hits?.hits?.length > 0) {
-          console.log(`✅ Encontrados ${data.hits.hits.length} processos no ${tribunal.toUpperCase()}`);
           for (const hit of data.hits.hits) {
             resultados.push({
               ...hit._source,
               tribunal: tribunal.toUpperCase()
             });
           }
-        } else {
-          console.log(`ℹ️ Nenhum processo encontrado no ${tribunal.toUpperCase()}`);
         }
-      } else {
-        const errorText = await response.text();
-        console.error(`❌ Erro ${tribunal.toUpperCase()}: ${response.status} - ${errorText}`);
       }
     } catch (err) {
       console.error(`⚠️ Erro ao consultar ${tribunal}:`, err);
@@ -307,84 +293,189 @@ async function buscarPorCPF(cpf: string, tribunais: string[]): Promise<any[]> {
   return resultados;
 }
 
-// Formata data de diferentes formatos possíveis da API DataJud
-function formatarData(dataStr: string | null | undefined): string {
+// =====================================================
+// NORMALIZAÇÃO DE DATAS (CRÍTICO!)
+// Suporta múltiplos formatos: YYYYMMDDHHmmss, ISO, timestamp, BR
+// =====================================================
+function formatarData(dataStr: string | number | null | undefined): string {
   if (!dataStr) return 'Não informado';
   
   try {
     let date: Date | null = null;
+    const input = String(dataStr).trim();
     
-    // Log para debug
-    console.log(`📅 Formatando data: ${dataStr} (tipo: ${typeof dataStr})`);
+    console.log(`📅 Formatando data: ${input} (tipo: ${typeof dataStr})`);
     
-    // Se for número (timestamp em milissegundos)
-    if (typeof dataStr === 'number' || !isNaN(Number(dataStr))) {
-      const timestamp = Number(dataStr);
-      // DataJud pode retornar timestamp em ms 
-      // Verificar se é um timestamp válido (após 1970 e antes de 2100)
-      if (timestamp > 0 && timestamp < 4102444800000) {
-        date = new Date(timestamp);
+    // FORMATO 1: YYYYMMDDHHmmss (14 dígitos) - formato DataJud/Projudi
+    // Ex: 20240720203148 -> 2024-07-20 20:31:48
+    if (/^\d{14}$/.test(input)) {
+      const year = parseInt(input.substring(0, 4));
+      const month = parseInt(input.substring(4, 6)) - 1;
+      const day = parseInt(input.substring(6, 8));
+      const hour = parseInt(input.substring(8, 10));
+      const minute = parseInt(input.substring(10, 12));
+      const second = parseInt(input.substring(12, 14));
+      
+      if (year >= 1900 && year <= 2100 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+        date = new Date(year, month, day, hour, minute, second);
+        console.log(`✅ Parseado como YYYYMMDDHHmmss: ${date.toISOString()}`);
       }
     }
     
-    // Formato ISO: 2023-10-17T00:00:00.000Z ou 2023-10-17 ou 2011-05-28
-    if (!date && typeof dataStr === 'string' && dataStr.includes('-')) {
-      // Extrair apenas a parte da data (ignorar timezone issues)
-      const datePart = dataStr.split('T')[0];
+    // FORMATO 2: YYYYMMDDHHmm (12 dígitos)
+    if (!date && /^\d{12}$/.test(input)) {
+      const year = parseInt(input.substring(0, 4));
+      const month = parseInt(input.substring(4, 6)) - 1;
+      const day = parseInt(input.substring(6, 8));
+      const hour = parseInt(input.substring(8, 10));
+      const minute = parseInt(input.substring(10, 12));
+      
+      if (year >= 1900 && year <= 2100) {
+        date = new Date(year, month, day, hour, minute, 0);
+        console.log(`✅ Parseado como YYYYMMDDHHmm: ${date.toISOString()}`);
+      }
+    }
+    
+    // FORMATO 3: YYYYMMDD (8 dígitos)
+    if (!date && /^\d{8}$/.test(input)) {
+      const year = parseInt(input.substring(0, 4));
+      const month = parseInt(input.substring(4, 6)) - 1;
+      const day = parseInt(input.substring(6, 8));
+      
+      if (year >= 1900 && year <= 2100) {
+        date = new Date(year, month, day);
+        console.log(`✅ Parseado como YYYYMMDD: ${date.toISOString()}`);
+      }
+    }
+    
+    // FORMATO 4: Timestamp em milissegundos (número grande)
+    if (!date && /^\d{13}$/.test(input)) {
+      const timestamp = parseInt(input);
+      if (timestamp > 0 && timestamp < 4102444800000) {
+        date = new Date(timestamp);
+        console.log(`✅ Parseado como timestamp ms: ${date.toISOString()}`);
+      }
+    }
+    
+    // FORMATO 5: ISO 8601 (2023-10-17T00:00:00.000Z ou similar)
+    if (!date && input.includes('-') && input.length >= 10) {
+      const datePart = input.split('T')[0];
       const parts = datePart.split('-');
       if (parts.length === 3) {
         const year = parseInt(parts[0]);
-        const month = parseInt(parts[1]) - 1; // Mês é 0-indexed
+        const month = parseInt(parts[1]) - 1;
         const day = parseInt(parts[2]);
         
-        // Validar que é uma data razoável (entre 1900 e 2100)
         if (year >= 1900 && year <= 2100 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
-          date = new Date(year, month, day);
+          // Se tiver hora, usar
+          if (input.includes('T')) {
+            date = new Date(input);
+          } else {
+            date = new Date(year, month, day);
+          }
+          console.log(`✅ Parseado como ISO: ${date.toISOString()}`);
         }
       }
     }
     
-    // Formato brasileiro: dd/mm/yyyy
-    if (!date && typeof dataStr === 'string' && dataStr.includes('/')) {
-      const parts = dataStr.split('/');
+    // FORMATO 6: Brasileiro dd/mm/yyyy ou dd/mm/yyyy HH:mm
+    if (!date && input.includes('/')) {
+      const mainPart = input.split(' ')[0];
+      const timePart = input.split(' ')[1];
+      const parts = mainPart.split('/');
+      
       if (parts.length === 3) {
         const day = parseInt(parts[0]);
         const month = parseInt(parts[1]) - 1;
         const year = parseInt(parts[2]);
+        
         if (year >= 1900 && year <= 2100) {
-          date = new Date(year, month, day);
+          if (timePart && timePart.includes(':')) {
+            const [hour, minute] = timePart.split(':').map(Number);
+            date = new Date(year, month, day, hour || 0, minute || 0, 0);
+          } else {
+            date = new Date(year, month, day);
+          }
+          console.log(`✅ Parseado como BR: ${date.toISOString()}`);
         }
       }
     }
     
-    // Se conseguiu parsear a data, formatar
+    // Se conseguiu parsear, formatar como DD/MM/YYYY HH:mm
     if (date && !isNaN(date.getTime())) {
       const day = date.getDate().toString().padStart(2, '0');
       const month = (date.getMonth() + 1).toString().padStart(2, '0');
       const year = date.getFullYear();
+      const hour = date.getHours();
+      const minute = date.getMinutes();
       
-      // Validar ano razoável
       if (year >= 1900 && year <= 2100) {
-        console.log(`✅ Data formatada: ${day}/${month}/${year}`);
+        // Se tiver hora diferente de 00:00, incluir
+        if (hour > 0 || minute > 0) {
+          const hourStr = hour.toString().padStart(2, '0');
+          const minStr = minute.toString().padStart(2, '0');
+          return `${day}/${month}/${year} ${hourStr}:${minStr}`;
+        }
         return `${day}/${month}/${year}`;
       }
     }
     
-    console.warn(`⚠️ Não foi possível formatar a data: ${dataStr}`);
+    console.warn(`⚠️ Não foi possível formatar a data: ${input}`);
   } catch (e) {
     console.error('Erro ao formatar data:', e);
   }
   
-  // Retornar a string original se não conseguir formatar
   return String(dataStr);
+}
+
+// Parsear data para timestamptz (para persistência no banco)
+function parseDataParaTimestamp(dataStr: string | number | null | undefined): string | null {
+  if (!dataStr) return null;
+  
+  try {
+    const input = String(dataStr).trim();
+    let date: Date | null = null;
+    
+    // YYYYMMDDHHmmss
+    if (/^\d{14}$/.test(input)) {
+      const year = parseInt(input.substring(0, 4));
+      const month = parseInt(input.substring(4, 6)) - 1;
+      const day = parseInt(input.substring(6, 8));
+      const hour = parseInt(input.substring(8, 10));
+      const minute = parseInt(input.substring(10, 12));
+      const second = parseInt(input.substring(12, 14));
+      date = new Date(year, month, day, hour, minute, second);
+    }
+    // YYYYMMDD
+    else if (/^\d{8}$/.test(input)) {
+      const year = parseInt(input.substring(0, 4));
+      const month = parseInt(input.substring(4, 6)) - 1;
+      const day = parseInt(input.substring(6, 8));
+      date = new Date(year, month, day);
+    }
+    // ISO
+    else if (input.includes('-')) {
+      date = new Date(input);
+    }
+    // Timestamp
+    else if (/^\d{13}$/.test(input)) {
+      date = new Date(parseInt(input));
+    }
+    
+    if (date && !isNaN(date.getTime())) {
+      return date.toISOString();
+    }
+  } catch (e) {
+    console.error('Erro ao parsear data para timestamp:', e);
+  }
+  
+  return null;
 }
 
 // Determina o status do processo baseado nas movimentações e campos
 function determinarStatus(processo: any): string {
-  // Verificar campo situação se existir
   if (processo.situacao) return processo.situacao;
   
-  // Verificar última movimentação para inferir status
   const movimentos = processo.movimentos || [];
   if (movimentos.length > 0) {
     const ultimaMovimentacao = movimentos[0].nome?.toLowerCase() || '';
@@ -405,17 +496,14 @@ function determinarStatus(processo: any): string {
 }
 
 function formatarProcesso(processo: any, tribunalFallback: string): ProcessoResponse {
-  // Extrair última atualização das movimentações
   const movimentos = processo.movimentos || [];
   const ultimaAtualizacao = movimentos.length > 0 ? movimentos[0].dataHora : null;
   
-  // Extrair prioridades
   const prioridades: string[] = [];
   if (processo.prioridades) {
     prioridades.push(...processo.prioridades.map((p: any) => p.nome || p));
   }
   
-  // Mapear grau do processo
   const grauMap: Record<string, string> = {
     'G1': '1º Grau',
     'G2': '2º Grau', 
@@ -423,7 +511,6 @@ function formatarProcesso(processo: any, tribunalFallback: string): ProcessoResp
     'ORI': 'Originário'
   };
   
-  // Mapear polo das partes
   const poloMap: Record<string, string> = {
     'AT': 'Autor',
     'PA': 'Autor', 
@@ -438,13 +525,35 @@ function formatarProcesso(processo: any, tribunalFallback: string): ProcessoResp
     'FL': 'Falido'
   };
   
+  // Extrair código da classe
+  const classeCodigo = processo.classe?.codigo || processo.classeProcessual?.codigo || null;
+  const classeNome = processo.classe?.nome || processo.classeProcessual?.nome || 'Não informado';
+  
+  // Processar assuntos com código
+  const assuntosRaw = processo.assuntos || processo.assuntosProcessuais || [];
+  const assuntos = assuntosRaw.map((a: any) => ({
+    nome: a.nome || String(a),
+    codigo: a.codigo ? String(a.codigo) : undefined
+  }));
+  
+  // Processar movimentações com código e data raw
+  const movimentosFormatados = movimentos.slice(0, 50).map((m: any, index: number) => ({
+    dataHora: formatarData(m.dataHora),
+    dataHoraRaw: m.dataHora,
+    nome: m.nome || m.movimentoNacional?.nome || 'Movimentação',
+    complemento: m.complementosTabelados?.map((c: any) => c.nome || c.descricao).join(', ') 
+      || m.complemento 
+      || undefined,
+    codigo: m.codigo || m.movimentoNacional?.codigo
+  }));
+  
   return {
     numeroProcesso: processo.numeroProcesso,
-    classe: processo.classe?.nome || processo.classeProcessual?.nome || 'Não informado',
-    assuntos: (processo.assuntos || processo.assuntosProcessuais || []).map((a: any) => a.nome || a),
+    classe: classeNome,
+    classeCodigo: classeCodigo ? String(classeCodigo) : undefined,
+    assuntos,
     tribunal: processo.tribunal || processo.siglaTribunal || tribunalFallback.toUpperCase(),
     dataAjuizamento: formatarData(processo.dataAjuizamento || processo.dataDistribuicao || processo.dataHoraUltimaAtualizacao),
-    // Campos detalhados
     grau: grauMap[processo.grau] || processo.grau || '1º Grau',
     nivelSigilo: processo.nivelSigilo === 0 ? 'Público' : processo.nivelSigilo === 1 ? 'Segredo de Justiça' : `Nível ${processo.nivelSigilo || 0}`,
     formato: processo.formato?.nome || processo.formato || 'Eletrônico',
@@ -454,16 +563,8 @@ function formatarProcesso(processo: any, tribunalFallback: string): ProcessoResp
     ultimaAtualizacao: formatarData(ultimaAtualizacao),
     valorCausa: processo.valorCausa || null,
     prioridade: prioridades,
-    movimentos: movimentos.slice(0, 15).map((m: any) => ({
-      dataHora: formatarData(m.dataHora),
-      nome: m.nome || m.movimentoNacional?.nome || 'Movimentação',
-      complemento: m.complementosTabelados?.map((c: any) => c.nome || c.descricao).join(', ') 
-        || m.complemento 
-        || undefined,
-      codigo: m.codigo || m.movimentoNacional?.codigo
-    })),
+    movimentos: movimentosFormatados,
     partes: (processo.partes || []).map((p: any) => {
-      // Extrair advogados da parte
       const advogados = (p.advogados || []).map((adv: any) => ({
         nome: adv.nome || 'Advogado não identificado',
         oab: adv.inscricao ? `OAB/${adv.inscricao.unidadeFederativa || ''} ${adv.inscricao.numero || ''}`.trim() : undefined
@@ -480,7 +581,8 @@ function formatarProcesso(processo: any, tribunalFallback: string): ProcessoResp
         documento: p.numeroDocumentoPrincipal || p.pessoa?.numeroDocumentoPrincipal || undefined,
         advogados: advogados.length > 0 ? advogados : undefined
       };
-    })
+    }),
+    fonteRaw: processo // Guardar dados brutos para debug
   };
 }
 
@@ -489,8 +591,15 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startTime = Date.now();
+
   try {
-    const { numeroProcesso, cpf, tribunal } = await req.json();
+    const { numeroProcesso, cpf, tribunal, persistir } = await req.json();
+    
+    // Criar cliente Supabase para persistência
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
     
     // Busca por CPF
     if (cpf) {
@@ -511,7 +620,8 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({ 
             encontrado: false, 
-            mensagem: 'Nenhum processo encontrado para este CPF nos tribunais consultados.' 
+            mensagem: 'Nenhum processo encontrado para este CPF nos tribunais consultados.',
+            tempoMs: Date.now() - startTime
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -519,13 +629,14 @@ serve(async (req) => {
       
       const processosFormatados = processos.map(p => formatarProcesso(p, p.tribunal));
       
-      console.log(`✅ Total de ${processosFormatados.length} processos encontrados`);
+      console.log(`✅ Total de ${processosFormatados.length} processos encontrados em ${Date.now() - startTime}ms`);
       
       return new Response(
         JSON.stringify({ 
           encontrado: true, 
           multiplos: true,
-          processos: processosFormatados 
+          processos: processosFormatados,
+          tempoMs: Date.now() - startTime
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -539,10 +650,9 @@ serve(async (req) => {
       );
     }
     
-    // Verificar se o input é CPF (11 dígitos)
+    // Verificar se o input é CPF
     const inputLimpo = numeroProcesso.replace(/[^\d]/g, '');
     if (inputLimpo.length === 11) {
-      // Redirecionar para busca por CPF
       console.log(`🔄 Input identificado como CPF, redirecionando...`);
       
       const processos = await buscarPorCPF(inputLimpo, TRIBUNAIS_PARA_BUSCA_CPF);
@@ -551,7 +661,8 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({ 
             encontrado: false, 
-            mensagem: 'Nenhum processo encontrado para este CPF nos tribunais consultados.' 
+            mensagem: 'Nenhum processo encontrado para este CPF nos tribunais consultados.',
+            tempoMs: Date.now() - startTime
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -563,27 +674,25 @@ serve(async (req) => {
         JSON.stringify({ 
           encontrado: true, 
           multiplos: true,
-          processos: processosFormatados 
+          processos: processosFormatados,
+          tempoMs: Date.now() - startTime
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
-    // Limpar número do processo (mantém formato CNJ)
     const numeroLimpo = numeroProcesso.trim();
     console.log(`📋 Número do processo: ${numeroLimpo}`);
     
-    // Detectar tribunal se não informado
     let tribunalBusca = tribunal?.toLowerCase();
     if (!tribunalBusca) {
       tribunalBusca = detectarTribunal(numeroLimpo);
       console.log(`🏛️ Tribunal detectado: ${tribunalBusca}`);
     }
     
-    // Se não detectou tribunal, tentar TRT11 (Amazonas) como padrão
     if (!tribunalBusca) {
-      tribunalBusca = 'trt11';
-      console.log('⚠️ Tribunal não detectado, usando TRT11 como padrão');
+      tribunalBusca = 'tjam';
+      console.log('⚠️ Tribunal não detectado, usando TJAM como padrão');
     }
     
     const resultado = await buscarProcesso(numeroLimpo, tribunalBusca);
@@ -592,19 +701,110 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           encontrado: false, 
-          mensagem: `Processo não encontrado no ${tribunalBusca.toUpperCase()}. Verifique o número ou selecione outro tribunal.` 
+          mensagem: `Processo não encontrado no ${tribunalBusca.toUpperCase()}. Verifique o número ou selecione outro tribunal.`,
+          tempoMs: Date.now() - startTime
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
-    const processo = resultado.hits.hits[0]._source;
-    const processoFormatado = formatarProcesso(processo, tribunalBusca);
+    const processoRaw = resultado.hits.hits[0]._source;
+    const processoFormatado = formatarProcesso(processoRaw, tribunalBusca);
     
-    console.log(`✅ Processo encontrado: ${processoFormatado.classe}`);
+    console.log(`✅ Processo encontrado: ${processoFormatado.classe} em ${Date.now() - startTime}ms`);
+    
+    // Persistir no banco se solicitado
+    if (persistir) {
+      try {
+        console.log('💾 Persistindo processo no banco...');
+        
+        // Upsert do processo principal
+        const { data: processoDb, error: processoError } = await supabase
+          .from('processos')
+          .upsert({
+            numero_processo: processoFormatado.numeroProcesso,
+            tribunal: processoFormatado.tribunal,
+            sistema: processoFormatado.sistemaProcessual,
+            sigilo: processoFormatado.nivelSigilo,
+            status: processoFormatado.status,
+            classe_cnj_codigo: processoFormatado.classeCodigo,
+            classe_cnj_nome: processoFormatado.classe,
+            titulo_acao: processoFormatado.classe,
+            orgao_julgador: processoFormatado.orgaoJulgador,
+            grau_formato: `${processoFormatado.grau} • ${processoFormatado.formato}`,
+            ajuizado_em: parseDataParaTimestamp(processoRaw.dataAjuizamento || processoRaw.dataDistribuicao),
+            ultima_atualizacao: parseDataParaTimestamp(processoRaw.movimentos?.[0]?.dataHora),
+            fonte_raw: processoRaw,
+            updated_at: new Date().toISOString()
+          }, { 
+            onConflict: 'numero_processo',
+            ignoreDuplicates: false
+          })
+          .select('id')
+          .single();
+        
+        if (processoError) {
+          console.error('❌ Erro ao salvar processo:', processoError);
+        } else if (processoDb) {
+          const processoId = processoDb.id;
+          console.log(`✅ Processo salvo com ID: ${processoId}`);
+          
+          // Limpar e inserir assuntos
+          await supabase.from('processo_assuntos').delete().eq('processo_id', processoId);
+          
+          if (processoFormatado.assuntos.length > 0) {
+            const assuntosInsert = processoFormatado.assuntos.map(a => ({
+              processo_id: processoId,
+              assunto_cnj_codigo: a.codigo,
+              assunto_nome: a.nome
+            }));
+            
+            const { error: assuntosError } = await supabase
+              .from('processo_assuntos')
+              .insert(assuntosInsert);
+            
+            if (assuntosError) {
+              console.error('❌ Erro ao salvar assuntos:', assuntosError);
+            } else {
+              console.log(`✅ ${assuntosInsert.length} assuntos salvos`);
+            }
+          }
+          
+          // Limpar e inserir movimentações
+          await supabase.from('processo_movimentacoes').delete().eq('processo_id', processoId);
+          
+          if (processoFormatado.movimentos.length > 0) {
+            const movimentosInsert = processoFormatado.movimentos.map((m, idx) => ({
+              processo_id: processoId,
+              movimento_cnj_codigo: m.codigo ? String(m.codigo) : null,
+              movimento_titulo: m.nome,
+              movimento_descricao: m.complemento,
+              data_movimento: parseDataParaTimestamp(m.dataHoraRaw),
+              ordem: idx
+            }));
+            
+            const { error: movError } = await supabase
+              .from('processo_movimentacoes')
+              .insert(movimentosInsert);
+            
+            if (movError) {
+              console.error('❌ Erro ao salvar movimentações:', movError);
+            } else {
+              console.log(`✅ ${movimentosInsert.length} movimentações salvas`);
+            }
+          }
+        }
+      } catch (persistError) {
+        console.error('❌ Erro na persistência:', persistError);
+      }
+    }
     
     return new Response(
-      JSON.stringify({ encontrado: true, processo: processoFormatado }),
+      JSON.stringify({ 
+        encontrado: true, 
+        processo: processoFormatado,
+        tempoMs: Date.now() - startTime
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
     
@@ -612,7 +812,7 @@ serve(async (req) => {
     console.error('❌ Erro na consulta:', error);
     const errorMessage = error instanceof Error ? error.message : 'Erro ao consultar processo';
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: errorMessage, tempoMs: Date.now() - startTime }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

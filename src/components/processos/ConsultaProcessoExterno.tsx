@@ -3,14 +3,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Loader2, Scale, Calendar, Users, FileText, AlertCircle, User, Building, Gavel, Clock, DollarSign, Shield, Briefcase, ChevronRight } from 'lucide-react';
+import { Search, Loader2, Scale, Calendar, Users, FileText, AlertCircle, User, Building, Gavel, Clock, DollarSign, Shield, Briefcase, ChevronRight, Save, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MovimentoDetailModal } from './MovimentoDetailModal';
 
+interface Assunto {
+  nome: string;
+  codigo?: string;
+}
+
 interface Movimento {
   dataHora: string;
+  dataHoraRaw?: string;
   nome: string;
   complemento?: string;
   codigo?: number;
@@ -33,10 +39,10 @@ interface Parte {
 interface ProcessoExterno {
   numeroProcesso: string;
   classe: string;
-  assuntos: string[];
+  classeCodigo?: string;
+  assuntos: Assunto[];
   tribunal: string;
   dataAjuizamento: string;
-  // Campos detalhados
   grau: string;
   nivelSigilo: string;
   formato: string;
@@ -54,12 +60,14 @@ export function ConsultaProcessoExterno() {
   const [numeroProcesso, setNumeroProcesso] = useState('');
   const [cpf, setCpf] = useState('');
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [processo, setProcesso] = useState<ProcessoExterno | null>(null);
   const [processos, setProcessos] = useState<ProcessoExterno[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [searchType, setSearchType] = useState<'numero' | 'cpf'>('numero');
   const [selectedMovimento, setSelectedMovimento] = useState<Movimento | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [tempoConsulta, setTempoConsulta] = useState<number | null>(null);
 
   const formatCPF = (value: string) => {
     const digits = value.replace(/\D/g, '').slice(0, 11);
@@ -86,6 +94,7 @@ export function ConsultaProcessoExterno() {
     setErro(null);
     setProcesso(null);
     setProcessos([]);
+    setTempoConsulta(null);
 
     try {
       const body = searchType === 'numero' 
@@ -95,6 +104,8 @@ export function ConsultaProcessoExterno() {
       const { data, error } = await supabase.functions.invoke('consulta-processos', { body });
 
       if (error) throw error;
+
+      setTempoConsulta(data.tempoMs);
 
       if (!data.encontrado) {
         setErro(data.mensagem || 'Processo não encontrado');
@@ -116,11 +127,24 @@ export function ConsultaProcessoExterno() {
     }
   };
 
-  const formatDate = (dateStr: string) => {
+  const handleImportar = async (proc: ProcessoExterno) => {
+    setSaving(true);
     try {
-      return new Date(dateStr).toLocaleDateString('pt-BR');
-    } catch {
-      return dateStr;
+      const { data, error } = await supabase.functions.invoke('consulta-processos', { 
+        body: { 
+          numeroProcesso: proc.numeroProcesso,
+          persistir: true 
+        } 
+      });
+
+      if (error) throw error;
+
+      toast.success('Processo importado com sucesso!');
+    } catch (err) {
+      console.error('Erro ao importar processo:', err);
+      toast.error('Erro ao importar processo');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -139,7 +163,7 @@ export function ConsultaProcessoExterno() {
     return 'bg-green-500/20 text-green-700';
   };
 
-  const renderProcessoDetails = (proc: ProcessoExterno) => (
+  const renderProcessoDetails = (proc: ProcessoExterno, showImport = true) => (
     <div className="space-y-4 animate-fade-in">
       {/* Header com número e status */}
       <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
@@ -148,9 +172,25 @@ export function ConsultaProcessoExterno() {
           <p className="text-xs text-muted-foreground">Número do Processo</p>
           <p className="font-mono font-medium">{proc.numeroProcesso}</p>
         </div>
-        <div className="flex gap-2 flex-wrap justify-end">
+        <div className="flex gap-2 flex-wrap justify-end items-center">
           <Badge variant="secondary">{proc.tribunal}</Badge>
           <Badge className={getStatusColor(proc.status)}>{proc.status}</Badge>
+          {showImport && (
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={() => handleImportar(proc)}
+              disabled={saving}
+              className="gap-1"
+            >
+              {saving ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Save className="h-3 w-3" />
+              )}
+              Importar
+            </Button>
+          )}
         </div>
       </div>
 
@@ -162,6 +202,9 @@ export function ConsultaProcessoExterno() {
             <p className="text-xs text-muted-foreground">Classe Processual</p>
           </div>
           <p className="font-medium text-sm">{proc.classe}</p>
+          {proc.classeCodigo && (
+            <p className="text-xs text-muted-foreground mt-0.5">Código CNJ: {proc.classeCodigo}</p>
+          )}
         </div>
         
         <div className="p-3 bg-muted/50 rounded-lg">
@@ -229,14 +272,17 @@ export function ConsultaProcessoExterno() {
         </div>
       )}
 
-      {/* Assuntos */}
+      {/* Assuntos - com código CNJ */}
       {proc.assuntos.length > 0 && (
         <div className="p-3 bg-muted/50 rounded-lg">
-          <p className="text-xs text-muted-foreground mb-2">Assuntos</p>
+          <p className="text-xs text-muted-foreground mb-2">Assuntos ({proc.assuntos.length})</p>
           <div className="flex flex-wrap gap-1">
             {proc.assuntos.map((assunto, i) => (
               <Badge key={i} variant="outline" className="text-xs">
-                {assunto}
+                {typeof assunto === 'string' ? assunto : assunto.nome}
+                {typeof assunto !== 'string' && assunto.codigo && (
+                  <span className="ml-1 opacity-60">({assunto.codigo})</span>
+                )}
               </Badge>
             ))}
           </div>
@@ -248,7 +294,7 @@ export function ConsultaProcessoExterno() {
         <div className="p-3 bg-muted/50 rounded-lg">
           <div className="flex items-center gap-2 mb-3">
             <Users className="h-4 w-4 text-muted-foreground" />
-            <p className="text-sm font-medium">Partes do Processo</p>
+            <p className="text-sm font-medium">Partes do Processo ({proc.partes.length})</p>
           </div>
           <div className="space-y-3">
             {proc.partes.slice(0, 8).map((parte, i) => (
@@ -285,8 +331,10 @@ export function ConsultaProcessoExterno() {
       {/* Últimas movimentações - Clicáveis */}
       {proc.movimentos.length > 0 && (
         <div>
-          <p className="text-sm font-medium mb-2">Últimas Movimentações ({proc.movimentos.length})</p>
-          <p className="text-xs text-muted-foreground mb-2">Clique para ver detalhes</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-medium">Movimentações ({proc.movimentos.length})</p>
+            <p className="text-xs text-muted-foreground">Clique para ver detalhes</p>
+          </div>
           <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
             {proc.movimentos.map((mov, i) => (
               <button
@@ -301,7 +349,9 @@ export function ConsultaProcessoExterno() {
                   <div className="flex-1">
                     <p className="text-sm font-medium group-hover:text-primary transition-colors">{mov.nome}</p>
                     {mov.codigo && (
-                      <span className="text-xs text-muted-foreground">Código CNJ: {mov.codigo}</span>
+                      <Badge variant="outline" className="text-xs mt-1">
+                        CNJ: {mov.codigo}
+                      </Badge>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
@@ -384,6 +434,13 @@ export function ConsultaProcessoExterno() {
             </p>
           </TabsContent>
         </Tabs>
+
+        {tempoConsulta && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <CheckCircle2 className="h-3 w-3 text-green-500" />
+            Consulta realizada em {tempoConsulta}ms
+          </div>
+        )}
 
         {erro && (
           <div className="flex items-center gap-2 p-3 bg-destructive/10 rounded-lg text-destructive">
