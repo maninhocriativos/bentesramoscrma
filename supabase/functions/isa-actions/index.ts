@@ -1169,6 +1169,143 @@ Responda em JSON:
         }
         break;
       }
+
+      // ============================================================
+      // NOVAS AÇÕES MULTIMODAIS
+      // ============================================================
+      
+      case 'processar_documento': {
+        const { lead_id, media_url } = data;
+        if (!lead_id || !media_url) {
+          result = { success: false, message: 'lead_id e media_url são obrigatórios' };
+          break;
+        }
+        
+        try {
+          const response = await fetch(`${supabaseUrl}/functions/v1/isa-multimodal`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+            },
+            body: JSON.stringify({
+              action: 'process_document',
+              mediaUrl: media_url,
+              leadId: lead_id,
+            }),
+          });
+          
+          const docResult = await response.json();
+          result = {
+            success: docResult.success,
+            message: docResult.success 
+              ? `📄 Documento ${docResult.documentType} recebido e processado!`
+              : 'Erro ao processar documento',
+            data: docResult
+          };
+        } catch (error) {
+          result = { success: false, message: 'Erro ao processar documento' };
+        }
+        break;
+      }
+
+      case 'enviar_contrato': {
+        const { lead_id, modelo_id } = data;
+        if (!lead_id) {
+          result = { success: false, message: 'lead_id é obrigatório' };
+          break;
+        }
+        
+        try {
+          const response = await fetch(`${supabaseUrl}/functions/v1/isa-multimodal`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+            },
+            body: JSON.stringify({
+              action: 'send_contract',
+              leadId: lead_id,
+              modeloId: modelo_id,
+            }),
+          });
+          
+          const contractResult = await response.json();
+          result = {
+            success: contractResult.success,
+            message: contractResult.message,
+            data: { contractUrl: contractResult.contractUrl }
+          };
+        } catch (error) {
+          result = { success: false, message: 'Erro ao enviar contrato' };
+        }
+        break;
+      }
+
+      case 'transcrever_audio': {
+        const { media_url } = data;
+        if (!media_url) {
+          result = { success: false, message: 'media_url é obrigatório' };
+          break;
+        }
+        
+        try {
+          const response = await fetch(`${supabaseUrl}/functions/v1/isa-multimodal`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+            },
+            body: JSON.stringify({
+              action: 'transcribe_audio',
+              mediaUrl: media_url,
+            }),
+          });
+          
+          const audioResult = await response.json();
+          result = {
+            success: audioResult.success,
+            message: audioResult.transcription || 'Erro na transcrição',
+            data: { transcription: audioResult.transcription }
+          };
+        } catch (error) {
+          result = { success: false, message: 'Erro ao transcrever áudio' };
+        }
+        break;
+      }
+
+      case 'analisar_imagem': {
+        const { media_url, context: imgContext } = data;
+        if (!media_url) {
+          result = { success: false, message: 'media_url é obrigatório' };
+          break;
+        }
+        
+        try {
+          const response = await fetch(`${supabaseUrl}/functions/v1/isa-multimodal`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+            },
+            body: JSON.stringify({
+              action: 'analyze_image',
+              mediaUrl: media_url,
+              context: imgContext,
+            }),
+          });
+          
+          const imgResult = await response.json();
+          result = {
+            success: imgResult.success,
+            message: imgResult.analysis || 'Erro na análise',
+            data: { analysis: imgResult.analysis }
+          };
+        } catch (error) {
+          result = { success: false, message: 'Erro ao analisar imagem' };
+        }
+        break;
+      }
     }
 
     console.log('Resultado:', result);

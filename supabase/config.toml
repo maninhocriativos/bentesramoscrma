@@ -74,3 +74,6 @@ verify_jwt = false
 
 [functions.sync-subscriber-names]
 verify_jwt = false
+
+[functions.isa-multimodal]
+verify_jwt = false
