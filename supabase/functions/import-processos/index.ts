@@ -7,12 +7,48 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Lista de tribunais disponíveis na API DataJud
+// Lista de tribunais disponíveis na API DataJud (fallback para api_publica_{tribunal})
 const TRIBUNAIS: Record<string, string> = {
   'trt11': 'api_publica_trt11',
   'tjam': 'api_publica_tjam',
   'trf1': 'api_publica_trf1',
+  'trf2': 'api_publica_trf2',
+  'trf3': 'api_publica_trf3',
+  'tjsp': 'api_publica_tjsp',
+  'tjrj': 'api_publica_tjrj',
+  'tjmg': 'api_publica_tjmg',
+  'tjrs': 'api_publica_tjrs',
+  'tjpr': 'api_publica_tjpr',
 };
+
+function determinarStatusBasico(processo: any): string {
+  const movimentos = processo?.movimentos || [];
+  if (movimentos.length > 0) {
+    const ultima = (movimentos[0]?.nome || '').toLowerCase();
+    if (ultima.includes('arquiv')) return 'Arquivado';
+    if (ultima.includes('baixa') || ultima.includes('trânsito')) return 'Arquivado';
+    if (ultima.includes('suspen')) return 'Suspenso';
+  }
+  return 'Em Andamento';
+}
+
+function extrairAutorEAdvogado(processoData: any): { autorNome?: string; advogado?: string } {
+  const partes = processoData?.partes || [];
+  const parteAutor = partes.find((p: any) =>
+    p?.polo === 'AT' || p?.polo === 'PA' || String(p?.tipoParte || '').toUpperCase().includes('AUTOR')
+  );
+
+  const autorNome = parteAutor?.nome || parteAutor?.pessoa?.nome;
+
+  const adv0 = parteAutor?.advogados?.[0];
+  const advNome = adv0?.nome;
+  const advOab = adv0?.inscricao
+    ? `OAB/${adv0.inscricao.unidadeFederativa || ''} ${adv0.inscricao.numero || ''}`.trim()
+    : undefined;
+
+  const advogado = advNome ? (advOab ? `${advNome} (${advOab})` : advNome) : undefined;
+  return { autorNome, advogado };
+}
 
 // Detecta tribunal pelo número do processo
 function detectarTribunal(numeroProcesso: string): string | null {
@@ -108,16 +144,10 @@ serve(async (req) => {
       // Verificar se já existe
       const { data: existing } = await supabaseClient
         .from('processos')
-        .select('id, numero_processo')
+        .select('id, numero_processo, titulo_acao, status, advogado_responsavel, cliente_id')
         .eq('numero_processo', numero)
         .maybeSingle();
-      
-      if (existing) {
-        console.log(`⚠️ Processo já existe: ${numero}`);
-        resultados.push({ numero, status: 'exists', id: existing.id });
-        continue;
-      }
-      
+
       // Detectar tribunal
       const tribunal = detectarTribunal(numero);
       if (!tribunal) {
@@ -128,44 +158,81 @@ serve(async (req) => {
       
       // Buscar dados na API DataJud
       const processoData = await buscarProcessoDataJud(numero, tribunal);
-      
-      // Preparar dados para inserção
-      const insertData = {
+
+      const { autorNome, advogado } = extrairAutorEAdvogado(processoData);
+      const statusBasico = processoData ? determinarStatusBasico(processoData) : 'Em Andamento';
+
+      // Preparar dados para inserção/atualização
+      const baseData = {
         numero_processo: numero,
         titulo_acao: processoData?.classe?.nome || processoData?.classeProcessual?.nome || 'Processo Importado',
-        status: 'Em Andamento',
-        advogado_responsavel: null,
-        cliente_id: null,
+        status: statusBasico,
+        advogado_responsavel: advogado || null,
+        cliente_id: null as string | null,
         frequencia_notificacao_dias: 7,
         notificacao_ativa: true,
       };
       
-      // Tentar vincular cliente se houver parte autora
-      if (processoData?.partes) {
-        const parteAutor = processoData.partes.find((p: any) => 
-          p.polo === 'AT' || p.polo === 'PA' || p.tipoParte?.includes('AUTOR')
-        );
+      // Tentar vincular cliente pelo nome completo (mais assertivo)
+      if (autorNome) {
+        const { data: lead } = await supabaseClient
+          .from('leads_juridicos')
+          .select('id, nome')
+          .ilike('nome', `%${autorNome}%`)
+          .limit(1)
+          .maybeSingle();
         
-        if (parteAutor?.nome) {
-          // Buscar lead pelo nome
-          const { data: lead } = await supabaseClient
-            .from('leads_juridicos')
-            .select('id, nome')
-            .ilike('nome', `%${parteAutor.nome.split(' ')[0]}%`)
-            .limit(1)
-            .maybeSingle();
-          
-          if (lead) {
-            insertData.cliente_id = lead.id;
-            console.log(`✅ Cliente vinculado: ${lead.nome}`);
-          }
+        if (lead) {
+          baseData.cliente_id = lead.id;
+          console.log(`✅ Cliente vinculado: ${lead.nome}`);
         }
       }
-      
+
+      if (existing) {
+        // Atualiza somente campos faltantes/ruins, mantendo o que o usuário já editou manualmente
+        const updates: Record<string, any> = {};
+
+        if (!existing.titulo_acao || existing.titulo_acao === 'Processo Importado') {
+          updates.titulo_acao = baseData.titulo_acao;
+        }
+        if (!existing.status) {
+          updates.status = baseData.status;
+        }
+        if (!existing.advogado_responsavel && baseData.advogado_responsavel) {
+          updates.advogado_responsavel = baseData.advogado_responsavel;
+        }
+        if (!existing.cliente_id && baseData.cliente_id) {
+          updates.cliente_id = baseData.cliente_id;
+        }
+
+        // Não forçar configs de notificação em processos já existentes
+
+        if (Object.keys(updates).length === 0) {
+          console.log(`ℹ️ Já está atualizado: ${numero}`);
+          resultados.push({ numero, status: 'exists', id: existing.id, updated: false });
+          continue;
+        }
+
+        const { error: updError } = await supabaseClient
+          .from('processos')
+          .update(updates)
+          .eq('id', existing.id);
+
+        if (updError) {
+          console.error(`❌ Erro ao atualizar: ${updError.message}`);
+          resultados.push({ numero, status: 'error', message: updError.message, id: existing.id });
+        } else {
+          console.log(`✅ Processo atualizado: ${numero}`);
+          resultados.push({ numero, status: 'updated', id: existing.id, updates });
+        }
+
+        continue;
+      }
+
       // Inserir no banco
       const { data: inserted, error } = await supabaseClient
         .from('processos')
-        .insert(insertData)
+        .insert(baseData)
         .select()
         .single();
       
@@ -174,11 +241,11 @@ serve(async (req) => {
         resultados.push({ numero, status: 'error', message: error.message });
       } else {
         console.log(`✅ Processo importado: ${numero}`);
-        resultados.push({ numero, status: 'imported', id: inserted.id, titulo: insertData.titulo_acao });
+        resultados.push({ numero, status: 'imported', id: inserted.id, titulo: baseData.titulo_acao });
       }
     }
     
-    console.log(`\n📊 Resumo: ${resultados.filter(r => r.status === 'imported').length} importados`);
+    console.log(`\n📊 Resumo: ${resultados.filter(r => r.status === 'imported').length} importados, ${resultados.filter(r => r.status === 'updated').length} atualizados`);
     
     return new Response(
       JSON.stringify({ success: true, resultados }),
@@ -194,3 +261,4 @@ serve(async (req) => {
     );
   }
 });
+
