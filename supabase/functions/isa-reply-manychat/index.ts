@@ -10,234 +10,338 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY')!;
+const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
-serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+// ============================================================
+// PROMPT SISTEMA DA ISA - ORQUESTRADORA CENTRAL
+// ============================================================
+const ISA_SYSTEM_PROMPT = `Você é a ISA, assistente jurídica virtual e ORQUESTRADORA CENTRAL do escritório Bentes & Ramos Advocacia.
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+## SUA IDENTIDADE
+- Nome: Isa (Inteligência de Suporte Advocatício)
+- Papel: Recepcionista inteligente, triagista e coordenadora de leads
+- Tom: Profissional, empática, eficiente, humana (não robótica)
+
+## SUAS CAPACIDADES ESPECIAIS
+🎙️ **ÁUDIO**: Você CONSEGUE ouvir e entender áudios - eles são transcritos automaticamente
+🖼️ **IMAGEM**: Você CONSEGUE ver e analisar imagens e documentos enviados
+📄 **DOCUMENTOS**: Você extrai dados de RG, CPF, comprovantes automaticamente
+📝 **CONTRATOS**: Você pode enviar contratos para assinatura digital
+
+## ÁREAS DE ATUAÇÃO (EXCLUSIVAS)
+✅ **Direito Bancário**: 
+   - Revisão de contratos bancários
+   - Juros abusivos e anatocismo
+   - Seguro prestamista (vendas casadas)
+   - Financiamentos de veículos
+   - Empréstimos consignados
+   - Cartões de crédito
+
+✅ **Direito Aéreo**:
+   - Cancelamento/atraso de voos
+   - Extravio de bagagem
+   - Overbooking
+   - Reembolsos
+
+## ÁREAS QUE NÃO ATENDEMOS
+❌ Trabalhista, Previdenciário, Família, Criminal, Imobiliário, Tributário
+
+Se o cliente mencionar essas áreas, decline educadamente:
+"Agradeço seu contato! Infelizmente nosso escritório é especializado em Direito Bancário e Aéreo. Recomendo buscar um advogado especializado na área [X]. Posso ajudar com alguma questão bancária ou de viagens aéreas?"
+
+## FLUXO DE ATENDIMENTO (STATE MACHINE)
+
+### 1. NEW → TRIAGE
+- Cliente acabou de chegar
+- PRIMEIRO: Cumprimente e pergunte qual é o problema
+- NÃO sugira agendamento sem entender o caso
+
+### 2. TRIAGE → CLASSIFIED  
+- Identificar tipo do caso (Bancário ou Aéreo)
+- Fazer perguntas para qualificar:
+  - Bancário: Qual banco? Tipo de contrato? Valor? Há quanto tempo?
+  - Aéreo: Qual companhia? Data do voo? O que aconteceu?
+
+### 3. CLASSIFIED → DATA_CAPTURE
+- Caso qualificado, coletar dados para contrato:
+  - Nome completo
+  - CPF
+  - RG  
+  - Endereço
+  - Data de nascimento
+- Solicitar documentos: "Por favor, me envie uma foto do seu RG ou CNH"
+
+### 4. DATA_CAPTURE → CONTRACT_SENT
+- Com dados coletados, informar que o contrato será enviado
+- Enviar contrato via Clicksign
+
+### 5. CONTRACT_SENT → DOCS_PENDING
+- Aguardar assinatura
+- Cobrar documentos pendentes do caso
+
+### 6. DOCS_PENDING → READY_FOR_LAWYER
+- Documentos recebidos
+- Caso pronto para análise do advogado
+
+## REGRAS DE COMPORTAMENTO
+
+1. **ENTENDA PRIMEIRO**: Nunca sugira agendamento sem entender o problema
+2. **RESPOSTAS CURTAS**: Máximo 3-4 linhas para WhatsApp
+3. **SEMPRE TERMINE COM PERGUNTA**: Mantenha o diálogo fluindo
+4. **RECONHEÇA MÍDIA**: Se receber áudio/foto, mencione que entendeu
+5. **NUNCA INVENTE**: Se não souber, diga que vai verificar
+6. **CONFIRME DADOS**: Repita dados importantes para confirmar
+7. **USE EMOJIS COM MODERAÇÃO**: 1-2 por mensagem, profissional
+
+## QUANDO RECEBER DOCUMENTOS
+- Agradeça: "Recebi seu documento, estou analisando..."
+- Se extrair dados: "Confirmando: seu nome é [X] e CPF [Y], correto?"
+- Se não conseguir ler: "Não consegui ler bem o documento. Pode enviar uma foto mais nítida?"
+
+## QUANDO RECEBER ÁUDIO
+- Sempre confirme: "Entendi sua mensagem de áudio..."
+- Responda ao conteúdo transcrito
+- Se não entender: "Não consegui ouvir bem, pode repetir ou digitar?"
+
+## HORÁRIOS DE ATENDIMENTO
+- Agendamentos: Segunda, Quarta e Sexta
+- Horários: 09h às 17h (exceto 12h-14h)
+- Fuso: América/Manaus (UTC-4)
+`;
+
+// ============================================================
+// PROCESSAR MÍDIA (ÁUDIO/IMAGEM)
+// ============================================================
+async function processMedia(
+  mediaUrl: string,
+  mediaType: string,
+  leadId: string | null,
+  supabase: any
+): Promise<{ processed: boolean; content: string; extractedData?: any }> {
+  console.log('[ISA-REPLY] 📦 Processando mídia:', mediaType, mediaUrl?.substring(0, 50));
 
   try {
-    const body = await req.json();
-    console.log('[ISA-REPLY] Payload recebido:', JSON.stringify(body));
-
-    // Extrair dados do payload
-    const subscriberId = body.subscriber_id?.toString().replace(/^\[|\]$/g, '').trim();
-    const mensagem = body.last_input_text || body.message || body.text || '';
-    const nome = body.full_name || body.name || body.first_name || 'Cliente';
-    const telefone = body.phone || body.wa_id || '';
-    const canal = body.channel || 'whatsapp';
-
-    if (!subscriberId) {
-      console.log('[ISA-REPLY] Subscriber ID não encontrado');
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: 'subscriber_id obrigatório' 
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (!mensagem || mensagem.trim() === '') {
-      console.log('[ISA-REPLY] Mensagem vazia, ignorando');
-      return new Response(JSON.stringify({ 
-        success: true, 
-        skipped: true,
-        reason: 'mensagem vazia' 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    console.log('[ISA-REPLY] Processando mensagem de:', nome, '- Mensagem:', mensagem.substring(0, 100));
-
-    // Buscar subscriber e lead vinculado para contexto
-    const { data: subscriber } = await supabase
-      .from('manychat_subscribers')
-      .select('lead_id, nome, atendimento_humano')
-      .eq('subscriber_id', subscriberId)
-      .maybeSingle();
-
-    // 🛑 VERIFICAR ATENDIMENTO HUMANO - Isa para de responder
-    if (subscriber?.atendimento_humano) {
-      console.log('[ISA-REPLY] ⏸️ Atendimento humano ativo, Isa não responde');
-      return new Response(JSON.stringify({ 
-        success: true, 
-        skipped: true,
-        reason: 'atendimento_humano_ativo' 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Buscar ou criar thread para o subscriber
-    let threadId: string | null = null;
-    const { data: threadData } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', `manychat_thread_${subscriberId}`)
-      .maybeSingle();
-
-    if (threadData) {
-      threadId = threadData.value;
-      console.log('[ISA-REPLY] Thread existente encontrada:', threadId);
-    }
-
-    // Buscar contexto COMPLETO do lead para enriquecer a mensagem
-    let contextPrefix = '';
-    let historicoConversa = '';
-    
-    if (subscriber?.lead_id) {
-      // Buscar dados do lead
-      const { data: lead } = await supabase
-        .from('leads_juridicos')
-        .select('nome, status, tipo_acao, resumo_ia, telefone, email')
-        .eq('id', subscriber.lead_id)
-        .maybeSingle();
-
-      // Buscar histórico de mensagens (últimas 25)
-      const { data: mensagensHist } = await supabase
-        .from('manychat_mensagens')
-        .select('conteudo, direcao, created_at')
-        .eq('lead_id', subscriber.lead_id)
-        .order('created_at', { ascending: false })
-        .limit(25);
-      
-      // Buscar histórico de interações (últimas 10)
-      const { data: interacoesHist } = await supabase
-        .from('interacoes')
-        .select('tipo, resumo, detalhes, direcao, data_interacao')
-        .eq('cliente_id', subscriber.lead_id)
-        .order('data_interacao', { ascending: false })
-        .limit(10);
-
-      if (lead) {
-        contextPrefix = `[CONTEXTO DO CLIENTE]
-Nome: ${lead.nome || nome}
-Status: ${lead.status || 'Lead Frio'}
-Tipo de Ação: ${lead.tipo_acao || 'NÃO IDENTIFICADO AINDA'}
-Resumo: ${lead.resumo_ia || 'Sem resumo - PRECISA ENTENDER O CASO PRIMEIRO'}
-`;
-      }
-
-      // Formatar histórico completo
-      const historicoCompleto = [
-        ...(mensagensHist || []).map(m => ({
-          origem: m.direcao === 'entrada' ? 'CLIENTE' : 'BOT/EQUIPE',
-          conteudo: m.conteudo,
-          data: m.created_at,
-        })),
-        ...(interacoesHist || []).map(i => ({
-          origem: i.direcao === 'entrada' ? 'CLIENTE' : 'EQUIPE',
-          conteudo: `[${i.tipo}] ${i.resumo}${i.detalhes ? ': ' + i.detalhes : ''}`,
-          data: i.data_interacao,
-        })),
-      ].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
-
-      if (historicoCompleto.length > 0) {
-        historicoConversa = '\n[HISTÓRICO DA CONVERSA - Leia TUDO para entender o contexto]\n' + 
-          historicoCompleto.slice(-25).map(h => `[${h.origem}] ${h.conteudo}`).join('\n') + '\n';
-      }
-    }
-
-    // Detectar se é áudio/mídia
-    const isMedia = mensagem.match(/\.(ogg|mp3|wav|jpg|jpeg|png|gif|mp4|webm|pdf)/i);
-    const mediaNote = isMedia ? '[O cliente enviou um arquivo de mídia/áudio. Peça para descrever em texto]\n\n' : '';
-
-    // Regras de comportamento inteligente
-    const regrasComportamento = `
-⚠️ REGRAS CRÍTICAS DE COMPORTAMENTO:
-
-1. SE O TIPO DE AÇÃO AINDA NÃO FOI IDENTIFICADO:
-   - NÃO sugira agendamento imediatamente!
-   - PRIMEIRO pergunte qual é o problema/questão do cliente
-   - Exemplo: "Olá! Como posso ajudá-lo hoje? Tem alguma questão sobre Direito Bancário ou problemas com voos?"
-
-2. APÓS ENTENDER O CASO:
-   - Se for área que atendemos (Bancário/Aéreo) → Qualifique e sugira agendamento
-   - Se NÃO for nossa área → Decline educadamente com a mensagem padrão de recusa
-
-3. NOSSO ESCRITÓRIO ATENDE APENAS:
-   ✅ Direito Bancário (juros abusivos, financiamentos, seguro prestamista)
-   ✅ Questões Aéreas (cancelamentos, atrasos, bagagens)
-
-4. NÃO ATENDEMOS (RECUSE IMEDIATAMENTE):
-   ❌ Trabalhista, Previdenciário, Família, Criminal, Imobiliário
-
-5. RESPONDA SEMPRE DE FORMA CURTA (máximo 3-4 linhas)
-`;
-
-    // Montar mensagem com contexto completo
-    const mensagemCompleta = `${contextPrefix}${historicoConversa}${regrasComportamento}${mediaNote}
-[NOVA MENSAGEM DO CLIENTE - Analise o histórico acima antes de responder]
-Cliente (${nome}): ${mensagem}`;
-
-    console.log('[ISA-REPLY] Chamando ai-chat com o agente GPT...');
-
-    // Chamar a edge function ai-chat que já tem o agente GPT configurado
-    const aiChatResponse = await fetch(`${supabaseUrl}/functions/v1/ai-chat`, {
+    const response = await fetch(`${supabaseUrl}/functions/v1/isa-multimodal`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${supabaseServiceKey}`,
       },
       body: JSON.stringify({
-        message: mensagemCompleta,
-        threadId: threadId,
+        action: 'process_media',
+        mediaUrl,
+        mediaType,
+        leadId,
       }),
     });
 
-    if (!aiChatResponse.ok) {
-      const errorText = await aiChatResponse.text();
-      console.error('[ISA-REPLY] Erro ai-chat:', aiChatResponse.status, errorText);
-      throw new Error(`ai-chat error: ${aiChatResponse.status} - ${errorText}`);
+    if (!response.ok) {
+      console.error('[ISA-REPLY] Erro ao processar mídia:', response.status);
+      return { processed: false, content: '' };
     }
 
-    const aiData = await aiChatResponse.json();
-    let respostaIsa = aiData.response || '';
-    const newThreadId = aiData.threadId;
+    const result = await response.json();
+    console.log('[ISA-REPLY] Resultado do processamento:', result);
 
-    console.log('[ISA-REPLY] Resposta do agente GPT:', respostaIsa?.substring(0, 200));
-    console.log('[ISA-REPLY] Thread ID:', newThreadId);
-
-    // Salvar thread ID para manter contexto
-    if (newThreadId && newThreadId !== threadId) {
-      await supabase.from('app_settings').upsert({
-        key: `manychat_thread_${subscriberId}`,
-        value: newThreadId,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'key' });
-      console.log('[ISA-REPLY] Thread salva para próximas mensagens');
+    if (result.success) {
+      if (result.transcription) {
+        return { 
+          processed: true, 
+          content: `[ÁUDIO TRANSCRITO]: "${result.transcription}"` 
+        };
+      }
+      if (result.analysis) {
+        return { 
+          processed: true, 
+          content: `[IMAGEM ANALISADA]: ${result.analysis}` 
+        };
+      }
+      if (result.documentType) {
+        return {
+          processed: true,
+          content: `[DOCUMENTO ${result.documentType} RECEBIDO E PROCESSADO]`,
+          extractedData: result.data
+        };
+      }
     }
 
-    if (!respostaIsa) {
-      console.error('[ISA-REPLY] Resposta vazia do agente');
-      throw new Error('Resposta vazia do agente GPT');
-    }
+    return { processed: false, content: '' };
+  } catch (error) {
+    console.error('[ISA-REPLY] Erro ao processar mídia:', error);
+    return { processed: false, content: '' };
+  }
+}
 
-    // Truncar resposta para WhatsApp se necessário (máximo 4096, mas queremos ~300 para UX)
-    if (respostaIsa.length > 500) {
-      respostaIsa = respostaIsa.substring(0, 497) + '...';
-    }
-
-    // Salvar resposta no banco
-    await supabase.from('manychat_mensagens').insert({
-      subscriber_id: subscriberId,
-      subscriber_nome: subscriber?.nome || nome,
-      conteudo: respostaIsa,
-      canal: canal,
-      tipo: 'text',
-      direcao: 'saida',
-      lead_id: subscriber?.lead_id,
+// ============================================================
+// BUSCAR CONTEXTO COMPLETO DO LEAD
+// ============================================================
+async function getLeadContext(leadId: string, supabase: any): Promise<string> {
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/isa-multimodal`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseServiceKey}`,
+      },
+      body: JSON.stringify({
+        action: 'get_lead_context',
+        leadId,
+      }),
     });
 
-    // Enviar resposta via ManyChat API com message_tag para contatos inativos
-    console.log('[ISA-REPLY] Enviando para ManyChat...');
-    
-    // Primeiro tentar sem message_tag (para contatos ativos nas últimas 24h)
-    let manychatResponse = await fetch('https://api.manychat.com/fb/sending/sendContent', {
+    if (!response.ok) return '';
+
+    const result = await response.json();
+    if (!result.success || !result.context) return '';
+
+    const ctx = result.context;
+    const lead = ctx.lead;
+    const classification = ctx.classification;
+    const contractData = ctx.contractData;
+
+    let contextStr = `
+[CONTEXTO COMPLETO DO LEAD]
+📋 Nome: ${lead?.nome || 'Não identificado'}
+📱 Telefone: ${lead?.telefone || 'N/A'}
+📧 Email: ${lead?.email || 'N/A'}
+🔄 Estado atual: ${lead?.lead_state || 'NEW'}
+📊 Status: ${lead?.status || 'Lead Frio'}
+`;
+
+    if (classification) {
+      contextStr += `
+🏷️ Classificação: ${classification.case_type || 'Não classificado'}
+📝 Subtipo: ${classification.sub_type || 'N/A'}
+💡 Resumo: ${classification.summary || 'N/A'}
+`;
+    }
+
+    if (contractData) {
+      contextStr += `
+📄 Dados contratuais coletados:
+- CPF: ${contractData.cpf || '❌ Pendente'}
+- RG: ${contractData.rg || '❌ Pendente'}
+- Endereço: ${contractData.endereco || '❌ Pendente'}
+- Data nasc: ${contractData.data_nascimento || '❌ Pendente'}
+`;
+    }
+
+    if (ctx.docsChecklist?.length > 0) {
+      const recebidos = ctx.docsChecklist.filter((d: any) => d.received);
+      const pendentes = ctx.docsChecklist.filter((d: any) => !d.received);
+      contextStr += `
+📑 Documentos: ${recebidos.length} recebidos, ${pendentes.length} pendentes
+`;
+      if (pendentes.length > 0) {
+        contextStr += `   Pendentes: ${pendentes.map((d: any) => d.doc_label).join(', ')}\n`;
+      }
+    }
+
+    if (ctx.compromissos?.length > 0) {
+      const proximoCompromisso = ctx.compromissos.find((c: any) => new Date(c.data_inicio) > new Date());
+      if (proximoCompromisso) {
+        contextStr += `📅 Próximo compromisso: ${proximoCompromisso.titulo} em ${new Date(proximoCompromisso.data_inicio).toLocaleDateString('pt-BR')}\n`;
+      }
+    }
+
+    contextStr += `
+📊 Métricas:
+- Total mensagens: ${ctx.totalMensagens}
+- Dias desde contato: ${ctx.diasDesdeContato}
+`;
+
+    // Histórico das últimas mensagens
+    if (ctx.mensagens?.length > 0) {
+      contextStr += `
+[HISTÓRICO RECENTE - Últimas ${Math.min(ctx.mensagens.length, 15)} mensagens]
+`;
+      const ultimasMsgs = ctx.mensagens.slice(0, 15).reverse();
+      for (const msg of ultimasMsgs) {
+        const origem = msg.direcao === 'entrada' ? 'CLIENTE' : 'ISA/EQUIPE';
+        contextStr += `[${origem}] ${msg.conteudo?.substring(0, 150)}${msg.conteudo?.length > 150 ? '...' : ''}\n`;
+      }
+    }
+
+    return contextStr;
+  } catch (error) {
+    console.error('[ISA-REPLY] Erro ao buscar contexto:', error);
+    return '';
+  }
+}
+
+// ============================================================
+// GERAR RESPOSTA COM IA
+// ============================================================
+async function generateResponse(
+  message: string,
+  context: string,
+  threadId?: string
+): Promise<{ response: string; threadId?: string }> {
+  
+  const apiUrl = LOVABLE_API_KEY 
+    ? 'https://ai.gateway.lovable.dev/v1/chat/completions'
+    : 'https://api.openai.com/v1/chat/completions';
+  
+  const apiKey = LOVABLE_API_KEY || OPENAI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error('Nenhuma API key configurada (LOVABLE_API_KEY ou OPENAI_API_KEY)');
+  }
+
+  const fullPrompt = `${ISA_SYSTEM_PROMPT}
+
+${context}
+
+[NOVA MENSAGEM DO CLIENTE]
+${message}
+
+Responda de forma natural, curta (máximo 3-4 linhas) e sempre termine com uma pergunta ou call-to-action.`;
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: LOVABLE_API_KEY ? 'google/gemini-3-flash-preview' : 'gpt-4o',
+        messages: [
+          { role: 'system', content: ISA_SYSTEM_PROMPT },
+          { role: 'user', content: `${context}\n\n[NOVA MENSAGEM DO CLIENTE]\n${message}` }
+        ],
+        max_tokens: 500,
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('[ISA-REPLY] Erro na API:', error);
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const resposta = data.choices?.[0]?.message?.content || '';
+
+    return { response: resposta, threadId };
+  } catch (error) {
+    console.error('[ISA-REPLY] Erro ao gerar resposta:', error);
+    throw error;
+  }
+}
+
+// ============================================================
+// ENVIAR RESPOSTA VIA MANYCHAT
+// ============================================================
+async function sendToManyChat(
+  subscriberId: string,
+  message: string
+): Promise<boolean> {
+  try {
+    // Primeira tentativa - envio normal
+    let response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
@@ -248,20 +352,19 @@ Cliente (${nome}): ${mensagem}`;
         data: {
           version: 'v2',
           content: {
-            messages: [{ type: 'text', text: respostaIsa }]
+            messages: [{ type: 'text', text: message }]
           }
         }
       }),
     });
 
-    let manychatResult = await manychatResponse.json();
-    console.log('[ISA-REPLY] Resposta ManyChat:', JSON.stringify(manychatResult));
-
-    // Se falhar por inatividade (código 3011), tentar com message_tag
-    if (manychatResult.code === 3011 || manychatResult.status === 'error') {
+    let result = await response.json();
+    
+    // Se falhar por inatividade, tentar com message_tag
+    if (result.code === 3011 || result.status === 'error') {
       console.log('[ISA-REPLY] Tentando com message_tag ACCOUNT_UPDATE...');
       
-      manychatResponse = await fetch('https://api.manychat.com/fb/sending/sendContent', {
+      response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
@@ -273,43 +376,174 @@ Cliente (${nome}): ${mensagem}`;
           data: {
             version: 'v2',
             content: {
-              messages: [{ type: 'text', text: respostaIsa }]
+              messages: [{ type: 'text', text: message }]
             }
           }
         }),
       });
 
-      manychatResult = await manychatResponse.json();
-      console.log('[ISA-REPLY] Resposta com message_tag:', JSON.stringify(manychatResult));
+      result = await response.json();
     }
 
-    // Registrar evento no sistema
+    console.log('[ISA-REPLY] Resposta ManyChat:', result.status);
+    return result.status === 'success';
+  } catch (error) {
+    console.error('[ISA-REPLY] Erro ao enviar para ManyChat:', error);
+    return false;
+  }
+}
+
+// ============================================================
+// MAIN HANDLER
+// ============================================================
+serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  try {
+    const body = await req.json();
+    console.log('[ISA-REPLY] 📨 Payload recebido:', JSON.stringify(body).substring(0, 300));
+
+    // Extrair dados do payload (compatível com ManyChat)
+    const subscriberId = body.subscriber_id?.toString().replace(/^\[|\]$/g, '').trim();
+    let mensagem = body.last_input_text || body.message || body.text || '';
+    const nome = body.full_name || body.name || body.first_name || 'Cliente';
+    const telefone = body.phone || body.wa_id || '';
+    const canal = body.channel || 'whatsapp';
+    
+    // Dados de mídia
+    const mediaUrl = body.media_url || body.attachment_url || body.file_url || '';
+    const mediaType = body.media_type || body.attachment_type || '';
+
+    if (!subscriberId) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'subscriber_id obrigatório' 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Buscar subscriber e lead vinculado
+    const { data: subscriber } = await supabase
+      .from('manychat_subscribers')
+      .select('lead_id, nome, atendimento_humano')
+      .eq('subscriber_id', subscriberId)
+      .maybeSingle();
+
+    // 🛑 Verificar atendimento humano
+    if (subscriber?.atendimento_humano) {
+      console.log('[ISA-REPLY] ⏸️ Atendimento humano ativo');
+      return new Response(JSON.stringify({ 
+        success: true, 
+        skipped: true,
+        reason: 'atendimento_humano_ativo' 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const leadId = subscriber?.lead_id;
+
+    // 📦 Processar mídia se presente
+    let mediaContent = '';
+    let extractedData = null;
+    
+    if (mediaUrl) {
+      const mediaResult = await processMedia(mediaUrl, mediaType, leadId, supabase);
+      if (mediaResult.processed) {
+        mediaContent = mediaResult.content;
+        extractedData = mediaResult.extractedData;
+        console.log('[ISA-REPLY] ✅ Mídia processada:', mediaContent.substring(0, 100));
+      }
+    }
+
+    // Combinar mensagem com conteúdo de mídia
+    const fullMessage = mediaContent 
+      ? `${mediaContent}\n\n${mensagem ? `Mensagem adicional: ${mensagem}` : ''}`
+      : mensagem;
+
+    if (!fullMessage || fullMessage.trim() === '') {
+      console.log('[ISA-REPLY] Mensagem vazia, ignorando');
+      return new Response(JSON.stringify({ 
+        success: true, 
+        skipped: true,
+        reason: 'mensagem vazia' 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log('[ISA-REPLY] 💬 Processando:', fullMessage.substring(0, 100));
+
+    // 📋 Buscar contexto completo do lead
+    let context = '';
+    if (leadId) {
+      context = await getLeadContext(leadId, supabase);
+    } else {
+      context = `[NOVO CONTATO - Sem lead vinculado ainda]\nNome informado: ${nome}\nTelefone: ${telefone}\n`;
+    }
+
+    // 🤖 Gerar resposta
+    const { response: respostaIsa } = await generateResponse(fullMessage, context);
+
+    if (!respostaIsa) {
+      throw new Error('Resposta vazia da IA');
+    }
+
+    // Truncar resposta para WhatsApp (máx 500 chars)
+    const respostaFinal = respostaIsa.length > 500 
+      ? respostaIsa.substring(0, 497) + '...' 
+      : respostaIsa;
+
+    // 💾 Salvar resposta no banco
+    await supabase.from('manychat_mensagens').insert({
+      subscriber_id: subscriberId,
+      subscriber_nome: subscriber?.nome || nome,
+      conteudo: respostaFinal,
+      canal: canal,
+      tipo: 'text',
+      direcao: 'saida',
+      lead_id: leadId,
+      metadata: extractedData ? { extracted_data: extractedData } : null,
+    });
+
+    // 📤 Enviar via ManyChat
+    const enviado = await sendToManyChat(subscriberId, respostaFinal);
+
+    // 📊 Registrar evento
     await supabase.from('system_events').insert({
       tipo: 'ia_resposta',
       fonte: 'isa-reply-manychat',
-      acao: 'resposta_gpt_enviada',
-      lead_id: subscriber?.lead_id,
+      acao: 'resposta_isa_enviada',
+      lead_id: leadId,
       dados: {
         subscriber_id: subscriberId,
-        mensagem_recebida: mensagem.substring(0, 200),
-        resposta_enviada: respostaIsa.substring(0, 500),
-        thread_id: newThreadId,
+        mensagem_recebida: fullMessage.substring(0, 200),
+        resposta_enviada: respostaFinal.substring(0, 300),
+        media_processada: !!mediaContent,
         canal,
       },
-      processado: true,
+      processado: enviado,
     });
+
+    console.log('[ISA-REPLY] ✅ Resposta enviada:', respostaFinal.substring(0, 100));
 
     return new Response(JSON.stringify({
       success: true,
-      resposta: respostaIsa,
+      resposta: respostaFinal,
       subscriber_id: subscriberId,
-      thread_id: newThreadId,
+      media_processed: !!mediaContent,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
-    console.error('[ISA-REPLY] Erro:', error);
+    console.error('[ISA-REPLY] ❌ Erro:', error);
     
     return new Response(JSON.stringify({
       success: false,
