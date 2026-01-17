@@ -68,3 +68,9 @@ verify_jwt = false
 
 [functions.petition-pdf]
 verify_jwt = false
+
+[functions.manychat-full-sync]
+verify_jwt = false
+
+[functions.sync-subscriber-names]
+verify_jwt = false

@@ -272,47 +272,38 @@ const ManyChatInbox = () => {
     }
   };
 
-  // Sincronizar TODOS os contatos com nome "Desconhecido"
+  // Sincronização COMPLETA - Importar TODOS contatos e conversas do ManyChat
   const syncAllContacts = async () => {
     setIsSyncing(true);
-    const unknownContacts = subscribers.filter(s => !s.nome || s.nome === 'Desconhecido' || s.nome === 'Sem nome');
     
-    let updated = 0;
-    for (const sub of unknownContacts) {
-      try {
-        const { data } = await supabase.functions.invoke('manychat', {
-          body: { action: 'buscar_subscriber', subscriberId: sub.subscriber_id }
-        });
-        
-        if (data?.status === 'success' && data?.data) {
-          const nome = data.data.name || `${data.data.first_name || ''} ${data.data.last_name || ''}`.trim();
-          const telefone = data.data.phone || sub.telefone;
-          
-          if (nome && nome !== '') {
-            await supabase
-              .from('manychat_subscribers' as any)
-              .update({ 
-                nome, 
-                foto: data.data.profile_pic || sub.foto,
-                telefone,
-                updated_at: new Date().toISOString() 
-              } as any)
-              .eq('subscriber_id', sub.subscriber_id);
-            updated++;
-          }
-        }
-      } catch (e) {
-        console.log('Erro ao sincronizar:', sub.subscriber_id, e);
-      }
+    try {
+      toast({
+        title: 'Sincronização iniciada',
+        description: 'Importando todos os contatos do ManyChat...'
+      });
+
+      const { data, error } = await supabase.functions.invoke('manychat-full-sync', {
+        body: { mode: 'full' }
+      });
+
+      if (error) throw error;
+
+      await loadSubscribers();
+      
+      toast({
+        title: 'Sincronização concluída!',
+        description: `${data.created || 0} novos contatos, ${data.updated || 0} atualizados de ${data.total || 0} total`
+      });
+    } catch (error: any) {
+      console.error('Erro na sincronização:', error);
+      toast({
+        title: 'Erro na sincronização',
+        description: error.message || 'Não foi possível sincronizar',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSyncing(false);
     }
-    
-    await loadSubscribers();
-    setIsSyncing(false);
-    
-    toast({
-      title: 'Sincronização concluída',
-      description: `${updated} contatos atualizados`
-    });
   };
 
   const loadMessages = async (subscriberId: string) => {
