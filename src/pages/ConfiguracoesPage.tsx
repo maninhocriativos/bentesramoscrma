@@ -95,6 +95,7 @@ export default function ConfiguracoesPage() {
               <Bot className="h-4 w-4" />
               <span className="hidden sm:inline">Isa IA</span>
             </TabsTrigger>
+          </TabsList>
 
           <TabsContent value="escritorio" className="animate-fade-in">
             <OfficeSettingsTab />
@@ -186,7 +187,5 @@ export default function ConfiguracoesPage() {
         </Tabs>
       </div>
     </AppLayout>
-  );
-}
   );
 }
