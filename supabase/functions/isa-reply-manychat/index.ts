@@ -271,6 +271,155 @@ async function getLeadContext(leadId: string, supabase: any): Promise<string> {
 }
 
 // ============================================================
+// DETERMINAR E ATUALIZAR ESTADO DO LEAD
+// ============================================================
+async function determineAndUpdateLeadState(
+  leadId: string,
+  currentState: string | null,
+  mensagemCliente: string,
+  respostaIsa: string,
+  hasMedia: boolean,
+  extractedData: any,
+  supabase: any
+): Promise<string | null> {
+  const state = currentState || 'NEW';
+  let newState: string | null = null;
+  let reason = '';
+
+  const msgLower = mensagemCliente.toLowerCase();
+  const respostaLower = respostaIsa.toLowerCase();
+
+  // Análise baseada em padrões e contexto
+  switch (state) {
+    case 'NEW':
+      // Cliente respondeu pela primeira vez → TRIAGE
+      if (mensagemCliente.length > 5) {
+        newState = 'TRIAGE';
+        reason = 'Cliente iniciou conversa - entrada em triagem';
+      }
+      break;
+
+    case 'TRIAGE':
+      // Detectar se classificação pode ser feita
+      const indiciosBancario = /banco|financiamento|empréstimo|consignado|cartão|juros|dívida|parcela|seguro|vendas? casadas?/i;
+      const indiciosAereo = /voo|avião|viagem|bagagem|aeroporto|companhia|latam|gol|azul|american/i;
+      
+      if (indiciosBancario.test(msgLower) || indiciosAereo.test(msgLower)) {
+        newState = 'CLASSIFIED';
+        reason = `Caso identificado: ${indiciosBancario.test(msgLower) ? 'Bancário' : 'Aéreo'}`;
+      }
+      break;
+
+    case 'CLASSIFIED':
+      // Se Isa está pedindo dados ou cliente está enviando dados → DATA_CAPTURE
+      const pedindoDados = /cpf|rg|documento|endereço|nome completo|nascimento|seus dados|envie.*foto/i;
+      const enviandoDados = /meu cpf|meu rg|moro em|nasci em|\d{3}\.\d{3}\.\d{3}-\d{2}|\d{11}/;
+      
+      if (pedindoDados.test(respostaLower) || enviandoDados.test(msgLower) || extractedData) {
+        newState = 'DATA_CAPTURE';
+        reason = 'Iniciando coleta de dados para contrato';
+      }
+      break;
+
+    case 'DATA_CAPTURE':
+      // Verificar se documento foi processado com dados extraídos
+      if (extractedData || hasMedia) {
+        // Checar se já temos dados suficientes para contrato
+        const { data: contractData } = await supabase
+          .from('lead_contract_data')
+          .select('cpf, rg, nome_mae')
+          .eq('lead_id', leadId)
+          .maybeSingle();
+
+        if (contractData?.cpf && contractData?.rg) {
+          // Dados mínimos coletados, mas ainda não enviou contrato
+          reason = 'Dados principais coletados';
+        }
+      }
+      
+      // Se mencionou envio de contrato
+      if (/contrato|assinatura|clicksign|enviar.*contrato/i.test(respostaLower)) {
+        newState = 'CONTRACT_SENT';
+        reason = 'Contrato será enviado ao cliente';
+      }
+      break;
+
+    case 'CONTRACT_SENT':
+      // Detectar assinatura
+      if (/assinei|assinado|assinatura|confirmado/i.test(msgLower)) {
+        newState = 'CONTRACT_SIGNED';
+        reason = 'Cliente confirmou assinatura do contrato';
+      }
+      break;
+
+    case 'CONTRACT_SIGNED':
+      // Checar documentos pendentes
+      if (/documento|comprovante|enviar|pendente/i.test(respostaLower)) {
+        newState = 'DOCS_PENDING';
+        reason = 'Aguardando documentos adicionais';
+      }
+      break;
+
+    case 'DOCS_PENDING':
+      // Verificar checklist de documentos
+      const { data: checklist } = await supabase
+        .from('lead_docs_checklist')
+        .select('received')
+        .eq('lead_id', leadId)
+        .eq('is_required', true);
+
+      if (checklist && checklist.length > 0) {
+        const todosRecebidos = checklist.every((d: any) => d.received);
+        if (todosRecebidos) {
+          newState = 'READY_FOR_LAWYER';
+          reason = 'Todos documentos obrigatórios recebidos';
+        }
+      }
+      break;
+  }
+
+  // Atualizar estado se houve mudança
+  if (newState && newState !== state) {
+    console.log(`[ISA-REPLY] 🔄 Transição de estado: ${state} → ${newState} (${reason})`);
+
+    // Usar a função RPC para atualizar estado com histórico
+    const { error } = await supabase.rpc('update_lead_state', {
+      p_lead_id: leadId,
+      p_to_state: newState,
+      p_changed_by: 'isa-reply-manychat',
+      p_reason: reason,
+    });
+
+    if (error) {
+      console.error('[ISA-REPLY] Erro ao atualizar estado:', error);
+      
+      // Fallback: atualizar diretamente
+      await supabase
+        .from('leads_juridicos')
+        .update({ 
+          lead_state: newState,
+          state_updated_at: new Date().toISOString()
+        })
+        .eq('id', leadId);
+
+      await supabase
+        .from('lead_state_history')
+        .insert({
+          lead_id: leadId,
+          from_state: state,
+          to_state: newState,
+          changed_by: 'isa-reply-manychat',
+          reason: reason,
+        });
+    }
+
+    return newState;
+  }
+
+  return null;
+}
+
+// ============================================================
 // GERAR RESPOSTA COM IA
 // ============================================================
 async function generateResponse(
@@ -448,7 +597,17 @@ serve(async (req: Request) => {
     }
 
     const leadId = subscriber?.lead_id;
-
+    
+    // Buscar estado atual do lead
+    let currentLeadState: string | null = null;
+    if (leadId) {
+      const { data: lead } = await supabase
+        .from('leads_juridicos')
+        .select('lead_state')
+        .eq('id', leadId)
+        .maybeSingle();
+      currentLeadState = lead?.lead_state || null;
+    }
     // 📦 Processar mídia se presente
     let mediaContent = '';
     let extractedData = null;
@@ -515,6 +674,20 @@ serve(async (req: Request) => {
     // 📤 Enviar via ManyChat
     const enviado = await sendToManyChat(subscriberId, respostaFinal);
 
+    // 🔄 Atualizar estado do lead baseado na conversa
+    let stateTransition: string | null = null;
+    if (leadId) {
+      stateTransition = await determineAndUpdateLeadState(
+        leadId,
+        currentLeadState,
+        fullMessage,
+        respostaFinal,
+        !!mediaContent,
+        extractedData,
+        supabase
+      );
+    }
+
     // 📊 Registrar evento
     await supabase.from('system_events').insert({
       tipo: 'ia_resposta',
@@ -526,18 +699,24 @@ serve(async (req: Request) => {
         mensagem_recebida: fullMessage.substring(0, 200),
         resposta_enviada: respostaFinal.substring(0, 300),
         media_processada: !!mediaContent,
+        estado_anterior: currentLeadState,
+        novo_estado: stateTransition,
         canal,
       },
       processado: enviado,
     });
 
     console.log('[ISA-REPLY] ✅ Resposta enviada:', respostaFinal.substring(0, 100));
+    if (stateTransition) {
+      console.log('[ISA-REPLY] 🔄 Estado atualizado para:', stateTransition);
+    }
 
     return new Response(JSON.stringify({
       success: true,
       resposta: respostaFinal,
       subscriber_id: subscriberId,
       media_processed: !!mediaContent,
+      state_transition: stateTransition,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
