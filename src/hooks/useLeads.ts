@@ -30,6 +30,41 @@ export function useLeads() {
     fetchLeads();
   }, [fetchLeads]);
 
+  // Fallback sync: ensures new leads appear even if Realtime drops
+  useEffect(() => {
+    let mounted = true;
+
+    const safeRefetch = async () => {
+      if (!mounted) return;
+      // Only refetch when tab is visible to avoid background churn
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      await fetchLeads();
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void safeRefetch();
+    };
+
+    const onFocus = () => {
+      void safeRefetch();
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    // Periodic check (covers missed Realtime events)
+    const interval = window.setInterval(() => {
+      void safeRefetch();
+    }, 45000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [fetchLeads]);
+
   // Separate effect for realtime subscription to avoid re-subscribing on fetchLeads change
   useEffect(() => {
     // Real-time subscription - ensures UI updates immediately
