@@ -68,22 +68,58 @@ function detectarTribunal(numeroProcesso: string): string | null {
   return null;
 }
 
-// Formata data
+// Formata data de diferentes formatos possíveis da API DataJud
 function formatarData(dataStr: string | null | undefined): string {
   if (!dataStr) return 'Não informado';
+  
   try {
-    if (dataStr.includes('-')) {
-      const date = new Date(dataStr);
-      if (!isNaN(date.getTime())) {
-        return date.toLocaleDateString('pt-BR', { 
-          day: '2-digit', month: '2-digit', year: 'numeric',
-          timeZone: 'America/Sao_Paulo'
-        });
+    let date: Date | null = null;
+    
+    // Se for número (timestamp em milissegundos)
+    if (typeof dataStr === 'number' || !isNaN(Number(dataStr))) {
+      const timestamp = Number(dataStr);
+      if (timestamp > 0 && timestamp < 4102444800000) {
+        date = new Date(timestamp);
       }
     }
-    if (dataStr.includes('/')) return dataStr;
+    
+    // Formato ISO: 2023-10-17T00:00:00.000Z
+    if (!date && typeof dataStr === 'string' && dataStr.includes('-')) {
+      const datePart = dataStr.split('T')[0];
+      const parts = datePart.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0]);
+        const month = parseInt(parts[1]) - 1;
+        const day = parseInt(parts[2]);
+        if (year >= 1900 && year <= 2100 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+          date = new Date(year, month, day);
+        }
+      }
+    }
+    
+    // Formato brasileiro: dd/mm/yyyy
+    if (!date && typeof dataStr === 'string' && dataStr.includes('/')) {
+      const parts = dataStr.split('/');
+      if (parts.length === 3) {
+        const day = parseInt(parts[0]);
+        const month = parseInt(parts[1]) - 1;
+        const year = parseInt(parts[2]);
+        if (year >= 1900 && year <= 2100) {
+          date = new Date(year, month, day);
+        }
+      }
+    }
+    
+    if (date && !isNaN(date.getTime())) {
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear();
+      if (year >= 1900 && year <= 2100) {
+        return `${day}/${month}/${year}`;
+      }
+    }
   } catch { /* ignore */ }
-  return dataStr;
+  return String(dataStr);
 }
 
 // Determina status do processo
@@ -276,11 +312,13 @@ serve(async (req) => {
       }
     }
     
-    // Ação: Monitoramento automático (cron job a cada 7 dias)
+    // Ação: Monitoramento automático com frequência personalizável
     if (action === 'monitor_semanal') {
-      console.log('📋 Iniciando monitoramento semanal de processos...');
+      console.log('📋 Iniciando monitoramento de processos com frequência personalizável...');
       
-      // Buscar todos os processos ativos com leads vinculados
+      const agora = new Date();
+      
+      // Buscar todos os processos ativos com notificação ativa
       const { data: processos } = await supabase
         .from('processos')
         .select(`
@@ -289,6 +327,9 @@ serve(async (req) => {
           titulo_acao,
           status,
           cliente_id,
+          frequencia_notificacao_dias,
+          ultima_notificacao_at,
+          notificacao_ativa,
           leads_juridicos!inner (
             id,
             nome,
@@ -296,7 +337,8 @@ serve(async (req) => {
           )
         `)
         .in('status', ['Em Andamento', 'Suspenso'])
-        .not('numero_processo', 'is', null);
+        .not('numero_processo', 'is', null)
+        .eq('notificacao_ativa', true);
       
       if (!processos || processos.length === 0) {
         console.log('📭 Nenhum processo ativo para monitorar');
@@ -306,13 +348,27 @@ serve(async (req) => {
         );
       }
       
-      console.log(`📊 ${processos.length} processos para monitorar`);
+      console.log(`📊 ${processos.length} processos para avaliar`);
       
       let enviados = 0;
       let erros = 0;
+      let ignorados = 0;
       
       for (const proc of processos) {
         if (!proc.numero_processo) continue;
+        
+        // Verificar se está na hora de enviar baseado na frequência
+        const frequencia = proc.frequencia_notificacao_dias || 7;
+        const ultimaNotificacao = proc.ultima_notificacao_at ? new Date(proc.ultima_notificacao_at) : null;
+        
+        if (ultimaNotificacao) {
+          const diasDesdeUltima = Math.floor((agora.getTime() - ultimaNotificacao.getTime()) / (1000 * 60 * 60 * 24));
+          if (diasDesdeUltima < frequencia) {
+            console.log(`⏭️ Processo ${proc.numero_processo}: próxima notificação em ${frequencia - diasDesdeUltima} dias`);
+            ignorados++;
+            continue;
+          }
+        }
         
         const leadId = proc.cliente_id;
         const lead = proc.leads_juridicos as any;
@@ -328,15 +384,15 @@ serve(async (req) => {
             const processoAtualizado = resultado.hits.hits[0]._source;
             const novoStatus = determinarStatus(processoAtualizado);
             
-            // Verificar se houve movimentação recente (últimos 7 dias)
+            // Verificar se houve movimentação recente
             const ultimaMovimentacao = processoAtualizado.movimentos?.[0];
             let houveMudanca = false;
             
             if (ultimaMovimentacao?.dataHora) {
               const dataMovimentacao = new Date(ultimaMovimentacao.dataHora);
-              const seteDiasAtras = new Date();
-              seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
-              houveMudanca = dataMovimentacao > seteDiasAtras;
+              const diasAtras = new Date();
+              diasAtras.setDate(diasAtras.getDate() - frequencia);
+              houveMudanca = dataMovimentacao > diasAtras;
             }
             
             // Atualizar status do processo no banco se mudou
@@ -363,7 +419,13 @@ serve(async (req) => {
               
               if (enviado) {
                 enviados++;
-                console.log(`✅ Atualização enviada para ${lead?.nome} (${proc.numero_processo})`);
+                console.log(`✅ Atualização enviada para ${lead?.nome} (${proc.numero_processo}) - frequência ${frequencia} dias`);
+                
+                // Atualizar data da última notificação
+                await supabase
+                  .from('processos')
+                  .update({ ultima_notificacao_at: agora.toISOString() })
+                  .eq('id', proc.id);
                 
                 // Registrar evento
                 await supabase.from('system_events').insert({
@@ -374,7 +436,8 @@ serve(async (req) => {
                   dados: { 
                     numero_processo: proc.numero_processo, 
                     status: novoStatus,
-                    houve_mudanca: houveMudanca
+                    houve_mudanca: houveMudanca,
+                    frequencia_dias: frequencia
                   },
                 });
                 
@@ -382,8 +445,8 @@ serve(async (req) => {
                 await supabase.from('interacoes').insert({
                   cliente_id: leadId,
                   tipo: 'Mensagem',
-                  resumo: `Atualização semanal do processo ${proc.numero_processo}`,
-                  detalhes: `Status: ${novoStatus}. ${houveMudanca ? 'Houve movimentação recente.' : 'Sem novas movimentações.'}`,
+                  resumo: `Atualização do processo ${proc.numero_processo}`,
+                  detalhes: `Status: ${novoStatus}. ${houveMudanca ? 'Houve movimentação recente.' : 'Sem novas movimentações.'} Frequência: ${frequencia} dias.`,
                   direcao: 'saida',
                 });
               }
@@ -399,13 +462,14 @@ serve(async (req) => {
         }
       }
       
-      console.log(`📊 Monitoramento concluído: ${enviados} atualizações enviadas, ${erros} erros`);
+      console.log(`📊 Monitoramento concluído: ${enviados} enviados, ${ignorados} ignorados, ${erros} erros`);
       
       return new Response(
         JSON.stringify({ 
           success: true, 
           processados: processos.length,
           enviados,
+          ignorados,
           erros
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
