@@ -1712,28 +1712,37 @@ export type Database = {
           advogado_responsavel: string | null
           cliente_id: string | null
           created_at: string | null
+          frequencia_notificacao_dias: number | null
           id: string
+          notificacao_ativa: boolean | null
           numero_processo: string | null
           status: string | null
           titulo_acao: string | null
+          ultima_notificacao_at: string | null
         }
         Insert: {
           advogado_responsavel?: string | null
           cliente_id?: string | null
           created_at?: string | null
+          frequencia_notificacao_dias?: number | null
           id?: string
+          notificacao_ativa?: boolean | null
           numero_processo?: string | null
           status?: string | null
           titulo_acao?: string | null
+          ultima_notificacao_at?: string | null
         }
         Update: {
           advogado_responsavel?: string | null
           cliente_id?: string | null
           created_at?: string | null
+          frequencia_notificacao_dias?: number | null
           id?: string
+          notificacao_ativa?: boolean | null
           numero_processo?: string | null
           status?: string | null
           titulo_acao?: string | null
+          ultima_notificacao_at?: string | null
         }
         Relationships: [
           {

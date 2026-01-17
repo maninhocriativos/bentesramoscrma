@@ -3,10 +3,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Loader2, Scale, Calendar, Users, FileText, AlertCircle, User, Building, Gavel, Clock, DollarSign, Shield, Briefcase } from 'lucide-react';
+import { Search, Loader2, Scale, Calendar, Users, FileText, AlertCircle, User, Building, Gavel, Clock, DollarSign, Shield, Briefcase, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { MovimentoDetailModal } from './MovimentoDetailModal';
 
 interface Movimento {
   dataHora: string;
@@ -57,6 +58,8 @@ export function ConsultaProcessoExterno() {
   const [processos, setProcessos] = useState<ProcessoExterno[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [searchType, setSearchType] = useState<'numero' | 'cpf'>('numero');
+  const [selectedMovimento, setSelectedMovimento] = useState<Movimento | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const formatCPF = (value: string) => {
     const digits = value.replace(/\D/g, '').slice(0, 11);
@@ -279,28 +282,39 @@ export function ConsultaProcessoExterno() {
         </div>
       )}
 
-      {/* Últimas movimentações */}
+      {/* Últimas movimentações - Clicáveis */}
       {proc.movimentos.length > 0 && (
         <div>
           <p className="text-sm font-medium mb-2">Últimas Movimentações ({proc.movimentos.length})</p>
+          <p className="text-xs text-muted-foreground mb-2">Clique para ver detalhes</p>
           <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
             {proc.movimentos.map((mov, i) => (
-              <div key={i} className="p-2 bg-muted/30 rounded-lg border-l-2 border-primary/30">
+              <button
+                key={i}
+                onClick={() => {
+                  setSelectedMovimento(mov);
+                  setIsModalOpen(true);
+                }}
+                className="w-full p-3 bg-muted/30 rounded-lg border-l-2 border-primary/30 hover:bg-muted/50 hover:border-primary transition-all text-left group"
+              >
                 <div className="flex justify-between items-start gap-2">
                   <div className="flex-1">
-                    <p className="text-sm font-medium">{mov.nome}</p>
+                    <p className="text-sm font-medium group-hover:text-primary transition-colors">{mov.nome}</p>
                     {mov.codigo && (
-                      <span className="text-xs text-muted-foreground">Código: {mov.codigo}</span>
+                      <span className="text-xs text-muted-foreground">Código CNJ: {mov.codigo}</span>
                     )}
                   </div>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{mov.dataHora}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">{mov.dataHora}</span>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  </div>
                 </div>
                 {mov.complemento && (
-                  <p className="text-xs text-muted-foreground mt-1 pl-2 border-l border-muted">
+                  <p className="text-xs text-muted-foreground mt-1 pl-2 border-l border-muted line-clamp-2">
                     {mov.complemento}
                   </p>
                 )}
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -397,6 +411,16 @@ export function ConsultaProcessoExterno() {
         {/* Processo único */}
         {processo && renderProcessoDetails(processo)}
       </CardContent>
+      
+      {/* Modal de detalhes da movimentação */}
+      <MovimentoDetailModal
+        movimento={selectedMovimento}
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setSelectedMovimento(null);
+        }}
+      />
     </Card>
   );
 }
