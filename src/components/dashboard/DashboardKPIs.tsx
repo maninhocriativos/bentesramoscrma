@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Users, Scale, TrendingUp, Briefcase, ArrowUpRight, ArrowDownRight, Sparkles, Activity } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Lead } from '@/types/leads';
 import { Processo } from '@/types/processos';
 import { AnimatedCounter } from '@/components/ui/animated-counter';
 import { cn } from '@/lib/utils';
+import { LEAD_STATE_LABELS, LeadState } from '@/types/stateMachine';
 
 interface DashboardKPIsProps {
   leads: Lead[];
@@ -14,30 +15,69 @@ interface DashboardKPIsProps {
 // Track previous values for trend comparison
 let previousValues: { [key: string]: number } = {};
 
+// Estados que indicam lead em progresso ativo
+const ESTADOS_ATIVOS: LeadState[] = ['TRIAGE', 'CLASSIFIED', 'DATA_CAPTURE', 'CONTRACT_SENT'];
+
+// Estados que indicam conversão bem sucedida
+const ESTADOS_CONVERTIDOS: LeadState[] = ['CONTRACT_SIGNED', 'DOCS_PENDING', 'READY_FOR_LAWYER'];
+
 export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
   const [recentChange, setRecentChange] = useState<string | null>(null);
   
-  const totalLeads = leads.length;
-  const totalProcessos = processos.length;
-  const leadsGanhos = leads.filter(l => l.status === 'Ganho').length;
-  const leadsPerdidos = leads.filter(l => l.status === 'Perdido').length;
-  const leadsEmAtendimento = leads.filter(l => l.status === 'Em Atendimento').length;
-  const processosAtivos = processos.filter(p => p.status === 'Em Andamento').length;
-  
-  // Calculate leads entering today
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const leadsHoje = leads.filter(l => new Date(l.created_at) >= today).length;
+  // Métricas baseadas em lead_state (State Machine)
+  const metrics = useMemo(() => {
+    const totalLeads = leads.length;
+    
+    // Leads em progresso ativo (usando lead_state)
+    const leadsEmProgresso = leads.filter(l => 
+      l.lead_state && ESTADOS_ATIVOS.includes(l.lead_state as LeadState)
+    ).length;
+    
+    // Leads convertidos (contrato assinado ou além)
+    const leadsConvertidos = leads.filter(l => 
+      l.lead_state && ESTADOS_CONVERTIDOS.includes(l.lead_state as LeadState)
+    ).length;
+    
+    // Leads perdidos (is_lost = true)
+    const leadsPerdidos = leads.filter(l => l.is_lost === true).length;
+    
+    // Leads novos (estado NEW ou sem estado)
+    const leadsNovos = leads.filter(l => !l.lead_state || l.lead_state === 'NEW').length;
+    
+    // Leads prontos para advogado
+    const leadsReady = leads.filter(l => l.lead_state === 'READY_FOR_LAWYER').length;
+    
+    // Leads criados hoje
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const leadsHoje = leads.filter(l => new Date(l.created_at) >= today).length;
+    
+    // Taxa de conversão: convertidos / (convertidos + perdidos)
+    const leadsFinalizados = leadsConvertidos + leadsPerdidos;
+    const taxaConversao = leadsFinalizados > 0 
+      ? Math.round((leadsConvertidos / leadsFinalizados) * 100) 
+      : 0;
+    
+    return {
+      totalLeads,
+      leadsEmProgresso,
+      leadsConvertidos,
+      leadsPerdidos,
+      leadsNovos,
+      leadsReady,
+      leadsHoje,
+      taxaConversao
+    };
+  }, [leads]);
 
   // Detect changes for visual feedback
   useEffect(() => {
     const currentValues: { [key: string]: number } = {
-      totalLeads,
-      leadsEmAtendimento,
-      leadsGanhos
+      totalLeads: metrics.totalLeads,
+      leadsEmProgresso: metrics.leadsEmProgresso,
+      leadsConvertidos: metrics.leadsConvertidos
     };
 
-    // Check for changes
     Object.keys(currentValues).forEach(key => {
       if (previousValues[key] !== undefined && previousValues[key] !== currentValues[key]) {
         setRecentChange(key);
@@ -46,32 +86,29 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
     });
 
     previousValues = { ...currentValues };
-  }, [totalLeads, leadsEmAtendimento, leadsGanhos]);
-  
-  const leadsFinalizados = leadsGanhos + leadsPerdidos;
-  const taxaConversao = leadsFinalizados > 0 ? Math.round((leadsGanhos / leadsFinalizados) * 100) : 0;
+  }, [metrics]);
 
   const kpis = [
     {
       id: 'totalLeads',
       title: 'Total de Leads',
-      value: totalLeads,
+      value: metrics.totalLeads,
       icon: Users,
-      trend: leadsHoje > 0 ? `+${leadsHoje} hoje` : '+0 hoje',
-      trendUp: leadsHoje > 0,
-      description: 'Leads captados',
+      trend: metrics.leadsHoje > 0 ? `+${metrics.leadsHoje} hoje` : '+0 hoje',
+      trendUp: metrics.leadsHoje > 0,
+      description: `${metrics.leadsNovos} novos aguardando`,
       gradient: 'from-blue-500/20 via-blue-400/10 to-transparent',
       iconBg: 'bg-blue-500/15 group-hover:bg-blue-500/25',
       iconColor: 'text-blue-600',
     },
     {
-      id: 'leadsEmAtendimento',
-      title: 'Em Atendimento',
-      value: leadsEmAtendimento,
+      id: 'leadsEmProgresso',
+      title: 'Em Progresso',
+      value: metrics.leadsEmProgresso,
       icon: TrendingUp,
-      trend: leadsEmAtendimento > 0 ? 'Ativos' : 'Nenhum',
-      trendUp: leadsEmAtendimento > 0,
-      description: 'Leads ativos agora',
+      trend: metrics.leadsEmProgresso > 0 ? 'Ativos' : 'Nenhum',
+      trendUp: metrics.leadsEmProgresso > 0,
+      description: 'Triagem a Contrato',
       gradient: 'from-orange-500/20 via-orange-400/10 to-transparent',
       iconBg: 'bg-orange-500/15 group-hover:bg-orange-500/25',
       iconColor: 'text-orange-600',
@@ -79,24 +116,24 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
     {
       id: 'taxaConversao',
       title: 'Taxa de Conversão',
-      value: taxaConversao,
+      value: metrics.taxaConversao,
       isPercentage: true,
       icon: Scale,
-      trend: taxaConversao >= 50 ? 'Excelente' : 'Em progresso',
-      trendUp: taxaConversao >= 50,
-      description: 'Leads convertidos',
+      trend: metrics.taxaConversao >= 50 ? 'Excelente' : 'Em progresso',
+      trendUp: metrics.taxaConversao >= 50,
+      description: 'Convertidos vs Perdidos',
       gradient: 'from-gold/20 via-gold/10 to-transparent',
       iconBg: 'bg-gold/15 group-hover:bg-gold/25',
       iconColor: 'text-gold',
     },
     {
-      id: 'leadsGanhos',
-      title: 'Leads Ganhos',
-      value: leadsGanhos,
+      id: 'leadsConvertidos',
+      title: 'Convertidos',
+      value: metrics.leadsConvertidos,
       icon: Briefcase,
-      trend: leadsGanhos > 0 ? 'Contratos' : '0',
-      trendUp: leadsGanhos > 0,
-      description: 'Contratos fechados',
+      trend: metrics.leadsReady > 0 ? `${metrics.leadsReady} prontos` : 'Contratos',
+      trendUp: metrics.leadsConvertidos > 0,
+      description: 'Contratos assinados+',
       gradient: 'from-success/20 via-success/10 to-transparent',
       iconBg: 'bg-success/15 group-hover:bg-success/25',
       iconColor: 'text-success',

@@ -22,4 +22,14 @@ export interface Lead {
   origem: LeadOrigem | null;
   valor_causa: number | null;
   tipo_acao: string | null;
+  // State Machine fields (optional - may not be set on all leads)
+  lead_state?: string | null;
+  state_updated_at?: string | null;
+  is_lost?: boolean | null;
+  lost_reason?: string | null;
+  lost_at?: string | null;
+  triage_started_at?: string | null;
+  contract_sent_at?: string | null;
+  contract_signed_at?: string | null;
+  last_contact_at?: string | null;
 }
