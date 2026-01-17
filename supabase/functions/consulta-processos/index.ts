@@ -564,21 +564,56 @@ function formatarProcesso(processo: any, tribunalFallback: string): ProcessoResp
     valorCausa: processo.valorCausa || null,
     prioridade: prioridades,
     movimentos: movimentosFormatados,
-    partes: (processo.partes || []).map((p: any) => {
-      const advogados = (p.advogados || []).map((adv: any) => ({
-        nome: adv.nome || 'Advogado não identificado',
-        oab: adv.inscricao ? `OAB/${adv.inscricao.unidadeFederativa || ''} ${adv.inscricao.numero || ''}`.trim() : undefined
-      }));
+    partes: (processo.partes || processo.poloAtivo?.concat(processo.poloPassivo || []) || []).map((p: any) => {
+      // Debug para ver estrutura real
+      console.log('📋 Parte raw:', JSON.stringify(p).substring(0, 500));
       
-      const poloOriginal = (p.polo || p.tipoParte || '').toUpperCase();
+      // Advogados podem estar em diversos caminhos
+      const advogadosRaw = p.advogados || p.representantes || p.procuradores || [];
+      const advogados = advogadosRaw.map((adv: any) => {
+        // O nome pode estar direto ou em pessoa.nome
+        const nomeAdv = adv.nome || adv.pessoa?.nome || adv.nomeAdvogado || 'Advogado não identificado';
+        
+        // OAB pode estar em inscricao ou direto
+        let oab: string | undefined;
+        if (adv.inscricao) {
+          const uf = adv.inscricao.unidadeFederativa || adv.inscricao.uf || '';
+          const num = adv.inscricao.numero || adv.inscricao.numeroOAB || '';
+          if (uf || num) oab = `OAB/${uf} ${num}`.trim();
+        } else if (adv.numeroOAB || adv.oab) {
+          oab = `OAB ${adv.numeroOAB || adv.oab}`;
+        }
+        
+        return { nome: nomeAdv, oab };
+      });
+      
+      const poloOriginal = (p.polo || p.tipoParte || p.tipoParticipacao || '').toUpperCase();
+      
+      // Nome da parte pode estar em diversos caminhos
+      const nomeParte = p.nome || p.pessoa?.nome || p.nomeCompleto || p.razaoSocial || p.nomeParte || 'Nome não informado';
+      
+      // Tipo de pessoa
+      let tipoPessoa = 'Não informado';
+      if (p.tipoPessoa === 'FISICA' || p.pessoa?.tipoPessoa === 'FISICA' || p.cpf) {
+        tipoPessoa = 'Pessoa Física';
+      } else if (p.tipoPessoa === 'JURIDICA' || p.pessoa?.tipoPessoa === 'JURIDICA' || p.cnpj) {
+        tipoPessoa = 'Pessoa Jurídica';
+      }
+      
+      // Documento pode estar em diversos campos
+      const documento = p.numeroDocumentoPrincipal 
+        || p.pessoa?.numeroDocumentoPrincipal 
+        || p.cpf 
+        || p.cnpj 
+        || p.documento
+        || undefined;
       
       return {
-        nome: p.nome || p.pessoa?.nome || 'Nome não informado',
-        tipo: poloMap[poloOriginal] || p.polo || 'Parte',
-        polo: p.polo || 'Não informado',
-        tipoPessoa: p.tipoPessoa === 'FISICA' || p.pessoa?.tipoPessoa === 'FISICA' ? 'Pessoa Física' : 
-                    p.tipoPessoa === 'JURIDICA' || p.pessoa?.tipoPessoa === 'JURIDICA' ? 'Pessoa Jurídica' : 'Não informado',
-        documento: p.numeroDocumentoPrincipal || p.pessoa?.numeroDocumentoPrincipal || undefined,
+        nome: nomeParte,
+        tipo: poloMap[poloOriginal] || p.polo || p.tipoParte || 'Parte',
+        polo: p.polo || p.tipoParte || 'Não informado',
+        tipoPessoa,
+        documento,
         advogados: advogados.length > 0 ? advogados : undefined
       };
     }),
