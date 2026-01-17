@@ -93,9 +93,11 @@ export function ProcessoModal({
         );
         
         let clienteId = '';
+        let nomeCliente = '';
         if (parteAutor?.nome) {
+          nomeCliente = parteAutor.nome;
           const nomeAutor = parteAutor.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-          // Buscar em TODOS os leads, não apenas clientes
+          // Buscar em TODOS os leads
           const leadMatch = leads.find(l => {
             const nomeLead = (l.nome || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             return nomeLead.includes(nomeAutor) || nomeAutor.includes(nomeLead);
@@ -105,19 +107,36 @@ export function ProcessoModal({
           }
         }
 
+        // Extrair advogado do autor
+        let advogadoResponsavel = '';
+        if (parteAutor?.advogados && parteAutor.advogados.length > 0) {
+          const adv = parteAutor.advogados[0];
+          advogadoResponsavel = adv.oab ? `${adv.nome} (${adv.oab})` : adv.nome;
+        }
+
         setFormData(prev => ({
           ...prev,
           titulo_acao: proc.classe || prev.titulo_acao,
           status: mapApiStatusToLocal(proc.status),
           cliente_id: clienteId || prev.cliente_id,
+          advogado_responsavel: advogadoResponsavel || prev.advogado_responsavel,
         }));
 
         toast.success('Dados do processo carregados!', {
-          description: `${proc.classe} - ${proc.tribunal}`
+          description: nomeCliente 
+            ? `${proc.classe} - Cliente: ${nomeCliente}` 
+            : `${proc.classe} - ${proc.tribunal}`
+        });
+      } else {
+        toast.error('Processo não encontrado', {
+          description: 'Verifique o número do processo e tente novamente'
         });
       }
     } catch (err) {
       console.error('Erro ao buscar dados do processo:', err);
+      toast.error('Erro ao buscar dados', {
+        description: 'Não foi possível consultar o DataJud'
+      });
     } finally {
       setFetchingData(false);
     }
