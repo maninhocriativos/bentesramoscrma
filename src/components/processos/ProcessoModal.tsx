@@ -94,11 +94,12 @@ export function ProcessoModal({
         
         let clienteId = '';
         if (parteAutor?.nome) {
-          // Buscar lead pelo nome
-          const leadMatch = leads.find(l => 
-            l.nome?.toLowerCase().includes(parteAutor.nome.toLowerCase()) ||
-            parteAutor.nome.toLowerCase().includes(l.nome?.toLowerCase() || '')
-          );
+          const nomeAutor = parteAutor.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          // Buscar em TODOS os leads, não apenas clientes
+          const leadMatch = leads.find(l => {
+            const nomeLead = (l.nome || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            return nomeLead.includes(nomeAutor) || nomeAutor.includes(nomeLead);
+          });
           if (leadMatch) {
             clienteId = leadMatch.id;
           }
@@ -190,10 +191,8 @@ export function ProcessoModal({
     }
   };
 
-  // Filter leads that have status "Ganho" or "Contrato Assinado" - these are clients
-  const clienteOptions = leads.filter(l => 
-    l.status === 'Ganho' || l.status === 'Contrato Assinado'
-  );
+  // Show all leads as potential clients
+  const clienteOptions = leads;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
