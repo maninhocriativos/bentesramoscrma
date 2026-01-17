@@ -279,46 +279,76 @@ async function buscarPorCPF(cpf: string, tribunais: string[]): Promise<any[]> {
   return resultados;
 }
 
-// Formata data de diferentes formatos possíveis
+// Formata data de diferentes formatos possíveis da API DataJud
 function formatarData(dataStr: string | null | undefined): string {
   if (!dataStr) return 'Não informado';
   
-  // Tenta diferentes formatos
   try {
-    // Formato ISO: 2023-10-17T00:00:00.000Z ou 2023-10-17
-    if (dataStr.includes('-')) {
-      const date = new Date(dataStr);
-      if (!isNaN(date.getTime())) {
-        return date.toLocaleDateString('pt-BR', { 
-          day: '2-digit', 
-          month: '2-digit', 
-          year: 'numeric',
-          timeZone: 'America/Sao_Paulo'
-        });
+    let date: Date | null = null;
+    
+    // Log para debug
+    console.log(`📅 Formatando data: ${dataStr} (tipo: ${typeof dataStr})`);
+    
+    // Se for número (timestamp em milissegundos)
+    if (typeof dataStr === 'number' || !isNaN(Number(dataStr))) {
+      const timestamp = Number(dataStr);
+      // DataJud pode retornar timestamp em ms 
+      // Verificar se é um timestamp válido (após 1970 e antes de 2100)
+      if (timestamp > 0 && timestamp < 4102444800000) {
+        date = new Date(timestamp);
       }
     }
-    // Formato dd/mm/yyyy
-    if (dataStr.includes('/')) {
-      return dataStr;
-    }
-    // Formato timestamp em ms
-    const timestamp = parseInt(dataStr);
-    if (!isNaN(timestamp)) {
-      const date = new Date(timestamp);
-      if (!isNaN(date.getTime())) {
-        return date.toLocaleDateString('pt-BR', { 
-          day: '2-digit', 
-          month: '2-digit', 
-          year: 'numeric',
-          timeZone: 'America/Sao_Paulo'
-        });
+    
+    // Formato ISO: 2023-10-17T00:00:00.000Z ou 2023-10-17 ou 2011-05-28
+    if (!date && typeof dataStr === 'string' && dataStr.includes('-')) {
+      // Extrair apenas a parte da data (ignorar timezone issues)
+      const datePart = dataStr.split('T')[0];
+      const parts = datePart.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0]);
+        const month = parseInt(parts[1]) - 1; // Mês é 0-indexed
+        const day = parseInt(parts[2]);
+        
+        // Validar que é uma data razoável (entre 1900 e 2100)
+        if (year >= 1900 && year <= 2100 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+          date = new Date(year, month, day);
+        }
       }
     }
+    
+    // Formato brasileiro: dd/mm/yyyy
+    if (!date && typeof dataStr === 'string' && dataStr.includes('/')) {
+      const parts = dataStr.split('/');
+      if (parts.length === 3) {
+        const day = parseInt(parts[0]);
+        const month = parseInt(parts[1]) - 1;
+        const year = parseInt(parts[2]);
+        if (year >= 1900 && year <= 2100) {
+          date = new Date(year, month, day);
+        }
+      }
+    }
+    
+    // Se conseguiu parsear a data, formatar
+    if (date && !isNaN(date.getTime())) {
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear();
+      
+      // Validar ano razoável
+      if (year >= 1900 && year <= 2100) {
+        console.log(`✅ Data formatada: ${day}/${month}/${year}`);
+        return `${day}/${month}/${year}`;
+      }
+    }
+    
+    console.warn(`⚠️ Não foi possível formatar a data: ${dataStr}`);
   } catch (e) {
     console.error('Erro ao formatar data:', e);
   }
   
-  return dataStr;
+  // Retornar a string original se não conseguir formatar
+  return String(dataStr);
 }
 
 // Determina o status do processo baseado nas movimentações e campos
