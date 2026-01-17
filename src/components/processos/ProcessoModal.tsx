@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Search, Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,9 @@ import {
 import { Processo, ProcessoStatus } from '@/types/processos';
 import { Lead } from '@/types/leads';
 import { useProcessos } from '@/hooks/useProcessos';
+import { ProcessoNotificacaoConfig } from './ProcessoNotificacaoConfig';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,7 +59,7 @@ export function ProcessoModal({
   canDelete = false,
   leads 
 }: ProcessoModalProps) {
-  const { createProcesso, updateProcesso, deleteProcesso } = useProcessos();
+  const { createProcesso, updateProcesso, deleteProcesso, fetchProcessos } = useProcessos();
   const [formData, setFormData] = useState({
     numero_processo: '',
     titulo_acao: '',
@@ -65,6 +68,82 @@ export function ProcessoModal({
     cliente_id: '',
   });
   const [saving, setSaving] = useState(false);
+  const [fetchingData, setFetchingData] = useState(false);
+
+  // Buscar dados do processo automaticamente ao digitar número válido
+  const fetchProcessoData = async (numeroProcesso: string) => {
+    // Validar formato CNJ: NNNNNNN-DD.AAAA.J.TR.OOOO
+    const cnjPattern = /^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$/;
+    if (!cnjPattern.test(numeroProcesso)) return;
+
+    setFetchingData(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('consulta-processos', {
+        body: { numeroProcesso }
+      });
+
+      if (error) throw error;
+
+      if (data?.encontrado && data?.processo) {
+        const proc = data.processo;
+        
+        // Encontrar cliente pela parte (autor) se existir
+        const parteAutor = proc.partes?.find((p: any) => 
+          p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT' || p.polo?.toUpperCase() === 'PA'
+        );
+        
+        let clienteId = '';
+        if (parteAutor?.nome) {
+          // Buscar lead pelo nome
+          const leadMatch = leads.find(l => 
+            l.nome?.toLowerCase().includes(parteAutor.nome.toLowerCase()) ||
+            parteAutor.nome.toLowerCase().includes(l.nome?.toLowerCase() || '')
+          );
+          if (leadMatch) {
+            clienteId = leadMatch.id;
+          }
+        }
+
+        setFormData(prev => ({
+          ...prev,
+          titulo_acao: proc.classe || prev.titulo_acao,
+          status: mapApiStatusToLocal(proc.status),
+          cliente_id: clienteId || prev.cliente_id,
+        }));
+
+        toast.success('Dados do processo carregados!', {
+          description: `${proc.classe} - ${proc.tribunal}`
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao buscar dados do processo:', err);
+    } finally {
+      setFetchingData(false);
+    }
+  };
+
+  // Mapear status da API para status local
+  const mapApiStatusToLocal = (apiStatus: string): ProcessoStatus => {
+    const statusMap: Record<string, ProcessoStatus> = {
+      'Em Andamento': 'Em Andamento',
+      'Arquivado': 'Arquivado',
+      'Suspenso': 'Suspenso',
+      'Transitado em Julgado': 'Arquivado',
+      'Com Sentença': 'Em Andamento',
+      'Em Grau Recursal': 'Em Andamento',
+    };
+    return statusMap[apiStatus] || 'Em Andamento';
+  };
+
+  // Debounce para buscar dados ao digitar número
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (isNew && formData.numero_processo.length >= 25) {
+        fetchProcessoData(formData.numero_processo);
+      }
+    }, 500);
+    return () => clearTimeout(timeoutId);
+  }, [formData.numero_processo, isNew]);
 
   useEffect(() => {
     if (processo) {
@@ -118,7 +197,7 @@ export function ProcessoModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg rounded-xl">
+      <DialogContent className="max-w-2xl rounded-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold">
             {isNew ? 'Novo Processo' : 'Detalhes do Processo'}
@@ -129,13 +208,23 @@ export function ProcessoModal({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="numero_processo">Número do Processo</Label>
-              <Input
-                id="numero_processo"
-                value={formData.numero_processo}
-                onChange={(e) => setFormData({ ...formData, numero_processo: e.target.value })}
-                className="rounded-xl"
-                placeholder="0000000-00.0000.0.00.0000"
-              />
+              <div className="relative">
+                <Input
+                  id="numero_processo"
+                  value={formData.numero_processo}
+                  onChange={(e) => setFormData({ ...formData, numero_processo: e.target.value })}
+                  className="rounded-xl pr-10"
+                  placeholder="0000000-00.0000.0.00.0000"
+                />
+                {fetchingData && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-primary" />
+                )}
+              </div>
+              {isNew && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Digite o número completo para carregar dados automaticamente
+                </p>
+              )}
             </div>
 
             <div>
@@ -199,6 +288,17 @@ export function ProcessoModal({
               </Select>
             </div>
           </div>
+
+          {/* Notification Config - Only show for existing processes */}
+          {!isNew && processo && (
+            <ProcessoNotificacaoConfig
+              processoId={processo.id}
+              frequenciaDias={processo.frequencia_notificacao_dias || 7}
+              notificacaoAtiva={processo.notificacao_ativa ?? true}
+              ultimaNotificacao={processo.ultima_notificacao_at}
+              onUpdate={() => fetchProcessos()}
+            />
+          )}
 
           {/* Action Buttons */}
           <div className="flex flex-wrap gap-2 pt-2">
