@@ -203,6 +203,8 @@ const ACOES_AUTOMATICAS = [
   'salvar_dados_contrato', // Salvar dados para contrato
   'marcar_doc_recebido', // Marcar documento como recebido
   'verificar_docs_pendentes', // Verificar documentos pendentes
+  // CONSULTA DE PROCESSOS
+  'consultar_processo', // Consultar status do processo do lead
 ];
 
 // Ações que precisam de confirmação do USUÁRIO INTERNO (híbrido)
@@ -1497,6 +1499,89 @@ Ou acesse nosso link de agendamento: https://cal.com/bentes-ramos-advocacia-1ucm
             all_received: pendentes.length === 0
           }
         };
+      }
+
+      case 'consultar_processo': {
+        // Consultar status do processo via DataJud e retornar para o lead
+        const { lead_id, numero_processo } = dados;
+        
+        if (!numero_processo) {
+          // Buscar processos vinculados ao lead
+          const { data: processos } = await supabase
+            .from('processos')
+            .select('numero_processo, titulo_acao, status')
+            .eq('cliente_id', lead_id)
+            .not('numero_processo', 'is', null)
+            .limit(5);
+          
+          if (!processos || processos.length === 0) {
+            return { 
+              success: false, 
+              message: 'Não encontrei nenhum processo vinculado a você. Pode me informar o número do processo?',
+              data: null
+            };
+          }
+          
+          // Se tiver apenas um processo, consultar direto
+          if (processos.length === 1) {
+            const numeroUnico = processos[0].numero_processo;
+            // Fazer chamada recursiva com o número
+            return await executarAcao(supabase, 'consultar_processo', { 
+              lead_id, 
+              numero_processo: numeroUnico 
+            }, subscriberId);
+          }
+          
+          // Se tiver múltiplos, listar
+          const lista = processos.map((p: any, i: number) => 
+            `${i + 1}. ${p.numero_processo} - ${p.titulo_acao || 'Sem título'} (${p.status || 'Em Andamento'})`
+          ).join('\n');
+          
+          return { 
+            success: true, 
+            message: `Encontrei ${processos.length} processos vinculados:\n${lista}\n\nQual deles você gostaria de consultar?`,
+            data: { processos }
+          };
+        }
+        
+        // Consultar processo específico via edge function
+        try {
+          const response = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/processo-status-monitor`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'consultar_para_lead',
+              lead_id,
+              numero_processo
+            }),
+          });
+          
+          const result = await response.json();
+          
+          if (result.success) {
+            return { 
+              success: true, 
+              message: result.mensagem,
+              data: result.dados
+            };
+          } else {
+            return { 
+              success: false, 
+              message: result.mensagem || 'Não foi possível consultar o processo.',
+              data: null
+            };
+          }
+        } catch (err) {
+          console.error('❌ Erro ao consultar processo:', err);
+          return { 
+            success: false, 
+            message: 'Ocorreu um erro ao consultar o processo. Tente novamente em instantes.',
+            data: null
+          };
+        }
       }
 
       default:

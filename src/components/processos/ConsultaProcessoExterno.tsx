@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Loader2, Scale, Calendar, Users, FileText, AlertCircle, User } from 'lucide-react';
+import { Search, Loader2, Scale, Calendar, Users, FileText, AlertCircle, User, Building, Gavel, Clock, DollarSign, Shield, Briefcase } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,11 +12,21 @@ interface Movimento {
   dataHora: string;
   nome: string;
   complemento?: string;
+  codigo?: number;
+}
+
+interface Advogado {
+  nome: string;
+  oab?: string;
 }
 
 interface Parte {
   nome: string;
   tipo: string;
+  polo: string;
+  tipoPessoa: string;
+  documento?: string;
+  advogados?: Advogado[];
 }
 
 interface ProcessoExterno {
@@ -25,6 +35,16 @@ interface ProcessoExterno {
   assuntos: string[];
   tribunal: string;
   dataAjuizamento: string;
+  // Campos detalhados
+  grau: string;
+  nivelSigilo: string;
+  formato: string;
+  sistemaProcessual: string;
+  orgaoJulgador: string;
+  status: string;
+  ultimaAtualizacao: string;
+  valorCausa: number | null;
+  prioridade: string[];
   movimentos: Movimento[];
   partes: Parte[];
 }
@@ -101,59 +121,158 @@ export function ConsultaProcessoExterno() {
     }
   };
 
+  const formatCurrency = (value: number | null) => {
+    if (!value) return null;
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  };
+
+  const getStatusColor = (status: string) => {
+    const statusLower = status.toLowerCase();
+    if (statusLower.includes('arquiv') || statusLower.includes('transitado')) return 'bg-muted text-muted-foreground';
+    if (statusLower.includes('suspen')) return 'bg-yellow-500/20 text-yellow-700';
+    if (statusLower.includes('sentença') || statusLower.includes('concluso')) return 'bg-blue-500/20 text-blue-700';
+    if (statusLower.includes('recursal')) return 'bg-purple-500/20 text-purple-700';
+    if (statusLower.includes('audiência')) return 'bg-orange-500/20 text-orange-700';
+    return 'bg-green-500/20 text-green-700';
+  };
+
   const renderProcessoDetails = (proc: ProcessoExterno) => (
     <div className="space-y-4 animate-fade-in">
-      {/* Informações principais */}
-      <div className="grid gap-3">
-        <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
-          <FileText className="h-5 w-5 text-primary mt-0.5" />
-          <div className="flex-1">
-            <p className="text-xs text-muted-foreground">Número</p>
-            <p className="font-mono font-medium">{proc.numeroProcesso}</p>
-          </div>
+      {/* Header com número e status */}
+      <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+        <FileText className="h-5 w-5 text-primary mt-0.5" />
+        <div className="flex-1">
+          <p className="text-xs text-muted-foreground">Número do Processo</p>
+          <p className="font-mono font-medium">{proc.numeroProcesso}</p>
+        </div>
+        <div className="flex gap-2 flex-wrap justify-end">
           <Badge variant="secondary">{proc.tribunal}</Badge>
+          <Badge className={getStatusColor(proc.status)}>{proc.status}</Badge>
         </div>
+      </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="p-3 bg-muted/50 rounded-lg">
-            <p className="text-xs text-muted-foreground">Classe</p>
-            <p className="font-medium text-sm">{proc.classe}</p>
+      {/* Informações principais em grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="p-3 bg-muted/50 rounded-lg">
+          <div className="flex items-center gap-2 mb-1">
+            <Gavel className="h-4 w-4 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">Classe Processual</p>
           </div>
-          <div className="p-3 bg-muted/50 rounded-lg flex items-center gap-2">
+          <p className="font-medium text-sm">{proc.classe}</p>
+        </div>
+        
+        <div className="p-3 bg-muted/50 rounded-lg">
+          <div className="flex items-center gap-2 mb-1">
             <Calendar className="h-4 w-4 text-muted-foreground" />
-            <div>
-              <p className="text-xs text-muted-foreground">Ajuizado em</p>
-              <p className="font-medium text-sm">{formatDate(proc.dataAjuizamento)}</p>
-            </div>
+            <p className="text-xs text-muted-foreground">Ajuizado em</p>
           </div>
+          <p className="font-medium text-sm">{proc.dataAjuizamento}</p>
         </div>
 
-        {proc.assuntos.length > 0 && (
+        <div className="p-3 bg-muted/50 rounded-lg">
+          <div className="flex items-center gap-2 mb-1">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">Última Atualização</p>
+          </div>
+          <p className="font-medium text-sm">{proc.ultimaAtualizacao}</p>
+        </div>
+
+        <div className="p-3 bg-muted/50 rounded-lg">
+          <div className="flex items-center gap-2 mb-1">
+            <Building className="h-4 w-4 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">Órgão Julgador</p>
+          </div>
+          <p className="font-medium text-sm line-clamp-2">{proc.orgaoJulgador}</p>
+        </div>
+
+        <div className="p-3 bg-muted/50 rounded-lg">
+          <div className="flex items-center gap-2 mb-1">
+            <Scale className="h-4 w-4 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">Grau / Formato</p>
+          </div>
+          <p className="font-medium text-sm">{proc.grau} • {proc.formato}</p>
+        </div>
+
+        {proc.valorCausa && (
           <div className="p-3 bg-muted/50 rounded-lg">
-            <p className="text-xs text-muted-foreground mb-2">Assuntos</p>
-            <div className="flex flex-wrap gap-1">
-              {proc.assuntos.map((assunto, i) => (
-                <Badge key={i} variant="outline" className="text-xs">
-                  {assunto}
-                </Badge>
-              ))}
+            <div className="flex items-center gap-2 mb-1">
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground">Valor da Causa</p>
             </div>
+            <p className="font-medium text-sm">{formatCurrency(proc.valorCausa)}</p>
           </div>
         )}
+
+        <div className="p-3 bg-muted/50 rounded-lg">
+          <div className="flex items-center gap-2 mb-1">
+            <Shield className="h-4 w-4 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">Sigilo / Sistema</p>
+          </div>
+          <p className="font-medium text-sm">{proc.nivelSigilo} • {proc.sistemaProcessual}</p>
+        </div>
       </div>
+
+      {/* Prioridades */}
+      {proc.prioridade && proc.prioridade.length > 0 && (
+        <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
+          <p className="text-xs text-amber-700 font-medium mb-1">⚡ Prioridades</p>
+          <div className="flex flex-wrap gap-1">
+            {proc.prioridade.map((p, i) => (
+              <Badge key={i} variant="outline" className="text-xs bg-amber-500/20 border-amber-500/30">
+                {p}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Assuntos */}
+      {proc.assuntos.length > 0 && (
+        <div className="p-3 bg-muted/50 rounded-lg">
+          <p className="text-xs text-muted-foreground mb-2">Assuntos</p>
+          <div className="flex flex-wrap gap-1">
+            {proc.assuntos.map((assunto, i) => (
+              <Badge key={i} variant="outline" className="text-xs">
+                {assunto}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Partes */}
       {proc.partes.length > 0 && (
         <div className="p-3 bg-muted/50 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-3">
             <Users className="h-4 w-4 text-muted-foreground" />
-            <p className="text-xs text-muted-foreground">Partes</p>
+            <p className="text-sm font-medium">Partes do Processo</p>
           </div>
-          <div className="space-y-1">
-            {proc.partes.slice(0, 6).map((parte, i) => (
-              <div key={i} className="flex justify-between items-center text-sm">
-                <span>{parte.nome}</span>
-                <Badge variant="outline" className="text-xs">{parte.tipo}</Badge>
+          <div className="space-y-3">
+            {proc.partes.slice(0, 8).map((parte, i) => (
+              <div key={i} className="p-2 bg-background/50 rounded border">
+                <div className="flex justify-between items-start mb-1">
+                  <span className="font-medium text-sm">{parte.nome}</span>
+                  <div className="flex gap-1">
+                    <Badge variant="outline" className="text-xs">{parte.tipo}</Badge>
+                    <Badge variant="secondary" className="text-xs">{parte.tipoPessoa}</Badge>
+                  </div>
+                </div>
+                {parte.documento && (
+                  <p className="text-xs text-muted-foreground">Doc: {parte.documento}</p>
+                )}
+                {parte.advogados && parte.advogados.length > 0 && (
+                  <div className="mt-2 pl-3 border-l-2 border-primary/30">
+                    <p className="text-xs text-muted-foreground mb-1">
+                      <Briefcase className="h-3 w-3 inline mr-1" />
+                      Advogado(s):
+                    </p>
+                    {parte.advogados.map((adv, j) => (
+                      <p key={j} className="text-xs">
+                        {adv.nome} {adv.oab && <span className="text-muted-foreground">({adv.oab})</span>}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -163,16 +282,23 @@ export function ConsultaProcessoExterno() {
       {/* Últimas movimentações */}
       {proc.movimentos.length > 0 && (
         <div>
-          <p className="text-sm font-medium mb-2">Últimas Movimentações</p>
-          <div className="space-y-2 max-h-60 overflow-y-auto">
+          <p className="text-sm font-medium mb-2">Últimas Movimentações ({proc.movimentos.length})</p>
+          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
             {proc.movimentos.map((mov, i) => (
               <div key={i} className="p-2 bg-muted/30 rounded-lg border-l-2 border-primary/30">
-                <div className="flex justify-between items-start">
-                  <p className="text-sm font-medium">{mov.nome}</p>
-                  <span className="text-xs text-muted-foreground">{formatDate(mov.dataHora)}</span>
+                <div className="flex justify-between items-start gap-2">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{mov.nome}</p>
+                    {mov.codigo && (
+                      <span className="text-xs text-muted-foreground">Código: {mov.codigo}</span>
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">{mov.dataHora}</span>
                 </div>
                 {mov.complemento && (
-                  <p className="text-xs text-muted-foreground mt-1">{mov.complemento}</p>
+                  <p className="text-xs text-muted-foreground mt-1 pl-2 border-l border-muted">
+                    {mov.complemento}
+                  </p>
                 )}
               </div>
             ))}
