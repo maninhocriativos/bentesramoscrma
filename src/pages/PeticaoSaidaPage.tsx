@@ -56,10 +56,30 @@ export default function PeticaoSaidaPage() {
   }, [id, getPetition, getDocuments, navigate]);
 
   const handleGeneratePdf = async () => {
-    if (!petition || !latestDoc?.html_content) return;
+    if (!petition) {
+      toast({
+        title: 'Erro',
+        description: 'Petição não encontrada.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    if (!latestDoc?.html_content) {
+      toast({
+        title: 'Erro',
+        description: 'Nenhum conteúdo HTML disponível. Gere a petição primeiro.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     setGeneratingPdf(true);
 
     try {
+      console.log('Iniciando geração de PDF...');
+      console.log('HTML content length:', latestDoc.html_content.length);
+      
       // Gerar PDF profissional com cabeçalho e rodapé
       const pdfBlob = await generatePetitionPdf({
         htmlContent: latestDoc.html_content,
@@ -68,14 +88,25 @@ export default function PeticaoSaidaPage() {
         version: latestDoc.version || 1,
       });
 
+      console.log('PDF gerado, tamanho:', pdfBlob.size);
+
+      if (pdfBlob.size < 100) {
+        throw new Error('PDF gerado está vazio ou corrompido.');
+      }
+
       const fileName = `peticao-${petition.id}-v${latestDoc.version}.pdf`;
 
       // Upload para Supabase Storage
       const filePath = `petitions/${petition.id}/${fileName}`;
-      await supabase.storage.from('documentos').upload(filePath, pdfBlob, {
+      const { error: uploadError } = await supabase.storage.from('documentos').upload(filePath, pdfBlob, {
         contentType: 'application/pdf',
         upsert: true,
       });
+
+      if (uploadError) {
+        console.error('Erro no upload:', uploadError);
+        throw new Error(`Falha no upload: ${uploadError.message}`);
+      }
 
       const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(filePath);
       
@@ -89,14 +120,15 @@ export default function PeticaoSaidaPage() {
       await updatePetition(petition.id, { status: 'gerado' });
 
       toast({
-        title: 'PDF gerado!',
-        description: 'Você pode baixar o documento agora.',
+        title: 'PDF gerado com sucesso!',
+        description: 'Clique em "Baixar PDF" para fazer o download.',
       });
     } catch (err) {
-      console.error(err);
+      console.error('Erro ao gerar PDF:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
       toast({
         title: 'Erro ao gerar PDF',
-        description: 'Tente novamente',
+        description: errorMessage,
         variant: 'destructive',
       });
     }

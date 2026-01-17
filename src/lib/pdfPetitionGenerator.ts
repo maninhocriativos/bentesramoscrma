@@ -16,7 +16,6 @@ const MARGIN_RIGHT = 20;
 const MARGIN_TOP = 35;
 const MARGIN_BOTTOM = 30;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
-const HEADER_HEIGHT = 25;
 const FOOTER_HEIGHT = 20;
 
 // Cores do escritório (dourado/amarelo conforme identidade)
@@ -24,7 +23,12 @@ const GOLD_COLOR = { r: 200, g: 160, b: 50 };
 const DARK_COLOR = { r: 30, g: 30, b: 30 };
 
 export async function generatePetitionPdf(options: PdfGeneratorOptions): Promise<Blob> {
-  const { htmlContent, officeSettings, petitionId, version } = options;
+  const { htmlContent, officeSettings } = options;
+  
+  // Validar que temos conteúdo HTML
+  if (!htmlContent || htmlContent.trim() === '') {
+    throw new Error('Conteúdo HTML vazio. Gere a petição primeiro.');
+  }
   
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -33,7 +37,25 @@ export async function generatePetitionPdf(options: PdfGeneratorOptions): Promise
   });
 
   // Converter HTML para texto estruturado
-  const { blocks, title } = parseHtmlContent(htmlContent);
+  let blocks: ContentBlock[] = [];
+  let title: string | null = null;
+  
+  try {
+    const parsed = parseHtmlContent(htmlContent);
+    blocks = parsed.blocks;
+    title = parsed.title;
+  } catch (parseError) {
+    console.error('Erro ao parsear HTML:', parseError);
+    // Fallback: tratar todo o conteúdo como um parágrafo
+    const textContent = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (textContent) {
+      blocks = [{ type: 'paragraph', content: textContent }];
+    }
+  }
+  
+  if (blocks.length === 0) {
+    throw new Error('Não foi possível extrair conteúdo do HTML.');
+  }
   
   let currentY = MARGIN_TOP;
   let pageNumber = 1;
