@@ -67,6 +67,7 @@ serve(async (req: Request) => {
     const limit = 100;
 
     console.log('[FULL-SYNC] Buscando subscribers do ManyChat...');
+    console.log('[FULL-SYNC] API Key prefix:', MANYCHAT_API_KEY?.substring(0, 15) + '...');
 
     while (hasMore) {
       try {
@@ -75,26 +76,41 @@ serve(async (req: Request) => {
         url.searchParams.append('limit', limit.toString());
         url.searchParams.append('offset', offset.toString());
 
+        console.log('[FULL-SYNC] Chamando:', url.toString());
         const response = await fetch(url.toString(), {
           method: 'GET',
           headers,
         });
 
+        console.log('[FULL-SYNC] Status:', response.status);
+
         if (!response.ok) {
+          const errorText = await response.text();
+          console.log(`[FULL-SYNC] Erro na resposta: ${response.status} - ${errorText}`);
           console.log(`[FULL-SYNC] Tentando método alternativo...`);
+          
           // Fallback: usar findByName com string vazia para buscar todos
           const fallbackUrl = new URL(`${MANYCHAT_API_URL}/fb/subscriber/findByName`);
           fallbackUrl.searchParams.append('name', '');
           
+          console.log('[FULL-SYNC] Fallback URL:', fallbackUrl.toString());
           const fallbackResponse = await fetch(fallbackUrl.toString(), {
             method: 'GET',
             headers,
           });
           
+          console.log('[FULL-SYNC] Fallback status:', fallbackResponse.status);
+          const fallbackText = await fallbackResponse.text();
+          console.log('[FULL-SYNC] Fallback response:', fallbackText.substring(0, 500));
+          
           if (fallbackResponse.ok) {
-            const fallbackData = await fallbackResponse.json();
-            if (fallbackData.status === 'success' && fallbackData.data) {
-              allSubscribers = fallbackData.data;
+            try {
+              const fallbackData = JSON.parse(fallbackText);
+              if (fallbackData.status === 'success' && fallbackData.data) {
+                allSubscribers = fallbackData.data;
+              }
+            } catch (e) {
+              console.log('[FULL-SYNC] Erro ao parsear fallback:', e);
             }
           }
           hasMore = false;
@@ -102,6 +118,7 @@ serve(async (req: Request) => {
         }
 
         const data = await response.json();
+        console.log('[FULL-SYNC] Response data status:', data.status);
         console.log(`[FULL-SYNC] Página ${offset / limit + 1}: ${data.data?.length || 0} subscribers`);
 
         if (data.status === 'success' && data.data && data.data.length > 0) {
