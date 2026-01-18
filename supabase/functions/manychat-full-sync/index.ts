@@ -9,6 +9,7 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const MANYCHAT_API_URL = 'https://api.manychat.com';
+// ManyChat usa /fb/ para Messenger e /wa/ para WhatsApp - vamos tentar ambos
 
 interface ManyChatSubscriber {
   id: string;
@@ -69,68 +70,76 @@ serve(async (req: Request) => {
     console.log('[FULL-SYNC] Buscando subscribers do ManyChat...');
     console.log('[FULL-SYNC] API Key prefix:', MANYCHAT_API_KEY?.substring(0, 15) + '...');
 
-    while (hasMore) {
-      try {
-        // Usar endpoint de busca com paginação
-        const url = new URL(`${MANYCHAT_API_URL}/fb/subscriber/getSubscribers`);
-        url.searchParams.append('limit', limit.toString());
-        url.searchParams.append('offset', offset.toString());
+    // Tentar primeiro com WhatsApp (/wa/), depois com Facebook (/fb/)
+    const endpoints = [
+      { prefix: '/wa', name: 'WhatsApp' },
+      { prefix: '/fb', name: 'Facebook' }
+    ];
 
-        console.log('[FULL-SYNC] Chamando:', url.toString());
-        const response = await fetch(url.toString(), {
-          method: 'GET',
-          headers,
-        });
+    for (const endpoint of endpoints) {
+      if (allSubscribers.length > 0) break;
+      
+      console.log(`[FULL-SYNC] Tentando endpoint ${endpoint.name}...`);
+      hasMore = true;
+      offset = 0;
 
-        console.log('[FULL-SYNC] Status:', response.status);
+      while (hasMore) {
+        try {
+          // Usar endpoint de busca com paginação
+          const url = new URL(`${MANYCHAT_API_URL}${endpoint.prefix}/subscriber/getSubscribers`);
+          url.searchParams.append('limit', limit.toString());
+          url.searchParams.append('offset', offset.toString());
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.log(`[FULL-SYNC] Erro na resposta: ${response.status} - ${errorText}`);
-          console.log(`[FULL-SYNC] Tentando método alternativo...`);
-          
-          // Fallback: usar findByName com string vazia para buscar todos
-          const fallbackUrl = new URL(`${MANYCHAT_API_URL}/fb/subscriber/findByName`);
-          fallbackUrl.searchParams.append('name', '');
-          
-          console.log('[FULL-SYNC] Fallback URL:', fallbackUrl.toString());
-          const fallbackResponse = await fetch(fallbackUrl.toString(), {
+          console.log('[FULL-SYNC] Chamando:', url.toString());
+          const response = await fetch(url.toString(), {
             method: 'GET',
             headers,
           });
-          
-          console.log('[FULL-SYNC] Fallback status:', fallbackResponse.status);
-          const fallbackText = await fallbackResponse.text();
-          console.log('[FULL-SYNC] Fallback response:', fallbackText.substring(0, 500));
-          
-          if (fallbackResponse.ok) {
-            try {
-              const fallbackData = JSON.parse(fallbackText);
+
+          console.log('[FULL-SYNC] Status:', response.status);
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.log(`[FULL-SYNC] Erro ${endpoint.name}: ${response.status}`);
+            
+            // Tentar fallback findByName
+            const fallbackUrl = new URL(`${MANYCHAT_API_URL}${endpoint.prefix}/subscriber/findByName`);
+            fallbackUrl.searchParams.append('name', 'a'); // Buscar por letra comum
+            
+            console.log('[FULL-SYNC] Tentando findByName:', fallbackUrl.toString());
+            const fallbackResponse = await fetch(fallbackUrl.toString(), {
+              method: 'GET',
+              headers,
+            });
+            
+            console.log('[FULL-SYNC] findByName status:', fallbackResponse.status);
+            
+            if (fallbackResponse.ok) {
+              const fallbackData = await fallbackResponse.json();
+              console.log('[FULL-SYNC] findByName resultado:', fallbackData.status, 'qtd:', fallbackData.data?.length || 0);
               if (fallbackData.status === 'success' && fallbackData.data) {
                 allSubscribers = fallbackData.data;
               }
-            } catch (e) {
-              console.log('[FULL-SYNC] Erro ao parsear fallback:', e);
             }
+            hasMore = false;
+            break;
           }
-          hasMore = false;
-          break;
-        }
 
-        const data = await response.json();
-        console.log('[FULL-SYNC] Response data status:', data.status);
-        console.log(`[FULL-SYNC] Página ${offset / limit + 1}: ${data.data?.length || 0} subscribers`);
+          const data = await response.json();
+          console.log('[FULL-SYNC] Response status:', data.status, 'qtd:', data.data?.length || 0);
+          console.log(`[FULL-SYNC] Página ${offset / limit + 1}: ${data.data?.length || 0} subscribers`);
 
-        if (data.status === 'success' && data.data && data.data.length > 0) {
-          allSubscribers = [...allSubscribers, ...data.data];
-          offset += limit;
-          hasMore = data.data.length === limit;
-        } else {
+          if (data.status === 'success' && data.data && data.data.length > 0) {
+            allSubscribers = [...allSubscribers, ...data.data];
+            offset += limit;
+            hasMore = data.data.length === limit;
+          } else {
+            hasMore = false;
+          }
+        } catch (e) {
+          console.error('[FULL-SYNC] Erro na paginação:', e);
           hasMore = false;
         }
-      } catch (e) {
-        console.error('[FULL-SYNC] Erro na paginação:', e);
-        hasMore = false;
       }
     }
 
