@@ -49,8 +49,24 @@ serve(async (req: Request) => {
 
     // === WEBHOOK ROUTES ===
     
-    // ManyChat Webhook - Redirecionar para manychat-webhook para processamento completo
-    if (path === '/webhook/manychat' || path.startsWith('/manychat')) {
+    // ManyChat Webhook - aceitar rotas explícitas e também POST direto em /api-hub (path vazio)
+    const isManyChatPayload =
+      !!body &&
+      (body.subscriber_id ||
+        body.subscriber ||
+        body.wa_id ||
+        body.ig_id ||
+        body.psid ||
+        body.last_input_text ||
+        body.text ||
+        body.message ||
+        body.mensagem);
+
+    if (
+      path === '/webhook/manychat' ||
+      path.startsWith('/manychat') ||
+      ((path === '' || path === '/' || path === '/webhook') && isManyChatPayload)
+    ) {
       // Limpar colchetes de arrays do ManyChat
       const cleanValue = (val: any): string | null => {
         if (!val) return null;
@@ -195,14 +211,22 @@ serve(async (req: Request) => {
         }
         
         // CRIAR LEAD AUTOMATICAMENTE se não encontrou
-        const temDadosParaCriarLead = (nome && nome !== 'Desconhecido') || telefone || email;
-        
+        // Observação: em canais como Facebook/Instagram, o ManyChat às vezes não envia telefone/email.
+        // Nesses casos, criamos um lead “fallback” usando o subscriber_id para não perder a entrada.
+        const canCreateFallbackLead =
+          !!subscriberId &&
+          typeof subscriberId === 'string' &&
+          !subscriberId.startsWith('api_');
+
+        const temDadosParaCriarLead =
+          (nome && nome !== 'Desconhecido') || telefone || email || canCreateFallbackLead;
+
         if (!leadId && temDadosParaCriarLead) {
-          const nomeDoLead = (nome && nome !== 'Desconhecido') 
-            ? nome 
-            : telefone 
-              ? `Contato ${telefone}` 
-              : `Contato via ${canal}`;
+          const nomeDoLead = (nome && nome !== 'Desconhecido')
+            ? nome
+            : telefone
+              ? `Contato ${telefone}`
+              : `Contato ${canal} #${subscriberId}`;
           
           // Determinar origem baseado no canal
           let origem = 'ManyChat';
