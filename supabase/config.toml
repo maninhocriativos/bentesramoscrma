@@ -75,6 +75,9 @@ verify_jwt = false
 [functions.sync-subscriber-names]
 verify_jwt = false
 
+[functions.manychat-backfill-leads]
+verify_jwt = true
+
 [functions.isa-multimodal]
 verify_jwt = false
 

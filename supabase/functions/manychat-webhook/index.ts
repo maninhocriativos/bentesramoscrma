@@ -297,25 +297,33 @@ serve(async (req) => {
       }
       
       // 🆕 Se não encontrou lead, CRIAR automaticamente como "Lead Frio"
-      // Criar lead se: tem nome válido OU tem telefone OU tem email (mensagens de entrada)
-      const temDadosParaCriarLead = (subscriberNome && subscriberNome !== 'Desconhecido') || telefone || email;
-      
+      // Importante: em canais como Facebook/Instagram, o ManyChat pode não enviar telefone/email/nome.
+      // Para não perder a entrada, criamos um lead “fallback” usando o subscriber_id (apenas para direção de entrada).
+      const canCreateFallbackLead =
+        !!subscriberId &&
+        typeof subscriberId === 'string' &&
+        !subscriberId.startsWith('manual_') &&
+        !subscriberId.startsWith('webhook_');
+
+      const temDadosParaCriarLead =
+        (subscriberNome && subscriberNome !== 'Desconhecido') || telefone || email || canCreateFallbackLead;
+
       if (!leadId && temDadosParaCriarLead && direcao === 'entrada') {
-        const nomeDoLead = (subscriberNome && subscriberNome !== 'Desconhecido') 
-          ? subscriberNome 
-          : telefone 
-            ? `Contato ${telefone}` 
-            : `Contato via ${canal}`;
-            
+        const nomeDoLead = (subscriberNome && subscriberNome !== 'Desconhecido')
+          ? subscriberNome
+          : telefone
+            ? `Contato ${telefone}`
+            : `Contato ${canal} #${subscriberId}`;
+
         console.log('🆕 Criando novo lead automaticamente para:', nomeDoLead);
-        
+
         // Determinar origem baseado no canal
         let origem = 'ManyChat';
         if (canal === 'instagram') origem = 'Instagram';
         else if (canal === 'facebook') origem = 'Facebook';
         else if (canal === 'whatsapp') origem = 'WhatsApp';
         else if (canal === 'telegram') origem = 'Telegram';
-        
+
         const { data: newLead, error: leadError } = await supabase
           .from('leads_juridicos')
           .insert({
@@ -328,13 +336,13 @@ serve(async (req) => {
           })
           .select()
           .single();
-        
+
         if (leadError) {
           console.error('❌ Erro ao criar lead:', leadError);
         } else {
           leadId = newLead.id;
           console.log('✅ Novo lead criado com sucesso:', newLead.nome, leadId);
-          
+
           // Registrar evento de criação de lead (entidade_id é UUID do lead, não subscriber_id)
           await supabase.from('system_events').insert({
             tipo: 'lead',
@@ -352,6 +360,15 @@ serve(async (req) => {
               subscriber_id: subscriberId,
             },
             processado: true,
+          });
+
+          // Criar follow-up base (mantém consistência com o fluxo do api-hub)
+          await supabase.from('lead_followups').insert({
+            lead_id: leadId,
+            subscriber_id: subscriberId,
+            canal: canal,
+            primeiro_contato_em: new Date().toISOString(),
+            status: 'aguardando',
           });
         }
       }
