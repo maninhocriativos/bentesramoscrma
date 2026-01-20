@@ -32,12 +32,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const lastUserIdRef = useRef<string | null>(null);
 
+  // Keep the latest loading value for timeouts/handlers created on mount.
+  const loadingRef = useRef(true);
+  const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     let mounted = true;
 
+    const stopWatchdog = () => {
+      if (watchdogRef.current) {
+        clearTimeout(watchdogRef.current);
+        watchdogRef.current = null;
+      }
+    };
+
     const safeSetLoading = (value: boolean) => {
       if (!mounted) return;
+      loadingRef.current = value;
       setLoading(value);
+      if (!value) stopWatchdog();
     };
 
     const safeSetSessionUser = (nextSession: Session | null) => {
@@ -48,9 +61,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Watchdog: if something goes wrong and we never leave "loading",
     // clear Supabase auth storage to break infinite loops.
-    const watchdog = window.setTimeout(() => {
+    stopWatchdog();
+    watchdogRef.current = setTimeout(() => {
       if (!mounted) return;
-      if (!loading) return;
+      if (!loadingRef.current) return;
 
       try {
         console.warn('[AuthProvider] Watchdog fired: clearing auth storage');
@@ -145,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       console.log('[AuthProvider] unmounted');
       mounted = false;
-      window.clearTimeout(watchdog);
+      stopWatchdog();
       subscription.unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
