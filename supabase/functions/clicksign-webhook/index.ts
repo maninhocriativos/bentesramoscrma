@@ -143,6 +143,15 @@ serve(async (req: Request): Promise<Response> => {
         newStatus = "Prazo Expirado";
         messageType = 'reminder_urgent';
         break;
+      case "reminder":
+        // Soft reminder - contract not signed yet
+        newStatus = "Aguardando Assinatura";
+        messageType = 'reminder_soft';
+        break;
+      case "reminder_urgent":
+        newStatus = "Urgente - Aguardando Assinatura";
+        messageType = 'reminder_urgent';
+        break;
       case "cancel":
         newStatus = "Cancelado";
         break;
