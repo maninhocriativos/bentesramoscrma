@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,11 +12,22 @@ import {
   FileText,
   Mail,
   Calendar,
-  ChevronRight
+  ChevronRight,
+  MessageSquare,
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ContratoComStatus } from '@/pages/ContratosPage';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface ContratosTableProps {
   contratos: ContratoComStatus[];
@@ -74,6 +86,43 @@ const statusConfig: Record<string, { label: string; color: string; bgColor: stri
 
 export function ContratosTable({ contratos }: ContratosTableProps) {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const [sendingReminder, setSendingReminder] = useState<string | null>(null);
+
+  const sendContractReminder = async (contrato: ContratoComStatus, type: 'soft' | 'urgent') => {
+    setSendingReminder(contrato.id);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('contract-reminder', {
+        body: {
+          documentKey: contrato.key,
+          documentName: contrato.leadNome,
+          contractLink: contrato.linkContrato,
+          reminderType: type,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast({
+          title: 'Cobrança enviada!',
+          description: `Mensagem ${type === 'urgent' ? 'urgente' : 'de lembrete'} enviada para ${data.lead?.nome || 'o cliente'}.`,
+        });
+      } else {
+        throw new Error(data?.error || 'Erro ao enviar cobrança');
+      }
+    } catch (error: any) {
+      console.error('Error sending reminder:', error);
+      toast({
+        title: 'Erro ao enviar cobrança',
+        description: error.message || 'Não foi possível enviar a mensagem. Verifique se o lead está vinculado ao ManyChat.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSendingReminder(null);
+    }
+  };
 
   if (contratos.length === 0) {
     return (
@@ -92,6 +141,10 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
       </Card>
     );
   }
+
+  // Check if contract is pending signature
+  const isPending = (status: string) => 
+    ['Aguardando Assinatura', 'Assinatura Parcial', 'Documento Enviado'].includes(status);
 
   return (
     <div className="space-y-3">
@@ -178,6 +231,41 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                     </td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {isPending(contrato.status) && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5"
+                                disabled={sendingReminder === contrato.id}
+                              >
+                                {sendingReminder === contrato.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <MessageSquare className="h-3.5 w-3.5" />
+                                )}
+                                Cobrar
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem 
+                                onClick={() => sendContractReminder(contrato, 'soft')}
+                                className="gap-2"
+                              >
+                                <MessageSquare className="h-4 w-4" />
+                                Lembrete amigável
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => sendContractReminder(contrato, 'urgent')}
+                                className="gap-2 text-destructive"
+                              >
+                                <AlertTriangle className="h-4 w-4" />
+                                Cobrança urgente
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                         {contrato.leadId && (
                           <Button
                             variant="ghost"
@@ -244,7 +332,7 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                   </Badge>
                 </div>
 
-                <div className="flex items-center justify-between pt-3 border-t">
+                <div className="flex items-center justify-between pt-3 border-t gap-2">
                   {contrato.lastUpdate && (
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Calendar className="h-3 w-3" />
@@ -256,17 +344,53 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                       })}
                     </div>
                   )}
-                  <a
-                    href={contrato.linkContrato}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ml-auto"
-                  >
-                    <Button variant="ghost" size="sm" className="gap-1 h-8 text-xs">
-                      Abrir
-                      <ChevronRight className="h-3 w-3" />
-                    </Button>
-                  </a>
+                  <div className="flex items-center gap-1 ml-auto">
+                    {isPending(contrato.status) && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1 h-8 text-xs"
+                            disabled={sendingReminder === contrato.id}
+                          >
+                            {sendingReminder === contrato.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <MessageSquare className="h-3 w-3" />
+                            )}
+                            Cobrar
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem 
+                            onClick={() => sendContractReminder(contrato, 'soft')}
+                            className="gap-2 text-xs"
+                          >
+                            <MessageSquare className="h-3.5 w-3.5" />
+                            Lembrete amigável
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => sendContractReminder(contrato, 'urgent')}
+                            className="gap-2 text-xs text-destructive"
+                          >
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            Cobrança urgente
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                    <a
+                      href={contrato.linkContrato}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Button variant="ghost" size="sm" className="gap-1 h-8 text-xs">
+                        Abrir
+                        <ChevronRight className="h-3 w-3" />
+                      </Button>
+                    </a>
+                  </div>
                 </div>
               </CardContent>
             </Card>
