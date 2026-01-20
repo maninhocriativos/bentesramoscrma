@@ -46,10 +46,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(nextSession?.user ?? null);
     };
 
+    // Watchdog: if something goes wrong and we never leave "loading",
+    // clear Supabase auth storage to break infinite loops.
+    const watchdog = window.setTimeout(() => {
+      if (!mounted) return;
+      if (!loading) return;
+
+      try {
+        console.warn('[AuthProvider] Watchdog fired: clearing auth storage');
+        const prefix = 'sb-qgenaltkjtlvwfgykpxq-';
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith(prefix)) {
+            localStorage.removeItem(key);
+          }
+        }
+      } catch (e) {
+        console.error('[AuthProvider] Watchdog error:', e);
+      }
+
+      safeSetSessionUser(null);
+      safeSetLoading(false);
+
+      if (!window.location.pathname.startsWith('/auth')) {
+        window.location.replace('/auth');
+      }
+    }, 9000);
+
+    console.log('[AuthProvider] mounted');
+
     // Listener first to avoid race conditions across tabs/refresh.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      console.log('[AuthProvider] auth event:', event);
+
       const newUserId = newSession?.user?.id ?? null;
 
       // TOKEN_REFRESHED happens frequently.
@@ -112,9 +143,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
 
     return () => {
+      console.log('[AuthProvider] unmounted');
       mounted = false;
+      window.clearTimeout(watchdog);
       subscription.unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
