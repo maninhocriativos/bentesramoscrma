@@ -914,6 +914,15 @@ const ManyChatInboxContent = () => {
                 >
                   {selectedSubscriber.atendimento_humano ? <UserRound className="h-5 w-5" /> : <Bot className="h-5 w-5" />}
                 </Button>
+                
+                {/* Botão de direcionar conversa */}
+                <ConversationAssignmentMenu
+                  teamMembers={getTeamWithStatus()}
+                  currentUserId={user?.id}
+                  currentAssignee={selectedSubscriber.assigned_to}
+                  onAssign={assignConversation}
+                />
+                
                 <CalWidget
                   subscriberId={selectedSubscriber.subscriber_id}
                   subscriberName={getDisplayName(selectedSubscriber)}
