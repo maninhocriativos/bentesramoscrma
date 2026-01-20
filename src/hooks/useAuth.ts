@@ -26,13 +26,31 @@ export function useAuth() {
 
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, newSession) => {
+      async (event, newSession) => {
         const newUserId = newSession?.user?.id ?? null;
         
         // For TOKEN_REFRESHED, only update session if same user (avoid re-render)
         if (event === 'TOKEN_REFRESHED' && newUserId === lastUserIdRef.current) {
           setSession(newSession);
           return;
+        }
+        
+        // For OAuth sign-in, check if user is approved
+        if (event === 'SIGNED_IN' && newSession?.user) {
+          const { data } = await supabase
+            .from('perfis')
+            .select('aprovado')
+            .eq('id', newSession.user.id)
+            .single();
+          
+          if (data && !data.aprovado) {
+            console.log('User not approved, signing out');
+            await supabase.auth.signOut();
+            setSession(null);
+            setUser(null);
+            setLoading(false);
+            return;
+          }
         }
         
         // For actual auth changes, update everything
