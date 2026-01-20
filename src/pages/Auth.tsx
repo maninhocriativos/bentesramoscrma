@@ -41,6 +41,7 @@ export default function Auth() {
   // Check if there's an invited email in the URL
   const invitedEmail = searchParams.get('email') || '';
   const isInvited = !!invitedEmail;
+  const notApproved = searchParams.get('not_approved') === 'true';
   
   const [email, setEmail] = useState(invitedEmail);
   const [password, setPassword] = useState('');
@@ -48,6 +49,7 @@ export default function Auth() {
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [activeTab, setActiveTab] = useState(isInvited ? 'register' : 'login');
   const [isProcessingOAuth, setIsProcessingOAuth] = useState(false);
+  const [showNotApprovedMessage, setShowNotApprovedMessage] = useState(notApproved);
 
   // Handle OAuth callback - check for hash fragment with tokens
   useEffect(() => {
@@ -187,6 +189,14 @@ export default function Auth() {
         </CardHeader>
         
         <CardContent>
+          {showNotApprovedMessage && (
+            <Alert className="mb-4 bg-amber-50 border-amber-200">
+              <AlertDescription className="text-amber-800">
+                Sua conta ainda não foi aprovada. Aguarde a aprovação do administrador.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {isInvited && (
             <Alert className="mb-4 bg-primary/10 border-primary/20">
               <UserPlus className="h-4 w-4" />
