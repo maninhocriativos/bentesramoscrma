@@ -41,7 +41,6 @@ export default function Auth() {
   // Check if there's an invited email in the URL
   const invitedEmail = searchParams.get('email') || '';
   const isInvited = !!invitedEmail;
-  const notApproved = searchParams.get('not_approved') === 'true';
   
   const [email, setEmail] = useState(invitedEmail);
   const [password, setPassword] = useState('');
@@ -49,45 +48,33 @@ export default function Auth() {
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [activeTab, setActiveTab] = useState(isInvited ? 'register' : 'login');
   const [isProcessingOAuth, setIsProcessingOAuth] = useState(false);
-  const [showNotApprovedMessage, setShowNotApprovedMessage] = useState(notApproved);
 
   // Handle OAuth callback - check for hash fragment with tokens
   useEffect(() => {
-    const hash = location.hash || '';
-
-    // If there's no hash, ensure we are not stuck in "processing".
-    if (!hash) {
-      setIsProcessingOAuth(false);
-      return;
-    }
-
-    const hashParams = new URLSearchParams(hash.substring(1));
+    const hashParams = new URLSearchParams(location.hash.substring(1));
     const accessToken = hashParams.get('access_token');
     const errorDescription = hashParams.get('error_description');
-
+    
     if (errorDescription) {
       toast({
         title: 'Erro no login',
         description: decodeURIComponent(errorDescription),
         variant: 'destructive',
       });
-      setIsProcessingOAuth(false);
       // Clear the hash
       window.history.replaceState(null, '', location.pathname);
       return;
     }
-
+    
     if (accessToken) {
       setIsProcessingOAuth(true);
-      // Safety timeout: if auth state doesn't arrive, stop the spinner.
-      const t = window.setTimeout(() => setIsProcessingOAuth(false), 8000);
-      return () => window.clearTimeout(t);
+      // The Supabase client will automatically handle the token from the hash
+      // Just wait for the auth state to update
     }
   }, [location.hash, toast, location.pathname]);
 
   useEffect(() => {
     if (user && !loading) {
-      setIsProcessingOAuth(false);
       navigate('/dashboard', { replace: true });
     }
   }, [user, loading, navigate]);
@@ -200,14 +187,6 @@ export default function Auth() {
         </CardHeader>
         
         <CardContent>
-          {showNotApprovedMessage && (
-            <Alert className="mb-4 bg-amber-50 border-amber-200">
-              <AlertDescription className="text-amber-800">
-                Sua conta ainda não foi aprovada. Aguarde a aprovação do administrador.
-              </AlertDescription>
-            </Alert>
-          )}
-
           {isInvited && (
             <Alert className="mb-4 bg-primary/10 border-primary/20">
               <UserPlus className="h-4 w-4" />

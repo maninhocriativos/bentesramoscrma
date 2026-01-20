@@ -163,25 +163,6 @@ export function EnviarContratoModal({ isOpen, onClose, onSuccess, preSelectedLea
           resumo: 'Contrato enviado para assinatura via Clicksign',
           detalhes: `Documento: ${file.name}\nEmail: ${signerEmail}`,
         });
-
-        // Enviar link do contrato via WhatsApp se tiver telefone
-        if (signerPhone) {
-          const whatsappMessage = `📄 *Contrato para Assinatura*\n\nOlá ${signerName},\n\nSeu contrato está pronto para assinatura. Clique no link abaixo para assinar digitalmente:\n\n👉 ${clicksignUrl}\n\nEm caso de dúvidas, estamos à disposição.\n\n*Bentes & Ramos Advogados*`;
-          
-          try {
-            await supabase.functions.invoke('zapi-send', {
-              body: {
-                to_phone: signerPhone,
-                message: whatsappMessage,
-                lead_id: selectedLeadId
-              }
-            });
-            console.log('Link do contrato enviado via WhatsApp');
-          } catch (whatsappError) {
-            console.error('Erro ao enviar link via WhatsApp:', whatsappError);
-            // Não bloquear o fluxo se falhar o WhatsApp
-          }
-        }
       }
 
       toast({
