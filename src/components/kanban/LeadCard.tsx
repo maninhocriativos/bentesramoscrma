@@ -271,7 +271,23 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra, fol
           )}
 
           {lead.link_contrato && (
-            <FileSignature className="w-2.5 h-2.5 text-gold" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className={cn(
+                  "inline-flex items-center px-1 py-0.5 rounded",
+                  lead.status === 'Ganho' || lead.status === 'Contrato Assinado'
+                    ? "bg-emerald-500/15 text-emerald-600"
+                    : "bg-amber-500/15 text-amber-600 animate-pulse"
+                )}>
+                  <FileSignature className="w-2.5 h-2.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {lead.status === 'Ganho' || lead.status === 'Contrato Assinado'
+                  ? 'Contrato assinado'
+                  : 'Contrato pendente de assinatura'}
+              </TooltipContent>
+            </Tooltip>
           )}
         </div>
 

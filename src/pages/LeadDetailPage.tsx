@@ -13,7 +13,7 @@ import { LeadInteracoesTab } from '@/components/leads/LeadInteracoesTab';
 import { LeadDocumentosTab } from '@/components/leads/LeadDocumentosTab';
 import { LeadProcessosTab } from '@/components/leads/LeadProcessosTab';
 import { LeadFinanceiroTab } from '@/components/leads/LeadFinanceiroTab';
-import { ContractStatusCard } from '@/components/leads/ContractStatusCard';
+import { LeadContractsSection } from '@/components/leads/LeadContractsSection';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -151,8 +151,8 @@ export default function LeadDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Contract Status */}
-        <ContractStatusCard leadId={lead.id} linkContrato={lead.link_contrato} />
+        {/* Contracts Section */}
+        <LeadContractsSection leadId={lead.id} leadNome={lead.nome || undefined} />
 
         {/* Tabs */}
         <Tabs defaultValue="interacoes" className="w-full">

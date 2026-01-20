@@ -203,6 +203,77 @@ export type Database = {
           },
         ]
       }
+      contract_reminders: {
+        Row: {
+          contract_created_at: string
+          contract_link: string | null
+          created_at: string
+          document_key: string
+          document_name: string | null
+          id: string
+          last_reminder_at: string | null
+          lead_id: string | null
+          linked_at: string | null
+          linked_by: string | null
+          next_reminder_at: string | null
+          reminder_stage: number
+          signed_at: string | null
+          signer_email: string | null
+          signer_name: string | null
+          signer_phone: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          contract_created_at?: string
+          contract_link?: string | null
+          created_at?: string
+          document_key: string
+          document_name?: string | null
+          id?: string
+          last_reminder_at?: string | null
+          lead_id?: string | null
+          linked_at?: string | null
+          linked_by?: string | null
+          next_reminder_at?: string | null
+          reminder_stage?: number
+          signed_at?: string | null
+          signer_email?: string | null
+          signer_name?: string | null
+          signer_phone?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          contract_created_at?: string
+          contract_link?: string | null
+          created_at?: string
+          document_key?: string
+          document_name?: string | null
+          id?: string
+          last_reminder_at?: string | null
+          lead_id?: string | null
+          linked_at?: string | null
+          linked_by?: string | null
+          next_reminder_at?: string | null
+          reminder_stage?: number
+          signed_at?: string | null
+          signer_email?: string | null
+          signer_name?: string | null
+          signer_phone?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_reminders_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       despesas: {
         Row: {
           cliente_id: string | null
@@ -1021,6 +1092,7 @@ export type Database = {
       }
       leads_juridicos: {
         Row: {
+          contract_key: string | null
           contract_sent_at: string | null
           contract_signed_at: string | null
           created_at: string
@@ -1044,6 +1116,7 @@ export type Database = {
           valor_causa: number | null
         }
         Insert: {
+          contract_key?: string | null
           contract_sent_at?: string | null
           contract_signed_at?: string | null
           created_at?: string
@@ -1067,6 +1140,7 @@ export type Database = {
           valor_causa?: number | null
         }
         Update: {
+          contract_key?: string | null
           contract_sent_at?: string | null
           contract_signed_at?: string | null
           created_at?: string

@@ -8,8 +8,12 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const MANYCHAT_API_URL = 'https://api.manychat.com';
 
-// Messages for Isa to send based on contract status
+// Reminder schedule: 12h, 24h, 48h, 5d
+const REMINDER_INTERVALS_HOURS = [12, 24, 48, 120]; // 120 = 5 days
+
+// Messages for contract status
 const CONTRACT_MESSAGES = {
   created: (clientName: string, contractLink: string) => 
     `Olá ${clientName}! 📄✨\n\n` +
@@ -18,19 +22,32 @@ const CONTRACT_MESSAGES = {
     `A assinatura é digital, rápida e segura. Qualquer dúvida, estou à disposição!\n\n` +
     `*Bentes & Ramos Advocacia*`,
   
-  reminder_soft: (clientName: string, contractLink: string) => 
+  reminder_12h: (clientName: string, contractLink: string) => 
     `Oi ${clientName}! 👋\n\n` +
-    `Passando para lembrar que seu contrato ainda aguarda assinatura.\n\n` +
+    `Vi que seu contrato ainda está aguardando assinatura.\n\n` +
     `🔗 Link para assinar: ${contractLink}\n\n` +
     `É bem rapidinho, leva menos de 2 minutos! 😊\n\n` +
     `*Bentes & Ramos Advocacia*`,
   
-  reminder_urgent: (clientName: string, contractLink: string) => 
+  reminder_24h: (clientName: string, contractLink: string) => 
+    `${clientName}, bom dia! ☀️\n\n` +
+    `Passando para lembrar do seu contrato que aguarda assinatura desde ontem.\n\n` +
+    `🔗 Assine aqui: ${contractLink}\n\n` +
+    `Precisando de ajuda, é só chamar!\n\n` +
+    `*Bentes & Ramos Advocacia*`,
+  
+  reminder_48h: (clientName: string, contractLink: string) => 
     `${clientName}, seu contrato precisa de atenção! ⚠️\n\n` +
-    `Percebemos que ainda não houve a assinatura. Para darmos continuidade ao seu processo, ` +
-    `*é essencial que você assine o contrato hoje*.\n\n` +
+    `Já se passaram 2 dias e ainda não recebemos sua assinatura.\n\n` +
     `🔗 Assine agora: ${contractLink}\n\n` +
-    `Sem a assinatura, não podemos iniciar os trabalhos. Por favor, priorize isso! 📝\n\n` +
+    `Para darmos continuidade ao seu processo, *a assinatura é essencial*.\n\n` +
+    `*Bentes & Ramos Advocacia*`,
+  
+  reminder_5d: (clientName: string, contractLink: string) => 
+    `${clientName}, URGENTE! 🚨\n\n` +
+    `Seu contrato está pendente há 5 dias. *Sem a assinatura, não podemos iniciar os trabalhos.*\n\n` +
+    `🔗 ASSINE AGORA: ${contractLink}\n\n` +
+    `Por favor, priorize isso hoje! Se houver algum problema ou dúvida, me avise.\n\n` +
     `*Bentes & Ramos Advocacia*`,
   
   signed: (clientName: string) => 
@@ -48,41 +65,221 @@ const CONTRACT_MESSAGES = {
     `*Bentes & Ramos Advocacia*`,
 };
 
-async function sendWhatsAppMessage(
-  supabase: any,
-  phone: string,
-  message: string,
-  leadId: string
-): Promise<boolean> {
+async function sendManyChatMessage(
+  subscriberId: string,
+  message: string
+): Promise<{ success: boolean; error?: string }> {
+  const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY');
+  
+  if (!MANYCHAT_API_KEY) {
+    console.log('[Clicksign] MANYCHAT_API_KEY not configured');
+    return { success: false, error: 'MANYCHAT_API_KEY não configurada' };
+  }
+
   try {
-    console.log(`[Clicksign Webhook] Sending WhatsApp to ${phone}`);
+    console.log(`[Clicksign] Sending ManyChat message to subscriber ${subscriberId}`);
     
-    const response = await fetch(`${supabaseUrl}/functions/v1/zapi-send`, {
+    const response = await fetch(`${MANYCHAT_API_URL}/fb/sending/sendContent`, {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseServiceKey}`,
       },
       body: JSON.stringify({
-        to_phone: phone,
-        message: message,
-        provider: 'zapi',
-        lead_id: leadId,
+        subscriber_id: parseInt(subscriberId),
+        data: {
+          version: 'v2',
+          content: {
+            messages: [{ type: 'text', text: message }],
+          },
+        },
       }),
     });
 
     const result = await response.json();
     
-    if (result.success) {
-      console.log(`[Clicksign Webhook] WhatsApp sent successfully`);
-      return true;
+    if (result.status === 'success') {
+      console.log('[Clicksign] ManyChat message sent successfully');
+      return { success: true };
     } else {
-      console.error(`[Clicksign Webhook] WhatsApp failed:`, result.error);
-      return false;
+      console.error('[Clicksign] ManyChat failed:', result);
+      return { success: false, error: result.message || 'Erro ao enviar' };
     }
   } catch (error) {
-    console.error(`[Clicksign Webhook] Error sending WhatsApp:`, error);
-    return false;
+    console.error('[Clicksign] Error sending ManyChat:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Erro desconhecido' };
+  }
+}
+
+async function findLeadByConversationAnalysis(
+  supabase: any,
+  documentName: string,
+  signerEmail?: string,
+  signerPhone?: string,
+  signerName?: string
+): Promise<{ lead: any; subscriber: any } | null> {
+  console.log('[Clicksign] Finding lead by conversation analysis...');
+  
+  // Strategy 1: Search by signer phone in manychat_subscribers
+  if (signerPhone) {
+    const cleanPhone = signerPhone.replace(/\D/g, '');
+    const { data: subscribers } = await supabase
+      .from('manychat_subscribers')
+      .select('*, leads_juridicos(*)')
+      .or(`telefone.ilike.%${cleanPhone}%,telefone.ilike.%${cleanPhone.slice(-9)}%`)
+      .limit(5);
+    
+    if (subscribers && subscribers.length > 0) {
+      const sub = subscribers[0];
+      if (sub.lead_id && sub.leads_juridicos) {
+        console.log(`[Clicksign] Found lead via phone: ${sub.leads_juridicos.nome}`);
+        return { lead: sub.leads_juridicos, subscriber: sub };
+      }
+    }
+  }
+
+  // Strategy 2: Search by signer name in recent messages
+  const nameParts = (signerName || documentName)
+    .replace(/^Documento\s*-?\s*/i, '')
+    .replace(/\.[^/.]+$/, '')
+    .split(' ')
+    .filter((t: string) => t.length > 2)
+    .slice(0, 2);
+
+  if (nameParts.length > 0) {
+    // Search in recent messages for name mentions
+    const { data: messages } = await supabase
+      .from('manychat_mensagens')
+      .select('subscriber_id, lead_id, subscriber_nome, conteudo')
+      .order('created_at', { ascending: false })
+      .limit(500);
+
+    if (messages) {
+      // Look for messages that mention the signer name
+      for (const msg of messages) {
+        const content = (msg.conteudo || '').toLowerCase();
+        const subName = (msg.subscriber_nome || '').toLowerCase();
+        
+        // Check if content or subscriber name matches
+        const matches = nameParts.every((part: string) => 
+          content.includes(part.toLowerCase()) || subName.includes(part.toLowerCase())
+        );
+        
+        if (matches && msg.lead_id) {
+          const { data: lead } = await supabase
+            .from('leads_juridicos')
+            .select('*')
+            .eq('id', msg.lead_id)
+            .single();
+          
+          const { data: subscriber } = await supabase
+            .from('manychat_subscribers')
+            .select('*')
+            .eq('subscriber_id', msg.subscriber_id)
+            .single();
+          
+          if (lead && subscriber) {
+            console.log(`[Clicksign] Found lead via message analysis: ${lead.nome}`);
+            return { lead, subscriber };
+          }
+        }
+      }
+    }
+
+    // Strategy 3: Direct lead name search
+    const { data: leads } = await supabase
+      .from('leads_juridicos')
+      .select('*')
+      .or(nameParts.map((p: string) => `nome.ilike.%${p}%`).join(','))
+      .limit(5);
+
+    if (leads && leads.length > 0) {
+      // Find the best matching lead
+      for (const lead of leads) {
+        const { data: subscriber } = await supabase
+          .from('manychat_subscribers')
+          .select('*')
+          .eq('lead_id', lead.id)
+          .single();
+        
+        if (subscriber) {
+          console.log(`[Clicksign] Found lead via name search: ${lead.nome}`);
+          return { lead, subscriber };
+        }
+      }
+    }
+  }
+
+  console.log('[Clicksign] No lead found via conversation analysis');
+  return null;
+}
+
+async function createOrUpdateContractReminder(
+  supabase: any,
+  documentKey: string,
+  documentName: string,
+  contractLink: string,
+  leadId: string | null,
+  signerEmail: string | null,
+  signerPhone: string | null,
+  signerName: string | null,
+  status: string,
+  linkedBy: string
+): Promise<void> {
+  const now = new Date();
+  
+  // Check if reminder already exists
+  const { data: existing } = await supabase
+    .from('contract_reminders')
+    .select('*')
+    .eq('document_key', documentKey)
+    .single();
+
+  if (existing) {
+    // Update existing
+    const updates: any = {
+      status,
+      updated_at: now.toISOString(),
+    };
+    
+    if (leadId && !existing.lead_id) {
+      updates.lead_id = leadId;
+      updates.linked_by = linkedBy;
+      updates.linked_at = now.toISOString();
+    }
+    
+    if (status === 'signed' || status === 'cancelled') {
+      updates.next_reminder_at = null;
+      updates.signed_at = status === 'signed' ? now.toISOString() : null;
+    }
+    
+    await supabase
+      .from('contract_reminders')
+      .update(updates)
+      .eq('document_key', documentKey);
+    
+    console.log(`[Clicksign] Updated contract_reminder for ${documentKey}`);
+  } else {
+    // Create new with first reminder scheduled for 12h later
+    const nextReminder = new Date(now.getTime() + REMINDER_INTERVALS_HOURS[0] * 60 * 60 * 1000);
+    
+    await supabase.from('contract_reminders').insert({
+      document_key: documentKey,
+      document_name: documentName,
+      contract_link: contractLink,
+      lead_id: leadId,
+      signer_email: signerEmail,
+      signer_phone: signerPhone,
+      signer_name: signerName,
+      status: 'pending',
+      reminder_stage: 0,
+      next_reminder_at: nextReminder.toISOString(),
+      contract_created_at: now.toISOString(),
+      linked_by: leadId ? linkedBy : null,
+      linked_at: leadId ? now.toISOString() : null,
+    });
+    
+    console.log(`[Clicksign] Created contract_reminder for ${documentKey}, next reminder at ${nextReminder.toISOString()}`);
   }
 }
 
@@ -110,254 +307,217 @@ serve(async (req: Request): Promise<Response> => {
     const documentKey = document.key;
     const documentFilename = document.filename || '';
     const eventName = eventData.name;
+    const signers = document.signers || [];
+    const firstSigner = signers[0] || {};
 
-    // Build the contract signing URL
     const contractLink = `https://app.clicksign.com/sign/${documentKey}`;
-
     console.log(`Processing event: ${eventName} for document: ${documentKey}`);
 
-    // Map Clicksign status to our status
+    // Map event to status and message type
     let newStatus: string | null = null;
     let messageType: string | null = null;
+    let reminderStatus = 'pending';
     
     switch (eventName) {
       case "upload":
-        newStatus = "Documento Enviado";
-        messageType = 'created';
-        break;
       case "add_signer":
         newStatus = "Aguardando Assinatura";
-        messageType = 'created'; // Also send notification when signer is added
+        messageType = 'created';
+        reminderStatus = 'pending';
         break;
       case "sign":
-        // Check if all signers have signed
-        const allSigned = document.signers?.every((s: any) => s.signed_at !== null);
+        const allSigned = signers.every((s: any) => s.signed_at !== null);
         newStatus = allSigned ? "Assinado" : "Assinatura Parcial";
-        messageType = 'signed';
+        messageType = allSigned ? 'signed' : null;
+        reminderStatus = allSigned ? 'signed' : 'pending';
         break;
       case "close":
         newStatus = "Finalizado";
         messageType = 'finalized';
-        break;
-      case "deadline":
-        newStatus = "Prazo Expirado";
-        messageType = 'reminder_urgent';
-        break;
-      case "reminder":
-        // Soft reminder - contract not signed yet
-        newStatus = "Aguardando Assinatura";
-        messageType = 'reminder_soft';
-        break;
-      case "reminder_urgent":
-        newStatus = "Urgente - Aguardando Assinatura";
-        messageType = 'reminder_urgent';
+        reminderStatus = 'signed';
         break;
       case "cancel":
         newStatus = "Cancelado";
+        reminderStatus = 'cancelled';
         break;
       case "refuse":
         newStatus = "Recusado";
+        reminderStatus = 'cancelled';
         break;
       default:
         console.log(`Unhandled event: ${eventName}`);
     }
 
-    if (newStatus) {
-      // Try to find lead by document key in link_contrato
-      let leads: any[] = [];
-      
-      // First, search by exact document key
-      const { data: leadsByKey, error: leadsKeyError } = await supabase
+    if (!newStatus) {
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Try to find lead using conversation analysis
+    let leadData = await findLeadByConversationAnalysis(
+      supabase,
+      documentFilename,
+      firstSigner.email,
+      firstSigner.phone_number,
+      firstSigner.name
+    );
+
+    // Fallback: try direct search in leads_juridicos
+    if (!leadData) {
+      const { data: leadsByKey } = await supabase
         .from("leads_juridicos")
-        .select("id, nome, telefone, link_contrato, status, lead_state")
+        .select("*, manychat_subscribers!manychat_subscribers_lead_id_fkey(*)")
         .ilike("link_contrato", `%${documentKey}%`);
 
-      if (!leadsKeyError && leadsByKey && leadsByKey.length > 0) {
-        leads = leadsByKey;
-      } else {
-        // Try to find by signer email or phone
-        const signers = document.signers || [];
-        for (const signer of signers) {
-          if (signer.email) {
-            const { data: leadsByEmail } = await supabase
-              .from("leads_juridicos")
-              .select("id, nome, telefone, link_contrato, status, lead_state")
-              .ilike("email", signer.email);
-            
-            if (leadsByEmail && leadsByEmail.length > 0) {
-              leads = [...leads, ...leadsByEmail];
-            }
-          }
-          
-          if (signer.phone_number) {
-            const cleanPhone = signer.phone_number.replace(/\D/g, '');
-            const { data: leadsByPhone } = await supabase
-              .from("leads_juridicos")
-              .select("id, nome, telefone, link_contrato, status, lead_state")
-              .or(`telefone.ilike.%${cleanPhone}%,telefone.ilike.%${cleanPhone.slice(-9)}%`);
-            
-            if (leadsByPhone && leadsByPhone.length > 0) {
-              leads = [...leads, ...leadsByPhone];
-            }
-          }
+      if (leadsByKey && leadsByKey.length > 0) {
+        const lead = leadsByKey[0];
+        const subscriber = lead.manychat_subscribers?.[0];
+        if (subscriber) {
+          leadData = { lead, subscriber };
         }
-        
-        // Remove duplicates
-        leads = leads.filter((lead, index, self) => 
-          index === self.findIndex(l => l.id === lead.id)
-        );
-      }
-
-      console.log(`Found ${leads.length} leads for document ${documentKey}`);
-      
-      for (const lead of leads) {
-        const leadId = lead.id;
-        const clientName = lead.nome?.split(' ')[0] || 'Cliente';
-        const phone = lead.telefone;
-        
-        // Update lead with contract link if not already set
-        if (!lead.link_contrato || !lead.link_contrato.includes(documentKey)) {
-          const { error: updateLinkError } = await supabase
-            .from("leads_juridicos")
-            .update({ 
-              link_contrato: contractLink,
-              contract_sent_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-            .eq("id", leadId);
-
-          if (updateLinkError) {
-            console.error("Error updating lead contract link:", updateLinkError);
-          } else {
-            console.log(`Lead ${leadId} updated with contract link: ${contractLink}`);
-          }
-        }
-        
-        // Update lead state based on contract status
-        if (newStatus === "Assinado" || newStatus === "Finalizado") {
-          // Update to CONTRACT_SIGNED state and Ganho status
-          const { error: updateLeadError } = await supabase
-            .from("leads_juridicos")
-            .update({ 
-              status: "Ganho",
-              lead_state: "CONTRACT_SIGNED",
-              contract_signed_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-            .eq("id", leadId);
-
-          if (updateLeadError) {
-            console.error("Error updating lead status to Ganho:", updateLeadError);
-          } else {
-            console.log(`Lead ${leadId} atualizado para Ganho - contrato assinado`);
-            
-            // Record state transition
-            await supabase.from("lead_state_history").insert({
-              lead_id: leadId,
-              from_state: lead.lead_state || 'CONTRACT_SENT',
-              to_state: 'CONTRACT_SIGNED',
-              changed_by: 'clicksign_webhook',
-              reason: `Contrato assinado via Clicksign (${documentKey})`
-            });
-          }
-        } else if (newStatus === "Documento Enviado" || newStatus === "Aguardando Assinatura") {
-          // Update to CONTRACT_SENT state
-          const { error: updateStateError } = await supabase
-            .from("leads_juridicos")
-            .update({ 
-              lead_state: "CONTRACT_SENT",
-              status: "Aguardando Contrato",
-              updated_at: new Date().toISOString()
-            })
-            .eq("id", leadId)
-            .not("lead_state", "in", "(CONTRACT_SIGNED,DOCS_PENDING,READY_FOR_LAWYER)");
-
-          if (!updateStateError) {
-            console.log(`Lead ${leadId} state updated to CONTRACT_SENT`);
-          }
-        }
-
-        // Create interaction for the event
-        const { error: interactionError } = await supabase
-          .from("interacoes")
-          .insert({
-            cliente_id: leadId,
-            tipo: "Documento",
-            resumo: `Contrato: ${newStatus}`,
-            detalhes: `Evento Clicksign: ${eventName}. Status: ${newStatus}. Link: ${contractLink}`,
-            direcao: "Sistema",
-          });
-
-        if (interactionError) {
-          console.error("Error creating interaction:", interactionError);
-        }
-
-        // Send WhatsApp notification if we have phone and a message type
-        if (phone && messageType) {
-          let message = '';
-          
-          if (messageType === 'created') {
-            message = CONTRACT_MESSAGES.created(clientName, contractLink);
-          } else if (messageType === 'reminder_soft') {
-            message = CONTRACT_MESSAGES.reminder_soft(clientName, contractLink);
-          } else if (messageType === 'reminder_urgent') {
-            message = CONTRACT_MESSAGES.reminder_urgent(clientName, contractLink);
-          } else if (messageType === 'signed') {
-            message = CONTRACT_MESSAGES.signed(clientName);
-          } else if (messageType === 'finalized') {
-            message = CONTRACT_MESSAGES.finalized(clientName);
-          }
-          
-          if (message) {
-            // Don't send duplicate notifications for signed events (only when all signed)
-            if (messageType === 'signed' && newStatus !== "Assinado") {
-              console.log(`Skipping signed notification - partial signature`);
-            } else {
-              await sendWhatsAppMessage(supabase, phone, message, leadId);
-              
-              // Log the notification
-              await supabase.from("system_events").insert({
-                tipo: "contrato",
-                acao: `notification_${messageType}`,
-                fonte: "clicksign_webhook",
-                lead_id: leadId,
-                dados: {
-                  document_key: documentKey,
-                  event_name: eventName,
-                  status: newStatus,
-                  phone: phone.slice(-4), // Only log last 4 digits
-                }
-              });
-            }
-          }
-        } else if (!phone) {
-          console.log(`Lead ${leadId} has no phone - skipping WhatsApp notification`);
-        }
-      }
-
-      // If no leads found but we have signer info, try to create a record
-      if (leads.length === 0 && document.signers?.length > 0) {
-        const signer = document.signers[0];
-        console.log(`No leads found. Signer info:`, signer);
-        
-        // Log this event for manual review
-        await supabase.from("system_events").insert({
-          tipo: "contrato",
-          acao: "orphan_contract",
-          fonte: "clicksign_webhook",
-          dados: {
-            document_key: documentKey,
-            document_name: documentFilename,
-            event_name: eventName,
-            signer_name: signer.name,
-            signer_email: signer.email,
-            signer_phone: signer.phone_number,
-          }
-        });
       }
     }
 
-    return new Response(JSON.stringify({ success: true, status: newStatus }), {
+    // Create/update contract reminder record
+    await createOrUpdateContractReminder(
+      supabase,
+      documentKey,
+      documentFilename,
+      contractLink,
+      leadData?.lead?.id || null,
+      firstSigner.email,
+      firstSigner.phone_number,
+      firstSigner.name,
+      reminderStatus,
+      leadData ? 'isa_auto' : 'none'
+    );
+
+    if (leadData) {
+      const { lead, subscriber } = leadData;
+      const leadId = lead.id;
+      const clientName = lead.nome?.split(' ')[0] || 'Cliente';
+
+      // Update lead with contract link
+      if (!lead.link_contrato || !lead.link_contrato.includes(documentKey)) {
+        await supabase
+          .from("leads_juridicos")
+          .update({ 
+            link_contrato: contractLink,
+            contract_key: documentKey,
+            contract_sent_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", leadId);
+        console.log(`[Clicksign] Lead ${leadId} updated with contract link`);
+      }
+
+      // Update lead state
+      if (newStatus === "Assinado" || newStatus === "Finalizado") {
+        await supabase
+          .from("leads_juridicos")
+          .update({ 
+            status: "Ganho",
+            lead_state: "CONTRACT_SIGNED",
+            contract_signed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", leadId);
+
+        await supabase.from("lead_state_history").insert({
+          lead_id: leadId,
+          from_state: lead.lead_state || 'CONTRACT_SENT',
+          to_state: 'CONTRACT_SIGNED',
+          changed_by: 'clicksign_webhook',
+          reason: `Contrato assinado via Clicksign (${documentKey})`
+        });
+      } else if (newStatus === "Aguardando Assinatura") {
+        await supabase
+          .from("leads_juridicos")
+          .update({ 
+            lead_state: "CONTRACT_SENT",
+            status: "Aguardando Contrato",
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", leadId)
+          .not("lead_state", "in", "(CONTRACT_SIGNED,DOCS_PENDING,READY_FOR_LAWYER)");
+      }
+
+      // Create interaction
+      await supabase.from("interacoes").insert({
+        cliente_id: leadId,
+        tipo: "Documento",
+        resumo: `Contrato: ${newStatus}`,
+        detalhes: `Evento Clicksign: ${eventName}. Status: ${newStatus}. Link: ${contractLink}`,
+        direcao: "Sistema",
+      });
+
+      // Send ManyChat message for new contracts or completions
+      if (messageType && subscriber?.subscriber_id) {
+        let message = '';
+        
+        switch (messageType) {
+          case 'created':
+            message = CONTRACT_MESSAGES.created(clientName, contractLink);
+            break;
+          case 'signed':
+            message = CONTRACT_MESSAGES.signed(clientName);
+            break;
+          case 'finalized':
+            message = CONTRACT_MESSAGES.finalized(clientName);
+            break;
+        }
+        
+        if (message) {
+          const sendResult = await sendManyChatMessage(subscriber.subscriber_id, message);
+          
+          if (sendResult.success) {
+            // Record in manychat_mensagens
+            await supabase.from("manychat_mensagens").insert({
+              subscriber_id: subscriber.subscriber_id,
+              lead_id: leadId,
+              conteudo: message,
+              direcao: 'saida',
+              tipo: 'text',
+              subscriber_nome: subscriber.nome,
+            });
+          }
+          
+          await supabase.from("system_events").insert({
+            tipo: "contrato",
+            acao: `notification_${messageType}`,
+            fonte: "clicksign_webhook",
+            lead_id: leadId,
+            dados: {
+              document_key: documentKey,
+              event_name: eventName,
+              status: newStatus,
+              manychat_sent: sendResult.success,
+            }
+          });
+        }
+      }
+    } else {
+      // No lead found - log for manual review
+      console.log(`[Clicksign] No lead found for document ${documentKey}`);
+      
+      await supabase.from("system_events").insert({
+        tipo: "contrato",
+        acao: "orphan_contract",
+        fonte: "clicksign_webhook",
+        dados: {
+          document_key: documentKey,
+          document_name: documentFilename,
+          event_name: eventName,
+          signer_name: firstSigner.name,
+          signer_email: firstSigner.email,
+          signer_phone: firstSigner.phone_number,
+        }
+      });
+    }
+
+    return new Response(JSON.stringify({ success: true, status: newStatus, leadFound: !!leadData }), {
       status: 200,
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });
@@ -366,10 +526,7 @@ serve(async (req: Request): Promise<Response> => {
     console.error("Error in clicksign-webhook function:", error);
     return new Response(
       JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      }
+      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   }
 });
