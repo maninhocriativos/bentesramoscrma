@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useTheme } from 'next-themes';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
@@ -9,17 +8,16 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { useChatPresence } from '@/hooks/useChatPresence';
 import { useAuth } from '@/hooks/useAuth';
+import { ChatThemeProvider, useChatTheme } from './ChatThemeProvider';
 import LeadContextPanel from './LeadContextPanel';
 import { 
   Send, 
   Search, 
   Phone, 
-  Video,
   RefreshCw,
   Mic,
   Paperclip,
   X,
-  Check,
   CheckCheck,
   ArrowLeft,
   MoreVertical,
@@ -33,12 +31,11 @@ import {
   Facebook,
   MessageCircle,
   Sparkles,
-  PanelRightOpen,
   PanelRightClose,
-  Calendar
+  Circle
 } from 'lucide-react';
 import CalWidget from './CalWidget';
-import { format, isToday, isYesterday } from 'date-fns';
+import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   DropdownMenu,
@@ -70,36 +67,13 @@ interface Message {
   tipo: string;
 }
 
-// Filtros de conversa
-type ConversationFilter = 'all' | 'unread' | 'favorites' | 'groups';
+type ConversationFilter = 'all' | 'unread' | 'human' | 'bot';
 
-// Cores do WhatsApp Desktop (Dark Mode)
-const WHATSAPP_COLORS = {
-  headerBg: '#008069',
-  headerDark: '#202C33',
-  chatBg: '#E4DDD6',
-  chatBgDark: '#0B141A',
-  sidebarBg: '#FFFFFF',
-  sidebarBgDark: '#111B21',
-  messageSent: '#D9FDD3',
-  messageSentDark: '#005C4B',
-  messageReceived: '#FFFFFF',
-  messageReceivedDark: '#202C33',
-  inputBg: '#F0F2F5',
-  inputBgDark: '#2A3942',
-  iconColor: '#54656F',
-  iconColorDark: '#AEBAC1',
-  textPrimary: '#111B21',
-  textSecondary: '#667781',
-  activeBg: '#F0F2F5',
-  activeBgDark: '#2A3942',
-  unreadBadge: '#25D366',
-};
-
-const ManyChatInbox = () => {
+// Componente interno que usa o tema
+const ManyChatInboxContent = () => {
   const { toast } = useToast();
   const { user } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { theme, toggleTheme } = useChatTheme();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
@@ -129,6 +103,27 @@ const ManyChatInbox = () => {
     user?.email?.split('@')[0]
   );
 
+  // Tema - classes dinâmicas
+  const isDark = theme === 'dark';
+  
+  const themeClasses = {
+    bg: isDark ? 'bg-[#0B141A]' : 'bg-[#EFEAE2]',
+    sidebar: isDark ? 'bg-[#111B21]' : 'bg-white',
+    header: isDark ? 'bg-[#202C33]' : 'bg-[#F0F2F5]',
+    headerText: isDark ? 'text-[#E9EDEF]' : 'text-[#111B21]',
+    secondaryText: isDark ? 'text-[#8696A0]' : 'text-[#667781]',
+    iconColor: isDark ? 'text-[#AEBAC1]' : 'text-[#54656F]',
+    border: isDark ? 'border-[#222D34]' : 'border-[#E9EDEF]',
+    hover: isDark ? 'hover:bg-[#202C33]' : 'hover:bg-[#F5F6F6]',
+    hoverBtn: isDark ? 'hover:bg-[#374248]' : 'hover:bg-[#E9EDEF]',
+    active: isDark ? 'bg-[#2A3942]' : 'bg-[#F0F2F5]',
+    input: isDark ? 'bg-[#2A3942]' : 'bg-white',
+    inputSearch: isDark ? 'bg-[#202C33]' : 'bg-[#F0F2F5]',
+    messageSent: isDark ? 'bg-[#005C4B]' : 'bg-[#D9FDD3]',
+    messageReceived: isDark ? 'bg-[#202C33]' : 'bg-white',
+    emptyState: isDark ? 'bg-[#222E35]' : 'bg-[#F0F2F5]',
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -137,17 +132,14 @@ const ManyChatInbox = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Check for lead_id in URL params
   useEffect(() => {
     const leadId = searchParams.get('lead_id');
     if (leadId) {
       setPendingLeadId(leadId);
-      // Clear the param from URL to avoid re-selecting on refresh
       setSearchParams({});
     }
   }, [searchParams, setSearchParams]);
 
-  // Auto-select conversation when subscribers load and we have a pending lead_id
   useEffect(() => {
     if (pendingLeadId && subscribers.length > 0) {
       const subscriber = subscribers.find(s => s.lead_id === pendingLeadId);
@@ -155,8 +147,6 @@ const ManyChatInbox = () => {
         setSelectedSubscriber(subscriber);
         setPendingLeadId(null);
       } else {
-        // Lead might not have a subscriber yet
-        console.log('Subscriber não encontrado para lead_id:', pendingLeadId);
         setPendingLeadId(null);
       }
     }
@@ -172,28 +162,24 @@ const ManyChatInbox = () => {
     typingTimeoutRef.current = setTimeout(() => setTyping(false), 2000);
   }, [setTyping]);
 
-  // Realtime subscriptions - Escutar novos subscribers e mensagens
+  // Realtime subscriptions
   useEffect(() => {
     console.log('[ManyChatInbox] Iniciando subscriptions realtime...');
     
     const messagesChannel = supabase
-      .channel('manychat-messages-live-v2')
+      .channel('manychat-messages-live-v3')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'manychat_mensagens' },
         (payload) => {
           console.log('[ManyChatInbox] Nova mensagem recebida:', payload.new);
           const newMsg = payload.new as Message & { subscriber_id: string };
           
-          // Se é mensagem do subscriber selecionado, adicionar à lista
           if (selectedSubscriber && newMsg.subscriber_id === selectedSubscriber.subscriber_id) {
             setMessages(prev => prev.some(m => m.id === newMsg.id) ? prev : [...prev, newMsg]);
           }
           
-          // Atualizar lista de subscribers - mover para o topo
           setSubscribers(prev => {
             const idx = prev.findIndex(s => s.subscriber_id === newMsg.subscriber_id);
             if (idx === -1) { 
-              // Subscriber não existe na lista - recarregar toda a lista
-              console.log('[ManyChatInbox] Novo subscriber detectado, recarregando lista...');
               loadSubscribers(); 
               return prev; 
             }
@@ -203,18 +189,13 @@ const ManyChatInbox = () => {
           });
         }
       )
-      .subscribe((status) => {
-        console.log('[ManyChatInbox] Status mensagens channel:', status);
-      });
+      .subscribe();
 
-    // Escutar INSERT e UPDATE de subscribers para detectar novos contatos
     const subscribersChannel = supabase
-      .channel('manychat-subscribers-live-v2')
+      .channel('manychat-subscribers-live-v3')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'manychat_subscribers' },
         (payload) => {
-          console.log('[ManyChatInbox] Novo subscriber inserido:', payload.new);
           const newSub = payload.new as Subscriber;
-          // Adicionar novo subscriber ao topo da lista
           setSubscribers(prev => {
             const exists = prev.some(s => s.subscriber_id === newSub.subscriber_id);
             if (exists) return prev;
@@ -224,7 +205,6 @@ const ManyChatInbox = () => {
       )
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'manychat_subscribers' },
         (payload) => {
-          console.log('[ManyChatInbox] Subscriber atualizado:', payload.new);
           const updatedSub = payload.new as Subscriber;
           setSubscribers(prev => {
             const idx = prev.findIndex(s => s.subscriber_id === updatedSub.subscriber_id);
@@ -235,12 +215,9 @@ const ManyChatInbox = () => {
           });
         }
       )
-      .subscribe((status) => {
-        console.log('[ManyChatInbox] Status subscribers channel:', status);
-      });
+      .subscribe();
 
     return () => {
-      console.log('[ManyChatInbox] Removendo channels realtime...');
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(subscribersChannel);
     };
@@ -272,35 +249,19 @@ const ManyChatInbox = () => {
     }
   };
 
-  // Sincronização COMPLETA - Importar TODOS contatos e conversas do ManyChat
   const syncAllContacts = async () => {
     setIsSyncing(true);
-    
     try {
-      toast({
-        title: 'Sincronização iniciada',
-        description: 'Importando todos os contatos do ManyChat...'
-      });
-
-      const { data, error } = await supabase.functions.invoke('manychat-full-sync', {
-        body: { mode: 'full' }
-      });
-
+      toast({ title: 'Sincronização iniciada', description: 'Importando contatos do ManyChat...' });
+      const { data, error } = await supabase.functions.invoke('manychat-full-sync', { body: { mode: 'full' } });
       if (error) throw error;
-
       await loadSubscribers();
-      
       toast({
         title: 'Sincronização concluída!',
-        description: `${data.created || 0} novos contatos, ${data.updated || 0} atualizados de ${data.total || 0} total`
+        description: `${data.created || 0} novos, ${data.updated || 0} atualizados`
       });
     } catch (error: any) {
-      console.error('Erro na sincronização:', error);
-      toast({
-        title: 'Erro na sincronização',
-        description: error.message || 'Não foi possível sincronizar',
-        variant: 'destructive'
-      });
+      toast({ title: 'Erro na sincronização', description: error.message, variant: 'destructive' });
     } finally {
       setIsSyncing(false);
     }
@@ -330,7 +291,6 @@ const ManyChatInbox = () => {
 
     setIsSending(true);
     try {
-      // Enviar via ManyChat
       await supabase.functions.invoke('manychat', {
         body: {
           action: 'enviar_mensagem',
@@ -340,7 +300,6 @@ const ManyChatInbox = () => {
         },
       });
 
-      // Salvar mensagem no banco
       await supabase.from('manychat_mensagens' as any).insert({
         subscriber_id: selectedSubscriber.subscriber_id,
         subscriber_nome: selectedSubscriber.nome,
@@ -351,12 +310,11 @@ const ManyChatInbox = () => {
         lead_id: selectedSubscriber.lead_id,
       } as any);
 
-      // Registrar interação se tem lead vinculado
       if (selectedSubscriber.lead_id) {
         await supabase.from('interacoes').insert({
           cliente_id: selectedSubscriber.lead_id,
           tipo: 'Chat',
-          resumo: `Mensagem enviada via ${selectedSubscriber.canal}: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`,
+          resumo: `Mensagem via ${selectedSubscriber.canal}: ${content.substring(0, 100)}...`,
           detalhes: content,
           direcao: 'saida',
           data_interacao: new Date().toISOString(),
@@ -389,10 +347,8 @@ const ManyChatInbox = () => {
       const fileExt = selectedFile.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `manychat/${selectedSubscriber.subscriber_id}/${fileName}`;
-      
       await supabase.storage.from('documentos').upload(filePath, selectedFile);
       const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(filePath);
-      
       const mediaType = selectedFile.type.startsWith('image/') ? 'image' : 
                        selectedFile.type.startsWith('audio/') ? 'audio' : 'document';
       await sendMessage(urlData.publicUrl, mediaType);
@@ -409,14 +365,12 @@ const ManyChatInbox = () => {
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
-      
       mediaRecorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
       mediaRecorder.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/ogg' });
         setSelectedFile(new File([audioBlob], `audio_${Date.now()}.ogg`, { type: 'audio/ogg' }));
         stream.getTracks().forEach(track => track.stop());
       };
-      
       mediaRecorder.start();
       setIsRecording(true);
     } catch (error) {
@@ -440,17 +394,17 @@ const ManyChatInbox = () => {
     return format(date, "dd/MM/yyyy");
   };
 
-  const getDateLabel = (messages: Message[], index: number) => {
+  const getDateLabel = (msgs: Message[], index: number) => {
     if (index === 0) {
-      const date = new Date(messages[0].created_at);
+      const date = new Date(msgs[0].created_at);
       if (isToday(date)) return 'HOJE';
       if (isYesterday(date)) return 'ONTEM';
       return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }).toUpperCase();
     }
-    const currentDate = new Date(messages[index].created_at).toDateString();
-    const prevDate = new Date(messages[index - 1].created_at).toDateString();
+    const currentDate = new Date(msgs[index].created_at).toDateString();
+    const prevDate = new Date(msgs[index - 1].created_at).toDateString();
     if (currentDate !== prevDate) {
-      const date = new Date(messages[index].created_at);
+      const date = new Date(msgs[index].created_at);
       if (isToday(date)) return 'HOJE';
       if (isYesterday(date)) return 'ONTEM';
       return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }).toUpperCase();
@@ -470,7 +424,7 @@ const ManyChatInbox = () => {
     return name.substring(0, 2).toUpperCase();
   };
 
-  // Componente para ícone do canal
+  // Ícone do canal
   const ChannelIcon = ({ canal, size = 'sm' }: { canal?: string; size?: 'sm' | 'md' }) => {
     const normalizedCanal = canal?.toLowerCase() || '';
     const iconSize = size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4';
@@ -496,7 +450,6 @@ const ManyChatInbox = () => {
         </div>
       );
     }
-    // Telegram ou outros
     if (normalizedCanal.includes('telegram')) {
       return (
         <div className={`${size === 'sm' ? 'p-0.5' : 'p-1'} rounded bg-[#0088cc]`}>
@@ -504,25 +457,42 @@ const ManyChatInbox = () => {
         </div>
       );
     }
-    // SMS
-    if (normalizedCanal.includes('sms')) {
-      return (
-        <div className={`${size === 'sm' ? 'p-0.5' : 'p-1'} rounded bg-gray-500`}>
-          <MessageCircle className={`${iconSize} text-white`} />
-        </div>
-      );
-    }
     return null;
   };
 
-  // Aplicar filtro de busca
-  const searchFilteredSubscribers = subscribers.filter(sub =>
-    sub.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    sub.telefone?.includes(searchTerm)
-  );
+  // Indicador Online Premium
+  const OnlineIndicator = ({ subscriberId, showText = false }: { subscriberId: string; showText?: boolean }) => {
+    const online = isOnline(subscriberId);
+    if (!online && !showText) return null;
+    
+    return (
+      <div className="flex items-center gap-1.5">
+        <span className={`relative flex h-2.5 w-2.5 ${online ? '' : 'opacity-50'}`}>
+          {online && (
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+          )}
+          <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${online ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+        </span>
+        {showText && (
+          <span className={`text-xs font-medium ${online ? 'text-emerald-500' : themeClasses.secondaryText}`}>
+            {online ? 'Online' : 'Offline'}
+          </span>
+        )}
+      </div>
+    );
+  };
 
-  // Aplicar filtro de categoria (por enquanto só "Tudo" funciona)
-  const filteredSubscribers = searchFilteredSubscribers;
+  // Filtros aplicados
+  const filteredSubscribers = subscribers
+    .filter(sub =>
+      sub.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      sub.telefone?.includes(searchTerm)
+    )
+    .filter(sub => {
+      if (activeFilter === 'human') return sub.atendimento_humano;
+      if (activeFilter === 'bot') return !sub.atendimento_humano;
+      return true;
+    });
 
   const renderMessage = (message: Message) => {
     const content = message.conteudo || '';
@@ -532,18 +502,14 @@ const ManyChatInbox = () => {
     const cleanUrl = content.replace(/^\[|\]$/g, '');
 
     if (isAudio) {
-      return (
-        <audio controls className="max-w-[220px] h-10" preload="metadata">
-          <source src={cleanUrl} type="audio/ogg" />
-        </audio>
-      );
+      return <audio controls className="max-w-[220px] h-10" preload="metadata"><source src={cleanUrl} type="audio/ogg" /></audio>;
     }
     if (isImage) {
       return (
         <img 
           src={cleanUrl} 
           alt="Imagem" 
-          className="max-w-[280px] rounded-lg cursor-pointer"
+          className="max-w-[280px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
           onClick={() => window.open(cleanUrl, '_blank')}
         />
       );
@@ -555,79 +521,51 @@ const ManyChatInbox = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#EFEAE2] dark:bg-[#0B141A]">
-      {/* Sidebar - Lista de Conversas (WhatsApp Desktop Style) */}
-      <div className={`${showMobileChat ? 'hidden md:flex' : 'flex'} w-full md:w-[400px] lg:w-[420px] flex-col bg-white dark:bg-[#111B21] border-r border-[#E9EDEF] dark:border-[#222D34]`}>
-        {/* Header com título "Conversas" */}
-        <div className="h-[60px] px-4 flex items-center justify-between bg-[#F0F2F5] dark:bg-[#202C33]">
+    <div className={`flex h-screen w-screen overflow-hidden ${themeClasses.bg}`}>
+      {/* Sidebar - Lista de Conversas */}
+      <div className={`${showMobileChat ? 'hidden md:flex' : 'flex'} w-full md:w-[380px] lg:w-[420px] flex-col ${themeClasses.sidebar} border-r ${themeClasses.border}`}>
+        {/* Header */}
+        <div className={`h-[60px] px-4 flex items-center justify-between ${themeClasses.header}`}>
           <div className="flex items-center gap-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-10 w-10 rounded-full text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]"
-                  title="Menu do CRM"
-                >
+                <Button variant="ghost" size="icon" className={`h-10 w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}>
                   <Menu className="h-5 w-5" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48">
-                <DropdownMenuItem onClick={() => navigate('/dashboard')}>
-                  Dashboard
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/leads')}>
-                  Leads
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/processos')}>
-                  Processos
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/tarefas')}>
-                  Tarefas
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/agenda')}>
-                  Agenda
-                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/dashboard')}>Dashboard</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/leads')}>Leads</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/processos')}>Processos</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/tarefas')}>Tarefas</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/agenda')}>Agenda</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate('/financeiro')}>
-                  Financeiro
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/documentos')}>
-                  Documentos
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/contratos')}>
-                  Contratos
-                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/financeiro')}>Financeiro</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/documentos')}>Documentos</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/contratos')}>Contratos</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate('/assistente')}>
-                  Isa Assistente
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/configuracoes')}>
-                  Configurações
-                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/assistente')}>Isa Assistente</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/configuracoes')}>Configurações</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <h1 className="text-[22px] font-semibold text-[#111B21] dark:text-[#E9EDEF]">
-              Conversas
-            </h1>
+            <h1 className={`text-xl font-semibold ${themeClasses.headerText}`}>Conversas</h1>
           </div>
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="h-10 w-10 rounded-full text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]"
-              title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
+              onClick={toggleTheme}
+              className={`h-10 w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}
+              title={isDark ? 'Modo claro' : 'Modo escuro'}
             >
-              {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
             </Button>
             <Button
               variant="ghost"
               size="icon"
               onClick={syncAllContacts}
               disabled={isSyncing}
-              className="h-10 w-10 rounded-full text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]"
-              title="Sincronizar contatos"
+              className={`h-10 w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}
             >
               <RefreshCw className={`h-5 w-5 ${isSyncing ? 'animate-spin' : ''}`} />
             </Button>
@@ -635,192 +573,179 @@ const ManyChatInbox = () => {
         </div>
 
         {/* Search */}
-        <div className="px-3 py-2 bg-white dark:bg-[#111B21]">
+        <div className={`px-3 py-2 ${themeClasses.sidebar}`}>
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-[#54656F] dark:text-[#8696A0]" />
+            <Search className={`absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 ${themeClasses.secondaryText}`} />
             <Input
-              placeholder="Pesquisar ou começar uma nova conversa"
+              placeholder="Pesquisar conversa..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-12 h-[35px] bg-[#F0F2F5] dark:bg-[#202C33] border-0 rounded-lg text-[13px] placeholder:text-[#667781] dark:placeholder:text-[#8696A0] focus-visible:ring-0"
+              className={`pl-12 h-[35px] ${themeClasses.inputSearch} border-0 rounded-lg text-[13px] focus-visible:ring-0`}
             />
           </div>
         </div>
 
-        {/* Filtros de conversa */}
-        <div className="px-3 py-2 bg-white dark:bg-[#111B21] border-b border-[#E9EDEF] dark:border-[#2A3942]">
+        {/* Filtros */}
+        <div className={`px-3 py-2 ${themeClasses.sidebar} border-b ${themeClasses.border}`}>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveFilter('all')}
-              className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
-                activeFilter === 'all'
-                  ? 'bg-[#00A884] text-white'
-                  : 'bg-[#F0F2F5] dark:bg-[#202C33] text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E0E4E7] dark:hover:bg-[#374248]'
-              }`}
-            >
-              Tudo
-            </button>
-            <button
-              onClick={() => setActiveFilter('unread')}
-              className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
-                activeFilter === 'unread'
-                  ? 'bg-[#00A884] text-white'
-                  : 'bg-[#F0F2F5] dark:bg-[#202C33] text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E0E4E7] dark:hover:bg-[#374248]'
-              }`}
-            >
-              Não lidas
-            </button>
-            <button
-              onClick={() => setActiveFilter('favorites')}
-              className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
-                activeFilter === 'favorites'
-                  ? 'bg-[#00A884] text-white'
-                  : 'bg-[#F0F2F5] dark:bg-[#202C33] text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E0E4E7] dark:hover:bg-[#374248]'
-              }`}
-            >
-              Favoritas
-            </button>
-            <button
-              onClick={() => setActiveFilter('groups')}
-              className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
-                activeFilter === 'groups'
-                  ? 'bg-[#00A884] text-white'
-                  : 'bg-[#F0F2F5] dark:bg-[#202C33] text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E0E4E7] dark:hover:bg-[#374248]'
-              }`}
-            >
-              Grupos
-            </button>
+            {(['all', 'human', 'bot'] as ConversationFilter[]).map((filter) => (
+              <button
+                key={filter}
+                onClick={() => setActiveFilter(filter)}
+                className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-all ${
+                  activeFilter === filter
+                    ? 'bg-[#00A884] text-white shadow-md'
+                    : `${themeClasses.inputSearch} ${themeClasses.secondaryText} ${themeClasses.hoverBtn}`
+                }`}
+              >
+                {filter === 'all' ? 'Todos' : filter === 'human' ? '🙋 Humano' : '🤖 Isa'}
+              </button>
+            ))}
           </div>
         </div>
 
         {/* Lista de Conversas */}
         <ScrollArea className="flex-1">
           {filteredSubscribers.length === 0 ? (
-            <div className="p-8 text-center text-[#667781]">
+            <div className={`p-8 text-center ${themeClasses.secondaryText}`}>
               <p className="text-sm">{isLoading ? 'Carregando...' : 'Nenhuma conversa'}</p>
             </div>
           ) : (
             <div>
-              {filteredSubscribers.map((subscriber) => (
-                <div
-                  key={subscriber.id}
-                  onClick={() => setSelectedSubscriber(subscriber)}
-                  className={`flex items-center gap-3 px-3 py-[10px] cursor-pointer transition-colors hover:bg-[#F5F6F6] dark:hover:bg-[#202C33] ${
-                    selectedSubscriber?.id === subscriber.id ? 'bg-[#F0F2F5] dark:bg-[#2A3942]' : ''
-                  }`}
-                >
-                  <div className="relative">
-                    <Avatar className="h-[49px] w-[49px] shrink-0">
-                      <AvatarImage src={subscriber.foto} />
-                      <AvatarFallback className="bg-[#00A884] text-white text-base font-normal">
-                        {getInitials(subscriber)}
-                      </AvatarFallback>
-                    </Avatar>
-                    {/* Indicador online */}
-                    {isOnline(subscriber.subscriber_id) && (
-                      <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#25D366] border-2 border-white dark:border-[#111B21]" />
-                    )}
-                  </div>
-                  
-                  <div className="flex-1 min-w-0 border-b border-[#E9EDEF] dark:border-[#222D34] pb-[10px]">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <ChannelIcon canal={subscriber.canal} size="sm" />
-                        <span className="font-normal text-[17px] text-[#111B21] dark:text-[#E9EDEF] truncate">
-                          {getDisplayName(subscriber)}
+              {filteredSubscribers.map((subscriber) => {
+                const isActive = selectedSubscriber?.id === subscriber.id;
+                const online = isOnline(subscriber.subscriber_id);
+                
+                return (
+                  <div
+                    key={subscriber.id}
+                    onClick={() => setSelectedSubscriber(subscriber)}
+                    className={`flex items-center gap-3 px-3 py-3 cursor-pointer transition-all ${themeClasses.hover} ${
+                      isActive ? themeClasses.active : ''
+                    } ${online ? 'border-l-2 border-l-emerald-500' : ''}`}
+                  >
+                    <div className="relative">
+                      <Avatar className="h-12 w-12 shrink-0 ring-2 ring-offset-2 ring-offset-transparent ring-transparent">
+                        <AvatarImage src={subscriber.foto} />
+                        <AvatarFallback className="bg-gradient-to-br from-[#00A884] to-[#008069] text-white text-base font-medium">
+                          {getInitials(subscriber)}
+                        </AvatarFallback>
+                      </Avatar>
+                      {/* Online indicator overlay */}
+                      {online && (
+                        <span className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-emerald-500 border-2 border-white dark:border-[#111B21] flex items-center justify-center">
+                          <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+                        </span>
+                      )}
+                      {/* Atendimento humano indicator */}
+                      {subscriber.atendimento_humano && (
+                        <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-amber-500 flex items-center justify-center text-[10px]">
+                          🙋
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className={`flex-1 min-w-0 border-b ${themeClasses.border} pb-3`}>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <ChannelIcon canal={subscriber.canal} size="sm" />
+                          <span className={`font-medium text-[15px] ${themeClasses.headerText} truncate`}>
+                            {getDisplayName(subscriber)}
+                          </span>
+                          {online && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-medium">
+                              online
+                            </span>
+                          )}
+                        </div>
+                        <span className={`text-[11px] ${themeClasses.secondaryText} shrink-0 ml-2`}>
+                          {subscriber.ultima_interacao && formatLastMessageTime(subscriber.ultima_interacao)}
                         </span>
                       </div>
-                      <span className="text-[12px] text-[#667781] dark:text-[#8696A0] shrink-0 ml-2">
-                        {subscriber.ultima_interacao && formatLastMessageTime(subscriber.ultima_interacao)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1 mt-[2px]">
-                      <CheckCheck className="h-[16px] w-[16px] text-[#53BDEB] shrink-0" />
-                      <span className="text-[14px] text-[#667781] dark:text-[#8696A0] truncate">
-                        {subscriber.telefone || subscriber.canal}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <CheckCheck className="h-4 w-4 text-[#53BDEB] shrink-0" />
+                        <span className={`text-[13px] ${themeClasses.secondaryText} truncate`}>
+                          {subscriber.telefone || subscriber.canal}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </ScrollArea>
       </div>
 
-      {/* Área de Chat (WhatsApp Style) */}
+      {/* Área de Chat */}
       <div className={`${!showMobileChat ? 'hidden md:flex' : 'flex'} flex-1 flex-col`}>
         {selectedSubscriber ? (
           <>
             {/* Header do Chat */}
-            <div className="h-[60px] px-4 flex items-center gap-3 bg-[#F0F2F5] dark:bg-[#202C33] border-b border-[#E9EDEF] dark:border-[#222D34]">
+            <div className={`h-[62px] px-4 flex items-center gap-3 ${themeClasses.header} border-b ${themeClasses.border}`}>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => { setSelectedSubscriber(null); setShowMobileChat(false); }}
-                className="md:hidden h-10 w-10 -ml-2 text-[#54656F] dark:text-[#AEBAC1]"
+                className={`md:hidden h-10 w-10 -ml-2 ${themeClasses.iconColor}`}
               >
                 <ArrowLeft className="h-6 w-6" />
               </Button>
               
-              <Avatar className="h-10 w-10 cursor-pointer">
-                <AvatarImage src={selectedSubscriber.foto} />
-                <AvatarFallback className="bg-[#00A884] text-white">
-                  {getInitials(selectedSubscriber)}
-                </AvatarFallback>
-              </Avatar>
+              <div className="relative">
+                <Avatar className="h-11 w-11 cursor-pointer ring-2 ring-offset-1 ring-transparent hover:ring-[#00A884] transition-all">
+                  <AvatarImage src={selectedSubscriber.foto} />
+                  <AvatarFallback className="bg-gradient-to-br from-[#00A884] to-[#008069] text-white">
+                    {getInitials(selectedSubscriber)}
+                  </AvatarFallback>
+                </Avatar>
+                {isOnline(selectedSubscriber.subscriber_id) && (
+                  <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-white" />
+                )}
+              </div>
               
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <ChannelIcon canal={selectedSubscriber.canal} size="md" />
-                  <h3 className="font-normal text-[16px] text-[#111B21] dark:text-[#E9EDEF] truncate">
+                  <h3 className={`font-semibold text-[16px] ${themeClasses.headerText} truncate`}>
                     {getDisplayName(selectedSubscriber)}
                   </h3>
                 </div>
-                <p className="text-[13px] text-[#667781] dark:text-[#8696A0] truncate">
-                  {isTyping(selectedSubscriber.subscriber_id) 
-                    ? 'digitando...' 
-                    : isOnline(selectedSubscriber.subscriber_id) 
-                      ? 'online'
-                      : selectedSubscriber.telefone || 'clique aqui para info'}
-                </p>
+                <div className="flex items-center gap-2">
+                  <OnlineIndicator subscriberId={selectedSubscriber.subscriber_id} showText />
+                  {isTyping(selectedSubscriber.subscriber_id) && (
+                    <span className="text-xs text-[#00A884] font-medium animate-pulse">digitando...</span>
+                  )}
+                </div>
               </div>
               
-              <div className="flex items-center gap-0.5 md:gap-1 shrink-0">
+              <div className="flex items-center gap-1 shrink-0">
                 {selectedSubscriber.telefone && (
                   <>
-                    {/* Botão Ligar via WhatsApp */}
                     <Button 
                       variant="ghost" 
                       size="icon" 
                       onClick={(e) => {
                         e.stopPropagation();
-                        const phone = selectedSubscriber.telefone?.replace(/\D/g, '');
-                        window.open(`https://wa.me/${phone}`, '_blank');
+                        window.open(`https://wa.me/${selectedSubscriber.telefone?.replace(/\D/g, '')}`, '_blank');
                       }}
-                      className="h-9 w-9 md:h-10 md:w-10 rounded-full text-[#00A884] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]"
-                      title="Abrir conversa no WhatsApp"
+                      className={`h-10 w-10 rounded-full text-[#00A884] ${themeClasses.hoverBtn}`}
                     >
                       <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
                         <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                       </svg>
                     </Button>
-                    {/* Botão Ligar Telefone - Visível apenas desktop */}
                     <Button 
                       variant="ghost" 
                       size="icon" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(`tel:${selectedSubscriber.telefone}`, '_self');
-                      }}
-                      className="hidden md:flex h-10 w-10 rounded-full text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]"
-                      title="Ligar"
+                      onClick={(e) => { e.stopPropagation(); window.open(`tel:${selectedSubscriber.telefone}`, '_self'); }}
+                      className={`hidden md:flex h-10 w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}
                     >
                       <Phone className="h-5 w-5" />
                     </Button>
                   </>
                 )}
-                {/* Botão Toggle Atendimento Humano */}
+                {/* Toggle Atendimento Humano */}
                 <Button 
                   variant="ghost" 
                   size="icon" 
@@ -843,77 +768,65 @@ const ManyChatInbox = () => {
                           : s
                       ));
                       toast({
-                        title: novoStatus ? '🙋 Atendimento Humano Ativado' : '🤖 Isa Reativada',
-                        description: novoStatus ? 'Isa parou de responder nesta conversa' : 'Isa voltou a responder automaticamente',
+                        title: novoStatus ? '🙋 Atendimento Humano' : '🤖 Isa Ativada',
+                        description: novoStatus ? 'Você assumiu a conversa' : 'Isa voltou a responder',
                       });
                     }
                   }}
-                  className={`h-9 w-9 md:h-10 md:w-10 rounded-full transition-colors ${
+                  className={`h-10 w-10 rounded-full transition-all ${
                     selectedSubscriber.atendimento_humano 
-                      ? 'text-[#25D366] bg-[#25D366]/10 hover:bg-[#25D366]/20' 
-                      : 'text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]'
+                      ? 'text-amber-500 bg-amber-500/10 hover:bg-amber-500/20' 
+                      : `${themeClasses.iconColor} ${themeClasses.hoverBtn}`
                   }`}
-                  title={selectedSubscriber.atendimento_humano ? 'Reativar Isa' : 'Assumir Atendimento (pausar Isa)'}
                 >
                   {selectedSubscriber.atendimento_humano ? <UserRound className="h-5 w-5" /> : <Bot className="h-5 w-5" />}
                 </Button>
-                {/* Botão Agendar Cal.com */}
                 <CalWidget
                   subscriberId={selectedSubscriber.subscriber_id}
                   subscriberName={getDisplayName(selectedSubscriber)}
                   subscriberEmail={selectedSubscriber.email}
                   subscriberPhone={selectedSubscriber.telefone}
                   leadId={selectedSubscriber.lead_id}
-                  onScheduled={(data) => {
-                    console.log('Agendamento realizado:', data);
-                    toast({
-                      title: '📅 Consulta Agendada',
-                      description: `${getDisplayName(selectedSubscriber)} agendou uma consulta!`,
-                    });
-                  }}
+                  onScheduled={() => toast({ title: '📅 Agendado!', description: 'Consulta marcada com sucesso' })}
                 />
-                {/* Botão Contexto do Lead */}
                 {selectedSubscriber.lead_id && (
                   <Button 
                     variant="ghost" 
                     size="icon" 
                     onClick={() => setShowContextPanel(!showContextPanel)}
-                    className={`hidden md:flex h-10 w-10 rounded-full transition-colors ${
+                    className={`hidden md:flex h-10 w-10 rounded-full transition-all ${
                       showContextPanel 
                         ? 'text-[#00A884] bg-[#00A884]/10 hover:bg-[#00A884]/20' 
-                        : 'text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]'
+                        : `${themeClasses.iconColor} ${themeClasses.hoverBtn}`
                     }`}
-                    title={showContextPanel ? 'Fechar contexto' : 'Ver contexto do lead'}
                   >
                     {showContextPanel ? <PanelRightClose className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}
                   </Button>
                 )}
-                <Button variant="ghost" size="icon" className="hidden md:flex h-10 w-10 rounded-full text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]">
-                  <Search className="h-5 w-5" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-9 w-9 md:h-10 md:w-10 rounded-full text-[#54656F] dark:text-[#AEBAC1] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]">
+                <Button variant="ghost" size="icon" className={`h-10 w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}>
                   <MoreVertical className="h-5 w-5" />
                 </Button>
               </div>
             </div>
 
-            {/* Área de Mensagens - WhatsApp Desktop Dark Pattern */}
+            {/* Área de Mensagens */}
             <div 
-              className="flex-1 overflow-y-auto px-4 md:px-16 lg:px-[63px] py-4 bg-[#EFEAE2] dark:bg-[#0B141A]"
+              className={`flex-1 overflow-y-auto px-4 md:px-16 lg:px-[63px] py-4 ${themeClasses.bg}`}
               style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cg fill='%2300000008'%3E%3Ccircle cx='25' cy='25' r='3'/%3E%3Ccircle cx='75' cy='75' r='3'/%3E%3Ccircle cx='125' cy='25' r='3'/%3E%3Ccircle cx='175' cy='75' r='3'/%3E%3Ccircle cx='225' cy='25' r='3'/%3E%3Ccircle cx='275' cy='75' r='3'/%3E%3C/g%3E%3C/svg%3E")`,
+                backgroundImage: isDark 
+                  ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cdefs%3E%3Cpattern id='p' width='80' height='80' patternUnits='userSpaceOnUse'%3E%3Ccircle cx='40' cy='40' r='1.5' fill='%23ffffff08'/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill='url(%23p)' width='100%25' height='100%25'/%3E%3C/svg%3E")`
+                  : `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cdefs%3E%3Cpattern id='p' width='80' height='80' patternUnits='userSpaceOnUse'%3E%3Ccircle cx='40' cy='40' r='1.5' fill='%2300000008'/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill='url(%23p)' width='100%25' height='100%25'/%3E%3C/svg%3E")`,
               }}
             >
               {isLoadingMessages ? (
                 <div className="h-full flex items-center justify-center">
-                  <RefreshCw className="h-8 w-8 animate-spin text-[#667781]" />
+                  <RefreshCw className={`h-8 w-8 animate-spin ${themeClasses.secondaryText}`} />
                 </div>
               ) : messages.length === 0 ? (
                 <div className="h-full flex items-center justify-center">
-                  <div className="bg-[#FCF4CB] dark:bg-[#332F24] rounded-lg px-4 py-3 max-w-md shadow-sm">
-                    <p className="text-[12.5px] text-[#54656F] dark:text-[#D1D7DB] text-center">
-                      As mensagens são protegidas com a criptografia de ponta a ponta. 
-                      Ninguém fora desta conversa pode ler.
+                  <div className={`${isDark ? 'bg-[#332F24]' : 'bg-[#FCF4CB]'} rounded-xl px-6 py-4 max-w-md shadow-lg`}>
+                    <p className={`text-[13px] ${themeClasses.secondaryText} text-center`}>
+                      🔒 As mensagens são protegidas com criptografia de ponta a ponta.
                     </p>
                   </div>
                 </div>
@@ -926,42 +839,37 @@ const ManyChatInbox = () => {
                     return (
                       <div key={message.id}>
                         {dateLabel && (
-                          <div className="flex justify-center my-3">
-                            <span className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#1F2C34] text-[12.5px] text-[#54656F] dark:text-[#8696A0] shadow-sm font-medium">
+                          <div className="flex justify-center my-4">
+                            <span className={`px-4 py-1.5 rounded-lg ${isDark ? 'bg-[#1F2C34]' : 'bg-white'} text-[12px] ${themeClasses.secondaryText} shadow-sm font-medium`}>
                               {dateLabel}
                             </span>
                           </div>
                         )}
-                        <div className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'} mb-[2px]`}>
+                        <div className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'} mb-[3px]`}>
                           <div
-                            className={`relative max-w-[85%] md:max-w-[65%] rounded-lg px-[9px] pt-[6px] pb-[8px] shadow-sm ${
-                              isOutgoing
-                                ? 'bg-[#D9FDD3] dark:bg-[#005C4B]'
-                                : 'bg-white dark:bg-[#202C33]'
+                            className={`relative max-w-[85%] md:max-w-[65%] rounded-xl px-3 pt-2 pb-2 shadow-md transition-all hover:shadow-lg ${
+                              isOutgoing ? themeClasses.messageSent : themeClasses.messageReceived
                             }`}
                             style={{
-                              borderTopLeftRadius: !isOutgoing ? '0' : undefined,
-                              borderTopRightRadius: isOutgoing ? '0' : undefined,
+                              borderTopLeftRadius: !isOutgoing ? '4px' : undefined,
+                              borderTopRightRadius: isOutgoing ? '4px' : undefined,
                             }}
                           >
-                            {/* Tail SVG */}
-                            <span 
-                              className={`absolute top-0 w-2 h-3 ${isOutgoing ? '-right-2' : '-left-2'}`}
-                            >
+                            <span className={`absolute top-0 w-2 h-3 ${isOutgoing ? '-right-2' : '-left-2'}`}>
                               {isOutgoing ? (
-                                <svg viewBox="0 0 8 13" className="fill-[#D9FDD3] dark:fill-[#005C4B]"><path d="M5.188 0H0v11.193l6.467-8.625C7.526 1.156 6.958 0 5.188 0z"/></svg>
+                                <svg viewBox="0 0 8 13" className={isDark ? 'fill-[#005C4B]' : 'fill-[#D9FDD3]'}><path d="M5.188 0H0v11.193l6.467-8.625C7.526 1.156 6.958 0 5.188 0z"/></svg>
                               ) : (
-                                <svg viewBox="0 0 8 13" className="fill-white dark:fill-[#202C33]"><path d="M1.533 3.568L8 12.193V0H2.812C1.042 0 .474 1.156 1.533 2.568z"/></svg>
+                                <svg viewBox="0 0 8 13" className={isDark ? 'fill-[#202C33]' : 'fill-white'}><path d="M1.533 3.568L8 12.193V0H2.812C1.042 0 .474 1.156 1.533 2.568z"/></svg>
                               )}
                             </span>
                             
                             {renderMessage(message)}
                             
-                            <div className="flex items-center justify-end gap-1 mt-1 -mb-1">
-                              <span className={`text-[11px] ${isOutgoing ? 'text-[#667781] dark:text-[#8FBFB1]' : 'text-[#667781] dark:text-[#8696A0]'}`}>
+                            <div className="flex items-center justify-end gap-1 mt-1">
+                              <span className={`text-[11px] ${isOutgoing ? (isDark ? 'text-[#8FBFB1]' : 'text-[#667781]') : themeClasses.secondaryText}`}>
                                 {formatMessageTime(message.created_at)}
                               </span>
-                              {isOutgoing && <CheckCheck className="h-[18px] w-[18px] text-[#53BDEB]" />}
+                              {isOutgoing && <CheckCheck className="h-4 w-4 text-[#53BDEB]" />}
                             </div>
                           </div>
                         </div>
@@ -971,7 +879,7 @@ const ManyChatInbox = () => {
                   
                   {isTyping(selectedSubscriber.subscriber_id) && (
                     <div className="flex justify-start mb-1">
-                      <div className="bg-white dark:bg-[#202C33] rounded-lg px-4 py-3 shadow-sm">
+                      <div className={`${themeClasses.messageReceived} rounded-xl px-4 py-3 shadow-md`}>
                         <div className="flex gap-1">
                           <div className="w-2 h-2 bg-[#8696A0] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                           <div className="w-2 h-2 bg-[#8696A0] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -988,8 +896,8 @@ const ManyChatInbox = () => {
 
             {/* Preview de arquivo */}
             {selectedFile && (
-              <div className="px-4 py-2 bg-[#F0F2F5] dark:bg-[#202C33] border-t border-[#E9EDEF] dark:border-[#222D34]">
-                <div className="flex items-center gap-3 p-2 rounded-lg bg-white dark:bg-[#111B21]">
+              <div className={`px-4 py-2 ${themeClasses.header} border-t ${themeClasses.border}`}>
+                <div className={`flex items-center gap-3 p-2 rounded-lg ${themeClasses.sidebar}`}>
                   {selectedFile.type.startsWith('image/') ? (
                     <img src={previewUrl || ''} alt="Preview" className="h-12 w-12 object-cover rounded" />
                   ) : (
@@ -998,8 +906,8 @@ const ManyChatInbox = () => {
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate text-[#111B21] dark:text-[#E9EDEF]">{selectedFile.name}</p>
-                    <p className="text-xs text-[#667781]">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                    <p className={`font-medium text-sm truncate ${themeClasses.headerText}`}>{selectedFile.name}</p>
+                    <p className={`text-xs ${themeClasses.secondaryText}`}>{(selectedFile.size / 1024).toFixed(1)} KB</p>
                   </div>
                   <Button variant="ghost" size="icon" onClick={() => { setSelectedFile(null); setPreviewUrl(null); }} className="h-8 w-8">
                     <X className="h-4 w-4" />
@@ -1009,14 +917,10 @@ const ManyChatInbox = () => {
             )}
 
             {/* Input de Mensagem */}
-            <div className="h-[62px] px-4 flex items-center gap-2 bg-[#F0F2F5] dark:bg-[#202C33]">
+            <div className={`h-[66px] px-4 flex items-center gap-2 ${themeClasses.header}`}>
               <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*,audio/*,video/*" className="hidden" />
               
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-10 w-10 rounded-full text-[#54656F] dark:text-[#8696A0] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]"
-              >
+              <Button variant="ghost" size="icon" className={`h-10 w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}>
                 <Smile className="h-6 w-6" />
               </Button>
               
@@ -1025,7 +929,7 @@ const ManyChatInbox = () => {
                 size="icon"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isSending}
-                className="h-10 w-10 rounded-full text-[#54656F] dark:text-[#8696A0] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]"
+                className={`h-10 w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}
               >
                 <Paperclip className="h-6 w-6" />
               </Button>
@@ -1037,7 +941,7 @@ const ManyChatInbox = () => {
                   onChange={(e) => { setNewMessage(e.target.value); handleTyping(); }}
                   onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && (selectedFile ? uploadAndSendFile() : sendMessage())}
                   disabled={isSending || isRecording}
-                  className="h-[42px] rounded-lg bg-white dark:bg-[#2A3942] border-0 text-[15px] placeholder:text-[#667781] dark:placeholder:text-[#8696A0] focus-visible:ring-0"
+                  className={`h-[44px] rounded-xl ${themeClasses.input} border-0 text-[15px] focus-visible:ring-0 shadow-sm`}
                 />
               </div>
 
@@ -1046,7 +950,7 @@ const ManyChatInbox = () => {
                   onClick={selectedFile ? uploadAndSendFile : () => sendMessage()} 
                   disabled={isSending}
                   size="icon"
-                  className="h-10 w-10 rounded-full bg-[#00A884] hover:bg-[#008069] text-white"
+                  className="h-11 w-11 rounded-full bg-[#00A884] hover:bg-[#008069] text-white shadow-lg transition-all hover:scale-105"
                 >
                   <Send className="h-5 w-5" />
                 </Button>
@@ -1056,7 +960,7 @@ const ManyChatInbox = () => {
                   size="icon"
                   onClick={isRecording ? stopRecording : startRecording}
                   disabled={isSending}
-                  className={`h-10 w-10 rounded-full ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'text-[#54656F] dark:text-[#8696A0] hover:bg-[#E9EDEF] dark:hover:bg-[#374248]'}`}
+                  className={`h-11 w-11 rounded-full transition-all ${isRecording ? 'bg-red-500 text-white animate-pulse shadow-lg' : `${themeClasses.iconColor} ${themeClasses.hoverBtn}`}`}
                 >
                   <Mic className="h-6 w-6" />
                 </Button>
@@ -1064,26 +968,22 @@ const ManyChatInbox = () => {
             </div>
           </>
         ) : (
-          /* Tela vazia - WhatsApp Style */
-          <div className="h-full flex flex-col items-center justify-center bg-[#F0F2F5] dark:bg-[#222E35] border-b-[6px] border-[#00A884]">
-            <div className="text-center max-w-md">
-              <div className="w-[320px] h-[188px] mx-auto mb-6 opacity-40">
-                <svg viewBox="0 0 303 172" className="w-full h-full">
-                  <path fill="#DAF7F3" d="M229.565 1c4.418 0 8 3.582 8 8v155c0 4.419-3.582 8-8 8H8c-4.418 0-8-3.581-8-8V9c0-4.418 3.582-8 8-8h221.565z"/>
-                  <path fill="#00A884" d="M54.5 65a21.5 21.5 0 1 0 0 43 21.5 21.5 0 0 0 0-43zm0 7.5a14 14 0 1 1-.001 28.001A14 14 0 0 1 54.5 72.5z"/>
-                  <path fill="#00A884" d="M37.125 123h34.75c3.59 0 6.5 2.91 6.5 6.5s-2.91 6.5-6.5 6.5h-34.75c-3.59 0-6.5-2.91-6.5-6.5s2.91-6.5 6.5-6.5z"/>
-                </svg>
+          /* Tela vazia */
+          <div className={`h-full flex flex-col items-center justify-center ${themeClasses.emptyState} border-b-[6px] border-[#00A884]`}>
+            <div className="text-center max-w-md px-4">
+              <div className="w-32 h-32 mx-auto mb-6 rounded-full bg-gradient-to-br from-[#00A884] to-[#008069] flex items-center justify-center shadow-xl">
+                <MessageCircle className="h-16 w-16 text-white" />
               </div>
-              <h2 className="text-[32px] font-light text-[#41525D] dark:text-[#E9EDEF] mb-4">
-                WhatsApp Web
+              <h2 className={`text-2xl font-semibold ${themeClasses.headerText} mb-3`}>
+                Central de Mensagens
               </h2>
-              <p className="text-[14px] text-[#667781] dark:text-[#8696A0] leading-5 mb-8">
-                Envie e receba mensagens sem manter seu telefone conectado.<br/>
-                Use o WhatsApp em até 4 aparelhos conectados ao mesmo tempo.
+              <p className={`text-[14px] ${themeClasses.secondaryText} leading-6 mb-6`}>
+                Selecione uma conversa para começar a atender seus leads.
+                <br/>As mensagens são atualizadas em tempo real.
               </p>
-              <div className="flex items-center justify-center gap-2 text-[14px] text-[#667781] dark:text-[#8696A0]">
+              <div className={`flex items-center justify-center gap-2 text-[13px] ${themeClasses.secondaryText}`}>
                 <span className="text-[#00A884]">🔒</span>
-                Suas mensagens pessoais são protegidas com a criptografia de ponta a ponta.
+                Suas mensagens são protegidas com criptografia.
               </div>
             </div>
           </div>
@@ -1099,6 +999,15 @@ const ManyChatInbox = () => {
         />
       )}
     </div>
+  );
+};
+
+// Componente wrapper com provider de tema isolado
+const ManyChatInbox = () => {
+  return (
+    <ChatThemeProvider>
+      <ManyChatInboxContent />
+    </ChatThemeProvider>
   );
 };
 
