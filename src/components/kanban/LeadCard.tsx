@@ -6,11 +6,13 @@ import { cn } from '@/lib/utils';
 import { LeadFollowupInfo } from '@/hooks/useLeadFollowups';
 import { 
   MessageCircle, ExternalLink, User, Clock, 
-  Zap, Timer, Ban, CheckCircle2
+  Zap, Timer, Ban, CheckCircle2, Phone, Mail,
+  TrendingUp, Star, Flame, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { EnviarContratoModal } from '@/components/contratos/EnviarContratoModal';
+import { Badge } from '@/components/ui/badge';
 
 interface LeadCardProps {
   lead: Lead;
@@ -36,23 +38,25 @@ const formatShortCurrency = (value: number | null): string => {
   return `R$ ${value.toFixed(0)}`;
 };
 
-// Compact follow-up indicator
+// Compact follow-up indicator with rich visuals
 function FollowupIndicator({ followupInfo }: { followupInfo: LeadFollowupInfo }) {
   const { status, followupStageFast, followupStageSlow, followupLockReason, waitingReply } = followupInfo;
 
   if (status === 'concluido' || followupLockReason) {
     return (
-      <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
-        <Ban className="w-3 h-3" />
-      </span>
+      <Badge variant="outline" className="h-5 px-1.5 text-[9px] font-medium bg-muted/50">
+        <Ban className="w-2.5 h-2.5 mr-0.5" />
+        Pausado
+      </Badge>
     );
   }
 
   if (waitingReply) {
     return (
-      <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600">
-        <Clock className="w-3 h-3 animate-pulse" />
-      </span>
+      <Badge className="h-5 px-1.5 text-[9px] font-medium bg-amber-100 text-amber-700 border-amber-200 animate-pulse">
+        <Clock className="w-2.5 h-2.5 mr-0.5" />
+        Aguardando
+      </Badge>
     );
   }
 
@@ -64,22 +68,41 @@ function FollowupIndicator({ followupInfo }: { followupInfo: LeadFollowupInfo })
   return (
     <div className="flex items-center gap-1">
       {hasFast && (
-        <span className="inline-flex items-center gap-0.5 text-[10px] text-blue-600">
-          <Zap className="w-3 h-3" />
-          {(followupStageFast ?? 0) + 1}/3
-        </span>
+        <Badge className="h-5 px-1.5 text-[9px] font-medium bg-blue-100 text-blue-700 border-blue-200">
+          <Zap className="w-2.5 h-2.5 mr-0.5" />
+          Fast {(followupStageFast ?? 0) + 1}/3
+        </Badge>
       )}
       {hasSlow && (
-        <span className="inline-flex items-center gap-0.5 text-[10px] text-violet-600">
-          <Timer className="w-3 h-3" />
-          {(followupStageSlow ?? 0) + 1}/3
-        </span>
+        <Badge className="h-5 px-1.5 text-[9px] font-medium bg-violet-100 text-violet-700 border-violet-200">
+          <Timer className="w-2.5 h-2.5 mr-0.5" />
+          Slow {(followupStageSlow ?? 0) + 1}/3
+        </Badge>
       )}
     </div>
   );
 }
 
-export function LeadCard({ lead, onClick, isDragging, followupInfo }: LeadCardProps) {
+// Sentiment indicator with glow
+function SentimentIndicator({ isaInsight }: { isaInsight?: LeadCardProps['isaInsight'] }) {
+  if (!isaInsight?.sentimento) return null;
+
+  const config = {
+    positivo: { icon: Star, color: 'text-amber-500', bg: 'bg-amber-50', glow: 'shadow-glow-gold' },
+    neutro: { icon: Sparkles, color: 'text-blue-500', bg: 'bg-blue-50', glow: '' },
+    negativo: { icon: Flame, color: 'text-red-500', bg: 'bg-red-50', glow: '' },
+  };
+
+  const { icon: Icon, color, bg } = config[isaInsight.sentimento];
+
+  return (
+    <div className={cn("p-1 rounded-full", bg)}>
+      <Icon className={cn("w-3 h-3", color)} />
+    </div>
+  );
+}
+
+export function LeadCard({ lead, onClick, isDragging, isaInsight, followupInfo }: LeadCardProps) {
   const navigate = useNavigate();
   const [isContratoModalOpen, setIsContratoModalOpen] = useState(false);
   
@@ -88,6 +111,7 @@ export function LeadCard({ lead, onClick, isDragging, followupInfo }: LeadCardPr
     : formatDistanceToNow(new Date(lead.created_at), { addSuffix: false, locale: ptBR });
 
   const hasContract = lead.status === 'Ganho' || lead.status === 'Contrato Assinado';
+  const hasValue = lead.valor_causa && lead.valor_causa > 0;
 
   const handleWhatsApp = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -106,64 +130,113 @@ export function LeadCard({ lead, onClick, isDragging, followupInfo }: LeadCardPr
     <div
       onClick={onClick}
       className={cn(
-        "bg-card rounded-lg cursor-pointer transition-all duration-150 group",
-        "border border-border/60 hover:border-primary/30 hover:shadow-md",
-        isDragging && "opacity-60 rotate-1 scale-105 shadow-xl"
+        "rounded-xl cursor-pointer transition-all duration-200 group kanban-card-wrapper",
+        "bg-card border border-border/60 overflow-hidden",
+        "hover:border-gold/40 hover:shadow-card-hover",
+        hasValue && "gradient-gold",
+        hasContract && "ring-1 ring-success/30 gradient-success",
+        isDragging && "kanban-card-dragging"
       )}
     >
-      {/* Header */}
-      <div className="p-3 pb-2">
-        <div className="flex items-start gap-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0">
-            <User className="w-4 h-4 text-primary" />
+      {/* Top accent line */}
+      <div className={cn(
+        "h-0.5 w-full",
+        hasContract ? "bg-gradient-to-r from-success/60 via-success to-success/60" :
+        hasValue ? "bg-gradient-to-r from-gold/40 via-gold to-gold/40" :
+        "bg-gradient-to-r from-transparent via-border to-transparent"
+      )} />
+
+      {/* Main Content */}
+      <div className="p-3">
+        {/* Header Row */}
+        <div className="flex items-start gap-2.5 mb-2">
+          {/* Avatar with gradient */}
+          <div className={cn(
+            "w-9 h-9 rounded-full flex items-center justify-center shrink-0 relative",
+            "bg-gradient-to-br from-primary/20 via-primary/10 to-gold/20",
+            hasContract && "from-success/20 via-success/10 to-emerald-300/20"
+          )}>
+            <User className={cn(
+              "w-4 h-4",
+              hasContract ? "text-success" : "text-primary"
+            )} />
+            {hasContract && (
+              <div className="absolute -bottom-0.5 -right-0.5 bg-success text-success-foreground rounded-full p-0.5">
+                <CheckCircle2 className="w-2.5 h-2.5" />
+              </div>
+            )}
           </div>
+
+          {/* Name & Value */}
           <div className="flex-1 min-w-0">
-            <h4 className="font-medium text-sm text-foreground truncate leading-tight">
+            <h4 className="font-semibold text-sm text-foreground truncate leading-tight">
               {lead.nome || 'Sem nome'}
             </h4>
-            <div className="flex items-center gap-2 mt-0.5">
-              {lead.valor_causa && (
-                <span className="text-xs font-medium text-success">
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {hasValue && (
+                <span className={cn(
+                  "text-xs font-bold",
+                  hasContract ? "text-success" : "text-gold-foreground"
+                )}>
                   {formatShortCurrency(lead.valor_causa)}
                 </span>
               )}
-              {hasContract && (
-                <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+              {lead.tipo_acao && (
+                <Badge variant="outline" className="h-4 px-1 text-[9px] font-medium">
+                  {lead.tipo_acao.slice(0, 12)}
+                </Badge>
               )}
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Footer */}
-      <div className="px-3 pb-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+          {/* Sentiment Indicator */}
+          <SentimentIndicator isaInsight={isaInsight} />
+        </div>
+
+        {/* Meta Row */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
             <Clock className="w-3 h-3" />
-            {lastInteraction}
-          </span>
+            <span className="text-[10px]">{lastInteraction}</span>
+          </div>
           {followupInfo && <FollowupIndicator followupInfo={followupInfo} />}
         </div>
+
+        {/* Origin badge */}
+        {lead.origem && (
+          <div className="mt-2 pt-2 border-t border-border/40">
+            <Badge variant="secondary" className="h-5 text-[10px] font-medium">
+              {lead.origem}
+            </Badge>
+          </div>
+        )}
       </div>
 
-      {/* Actions - Minimal */}
-      <div className="flex border-t border-border/40 divide-x divide-border/40 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Hover Actions */}
+      <div className={cn(
+        "flex border-t border-border/40 divide-x divide-border/40",
+        "opacity-0 group-hover:opacity-100 transition-opacity duration-200",
+        "bg-muted/30"
+      )}>
+        {lead.telefone && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="flex-1 h-8 rounded-none text-muted-foreground hover:text-green-600 hover:bg-green-50 gap-1.5"
+            onClick={handleWhatsApp}
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            <span className="text-[10px] font-medium">WhatsApp</span>
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"
-          className="flex-1 h-8 rounded-none rounded-bl-lg text-muted-foreground hover:text-success hover:bg-success/5"
-          onClick={handleWhatsApp}
-          disabled={!lead.telefone}
-        >
-          <MessageCircle className="w-3.5 h-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="flex-1 h-8 rounded-none rounded-br-lg text-muted-foreground hover:text-primary hover:bg-primary/5"
+          className="flex-1 h-8 rounded-none text-muted-foreground hover:text-primary hover:bg-primary/5 gap-1.5"
           onClick={handleViewDetails}
         >
           <ExternalLink className="w-3.5 h-3.5" />
+          <span className="text-[10px] font-medium">Detalhes</span>
         </Button>
       </div>
 
