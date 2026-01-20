@@ -28,15 +28,79 @@ const CONTRACT_MESSAGES = {
     `${name}, URGENTE! 🚨\n\nSeu contrato está pendente há 5 dias. *Sem a assinatura, não podemos iniciar os trabalhos.*\n\n🔗 ASSINE AGORA: ${link}\n\nPor favor, priorize isso hoje! Se houver algum problema ou dúvida, me avise.\n\n*Bentes & Ramos Advocacia*`,
 };
 
+async function sendViaZapi(
+  supabase: any,
+  phone: string,
+  message: string,
+  leadId?: string
+): Promise<boolean> {
+  const { data: config } = await supabase
+    .from('integrations_config')
+    .select('*')
+    .eq('provider', 'zapi')
+    .single();
+
+  if (!config?.is_active) {
+    console.log('[Contract Auto Reminder] Z-API not active');
+    return false;
+  }
+
+  const instanceId = config.config_json?.instance_id;
+  const token = config.config_json?.token;
+
+  if (!instanceId || !token) {
+    console.log('[Contract Auto Reminder] Z-API credentials missing');
+    return false;
+  }
+
+  let cleanPhone = phone.replace(/\D/g, '');
+  if (cleanPhone.length === 10 || cleanPhone.length === 11) {
+    cleanPhone = '55' + cleanPhone;
+  }
+
+  try {
+    console.log(`[Contract Auto Reminder] Sending via Z-API to ${cleanPhone}`);
+    
+    const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: cleanPhone, message })
+    });
+
+    const data = await response.json();
+    
+    if (response.ok && !data.error) {
+      if (leadId) {
+        await supabase.from('manychat_mensagens').insert({
+          subscriber_id: `zapi_${cleanPhone}`,
+          lead_id: leadId,
+          conteudo: message,
+          direcao: 'saida',
+          tipo: 'text',
+          subscriber_nome: 'Sistema',
+          canal: 'whatsapp',
+          metadata: { source: 'zapi', context: 'contract_auto_reminder' }
+        });
+      }
+      return true;
+    }
+    console.log('[Contract Auto Reminder] Z-API error:', data);
+    return false;
+  } catch (error) {
+    console.error('[Contract Auto Reminder] Z-API error:', error);
+    return false;
+  }
+}
+
 async function sendManyChatMessage(
   subscriberId: string,
   message: string
-): Promise<boolean> {
+): Promise<{ success: boolean; code?: number }> {
   const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY');
   
   if (!MANYCHAT_API_KEY) {
-    console.log('[Contract Reminder] MANYCHAT_API_KEY not configured');
-    return false;
+    console.log('[Contract Auto Reminder] MANYCHAT_API_KEY not configured');
+    return { success: false };
   }
 
   try {
@@ -58,10 +122,10 @@ async function sendManyChatMessage(
     });
 
     const result = await response.json();
-    return result.status === 'success';
+    return { success: result.status === 'success', code: result.code };
   } catch (error) {
-    console.error('[Contract Reminder] Error:', error);
-    return false;
+    console.error('[Contract Auto Reminder] Error:', error);
+    return { success: false };
   }
 }
 
@@ -149,10 +213,21 @@ serve(async (req: Request): Promise<Response> => {
         case 3: message = CONTRACT_MESSAGES.reminder_5d(clientName, contractLink); break;
       }
 
-      // Send message
-      const success = await sendManyChatMessage(subscriber.subscriber_id, message);
+      // Try ManyChat first, then Z-API as fallback
+      let sendResult = await sendManyChatMessage(subscriber.subscriber_id, message);
+      let success = sendResult.success;
+      let sentVia = 'manychat';
+
+      // If ManyChat fails due to 24h window (code 3011), try Z-API
+      if (!success && sendResult.code === 3011 && lead?.telefone) {
+        console.log(`[Contract Auto Reminder] ManyChat 24h expired for ${reminder.document_key}, trying Z-API...`);
+        success = await sendViaZapi(supabase, lead.telefone, message, lead.id);
+        sentVia = 'zapi';
+      }
 
       if (success) {
+        console.log(`[Contract Auto Reminder] Sent via ${sentVia}`);
+        
         console.log(`[Contract Reminder] Sent ${stageName} reminder for ${reminder.document_key}`);
 
         // Calculate next reminder

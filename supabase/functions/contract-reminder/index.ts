@@ -28,10 +28,76 @@ const CONTRACT_MESSAGES = {
     `*Bentes & Ramos Advocacia*`,
 };
 
+async function sendViaZapi(
+  supabase: any,
+  phone: string,
+  message: string,
+  leadId?: string
+): Promise<{ success: boolean; error?: string }> {
+  // Get Z-API config
+  const { data: config } = await supabase
+    .from('integrations_config')
+    .select('*')
+    .eq('provider', 'zapi')
+    .single();
+
+  if (!config?.is_active) {
+    return { success: false, error: 'Z-API não está ativa' };
+  }
+
+  const instanceId = config.config_json?.instance_id;
+  const token = config.config_json?.token;
+
+  if (!instanceId || !token) {
+    return { success: false, error: 'Credenciais Z-API não configuradas' };
+  }
+
+  // Normalize phone
+  let cleanPhone = phone.replace(/\D/g, '');
+  if (cleanPhone.length === 10 || cleanPhone.length === 11) {
+    cleanPhone = '55' + cleanPhone;
+  }
+
+  try {
+    console.log(`[Contract Reminder] Sending via Z-API to ${cleanPhone}`);
+    
+    const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: cleanPhone, message })
+    });
+
+    const data = await response.json();
+    console.log('[Contract Reminder] Z-API response:', data);
+    
+    if (response.ok && !data.error) {
+      // Save message to history
+      if (leadId) {
+        await supabase.from('manychat_mensagens').insert({
+          subscriber_id: `zapi_${cleanPhone}`,
+          lead_id: leadId,
+          conteudo: message,
+          direcao: 'saida',
+          tipo: 'text',
+          subscriber_nome: 'Sistema',
+          canal: 'whatsapp',
+          metadata: { source: 'zapi', context: 'contract_reminder' }
+        });
+      }
+      return { success: true };
+    } else {
+      return { success: false, error: data.error || 'Erro Z-API' };
+    }
+  } catch (error) {
+    console.error('[Contract Reminder] Z-API error:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Erro desconhecido' };
+  }
+}
+
 async function sendManyChatMessage(
   subscriberId: string,
   message: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; code?: number }> {
   const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY');
   
   if (!MANYCHAT_API_KEY) {
@@ -52,12 +118,7 @@ async function sendManyChatMessage(
         data: {
           version: 'v2',
           content: {
-            messages: [
-              {
-                type: 'text',
-                text: message,
-              },
-            ],
+            messages: [{ type: 'text', text: message }],
           },
         },
       }),
@@ -69,7 +130,7 @@ async function sendManyChatMessage(
     if (result.status === 'success') {
       return { success: true };
     } else {
-      return { success: false, error: result.message || 'Erro ao enviar mensagem' };
+      return { success: false, error: result.message || 'Erro ao enviar mensagem', code: result.code };
     }
   } catch (error) {
     console.error('[Contract Reminder] Error sending ManyChat message:', error);
@@ -199,15 +260,24 @@ serve(async (req: Request): Promise<Response> => {
       ? CONTRACT_MESSAGES.urgent(clientName, link)
       : CONTRACT_MESSAGES.soft(clientName, link);
 
-    // Send via ManyChat
-    const sendResult = await sendManyChatMessage(subscriber.subscriber_id, message);
+    // Try ManyChat first, fallback to Z-API if 24h window expired
+    let sendResult = await sendManyChatMessage(subscriber.subscriber_id, message);
+    let sentVia = 'manychat';
+
+    // If ManyChat fails due to 24h window (code 3011), try Z-API
+    if (!sendResult.success && sendResult.code === 3011 && lead.telefone) {
+      console.log('[Contract Reminder] ManyChat 24h window expired, trying Z-API...');
+      sendResult = await sendViaZapi(supabase, lead.telefone, message, lead.id);
+      sentVia = 'zapi';
+    }
 
     if (!sendResult.success) {
       return new Response(
         JSON.stringify({ 
           success: false, 
           error: sendResult.error,
-          lead: { id: lead.id, nome: lead.nome }
+          lead: { id: lead.id, nome: lead.nome },
+          details: 'ManyChat falhou (janela 24h) e Z-API não disponível'
         }),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
