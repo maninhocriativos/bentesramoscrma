@@ -149,11 +149,15 @@ const ManyChatInboxContent = () => {
     hover: isDark ? 'hover:bg-[#202C33]' : 'hover:bg-[#F5F6F6]',
     hoverBtn: isDark ? 'hover:bg-[#374248]' : 'hover:bg-[#E9EDEF]',
     active: isDark ? 'bg-[#2A3942]' : 'bg-[#F0F2F5]',
-    input: isDark ? 'bg-[#2A3942]' : 'bg-white',
-    inputSearch: isDark ? 'bg-[#202C33]' : 'bg-[#F0F2F5]',
-    messageSent: isDark ? 'bg-[#005C4B]' : 'bg-[#D9FDD3]',
-    messageReceived: isDark ? 'bg-[#202C33]' : 'bg-white',
+    input: isDark ? 'bg-[#2A3942] text-[#E9EDEF] placeholder:text-[#8696A0]' : 'bg-white text-[#111B21]',
+    inputSearch: isDark ? 'bg-[#202C33] text-[#E9EDEF] placeholder:text-[#8696A0]' : 'bg-[#F0F2F5]',
+    messageSent: isDark ? 'bg-[#005C4B] text-[#E9EDEF]' : 'bg-[#D9FDD3] text-[#111B21]',
+    messageReceived: isDark ? 'bg-[#202C33] text-[#E9EDEF]' : 'bg-white text-[#111B21]',
     emptyState: isDark ? 'bg-[#222E35]' : 'bg-[#F0F2F5]',
+    // Text colors for messages
+    messageSentText: isDark ? 'text-[#E9EDEF]' : 'text-[#111B21]',
+    messageReceivedText: isDark ? 'text-[#E9EDEF]' : 'text-[#111B21]',
+    messageTime: isDark ? 'text-[#8FBFB1]' : 'text-[#667781]',
   };
 
   const scrollToBottom = () => {
@@ -631,7 +635,7 @@ const ManyChatInboxContent = () => {
     if (isVideo) {
       return <video controls className="max-w-[280px] rounded-lg" preload="metadata"><source src={cleanUrl} /></video>;
     }
-    return <p className="whitespace-pre-wrap break-words text-[14.2px] leading-[19px]">{content}</p>;
+    return <p className="whitespace-pre-wrap break-words text-[14.2px] leading-[19px] text-inherit">{content}</p>;
   };
 
   return (
@@ -995,7 +999,7 @@ const ManyChatInboxContent = () => {
                             {renderMessage(message)}
                             
                             <div className="flex items-center justify-end gap-1 mt-1">
-                              <span className={`text-[11px] ${isOutgoing ? (isDark ? 'text-[#8FBFB1]' : 'text-[#667781]') : themeClasses.secondaryText}`}>
+                              <span className={`text-[11px] ${isOutgoing ? themeClasses.messageTime : themeClasses.secondaryText}`}>
                                 {formatMessageTime(message.created_at)}
                               </span>
                               {isOutgoing && <CheckCheck className="h-4 w-4 text-[#53BDEB]" />}
