@@ -35,21 +35,25 @@ export function useAuth() {
           return;
         }
         
-        // For OAuth sign-in, check if user is approved
+        // For OAuth sign-in, check if user is approved (but don't block if profile doesn't exist yet)
         if (event === 'SIGNED_IN' && newSession?.user) {
-          const { data } = await supabase
-            .from('perfis')
-            .select('aprovado')
-            .eq('id', newSession.user.id)
-            .single();
-          
-          if (data && !data.aprovado) {
-            console.log('User not approved, signing out');
-            await supabase.auth.signOut();
-            setSession(null);
-            setUser(null);
-            setLoading(false);
-            return;
+          try {
+            const { data, error } = await supabase
+              .from('perfis')
+              .select('aprovado')
+              .eq('id', newSession.user.id)
+              .single();
+            
+            // Only block if profile exists AND is not approved
+            if (!error && data && data.aprovado === false) {
+              console.log('User not approved, signing out');
+              await supabase.auth.signOut();
+              // Redirect to auth with not_approved flag
+              window.location.href = '/auth?not_approved=true';
+              return;
+            }
+          } catch (e) {
+            console.error('Error checking approval:', e);
           }
         }
         
