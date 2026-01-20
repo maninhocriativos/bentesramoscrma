@@ -53,30 +53,41 @@ export default function Auth() {
 
   // Handle OAuth callback - check for hash fragment with tokens
   useEffect(() => {
-    const hashParams = new URLSearchParams(location.hash.substring(1));
+    const hash = location.hash || '';
+
+    // If there's no hash, ensure we are not stuck in "processing".
+    if (!hash) {
+      setIsProcessingOAuth(false);
+      return;
+    }
+
+    const hashParams = new URLSearchParams(hash.substring(1));
     const accessToken = hashParams.get('access_token');
     const errorDescription = hashParams.get('error_description');
-    
+
     if (errorDescription) {
       toast({
         title: 'Erro no login',
         description: decodeURIComponent(errorDescription),
         variant: 'destructive',
       });
+      setIsProcessingOAuth(false);
       // Clear the hash
       window.history.replaceState(null, '', location.pathname);
       return;
     }
-    
+
     if (accessToken) {
       setIsProcessingOAuth(true);
-      // The Supabase client will automatically handle the token from the hash
-      // Just wait for the auth state to update
+      // Safety timeout: if auth state doesn't arrive, stop the spinner.
+      const t = window.setTimeout(() => setIsProcessingOAuth(false), 8000);
+      return () => window.clearTimeout(t);
     }
   }, [location.hash, toast, location.pathname]);
 
   useEffect(() => {
     if (user && !loading) {
+      setIsProcessingOAuth(false);
       navigate('/dashboard', { replace: true });
     }
   }, [user, loading, navigate]);

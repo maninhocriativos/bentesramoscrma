@@ -3,7 +3,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { PerfilProvider } from "@/contexts/PerfilContext";
+
 
 import RequireAuth from "@/components/auth/RequireAuth";
 
@@ -51,44 +53,46 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <PerfilProvider>
-          <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <AuthProvider>
+          <PerfilProvider>
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-            {/* Public */}
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/politica-privacidade" element={<PoliticaPrivacidadePage />} />
-            <Route path="/termos-servico" element={<TermosServicoPage />} />
-            <Route path="/install" element={<InstallPage />} />
+              {/* Public */}
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/politica-privacidade" element={<PoliticaPrivacidadePage />} />
+              <Route path="/termos-servico" element={<TermosServicoPage />} />
+              <Route path="/install" element={<InstallPage />} />
 
-            {/* Protected */}
-            <Route element={<RequireAuth />}>
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/leads" element={<LeadsPage />} />
-              <Route path="/leads/:id" element={<LeadDetailPage />} />
-              <Route path="/processos" element={<ProcessosPage />} />
-              <Route path="/agenda" element={<AgendaPage />} />
-              <Route path="/financeiro" element={<FinanceiroPage />} />
-              <Route path="/documentos" element={<DocumentosPage />} />
-              <Route path="/contratos" element={<ContratosPage />} />
-              <Route path="/tarefas" element={<TarefasPage />} />
-              <Route path="/configuracoes" element={<ConfiguracoesPage />} />
-              <Route path="/assistente" element={<AssistentePage />} />
-              <Route path="/isa-autonoma" element={<IsaAutonomaPage />} />
-              <Route path="/manychat" element={<ManyChatPage />} />
-              <Route path="/api-hub" element={<ApiHubPage />} />
-              <Route path="/api-docs" element={<ApiDocsPage />} />
-              <Route path="/peticoes" element={<PeticoesPage />} />
-              <Route path="/peticoes/nova" element={<PeticaoEditarPage />} />
-              <Route path="/peticoes/:id/editar" element={<PeticaoEditarPage />} />
-              <Route path="/peticoes/:id/revisao" element={<PeticaoRevisaoPage />} />
-              <Route path="/peticoes/:id/saida" element={<PeticaoSaidaPage />} />
-              <Route path="/modelos" element={<ModelosPage />} />
-            </Route>
+              {/* Protected */}
+              <Route element={<RequireAuth />}>
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/leads" element={<LeadsPage />} />
+                <Route path="/leads/:id" element={<LeadDetailPage />} />
+                <Route path="/processos" element={<ProcessosPage />} />
+                <Route path="/agenda" element={<AgendaPage />} />
+                <Route path="/financeiro" element={<FinanceiroPage />} />
+                <Route path="/documentos" element={<DocumentosPage />} />
+                <Route path="/contratos" element={<ContratosPage />} />
+                <Route path="/tarefas" element={<TarefasPage />} />
+                <Route path="/configuracoes" element={<ConfiguracoesPage />} />
+                <Route path="/assistente" element={<AssistentePage />} />
+                <Route path="/isa-autonoma" element={<IsaAutonomaPage />} />
+                <Route path="/manychat" element={<ManyChatPage />} />
+                <Route path="/api-hub" element={<ApiHubPage />} />
+                <Route path="/api-docs" element={<ApiDocsPage />} />
+                <Route path="/peticoes" element={<PeticoesPage />} />
+                <Route path="/peticoes/nova" element={<PeticaoEditarPage />} />
+                <Route path="/peticoes/:id/editar" element={<PeticaoEditarPage />} />
+                <Route path="/peticoes/:id/revisao" element={<PeticaoRevisaoPage />} />
+                <Route path="/peticoes/:id/saida" element={<PeticaoSaidaPage />} />
+                <Route path="/modelos" element={<ModelosPage />} />
+              </Route>
 
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </PerfilProvider>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </PerfilProvider>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
