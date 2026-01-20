@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trash2, Search, Loader2 } from 'lucide-react';
+import { Trash2, Search, Loader2, Users, ChevronRight, Briefcase, BadgeCheck } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -33,6 +35,27 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+
+interface Advogado {
+  nome: string;
+  oab?: string;
+}
+
+interface Parte {
+  nome: string;
+  tipo: string;
+  polo: string;
+  tipoPessoa: string;
+  documento?: string;
+  advogados?: Advogado[];
+}
+
+interface Movimento {
+  dataHora: string;
+  nome: string;
+  complemento?: string;
+  codigo?: number;
+}
 
 interface ProcessoModalProps {
   processo: Processo | null;
@@ -69,6 +92,10 @@ export function ProcessoModal({
   });
   const [saving, setSaving] = useState(false);
   const [fetchingData, setFetchingData] = useState(false);
+  
+  // Estado para dados carregados do DataJud
+  const [partes, setPartes] = useState<Parte[]>([]);
+  const [movimentos, setMovimentos] = useState<Movimento[]>([]);
 
   // Buscar dados do processo automaticamente ao digitar número válido
   const fetchProcessoData = async (numeroProcesso: string) => {
@@ -122,6 +149,14 @@ export function ProcessoModal({
           advogado_responsavel: advogadoResponsavel || prev.advogado_responsavel,
         }));
 
+        // Armazenar partes e movimentações
+        if (proc.partes && Array.isArray(proc.partes)) {
+          setPartes(proc.partes);
+        }
+        if (proc.movimentos && Array.isArray(proc.movimentos)) {
+          setMovimentos(proc.movimentos.slice(0, 15)); // Limitar a 15 movimentações no modal
+        }
+
         toast.success('Dados do processo carregados!', {
           description: nomeCliente 
             ? `${proc.classe} - Cliente: ${nomeCliente}` 
@@ -174,6 +209,9 @@ export function ProcessoModal({
         advogado_responsavel: processo.advogado_responsavel || '',
         cliente_id: processo.cliente_id || '',
       });
+      // Limpar dados do DataJud para processos existentes (só carrega para novos)
+      setPartes([]);
+      setMovimentos([]);
     } else {
       setFormData({
         numero_processo: '',
@@ -182,6 +220,8 @@ export function ProcessoModal({
         advogado_responsavel: '',
         cliente_id: '',
       });
+      setPartes([]);
+      setMovimentos([]);
     }
   }, [processo, isOpen]);
 
@@ -306,6 +346,92 @@ export function ProcessoModal({
               </Select>
             </div>
           </div>
+
+          {/* Partes do Processo - Exibir quando carregado do DataJud */}
+          {partes.length > 0 && (
+            <div className="p-3 bg-muted/50 rounded-xl">
+              <div className="flex items-center gap-2 mb-3">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-medium">Partes do Processo ({partes.length})</p>
+              </div>
+              <ScrollArea className="max-h-48">
+                <div className="space-y-2">
+                  {partes.map((parte, i) => {
+                    const tipoLower = (parte.tipo || '').toLowerCase();
+                    const poloClasses = tipoLower.includes('autor')
+                      ? 'bg-success/15 text-success border-success/30'
+                      : tipoLower.includes('réu') || tipoLower.includes('reu')
+                        ? 'bg-destructive/15 text-destructive border-destructive/30'
+                        : 'bg-secondary/25 text-secondary-foreground border-secondary/30';
+
+                    return (
+                      <div key={i} className="p-2 bg-background/50 rounded border">
+                        <div className="flex justify-between items-start gap-2">
+                          <span className="font-medium text-sm line-clamp-1">{parte.nome}</span>
+                          <div className="flex gap-1">
+                            <Badge variant="outline" className={`text-xs ${poloClasses}`}>{parte.tipo}</Badge>
+                          </div>
+                        </div>
+                        {parte.documento && (
+                          <p className="text-xs text-muted-foreground mt-1">Doc: {parte.documento}</p>
+                        )}
+                        {parte.advogados && parte.advogados.length > 0 && (
+                          <div className="mt-2 pl-3 border-l-2 border-primary/30">
+                            <p className="text-xs text-muted-foreground mb-1 inline-flex items-center gap-1">
+                              <Briefcase className="h-3 w-3" />
+                              Advogado(s)
+                            </p>
+                            <div className="space-y-1">
+                              {parte.advogados.map((adv, j) => (
+                                <div key={j} className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-medium">{adv.nome}</p>
+                                  {adv.oab && (
+                                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                      <BadgeCheck className="h-3 w-3 text-primary" />
+                                      {adv.oab}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            </div>
+          )}
+
+          {/* Movimentações - Exibir quando carregado do DataJud */}
+          {movimentos.length > 0 && (
+            <div className="p-3 bg-muted/50 rounded-xl">
+              <p className="text-sm font-medium mb-2">Últimas Movimentações ({movimentos.length})</p>
+              <ScrollArea className="max-h-48">
+                <div className="space-y-2">
+                  {movimentos.map((mov, i) => (
+                    <div key={i} className="p-2 bg-background/50 rounded border-l-2 border-primary/30">
+                      <div className="flex justify-between items-start gap-2">
+                        <p className="text-sm font-medium flex-1">{mov.nome}</p>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">{mov.dataHora}</span>
+                      </div>
+                      {mov.codigo && (
+                        <Badge variant="outline" className="text-xs mt-1">
+                          CNJ: {mov.codigo}
+                        </Badge>
+                      )}
+                      {mov.complemento && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                          {mov.complemento}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          )}
 
           {/* Notification Config - Only show for existing processes */}
           {!isNew && processo && (

@@ -511,19 +511,6 @@ function formatarProcesso(processo: any, tribunalFallback: string): ProcessoResp
     'ORI': 'Originário'
   };
   
-  const poloMap: Record<string, string> = {
-    'AT': 'Autor',
-    'PA': 'Autor', 
-    'AUTOR': 'Autor',
-    'RÉU': 'Réu',
-    'REU': 'Réu',
-    'PP': 'Réu',
-    'PASSIVE': 'Réu',
-    'TE': 'Terceiro',
-    'TERCEIRO': 'Terceiro',
-    'VI': 'Vítima',
-    'FL': 'Falido'
-  };
   
   // Extrair código da classe
   const classeCodigo = processo.classe?.codigo || processo.classeProcessual?.codigo || null;
@@ -536,16 +523,49 @@ function formatarProcesso(processo: any, tribunalFallback: string): ProcessoResp
     codigo: a.codigo ? String(a.codigo) : undefined
   }));
   
-  // Processar movimentações com código e data raw
-  const movimentosFormatados = movimentos.slice(0, 50).map((m: any, index: number) => ({
-    dataHora: formatarData(m.dataHora),
-    dataHoraRaw: m.dataHora,
-    nome: m.nome || m.movimentoNacional?.nome || 'Movimentação',
-    complemento: m.complementosTabelados?.map((c: any) => c.nome || c.descricao).join(', ') 
-      || m.complemento 
-      || undefined,
-    codigo: m.codigo || m.movimentoNacional?.codigo
-  }));
+  // Processar movimentações com código e data raw - extraindo complementos de todas as fontes
+  const movimentosFormatados = movimentos.slice(0, 50).map((m: any, index: number) => {
+    // Extrair complemento de múltiplas fontes possíveis
+    let complementoTexto = '';
+    
+    // Fonte 1: complementosTabelados (array com nome/descricao/valor)
+    if (m.complementosTabelados && Array.isArray(m.complementosTabelados)) {
+      const partes = m.complementosTabelados.map((c: any) => {
+        if (c.descricao) return c.descricao;
+        if (c.nome && c.valor) return `${c.nome}: ${c.valor}`;
+        if (c.nome) return c.nome;
+        if (c.valor) return c.valor;
+        return null;
+      }).filter(Boolean);
+      complementoTexto = partes.join(' | ');
+    }
+    
+    // Fonte 2: complemento direto (string)
+    if (!complementoTexto && m.complemento) {
+      complementoTexto = m.complemento;
+    }
+    
+    // Fonte 3: tipoDecisao ou tipoDocumento
+    if (!complementoTexto && m.tipoDecisao) {
+      complementoTexto = m.tipoDecisao;
+    }
+    if (!complementoTexto && m.tipoDocumento) {
+      complementoTexto = m.tipoDocumento;
+    }
+    
+    // Fonte 4: texto dos complementos como array de strings
+    if (!complementoTexto && m.complementos && Array.isArray(m.complementos)) {
+      complementoTexto = m.complementos.join(', ');
+    }
+    
+    return {
+      dataHora: formatarData(m.dataHora),
+      dataHoraRaw: m.dataHora,
+      nome: m.nome || m.movimentoNacional?.nome || m.tipoMovimento || 'Movimentação',
+      complemento: complementoTexto || undefined,
+      codigo: m.codigo || m.movimentoNacional?.codigo || m.codigoNacional
+    };
+  });
   
   return {
     numeroProcesso: processo.numeroProcesso,
@@ -564,60 +584,162 @@ function formatarProcesso(processo: any, tribunalFallback: string): ProcessoResp
     valorCausa: processo.valorCausa || null,
     prioridade: prioridades,
     movimentos: movimentosFormatados,
-    partes: (processo.partes || processo.poloAtivo?.concat(processo.poloPassivo || []) || []).map((p: any) => {
-      // Debug para ver estrutura real
-      console.log('📋 Parte raw:', JSON.stringify(p).substring(0, 500));
-      
-      // Advogados podem estar em diversos caminhos
-      const advogadosRaw = p.advogados || p.representantes || p.procuradores || [];
-      const advogados = advogadosRaw.map((adv: any) => {
-        // O nome pode estar direto ou em pessoa.nome
-        const nomeAdv = adv.nome || adv.pessoa?.nome || adv.nomeAdvogado || 'Advogado não identificado';
-        
-        // OAB pode estar em inscricao ou direto
-        let oab: string | undefined;
-        if (adv.inscricao) {
-          const uf = adv.inscricao.unidadeFederativa || adv.inscricao.uf || '';
-          const num = adv.inscricao.numero || adv.inscricao.numeroOAB || '';
-          if (uf || num) oab = `OAB/${uf} ${num}`.trim();
-        } else if (adv.numeroOAB || adv.oab) {
-          oab = `OAB ${adv.numeroOAB || adv.oab}`;
-        }
-        
-        return { nome: nomeAdv, oab };
-      });
-      
-      const poloOriginal = (p.polo || p.tipoParte || p.tipoParticipacao || '').toUpperCase();
-      
-      // Nome da parte pode estar em diversos caminhos
-      const nomeParte = p.nome || p.pessoa?.nome || p.nomeCompleto || p.razaoSocial || p.nomeParte || 'Nome não informado';
-      
-      // Tipo de pessoa
-      let tipoPessoa = 'Não informado';
-      if (p.tipoPessoa === 'FISICA' || p.pessoa?.tipoPessoa === 'FISICA' || p.cpf) {
-        tipoPessoa = 'Pessoa Física';
-      } else if (p.tipoPessoa === 'JURIDICA' || p.pessoa?.tipoPessoa === 'JURIDICA' || p.cnpj) {
-        tipoPessoa = 'Pessoa Jurídica';
-      }
-      
-      // Documento pode estar em diversos campos
-      const documento = p.numeroDocumentoPrincipal 
-        || p.pessoa?.numeroDocumentoPrincipal 
-        || p.cpf 
-        || p.cnpj 
-        || p.documento
-        || undefined;
-      
-      return {
-        nome: nomeParte,
-        tipo: poloMap[poloOriginal] || p.polo || p.tipoParte || 'Parte',
-        polo: p.polo || p.tipoParte || 'Não informado',
-        tipoPessoa,
-        documento,
-        advogados: advogados.length > 0 ? advogados : undefined
-      };
-    }),
+    partes: extractPartes(processo),
     fonteRaw: processo // Guardar dados brutos para debug
+  };
+}
+
+// Função auxiliar para extrair partes de múltiplas estruturas possíveis
+function extractPartes(processo: any): Array<any> {
+  const poloMap: Record<string, string> = {
+    'AT': 'Autor',
+    'PA': 'Autor', 
+    'AUTOR': 'Autor',
+    'ATIVO': 'Autor',
+    'RÉU': 'Réu',
+    'REU': 'Réu',
+    'PP': 'Réu',
+    'PASSIVO': 'Réu',
+    'PASSIVE': 'Réu',
+    'TE': 'Terceiro',
+    'TERCEIRO': 'Terceiro',
+    'VI': 'Vítima',
+    'FL': 'Falido'
+  };
+
+  const partesResult: any[] = [];
+  
+  // Log para debug
+  console.log('🔍 Estrutura do processo para partes:', {
+    hasPartes: !!processo.partes,
+    partesLength: processo.partes?.length,
+    hasPoloAtivo: !!processo.poloAtivo,
+    hasPoloPassivo: !!processo.poloPassivo
+  });
+
+  // Fonte 1: Array de partes direto
+  if (processo.partes && Array.isArray(processo.partes)) {
+    for (const p of processo.partes) {
+      console.log('📋 Processando parte:', JSON.stringify(p).substring(0, 800));
+      partesResult.push(processarParte(p, poloMap));
+    }
+  }
+  
+  // Fonte 2: poloAtivo e poloPassivo separados
+  if (processo.poloAtivo && Array.isArray(processo.poloAtivo)) {
+    for (const p of processo.poloAtivo) {
+      const parte = processarParte(p, poloMap);
+      parte.tipo = 'Autor';
+      parte.polo = 'ATIVO';
+      partesResult.push(parte);
+    }
+  }
+  
+  if (processo.poloPassivo && Array.isArray(processo.poloPassivo)) {
+    for (const p of processo.poloPassivo) {
+      const parte = processarParte(p, poloMap);
+      parte.tipo = 'Réu';
+      parte.polo = 'PASSIVO';
+      partesResult.push(parte);
+    }
+  }
+  
+  // Fonte 3: Partes dentro de pessoa
+  if (!partesResult.length && processo.pessoa) {
+    partesResult.push(processarParte({ pessoa: processo.pessoa }, poloMap));
+  }
+  
+  console.log(`✅ Total de ${partesResult.length} partes extraídas`);
+  return partesResult;
+}
+
+function processarParte(p: any, poloMap: Record<string, string>): any {
+  // Extrair advogados de múltiplas fontes
+  const advogadosRaw = p.advogados 
+    || p.representantes 
+    || p.procuradores 
+    || p.advogado 
+    || (p.pessoa?.advogados)
+    || [];
+  
+  const advogadosArray = Array.isArray(advogadosRaw) ? advogadosRaw : [advogadosRaw];
+  
+  const advogados = advogadosArray.filter(Boolean).map((adv: any) => {
+    // Nome pode estar em múltiplos lugares
+    const nomeAdv = adv.nome 
+      || adv.pessoa?.nome 
+      || adv.nomeAdvogado 
+      || adv.nomeCompleto
+      || 'Advogado não identificado';
+    
+    // OAB pode estar em múltiplas estruturas
+    let oab: string | undefined;
+    if (adv.inscricao) {
+      const inscricoes = Array.isArray(adv.inscricao) ? adv.inscricao : [adv.inscricao];
+      for (const insc of inscricoes) {
+        const uf = insc.unidadeFederativa || insc.uf || insc.estado || '';
+        const num = insc.numero || insc.numeroOAB || insc.numeroInscricao || '';
+        if (uf || num) {
+          oab = `OAB/${uf} ${num}`.trim();
+          break;
+        }
+      }
+    } else if (adv.numeroOAB) {
+      oab = `OAB ${adv.numeroOAB}`;
+    } else if (adv.oab) {
+      oab = typeof adv.oab === 'string' ? adv.oab : `OAB ${adv.oab}`;
+    } else if (adv.inscricaoOAB) {
+      oab = `OAB ${adv.inscricaoOAB}`;
+    }
+    
+    return { nome: nomeAdv, oab };
+  }).filter((adv: any) => adv.nome !== 'Advogado não identificado');
+  
+  // Determinar polo/tipo
+  const poloOriginal = (
+    p.polo 
+    || p.tipoParte 
+    || p.tipoParticipacao 
+    || p.tipoDeParticipacao
+    || p.poloProcessual
+    || ''
+  ).toUpperCase();
+  
+  // Nome da parte
+  const nomeParte = p.nome 
+    || p.pessoa?.nome 
+    || p.nomeCompleto 
+    || p.razaoSocial 
+    || p.nomeParte 
+    || p.nomeParteProcesso
+    || 'Nome não informado';
+  
+  // Tipo de pessoa
+  let tipoPessoa = 'Não informado';
+  const tipoPessoaRaw = p.tipoPessoa || p.pessoa?.tipoPessoa || '';
+  if (tipoPessoaRaw === 'FISICA' || p.cpf || p.pessoa?.cpf) {
+    tipoPessoa = 'Pessoa Física';
+  } else if (tipoPessoaRaw === 'JURIDICA' || p.cnpj || p.pessoa?.cnpj) {
+    tipoPessoa = 'Pessoa Jurídica';
+  }
+  
+  // Documento
+  const documento = p.numeroDocumentoPrincipal 
+    || p.pessoa?.numeroDocumentoPrincipal 
+    || p.cpf 
+    || p.pessoa?.cpf
+    || p.cnpj 
+    || p.pessoa?.cnpj
+    || p.documento
+    || undefined;
+  
+  return {
+    nome: nomeParte,
+    tipo: poloMap[poloOriginal] || p.polo || p.tipoParte || 'Parte',
+    polo: p.polo || p.tipoParte || 'Não informado',
+    tipoPessoa,
+    documento,
+    advogados: advogados.length > 0 ? advogados : undefined
   };
 }
 
