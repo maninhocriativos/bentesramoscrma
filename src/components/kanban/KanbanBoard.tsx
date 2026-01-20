@@ -31,22 +31,18 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
   const [draggedLead, setDraggedLead] = useState<Lead | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<LeadStatus | null>(null);
   
-  // Scroll navigation state
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
-  // Buscar insights da Isa, extras e followups para todos os leads
   const leadIds = useMemo(() => leads.map(l => l.id), [leads]);
   const { insights: isaInsights } = useIsaInsights(leadIds);
   const { extras: leadExtras } = useLeadExtras(leadIds);
   const { followups: leadFollowups } = useLeadFollowups(leadIds);
 
-  // Check scroll position
   const updateScrollButtons = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    
     setCanScrollLeft(container.scrollLeft > 10);
     setCanScrollRight(container.scrollLeft < container.scrollWidth - container.clientWidth - 10);
   }, []);
@@ -65,16 +61,13 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
     };
   }, [updateScrollButtons]);
 
-  // Smooth scroll navigation
   const scrollTo = useCallback((direction: 'left' | 'right') => {
     const container = scrollContainerRef.current;
     if (!container) return;
     
-    const columnWidth = 280; // Approximate column width + gap
-    const scrollAmount = direction === 'left' ? -columnWidth : columnWidth;
-    
+    const columnWidth = 280;
     container.scrollBy({
-      left: scrollAmount,
+      left: direction === 'left' ? -columnWidth : columnWidth,
       behavior: 'smooth'
     });
   }, []);
@@ -82,15 +75,9 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
   const handleDragStart = useCallback((e: React.DragEvent, lead: Lead) => {
     setDraggedLead(lead);
     e.dataTransfer.effectAllowed = 'move';
-    if (e.currentTarget instanceof HTMLElement) {
-      e.currentTarget.style.opacity = '0.5';
-    }
   }, []);
 
-  const handleDragEnd = useCallback((e: React.DragEvent) => {
-    if (e.currentTarget instanceof HTMLElement) {
-      e.currentTarget.style.opacity = '1';
-    }
+  const handleDragEnd = useCallback(() => {
     setDraggedLead(null);
     setDragOverStatus(null);
   }, []);
@@ -117,8 +104,8 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
       
       if (!result.error) {
         toast({
-          title: 'Lead movido!',
-          description: `${draggedLead.nome || 'Lead'} movido para ${status}`,
+          title: 'Lead movido',
+          description: `${draggedLead.nome || 'Lead'} → ${status}`,
         });
       }
     }
@@ -128,69 +115,51 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
 
   return (
     <div className="relative w-full h-full">
-      {/* Left Navigation Arrow */}
-      <div 
-        className={cn(
-          "absolute left-0 top-0 bottom-2 z-10 flex items-center",
-          "pointer-events-none transition-opacity duration-200",
-          canScrollLeft ? "opacity-100" : "opacity-0"
-        )}
-      >
-        <div className="bg-gradient-to-r from-background via-background/80 to-transparent h-full w-12 flex items-center">
-          <Button
-            variant="outline"
-            size="icon"
-            className={cn(
-              "pointer-events-auto h-10 w-10 rounded-full shadow-lg",
-              "bg-card/95 backdrop-blur border-border/50",
-              "hover:bg-primary hover:text-primary-foreground hover:border-primary",
-              "transition-all duration-200"
-            )}
-            onClick={() => scrollTo('left')}
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
+      {/* Nav Arrows */}
+      {canScrollLeft && (
+        <div className="absolute left-0 top-0 bottom-0 z-10 flex items-center pointer-events-none">
+          <div className="bg-gradient-to-r from-background to-transparent h-full w-16 flex items-center pl-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="pointer-events-auto h-9 w-9 rounded-full shadow-md bg-card/95 backdrop-blur"
+              onClick={() => scrollTo('left')}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Right Navigation Arrow */}
-      <div 
-        className={cn(
-          "absolute right-0 top-0 bottom-2 z-10 flex items-center",
-          "pointer-events-none transition-opacity duration-200",
-          canScrollRight ? "opacity-100" : "opacity-0"
-        )}
-      >
-        <div className="bg-gradient-to-l from-background via-background/80 to-transparent h-full w-12 flex items-center justify-end">
-          <Button
-            variant="outline"
-            size="icon"
-            className={cn(
-              "pointer-events-auto h-10 w-10 rounded-full shadow-lg",
-              "bg-card/95 backdrop-blur border-border/50",
-              "hover:bg-primary hover:text-primary-foreground hover:border-primary",
-              "transition-all duration-200"
-            )}
-            onClick={() => scrollTo('right')}
-          >
-            <ChevronRight className="h-5 w-5" />
-          </Button>
+      {canScrollRight && (
+        <div className="absolute right-0 top-0 bottom-0 z-10 flex items-center pointer-events-none">
+          <div className="bg-gradient-to-l from-background to-transparent h-full w-16 flex items-center justify-end pr-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="pointer-events-auto h-9 w-9 rounded-full shadow-md bg-card/95 backdrop-blur"
+              onClick={() => scrollTo('right')}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Scrollable Container */}
       <div 
         ref={scrollContainerRef}
-        className="w-full h-full overflow-x-auto overflow-y-hidden pb-2 scroll-smooth scrollbar-stable"
+        className="w-full h-full overflow-x-auto overflow-y-hidden pb-2 scroll-smooth"
       >
         <div 
-          className="inline-flex gap-3 pb-2 px-1 min-w-max"
+          className="inline-flex gap-3 px-1 min-w-max h-full"
           onDragLeave={handleDragLeave}
         >
           {STATUSES.map((status) => (
             <div 
               key={status}
               onDragEnter={() => handleDragEnter(status)}
+              className="h-full"
             >
               <KanbanColumn
                 status={status}

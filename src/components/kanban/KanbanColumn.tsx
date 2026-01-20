@@ -12,15 +12,9 @@ interface IsaInsight {
 
 interface LeadExtra {
   leadId: string;
-  ultimaInteracao: {
-    resumo: string;
-    data: string;
-  } | null;
+  ultimaInteracao: { resumo: string; data: string; } | null;
   temAgendamento: boolean;
-  proximoAgendamento: {
-    titulo: string;
-    data: string;
-  } | null;
+  proximoAgendamento: { titulo: string; data: string; } | null;
 }
 
 interface KanbanColumnProps {
@@ -37,73 +31,14 @@ interface KanbanColumnProps {
   leadFollowups?: Record<string, LeadFollowupInfo>;
 }
 
-const STATUS_COLORS: Record<LeadStatus, { 
-  bg: string; 
-  border: string; 
-  indicator: string; 
-  gradient: string;
-  headerBg: string;
-}> = {
-  'Lead Frio': { 
-    bg: 'bg-slate-50', 
-    border: 'border-slate-200', 
-    indicator: 'bg-slate-500',
-    gradient: 'from-slate-500/10 to-transparent',
-    headerBg: 'bg-gradient-to-r from-slate-100 to-slate-50'
-  },
-  'Em Atendimento': { 
-    bg: 'bg-blue-50', 
-    border: 'border-blue-200', 
-    indicator: 'bg-blue-500',
-    gradient: 'from-blue-500/10 to-transparent',
-    headerBg: 'bg-gradient-to-r from-blue-100 to-blue-50'
-  },
-  'Em Negociação': {
-    bg: 'bg-cyan-50',
-    border: 'border-cyan-200',
-    indicator: 'bg-cyan-500',
-    gradient: 'from-cyan-500/10 to-transparent',
-    headerBg: 'bg-gradient-to-r from-cyan-100 to-cyan-50'
-  },
-  'Aguardando Contrato': { 
-    bg: 'bg-amber-50', 
-    border: 'border-amber-200', 
-    indicator: 'bg-amber-500',
-    gradient: 'from-amber-500/10 to-transparent',
-    headerBg: 'bg-gradient-to-r from-amber-100 to-amber-50'
-  },
-  'Contrato Assinado': { 
-    bg: 'bg-emerald-50', 
-    border: 'border-emerald-200', 
-    indicator: 'bg-emerald-500',
-    gradient: 'from-emerald-500/10 to-transparent',
-    headerBg: 'bg-gradient-to-r from-emerald-100 to-emerald-50'
-  },
-  'Ganho': { 
-    bg: 'bg-green-50', 
-    border: 'border-green-300', 
-    indicator: 'bg-green-600',
-    gradient: 'from-green-500/15 to-transparent',
-    headerBg: 'bg-gradient-to-r from-green-100 to-green-50'
-  },
-  'Perdido': { 
-    bg: 'bg-red-50', 
-    border: 'border-red-200', 
-    indicator: 'bg-red-500',
-    gradient: 'from-red-500/10 to-transparent',
-    headerBg: 'bg-gradient-to-r from-red-100 to-red-50'
-  },
-};
-
-// Short labels for mobile
-const STATUS_SHORT_LABELS: Record<LeadStatus, string> = {
-  'Lead Frio': 'Frio',
-  'Em Atendimento': 'Atendimento',
-  'Em Negociação': 'Negociação',
-  'Aguardando Contrato': 'Contrato',
-  'Contrato Assinado': 'Assinado',
-  'Ganho': 'Ganho',
-  'Perdido': 'Perdido',
+const STATUS_STYLES: Record<LeadStatus, { dot: string; accent: string }> = {
+  'Lead Frio': { dot: 'bg-slate-400', accent: 'border-t-slate-400' },
+  'Em Atendimento': { dot: 'bg-blue-500', accent: 'border-t-blue-500' },
+  'Em Negociação': { dot: 'bg-cyan-500', accent: 'border-t-cyan-500' },
+  'Aguardando Contrato': { dot: 'bg-amber-500', accent: 'border-t-amber-500' },
+  'Contrato Assinado': { dot: 'bg-emerald-500', accent: 'border-t-emerald-500' },
+  'Ganho': { dot: 'bg-green-600', accent: 'border-t-green-600' },
+  'Perdido': { dot: 'bg-red-500', accent: 'border-t-red-500' },
 };
 
 export function KanbanColumn({
@@ -120,17 +55,15 @@ export function KanbanColumn({
   leadFollowups = {},
 }: KanbanColumnProps) {
   const columnLeads = leads.filter((lead) => lead.status === status);
-  const statusStyle = STATUS_COLORS[status];
-  const shortLabel = STATUS_SHORT_LABELS[status];
+  const style = STATUS_STYLES[status];
   
-  // Track count changes for animation
-  const [showCountChange, setShowCountChange] = useState(false);
+  const [showCountPulse, setShowCountPulse] = useState(false);
   const prevCountRef = useRef(columnLeads.length);
   
   useEffect(() => {
     if (prevCountRef.current !== columnLeads.length) {
-      setShowCountChange(true);
-      const timer = setTimeout(() => setShowCountChange(false), 1500);
+      setShowCountPulse(true);
+      const timer = setTimeout(() => setShowCountPulse(false), 1000);
       prevCountRef.current = columnLeads.length;
       return () => clearTimeout(timer);
     }
@@ -142,64 +75,42 @@ export function KanbanColumn({
       onDrop={(e) => onDrop(e, status)}
       className={cn(
         "flex flex-col rounded-xl overflow-hidden",
-        "bg-card border shadow-sm",
-        "transition-all duration-200 ease-out",
-        // Narrower columns for more compact view
-        "min-w-[220px] w-[220px] md:min-w-[240px] md:w-[240px]",
-        isDragOver && [
-          "ring-2 ring-gold/60 shadow-md border-gold/40",
-          "scale-[1.01]"
-        ]
+        "bg-muted/30 border border-border/50",
+        "min-w-[240px] w-[240px] lg:min-w-[260px] lg:w-[260px]",
+        "transition-all duration-200",
+        "border-t-2",
+        style.accent,
+        isDragOver && "ring-2 ring-primary/40 bg-primary/5"
       )}
     >
       {/* Header */}
-      <div className={cn(
-        "flex items-center gap-2 px-3 py-2.5 border-b",
-        statusStyle.headerBg, statusStyle.border
-      )}>
-        <div className={cn(
-          "w-2.5 h-2.5 rounded-full shrink-0",
-          statusStyle.indicator
-        )} />
-        
-        {/* Always show full label for better context */}
+      <div className="flex items-center gap-2 px-3 py-2.5 bg-card/50">
+        <div className={cn("w-2 h-2 rounded-full shrink-0", style.dot)} />
         <h3 className="font-medium text-xs text-foreground flex-1 truncate">
           {status}
         </h3>
-        
         <span className={cn(
-          "text-[10px] px-2 py-0.5 rounded-full font-semibold transition-all duration-300",
-          "bg-primary text-primary-foreground",
-          showCountChange && "ring-2 ring-success ring-offset-1 animate-pulse scale-110"
+          "text-[10px] px-1.5 py-0.5 rounded-full font-semibold min-w-[20px] text-center",
+          "bg-foreground/10 text-foreground",
+          showCountPulse && "animate-pulse ring-2 ring-primary/50"
         )}>
           {columnLeads.length}
         </span>
       </div>
 
-      {/* Cards Container */}
+      {/* Cards */}
       <div className={cn(
         "flex flex-col gap-2 p-2 flex-1 overflow-y-auto",
-        "max-h-[calc(100vh-260px)]",
-        "bg-gradient-to-b", statusStyle.gradient
+        "max-h-[calc(100vh-280px)]"
       )}>
         {columnLeads.map((lead, index) => (
           <div
             key={lead.id}
             draggable
-            onDragStart={(e) => {
-              e.currentTarget.classList.add('kanban-card-dragging');
-              onDragStart(e, lead);
-            }}
-            onDragEnd={(e) => {
-              e.currentTarget.classList.remove('kanban-card-dragging');
-              e.currentTarget.classList.add('kanban-card-dropped');
-              setTimeout(() => {
-                e.currentTarget?.classList.remove('kanban-card-dropped');
-              }, 700);
-              onDragEnd(e);
-            }}
-            style={{ animationDelay: `${index * 50}ms` }}
-            className="kanban-card-wrapper animate-fade-in cursor-grab active:cursor-grabbing"
+            onDragStart={(e) => onDragStart(e, lead)}
+            onDragEnd={onDragEnd}
+            style={{ animationDelay: `${index * 30}ms` }}
+            className="animate-fade-in cursor-grab active:cursor-grabbing"
           >
             <LeadCard 
               lead={lead} 
@@ -213,14 +124,13 @@ export function KanbanColumn({
         
         {columnLeads.length === 0 && (
           <div className={cn(
-            "flex-1 flex flex-col items-center justify-center min-h-[100px]",
-            "text-muted-foreground border border-dashed border-border/50 rounded-lg",
-            "bg-card/50",
-            isDragOver && "border-gold/50 bg-gold/5"
+            "flex-1 flex flex-col items-center justify-center min-h-[120px]",
+            "text-muted-foreground/60 border-2 border-dashed border-border/40 rounded-lg",
+            isDragOver && "border-primary/40 bg-primary/5"
           )}>
-            <Inbox className="w-6 h-6 mb-1 opacity-30" />
-            <span className="text-xs text-center">
-              {isDragOver ? 'Solte aqui!' : 'Arraste leads'}
+            <Inbox className="w-6 h-6 mb-1.5" />
+            <span className="text-xs">
+              {isDragOver ? 'Solte aqui' : 'Vazio'}
             </span>
           </div>
         )}
