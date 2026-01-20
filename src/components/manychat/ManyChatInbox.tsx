@@ -7,8 +7,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { useChatPresence } from '@/hooks/useChatPresence';
+import { useTeamPresence } from '@/hooks/useTeamPresence';
+import { useChatNotifications } from '@/hooks/useChatNotifications';
 import { useAuth } from '@/hooks/useAuth';
+import { usePerfil } from '@/hooks/usePerfil';
 import { ChatThemeProvider, useChatTheme } from './ChatThemeProvider';
+import { TeamPresencePanel } from './TeamPresencePanel';
+import { ConversationAssignmentMenu } from './ConversationAssignmentMenu';
 import LeadContextPanel from './LeadContextPanel';
 import { 
   Send, 
@@ -32,10 +37,11 @@ import {
   MessageCircle,
   Sparkles,
   PanelRightClose,
-  Circle
+  Users,
+  History
 } from 'lucide-react';
 import CalWidget from './CalWidget';
-import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
+import { format, isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   DropdownMenu,
@@ -57,6 +63,7 @@ interface Subscriber {
   lead_id?: string;
   atendimento_humano?: boolean;
   atendimento_humano_desde?: string;
+  assigned_to?: string;
 }
 
 interface Message {
@@ -67,12 +74,13 @@ interface Message {
   tipo: string;
 }
 
-type ConversationFilter = 'all' | 'unread' | 'human' | 'bot';
+type ConversationFilter = 'all' | 'unread' | 'human' | 'bot' | 'mine';
 
 // Componente interno que usa o tema
 const ManyChatInboxContent = () => {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { fullName } = usePerfil();
   const { theme, toggleTheme } = useChatTheme();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -92,16 +100,40 @@ const ManyChatInboxContent = () => {
   const [activeFilter, setActiveFilter] = useState<ConversationFilter>('all');
   const [pendingLeadId, setPendingLeadId] = useState<string | null>(null);
   const [showContextPanel, setShowContextPanel] = useState(false);
+  const [showTeamPanel, setShowTeamPanel] = useState(false);
+  const [isLoadingFullHistory, setIsLoadingFullHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastMessageIdRef = useRef<string | null>(null);
 
   const { isOnline, isTyping, setTyping } = useChatPresence(
     user?.id,
-    user?.email?.split('@')[0]
+    fullName || user?.email?.split('@')[0]
   );
+
+  const { 
+    getTeamWithStatus, 
+    setCurrentChat, 
+    getOnlineCount 
+  } = useTeamPresence(
+    user?.id,
+    fullName || user?.email?.split('@')[0]
+  );
+
+  const {
+    playNotificationSound,
+    notifyAssignment,
+    notifyNewMessage,
+    requestNotificationPermission,
+  } = useChatNotifications();
+
+  // Request notification permission on mount
+  useEffect(() => {
+    requestNotificationPermission();
+  }, [requestNotificationPermission]);
 
   // Tema - classes dinâmicas
   const isDark = theme === 'dark';
@@ -162,19 +194,27 @@ const ManyChatInboxContent = () => {
     typingTimeoutRef.current = setTimeout(() => setTyping(false), 2000);
   }, [setTyping]);
 
-  // Realtime subscriptions
+  // Realtime subscriptions with notifications
   useEffect(() => {
     console.log('[ManyChatInbox] Iniciando subscriptions realtime...');
     
     const messagesChannel = supabase
-      .channel('manychat-messages-live-v3')
+      .channel('manychat-messages-live-v4')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'manychat_mensagens' },
         (payload) => {
           console.log('[ManyChatInbox] Nova mensagem recebida:', payload.new);
-          const newMsg = payload.new as Message & { subscriber_id: string };
+          const newMsg = payload.new as Message & { subscriber_id: string; subscriber_nome?: string };
+          
+          // Prevent duplicate notification for same message
+          if (lastMessageIdRef.current === newMsg.id) return;
+          lastMessageIdRef.current = newMsg.id;
           
           if (selectedSubscriber && newMsg.subscriber_id === selectedSubscriber.subscriber_id) {
             setMessages(prev => prev.some(m => m.id === newMsg.id) ? prev : [...prev, newMsg]);
+          } else if (newMsg.direcao === 'entrada') {
+            // Play notification sound for new incoming message not in current chat
+            playNotificationSound();
+            notifyNewMessage(newMsg.subscriber_nome || 'Contato', newMsg.conteudo?.substring(0, 100) || '');
           }
           
           setSubscribers(prev => {
@@ -192,7 +232,7 @@ const ManyChatInboxContent = () => {
       .subscribe();
 
     const subscribersChannel = supabase
-      .channel('manychat-subscribers-live-v3')
+      .channel('manychat-subscribers-live-v4')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'manychat_subscribers' },
         (payload) => {
           const newSub = payload.new as Subscriber;
@@ -206,6 +246,13 @@ const ManyChatInboxContent = () => {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'manychat_subscribers' },
         (payload) => {
           const updatedSub = payload.new as Subscriber;
+          const oldSub = payload.old as Subscriber;
+          
+          // Check if conversation was assigned to current user
+          if (updatedSub.assigned_to === user?.id && oldSub?.assigned_to !== user?.id) {
+            notifyAssignment(updatedSub.nome || 'Contato', 'Um colega');
+          }
+          
           setSubscribers(prev => {
             const idx = prev.findIndex(s => s.subscriber_id === updatedSub.subscriber_id);
             if (idx === -1) return prev;
@@ -221,16 +268,19 @@ const ManyChatInboxContent = () => {
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(subscribersChannel);
     };
-  }, [selectedSubscriber?.subscriber_id]);
+  }, [selectedSubscriber?.subscriber_id, user?.id, playNotificationSound, notifyNewMessage, notifyAssignment]);
 
+  // Update team presence when selecting a chat
   useEffect(() => {
     if (selectedSubscriber) {
       loadMessages(selectedSubscriber.subscriber_id);
+      setCurrentChat(selectedSubscriber.subscriber_id);
       setShowMobileChat(true);
     } else {
       setMessages([]);
+      setCurrentChat(null);
     }
-  }, [selectedSubscriber?.subscriber_id]);
+  }, [selectedSubscriber?.subscriber_id, setCurrentChat]);
 
   const loadSubscribers = async () => {
     setIsLoading(true);
@@ -267,14 +317,21 @@ const ManyChatInboxContent = () => {
     }
   };
 
-  const loadMessages = async (subscriberId: string) => {
+  const loadMessages = async (subscriberId: string, loadAll = false) => {
     setIsLoadingMessages(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('manychat_mensagens' as any)
         .select('*')
         .eq('subscriber_id', subscriberId)
         .order('created_at', { ascending: true });
+
+      // Only limit if not loading all history
+      if (!loadAll) {
+        query = query.limit(100);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setMessages((data as Message[]) || []);
@@ -282,6 +339,63 @@ const ManyChatInboxContent = () => {
       console.error('Erro ao carregar mensagens:', error);
     } finally {
       setIsLoadingMessages(false);
+    }
+  };
+
+  const loadFullHistory = async () => {
+    if (!selectedSubscriber) return;
+    setIsLoadingFullHistory(true);
+    try {
+      // Load ALL messages for this subscriber
+      const { data, error } = await supabase
+        .from('manychat_mensagens' as any)
+        .select('*')
+        .eq('subscriber_id', selectedSubscriber.subscriber_id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setMessages((data as Message[]) || []);
+      toast({ 
+        title: '📜 Histórico Completo', 
+        description: `${(data as Message[])?.length || 0} mensagens carregadas` 
+      });
+    } catch (error) {
+      console.error('Erro ao carregar histórico:', error);
+      toast({ title: 'Erro', description: 'Não foi possível carregar o histórico', variant: 'destructive' });
+    } finally {
+      setIsLoadingFullHistory(false);
+    }
+  };
+
+  const assignConversation = async (memberId: string) => {
+    if (!selectedSubscriber) return;
+    
+    try {
+      const { error } = await supabase
+        .from('manychat_subscribers')
+        .update({ assigned_to: memberId })
+        .eq('subscriber_id', selectedSubscriber.subscriber_id);
+
+      if (error) throw error;
+
+      // Get assigned member name
+      const teamMembers = getTeamWithStatus();
+      const member = teamMembers.find(m => m.id === memberId);
+      
+      toast({
+        title: '✅ Conversa direcionada',
+        description: `Direcionado para ${member?.fullName || 'membro da equipe'}`,
+      });
+
+      // Update local state
+      setSelectedSubscriber(prev => prev ? { ...prev, assigned_to: memberId } : null);
+      setSubscribers(prev => prev.map(s => 
+        s.subscriber_id === selectedSubscriber.subscriber_id 
+          ? { ...s, assigned_to: memberId }
+          : s
+      ));
+    } catch (error) {
+      toast({ title: 'Erro', description: 'Não foi possível direcionar a conversa', variant: 'destructive' });
     }
   };
 
@@ -551,6 +665,21 @@ const ManyChatInboxContent = () => {
             <h1 className={`text-xl font-semibold ${themeClasses.headerText}`}>Conversas</h1>
           </div>
           <div className="flex items-center gap-1">
+            {/* Team panel button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowTeamPanel(!showTeamPanel)}
+              className={`h-10 w-10 rounded-full relative ${showTeamPanel ? 'text-[#00A884] bg-[#00A884]/10' : themeClasses.iconColor} ${themeClasses.hoverBtn}`}
+              title="Equipe online"
+            >
+              <Users className="h-5 w-5" />
+              {getOnlineCount() > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-emerald-500 text-[10px] text-white flex items-center justify-center font-medium">
+                  {getOnlineCount()}
+                </span>
+              )}
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -996,6 +1125,18 @@ const ManyChatInboxContent = () => {
           leadId={selectedSubscriber.lead_id}
           onClose={() => setShowContextPanel(false)}
           onNavigateToLead={() => navigate(`/leads/${selectedSubscriber.lead_id}`)}
+        />
+      )}
+
+      {/* Painel de Equipe Online */}
+      {showTeamPanel && (
+        <TeamPresencePanel
+          teamMembers={getTeamWithStatus()}
+          currentUserId={user?.id}
+          onClose={() => setShowTeamPanel(false)}
+          onAssignToMember={assignConversation}
+          subscriberName={selectedSubscriber ? (selectedSubscriber.nome || 'Contato') : undefined}
+          isAssigning={!!selectedSubscriber}
         />
       )}
     </div>
