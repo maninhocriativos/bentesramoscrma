@@ -58,6 +58,29 @@ export default function PeticaoSaidaPage() {
 
   const latestDoc = documents[0];
 
+  const getStoragePathFromPdfRef = (pdfRef: string): string | null => {
+    // New approach: store the storage path (recommended)
+    if (!pdfRef) return null;
+    if (!pdfRef.startsWith('http')) return pdfRef;
+
+    // Backward compatibility: older records stored a public URL
+    const publicMarker = '/storage/v1/object/public/documentos/';
+    const signMarker = '/storage/v1/object/sign/documentos/';
+
+    const idxPublic = pdfRef.indexOf(publicMarker);
+    if (idxPublic >= 0) {
+      return decodeURIComponent(pdfRef.slice(idxPublic + publicMarker.length));
+    }
+
+    const idxSign = pdfRef.indexOf(signMarker);
+    if (idxSign >= 0) {
+      const rest = pdfRef.slice(idxSign + signMarker.length);
+      return decodeURIComponent(rest.split('?')[0]);
+    }
+
+    return null;
+  };
+
   const handleGeneratePdf = async () => {
     if (!petition) {
       toast({
@@ -84,14 +107,15 @@ export default function PeticaoSaidaPage() {
         htmlContent: latestDoc.html_content,
         officeSettings,
         petitionId: petition.id,
-        version: latestDoc.version || 1,
+        version: latestDoc.version ?? 1,
       });
 
       if (pdfBlob.size < 100) {
         throw new Error('PDF gerado está vazio ou corrompido.');
       }
 
-      const fileName = `peticao-${petition.id}-v${latestDoc.version}.pdf`;
+      const version = latestDoc.version ?? 1;
+      const fileName = `peticao-${petition.id}-v${version}.pdf`;
       const filePath = `petitions/${petition.id}/${fileName}`;
       
       const { error: uploadError } = await supabase.storage.from('documentos').upload(filePath, pdfBlob, {
@@ -103,9 +127,8 @@ export default function PeticaoSaidaPage() {
         throw new Error(`Falha no upload: ${uploadError.message}`);
       }
 
-      const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(filePath);
-      
-      await supabase.from('petition_documents').update({ pdf_url: urlData.publicUrl }).eq('id', latestDoc.id);
+      // IMPORTANT: bucket "documentos" é privado; armazenamos o *path* e geramos URL assinada no download.
+      await supabase.from('petition_documents').update({ pdf_url: filePath }).eq('id', latestDoc.id);
 
       const docsData = await getDocuments(petition.id);
       setDocuments(docsData);
@@ -163,14 +186,37 @@ export default function PeticaoSaidaPage() {
     setSavingHtml(false);
   };
 
-  const handleDownload = (url: string, filename: string) => {
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownload = async (pdfRef: string, filename: string) => {
+    try {
+      const filePath = getStoragePathFromPdfRef(pdfRef);
+      if (!filePath) {
+        throw new Error('Não foi possível localizar o arquivo do PDF para download.');
+      }
+
+      const { data, error } = await supabase.storage
+        .from('documentos')
+        .createSignedUrl(filePath, 60);
+
+      if (error || !data?.signedUrl) {
+        throw new Error(error?.message || 'Falha ao gerar link de download.');
+      }
+
+      const link = document.createElement('a');
+      link.href = data.signedUrl;
+      link.download = filename;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Erro ao baixar PDF:', err);
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      toast({
+        title: 'Erro ao baixar PDF',
+        description: msg,
+        variant: 'destructive',
+      });
+    }
   };
 
   if (loading) {
