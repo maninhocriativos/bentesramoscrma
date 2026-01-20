@@ -9,71 +9,97 @@ export function useAuth() {
   const lastUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // Check for existing session first
-    supabase.auth.getSession().then(async ({ data: { session: existingSession }, error }) => {
-      if (error) {
-        console.error('Session error:', error);
-        await supabase.auth.signOut();
-        setSession(null);
-        setUser(null);
-      } else {
-        lastUserIdRef.current = existingSession?.user?.id ?? null;
-        setSession(existingSession);
-        setUser(existingSession?.user ?? null);
+    let mounted = true;
+
+    const safeSetLoading = (value: boolean) => {
+      if (!mounted) return;
+      setLoading(value);
+    };
+
+    const safeSetSessionUser = (nextSession: Session | null) => {
+      if (!mounted) return;
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+    };
+
+    // 1) Listener first (avoids race conditions)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      const newUserId = newSession?.user?.id ?? null;
+
+      // TOKEN_REFRESHED happens frequently; avoid expensive re-renders
+      if (event === 'TOKEN_REFRESHED' && newUserId === lastUserIdRef.current) {
+        if (mounted) setSession(newSession);
+        return;
       }
-      setLoading(false);
+
+      // If user just signed in, check approval (but don't crash/hang on missing profile)
+      if (event === 'SIGNED_IN' && newSession?.user) {
+        try {
+          const { data, error } = await supabase
+            .from('perfis')
+            .select('aprovado')
+            .eq('id', newSession.user.id)
+            .maybeSingle();
+
+          if (!error && data?.aprovado === false) {
+            await supabase.auth.signOut();
+            safeSetSessionUser(null);
+            safeSetLoading(false);
+
+            // Redirect once to show message
+            if (!window.location.pathname.startsWith('/auth')) {
+              window.location.replace('/auth?not_approved=true');
+            }
+            return;
+          }
+        } catch (e) {
+          console.error('Error checking approval:', e);
+        }
+      }
+
+      lastUserIdRef.current = newUserId;
+      safeSetSessionUser(newSession);
+      safeSetLoading(false);
     });
 
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
-        const newUserId = newSession?.user?.id ?? null;
-        
-        // For TOKEN_REFRESHED, only update session if same user (avoid re-render)
-        if (event === 'TOKEN_REFRESHED' && newUserId === lastUserIdRef.current) {
-          setSession(newSession);
-          return;
+    // 2) Then fetch current session (always end loading)
+    (async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          console.error('Session error:', error);
+          await supabase.auth.signOut();
+          lastUserIdRef.current = null;
+          safeSetSessionUser(null);
+        } else {
+          lastUserIdRef.current = data.session?.user?.id ?? null;
+          safeSetSessionUser(data.session ?? null);
         }
-        
-        // For OAuth sign-in, check if user is approved (but don't block if profile doesn't exist yet)
-        if (event === 'SIGNED_IN' && newSession?.user) {
-          try {
-            const { data, error } = await supabase
-              .from('perfis')
-              .select('aprovado')
-              .eq('id', newSession.user.id)
-              .single();
-            
-            // Only block if profile exists AND is not approved
-            if (!error && data && data.aprovado === false) {
-              console.log('User not approved, signing out');
-              await supabase.auth.signOut();
-              // Redirect to auth with not_approved flag
-              window.location.href = '/auth?not_approved=true';
-              return;
-            }
-          } catch (e) {
-            console.error('Error checking approval:', e);
-          }
-        }
-        
-        // For actual auth changes, update everything
-        lastUserIdRef.current = newUserId;
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
-        setLoading(false);
+      } catch (e) {
+        console.error('getSession threw:', e);
+        lastUserIdRef.current = null;
+        safeSetSessionUser(null);
+      } finally {
+        safeSetLoading(false);
       }
-    );
+    })();
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const checkUserApproval = async (userId: string): Promise<boolean> => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('perfis')
       .select('aprovado')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
+
+    if (error) return false;
     return data?.aprovado ?? false;
   };
 
