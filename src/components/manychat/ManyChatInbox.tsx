@@ -309,14 +309,36 @@ const ManyChatInbox = () => {
   const loadMessages = async (subscriberId: string) => {
     setIsLoadingMessages(true);
     try {
-      const { data, error } = await supabase
+      // Buscar mensagens pelo subscriber_id E pelo lead_id (para pegar todas as fontes)
+      let query = supabase
         .from('manychat_mensagens' as any)
         .select('*')
-        .eq('subscriber_id', subscriberId)
         .order('created_at', { ascending: true });
 
+      // Se o subscriber tem lead_id, buscar por ambos
+      const subscriber = subscribers.find(s => s.subscriber_id === subscriberId);
+      
+      if (subscriber?.lead_id) {
+        // Buscar mensagens tanto pelo subscriber_id quanto pelo lead_id
+        query = query.or(`subscriber_id.eq.${subscriberId},lead_id.eq.${subscriber.lead_id}`);
+      } else {
+        query = query.eq('subscriber_id', subscriberId);
+      }
+
+      const { data, error } = await query;
+
       if (error) throw error;
-      setMessages((data as Message[]) || []);
+      
+      // Remove duplicatas baseado no id
+      const uniqueMessages = data ? (data as Message[]).reduce((acc: Message[], msg) => {
+        if (!acc.find(m => m.id === msg.id)) acc.push(msg);
+        return acc;
+      }, []) : [];
+      
+      // Ordenar por data
+      uniqueMessages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      
+      setMessages(uniqueMessages);
     } catch (error) {
       console.error('Erro ao carregar mensagens:', error);
     } finally {

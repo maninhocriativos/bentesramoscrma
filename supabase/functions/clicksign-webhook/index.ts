@@ -70,7 +70,7 @@ serve(async (req: Request): Promise<Response> => {
       // Update leads that have this document key in their link_contrato
       const { data: leads, error: leadsError } = await supabase
         .from("leads_juridicos")
-        .select("id, link_contrato, status")
+        .select("id, nome, telefone, link_contrato, status")
         .ilike("link_contrato", `%${documentKey}%`);
 
       if (leadsError) {
@@ -109,6 +109,68 @@ serve(async (req: Request): Promise<Response> => {
 
           if (interactionError) {
             console.error("Error creating interaction:", interactionError);
+          }
+
+          // Enviar notificação via WhatsApp sobre status do contrato
+          if (lead.telefone && (eventName === "add_signer" || eventName === "sign" || eventName === "close")) {
+            let whatsappMessage = "";
+            const clienteName = lead.nome || "Cliente";
+            const contractUrl = lead.link_contrato;
+
+            if (eventName === "add_signer") {
+              whatsappMessage = `📄 *Contrato Disponível para Assinatura*\n\nOlá ${clienteName},\n\nSeu contrato está pronto! Clique no link abaixo para assinar digitalmente:\n\n👉 ${contractUrl}\n\nDúvidas? Estamos à disposição.\n\n*Bentes & Ramos Advogados*`;
+            } else if (eventName === "sign") {
+              whatsappMessage = `✅ *Assinatura Recebida*\n\nOlá ${clienteName},\n\nRecebemos sua assinatura no contrato. ${newStatus === "Assinado" ? "Todas as partes assinaram!" : "Aguardando demais assinantes."}\n\n*Bentes & Ramos Advogados*`;
+            } else if (eventName === "close") {
+              whatsappMessage = `🎉 *Contrato Finalizado*\n\nOlá ${clienteName},\n\nSeu contrato foi finalizado com sucesso! Você pode acessá-lo pelo link:\n\n👉 ${contractUrl}\n\nObrigado pela confiança!\n\n*Bentes & Ramos Advogados*`;
+            }
+
+            if (whatsappMessage) {
+              try {
+                // Buscar configuração Z-API
+                const { data: config } = await supabase
+                  .from('integrations_config')
+                  .select('config_json, is_active')
+                  .eq('provider', 'zapi')
+                  .single();
+
+                if (config?.is_active) {
+                  const instanceId = config.config_json?.instance_id;
+                  const token = config.config_json?.token;
+
+                  if (instanceId && token) {
+                    let cleanPhone = lead.telefone.replace(/\D/g, '');
+                    if (cleanPhone.length === 10 || cleanPhone.length === 11) {
+                      cleanPhone = '55' + cleanPhone;
+                    }
+
+                    const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ phone: cleanPhone, message: whatsappMessage })
+                    });
+
+                    if (response.ok) {
+                      console.log(`WhatsApp enviado para ${lead.telefone} - evento: ${eventName}`);
+                      
+                      // Registrar mensagem enviada
+                      await supabase.from('manychat_mensagens').insert({
+                        subscriber_id: `zapi_${cleanPhone}`,
+                        subscriber_nome: 'Escritório',
+                        conteudo: whatsappMessage,
+                        canal: 'whatsapp',
+                        tipo: 'text',
+                        direcao: 'saida',
+                        lead_id: lead.id,
+                        metadata: { source: 'clicksign-webhook', event: eventName }
+                      });
+                    }
+                  }
+                }
+              } catch (whatsappError) {
+                console.error("Erro ao enviar WhatsApp:", whatsappError);
+              }
+            }
           }
         }
       }
