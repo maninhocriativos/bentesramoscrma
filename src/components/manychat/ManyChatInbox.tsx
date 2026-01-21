@@ -188,8 +188,27 @@ const ManyChatInboxContent = () => {
     }
   }, [pendingLeadId, subscribers]);
 
+  // Initial load and polling fallback for real-time sync
   useEffect(() => {
     loadSubscribers();
+    
+    // Polling fallback every 30 seconds
+    const pollInterval = setInterval(() => {
+      console.log('[ManyChatInbox] Polling fallback - recarregando subscribers...');
+      loadSubscribers();
+    }, 30000);
+
+    // Refetch on window focus
+    const handleFocus = () => {
+      console.log('[ManyChatInbox] Window focus - recarregando subscribers...');
+      loadSubscribers();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(pollInterval);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   const handleTyping = useCallback(() => {
@@ -309,6 +328,11 @@ const ManyChatInboxContent = () => {
       toast({ title: 'Sincronização iniciada', description: 'Importando contatos do ManyChat...' });
       const { data, error } = await supabase.functions.invoke('manychat-full-sync', { body: { mode: 'full' } });
       if (error) throw error;
+      
+      // Also sync subscriber names for contacts with "Desconhecido"
+      toast({ title: 'Atualizando nomes...', description: 'Buscando nomes dos contatos...' });
+      await supabase.functions.invoke('sync-subscriber-names');
+      
       await loadSubscribers();
       toast({
         title: 'Sincronização concluída!',
@@ -530,16 +554,58 @@ const ManyChatInboxContent = () => {
     return null;
   };
 
+  // Format phone for display
+  const formatPhone = (phone?: string) => {
+    if (!phone) return null;
+    const clean = phone.replace(/\D/g, '');
+    // Format Brazilian phone: +55 (92) 99999-9999
+    if (clean.startsWith('55') && clean.length >= 12) {
+      const ddd = clean.slice(2, 4);
+      const part1 = clean.slice(4, 9);
+      const part2 = clean.slice(9);
+      return `(${ddd}) ${part1}-${part2}`;
+    }
+    // Just format with spaces
+    if (clean.length >= 10) {
+      return phone.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+    }
+    return phone;
+  };
+
   const getDisplayName = (sub: Subscriber) => {
-    if (sub.nome && sub.nome !== 'Desconhecido' && sub.nome !== 'Sem nome') return sub.nome;
-    if (sub.telefone) return sub.telefone;
-    return 'Contato';
+    // Check for valid name (not placeholder)
+    const invalidNames = ['Desconhecido', 'Sem nome', 'desconhecido', 'null', '', '{{wa_id}}'];
+    const hasValidName = sub.nome && !invalidNames.includes(sub.nome) && !sub.nome.startsWith('{{') && !sub.nome.startsWith('[');
+    
+    if (hasValidName) return sub.nome;
+    
+    // Try formatted phone
+    const formattedPhone = formatPhone(sub.telefone);
+    if (formattedPhone) return formattedPhone;
+    
+    // Fallback to raw phone or subscriber_id
+    if (sub.telefone && sub.telefone !== '{{wa_id}}') return sub.telefone;
+    
+    return `Contato #${sub.subscriber_id?.slice(-4) || '????'}`;
   };
 
   const getInitials = (sub: Subscriber) => {
-    const name = getDisplayName(sub);
-    if (name.startsWith('+') || /^\d/.test(name)) return name.slice(-2);
-    return name.substring(0, 2).toUpperCase();
+    const invalidNames = ['Desconhecido', 'Sem nome', 'desconhecido', 'null', '', '{{wa_id}}'];
+    const hasValidName = sub.nome && !invalidNames.includes(sub.nome) && !sub.nome.startsWith('{{') && !sub.nome.startsWith('[');
+    
+    if (hasValidName) {
+      const parts = sub.nome.split(' ').filter(p => p.length > 0);
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[1][0]).toUpperCase();
+      }
+      return sub.nome.substring(0, 2).toUpperCase();
+    }
+    
+    // Use last 2 digits of phone or subscriber_id
+    const phone = sub.telefone?.replace(/\D/g, '');
+    if (phone && phone.length >= 2) return phone.slice(-2);
+    if (sub.subscriber_id) return sub.subscriber_id.slice(-2);
+    return '??';
   };
 
   // Ícone do canal
@@ -600,12 +666,20 @@ const ManyChatInboxContent = () => {
     );
   };
 
-  // Filtros aplicados
+  // Filtros aplicados - busca melhorada
   const filteredSubscribers = subscribers
-    .filter(sub =>
-      sub.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      sub.telefone?.includes(searchTerm)
-    )
+    .filter(sub => {
+      if (!searchTerm) return true;
+      const term = searchTerm.toLowerCase();
+      const displayName = getDisplayName(sub).toLowerCase();
+      return (
+        displayName.includes(term) ||
+        sub.nome?.toLowerCase().includes(term) ||
+        sub.telefone?.includes(searchTerm) ||
+        sub.subscriber_id?.includes(searchTerm) ||
+        sub.email?.toLowerCase().includes(term)
+      );
+    })
     .filter(sub => {
       if (activeFilter === 'human') return sub.atendimento_humano;
       if (activeFilter === 'bot') return !sub.atendimento_humano;
