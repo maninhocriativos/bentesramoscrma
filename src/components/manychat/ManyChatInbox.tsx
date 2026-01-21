@@ -188,28 +188,48 @@ const ManyChatInboxContent = () => {
     }
   }, [pendingLeadId, subscribers]);
 
-  // Initial load and polling fallback for real-time sync
+  // Initial load and aggressive realtime sync
   useEffect(() => {
     loadSubscribers();
     
-    // Polling fallback every 30 seconds
+    // Polling fallback every 10 seconds for better responsiveness
     const pollInterval = setInterval(() => {
-      console.log('[ManyChatInbox] Polling fallback - recarregando subscribers...');
+      console.log('[ManyChatInbox] Polling - atualizando...');
       loadSubscribers();
-    }, 30000);
+      // Also refresh messages if a subscriber is selected
+      if (selectedSubscriber) {
+        loadMessages(selectedSubscriber.subscriber_id);
+      }
+    }, 10000);
 
     // Refetch on window focus
     const handleFocus = () => {
-      console.log('[ManyChatInbox] Window focus - recarregando subscribers...');
+      console.log('[ManyChatInbox] Window focus - recarregando...');
       loadSubscribers();
+      if (selectedSubscriber) {
+        loadMessages(selectedSubscriber.subscriber_id);
+      }
     };
     window.addEventListener('focus', handleFocus);
+
+    // Visibility change handler for mobile/tab switching
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[ManyChatInbox] Tab visible - recarregando...');
+        loadSubscribers();
+        if (selectedSubscriber) {
+          loadMessages(selectedSubscriber.subscriber_id);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       clearInterval(pollInterval);
       window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, []);
+  }, [selectedSubscriber?.subscriber_id]);
 
   const handleTyping = useCallback(() => {
     setTyping(true);
@@ -217,77 +237,121 @@ const ManyChatInboxContent = () => {
     typingTimeoutRef.current = setTimeout(() => setTyping(false), 2000);
   }, [setTyping]);
 
-  // Realtime subscriptions with notifications
+  // Realtime subscriptions - more robust with reconnection
   useEffect(() => {
-    console.log('[ManyChatInbox] Iniciando subscriptions realtime...');
+    console.log('[ManyChatInbox] Configurando canais realtime...');
     
-    const messagesChannel = supabase
-      .channel('manychat-messages-live-v4')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'manychat_mensagens' },
-        (payload) => {
-          console.log('[ManyChatInbox] Nova mensagem recebida:', payload.new);
-          const newMsg = payload.new as Message & { subscriber_id: string; subscriber_nome?: string };
-          
-          // Prevent duplicate notification for same message
-          if (lastMessageIdRef.current === newMsg.id) return;
-          lastMessageIdRef.current = newMsg.id;
-          
-          if (selectedSubscriber && newMsg.subscriber_id === selectedSubscriber.subscriber_id) {
-            setMessages(prev => prev.some(m => m.id === newMsg.id) ? prev : [...prev, newMsg]);
-          } else if (newMsg.direcao === 'entrada') {
-            // Play notification sound for new incoming message not in current chat
-            playNotificationSound();
-            notifyNewMessage(newMsg.subscriber_nome || 'Contato', newMsg.conteudo?.substring(0, 100) || '');
+    let isSubscribed = true;
+    
+    const setupChannels = () => {
+      // Messages channel with unique name to avoid conflicts
+      const messagesChannel = supabase
+        .channel(`manychat-msgs-${Date.now()}`, {
+          config: {
+            broadcast: { self: true },
+            presence: { key: user?.id || 'anonymous' },
           }
-          
-          setSubscribers(prev => {
-            const idx = prev.findIndex(s => s.subscriber_id === newMsg.subscriber_id);
-            if (idx === -1) { 
-              loadSubscribers(); 
-              return prev; 
+        })
+        .on('postgres_changes', 
+          { event: '*', schema: 'public', table: 'manychat_mensagens' },
+          (payload) => {
+            console.log('[Realtime] Mensagem evento:', payload.eventType, payload);
+            
+            if (payload.eventType === 'INSERT') {
+              const newMsg = payload.new as Message & { subscriber_id: string; subscriber_nome?: string };
+              
+              // Prevent duplicate notification for same message
+              if (lastMessageIdRef.current === newMsg.id) return;
+              lastMessageIdRef.current = newMsg.id;
+              
+              // Update messages if current chat
+              if (selectedSubscriber && newMsg.subscriber_id === selectedSubscriber.subscriber_id) {
+                setMessages(prev => {
+                  if (prev.some(m => m.id === newMsg.id)) return prev;
+                  return [...prev, newMsg];
+                });
+                scrollToBottom();
+              }
+              
+              // Play notification for incoming messages from other chats
+              if (newMsg.direcao === 'entrada' && (!selectedSubscriber || newMsg.subscriber_id !== selectedSubscriber.subscriber_id)) {
+                playNotificationSound();
+                notifyNewMessage(newMsg.subscriber_nome || 'Novo contato', newMsg.conteudo?.substring(0, 100) || '');
+              }
+              
+              // Update subscriber order
+              setSubscribers(prev => {
+                const idx = prev.findIndex(s => s.subscriber_id === newMsg.subscriber_id);
+                if (idx === -1) { 
+                  loadSubscribers(); 
+                  return prev; 
+                }
+                const updated = [...prev];
+                const [subscriber] = updated.splice(idx, 1);
+                return [{ ...subscriber, ultima_interacao: new Date().toISOString() }, ...updated];
+              });
             }
-            const updated = [...prev];
-            const [subscriber] = updated.splice(idx, 1);
-            return [{ ...subscriber, ultima_interacao: new Date().toISOString() }, ...updated];
-          });
-        }
-      )
-      .subscribe();
-
-    const subscribersChannel = supabase
-      .channel('manychat-subscribers-live-v4')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'manychat_subscribers' },
-        (payload) => {
-          const newSub = payload.new as Subscriber;
-          setSubscribers(prev => {
-            const exists = prev.some(s => s.subscriber_id === newSub.subscriber_id);
-            if (exists) return prev;
-            return [newSub, ...prev];
-          });
-        }
-      )
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'manychat_subscribers' },
-        (payload) => {
-          const updatedSub = payload.new as Subscriber;
-          const oldSub = payload.old as Subscriber;
-          
-          // Check if conversation was assigned to current user
-          if (updatedSub.assigned_to === user?.id && oldSub?.assigned_to !== user?.id) {
-            notifyAssignment(updatedSub.nome || 'Contato', 'Um colega');
           }
-          
-          setSubscribers(prev => {
-            const idx = prev.findIndex(s => s.subscriber_id === updatedSub.subscriber_id);
-            if (idx === -1) return prev;
-            const updated = [...prev];
-            updated[idx] = { ...updated[idx], ...updatedSub };
-            return updated;
-          });
-        }
-      )
-      .subscribe();
+        )
+        .subscribe((status) => {
+          console.log('[Realtime] Messages channel status:', status);
+          if (status === 'CHANNEL_ERROR') {
+            console.error('[Realtime] Messages channel error, will retry...');
+          }
+        });
+
+      // Subscribers channel
+      const subscribersChannel = supabase
+        .channel(`manychat-subs-${Date.now()}`, {
+          config: { broadcast: { self: true } }
+        })
+        .on('postgres_changes', 
+          { event: '*', schema: 'public', table: 'manychat_subscribers' },
+          (payload) => {
+            console.log('[Realtime] Subscriber evento:', payload.eventType, payload);
+            
+            if (payload.eventType === 'INSERT') {
+              const newSub = payload.new as Subscriber;
+              setSubscribers(prev => {
+                if (prev.some(s => s.subscriber_id === newSub.subscriber_id)) return prev;
+                return [newSub, ...prev];
+              });
+            } else if (payload.eventType === 'UPDATE') {
+              const updatedSub = payload.new as Subscriber;
+              const oldSub = payload.old as Subscriber;
+              
+              // Check if conversation was assigned to current user
+              if (updatedSub.assigned_to === user?.id && oldSub?.assigned_to !== user?.id) {
+                notifyAssignment(updatedSub.nome || 'Contato', 'Um colega');
+              }
+              
+              setSubscribers(prev => {
+                const idx = prev.findIndex(s => s.subscriber_id === updatedSub.subscriber_id);
+                if (idx === -1) return prev;
+                const updated = [...prev];
+                updated[idx] = { ...updated[idx], ...updatedSub };
+                return updated;
+              });
+              
+              // Update selected subscriber if it's the current one
+              if (selectedSubscriber?.subscriber_id === updatedSub.subscriber_id) {
+                setSelectedSubscriber(prev => prev ? { ...prev, ...updatedSub } : null);
+              }
+            }
+          }
+        )
+        .subscribe((status) => {
+          console.log('[Realtime] Subscribers channel status:', status);
+        });
+
+      return { messagesChannel, subscribersChannel };
+    };
+
+    const { messagesChannel, subscribersChannel } = setupChannels();
 
     return () => {
+      isSubscribed = false;
+      console.log('[ManyChatInbox] Removendo canais realtime...');
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(subscribersChannel);
     };
@@ -431,6 +495,21 @@ const ManyChatInboxContent = () => {
     const content = mediaUrl || newMessage.trim();
     if (!content || !selectedSubscriber) return;
 
+    // Optimistic update - show message immediately
+    const tempId = `temp_${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: tempId,
+      conteudo: content,
+      created_at: new Date().toISOString(),
+      direcao: 'saida',
+      tipo: mediaType || 'text',
+    };
+    
+    setMessages(prev => [...prev, optimisticMessage]);
+    setNewMessage('');
+    setTyping(false);
+    scrollToBottom();
+
     setIsSending(true);
     try {
       // Enviar via ManyChat API
@@ -455,13 +534,13 @@ const ManyChatInboxContent = () => {
         console.warn('[Chat] ManyChat retornou erro:', mcResult);
         toast({ 
           title: '⚠️ Atenção', 
-          description: 'Mensagem salva mas pode não ter chegado ao destinatário. Verifique se a conversa está ativa.',
+          description: 'Mensagem salva mas pode não ter chegado ao destinatário.',
           variant: 'destructive'
         });
       }
 
       // Salvar mensagem localmente (sempre, para histórico)
-      await supabase.from('manychat_mensagens' as any).insert({
+      const { data: savedMsg } = await supabase.from('manychat_mensagens' as any).insert({
         subscriber_id: selectedSubscriber.subscriber_id,
         subscriber_nome: selectedSubscriber.nome,
         canal: selectedSubscriber.canal,
@@ -470,7 +549,12 @@ const ManyChatInboxContent = () => {
         direcao: 'saida',
         lead_id: selectedSubscriber.lead_id,
         metadata: { sent_via: 'chat_interface', manychat_status: mcResult?.status }
-      } as any);
+      } as any).select().single();
+
+      // Replace optimistic message with real one
+      if (savedMsg) {
+        setMessages(prev => prev.map(m => m.id === tempId ? savedMsg as Message : m));
+      }
 
       // Registrar interação se houver lead vinculado
       if (selectedSubscriber.lead_id) {
@@ -484,17 +568,18 @@ const ManyChatInboxContent = () => {
         });
       }
 
-      setNewMessage('');
       setSelectedFile(null);
       setPreviewUrl(null);
-      setTyping(false);
 
       // Toast de sucesso apenas se ManyChat confirmou
       if (mcResult?.status === 'success') {
-        toast({ title: '✅ Enviado', description: 'Mensagem entregue ao ManyChat' });
+        toast({ title: '✅ Enviado', description: 'Mensagem entregue' });
       }
     } catch (error: any) {
       console.error('[Chat] Erro ao enviar:', error);
+      // Remove optimistic message on error
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setNewMessage(content); // Restore message
       toast({ 
         title: 'Erro no envio', 
         description: error.message || 'Não foi possível enviar a mensagem', 
