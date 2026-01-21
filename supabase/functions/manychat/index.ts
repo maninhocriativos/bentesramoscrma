@@ -18,8 +18,9 @@ serve(async (req) => {
       throw new Error('MANYCHAT_API_KEY não configurada');
     }
 
-    const { action, subscriberId, message, searchTerm } = await req.json();
-    console.log(`ManyChat action: ${action}`, { subscriberId, searchTerm });
+    const body = await req.json();
+    const { action, subscriberId, message, searchTerm, type } = body;
+    console.log(`[ManyChat] Action: ${action}`, { subscriberId, type, messageLength: message?.length });
 
     const headers = {
       'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
@@ -30,7 +31,6 @@ serve(async (req) => {
 
     switch (action) {
       case 'buscar_por_nome': {
-        // Busca subscribers por nome
         const url = new URL(`${MANYCHAT_API_URL}/fb/subscriber/findByName`);
         url.searchParams.append('name', searchTerm);
         
@@ -40,7 +40,7 @@ serve(async (req) => {
         });
         
         const data = await response.json();
-        console.log('Busca por nome:', data);
+        console.log('[ManyChat] Busca por nome:', data.status);
         
         if (data.status === 'success' && data.data) {
           result = {
@@ -61,7 +61,6 @@ serve(async (req) => {
       }
 
       case 'buscar_por_telefone': {
-        // Busca subscriber por telefone
         const url = new URL(`${MANYCHAT_API_URL}/fb/subscriber/findBySystemField`);
         url.searchParams.append('field_name', 'phone');
         url.searchParams.append('field_value', searchTerm);
@@ -72,13 +71,12 @@ serve(async (req) => {
         });
         
         const data = await response.json();
-        console.log('Busca por telefone:', data);
+        console.log('[ManyChat] Busca por telefone:', data.status);
         result = data;
         break;
       }
 
       case 'buscar_subscriber': {
-        // Busca informações de um subscriber específico por ID
         const url = new URL(`${MANYCHAT_API_URL}/fb/subscriber/getInfo`);
         url.searchParams.append('subscriber_id', subscriberId);
         
@@ -88,9 +86,8 @@ serve(async (req) => {
         });
         
         const data = await response.json();
-        console.log('Subscriber info raw:', JSON.stringify(data));
+        console.log('[ManyChat] Subscriber info:', data.status);
         
-        // Normalizar resposta para extrair nome corretamente
         if (data.status === 'success' && data.data) {
           const sub = data.data;
           const nome = sub.name || `${sub.first_name || ''} ${sub.last_name || ''}`.trim() || null;
@@ -113,33 +110,126 @@ serve(async (req) => {
       }
 
       case 'enviar_mensagem': {
-        // Envia mensagem para um subscriber
-        const response = await fetch(`${MANYCHAT_API_URL}/fb/sending/sendContent`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            subscriber_id: subscriberId,
-            data: {
-              version: 'v2',
-              content: {
-                messages: [
-                  {
-                    type: 'text',
-                    text: message,
-                  },
-                ],
-              },
-            },
-          }),
-        });
+        // Tentar primeiro com sendContent (dentro da janela de 24h)
+        console.log(`[ManyChat] Enviando mensagem para subscriber ${subscriberId}`);
         
-        result = await response.json();
-        console.log('Mensagem enviada:', result);
+        let sendSuccess = false;
+        let sendResult: any = null;
+
+        // Método 1: sendContent (para conversas ativas - janela 24h)
+        try {
+          const contentResponse = await fetch(`${MANYCHAT_API_URL}/fb/sending/sendContent`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              subscriber_id: parseInt(subscriberId) || subscriberId,
+              data: {
+                version: 'v2',
+                content: {
+                  messages: [
+                    {
+                      type: 'text',
+                      text: message,
+                    },
+                  ],
+                },
+              },
+            }),
+          });
+          
+          sendResult = await contentResponse.json();
+          console.log('[ManyChat] sendContent response:', JSON.stringify(sendResult));
+          
+          if (sendResult.status === 'success') {
+            sendSuccess = true;
+          }
+        } catch (e) {
+          console.log('[ManyChat] sendContent failed:', e);
+        }
+
+        // Método 2: sendFlow com message_tag se sendContent falhou (fora da janela 24h)
+        if (!sendSuccess) {
+          console.log('[ManyChat] Tentando com message_tag ACCOUNT_UPDATE...');
+          try {
+            const taggedResponse = await fetch(`${MANYCHAT_API_URL}/fb/sending/sendContent`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                subscriber_id: parseInt(subscriberId) || subscriberId,
+                message_tag: 'ACCOUNT_UPDATE',
+                data: {
+                  version: 'v2',
+                  content: {
+                    messages: [
+                      {
+                        type: 'text',
+                        text: message,
+                      },
+                    ],
+                  },
+                },
+              }),
+            });
+            
+            sendResult = await taggedResponse.json();
+            console.log('[ManyChat] sendContent with tag response:', JSON.stringify(sendResult));
+            
+            if (sendResult.status === 'success') {
+              sendSuccess = true;
+            }
+          } catch (e) {
+            console.log('[ManyChat] sendContent with tag failed:', e);
+          }
+        }
+
+        // Método 3: API direta de WhatsApp se disponível
+        if (!sendSuccess && body.phone) {
+          console.log('[ManyChat] Tentando via WhatsApp API...');
+          try {
+            // Para WhatsApp, usar endpoint específico se disponível
+            const waResponse = await fetch(`${MANYCHAT_API_URL}/fb/sending/sendContent`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                subscriber_id: parseInt(subscriberId) || subscriberId,
+                data: {
+                  version: 'v2',
+                  content: {
+                    type: 'whatsapp',
+                    messages: [
+                      {
+                        type: 'text',
+                        text: message,
+                      },
+                    ],
+                  },
+                },
+              }),
+            });
+            
+            const waResult = await waResponse.json();
+            console.log('[ManyChat] WhatsApp response:', JSON.stringify(waResult));
+            
+            if (waResult.status === 'success') {
+              sendSuccess = true;
+              sendResult = waResult;
+            }
+          } catch (e) {
+            console.log('[ManyChat] WhatsApp send failed:', e);
+          }
+        }
+
+        result = sendResult || { status: 'error', message: 'Falha ao enviar mensagem' };
+        
+        if (sendSuccess) {
+          console.log('[ManyChat] ✅ Mensagem enviada com sucesso');
+        } else {
+          console.log('[ManyChat] ❌ Falha no envio:', result);
+        }
         break;
       }
 
       case 'buscar_tags': {
-        // Busca todas as tags disponíveis
         const response = await fetch(`${MANYCHAT_API_URL}/fb/page/getTags`, {
           method: 'GET',
           headers,
@@ -149,7 +239,6 @@ serve(async (req) => {
       }
 
       case 'adicionar_tag': {
-        const body = await req.json();
         const response = await fetch(`${MANYCHAT_API_URL}/fb/subscriber/addTag`, {
           method: 'POST',
           headers,
@@ -171,7 +260,7 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Erro ManyChat:', error);
+    console.error('[ManyChat] Erro:', error);
     return new Response(
       JSON.stringify({ 
         status: 'error', 

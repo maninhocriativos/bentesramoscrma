@@ -433,15 +433,34 @@ const ManyChatInboxContent = () => {
 
     setIsSending(true);
     try {
-      await supabase.functions.invoke('manychat', {
+      // Enviar via ManyChat API
+      const { data: mcResult, error: mcError } = await supabase.functions.invoke('manychat', {
         body: {
           action: 'enviar_mensagem',
           subscriberId: selectedSubscriber.subscriber_id,
           message: content,
           type: mediaType || 'text',
+          phone: selectedSubscriber.telefone,
         },
       });
 
+      console.log('[Chat] ManyChat response:', mcResult, mcError);
+
+      // Verificar se houve erro no envio
+      if (mcError) {
+        throw new Error(mcError.message || 'Erro ao enviar via ManyChat');
+      }
+
+      if (mcResult?.status === 'error') {
+        console.warn('[Chat] ManyChat retornou erro:', mcResult);
+        toast({ 
+          title: '⚠️ Atenção', 
+          description: 'Mensagem salva mas pode não ter chegado ao destinatário. Verifique se a conversa está ativa.',
+          variant: 'destructive'
+        });
+      }
+
+      // Salvar mensagem localmente (sempre, para histórico)
       await supabase.from('manychat_mensagens' as any).insert({
         subscriber_id: selectedSubscriber.subscriber_id,
         subscriber_nome: selectedSubscriber.nome,
@@ -450,8 +469,10 @@ const ManyChatInboxContent = () => {
         tipo: mediaType || 'text',
         direcao: 'saida',
         lead_id: selectedSubscriber.lead_id,
+        metadata: { sent_via: 'chat_interface', manychat_status: mcResult?.status }
       } as any);
 
+      // Registrar interação se houver lead vinculado
       if (selectedSubscriber.lead_id) {
         await supabase.from('interacoes').insert({
           cliente_id: selectedSubscriber.lead_id,
@@ -467,8 +488,18 @@ const ManyChatInboxContent = () => {
       setSelectedFile(null);
       setPreviewUrl(null);
       setTyping(false);
-    } catch (error) {
-      toast({ title: 'Erro', description: 'Não foi possível enviar', variant: 'destructive' });
+
+      // Toast de sucesso apenas se ManyChat confirmou
+      if (mcResult?.status === 'success') {
+        toast({ title: '✅ Enviado', description: 'Mensagem entregue ao ManyChat' });
+      }
+    } catch (error: any) {
+      console.error('[Chat] Erro ao enviar:', error);
+      toast({ 
+        title: 'Erro no envio', 
+        description: error.message || 'Não foi possível enviar a mensagem', 
+        variant: 'destructive' 
+      });
     } finally {
       setIsSending(false);
     }
