@@ -1092,11 +1092,17 @@ export type Database = {
       }
       leads_juridicos: {
         Row: {
+          bairro: string | null
+          cep: string | null
+          cidade: string | null
           contract_key: string | null
           contract_sent_at: string | null
           contract_signed_at: string | null
+          cpf: string | null
           created_at: string
           email: string | null
+          endereco: string | null
+          estado_civil: string | null
           id: string
           is_lost: boolean | null
           last_contact_at: string | null
@@ -1104,23 +1110,34 @@ export type Database = {
           link_contrato: string | null
           lost_at: string | null
           lost_reason: string | null
+          nacionalidade: string | null
           nome: string | null
+          numero: string | null
           origem: string | null
+          profissao: string | null
           resumo_ia: string | null
+          rg: string | null
           state_updated_at: string | null
           status: string | null
           telefone: string | null
           tipo_acao: string | null
           triage_started_at: string | null
+          uf: string | null
           updated_at: string | null
           valor_causa: number | null
         }
         Insert: {
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
           contract_key?: string | null
           contract_sent_at?: string | null
           contract_signed_at?: string | null
+          cpf?: string | null
           created_at?: string
           email?: string | null
+          endereco?: string | null
+          estado_civil?: string | null
           id?: string
           is_lost?: boolean | null
           last_contact_at?: string | null
@@ -1128,23 +1145,34 @@ export type Database = {
           link_contrato?: string | null
           lost_at?: string | null
           lost_reason?: string | null
+          nacionalidade?: string | null
           nome?: string | null
+          numero?: string | null
           origem?: string | null
+          profissao?: string | null
           resumo_ia?: string | null
+          rg?: string | null
           state_updated_at?: string | null
           status?: string | null
           telefone?: string | null
           tipo_acao?: string | null
           triage_started_at?: string | null
+          uf?: string | null
           updated_at?: string | null
           valor_causa?: number | null
         }
         Update: {
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
           contract_key?: string | null
           contract_sent_at?: string | null
           contract_signed_at?: string | null
+          cpf?: string | null
           created_at?: string
           email?: string | null
+          endereco?: string | null
+          estado_civil?: string | null
           id?: string
           is_lost?: boolean | null
           last_contact_at?: string | null
@@ -1152,14 +1180,19 @@ export type Database = {
           link_contrato?: string | null
           lost_at?: string | null
           lost_reason?: string | null
+          nacionalidade?: string | null
           nome?: string | null
+          numero?: string | null
           origem?: string | null
+          profissao?: string | null
           resumo_ia?: string | null
+          rg?: string | null
           state_updated_at?: string | null
           status?: string | null
           telefone?: string | null
           tipo_acao?: string | null
           triage_started_at?: string | null
+          uf?: string | null
           updated_at?: string | null
           valor_causa?: number | null
         }
@@ -1985,6 +2018,44 @@ export type Database = {
           {
             foreignKeyName: "processos_cliente_id_fkey"
             columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      procuracoes: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          html_content: string
+          id: string
+          lead_id: string | null
+          objetivo: string | null
+          pdf_url: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          html_content: string
+          id?: string
+          lead_id?: string | null
+          objetivo?: string | null
+          pdf_url?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          html_content?: string
+          id?: string
+          lead_id?: string | null
+          objetivo?: string | null
+          pdf_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "procuracoes_lead_id_fkey"
+            columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads_juridicos"
             referencedColumns: ["id"]
