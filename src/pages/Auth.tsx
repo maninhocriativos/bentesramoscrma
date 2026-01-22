@@ -8,9 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { UserPlus, Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { UserPlus, Loader2, ArrowLeft, Mail, CheckCircle } from 'lucide-react';
 import logo from '@/assets/logo-bentes-ramos.png';
 
 // Schema for login - simpler validation
@@ -42,42 +44,61 @@ export default function Auth() {
   const invitedEmail = searchParams.get('email') || '';
   const isInvited = !!invitedEmail;
   
+  // Check if this is a password reset flow
+  const isPasswordReset = location.hash.includes('type=recovery');
+  
   const [email, setEmail] = useState(invitedEmail);
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [activeTab, setActiveTab] = useState(isInvited ? 'register' : 'login');
   const [isProcessingOAuth, setIsProcessingOAuth] = useState(false);
+  
+  // Forgot password states
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotEmailSent, setForgotEmailSent] = useState(false);
+  const [sendingResetEmail, setSendingResetEmail] = useState(false);
+  
+  // Password reset states
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resettingPassword, setResettingPassword] = useState(false);
 
-  // Handle OAuth callback - check for hash fragment with tokens
+  // Handle OAuth callback and password reset - check for hash fragment with tokens
   useEffect(() => {
     const hashParams = new URLSearchParams(location.hash.substring(1));
     const accessToken = hashParams.get('access_token');
     const errorDescription = hashParams.get('error_description');
+    const type = hashParams.get('type');
     
     if (errorDescription) {
       toast({
-        title: 'Erro no login',
+        title: 'Erro',
         description: decodeURIComponent(errorDescription),
         variant: 'destructive',
       });
-      // Clear the hash
       window.history.replaceState(null, '', location.pathname);
+      return;
+    }
+    
+    // Handle password recovery flow
+    if (type === 'recovery' && accessToken) {
+      setShowResetPassword(true);
       return;
     }
     
     if (accessToken) {
       setIsProcessingOAuth(true);
-      // The Supabase client will automatically handle the token from the hash
-      // Just wait for the auth state to update
     }
   }, [location.hash, toast, location.pathname]);
 
   useEffect(() => {
-    if (user && !loading) {
+    if (user && !loading && !showResetPassword) {
       navigate('/dashboard', { replace: true });
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, showResetPassword]);
 
   const validateForm = (isRegistration = false) => {
     const schema = isRegistration ? registerSchema : loginSchema;
@@ -156,6 +177,97 @@ export default function Auth() {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!forgotEmail || !z.string().email().safeParse(forgotEmail).success) {
+      toast({
+        title: 'Email inválido',
+        description: 'Por favor, insira um email válido.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSendingResetEmail(true);
+    
+    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+      redirectTo: `${window.location.origin}/auth`,
+    });
+
+    setSendingResetEmail(false);
+
+    if (error) {
+      toast({
+        title: 'Erro ao enviar email',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } else {
+      setForgotEmailSent(true);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (newPassword.length < 8) {
+      toast({
+        title: 'Senha muito curta',
+        description: 'A senha deve ter no mínimo 8 caracteres.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: 'Senhas não conferem',
+        description: 'As senhas digitadas não são iguais.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate password strength
+    const passwordResult = registerSchema.shape.password.safeParse(newPassword);
+    if (!passwordResult.success) {
+      toast({
+        title: 'Senha fraca',
+        description: passwordResult.error.errors[0]?.message || 'Senha não atende aos requisitos.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setResettingPassword(true);
+
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    setResettingPassword(false);
+
+    if (error) {
+      toast({
+        title: 'Erro ao redefinir senha',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: 'Senha redefinida!',
+        description: 'Sua senha foi alterada com sucesso.',
+      });
+      setShowResetPassword(false);
+      setNewPassword('');
+      setConfirmPassword('');
+      // Clear hash from URL
+      window.history.replaceState(null, '', location.pathname);
+      navigate('/dashboard', { replace: true });
+    }
+  };
+
   // Show loading while checking auth state or processing OAuth callback
   if (loading || isProcessingOAuth) {
     return (
@@ -166,6 +278,77 @@ export default function Auth() {
             {isProcessingOAuth ? 'Processando login...' : 'Carregando...'}
           </p>
         </div>
+      </div>
+    );
+  }
+
+  // Password Reset Dialog
+  if (showResetPassword) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-md rounded-2xl shadow-soft-lg animate-fade-in">
+          <CardHeader className="text-center pb-2">
+            <div className="flex justify-center mb-4">
+              <img 
+                src={logo} 
+                alt="Bentes Ramos" 
+                className="h-[80px] w-auto object-contain"
+              />
+            </div>
+            <CardDescription className="text-lg font-medium text-foreground">
+              Redefinir Senha
+            </CardDescription>
+          </CardHeader>
+          
+          <CardContent>
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <div>
+                <Label htmlFor="new-password">Nova Senha</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="rounded-xl"
+                  placeholder="Digite sua nova senha"
+                  required
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Mínimo 8 caracteres, com letra maiúscula, minúscula e número
+                </p>
+              </div>
+              
+              <div>
+                <Label htmlFor="confirm-password">Confirmar Senha</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="rounded-xl"
+                  placeholder="Confirme sua nova senha"
+                  required
+                />
+              </div>
+              
+              <Button 
+                type="submit" 
+                className="w-full rounded-xl"
+                disabled={resettingPassword}
+              >
+                {resettingPassword ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Redefinindo...
+                  </>
+                ) : (
+                  'Redefinir Senha'
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -257,7 +440,19 @@ export default function Auth() {
                 </div>
                 
                 <div>
-                  <Label htmlFor="login-password">Senha</Label>
+                  <div className="flex justify-between items-center mb-1">
+                    <Label htmlFor="login-password">Senha</Label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotEmail(email);
+                        setShowForgotPassword(true);
+                      }}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Esqueci minha senha
+                    </button>
+                  </div>
                   <Input
                     id="login-password"
                     type="password"
@@ -319,7 +514,7 @@ export default function Auth() {
                   )}
                 </div>
 
-                <Alert className="bg-amber-50 border-amber-200 text-amber-800">
+                <Alert className="bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-400">
                   <AlertDescription className="text-xs">
                     Após o cadastro, sua conta precisará ser aprovada por um administrador antes de você poder acessar o sistema.
                   </AlertDescription>
@@ -363,6 +558,108 @@ export default function Auth() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Forgot Password Dialog */}
+      <Dialog open={showForgotPassword} onOpenChange={(open) => {
+        setShowForgotPassword(open);
+        if (!open) {
+          setForgotEmailSent(false);
+          setForgotEmail('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {forgotEmailSent ? (
+                <>
+                  <CheckCircle className="h-5 w-5 text-emerald-500" />
+                  Email Enviado
+                </>
+              ) : (
+                <>
+                  <Mail className="h-5 w-5" />
+                  Recuperar Senha
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {forgotEmailSent 
+                ? 'Verifique sua caixa de entrada para continuar.'
+                : 'Informe seu email para receber um link de redefinição de senha.'
+              }
+            </DialogDescription>
+          </DialogHeader>
+
+          {forgotEmailSent ? (
+            <div className="space-y-4">
+              <Alert className="bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400">
+                <CheckCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Um email foi enviado para <strong>{forgotEmail}</strong> com instruções para redefinir sua senha.
+                </AlertDescription>
+              </Alert>
+              <p className="text-sm text-muted-foreground">
+                Não recebeu o email? Verifique sua pasta de spam ou{' '}
+                <button
+                  type="button"
+                  onClick={() => setForgotEmailSent(false)}
+                  className="text-primary hover:underline"
+                >
+                  tente novamente
+                </button>
+              </p>
+              <Button 
+                onClick={() => setShowForgotPassword(false)}
+                className="w-full rounded-xl"
+              >
+                Voltar ao Login
+              </Button>
+            </div>
+          ) : (
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div>
+                <Label htmlFor="forgot-email">Email</Label>
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  className="rounded-xl"
+                  placeholder="seu@email.com"
+                  required
+                  autoFocus
+                />
+              </div>
+              
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowForgotPassword(false)}
+                  className="flex-1 rounded-xl"
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Voltar
+                </Button>
+                <Button 
+                  type="submit" 
+                  className="flex-1 rounded-xl"
+                  disabled={sendingResetEmail}
+                >
+                  {sendingResetEmail ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    'Enviar Link'
+                  )}
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
