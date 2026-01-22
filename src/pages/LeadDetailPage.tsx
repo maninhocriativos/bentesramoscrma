@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Phone, Mail, Calendar, Globe, FileText, MessageSquare, Scale, DollarSign, User } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, Calendar, Globe, FileText, MessageSquare, Scale, DollarSign, User, ScrollText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Lead } from '@/types/leads';
 import { AppLayout } from '@/components/layouts/AppLayout';
@@ -14,6 +14,7 @@ import { LeadDocumentosTab } from '@/components/leads/LeadDocumentosTab';
 import { LeadProcessosTab } from '@/components/leads/LeadProcessosTab';
 import { LeadFinanceiroTab } from '@/components/leads/LeadFinanceiroTab';
 import { LeadContractsSection } from '@/components/leads/LeadContractsSection';
+import { ProcuracaoModal } from '@/components/leads/ProcuracaoModal';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -32,6 +33,7 @@ export default function LeadDetailPage() {
   const navigate = useNavigate();
   const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
+  const [procuracaoModalOpen, setProcuracaoModalOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -86,6 +88,10 @@ export default function LeadDetailPage() {
               Cliente desde {format(new Date(lead.created_at), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
             </p>
           </div>
+          <Button variant="outline" onClick={() => setProcuracaoModalOpen(true)}>
+            <ScrollText className="h-4 w-4 mr-2" />
+            Gerar Procuração
+          </Button>
           <Badge className={`${statusColors[lead.status]} text-white`}>
             {lead.status}
           </Badge>
@@ -191,6 +197,19 @@ export default function LeadDetailPage() {
             <LeadFinanceiroTab clienteId={lead.id} />
           </TabsContent>
         </Tabs>
+
+        {/* Procuração Modal */}
+        <ProcuracaoModal
+          open={procuracaoModalOpen}
+          onOpenChange={setProcuracaoModalOpen}
+          lead={{
+            id: lead.id,
+            nome: lead.nome,
+            telefone: lead.telefone,
+            email: lead.email,
+            tipo_acao: lead.tipo_acao,
+          }}
+        />
       </div>
     </AppLayout>
   );
