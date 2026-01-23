@@ -1,5 +1,12 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { 
+  enviarMensagemZapi, 
+  getZapiConfig, 
+  sendText,
+  gerarSubscriberId,
+  normalizePhone 
+} from '../_shared/zapi-helper.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,7 +15,6 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const MANYCHAT_API_URL = 'https://api.manychat.com';
 
 // Reminder schedule: 12h, 24h, 48h, 5d (in hours)
 const REMINDER_INTERVALS_HOURS = [12, 24, 48, 120];
@@ -28,107 +34,6 @@ const CONTRACT_MESSAGES = {
     `${name}, URGENTE! 🚨\n\nSeu contrato está pendente há 5 dias. *Sem a assinatura, não podemos iniciar os trabalhos.*\n\n🔗 ASSINE AGORA: ${link}\n\nPor favor, priorize isso hoje! Se houver algum problema ou dúvida, me avise.\n\n*Bentes & Ramos Advocacia*`,
 };
 
-async function sendViaZapi(
-  supabase: any,
-  phone: string,
-  message: string,
-  leadId?: string
-): Promise<boolean> {
-  const { data: config } = await supabase
-    .from('integrations_config')
-    .select('*')
-    .eq('provider', 'zapi')
-    .single();
-
-  if (!config?.is_active) {
-    console.log('[Contract Auto Reminder] Z-API not active');
-    return false;
-  }
-
-  const instanceId = config.config_json?.instance_id;
-  const token = config.config_json?.token;
-
-  if (!instanceId || !token) {
-    console.log('[Contract Auto Reminder] Z-API credentials missing');
-    return false;
-  }
-
-  let cleanPhone = phone.replace(/\D/g, '');
-  if (cleanPhone.length === 10 || cleanPhone.length === 11) {
-    cleanPhone = '55' + cleanPhone;
-  }
-
-  try {
-    console.log(`[Contract Auto Reminder] Sending via Z-API to ${cleanPhone}`);
-    
-    const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: cleanPhone, message })
-    });
-
-    const data = await response.json();
-    
-    if (response.ok && !data.error) {
-      if (leadId) {
-        await supabase.from('manychat_mensagens').insert({
-          subscriber_id: `zapi_${cleanPhone}`,
-          lead_id: leadId,
-          conteudo: message,
-          direcao: 'saida',
-          tipo: 'text',
-          subscriber_nome: 'Sistema',
-          canal: 'whatsapp',
-          metadata: { source: 'zapi', context: 'contract_auto_reminder' }
-        });
-      }
-      return true;
-    }
-    console.log('[Contract Auto Reminder] Z-API error:', data);
-    return false;
-  } catch (error) {
-    console.error('[Contract Auto Reminder] Z-API error:', error);
-    return false;
-  }
-}
-
-async function sendManyChatMessage(
-  subscriberId: string,
-  message: string
-): Promise<{ success: boolean; code?: number }> {
-  const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY');
-  
-  if (!MANYCHAT_API_KEY) {
-    console.log('[Contract Auto Reminder] MANYCHAT_API_KEY not configured');
-    return { success: false };
-  }
-
-  try {
-    const response = await fetch(`${MANYCHAT_API_URL}/fb/sending/sendContent`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        subscriber_id: parseInt(subscriberId),
-        data: {
-          version: 'v2',
-          content: {
-            messages: [{ type: 'text', text: message }],
-          },
-        },
-      }),
-    });
-
-    const result = await response.json();
-    return { success: result.status === 'success', code: result.code };
-  } catch (error) {
-    console.error('[Contract Auto Reminder] Error:', error);
-    return { success: false };
-  }
-}
-
 serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -138,7 +43,19 @@ serve(async (req: Request): Promise<Response> => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const now = new Date();
     
-    console.log(`[Contract Reminder] Processing reminders at ${now.toISOString()}`);
+    console.log(`[Contract Reminder Z-API] Processing reminders at ${now.toISOString()}`);
+
+    // Verificar se Z-API está configurado
+    const zapiConfig = await getZapiConfig(supabase);
+    if (!zapiConfig) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Z-API não configurado ou inativo' 
+      }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
 
     // Get pending reminders that are due
     const { data: pendingReminders, error } = await supabase
@@ -182,19 +99,9 @@ serve(async (req: Request): Promise<Response> => {
         continue;
       }
 
-      // Get subscriber for sending message
-      let subscriber = null;
-      if (lead) {
-        const { data: sub } = await supabase
-          .from('manychat_subscribers')
-          .select('subscriber_id, nome')
-          .eq('lead_id', lead.id)
-          .single();
-        subscriber = sub;
-      }
-
-      if (!subscriber) {
-        console.log(`[Contract Reminder] No subscriber found for ${reminder.document_key}`);
+      // Verificar se lead tem telefone
+      if (!lead?.telefone) {
+        console.log(`[Contract Reminder] No phone for ${reminder.document_key}`);
         skipped++;
         continue;
       }
@@ -213,22 +120,11 @@ serve(async (req: Request): Promise<Response> => {
         case 3: message = CONTRACT_MESSAGES.reminder_5d(clientName, contractLink); break;
       }
 
-      // Try ManyChat first, then Z-API as fallback
-      let sendResult = await sendManyChatMessage(subscriber.subscriber_id, message);
-      let success = sendResult.success;
-      let sentVia = 'manychat';
+      // Enviar via Z-API
+      const result = await sendText(zapiConfig, lead.telefone, message);
 
-      // If ManyChat fails due to 24h window (code 3011), try Z-API
-      if (!success && sendResult.code === 3011 && lead?.telefone) {
-        console.log(`[Contract Auto Reminder] ManyChat 24h expired for ${reminder.document_key}, trying Z-API...`);
-        success = await sendViaZapi(supabase, lead.telefone, message, lead.id);
-        sentVia = 'zapi';
-      }
-
-      if (success) {
-        console.log(`[Contract Auto Reminder] Sent via ${sentVia}`);
-        
-        console.log(`[Contract Reminder] Sent ${stageName} reminder for ${reminder.document_key}`);
+      if (result.success) {
+        console.log(`[Contract Reminder] ✅ Sent ${stageName} via Z-API for ${reminder.document_key}`);
 
         // Calculate next reminder
         const nextStage = stage + 1;
@@ -254,44 +150,45 @@ serve(async (req: Request): Promise<Response> => {
           })
           .eq('id', reminder.id);
 
-        // Record in manychat_mensagens
-        if (lead) {
-          await supabase.from('manychat_mensagens').insert({
-            subscriber_id: subscriber.subscriber_id,
-            lead_id: lead.id,
-            conteudo: message,
-            direcao: 'saida',
-            tipo: 'text',
-            subscriber_nome: subscriber.nome,
-          });
+        // Record in manychat_mensagens (usando tabela existente como histórico unificado)
+        await supabase.from('manychat_mensagens').insert({
+          subscriber_id: gerarSubscriberId(lead.telefone),
+          lead_id: lead.id,
+          conteudo: message,
+          direcao: 'saida',
+          tipo: 'text',
+          subscriber_nome: lead.nome || 'Cliente',
+          canal: 'whatsapp',
+          metadata: { source: 'zapi', context: 'contract_auto_reminder', stage: stageName }
+        });
 
-          // Record interaction
-          await supabase.from('interacoes').insert({
-            cliente_id: lead.id,
-            tipo: 'WhatsApp',
-            resumo: `Cobrança automática de contrato (${stageName})`,
-            detalhes: `Mensagem automática enviada para cobrar assinatura do contrato. Estágio: ${stageName}. Link: ${contractLink}`,
-            direcao: 'Saída',
-          });
-        }
+        // Record interaction
+        await supabase.from('interacoes').insert({
+          cliente_id: lead.id,
+          tipo: 'WhatsApp',
+          resumo: `Cobrança automática de contrato (${stageName}) via Z-API`,
+          detalhes: `Mensagem automática enviada para cobrar assinatura do contrato. Estágio: ${stageName}. Link: ${contractLink}`,
+          direcao: 'Saída',
+        });
 
         // Log system event
         await supabase.from('system_events').insert({
           tipo: 'contrato',
           acao: `auto_reminder_${stageName}`,
-          fonte: 'contract-auto-reminder',
+          fonte: 'zapi-contract-reminder',
           lead_id: lead?.id,
           dados: {
             document_key: reminder.document_key,
             stage: stage,
             stage_name: stageName,
-            subscriber_id: subscriber.subscriber_id,
+            provider: 'zapi',
+            phone: normalizePhone(lead.telefone)
           }
         });
 
         sent++;
       } else {
-        console.log(`[Contract Reminder] Failed to send for ${reminder.document_key}`);
+        console.log(`[Contract Reminder] ❌ Failed for ${reminder.document_key}: ${result.error}`);
         failed++;
       }
     }
@@ -301,6 +198,7 @@ serve(async (req: Request): Promise<Response> => {
       sent,
       skipped,
       failed,
+      provider: 'zapi',
       timestamp: now.toISOString(),
     };
 

@@ -11,6 +11,11 @@ import {
   getInicioAmanhaUtc,
   MANAUS_TIMEZONE
 } from '../_shared/timezone-helpers.ts';
+import { 
+  getZapiConfig, 
+  sendText,
+  gerarSubscriberId 
+} from '../_shared/zapi-helper.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,122 +24,61 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY');
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 
-// Função para enviar mensagem WhatsApp via ManyChat (dentro da janela de 24h)
-async function enviarWhatsApp(subscriberId: string, mensagem: string): Promise<{ success: boolean; usouTemplate: boolean }> {
-  if (!MANYCHAT_API_KEY) {
-    console.error('MANYCHAT_API_KEY não configurada');
-    return { success: false, usouTemplate: false };
+// Função para enviar mensagem WhatsApp via Z-API
+async function enviarWhatsApp(
+  supabase: any,
+  phone: string, 
+  mensagem: string,
+  leadId?: string,
+  leadNome?: string
+): Promise<{ success: boolean; metodo: string }> {
+  const config = await getZapiConfig(supabase);
+  
+  if (!config) {
+    console.error('[ISA-SCHEDULER] Z-API não configurado');
+    return { success: false, metodo: 'falhou' };
   }
 
-  try {
-    const response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        subscriber_id: parseInt(subscriberId),
-        data: {
-          version: 'v2',
-          content: {
-            messages: [{ type: 'text', text: mensagem }],
-          },
-        },
-      }),
+  const result = await sendText(config, phone, mensagem);
+  
+  if (result.success && leadId) {
+    // Registrar mensagem
+    await supabase.from('manychat_mensagens').insert({
+      subscriber_id: gerarSubscriberId(phone),
+      subscriber_nome: leadNome || 'Cliente',
+      lead_id: leadId,
+      conteudo: mensagem,
+      direcao: 'saida',
+      tipo: 'text',
+      canal: 'whatsapp',
+      metadata: { source: 'zapi', context: 'isa_scheduler' }
     });
-
-    const result = await response.json();
-    console.log('WhatsApp sendContent:', result);
-    
-    // Se sucesso, retorna
-    if (result.status === 'success') {
-      return { success: true, usouTemplate: false };
-    }
-    
-    // Se falhou por janela de 24h (código 3011), retorna para tentar via Flow
-    if (result.code === 3011 || result.message?.includes('24 hours')) {
-      console.log('Janela de 24h expirada, precisa usar template');
-      return { success: false, usouTemplate: false };
-    }
-    
-    return { success: false, usouTemplate: false };
-  } catch (error) {
-    console.error('Erro ao enviar WhatsApp:', error);
-    return { success: false, usouTemplate: false };
   }
+
+  return { 
+    success: result.success, 
+    metodo: result.success ? 'zapi' : 'falhou' 
+  };
 }
 
-// Função para enviar via Flow/Template (fora da janela de 24h)
-// Requer flows configurados no ManyChat: "lembrete_1h" e "lembrete_24h"
-async function enviarViaFlow(subscriberId: string, flowNs: string, dados: Record<string, any>): Promise<boolean> {
-  if (!MANYCHAT_API_KEY) {
-    console.error('MANYCHAT_API_KEY não configurada');
-    return false;
-  }
-
-  try {
-    console.log(`Enviando via Flow: subscriber=${subscriberId}, flow=${flowNs}, dados=`, dados);
-    
-    const response = await fetch('https://api.manychat.com/fb/sending/sendFlow', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        subscriber_id: parseInt(subscriberId),
-        flow_ns: flowNs,
-        external_data: dados
-      }),
-    });
-
-    const result = await response.json();
-    console.log('WhatsApp sendFlow:', result);
-    return result.status === 'success';
-  } catch (error) {
-    console.error('Erro ao enviar via Flow:', error);
-    return false;
-  }
-}
-
-// Enviar lembrete com fallback para template quando fora da janela de 24h
+// Enviar lembrete com dados formatados
 async function enviarLembreteCompromisso(
-  subscriberId: string, 
+  supabase: any,
+  phone: string,
   tipoLembrete: '1h' | '24h',
-  dados: { nome: string; titulo: string; dataFormatada: string }
-): Promise<{ enviado: boolean; metodo: 'direto' | 'template' | 'falhou' }> {
+  dados: { nome: string; titulo: string; dataFormatada: string },
+  leadId?: string
+): Promise<{ enviado: boolean; metodo: string }> {
   
   const mensagem = tipoLembrete === '1h'
     ? `⏰ Olá ${dados.nome}! Lembrando que seu atendimento "${dados.titulo}" está marcado para daqui 1 hora (${dados.dataFormatada}). Até logo!`
     : `📅 Olá ${dados.nome}! Passando para lembrar que amanhã você tem um atendimento "${dados.titulo}" marcado para ${dados.dataFormatada}. Confirma sua presença? ✅`;
 
-  // Tenta envio direto primeiro
-  const resultDireto = await enviarWhatsApp(subscriberId, mensagem);
+  const result = await enviarWhatsApp(supabase, phone, mensagem, leadId, dados.nome);
   
-  if (resultDireto.success) {
-    return { enviado: true, metodo: 'direto' };
-  }
-  
-  // Se falhou (provavelmente janela de 24h), tenta via Flow/Template
-  // Namespace do flow configurado no ManyChat
-  const flowNs = tipoLembrete === '1h' ? 'content20260107131615_826623' : 'content20260107131615_826623';
-  
-  console.log(`Tentando envio via template: ${flowNs}`);
-  const resultFlow = await enviarViaFlow(subscriberId, flowNs, {
-    nome: dados.nome,
-    titulo: dados.titulo,
-    data: dados.dataFormatada
-  });
-  
-  if (resultFlow) {
-    return { enviado: true, metodo: 'template' };
-  }
-  
-  return { enviado: false, metodo: 'falhou' };
+  return { enviado: result.success, metodo: result.metodo };
 }
 
 // Função para enviar email via Resend
@@ -208,9 +152,9 @@ serve(async (req) => {
 
   try {
     const { task } = await req.json();
-    console.log(`Isa Scheduler executando task: ${task}`);
+    console.log(`[ISA-SCHEDULER Z-API] Executando task: ${task}`);
 
-    const results: any = { task, timestamp: new Date().toISOString(), actions: [] };
+    const results: any = { task, timestamp: new Date().toISOString(), actions: [], provider: 'zapi' };
 
     // ==================== LEMBRETES DE COMPROMISSOS ====================
     if (task === 'lembretes_compromissos' || task === 'all') {
@@ -235,8 +179,6 @@ serve(async (req) => {
         const lead = comp.leads_juridicos;
 
         // Determinar tipo de lembrete baseado no tempo restante
-        // 24h: entre 23h e 25h antes (primeiro lembrete)
-        // 1h: entre 0 e 90 minutos antes (segundo lembrete - janela ampliada)
         let tipoLembrete = '';
         if (diffMinutos <= 90 && diffMinutos >= 0) tipoLembrete = '1h';
         else if (diffMinutos <= 25 * 60 && diffMinutos >= 23 * 60) tipoLembrete = '24h';
@@ -254,53 +196,47 @@ serve(async (req) => {
 
         if (notificacoesExistentes) continue;
 
-        // Buscar subscriber do lead para enviar WhatsApp
-        if (lead?.id) {
-          const { data: subscriber } = await supabase
-            .from('manychat_subscribers')
-            .select('subscriber_id')
-            .eq('lead_id', lead.id)
-            .single();
+        // Verificar se lead tem telefone
+        if (lead?.telefone) {
+          const dataFormatada = formatarDataHoraExtenso(dataComp);
 
-          if (subscriber?.subscriber_id) {
-            const dataFormatada = formatarDataHoraExtenso(dataComp);
+          const resultado = await enviarLembreteCompromisso(
+            supabase,
+            lead.telefone,
+            tipoLembrete as '1h' | '24h',
+            {
+              nome: lead.nome || 'Cliente',
+              titulo: comp.titulo,
+              dataFormatada
+            },
+            lead.id
+          );
 
-            // Usar a nova função que faz fallback para template
-            const resultado = await enviarLembreteCompromisso(
-              subscriber.subscriber_id,
-              tipoLembrete as '1h' | '24h',
-              {
-                nome: lead.nome || 'Cliente',
-                titulo: comp.titulo,
-                dataFormatada
-              }
-            );
-
-            // Registrar evento
-            await supabase.from('system_events').insert({
-              tipo: 'notificacao',
-              fonte: 'isa_scheduler',
-              acao: `lembrete_${tipoLembrete}`,
-              entidade_tipo: 'compromisso',
-              entidade_id: comp.id,
-              lead_id: lead.id,
-              dados: { 
-                enviado: resultado.enviado, 
-                metodo: resultado.metodo,
-                tipoLembrete,
-                dataFormatada
-              }
-            });
-
-            results.actions.push({
-              tipo: 'lembrete_whatsapp',
+          // Registrar evento
+          await supabase.from('system_events').insert({
+            tipo: 'notificacao',
+            fonte: 'zapi_scheduler',
+            acao: `lembrete_${tipoLembrete}`,
+            entidade_tipo: 'compromisso',
+            entidade_id: comp.id,
+            lead_id: lead.id,
+            dados: { 
+              enviado: resultado.enviado, 
+              metodo: resultado.metodo,
               tipoLembrete,
-              compromisso: comp.titulo,
-              lead: lead.nome,
-              enviado: resultado.enviado,
-              metodo: resultado.metodo
-            });
-          }
+              dataFormatada,
+              provider: 'zapi'
+            }
+          });
+
+          results.actions.push({
+            tipo: 'lembrete_whatsapp',
+            tipoLembrete,
+            compromisso: comp.titulo,
+            lead: lead.nome,
+            enviado: resultado.enviado,
+            metodo: resultado.metodo
+          });
         }
       }
     }
@@ -318,27 +254,19 @@ serve(async (req) => {
         .eq('id', compromissoId)
         .single();
 
-      if (comp?.leads_juridicos) {
+      if (comp?.leads_juridicos?.telefone) {
         const lead = comp.leads_juridicos;
-        const { data: subscriber } = await supabase
-          .from('manychat_subscribers')
-          .select('subscriber_id')
-          .eq('lead_id', lead.id)
-          .single();
+        const dataFormatada = formatarDataHoraExtenso(comp.data_inicio);
 
-        if (subscriber?.subscriber_id) {
-          const dataFormatada = formatarDataHoraExtenso(comp.data_inicio);
+        const mensagem = `✅ ${lead.nome || 'Cliente'}, seu atendimento foi agendado com sucesso!\n\n📋 *${comp.titulo}*\n📅 ${dataFormatada}\n\nCaso precise remarcar, é só nos avisar. Até lá! 👋`;
 
-          const mensagem = `✅ ${lead.nome || 'Cliente'}, seu atendimento foi agendado com sucesso!\n\n📋 *${comp.titulo}*\n📅 ${dataFormatada}\n\nCaso precise remarcar, é só nos avisar. Até lá! 👋`;
+        await enviarWhatsApp(supabase, lead.telefone, mensagem, lead.id, lead.nome);
 
-          await enviarWhatsApp(subscriber.subscriber_id, mensagem);
-
-          results.actions.push({
-            tipo: 'confirmacao_imediata',
-            compromisso: comp.titulo,
-            lead: lead.nome
-          });
-        }
+        results.actions.push({
+          tipo: 'confirmacao_imediata',
+          compromisso: comp.titulo,
+          lead: lead.nome
+        });
       }
     }
 
@@ -352,14 +280,14 @@ serve(async (req) => {
         .from('compromissos')
         .select(`
           *,
-          leads_juridicos!compromissos_lead_id_fkey (id, nome)
+          leads_juridicos!compromissos_lead_id_fkey (id, nome, telefone)
         `)
         .lte('data_fim', agora.toISOString())
         .gte('data_fim', ontem.toISOString());
 
       for (const comp of compromissos || []) {
         const lead = comp.leads_juridicos;
-        if (!lead?.id) continue;
+        if (!lead?.id || !lead?.telefone) continue;
 
         // Verificar se já foi enviado
         const { data: jaEnviado } = await supabase
@@ -372,33 +300,25 @@ serve(async (req) => {
 
         if (jaEnviado) continue;
 
-        const { data: subscriber } = await supabase
-          .from('manychat_subscribers')
-          .select('subscriber_id')
-          .eq('lead_id', lead.id)
-          .single();
+        const mensagem = `Olá ${lead.nome || ''}! 😊\n\nEsperamos que seu atendimento "${comp.titulo}" tenha sido produtivo.\n\nComo podemos ajudá-lo(a) a partir de agora? Estamos à disposição para qualquer dúvida. 💼`;
 
-        if (subscriber?.subscriber_id) {
-          const mensagem = `Olá ${lead.nome || ''}! 😊\n\nEsperamos que seu atendimento "${comp.titulo}" tenha sido produtivo.\n\nComo podemos ajudá-lo(a) a partir de agora? Estamos à disposição para qualquer dúvida. 💼`;
+        await enviarWhatsApp(supabase, lead.telefone, mensagem, lead.id, lead.nome);
 
-          await enviarWhatsApp(subscriber.subscriber_id, mensagem);
+        await supabase.from('system_events').insert({
+          tipo: 'notificacao',
+          fonte: 'zapi_scheduler',
+          acao: 'followup_pos_atendimento',
+          entidade_tipo: 'compromisso',
+          entidade_id: comp.id,
+          lead_id: lead.id,
+          dados: { enviado: true, provider: 'zapi' }
+        });
 
-          await supabase.from('system_events').insert({
-            tipo: 'notificacao',
-            fonte: 'isa_scheduler',
-            acao: 'followup_pos_atendimento',
-            entidade_tipo: 'compromisso',
-            entidade_id: comp.id,
-            lead_id: lead.id,
-            dados: { enviado: true }
-          });
-
-          results.actions.push({
-            tipo: 'followup_pos_atendimento',
-            compromisso: comp.titulo,
-            lead: lead.nome
-          });
-        }
+        results.actions.push({
+          tipo: 'followup_pos_atendimento',
+          compromisso: comp.titulo,
+          lead: lead.nome
+        });
       }
     }
 
@@ -483,7 +403,6 @@ serve(async (req) => {
     if (task === 'email_leads_sem_retorno' || task === 'all') {
       const ha7dias = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-      // Leads em atendimento sem interação há 7+ dias
       const { data: leadsSemRetorno } = await supabase
         .from('leads_juridicos')
         .select(`
@@ -494,63 +413,42 @@ serve(async (req) => {
         .order('updated_at', { ascending: true });
 
       const leadsAlerta = leadsSemRetorno?.filter(lead => {
-        const ultimaInteracao = lead.interacoes?.sort((a: any, b: any) => 
-          new Date(b.data_interacao).getTime() - new Date(a.data_interacao).getTime()
-        )[0];
-        
-        const dataRef = ultimaInteracao?.data_interacao || lead.updated_at;
-        return new Date(dataRef) < ha7dias;
+        const ultimaInteracao = lead.interacoes?.length 
+          ? Math.max(...lead.interacoes.map((i: any) => new Date(i.data_interacao).getTime()))
+          : new Date(lead.updated_at).getTime();
+        return ultimaInteracao < ha7dias.getTime();
       });
 
       if (leadsAlerta?.length) {
-        let conteudo = `<p style="color: #4a5568; font-size: 16px;">Os seguintes leads estão sem interação há mais de 7 dias:</p>`;
-        conteudo += `<table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
-          <tr style="background-color: #edf2f7;">
-            <th style="padding: 10px; text-align: left; border: 1px solid #e2e8f0;">Lead</th>
-            <th style="padding: 10px; text-align: left; border: 1px solid #e2e8f0;">Status</th>
-            <th style="padding: 10px; text-align: left; border: 1px solid #e2e8f0;">Última Atividade</th>
-          </tr>`;
-
-        for (const lead of leadsAlerta) {
-          const ultimaInteracao = lead.interacoes?.sort((a: any, b: any) => 
-            new Date(b.data_interacao).getTime() - new Date(a.data_interacao).getTime()
-          )[0];
-          const dataRef = ultimaInteracao?.data_interacao || lead.updated_at;
-          
-          conteudo += `<tr>
-            <td style="padding: 10px; border: 1px solid #e2e8f0;">${lead.nome || 'Sem nome'}</td>
-            <td style="padding: 10px; border: 1px solid #e2e8f0;">${lead.status}</td>
-            <td style="padding: 10px; border: 1px solid #e2e8f0;">${formatarData(dataRef)}</td>
-          </tr>`;
-        }
-        conteudo += '</table>';
-        conteudo += `<p style="color: #e53e3e; font-size: 14px; margin-top: 15px;">⚠️ Atenção: ${leadsAlerta.length} lead(s) precisam de follow-up urgente!</p>`;
-
-        // Buscar gerentes/admins
-        const { data: roles } = await supabase
-          .from('user_roles')
-          .select('user_id, role')
-          .in('role', ['Administrador', 'Gerente']);
-
-        const { data: usuarios } = await supabase
+        const { data: admins } = await supabase
           .from('perfis')
-          .select('id, email')
-          .in('id', roles?.map(r => r.user_id) || [])
-          .eq('aprovado', true);
+          .select('email')
+          .eq('aprovado', true)
+          .in('cargo', ['Administrador', 'Gerente']);
 
-        const emails = usuarios?.map(u => u.email).filter(Boolean) as string[];
+        const emailsAdmin = admins?.map(a => a.email).filter(Boolean) as string[];
 
-        if (emails.length > 0) {
+        if (emailsAdmin.length > 0) {
+          let conteudo = `<p style="color: #e53e3e; font-weight: bold;">⚠️ Atenção! Existem ${leadsAlerta.length} leads sem contato há mais de 7 dias:</p><ul style="color: #4a5568;">`;
+          
+          for (const lead of leadsAlerta.slice(0, 10)) {
+            conteudo += `<li><strong>${lead.nome}</strong> - ${lead.telefone || lead.email || 'Sem contato'}</li>`;
+          }
+          
+          if (leadsAlerta.length > 10) {
+            conteudo += `<li>... e mais ${leadsAlerta.length - 10} leads</li>`;
+          }
+          conteudo += '</ul>';
+
           await enviarEmail(
-            emails,
-            `⚠️ ${leadsAlerta.length} Leads Sem Retorno - Ação Necessária`,
+            emailsAdmin,
+            `⚠️ Alerta: ${leadsAlerta.length} Leads Sem Retorno`,
             emailTemplate('Leads Sem Retorno', conteudo)
           );
 
           results.actions.push({
             tipo: 'email_leads_sem_retorno',
-            leads_alertados: leadsAlerta.length,
-            destinatarios: emails.length
+            quantidade: leadsAlerta.length
           });
         }
       }
@@ -558,218 +456,72 @@ serve(async (req) => {
 
     // ==================== EMAIL: PRAZOS PRÓXIMOS ====================
     if (task === 'email_prazos_proximos' || task === 'all') {
+      const em7dias = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       const hoje = new Date();
-      const em7dias = new Date(hoje.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-      // Buscar compromissos do tipo "Prazo" nos próximos 7 dias
-      const { data: prazos } = await supabase
-        .from('compromissos')
-        .select(`
-          *,
-          processos (numero_processo, titulo_acao),
-          leads_juridicos!compromissos_lead_id_fkey (nome)
-        `)
-        .eq('tipo', 'Prazo')
-        .gte('data_inicio', hoje.toISOString())
-        .lte('data_inicio', em7dias.toISOString())
-        .order('data_inicio');
-
-      if (prazos?.length) {
-        let conteudo = `<p style="color: #4a5568; font-size: 16px;">Você tem ${prazos.length} prazo(s) nos próximos 7 dias:</p>`;
-        conteudo += `<table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
-          <tr style="background-color: #fed7d7;">
-            <th style="padding: 10px; text-align: left; border: 1px solid #feb2b2;">Data</th>
-            <th style="padding: 10px; text-align: left; border: 1px solid #feb2b2;">Prazo</th>
-            <th style="padding: 10px; text-align: left; border: 1px solid #feb2b2;">Processo/Cliente</th>
-          </tr>`;
-
-        for (const prazo of prazos) {
-          const diasRestantes = Math.ceil((new Date(prazo.data_inicio).getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
-          const corLinha = diasRestantes <= 2 ? '#fff5f5' : '#ffffff';
-
-          conteudo += `<tr style="background-color: ${corLinha};">
-            <td style="padding: 10px; border: 1px solid #e2e8f0;">
-              <strong>${formatarData(prazo.data_inicio)}</strong>
-              <br><small style="color: ${diasRestantes <= 2 ? '#e53e3e' : '#718096'}">${diasRestantes} dia(s)</small>
-            </td>
-            <td style="padding: 10px; border: 1px solid #e2e8f0;">${prazo.titulo}</td>
-            <td style="padding: 10px; border: 1px solid #e2e8f0;">
-              ${prazo.processos?.numero_processo || ''} 
-              ${prazo.leads_juridicos?.nome ? `- ${prazo.leads_juridicos.nome}` : ''}
-            </td>
-          </tr>`;
-        }
-        conteudo += '</table>';
-
-        const prazosUrgentes = prazos.filter(p => {
-          const dias = Math.ceil((new Date(p.data_inicio).getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
-          return dias <= 2;
-        });
-
-        if (prazosUrgentes.length > 0) {
-          conteudo += `<p style="color: #e53e3e; font-size: 14px; margin-top: 15px; font-weight: bold;">🚨 ${prazosUrgentes.length} prazo(s) vencem em até 2 dias!</p>`;
-        }
-
-        // Enviar para advogados e gerentes
-        const { data: roles } = await supabase
-          .from('user_roles')
-          .select('user_id')
-          .in('role', ['Administrador', 'Advogado', 'Gerente']);
-
-        const { data: usuarios } = await supabase
-          .from('perfis')
-          .select('id, email')
-          .in('id', roles?.map(r => r.user_id) || [])
-          .eq('aprovado', true);
-
-        const emails = usuarios?.map(u => u.email).filter(Boolean) as string[];
-
-        if (emails.length > 0) {
-          await enviarEmail(
-            emails,
-            `⚖️ ${prazos.length} Prazos Processuais - Próximos 7 Dias`,
-            emailTemplate('Prazos Processuais Próximos', conteudo)
-          );
-
-          results.actions.push({
-            tipo: 'email_prazos_proximos',
-            prazos: prazos.length,
-            urgentes: prazosUrgentes.length,
-            destinatarios: emails.length
-          });
-        }
-      }
-    }
-
-    // ==================== EMAIL: RELATÓRIO SEMANAL ====================
-    if (task === 'email_relatorio_semanal') {
-      const hoje = new Date();
-      const semanaPassada = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-      // Métricas da semana
-      const { count: novosLeads } = await supabase
-        .from('leads_juridicos')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', semanaPassada.toISOString());
-
-      const { count: leadsConvertidos } = await supabase
-        .from('leads_juridicos')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'Cliente')
-        .gte('updated_at', semanaPassada.toISOString());
-
-      const { count: compromissosSemana } = await supabase
-        .from('compromissos')
-        .select('*', { count: 'exact', head: true })
-        .gte('data_inicio', semanaPassada.toISOString())
-        .lte('data_inicio', hoje.toISOString());
-
-      const { count: tarefasConcluidas } = await supabase
+      const { data: tarefasPrazo } = await supabase
         .from('tarefas')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'concluida')
-        .gte('data_conclusao', semanaPassada.toISOString());
+        .select('*, responsavel:perfis(nome, email)')
+        .neq('status', 'concluida')
+        .lte('data_limite', em7dias.toISOString().split('T')[0])
+        .order('data_limite');
 
-      const { count: interacoesSemana } = await supabase
-        .from('interacoes')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', semanaPassada.toISOString());
-
-      // Leads por status
-      const { data: leadsStatus } = await supabase
-        .from('leads_juridicos')
-        .select('status');
-
-      const statusCount: Record<string, number> = {};
-      leadsStatus?.forEach(l => {
-        statusCount[l.status || 'Sem status'] = (statusCount[l.status || 'Sem status'] || 0) + 1;
-      });
-
-      let conteudo = `
-        <p style="color: #4a5568; font-size: 16px;">Aqui está o resumo da semana de ${formatarData(semanaPassada)} a ${formatarData(hoje)}:</p>
+      if (tarefasPrazo?.length) {
+        // Agrupar por responsável
+        const porResponsavel: Record<string, any[]> = {};
         
-        <div style="display: flex; flex-wrap: wrap; gap: 15px; margin: 20px 0;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; min-width: 120px; text-align: center;">
-            <div style="font-size: 32px; font-weight: bold;">${novosLeads || 0}</div>
-            <div style="font-size: 12px; opacity: 0.9;">Novos Leads</div>
-          </div>
-          <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; padding: 20px; border-radius: 10px; min-width: 120px; text-align: center;">
-            <div style="font-size: 32px; font-weight: bold;">${leadsConvertidos || 0}</div>
-            <div style="font-size: 12px; opacity: 0.9;">Convertidos</div>
-          </div>
-          <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 20px; border-radius: 10px; min-width: 120px; text-align: center;">
-            <div style="font-size: 32px; font-weight: bold;">${compromissosSemana || 0}</div>
-            <div style="font-size: 12px; opacity: 0.9;">Compromissos</div>
-          </div>
-          <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; padding: 20px; border-radius: 10px; min-width: 120px; text-align: center;">
-            <div style="font-size: 32px; font-weight: bold;">${tarefasConcluidas || 0}</div>
-            <div style="font-size: 12px; opacity: 0.9;">Tarefas Concluídas</div>
-          </div>
-        </div>
+        for (const tarefa of tarefasPrazo) {
+          const email = tarefa.responsavel?.email || 'sem_responsavel';
+          if (!porResponsavel[email]) porResponsavel[email] = [];
+          porResponsavel[email].push(tarefa);
+        }
 
-        <h3 style="color: #2d3748; margin-top: 25px;">📊 Leads por Status</h3>
-        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-          ${Object.entries(statusCount).map(([status, count]) => `
-            <tr>
-              <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${status}</td>
-              <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: bold;">${count}</td>
-            </tr>
-          `).join('')}
-        </table>
+        for (const [email, tarefas] of Object.entries(porResponsavel)) {
+          if (email === 'sem_responsavel') continue;
 
-        <p style="color: #718096; font-size: 14px; margin-top: 20px;">
-          💬 Total de interações na semana: <strong>${interacoesSemana || 0}</strong>
-        </p>
-      `;
+          let conteudo = `<p style="color: #4a5568; font-size: 16px;">Você tem ${tarefas.length} tarefa(s) com prazo nos próximos 7 dias:</p><ul>`;
+          
+          for (const t of tarefas) {
+            const diasRestantes = Math.ceil((new Date(t.data_limite).getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+            const urgencia = diasRestantes <= 2 ? 'color: #e53e3e; font-weight: bold;' : 'color: #4a5568;';
+            conteudo += `<li style="${urgencia}">${t.titulo} - Prazo: ${formatarData(t.data_limite)} (${diasRestantes} dia${diasRestantes !== 1 ? 's' : ''})</li>`;
+          }
+          conteudo += '</ul>';
 
-      // Enviar para admins e gerentes
-      const { data: roles } = await supabase
-        .from('user_roles')
-        .select('user_id')
-        .in('role', ['Administrador', 'Gerente']);
-
-      const { data: usuarios } = await supabase
-        .from('perfis')
-        .select('id, email')
-        .in('id', roles?.map(r => r.user_id) || [])
-        .eq('aprovado', true);
-
-      const emails = usuarios?.map(u => u.email).filter(Boolean) as string[];
-
-      if (emails.length > 0) {
-        await enviarEmail(
-          emails,
-          `📈 Relatório Semanal - ${formatarData(semanaPassada)} a ${formatarData(hoje)}`,
-          emailTemplate('Relatório Semanal', conteudo)
-        );
+          await enviarEmail(
+            [email],
+            `📋 Prazos Próximos - ${tarefas.length} tarefa(s)`,
+            emailTemplate('Prazos Próximos', conteudo)
+          );
+        }
 
         results.actions.push({
-          tipo: 'email_relatorio_semanal',
-          novosLeads,
-          convertidos: leadsConvertidos,
-          destinatarios: emails.length
+          tipo: 'email_prazos_proximos',
+          tarefas: tarefasPrazo.length
         });
       }
     }
 
     // Registrar execução
     await supabase.from('system_events').insert({
-      tipo: 'automacao',
-      fonte: 'isa_scheduler',
+      tipo: 'scheduler',
+      fonte: 'zapi_isa_scheduler',
       acao: task,
-      dados: results
+      dados: results,
+      processado: true
     });
 
-    console.log('Isa Scheduler concluído:', results);
+    console.log('[ISA-SCHEDULER] Resultado:', JSON.stringify(results));
 
-    return new Response(JSON.stringify(results), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-
-  } catch (error) {
-    console.error('Erro no Isa Scheduler:', error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Erro desconhecido' }),
+      JSON.stringify({ success: true, ...results }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+  } catch (error: any) {
+    console.error('[ISA-SCHEDULER] Erro:', error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

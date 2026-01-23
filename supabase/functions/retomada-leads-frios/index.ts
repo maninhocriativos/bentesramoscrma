@@ -1,8 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { 
+  getZapiConfig, 
+  sendText,
+  gerarSubscriberId 
+} from '../_shared/zapi-helper.ts';
 
 /**
- * FLUXO DE RETOMADA - Leads Frios Sem Resposta
+ * FLUXO DE RETOMADA - Leads Frios Sem Resposta (Z-API)
  * 
  * Este é um fluxo SEPARADO do follow-up inicial.
  * Só é acionado para leads que:
@@ -10,7 +15,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
  * - Já passaram pelo follow-up inicial (3 mensagens)
  * - Não responderam
  * 
- * Envia o template aprovado da Meta nos seguintes intervalos:
+ * Envia mensagens personalizadas nos seguintes intervalos:
  * - Retomada 1: após 24h do último follow-up
  * - Retomada 2: após 48h do último follow-up
  * - Retomada 3: após 6 dias do último follow-up
@@ -23,57 +28,45 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const manychatApiKey = Deno.env.get('MANYCHAT_API_KEY')!;
-
-// Fluxo de retomada aprovado pela Meta
-const RETOMADA_FLOW_NS = 'content20260105140934_525890';
 
 // Intervalos de envio (em minutos desde o último follow-up)
 const RETOMADA_CONFIG = {
-  retomada_1: { delay_minutos: 1440, titulo: "Retomada 24h" },   // 24 horas
-  retomada_2: { delay_minutos: 2880, titulo: "Retomada 48h" },   // 48 horas
-  retomada_3: { delay_minutos: 8640, titulo: "Retomada 6 dias" } // 6 dias
-};
+  retomada_1: { 
+    delay_minutos: 1440, 
+    titulo: "Retomada 24h",
+    mensagem: `{{nome}}, ainda estamos à disposição para ajudar com seu caso!
 
-// Enviar via Flow (template aprovado pela Meta)
-async function enviarRetomada(subscriberId: string, nome: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    console.log(`[RETOMADA] Enviando via Flow: subscriber=${subscriberId}, flow=${RETOMADA_FLOW_NS}`);
-    
-    const response = await fetch('https://api.manychat.com/fb/sending/sendFlow', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${manychatApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        subscriber_id: parseInt(subscriberId),
-        flow_ns: RETOMADA_FLOW_NS,
-        external_data: { nome: nome || 'Cliente' }
-      }),
-    });
+📌 Muitos clientes como você descobriram que tinham direito a devoluções de cobranças indevidas.
 
-    const contentType = response.headers.get('content-type');
-    if (!contentType?.includes('application/json')) {
-      const text = await response.text();
-      console.error('[RETOMADA] Resposta não-JSON:', text.substring(0, 200));
-      return { success: false, error: 'Resposta não-JSON' };
-    }
+Quer que eu verifique gratuitamente se você também tem? É só responder "SIM" 👇
 
-    const result = await response.json();
-    console.log('[RETOMADA] sendFlow response:', JSON.stringify(result));
-    
-    if (result.status === 'success') {
-      return { success: true };
-    }
-    
-    return { success: false, error: result.message || 'Erro desconhecido' };
+Bentes & Ramos Advocacia`
+  },
+  retomada_2: { 
+    delay_minutos: 2880, 
+    titulo: "Retomada 48h",
+    mensagem: `{{nome}}, passando para uma última verificação...
 
-  } catch (error: any) {
-    console.error('[RETOMADA] Erro:', error);
-    return { success: false, error: error.message };
+⏰ Lembra que existe prazo para recuperar valores de cobranças indevidas?
+
+Se ainda tiver interesse, responda esta mensagem e analisamos seu caso gratuitamente.
+
+Bentes & Ramos Advocacia`
+  },
+  retomada_3: { 
+    delay_minutos: 8640, 
+    titulo: "Retomada 6 dias",
+    mensagem: `{{nome}}, sei que a correria do dia a dia é grande...
+
+Mas queria deixar registrado: estamos aqui caso precise de ajuda com cobranças bancárias.
+
+📌 Já ajudamos clientes a recuperar mais de R$ 5.000!
+
+Qualquer dúvida, é só responder. Boa semana! 🤝
+
+Bentes & Ramos Advocacia`
   }
-}
+};
 
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -89,22 +82,33 @@ serve(async (req: Request) => {
     body = await req.json();
   } catch { /* sem body */ }
 
+  // Verificar Z-API
+  const zapiConfig = await getZapiConfig(supabase);
+  if (!zapiConfig) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Z-API não configurado ou inativo' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+    );
+  }
+
   // Teste manual
-  if (body.test && body.subscriber_id) {
-    console.log(`[RETOMADA-TEST] Testando para subscriber: ${body.subscriber_id}`);
-    const resultado = await enviarRetomada(body.subscriber_id, body.nome || 'Cliente');
+  if (body.test && body.phone) {
+    console.log(`[RETOMADA-TEST] Testando para telefone: ${body.phone}`);
+    const resultado = await sendText(zapiConfig, body.phone, 
+      RETOMADA_CONFIG.retomada_1.mensagem.replace('{{nome}}', body.nome || 'Cliente')
+    );
     return new Response(
       JSON.stringify({ 
         success: resultado.success, 
-        flow_ns: RETOMADA_FLOW_NS,
-        subscriber_id: body.subscriber_id,
-        resultado 
+        phone: body.phone,
+        resultado,
+        provider: 'zapi'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
   
-  console.log('[RETOMADA] Iniciando processamento:', agora.toISOString());
+  console.log('[RETOMADA Z-API] Iniciando processamento:', agora.toISOString());
 
   try {
     // Buscar leads frios que já concluíram o follow-up inicial mas não responderam
@@ -127,7 +131,6 @@ serve(async (req: Request) => {
 
     let enviados = 0;
     let erros = 0;
-
     let pulados = 0;
 
     for (const followup of followups || []) {
@@ -139,13 +142,13 @@ serve(async (req: Request) => {
         continue;
       }
 
-      if (!followup.subscriber_id) {
-        console.log(`[RETOMADA] Lead ${lead.nome} sem subscriber_id, pulando`);
+      // Verificar se tem telefone
+      if (!lead.telefone) {
+        console.log(`[RETOMADA] Lead ${lead.nome} sem telefone, pulando`);
         continue;
       }
 
       // ⚠️ VERIFICAR SE LEAD TEM MENSAGENS RECENTES DE ENTRADA (conversa ativa)
-      // Se o lead mandou mensagem nas últimas 2 horas, NÃO enviar retomada automática
       const duasHorasAtras = new Date(agora.getTime() - 2 * 60 * 60 * 1000).toISOString();
       
       const { data: mensagensRecentes } = await supabase
@@ -158,7 +161,7 @@ serve(async (req: Request) => {
         .limit(1);
 
       if (mensagensRecentes && mensagensRecentes.length > 0) {
-        console.log(`[RETOMADA] ⏸️ Lead ${lead.nome} tem conversa ativa (última msg: ${mensagensRecentes[0].created_at}), pulando retomada`);
+        console.log(`[RETOMADA] ⏸️ Lead ${lead.nome} tem conversa ativa`);
         pulados++;
         continue;
       }
@@ -173,7 +176,7 @@ serve(async (req: Request) => {
         .limit(1);
 
       if (interacoesRecentes && interacoesRecentes.length > 0) {
-        console.log(`[RETOMADA] ⏸️ Lead ${lead.nome} tem interação recente, pulando retomada`);
+        console.log(`[RETOMADA] ⏸️ Lead ${lead.nome} tem interação recente`);
         pulados++;
         continue;
       }
@@ -185,15 +188,12 @@ serve(async (req: Request) => {
       console.log(`[RETOMADA] Lead: ${lead.nome}, minutos desde followup_3: ${minutosDesdeUltimoFollowup.toFixed(0)}`);
 
       // Determinar qual retomada enviar
-      // Usando campos existentes: retomada usa os mesmos campos mas com lógica diferente
-      // Para não criar novos campos, vamos usar um campo de metadata
-      
       let retomadaKey: string | null = null;
+      let retomadaConfig: any = null;
       
       // Retomada 1: após 24h do followup_3
       if (minutosDesdeUltimoFollowup >= RETOMADA_CONFIG.retomada_1.delay_minutos && 
           minutosDesdeUltimoFollowup < RETOMADA_CONFIG.retomada_2.delay_minutos) {
-        // Verificar se já enviou retomada 1 (olhando system_events)
         const { data: jaEnviou } = await supabase
           .from('system_events')
           .select('id')
@@ -203,6 +203,7 @@ serve(async (req: Request) => {
         
         if (!jaEnviou || jaEnviou.length === 0) {
           retomadaKey = 'retomada_1';
+          retomadaConfig = RETOMADA_CONFIG.retomada_1;
         }
       }
       // Retomada 2: após 48h do followup_3
@@ -217,6 +218,7 @@ serve(async (req: Request) => {
         
         if (!jaEnviou || jaEnviou.length === 0) {
           retomadaKey = 'retomada_2';
+          retomadaConfig = RETOMADA_CONFIG.retomada_2;
         }
       }
       // Retomada 3: após 6 dias do followup_3
@@ -230,30 +232,44 @@ serve(async (req: Request) => {
         
         if (!jaEnviou || jaEnviou.length === 0) {
           retomadaKey = 'retomada_3';
+          retomadaConfig = RETOMADA_CONFIG.retomada_3;
         }
       }
 
-      if (retomadaKey) {
-        console.log(`[RETOMADA] Enviando ${retomadaKey} para ${lead.nome}`);
+      if (retomadaKey && retomadaConfig) {
+        console.log(`[RETOMADA] Enviando ${retomadaKey} para ${lead.nome} via Z-API`);
 
-        const resultado = await enviarRetomada(followup.subscriber_id, lead.nome);
+        const mensagem = retomadaConfig.mensagem.replace('{{nome}}', lead.nome || 'Cliente');
+        const resultado = await sendText(zapiConfig, lead.telefone, mensagem);
 
         if (resultado.success) {
           // Registrar no system_events
           await supabase.from('system_events').insert({
             tipo: 'retomada',
-            fonte: 'isa-automation',
+            fonte: 'zapi-automation',
             acao: `${retomadaKey}_enviado`,
             lead_id: lead.id,
             entidade_tipo: 'lead_followup',
             entidade_id: followup.id,
             dados: { 
               retomada: retomadaKey, 
-              subscriber_id: followup.subscriber_id,
-              flow_ns: RETOMADA_FLOW_NS,
-              minutos_desde_followup: minutosDesdeUltimoFollowup
+              phone: lead.telefone,
+              minutos_desde_followup: minutosDesdeUltimoFollowup,
+              provider: 'zapi'
             },
             processado: true
+          });
+
+          // Registrar mensagem
+          await supabase.from('manychat_mensagens').insert({
+            subscriber_id: gerarSubscriberId(lead.telefone),
+            subscriber_nome: lead.nome || 'Cliente',
+            lead_id: lead.id,
+            conteudo: mensagem,
+            direcao: 'saida',
+            tipo: 'text',
+            canal: 'whatsapp',
+            metadata: { source: 'zapi', context: 'retomada', retomada: retomadaKey }
           });
 
           // Registrar interação
@@ -261,8 +277,8 @@ serve(async (req: Request) => {
             cliente_id: lead.id,
             tipo: 'WhatsApp',
             direcao: 'Saída',
-            resumo: `Retomada automática (${RETOMADA_CONFIG[retomadaKey as keyof typeof RETOMADA_CONFIG].titulo}) enviada pela Isa`,
-            detalhes: `Template de retomada enviado via ManyChat Flow: ${RETOMADA_FLOW_NS}`,
+            resumo: `Retomada automática (${retomadaConfig.titulo}) via Z-API`,
+            detalhes: mensagem,
           });
 
           enviados++;
@@ -274,7 +290,7 @@ serve(async (req: Request) => {
       }
     }
 
-    console.log(`[RETOMADA] Concluído. Enviados: ${enviados}, Erros: ${erros}, Pulados (conversa ativa): ${pulados}`);
+    console.log(`[RETOMADA] Concluído. Enviados: ${enviados}, Erros: ${erros}, Pulados: ${pulados}`);
 
     return new Response(
       JSON.stringify({ 
@@ -283,6 +299,7 @@ serve(async (req: Request) => {
         enviados,
         erros,
         pulados_conversa_ativa: pulados,
+        provider: 'zapi',
         timestamp: agora.toISOString()
       }),
       { 
