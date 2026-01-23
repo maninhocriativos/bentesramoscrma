@@ -1,5 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { 
+  enviarMensagemZapi, 
+  getZapiConfig, 
+  sendText,
+  gerarSubscriberId 
+} from '../_shared/zapi-helper.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,7 +14,6 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const manychatApiKey = Deno.env.get('MANYCHAT_API_KEY')!;
 
 // ============================================================
 // CONFIGURAÇÃO FOLLOW-UP FAST (apenas Lead Frio)
@@ -27,8 +32,7 @@ const FAST_CONFIG = {
 
 O banco cobrou dele o que não devia, e a Justiça mandou devolver TUDO!
 
-*Você pode estar na mesma situação.* Me conta o que está acontecendo? 👇`,
-    flow_ns: 'followup_fast_1'
+*Você pode estar na mesma situação.* Me conta o que está acontecendo? 👇`
   },
   stage_2: {
     delay_minutos: 240, // 4 horas
@@ -43,8 +47,7 @@ O banco cobrou dele o que não devia, e a Justiça mandou devolver TUDO!
 
 Já ajudamos pessoas que nem sabiam que tinham direito!
 
-Quer que eu analise seu caso SEM COMPROMISSO? Só responder "SIM" 👇`,
-    flow_ns: 'followup_fast_2'
+Quer que eu analise seu caso SEM COMPROMISSO? Só responder "SIM" 👇`
   },
   stage_3: {
     delay_minutos: 900, // 15 horas
@@ -63,8 +66,7 @@ O cliente nem precisou ir na audiência!
 
 Se você tem financiamento, empréstimo ou cobrança bancária, pode ter dinheiro a receber.
 
-*Responda "QUERO ANALISAR"* e verificamos GRÁTIS se você tem direito! 🔍`,
-    flow_ns: 'followup_fast_3'
+*Responda "QUERO ANALISAR"* e verificamos GRÁTIS se você tem direito! 🔍`
   }
 };
 
@@ -82,9 +84,7 @@ Passando para lembrar que estamos à disposição para analisar seu caso.
 
 Muitos clientes como você conseguiram recuperar valores cobrados indevidamente pelos bancos.
 
-Posso ajudar? Responda esta mensagem! 📩`,
-    flow_ns: 'content20260105140934_525890',
-    requer_template: true
+Posso ajudar? Responda esta mensagem! 📩`
   },
   stage_2: {
     delay_minutos: 2880, // 48h
@@ -95,9 +95,7 @@ Posso ajudar? Responda esta mensagem! 📩`,
 
 Ainda está interessado(a) em verificar se tem valores a receber? É gratuito e sem compromisso.
 
-Responda "SIM" para continuarmos! ✅`,
-    flow_ns: 'followup_slow_2',
-    requer_template: true
+Responda "SIM" para continuarmos! ✅`
   },
   stage_3: {
     delay_minutos: 4320, // 72h
@@ -108,9 +106,7 @@ Se mudar de ideia sobre verificar possíveis cobranças indevidas no seu nome, �
 
 Estamos à disposição! 🤝
 
-Bentes & Ramos Advocacia`,
-    flow_ns: 'followup_slow_3',
-    requer_template: true
+Bentes & Ramos Advocacia`
   },
   stage_4: {
     delay_minutos: 7200, // 5 dias (72h + 48h = 120h = 5 dias)
@@ -126,9 +122,7 @@ Se quiser, posso verificar gratuitamente se você também tem valores a receber.
 
 É só responder "QUERO" 👇
 
-Bentes & Ramos Advocacia`,
-    flow_ns: 'content20260113164223_086496',
-    requer_template: true
+Bentes & Ramos Advocacia`
   }
 };
 
@@ -137,116 +131,38 @@ const STATUS_PERMITE_FAST = ['Lead Frio'];
 const STATUS_PERMITE_SLOW = ['Lead Frio', 'Em Atendimento', 'Em Negociação', 'Aguardando Contrato'];
 const STATUS_BLOQUEADOS = ['Contrato Assinado', 'Ganho'];
 
-// Enviar mensagem direta via ManyChat (dentro de 24h)
-async function enviarMensagemManyChat(subscriberId: string, mensagem: string, canal: string = 'whatsapp') {
-  try {
-    console.log(`[FOLLOWUP] Enviando mensagem direta: subscriber=${subscriberId}, canal=${canal}`);
-    
-    const response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${manychatApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        subscriber_id: parseInt(subscriberId),
-        data: {
-          version: "v2",
-          content: {
-            type: canal === 'instagram' ? 'instagram' : 'whatsapp',
-            messages: [{ type: "text", text: mensagem }]
-          }
-        }
-      }),
-    });
-
-    const contentType = response.headers.get('content-type');
-    if (!contentType?.includes('application/json')) {
-      const text = await response.text();
-      console.error('[FOLLOWUP] Resposta não-JSON:', text.substring(0, 300));
-      return await tentarSendMessage(subscriberId, mensagem);
-    }
-
-    const result = await response.json();
-    console.log('[FOLLOWUP] sendContent response:', JSON.stringify(result));
-    
-    if (result.status === 'success') {
-      return { success: true, result };
-    }
-    
-    console.log('[FOLLOWUP] sendContent falhou, tentando sendMessage...');
-    return await tentarSendMessage(subscriberId, mensagem);
-
-  } catch (error: any) {
-    console.error('[FOLLOWUP] Erro no envio:', error);
-    return await tentarSendMessage(subscriberId, mensagem);
+// Enviar mensagem via Z-API
+async function enviarMensagem(
+  supabase: any, 
+  phone: string, 
+  mensagem: string, 
+  leadId: string,
+  leadNome: string
+): Promise<{ success: boolean; error?: string }> {
+  const config = await getZapiConfig(supabase);
+  
+  if (!config) {
+    console.log('[FOLLOWUP] Z-API não configurado');
+    return { success: false, error: 'Z-API não configurado' };
   }
-}
 
-// Fallback via sendMessage
-async function tentarSendMessage(subscriberId: string, mensagem: string) {
-  try {
-    const response = await fetch('https://api.manychat.com/fb/subscriber/sendMessage', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${manychatApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        subscriber_id: parseInt(subscriberId),
-        message_tag: 'CONFIRMED_EVENT_UPDATE',
-        data: {
-          version: "v2",
-          content: {
-            messages: [{ type: "text", text: mensagem }]
-          }
-        }
-      }),
+  const result = await sendText(config, phone, mensagem);
+  
+  if (result.success) {
+    // Registrar mensagem no histórico
+    await supabase.from('manychat_mensagens').insert({
+      subscriber_id: gerarSubscriberId(phone),
+      subscriber_nome: leadNome || 'Cliente',
+      lead_id: leadId,
+      conteudo: mensagem,
+      direcao: 'saida',
+      tipo: 'text',
+      canal: 'whatsapp',
+      metadata: { source: 'zapi', context: 'followup_automation' }
     });
-
-    const result = await response.json();
-    console.log('[FOLLOWUP] sendMessage response:', JSON.stringify(result));
-    return { success: result.status === 'success', result };
-  } catch (error: any) {
-    console.error('[FOLLOWUP] sendMessage falhou:', error);
-    return { success: false, error: error.message };
   }
-}
 
-// Enviar via Flow (para templates aprovados após 24h)
-async function enviarViaFlow(subscriberId: string, flowNs: string, dados: Record<string, any>) {
-  try {
-    console.log(`[FOLLOWUP] Enviando via Flow: subscriber=${subscriberId}, flow=${flowNs}`);
-    
-    const response = await fetch('https://api.manychat.com/fb/sending/sendFlow', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${manychatApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        subscriber_id: parseInt(subscriberId),
-        flow_ns: flowNs,
-        external_data: dados
-      }),
-    });
-
-    const contentType = response.headers.get('content-type');
-    if (!contentType?.includes('application/json')) {
-      const text = await response.text();
-      console.error('[FOLLOWUP] Resposta não-JSON do sendFlow:', text.substring(0, 200));
-      return { success: false, error: 'Resposta não-JSON', fallback: true };
-    }
-
-    const result = await response.json();
-    console.log('[FOLLOWUP] sendFlow response:', JSON.stringify(result));
-    
-    return { success: result.status === 'success', result, error: result.error };
-
-  } catch (error: any) {
-    console.error('[FOLLOWUP] Erro no sendFlow:', error);
-    return { success: false, error: error.message, fallback: true };
-  }
+  return { success: result.success, error: result.error };
 }
 
 // Calcular próximo follow-up
@@ -290,7 +206,7 @@ serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const agora = new Date();
 
-  console.log('[FOLLOWUP] Iniciando processamento FAST/SLOW:', agora.toISOString());
+  console.log('[FOLLOWUP] Iniciando processamento Z-API:', agora.toISOString());
 
   try {
     // Buscar follow-ups pendentes
@@ -323,7 +239,14 @@ serve(async (req: Request) => {
       const stageFast = followup.followup_stage_fast || 0;
       const stageSlow = followup.followup_stage_slow || 0;
       
-      console.log(`[FOLLOWUP] Lead: ${lead.nome}, status: ${lead.status}, FAST: ${stageFast}/3, SLOW: ${stageSlow}/3, minutos: ${minutosDesdeContato.toFixed(0)}`);
+      console.log(`[FOLLOWUP] Lead: ${lead.nome}, status: ${lead.status}, FAST: ${stageFast}/3, SLOW: ${stageSlow}/4, minutos: ${minutosDesdeContato.toFixed(0)}`);
+
+      // 🛑 Verificar se lead tem telefone
+      if (!lead.telefone) {
+        console.log(`[FOLLOWUP] ⚠️ Lead ${lead.nome} sem telefone`);
+        pulados++;
+        continue;
+      }
 
       // 🛑 REGRA 1: Status bloqueados - NUNCA enviar
       if (STATUS_BLOQUEADOS.includes(lead.status)) {
@@ -341,19 +264,17 @@ serve(async (req: Request) => {
         continue;
       }
 
-      // 🛑 REGRA 2: Verificar atendimento humano
-      if (followup.subscriber_id) {
-        const { data: subscriber } = await supabase
-          .from('manychat_subscribers')
-          .select('atendimento_humano')
-          .eq('subscriber_id', followup.subscriber_id)
-          .maybeSingle();
+      // 🛑 REGRA 2: Verificar atendimento humano (via subscriber_id legado ou pelo lead_id)
+      const { data: subscriber } = await supabase
+        .from('manychat_subscribers')
+        .select('atendimento_humano')
+        .eq('lead_id', lead.id)
+        .maybeSingle();
 
-        if (subscriber?.atendimento_humano) {
-          console.log(`[FOLLOWUP] 🛑 Atendimento humano ativo para ${lead.nome}`);
-          pulados++;
-          continue;
-        }
+      if (subscriber?.atendimento_humano) {
+        console.log(`[FOLLOWUP] 🛑 Atendimento humano ativo para ${lead.nome}`);
+        pulados++;
+        continue;
       }
 
       // 🛑 REGRA 3: Verificar mensagens recentes (conversa ativa - 30 min)
@@ -447,33 +368,10 @@ serve(async (req: Request) => {
         continue;
       }
 
-      // Enviar follow-up
-      if (!followup.subscriber_id) {
-        console.log(`[FOLLOWUP] ⚠️ Lead ${lead.nome} sem subscriber_id`);
-        pulados++;
-        continue;
-      }
-
-      console.log(`[FOLLOWUP] Enviando ${tipoEnvio} stage ${stageEnvio} para ${lead.nome}`);
+      console.log(`[FOLLOWUP] Enviando ${tipoEnvio} stage ${stageEnvio} para ${lead.nome} via Z-API`);
 
       const mensagem = config.mensagem.replace(/\{\{nome\}\}/g, lead.nome || 'cliente');
-      let resultado: any;
-
-      // SLOW sempre usa template (>24h)
-      if (tipoEnvio === 'SLOW' || config.requer_template) {
-        resultado = await enviarViaFlow(followup.subscriber_id, config.flow_ns, {
-          nome: lead.nome || 'cliente',
-          mensagem
-        });
-        
-        // Fallback para mensagem direta se flow falhar
-        if (!resultado.success) {
-          console.log('[FOLLOWUP] Flow falhou, tentando envio direto...');
-          resultado = await enviarMensagemManyChat(followup.subscriber_id, mensagem, followup.canal || 'whatsapp');
-        }
-      } else {
-        resultado = await enviarMensagemManyChat(followup.subscriber_id, mensagem, followup.canal || 'whatsapp');
-      }
+      const resultado = await enviarMensagem(supabase, lead.telefone, mensagem, lead.id, lead.nome);
 
       if (resultado.success) {
         // Atualizar campos
@@ -481,7 +379,9 @@ serve(async (req: Request) => {
           status: 'em_andamento',
           last_outbound_at: agora.toISOString(),
           last_isa_outbound_at: agora.toISOString(),
-          waiting_reply: true
+          waiting_reply: true,
+          // Atualizar subscriber_id para formato Z-API
+          subscriber_id: gerarSubscriberId(lead.telefone)
         };
 
         if (tipoEnvio === 'FAST') {
@@ -499,18 +399,6 @@ serve(async (req: Request) => {
           }
         } else {
           updateData.followup_stage_slow = stageEnvio;
-          // Mapear para campos legados de retomada
-          if (stageEnvio === 1) {
-            updateData.retomada_1_enviado = true;
-            updateData.retomada_1_enviado_em = agora.toISOString();
-          } else if (stageEnvio === 2) {
-            updateData.retomada_2_enviado = true;
-            updateData.retomada_2_enviado_em = agora.toISOString();
-          } else if (stageEnvio === 3) {
-            updateData.retomada_3_enviado = true;
-            updateData.retomada_3_enviado_em = agora.toISOString();
-          }
-          // Stage 4 é rastreado apenas pelo followup_stage_slow (sem campo legado)
         }
 
         // Calcular próximo follow-up
@@ -530,34 +418,42 @@ serve(async (req: Request) => {
           updateData.next_followup_type = null;
         }
 
-        await supabase.from('lead_followups').update(updateData).eq('id', followup.id);
+        await supabase
+          .from('lead_followups')
+          .update(updateData)
+          .eq('id', followup.id);
+
+        // Registrar evento no sistema
+        await supabase.from('system_events').insert({
+          tipo: 'followup',
+          fonte: 'zapi-automation',
+          acao: `${tipoEnvio.toLowerCase()}_stage_${stageEnvio}`,
+          lead_id: lead.id,
+          entidade_tipo: 'lead_followup',
+          entidade_id: followup.id,
+          dados: { 
+            tipo: tipoEnvio, 
+            stage: stageEnvio, 
+            titulo: config.titulo,
+            provider: 'zapi'
+          },
+          processado: true
+        });
 
         // Registrar interação
         await supabase.from('interacoes').insert({
           cliente_id: lead.id,
           tipo: 'WhatsApp',
           direcao: 'Saída',
-          resumo: `${tipoEnvio} ${stageEnvio}/3 enviado automaticamente`,
-          detalhes: mensagem,
-        });
-
-        // Registrar evento
-        await supabase.from('system_events').insert({
-          tipo: 'followup',
-          fonte: 'followup-automation',
-          acao: `${tipoEnvio.toLowerCase()}_${stageEnvio}_enviado`,
-          lead_id: lead.id,
-          entidade_tipo: 'lead_followup',
-          entidade_id: followup.id,
-          dados: { tipo: tipoEnvio, stage: stageEnvio, subscriber_id: followup.subscriber_id },
-          processado: true
+          resumo: `${config.titulo} via Z-API`,
+          detalhes: mensagem.substring(0, 500),
         });
 
         enviados++;
-        console.log(`[FOLLOWUP] ✅ ${tipoEnvio} ${stageEnvio}/3 enviado para ${lead.nome}`);
+        console.log(`[FOLLOWUP] ✅ ${tipoEnvio} stage ${stageEnvio} enviado para ${lead.nome}`);
       } else {
         erros++;
-        console.error(`[FOLLOWUP] ❌ Erro ao enviar: ${resultado.error}`);
+        console.error(`[FOLLOWUP] ❌ Erro ao enviar para ${lead.nome}: ${resultado.error}`);
       }
     }
 
@@ -566,21 +462,28 @@ serve(async (req: Request) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        processados: followups?.length || 0,
-        enviados,
-        erros,
-        pulados,
+        processados: followups?.length || 0, 
+        enviados, 
+        erros, 
+        pulados, 
         agendados,
-        timestamp: agora.toISOString()
+        provider: 'zapi',
+        timestamp: agora.toISOString() 
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200 
+      }
     );
 
   } catch (error: any) {
     console.error('[FOLLOWUP] Erro geral:', error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500 
+      }
     );
   }
 });
