@@ -127,10 +127,10 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
   // Permissões por módulo:
   // - Processos: Admin, Advogado, Secretaria (Gerente NÃO)
   const canAccessProcessos = isAdmin || isAdvogado || isSecretaria;
-  // - Leads/CRM: Admin, Gerente, Advogado (Secretaria NÃO)
-  const canAccessLeads = isAdmin || isGerente || isAdvogado;
-  // - Dashboard: Admin, Gerente, Advogado (Secretaria NÃO)
-  const canAccessDashboard = isAdmin || isGerente || isAdvogado;
+  // - Leads/CRM: Admin, Gerente, Advogado, Secretaria
+  const canAccessLeads = isAdmin || isGerente || isAdvogado || isSecretaria;
+  // - Dashboard: Admin, Gerente, Advogado, Secretaria
+  const canAccessDashboard = isAdmin || isGerente || isAdvogado || isSecretaria;
   // - Agenda: Todos
   const canAccessAgenda = true;
   // - Tarefas: Todos
