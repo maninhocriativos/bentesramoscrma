@@ -54,6 +54,28 @@ serve(async (req: Request) => {
     if (path === '/webhook/fiqon' || path === '/fiqon') {
       console.log('[API-HUB] FiqOn webhook received:', JSON.stringify(body).substring(0, 500));
       
+      // Verificar se é um evento de teste
+      if (body.type === 'test' || body.source === 'fiqon_test') {
+        console.log('[API-HUB] FiqOn test event received');
+        
+        await supabase.from('integration_logs').insert({
+          provider: 'fiqon',
+          direction: 'inbound',
+          endpoint: path,
+          payload_json: body,
+          status: 'ok'
+        });
+
+        return new Response(JSON.stringify({ 
+          success: true, 
+          source: 'fiqon',
+          type: 'test',
+          message: 'Webhook test successful'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      
       // O FiqOn pode enviar em diferentes formatos, normalizamos aqui
       // e encaminhamos para o zapi-webhook
       try {

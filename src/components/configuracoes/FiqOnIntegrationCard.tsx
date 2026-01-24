@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Zap, Save, TestTube, Loader2, Eye, EyeOff, CheckCircle, XCircle, Copy, Check } from 'lucide-react';
+import { Zap, Save, TestTube, Loader2, CheckCircle, XCircle, Copy, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { IntegrationConfig } from '@/types/stateMachine';
@@ -18,13 +18,10 @@ export function FiqOnIntegrationCard() {
   const [copied, setCopied] = useState<string | null>(null);
   
   const [config, setConfig] = useState<IntegrationConfig | null>(null);
-  const [baseUrl, setBaseUrl] = useState('');
-  const [apiKey, setApiKey] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [isActive, setIsActive] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
 
-  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL || 'https://qgenaltkjtlvwfgykpxq.supabase.co'}/functions/v1/api-hub/webhook/fiqon`;
+  const webhookUrl = 'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/api-hub/webhook/fiqon';
 
   useEffect(() => {
     loadConfig();
@@ -44,8 +41,6 @@ export function FiqOnIntegrationCard() {
       if (data) {
         const typedData = data as unknown as IntegrationConfig;
         setConfig(typedData);
-        setBaseUrl(typedData.config_json?.base_url || '');
-        setApiKey(typedData.config_json?.api_key || '');
         setWebhookSecret(typedData.config_json?.webhook_secret || '');
         setIsActive(typedData.is_active);
       }
@@ -64,8 +59,6 @@ export function FiqOnIntegrationCard() {
         .upsert({
           provider: 'fiqon',
           config_json: {
-            base_url: baseUrl,
-            api_key: apiKey,
             webhook_secret: webhookSecret
           },
           is_active: isActive,
@@ -93,23 +86,20 @@ export function FiqOnIntegrationCard() {
   };
 
   const handleTest = async () => {
-    if (!baseUrl || !apiKey) {
-      toast({
-        title: 'Credenciais incompletas',
-        description: 'Preencha a Base URL e API Key antes de testar.',
-        variant: 'destructive'
-      });
-      return;
-    }
-
+    // Para FiqOn, testamos enviando um evento de teste para nosso próprio webhook
     setTesting(true);
     try {
-      // Testar conexão com FiqOn
-      const response = await fetch(`${baseUrl}/health`, {
-        method: 'GET',
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
         headers: {
-          'Authorization': `Bearer ${apiKey}`
-        }
+          'Content-Type': 'application/json',
+          ...(webhookSecret ? { 'x-webhook-secret': webhookSecret } : {})
+        },
+        body: JSON.stringify({
+          type: 'test',
+          source: 'fiqon_test',
+          timestamp: new Date().toISOString()
+        })
       });
 
       // Atualizar status do teste
@@ -123,22 +113,22 @@ export function FiqOnIntegrationCard() {
 
       if (response.ok) {
         toast({
-          title: 'Conexão bem-sucedida!',
-          description: 'O FiqOn está conectado e funcionando.'
+          title: 'Webhook funcionando!',
+          description: 'O endpoint está pronto para receber mensagens do FiqOn.'
         });
       } else {
+        const errorText = await response.text();
         toast({
-          title: 'Erro na conexão',
-          description: 'Não foi possível conectar ao FiqOn.',
+          title: 'Erro no webhook',
+          description: errorText || 'Não foi possível conectar ao webhook.',
           variant: 'destructive'
         });
       }
 
       loadConfig();
     } catch (error) {
-      console.error('Error testing FiqOn:', error);
+      console.error('Error testing FiqOn webhook:', error);
       
-      // Atualizar status como erro
       await supabase
         .from('integrations_config')
         .update({
@@ -149,7 +139,7 @@ export function FiqOnIntegrationCard() {
 
       toast({
         title: 'Erro no teste',
-        description: 'Falha ao testar conexão com FiqOn. Verifique a URL e credenciais.',
+        description: 'Falha ao testar webhook. Verifique a conexão.',
         variant: 'destructive'
       });
     } finally {
@@ -213,48 +203,17 @@ export function FiqOnIntegrationCard() {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label>Base URL</Label>
-          <Input
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="https://api.fiqon.com/v1"
-          />
+        <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+          <p className="font-medium mb-1">📋 Como configurar:</p>
+          <ol className="list-decimal list-inside space-y-1 text-xs">
+            <li>No FiqOn, crie um fluxo que receba webhooks da Z-API</li>
+            <li>Configure a ação de saída para enviar POST para a URL abaixo</li>
+            <li>O CRM receberá as mensagens e a Isa responderá automaticamente</li>
+          </ol>
         </div>
 
         <div className="space-y-2">
-          <Label>API Key</Label>
-          <div className="relative">
-            <Input
-              type={showApiKey ? 'text' : 'password'}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Sua API Key"
-              className="pr-10"
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="absolute right-0 top-0 h-full px-3"
-              onClick={() => setShowApiKey(!showApiKey)}
-            >
-              {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </Button>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Webhook Secret (Opcional)</Label>
-          <Input
-            value={webhookSecret}
-            onChange={(e) => setWebhookSecret(e.target.value)}
-            placeholder="Senha para validar webhooks"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>URL do Webhook</Label>
+          <Label>URL do Webhook (Configure no FiqOn)</Label>
           <div className="flex gap-2">
             <Input
               readOnly
@@ -273,13 +232,28 @@ export function FiqOnIntegrationCard() {
               )}
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Use esta URL como destino do fluxo no FiqOn
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Webhook Secret (Opcional)</Label>
+          <Input
+            value={webhookSecret}
+            onChange={(e) => setWebhookSecret(e.target.value)}
+            placeholder="Senha para validar webhooks recebidos"
+          />
+          <p className="text-xs text-muted-foreground">
+            Se configurado, inclua o header <code className="bg-muted px-1 rounded">x-webhook-secret</code> nas requisições do FiqOn
+          </p>
         </div>
 
         <div className="flex justify-between pt-4 border-t">
           <Button
             variant="outline"
             onClick={handleTest}
-            disabled={testing || !baseUrl || !apiKey}
+            disabled={testing}
             className="gap-2"
           >
             {testing ? (
@@ -290,7 +264,7 @@ export function FiqOnIntegrationCard() {
             ) : (
               <>
                 <TestTube className="h-4 w-4" />
-                Testar Conexão
+                Testar Webhook
               </>
             )}
           </Button>
