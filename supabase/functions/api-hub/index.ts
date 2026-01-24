@@ -48,6 +48,73 @@ serve(async (req: Request) => {
     };
 
     // === WEBHOOK ROUTES ===
+
+    // === FiqOn / Z-API Webhook ===
+    // FiqOn recebe eventos do Z-API e encaminha para nós
+    if (path === '/webhook/fiqon' || path === '/fiqon') {
+      console.log('[API-HUB] FiqOn webhook received:', JSON.stringify(body).substring(0, 500));
+      
+      // O FiqOn pode enviar em diferentes formatos, normalizamos aqui
+      // e encaminhamos para o zapi-webhook
+      try {
+        const zapiPayload = normalizeFiqonToZapi(body);
+        
+        if (zapiPayload) {
+          // Chamar zapi-webhook diretamente
+          const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-webhook', {
+            body: zapiPayload
+          });
+
+          if (zapiError) {
+            console.error('[API-HUB] Error calling zapi-webhook:', zapiError);
+            await supabase.from('system_events').insert({
+              tipo: 'integracao',
+              fonte: 'fiqon',
+              acao: 'webhook_error',
+              erro: zapiError.message,
+              dados: body
+            });
+          } else {
+            console.log('[API-HUB] FiqOn -> Z-API webhook processed:', zapiResult);
+          }
+
+          return new Response(JSON.stringify({ 
+            success: true, 
+            source: 'fiqon',
+            processed: true,
+            result: zapiResult 
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        } else {
+          // Evento que não é mensagem (status, presence, etc)
+          console.log('[API-HUB] FiqOn non-message event, logging only');
+          await supabase.from('integration_logs').insert({
+            provider: 'fiqon',
+            direction: 'inbound',
+            endpoint: path,
+            payload_json: body,
+            status: 'ok'
+          });
+
+          return new Response(JSON.stringify({ 
+            success: true, 
+            source: 'fiqon',
+            type: 'non-message-event'
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+      } catch (fiqonError: any) {
+        console.error('[API-HUB] FiqOn processing error:', fiqonError);
+        return new Response(JSON.stringify({ 
+          error: fiqonError.message 
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
     
     // ManyChat Webhook - aceitar rotas explícitas e também POST direto em /api-hub (path vazio)
     const isManyChatPayload =
@@ -772,6 +839,7 @@ serve(async (req: Request) => {
         status: 'healthy', 
         timestamp: new Date().toISOString(),
         endpoints: [
+          'POST /webhook/fiqon (Z-API via FiqOn)',
           'POST /webhook/manychat',
           'POST /webhook/clicksign', 
           'POST /webhook/automation',
@@ -825,3 +893,85 @@ serve(async (req: Request) => {
     });
   }
 });
+
+// Função para normalizar payload do FiqOn para formato Z-API
+function normalizeFiqonToZapi(body: any): any {
+  // FiqOn pode enviar diferentes tipos de eventos do Z-API
+  // Formatos possíveis:
+  // 1. Evento direto do Z-API passado pelo FiqOn
+  // 2. Formato wrapper do FiqOn com dados dentro de "data" ou "payload"
+  
+  const payload = body.data || body.payload || body;
+  
+  // Verificar se é uma mensagem recebida
+  const isReceivedMessage = 
+    payload.isNewMsg === true || 
+    payload.event === 'message' ||
+    payload.type === 'ReceivedCallback' ||
+    payload.fromMe === false ||
+    (payload.phone && payload.text) ||
+    (payload.phone && (payload.audio || payload.image || payload.document));
+
+  // Ignorar mensagens enviadas por nós mesmos
+  if (payload.fromMe === true || payload.isFromMe === true) {
+    console.log('[FiqOn] Ignoring outbound message');
+    return null;
+  }
+
+  // Ignorar eventos que não são mensagens
+  if (!isReceivedMessage && !payload.phone && !payload.chatId) {
+    console.log('[FiqOn] Event is not a received message:', payload.event || payload.type);
+    return null;
+  }
+
+  // Normalizar para formato esperado pelo zapi-webhook
+  const normalized: any = {
+    // Identificação do contato
+    phone: payload.phone || payload.chatId?.replace('@c.us', '') || payload.from,
+    senderName: payload.senderName || payload.pushName || payload.name || payload.sender?.name,
+    
+    // ID da mensagem
+    messageId: payload.messageId || payload.id || payload.ids?.[0],
+    
+    // Timestamp
+    timestamp: payload.timestamp || payload.momment || Math.floor(Date.now() / 1000),
+    
+    // Fonte
+    source: 'fiqon'
+  };
+
+  // Normalizar conteúdo da mensagem baseado no tipo
+  if (payload.text?.message) {
+    normalized.text = payload.text;
+  } else if (payload.text && typeof payload.text === 'string') {
+    normalized.text = { message: payload.text };
+  } else if (payload.message?.text) {
+    normalized.text = { message: payload.message.text };
+  } else if (payload.body) {
+    normalized.text = { message: payload.body };
+  }
+
+  // Mídia
+  if (payload.audio) {
+    normalized.audio = payload.audio;
+  }
+  if (payload.image) {
+    normalized.image = payload.image;
+  }
+  if (payload.document) {
+    normalized.document = payload.document;
+  }
+  if (payload.video) {
+    normalized.video = payload.video;
+  }
+  if (payload.sticker) {
+    normalized.sticker = payload.sticker;
+  }
+  if (payload.location) {
+    normalized.location = payload.location;
+  }
+
+  console.log('[FiqOn] Normalized payload:', JSON.stringify(normalized).substring(0, 300));
+  
+  return normalized;
+}

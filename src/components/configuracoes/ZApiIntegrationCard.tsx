@@ -24,7 +24,10 @@ export function ZApiIntegrationCard() {
   const [isActive, setIsActive] = useState(false);
   const [showToken, setShowToken] = useState(false);
 
-  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL || 'https://qgenaltkjtlvwfgykpxq.supabase.co'}/functions/v1/zapi-webhook`;
+  // URL para receber webhooks via FiqOn
+  const webhookUrlFiqon = `${import.meta.env.VITE_SUPABASE_URL || 'https://qgenaltkjtlvwfgykpxq.supabase.co'}/functions/v1/api-hub/webhook/fiqon`;
+  // URL direta (alternativa)
+  const webhookUrlDirect = `${import.meta.env.VITE_SUPABASE_URL || 'https://qgenaltkjtlvwfgykpxq.supabase.co'}/functions/v1/zapi-webhook`;
 
   useEffect(() => {
     loadConfig();
@@ -171,9 +174,9 @@ export function ZApiIntegrationCard() {
               <MessageSquare className="h-5 w-5 text-green-600" />
             </div>
             <div className="space-y-0.5">
-              <CardTitle className="text-base font-semibold">Z-API (WhatsApp)</CardTitle>
+              <CardTitle className="text-base font-semibold">Z-API + FiqOn</CardTitle>
               <CardDescription className="text-xs">
-                Integração com WhatsApp via Z-API
+                WhatsApp via Z-API com automação FiqOn
               </CardDescription>
             </div>
           </div>
@@ -243,28 +246,53 @@ export function ZApiIntegrationCard() {
           </p>
         </div>
 
-        <div className="space-y-2">
-          <Label>URL do Webhook</Label>
-          <div className="flex gap-2">
-            <Input
-              readOnly
-              value={webhookUrl}
-              className="font-mono text-xs bg-muted/30"
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => copyToClipboard(webhookUrl, 'webhook')}
-            >
-              {copied === 'webhook' ? (
-                <Check className="h-4 w-4 text-green-600" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
-            </Button>
+        <div className="space-y-3 p-3 bg-muted/30 rounded-lg border">
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="text-xs">Configuração FiqOn</Badge>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Configure esta URL no painel do Z-API para receber mensagens.
+          
+          <div className="space-y-2">
+            <Label className="text-xs font-medium">1. Configure no Z-API (campo "Ao receber")</Label>
+            <p className="text-xs text-muted-foreground mb-1">
+              Use o webhook do FiqOn que você já configurou:
+            </p>
+            <div className="flex gap-2">
+              <Input
+                readOnly
+                value="https://webhook.fiqon.app/webhook/019acc14-90a0-71b..."
+                className="font-mono text-xs bg-background"
+                placeholder="Seu webhook FiqOn"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-medium">2. Configure no FiqOn (destino do fluxo)</Label>
+            <p className="text-xs text-muted-foreground mb-1">
+              O FiqOn deve encaminhar para esta URL:
+            </p>
+            <div className="flex gap-2">
+              <Input
+                readOnly
+                value={webhookUrlFiqon}
+                className="font-mono text-xs bg-background"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => copyToClipboard(webhookUrlFiqon, 'fiqon')}
+              >
+                {copied === 'fiqon' ? (
+                  <Check className="h-4 w-4 text-green-600" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+          
+          <p className="text-xs text-muted-foreground pt-2 border-t">
+            <strong>Fluxo:</strong> WhatsApp → Z-API → FiqOn → CRM (Isa responde automaticamente)
           </p>
         </div>
 
