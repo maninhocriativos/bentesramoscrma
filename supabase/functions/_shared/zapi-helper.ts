@@ -11,6 +11,7 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 export interface ZapiConfig {
   instance_id: string;
   token: string;
+  client_token?: string;
   webhook_secret?: string;
 }
 
@@ -53,6 +54,7 @@ export async function getZapiConfig(supabase: any): Promise<ZapiConfig | null> {
 
   const instanceId = config.config_json?.instance_id;
   const token = config.config_json?.token;
+  const clientToken = config.config_json?.client_token;
 
   if (!instanceId || !token) {
     console.log('[Z-API Helper] Credenciais faltando');
@@ -62,6 +64,7 @@ export async function getZapiConfig(supabase: any): Promise<ZapiConfig | null> {
   return {
     instance_id: instanceId,
     token: token,
+    client_token: clientToken,
     webhook_secret: config.config_json?.webhook_secret
   };
 }
@@ -79,11 +82,16 @@ export async function sendText(
   try {
     console.log(`[Z-API Helper] Enviando texto para ${cleanPhone}`);
     
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (config.client_token) {
+      headers['Client-Token'] = config.client_token;
+    }
+    
     const response = await fetch(
       `https://api.z-api.io/instances/${config.instance_id}/token/${config.token}/send-text`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ phone: cleanPhone, message })
       }
     );
@@ -128,11 +136,16 @@ export async function sendImage(
   try {
     console.log(`[Z-API Helper] Enviando imagem para ${cleanPhone}`);
     
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (config.client_token) {
+      headers['Client-Token'] = config.client_token;
+    }
+    
     const response = await fetch(
       `https://api.z-api.io/instances/${config.instance_id}/token/${config.token}/send-image`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ 
           phone: cleanPhone, 
           image: imageUrl,
@@ -167,11 +180,16 @@ export async function sendDocument(
   try {
     console.log(`[Z-API Helper] Enviando documento para ${cleanPhone}`);
     
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (config.client_token) {
+      headers['Client-Token'] = config.client_token;
+    }
+    
     const response = await fetch(
       `https://api.z-api.io/instances/${config.instance_id}/token/${config.token}/send-document`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ 
           phone: cleanPhone, 
           document: documentUrl,
@@ -205,11 +223,16 @@ export async function sendAudio(
   try {
     console.log(`[Z-API Helper] Enviando áudio para ${cleanPhone}`);
     
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (config.client_token) {
+      headers['Client-Token'] = config.client_token;
+    }
+    
     const response = await fetch(
       `https://api.z-api.io/instances/${config.instance_id}/token/${config.token}/send-audio`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ 
           phone: cleanPhone, 
           audio: audioUrl

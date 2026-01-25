@@ -114,6 +114,7 @@ export interface IntegrationConfig {
   config_json: {
     instance_id?: string;
     token?: string;
+    client_token?: string;
     webhook_secret?: string;
     base_url?: string;
     api_key?: string;

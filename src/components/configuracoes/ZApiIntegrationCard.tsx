@@ -20,9 +20,11 @@ export function ZApiIntegrationCard() {
   const [config, setConfig] = useState<IntegrationConfig | null>(null);
   const [instanceId, setInstanceId] = useState('');
   const [token, setToken] = useState('');
+  const [clientToken, setClientToken] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [isActive, setIsActive] = useState(false);
   const [showToken, setShowToken] = useState(false);
+  const [showClientToken, setShowClientToken] = useState(false);
 
   // URL para receber webhooks via FiqOn
   const webhookUrlFiqon = `${import.meta.env.VITE_SUPABASE_URL || 'https://qgenaltkjtlvwfgykpxq.supabase.co'}/functions/v1/api-hub/webhook/fiqon`;
@@ -49,6 +51,7 @@ export function ZApiIntegrationCard() {
         setConfig(typedData);
         setInstanceId(typedData.config_json?.instance_id || '');
         setToken(typedData.config_json?.token || '');
+        setClientToken(typedData.config_json?.client_token || '');
         setWebhookSecret(typedData.config_json?.webhook_secret || '');
         setIsActive(typedData.is_active);
       }
@@ -69,6 +72,7 @@ export function ZApiIntegrationCard() {
           config_json: {
             instance_id: instanceId,
             token: token,
+            client_token: clientToken,
             webhook_secret: webhookSecret
           },
           is_active: isActive,
@@ -108,8 +112,14 @@ export function ZApiIntegrationCard() {
     setTesting(true);
     try {
       // Testar conexão com Z-API
+      const headers: Record<string, string> = {};
+      if (clientToken) {
+        headers['Client-Token'] = clientToken;
+      }
+      
       const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/status`, {
-        method: 'GET'
+        method: 'GET',
+        headers
       });
 
       const data = await response.json();
@@ -212,7 +222,7 @@ export function ZApiIntegrationCard() {
             />
           </div>
           <div className="space-y-2">
-            <Label>Token</Label>
+            <Label>Token da Instância</Label>
             <div className="relative">
               <Input
                 type={showToken ? 'text' : 'password'}
@@ -232,6 +242,31 @@ export function ZApiIntegrationCard() {
               </Button>
             </div>
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Client-Token (Obrigatório)</Label>
+          <div className="relative">
+            <Input
+              type={showClientToken ? 'text' : 'password'}
+              value={clientToken}
+              onChange={(e) => setClientToken(e.target.value)}
+              placeholder="Seu Client-Token"
+              className="pr-10"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-0 top-0 h-full px-3"
+              onClick={() => setShowClientToken(!showClientToken)}
+            >
+              {showClientToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Encontre em Segurança {'>'} Token de Segurança no painel Z-API.
+          </p>
         </div>
 
         <div className="space-y-2">
