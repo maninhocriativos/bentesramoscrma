@@ -389,18 +389,16 @@ const ManyChatInboxContent = () => {
   const syncAllContacts = async () => {
     setIsSyncing(true);
     try {
-      toast({ title: 'Sincronização iniciada', description: 'Importando contatos do ManyChat...' });
-      const { data, error } = await supabase.functions.invoke('manychat-full-sync', { body: { mode: 'full' } });
-      if (error) throw error;
+      toast({ title: 'Sincronização iniciada', description: 'Atualizando contatos via Z-API...' });
       
-      // Also sync subscriber names for contacts with "Desconhecido"
+      // Sync subscriber names for contacts with "Desconhecido"
       toast({ title: 'Atualizando nomes...', description: 'Buscando nomes dos contatos...' });
       await supabase.functions.invoke('sync-subscriber-names');
       
       await loadSubscribers();
       toast({
         title: 'Sincronização concluída!',
-        description: `${data.created || 0} novos, ${data.updated || 0} atualizados`
+        description: 'Lista de contatos atualizada'
       });
     } catch (error: any) {
       toast({ title: 'Erro na sincronização', description: error.message, variant: 'destructive' });
@@ -512,29 +510,28 @@ const ManyChatInboxContent = () => {
 
     setIsSending(true);
     try {
-      // Enviar via ManyChat API
-      const { data: mcResult, error: mcError } = await supabase.functions.invoke('manychat', {
+      // Enviar via Z-API
+      const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-send', {
         body: {
-          action: 'enviar_mensagem',
-          subscriberId: selectedSubscriber.subscriber_id,
+          to_phone: selectedSubscriber.telefone,
           message: content,
           type: mediaType || 'text',
-          phone: selectedSubscriber.telefone,
+          lead_id: selectedSubscriber.lead_id,
         },
       });
 
-      console.log('[Chat] ManyChat response:', mcResult, mcError);
+      console.log('[Chat] Z-API response:', zapiResult, zapiError);
 
       // Verificar se houve erro no envio
-      if (mcError) {
-        throw new Error(mcError.message || 'Erro ao enviar via ManyChat');
+      if (zapiError) {
+        throw new Error(zapiError.message || 'Erro ao enviar via Z-API');
       }
 
-      if (mcResult?.status === 'error') {
-        console.warn('[Chat] ManyChat retornou erro:', mcResult);
+      if (!zapiResult?.success) {
+        console.warn('[Chat] Z-API retornou erro:', zapiResult);
         toast({ 
           title: '⚠️ Atenção', 
-          description: 'Mensagem salva mas pode não ter chegado ao destinatário.',
+          description: zapiResult?.error || 'Mensagem pode não ter chegado ao destinatário.',
           variant: 'destructive'
         });
       }
@@ -543,12 +540,12 @@ const ManyChatInboxContent = () => {
       const { data: savedMsg } = await supabase.from('manychat_mensagens' as any).insert({
         subscriber_id: selectedSubscriber.subscriber_id,
         subscriber_nome: selectedSubscriber.nome,
-        canal: selectedSubscriber.canal,
+        canal: 'whatsapp',
         conteudo: content,
         tipo: mediaType || 'text',
         direcao: 'saida',
         lead_id: selectedSubscriber.lead_id,
-        metadata: { sent_via: 'chat_interface', manychat_status: mcResult?.status }
+        metadata: { sent_via: 'chat_interface', zapi_status: zapiResult?.success ? 'success' : 'error', message_id: zapiResult?.messageId }
       } as any).select().single();
 
       // Replace optimistic message with real one
@@ -561,7 +558,7 @@ const ManyChatInboxContent = () => {
         await supabase.from('interacoes').insert({
           cliente_id: selectedSubscriber.lead_id,
           tipo: 'Chat',
-          resumo: `Mensagem via ${selectedSubscriber.canal}: ${content.substring(0, 100)}...`,
+          resumo: `Mensagem via WhatsApp: ${content.substring(0, 100)}...`,
           detalhes: content,
           direcao: 'saida',
           data_interacao: new Date().toISOString(),
@@ -571,9 +568,9 @@ const ManyChatInboxContent = () => {
       setSelectedFile(null);
       setPreviewUrl(null);
 
-      // Toast de sucesso apenas se ManyChat confirmou
-      if (mcResult?.status === 'success') {
-        toast({ title: '✅ Enviado', description: 'Mensagem entregue' });
+      // Toast de sucesso apenas se Z-API confirmou
+      if (zapiResult?.success) {
+        toast({ title: '✅ Enviado', description: 'Mensagem entregue via WhatsApp' });
       }
     } catch (error: any) {
       console.error('[Chat] Erro ao enviar:', error);
