@@ -44,7 +44,7 @@ serve(async (req: Request) => {
       });
     }
 
-    let result;
+    let result: { success: boolean; data?: any; error?: string; messageId?: string };
     let success = false;
 
     if (provider === 'zapi') {
@@ -99,7 +99,8 @@ serve(async (req: Request) => {
     return new Response(JSON.stringify({ 
       success,
       data: result.data,
-      error: result.error
+      error: result.error,
+      messageId: result.messageId
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
@@ -115,9 +116,10 @@ serve(async (req: Request) => {
   }
 });
 
-async function sendViaZapi(config: any, phone: string, message: string): Promise<{ success: boolean; data?: any; error?: string }> {
+async function sendViaZapi(config: any, phone: string, message: string): Promise<{ success: boolean; data?: any; error?: string; messageId?: string }> {
   const instanceId = config.instance_id;
   const token = config.token;
+  const clientToken = config.client_token;
 
   if (!instanceId || !token) {
     return { success: false, error: 'Missing Z-API credentials' };
@@ -130,9 +132,18 @@ async function sendViaZapi(config: any, phone: string, message: string): Promise
   }
 
   try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    
+    // Add client token if available
+    if (clientToken) {
+      headers['Client-Token'] = clientToken;
+    }
+    
+    console.log(`[Z-API Send] Sending to ${cleanPhone}, clientToken: ${clientToken ? 'present' : 'missing'}`);
+
     const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         phone: cleanPhone,
         message: message
@@ -140,13 +151,23 @@ async function sendViaZapi(config: any, phone: string, message: string): Promise
     });
 
     const data = await response.json();
+    console.log('[Z-API Send] Response:', JSON.stringify(data).substring(0, 200));
     
-    if (response.ok) {
-      return { success: true, data };
+    if (response.ok && !data.error) {
+      return { 
+        success: true, 
+        data,
+        messageId: data.messageId || data.id
+      };
     } else {
-      return { success: false, error: data.error || 'Z-API error', data };
+      return { 
+        success: false, 
+        error: data.error || data.message || 'Z-API error', 
+        data 
+      };
     }
   } catch (error) {
+    console.error('[Z-API Send] Exception:', error);
     return { success: false, error: String(error) };
   }
 }
