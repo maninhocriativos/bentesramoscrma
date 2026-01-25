@@ -188,38 +188,31 @@ const ManyChatInboxContent = () => {
     }
   }, [pendingLeadId, subscribers]);
 
-  // Initial load and aggressive realtime sync
+  // Track current subscriber ID to prevent unnecessary reloads
+  const selectedSubscriberIdRef = useRef<string | null>(null);
+
+  // Initial load only - no aggressive polling (realtime handles updates)
   useEffect(() => {
     loadSubscribers();
     
-    // Polling fallback every 10 seconds for better responsiveness
+    // Polling fallback every 30 seconds (reduced from 10s - realtime is primary)
     const pollInterval = setInterval(() => {
-      console.log('[ManyChatInbox] Polling - atualizando...');
+      console.log('[ManyChatInbox] Polling - atualizando lista...');
       loadSubscribers();
-      // Also refresh messages if a subscriber is selected
-      if (selectedSubscriber) {
-        loadMessages(selectedSubscriber.subscriber_id);
-      }
-    }, 10000);
+    }, 30000);
 
-    // Refetch on window focus
+    // Refetch on window focus (but not messages - only subscriber list)
     const handleFocus = () => {
-      console.log('[ManyChatInbox] Window focus - recarregando...');
+      console.log('[ManyChatInbox] Window focus - recarregando lista...');
       loadSubscribers();
-      if (selectedSubscriber) {
-        loadMessages(selectedSubscriber.subscriber_id);
-      }
     };
     window.addEventListener('focus', handleFocus);
 
     // Visibility change handler for mobile/tab switching
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        console.log('[ManyChatInbox] Tab visible - recarregando...');
+        console.log('[ManyChatInbox] Tab visible - recarregando lista...');
         loadSubscribers();
-        if (selectedSubscriber) {
-          loadMessages(selectedSubscriber.subscriber_id);
-        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -229,7 +222,7 @@ const ManyChatInboxContent = () => {
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [selectedSubscriber?.subscriber_id]);
+  }, []); // Empty dependency - only run once on mount
 
   const handleTyping = useCallback(() => {
     setTyping(true);
@@ -357,15 +350,22 @@ const ManyChatInboxContent = () => {
     };
   }, [selectedSubscriber?.subscriber_id, user?.id, playNotificationSound, notifyNewMessage, notifyAssignment]);
 
-  // Update team presence when selecting a chat
+  // Update team presence and load messages when selecting a NEW chat
   useEffect(() => {
-    if (selectedSubscriber) {
-      loadMessages(selectedSubscriber.subscriber_id);
-      setCurrentChat(selectedSubscriber.subscriber_id);
-      setShowMobileChat(true);
-    } else {
-      setMessages([]);
-      setCurrentChat(null);
+    const newSubscriberId = selectedSubscriber?.subscriber_id || null;
+    
+    // Only load if subscriber actually changed (not on every render)
+    if (newSubscriberId !== selectedSubscriberIdRef.current) {
+      selectedSubscriberIdRef.current = newSubscriberId;
+      
+      if (selectedSubscriber) {
+        loadMessages(selectedSubscriber.subscriber_id);
+        setCurrentChat(selectedSubscriber.subscriber_id);
+        setShowMobileChat(true);
+      } else {
+        setMessages([]);
+        setCurrentChat(null);
+      }
     }
   }, [selectedSubscriber?.subscriber_id, setCurrentChat]);
 
