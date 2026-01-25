@@ -68,6 +68,17 @@ Bentes & Ramos Advocacia`
   }
 };
 
+// Mensagem para campanha manual de reengajamento
+const CAMPANHA_MENSAGEM = `{{nome}}, tudo bem? 👋
+
+Vi que conversamos há um tempo sobre cobranças bancárias indevidas.
+
+Novidade: agora estamos conseguindo resultados ainda melhores para nossos clientes! 💰
+
+Se ainda tiver interesse em verificar seu caso (é grátis), me responde aqui que te explico rapidinho.
+
+Bentes & Ramos Advocacia 🤝`;
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -91,7 +102,7 @@ serve(async (req: Request) => {
     );
   }
 
-  // Teste manual
+  // Teste manual para um número específico
   if (body.test && body.phone) {
     console.log(`[RETOMADA-TEST] Testando para telefone: ${body.phone}`);
     const resultado = await sendText(zapiConfig, body.phone, 
@@ -103,6 +114,116 @@ serve(async (req: Request) => {
         phone: body.phone,
         resultado,
         provider: 'zapi'
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // MODO CAMPANHA: Enviar para todos os leads frios que já completaram o ciclo
+  if (body.campanha) {
+    console.log('[RETOMADA-CAMPANHA] Iniciando campanha de reengajamento...');
+    
+    const { data: leadsFrios, error: campError } = await supabase
+      .from('lead_followups')
+      .select(`
+        lead_id,
+        leads_juridicos!inner(id, nome, telefone, status)
+      `)
+      .eq('status', 'concluido')
+      .eq('respondido', false)
+      .eq('followup_3_enviado', true);
+
+    if (campError) {
+      console.error('[RETOMADA-CAMPANHA] Erro:', campError);
+      throw campError;
+    }
+
+    let enviados = 0;
+    let erros = 0;
+    const limite = body.limite || 50; // Limite padrão de 50 por campanha
+
+    for (const followup of leadsFrios || []) {
+      if (enviados >= limite) break;
+      
+      const lead = followup.leads_juridicos as any;
+      if (!lead || lead.status !== 'Lead Frio' || !lead.telefone) continue;
+
+      // Verificar se já enviou campanha hoje
+      const hoje = new Date().toISOString().split('T')[0];
+      const { data: jaEnviou } = await supabase
+        .from('system_events')
+        .select('id')
+        .eq('lead_id', lead.id)
+        .eq('acao', 'campanha_reengajamento')
+        .gte('created_at', hoje)
+        .limit(1);
+
+      if (jaEnviou && jaEnviou.length > 0) {
+        console.log(`[CAMPANHA] Lead ${lead.nome} já recebeu campanha hoje, pulando`);
+        continue;
+      }
+
+      const mensagem = CAMPANHA_MENSAGEM.replace('{{nome}}', lead.nome || 'Cliente');
+      console.log(`[CAMPANHA] Enviando para ${lead.nome} (${lead.telefone})`);
+      
+      const resultado = await sendText(zapiConfig, lead.telefone, mensagem);
+
+      if (resultado.success) {
+        // Registrar no system_events
+        await supabase.from('system_events').insert({
+          tipo: 'campanha',
+          fonte: 'zapi-automation',
+          acao: 'campanha_reengajamento',
+          lead_id: lead.id,
+          entidade_tipo: 'lead',
+          entidade_id: lead.id,
+          dados: { 
+            campanha: body.campanha_nome || 'reengajamento_manual',
+            phone: lead.telefone,
+            provider: 'zapi'
+          },
+          processado: true
+        });
+
+        // Registrar mensagem
+        await supabase.from('manychat_mensagens').insert({
+          subscriber_id: gerarSubscriberId(lead.telefone),
+          subscriber_nome: lead.nome || 'Cliente',
+          lead_id: lead.id,
+          conteudo: mensagem,
+          direcao: 'saida',
+          tipo: 'text',
+          canal: 'whatsapp',
+          metadata: { source: 'zapi', context: 'campanha_reengajamento' }
+        });
+
+        // Registrar interação
+        await supabase.from('interacoes').insert({
+          cliente_id: lead.id,
+          tipo: 'WhatsApp',
+          direcao: 'Saída',
+          resumo: `Campanha de Reengajamento via Z-API`,
+          detalhes: mensagem,
+        });
+
+        enviados++;
+        console.log(`[CAMPANHA] ✅ Enviado para ${lead.nome}`);
+      } else {
+        erros++;
+        console.error(`[CAMPANHA] ❌ Erro ao enviar para ${lead.nome}: ${resultado.error}`);
+      }
+    }
+
+    return new Response(
+      JSON.stringify({ 
+        success: true, 
+        modo: 'campanha',
+        total_leads: leadsFrios?.length || 0,
+        enviados,
+        erros,
+        limite,
+        provider: 'zapi',
+        timestamp: agora.toISOString()
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
