@@ -410,11 +410,23 @@ const ManyChatInboxContent = () => {
   const loadMessages = async (subscriberId: string, loadAll = false) => {
     setIsLoadingMessages(true);
     try {
+      // Get subscriber phone for Z-API format lookup
+      const currentSub = subscribers.find(s => s.subscriber_id === subscriberId);
+      const phoneClean = currentSub?.telefone?.replace(/\D/g, '') || '';
+      const zapiId = phoneClean ? `zapi_${phoneClean.startsWith('55') ? phoneClean : '55' + phoneClean}` : null;
+      
+      // Build query to match both old subscriber_id AND new zapi_ format
       let query = supabase
         .from('manychat_mensagens' as any)
         .select('*')
-        .eq('subscriber_id', subscriberId)
         .order('created_at', { ascending: true });
+
+      // Match subscriber_id OR zapi_phone format
+      if (zapiId) {
+        query = query.or(`subscriber_id.eq.${subscriberId},subscriber_id.eq.${zapiId}`);
+      } else {
+        query = query.eq('subscriber_id', subscriberId);
+      }
 
       // Only limit if not loading all history
       if (!loadAll) {

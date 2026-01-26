@@ -73,17 +73,49 @@ serve(async (req: Request) => {
       duration_ms: Date.now() - startTime
     });
 
-    // Salvar mensagem enviada
+    // Buscar subscriber_id existente pelo telefone ou lead_id
+    let existingSubscriberId: string | null = null;
+    let existingSubscriberName = 'Escritório';
+    const phoneClean = to_phone.replace(/\D/g, '');
+    
     if (success && lead_id) {
+      // Primeiro tentar pelo lead_id
+      const { data: subByLead } = await supabase
+        .from('manychat_subscribers')
+        .select('subscriber_id, nome')
+        .eq('lead_id', lead_id)
+        .maybeSingle();
+      
+      if (subByLead) {
+        existingSubscriberId = subByLead.subscriber_id;
+        existingSubscriberName = subByLead.nome || 'Escritório';
+      } else {
+        // Tentar pelo telefone (normalizado)
+        const { data: subByPhone } = await supabase
+          .from('manychat_subscribers')
+          .select('subscriber_id, nome')
+          .or(`telefone.ilike.%${phoneClean.slice(-9)}%,subscriber_id.ilike.%${phoneClean.slice(-9)}%`)
+          .limit(1)
+          .maybeSingle();
+        
+        if (subByPhone) {
+          existingSubscriberId = subByPhone.subscriber_id;
+          existingSubscriberName = subByPhone.nome || 'Escritório';
+        }
+      }
+      
+      // Usar subscriber_id existente ou criar novo padrão Z-API
+      const finalSubscriberId = existingSubscriberId || `zapi_${phoneClean}`;
+      
       await supabase.from('manychat_mensagens').insert({
-        subscriber_id: `${provider}_${to_phone}`,
-        subscriber_nome: 'Escritório',
+        subscriber_id: finalSubscriberId,
+        subscriber_nome: existingSubscriberName,
         conteudo: message,
         canal: 'whatsapp',
         tipo: 'text',
         direcao: 'saida',
         lead_id,
-        metadata: { source: provider }
+        metadata: { source: provider, zapi_message_id: result.messageId }
       });
 
       // Registrar interação
