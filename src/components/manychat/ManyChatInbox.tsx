@@ -437,30 +437,56 @@ const ManyChatInboxContent = () => {
       // Get subscriber phone for Z-API format lookup
       const currentSub = subscribers.find(s => s.subscriber_id === subscriberId);
       const phoneClean = currentSub?.telefone?.replace(/\D/g, '') || '';
-      const zapiId = phoneClean ? `zapi_${phoneClean.startsWith('55') ? phoneClean : '55' + phoneClean}` : null;
       
-      // Build query to match both old subscriber_id AND new zapi_ format
+      // Criar lista de possíveis subscriber_ids para buscar
+      const possibleIds: string[] = [subscriberId];
+      
+      // Adicionar formato zapi_ com telefone normalizado
+      if (phoneClean && phoneClean.length >= 10 && phoneClean.length <= 13) {
+        const normalizedPhone = phoneClean.startsWith('55') ? phoneClean : '55' + phoneClean;
+        possibleIds.push(`zapi_${normalizedPhone}`);
+        possibleIds.push(`zapi_${phoneClean}`);
+      }
+      
+      // Também tentar pelo lead_id se disponível
+      const leadId = currentSub?.lead_id;
+      
+      console.log('[loadMessages] Buscando mensagens para:', { subscriberId, possibleIds, leadId });
+      
+      // Build query to match multiple possible subscriber_ids OR lead_id
       let query = supabase
         .from('manychat_mensagens' as any)
         .select('*')
         .order('created_at', { ascending: true });
 
-      // Match subscriber_id OR zapi_phone format
-      if (zapiId) {
-        query = query.or(`subscriber_id.eq.${subscriberId},subscriber_id.eq.${zapiId}`);
+      // Match subscriber_id OU lead_id
+      if (leadId) {
+        const idsFilter = possibleIds.map(id => `subscriber_id.eq.${id}`).join(',');
+        query = query.or(`${idsFilter},lead_id.eq.${leadId}`);
       } else {
-        query = query.eq('subscriber_id', subscriberId);
+        const idsFilter = possibleIds.map(id => `subscriber_id.eq.${id}`).join(',');
+        query = query.or(idsFilter);
       }
 
       // Only limit if not loading all history
       if (!loadAll) {
-        query = query.limit(100);
+        query = query.limit(200);
       }
 
       const { data, error } = await query;
 
       if (error) throw error;
-      setMessages((data as Message[]) || []);
+      
+      // Deduplicar mensagens por ID
+      const uniqueMessages = (data as Message[])?.reduce((acc, msg) => {
+        if (!acc.find(m => m.id === msg.id)) {
+          acc.push(msg);
+        }
+        return acc;
+      }, [] as Message[]) || [];
+      
+      console.log('[loadMessages] Mensagens carregadas:', uniqueMessages.length);
+      setMessages(uniqueMessages);
     } catch (error) {
       console.error('Erro ao carregar mensagens:', error);
     } finally {
@@ -703,21 +729,33 @@ const ManyChatInboxContent = () => {
     return null;
   };
 
-  // Format phone for display
+  // Format phone for display - melhor formatação
   const formatPhone = (phone?: string) => {
     if (!phone) return null;
     const clean = phone.replace(/\D/g, '');
-    // Format Brazilian phone: +55 (92) 99999-9999
-    if (clean.startsWith('55') && clean.length >= 12) {
+    
+    // Se for número muito longo (possível ID de grupo), retornar null
+    if (clean.length > 15) return null;
+    
+    // Format Brazilian phone: (92) 99999-9999
+    if (clean.startsWith('55') && (clean.length === 12 || clean.length === 13)) {
       const ddd = clean.slice(2, 4);
-      const part1 = clean.slice(4, 9);
-      const part2 = clean.slice(9);
-      return `(${ddd}) ${part1}-${part2}`;
+      const rest = clean.slice(4);
+      if (rest.length === 9) {
+        return `(${ddd}) ${rest.slice(0, 5)}-${rest.slice(5)}`;
+      } else if (rest.length === 8) {
+        return `(${ddd}) ${rest.slice(0, 4)}-${rest.slice(4)}`;
+      }
     }
-    // Just format with spaces
-    if (clean.length >= 10) {
-      return phone.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+    
+    // Without country code
+    if (clean.length === 11) {
+      return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7)}`;
     }
+    if (clean.length === 10) {
+      return `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6)}`;
+    }
+    
     return phone;
   };
 
@@ -731,6 +769,11 @@ const ManyChatInboxContent = () => {
     // Try formatted phone
     const formattedPhone = formatPhone(sub.telefone);
     if (formattedPhone) return formattedPhone;
+    
+    // Se o telefone é muito longo (grupo), mostrar indicador
+    if (sub.telefone && sub.telefone.replace(/\D/g, '').length > 15) {
+      return `Grupo #${sub.subscriber_id?.slice(-4) || '????'}`;
+    }
     
     // Fallback to raw phone or subscriber_id
     if (sub.telefone && sub.telefone !== '{{wa_id}}') return sub.telefone;

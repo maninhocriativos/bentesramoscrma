@@ -29,7 +29,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
   const lastMessageIdRef = useRef<string | null>(null);
   const { toast } = useToast();
 
-  // Load messages for a subscriber
+  // Load messages for a subscriber (considering multiple possible IDs)
   const loadMessages = useCallback(async (loadAll = false) => {
     if (!subscriberId) {
       setMessages([]);
@@ -38,20 +38,54 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
 
     setIsLoading(true);
     try {
+      // Build possible subscriber IDs
+      const possibleIds = [subscriberId];
+      
+      // If subscriberId looks like a phone, also try zapi_ format
+      const phoneMatch = subscriberId.match(/\d{10,13}/);
+      if (phoneMatch) {
+        const phone = phoneMatch[0];
+        const normalized = phone.startsWith('55') ? phone : '55' + phone;
+        possibleIds.push(`zapi_${normalized}`);
+        possibleIds.push(`zapi_${phone}`);
+      }
+      
+      // If it's already zapi_ format, extract phone and add variations
+      if (subscriberId.startsWith('zapi_')) {
+        const phone = subscriberId.replace('zapi_', '');
+        possibleIds.push(phone);
+        if (!phone.startsWith('55') && phone.length >= 10) {
+          possibleIds.push(`zapi_55${phone}`);
+        }
+      }
+
+      console.log('[useChatMessages] Buscando por:', possibleIds);
+
+      const idsFilter = possibleIds.map(id => `subscriber_id.eq.${id}`).join(',');
+      
       let query = supabase
         .from('manychat_mensagens' as any)
         .select('*')
-        .eq('subscriber_id', subscriberId)
+        .or(idsFilter)
         .order('created_at', { ascending: true });
 
       if (!loadAll) {
-        query = query.limit(100);
+        query = query.limit(200);
       }
 
       const { data, error } = await query;
 
       if (error) throw error;
-      setMessages((data as ChatMessage[]) || []);
+      
+      // Deduplicar por ID
+      const uniqueMessages = (data as ChatMessage[])?.reduce((acc, msg) => {
+        if (!acc.find(m => m.id === msg.id)) {
+          acc.push(msg);
+        }
+        return acc;
+      }, [] as ChatMessage[]) || [];
+      
+      setMessages(uniqueMessages);
     } catch (error) {
       console.error('[useChatMessages] Erro ao carregar mensagens:', error);
     } finally {
