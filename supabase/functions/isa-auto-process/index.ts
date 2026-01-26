@@ -1702,41 +1702,82 @@ async function verificarDisponibilidadeHorario(supabase: any, dataHora: Date): P
   return { disponivel: true };
 }
 
-// Enviar resposta via ManyChat
+// Enviar resposta via Z-API (substituiu ManyChat)
 async function enviarRespostaManyChat(subscriberId: string, mensagem: string): Promise<boolean> {
-  if (!MANYCHAT_API_KEY) {
-    console.log('⚠️ MANYCHAT_API_KEY não configurada, resposta não enviada');
-    return false;
-  }
+  const supabaseClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  );
 
   try {
-    const response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
-      },
-      body: JSON.stringify({
-        subscriber_id: parseInt(subscriberId),
-        data: {
-          version: 'v2',
-          content: {
-            messages: [{ type: 'text', text: mensagem }]
-          }
-        }
-      }),
-    });
+    // Buscar telefone do subscriber
+    const { data: subscriber } = await supabaseClient
+      .from('manychat_subscribers')
+      .select('telefone')
+      .eq('subscriber_id', subscriberId)
+      .maybeSingle();
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('❌ Erro ao enviar para ManyChat:', error);
+    if (!subscriber?.telefone) {
+      console.log('⚠️ Subscriber sem telefone:', subscriberId);
       return false;
     }
 
-    console.log('✅ Resposta enviada via ManyChat');
+    // Buscar configuração do Z-API
+    const { data: zapiConfig } = await supabaseClient
+      .from('integrations_config')
+      .select('config_json, is_active')
+      .eq('provider', 'zapi')
+      .single();
+
+    if (!zapiConfig?.is_active) {
+      console.log('⚠️ Z-API não está ativo');
+      return false;
+    }
+
+    const instanceId = zapiConfig.config_json?.instance_id;
+    const token = zapiConfig.config_json?.token;
+    const clientToken = zapiConfig.config_json?.client_token;
+
+    if (!instanceId || !token) {
+      console.log('⚠️ Z-API não configurado (falta instance_id ou token)');
+      return false;
+    }
+
+    // Normalizar telefone
+    let cleanPhone = subscriber.telefone.replace(/\D/g, '');
+    if (cleanPhone.length === 10 || cleanPhone.length === 11) {
+      cleanPhone = '55' + cleanPhone;
+    }
+
+    // Headers com Client-Token se disponível
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (clientToken) {
+      headers['Client-Token'] = clientToken;
+    }
+
+    console.log(`[Isa Z-API] Enviando para ${cleanPhone}, clientToken: ${clientToken ? 'presente' : 'ausente'}`);
+
+    // Enviar via Z-API
+    const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        phone: cleanPhone,
+        message: mensagem
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || result.error) {
+      console.error('❌ Erro ao enviar via Z-API:', result);
+      return false;
+    }
+
+    console.log('✅ Resposta enviada via Z-API para:', cleanPhone);
     return true;
   } catch (error) {
-    console.error('❌ Erro ao enviar para ManyChat:', error);
+    console.error('❌ Erro ao enviar via Z-API:', error);
     return false;
   }
 }

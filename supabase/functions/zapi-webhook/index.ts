@@ -173,12 +173,12 @@ serve(async (req: Request) => {
           const { data: isaResponse, error: isaError } = await supabase.functions.invoke('isa-auto-process', {
             body: {
               lead_id: leadId,
-              message: normalized.message,
+              mensagem: normalized.message, // FIXED: isa-auto-process expects 'mensagem' not 'message'
               lead_state: lead.lead_state || 'NEW',
-              channel: 'zapi',
+              canal: 'zapi', // FIXED: isa-auto-process expects 'canal' not 'channel'
               subscriber_id: gerarSubscriberId(normalized.phone),
               subscriber_nome: normalized.name || lead.nome || normalized.phone,
-              media_type: normalized.messageType !== 'text' ? normalized.messageType : undefined,
+              tipo_mensagem: normalized.messageType !== 'text' ? normalized.messageType : 'text', // FIXED: 'tipo_mensagem'
               media_url: normalized.media?.url || normalized.media?.imageUrl || normalized.media?.audioUrl
             }
           });
