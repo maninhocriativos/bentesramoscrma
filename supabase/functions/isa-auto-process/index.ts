@@ -1702,13 +1702,8 @@ async function verificarDisponibilidadeHorario(supabase: any, dataHora: Date): P
   return { disponivel: true };
 }
 
-// Enviar resposta via Z-API (substituiu ManyChat)
-async function enviarRespostaManyChat(subscriberId: string, mensagem: string): Promise<boolean> {
-  const supabaseClient = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-  );
-
+// Enviar resposta via Z-API (retorna messageId para evitar duplicação)
+async function enviarRespostaZapi(supabaseClient: any, subscriberId: string, mensagem: string): Promise<{ success: boolean; messageId?: string }> {
   try {
     // Buscar telefone do subscriber
     const { data: subscriber } = await supabaseClient
@@ -1719,7 +1714,7 @@ async function enviarRespostaManyChat(subscriberId: string, mensagem: string): P
 
     if (!subscriber?.telefone) {
       console.log('⚠️ Subscriber sem telefone:', subscriberId);
-      return false;
+      return { success: false };
     }
 
     // Buscar configuração do Z-API
@@ -1731,7 +1726,7 @@ async function enviarRespostaManyChat(subscriberId: string, mensagem: string): P
 
     if (!zapiConfig?.is_active) {
       console.log('⚠️ Z-API não está ativo');
-      return false;
+      return { success: false };
     }
 
     const instanceId = zapiConfig.config_json?.instance_id;
@@ -1740,7 +1735,7 @@ async function enviarRespostaManyChat(subscriberId: string, mensagem: string): P
 
     if (!instanceId || !token) {
       console.log('⚠️ Z-API não configurado (falta instance_id ou token)');
-      return false;
+      return { success: false };
     }
 
     // Normalizar telefone
@@ -1771,15 +1766,25 @@ async function enviarRespostaManyChat(subscriberId: string, mensagem: string): P
 
     if (!response.ok || result.error) {
       console.error('❌ Erro ao enviar via Z-API:', result);
-      return false;
+      return { success: false };
     }
 
-    console.log('✅ Resposta enviada via Z-API para:', cleanPhone);
-    return true;
+    console.log('✅ Resposta enviada via Z-API para:', cleanPhone, 'messageId:', result.messageId);
+    return { success: true, messageId: result.messageId || result.id };
   } catch (error) {
     console.error('❌ Erro ao enviar via Z-API:', error);
-    return false;
+    return { success: false };
   }
+}
+
+// Alias para compatibilidade
+async function enviarRespostaManyChat(subscriberId: string, mensagem: string): Promise<boolean> {
+  const supabaseClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  );
+  const result = await enviarRespostaZapi(supabaseClient, subscriberId, mensagem);
+  return result.success;
 }
 
 // Processar mensagem com IA
@@ -2347,12 +2352,15 @@ serve(async (req) => {
       );
     }
 
-    // Enviar resposta via ManyChat se houver
+    // Enviar resposta via Z-API se houver
     let respostaEnviada = false;
+    let respostaMsgId: string | null = null;
     if (resultado.resposta && subscriber_id) {
-      respostaEnviada = await enviarRespostaManyChat(subscriber_id, resultado.resposta);
+      const sendResult = await enviarRespostaZapi(supabase, subscriber_id, resultado.resposta);
+      respostaEnviada = sendResult.success;
+      respostaMsgId = sendResult.messageId || null;
       
-      // Salvar resposta no banco
+      // Salvar resposta no banco (única vez, aqui)
       if (respostaEnviada) {
         await supabase.from('manychat_mensagens').insert({
           subscriber_id: subscriber_id,
@@ -2364,6 +2372,8 @@ serve(async (req) => {
           lead_id: lead_id,
           metadata: { 
             auto_gerada: true, 
+            source: 'isa',
+            message_id: respostaMsgId,
             analise: resultado.analise 
           },
         });
