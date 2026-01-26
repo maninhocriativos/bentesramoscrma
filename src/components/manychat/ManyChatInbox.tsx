@@ -257,8 +257,22 @@ const ManyChatInboxContent = () => {
               if (lastMessageIdRef.current === newMsg.id) return;
               lastMessageIdRef.current = newMsg.id;
               
+              // Check if message belongs to currently selected conversation
+              // Match both exact subscriber_id AND phone-based zapi_ format
+              const currentSubId = selectedSubscriber?.subscriber_id;
+              const currentPhone = selectedSubscriber?.telefone?.replace(/\D/g, '') || '';
+              const normalizedPhone = currentPhone.startsWith('55') ? currentPhone : '55' + currentPhone;
+              const currentZapiId = currentPhone ? `zapi_${normalizedPhone}` : null;
+              
+              const isCurrentChat = selectedSubscriber && (
+                newMsg.subscriber_id === currentSubId ||
+                newMsg.subscriber_id === currentZapiId ||
+                (currentZapiId && currentSubId && newMsg.subscriber_id.includes(currentPhone.slice(-9)))
+              );
+              
               // Update messages if current chat
-              if (selectedSubscriber && newMsg.subscriber_id === selectedSubscriber.subscriber_id) {
+              if (isCurrentChat) {
+                console.log('[Realtime] Adicionando mensagem ao chat atual');
                 setMessages(prev => {
                   if (prev.some(m => m.id === newMsg.id)) return prev;
                   return [...prev, newMsg];
@@ -267,15 +281,25 @@ const ManyChatInboxContent = () => {
               }
               
               // Play notification for incoming messages from other chats
-              if (newMsg.direcao === 'entrada' && (!selectedSubscriber || newMsg.subscriber_id !== selectedSubscriber.subscriber_id)) {
+              if (newMsg.direcao === 'entrada' && !isCurrentChat) {
                 playNotificationSound();
                 notifyNewMessage(newMsg.subscriber_nome || 'Novo contato', newMsg.conteudo?.substring(0, 100) || '');
               }
               
-              // Update subscriber order
+              // Update subscriber order - find by subscriber_id OR by matching phone in zapi_ format
               setSubscribers(prev => {
-                const idx = prev.findIndex(s => s.subscriber_id === newMsg.subscriber_id);
+                let idx = prev.findIndex(s => s.subscriber_id === newMsg.subscriber_id);
+                
+                // If not found, try to find by phone number pattern
+                if (idx === -1 && newMsg.subscriber_id.startsWith('zapi_')) {
+                  const phoneFromZapi = newMsg.subscriber_id.replace('zapi_', '');
+                  const phoneSuffix = phoneFromZapi.slice(-9);
+                  idx = prev.findIndex(s => s.telefone?.includes(phoneSuffix));
+                }
+                
                 if (idx === -1) { 
+                  // New subscriber - reload list
+                  console.log('[Realtime] Novo subscriber detectado, recarregando lista...');
                   loadSubscribers(); 
                   return prev; 
                 }

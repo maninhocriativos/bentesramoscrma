@@ -5,17 +5,22 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { MessageSquare, Save, TestTube, Loader2, Eye, EyeOff, CheckCircle, XCircle, Copy, Check } from 'lucide-react';
+import { MessageSquare, Save, TestTube, Loader2, Eye, EyeOff, CheckCircle, XCircle, Copy, Check, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { IntegrationConfig } from '@/types/stateMachine';
+
+// URLs de webhook (hardcoded para evitar problemas com VITE_*)
+const SUPABASE_PROJECT_URL = 'https://qgenaltkjtlvwfgykpxq.supabase.co';
 
 export function ZApiIntegrationCard() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [lastInboundLog, setLastInboundLog] = useState<any>(null);
   
   const [config, setConfig] = useState<IntegrationConfig | null>(null);
   const [instanceId, setInstanceId] = useState('');
@@ -26,13 +31,13 @@ export function ZApiIntegrationCard() {
   const [showToken, setShowToken] = useState(false);
   const [showClientToken, setShowClientToken] = useState(false);
 
-  // URL para receber webhooks via FiqOn
-  const webhookUrlFiqon = `${import.meta.env.VITE_SUPABASE_URL || 'https://qgenaltkjtlvwfgykpxq.supabase.co'}/functions/v1/api-hub/webhook/fiqon`;
-  // URL direta (alternativa)
-  const webhookUrlDirect = `${import.meta.env.VITE_SUPABASE_URL || 'https://qgenaltkjtlvwfgykpxq.supabase.co'}/functions/v1/zapi-webhook`;
+  // URLs para receber webhooks
+  const webhookUrlDirect = `${SUPABASE_PROJECT_URL}/functions/v1/zapi-webhook`;
+  const webhookUrlFiqon = `${SUPABASE_PROJECT_URL}/functions/v1/api-hub/webhook/fiqon`;
 
   useEffect(() => {
     loadConfig();
+    loadLastInboundLog();
   }, []);
 
   const loadConfig = async () => {
@@ -59,6 +64,68 @@ export function ZApiIntegrationCard() {
       console.error('Error loading Z-API config:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadLastInboundLog = async () => {
+    try {
+      const { data } = await supabase
+        .from('integration_logs')
+        .select('*')
+        .eq('provider', 'zapi')
+        .eq('direction', 'inbound')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      setLastInboundLog(data);
+    } catch (error) {
+      console.error('Error loading inbound log:', error);
+    }
+  };
+
+  const testWebhook = async () => {
+    setTestingWebhook(true);
+    try {
+      // Enviar payload de teste para o webhook
+      const testPayload = {
+        phone: '5500000000000',
+        text: { message: 'Teste de webhook do painel de configurações' },
+        senderName: 'Teste Sistema',
+        messageId: `test_${Date.now()}`,
+        timestamp: Math.floor(Date.now() / 1000),
+        isTest: true
+      };
+
+      const response = await fetch(webhookUrlDirect, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testPayload)
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        toast({
+          title: '✅ Webhook funcionando!',
+          description: 'O endpoint está respondendo corretamente.'
+        });
+        loadLastInboundLog();
+      } else {
+        toast({
+          title: '⚠️ Erro no webhook',
+          description: result.error || 'O webhook retornou erro.',
+          variant: 'destructive'
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: '❌ Falha no teste',
+        description: error.message || 'Não foi possível alcançar o webhook.',
+        variant: 'destructive'
+      });
+    } finally {
+      setTestingWebhook(false);
     }
   };
 
@@ -281,30 +348,93 @@ export function ZApiIntegrationCard() {
           </p>
         </div>
 
-        <div className="space-y-3 p-3 bg-muted/30 rounded-lg border">
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-xs">Configuração FiqOn</Badge>
+        {/* Diagnóstico de Webhook */}
+        <div className="space-y-3 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <span className="text-sm font-medium text-amber-800 dark:text-amber-200">Status do Webhook</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { loadLastInboundLog(); }}
+              className="h-7 text-xs"
+            >
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Atualizar
+            </Button>
           </div>
           
+          {lastInboundLog ? (
+            <div className="text-xs text-green-700 dark:text-green-400 flex items-center gap-2">
+              <CheckCircle className="h-4 w-4" />
+              Última mensagem recebida: {new Date(lastInboundLog.created_at).toLocaleString('pt-BR')}
+            </div>
+          ) : (
+            <div className="text-xs text-amber-700 dark:text-amber-300">
+              ⚠️ <strong>Nenhuma mensagem recebida ainda.</strong> Configure o webhook no painel Z-API.
+            </div>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={testWebhook}
+            disabled={testingWebhook}
+            className="w-full gap-2"
+          >
+            {testingWebhook ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Testando webhook...
+              </>
+            ) : (
+              <>
+                <TestTube className="h-4 w-4" />
+                Testar Endpoint do Webhook
+              </>
+            )}
+          </Button>
+        </div>
+
+        {/* Configuração do Webhook */}
+        <div className="space-y-3 p-3 bg-muted/30 rounded-lg border">
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="text-xs">URLs de Webhook</Badge>
+          </div>
+          
+          {/* Opção 1: Direto */}
           <div className="space-y-2">
-            <Label className="text-xs font-medium">1. Configure no Z-API (campo "Ao receber")</Label>
+            <Label className="text-xs font-medium">✅ Opção 1: Webhook Direto (Recomendado)</Label>
             <p className="text-xs text-muted-foreground mb-1">
-              Use o webhook do FiqOn que você já configurou:
+              Configure esta URL no campo "Ao receber" do Z-API:
             </p>
             <div className="flex gap-2">
               <Input
                 readOnly
-                value="https://webhook.fiqon.app/webhook/019acc14-90a0-71b..."
+                value={webhookUrlDirect}
                 className="font-mono text-xs bg-background"
-                placeholder="Seu webhook FiqOn"
               />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => copyToClipboard(webhookUrlDirect, 'direct')}
+              >
+                {copied === 'direct' ? (
+                  <Check className="h-4 w-4 text-green-600" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label className="text-xs font-medium">2. Configure no FiqOn (destino do fluxo)</Label>
+          {/* Opção 2: Via FiqOn */}
+          <div className="space-y-2 pt-2 border-t">
+            <Label className="text-xs font-medium">Opção 2: Via FiqOn</Label>
             <p className="text-xs text-muted-foreground mb-1">
-              O FiqOn deve encaminhar para esta URL:
+              Se usar FiqOn como intermediário, configure este destino no fluxo:
             </p>
             <div className="flex gap-2">
               <Input
@@ -327,7 +457,7 @@ export function ZApiIntegrationCard() {
           </div>
           
           <p className="text-xs text-muted-foreground pt-2 border-t">
-            <strong>Fluxo:</strong> WhatsApp → Z-API → FiqOn → CRM (Isa responde automaticamente)
+            <strong>Fluxo:</strong> WhatsApp → Z-API → CRM (mensagens aparecem no Chat em tempo real)
           </p>
         </div>
 

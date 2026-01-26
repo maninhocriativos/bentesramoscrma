@@ -86,11 +86,37 @@ serve(async (req: Request) => {
         .eq('respondido', false);
     }
 
+    // Gerar subscriber_id único baseado no telefone
+    const subscriberId = gerarSubscriberId(normalized.phone!);
+    
+    // IMPORTANTE: Criar ou atualizar subscriber ANTES de salvar mensagem
+    // Isso garante que o chat vai mostrar a conversa
+    console.log('[Z-API Webhook] Upserting subscriber:', subscriberId);
+    
+    const { error: subError } = await supabase
+      .from('manychat_subscribers')
+      .upsert({
+        subscriber_id: subscriberId,
+        nome: normalized.name || normalized.phone,
+        telefone: normalized.phone,
+        canal: 'whatsapp',
+        lead_id: leadId,
+        ultima_interacao: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }, { 
+        onConflict: 'subscriber_id',
+        ignoreDuplicates: false 
+      });
+    
+    if (subError) {
+      console.error('[Z-API Webhook] Error upserting subscriber:', subError);
+    }
+
     // Salvar mensagem
     if (normalized.message && leadId) {
-      const subscriberId = gerarSubscriberId(normalized.phone);
+      console.log('[Z-API Webhook] Saving message for subscriber:', subscriberId);
       
-      await supabase.from('manychat_mensagens').insert({
+      const { data: savedMsg, error: msgError } = await supabase.from('manychat_mensagens').insert({
         subscriber_id: subscriberId,
         subscriber_nome: normalized.name || normalized.phone,
         conteudo: normalized.message,
@@ -103,7 +129,13 @@ serve(async (req: Request) => {
           original: body,
           message_id: normalized.messageId
         }
-      });
+      }).select().single();
+
+      if (msgError) {
+        console.error('[Z-API Webhook] Error saving message:', msgError);
+      } else {
+        console.log('[Z-API Webhook] Message saved:', savedMsg?.id);
+      }
 
       // Registrar interação
       await supabase.from('interacoes').insert({
