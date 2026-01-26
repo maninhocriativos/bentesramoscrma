@@ -5,7 +5,6 @@ import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
 import { DashboardFiltersBar, DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { ConversionMetrics } from '@/components/dashboard/ConversionMetrics';
-import { FollowupRetomadaPanel } from '@/components/dashboard/FollowupRetomadaPanel';
 import { RealtimeLeadsMonitor } from '@/components/dashboard/RealtimeLeadsMonitor';
 import { AlertasWidget } from '@/components/AlertasWidget';
 import { useLeads } from '@/hooks/useLeads';
@@ -130,8 +129,7 @@ export default function DashboardPage() {
             {/* Real-time Leads Monitor */}
             <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <FollowupRetomadaPanel />
+            <div className="grid grid-cols-1 gap-4">
               <AlertasWidget 
                 alertas={alertas} 
                 onAlertClick={handleAlertClick}

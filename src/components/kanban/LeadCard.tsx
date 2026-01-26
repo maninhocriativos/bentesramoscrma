@@ -3,11 +3,9 @@ import { ptBR } from 'date-fns/locale';
 import { useState } from 'react';
 import { Lead } from '@/types/leads';
 import { cn } from '@/lib/utils';
-import { LeadFollowupInfo } from '@/hooks/useLeadFollowups';
 import { 
   MessageCircle, ExternalLink, User, Clock, 
-  Zap, Timer, Ban, CheckCircle2, Phone, Mail,
-  TrendingUp, Star, Flame, Sparkles
+  CheckCircle2, Star, Flame, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
@@ -28,7 +26,6 @@ interface LeadCardProps {
     temAgendamento: boolean;
     proximoAgendamento: { titulo: string; data: string; } | null;
   };
-  followupInfo?: LeadFollowupInfo;
 }
 
 const formatShortCurrency = (value: number | null): string => {
@@ -37,51 +34,6 @@ const formatShortCurrency = (value: number | null): string => {
   if (value >= 1000) return `R$ ${(value / 1000).toFixed(0)}k`;
   return `R$ ${value.toFixed(0)}`;
 };
-
-// Compact follow-up indicator with rich visuals
-function FollowupIndicator({ followupInfo }: { followupInfo: LeadFollowupInfo }) {
-  const { status, followupStageFast, followupStageSlow, followupLockReason, waitingReply } = followupInfo;
-
-  if (status === 'concluido' || followupLockReason) {
-    return (
-      <Badge variant="outline" className="h-5 px-1.5 text-[9px] font-medium bg-muted/50">
-        <Ban className="w-2.5 h-2.5 mr-0.5" />
-        Pausado
-      </Badge>
-    );
-  }
-
-  if (waitingReply) {
-    return (
-      <Badge className="h-5 px-1.5 text-[9px] font-medium bg-amber-100 text-amber-700 border-amber-200 animate-pulse">
-        <Clock className="w-2.5 h-2.5 mr-0.5" />
-        Aguardando
-      </Badge>
-    );
-  }
-
-  const hasFast = followupStageFast !== null && followupStageFast >= 0 && followupStageFast < 3;
-  const hasSlow = followupStageSlow !== null && followupStageSlow >= 0 && followupStageSlow < 3;
-
-  if (!hasFast && !hasSlow) return null;
-
-  return (
-    <div className="flex items-center gap-1">
-      {hasFast && (
-        <Badge className="h-5 px-1.5 text-[9px] font-medium bg-blue-100 text-blue-700 border-blue-200">
-          <Zap className="w-2.5 h-2.5 mr-0.5" />
-          Fast {(followupStageFast ?? 0) + 1}/3
-        </Badge>
-      )}
-      {hasSlow && (
-        <Badge className="h-5 px-1.5 text-[9px] font-medium bg-violet-100 text-violet-700 border-violet-200">
-          <Timer className="w-2.5 h-2.5 mr-0.5" />
-          Slow {(followupStageSlow ?? 0) + 1}/3
-        </Badge>
-      )}
-    </div>
-  );
-}
 
 // Sentiment indicator with glow
 function SentimentIndicator({ isaInsight }: { isaInsight?: LeadCardProps['isaInsight'] }) {
@@ -102,7 +54,7 @@ function SentimentIndicator({ isaInsight }: { isaInsight?: LeadCardProps['isaIns
   );
 }
 
-export function LeadCard({ lead, onClick, isDragging, isaInsight, followupInfo }: LeadCardProps) {
+export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProps) {
   const navigate = useNavigate();
   const [isContratoModalOpen, setIsContratoModalOpen] = useState(false);
   
@@ -194,12 +146,11 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight, followupInfo }
         </div>
 
         {/* Meta Row */}
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Clock className="w-3 h-3" />
             <span className="text-[10px]">{lastInteraction}</span>
           </div>
-          {followupInfo && <FollowupIndicator followupInfo={followupInfo} />}
         </div>
 
         {/* Origin badge */}
