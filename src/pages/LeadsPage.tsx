@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/collapsible";
 
 // Lazy import panels for cleaner code
-import { FollowupStatusPanel } from '@/components/crm/FollowupStatusPanel';
 import { AguardandoDocumentosPanel } from '@/components/crm/AguardandoDocumentosPanel';
 import { RecentActivities } from '@/components/crm/RecentActivities';
 import { DashboardTarefas } from '@/components/crm/DashboardTarefas';
@@ -194,8 +193,7 @@ export default function LeadsPage() {
                 </CollapsibleTrigger>
                 
                 <CollapsibleContent>
-                  <div className="px-4 md:px-6 pb-4 pt-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                    <FollowupStatusPanel />
+                  <div className="px-4 md:px-6 pb-4 pt-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     <AguardandoDocumentosPanel />
                     <RecentActivities leads={leads} />
                     <DashboardTarefas onNewTask={() => setIsTaskModalOpen(true)} />
