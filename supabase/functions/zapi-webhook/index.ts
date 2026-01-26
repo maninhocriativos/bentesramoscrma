@@ -112,41 +112,89 @@ serve(async (req: Request) => {
       console.error('[Z-API Webhook] Error upserting subscriber:', subError);
     }
 
-    // Salvar mensagem
+    // Salvar mensagem - com prevenção de duplicatas por message_id
     if (normalized.message && leadId) {
-      console.log('[Z-API Webhook] Saving message for subscriber:', subscriberId);
+      console.log('[Z-API Webhook] Saving message for subscriber:', subscriberId, 'messageId:', normalized.messageId);
       
-      const { data: savedMsg, error: msgError } = await supabase.from('manychat_mensagens').insert({
-        subscriber_id: subscriberId,
-        subscriber_nome: normalized.name || normalized.phone,
-        conteudo: normalized.message,
-        canal: 'whatsapp',
-        tipo: normalized.messageType || 'text',
-        direcao: 'entrada',
-        lead_id: leadId,
-        metadata: { 
-          source: 'zapi', 
-          original: body,
-          message_id: normalized.messageId
+      // IMPORTANTE: Verificar se mensagem já existe pelo message_id para evitar duplicatas
+      if (normalized.messageId) {
+        const { data: existingMsg } = await supabase
+          .from('manychat_mensagens')
+          .select('id')
+          .eq('metadata->>message_id', normalized.messageId)
+          .maybeSingle();
+        
+        if (existingMsg) {
+          console.log('[Z-API Webhook] Message already exists, skipping:', normalized.messageId);
+          // Ainda precisamos chamar a Isa, então continuamos
+        } else {
+          // Salvar nova mensagem
+          const { data: savedMsg, error: msgError } = await supabase.from('manychat_mensagens').insert({
+            subscriber_id: subscriberId,
+            subscriber_nome: normalized.name || normalized.phone,
+            conteudo: normalized.message,
+            canal: 'whatsapp',
+            tipo: normalized.messageType || 'text',
+            direcao: 'entrada',
+            lead_id: leadId,
+            metadata: { 
+              source: 'zapi', 
+              original: body,
+              message_id: normalized.messageId
+            }
+          }).select().single();
+
+          if (msgError) {
+            console.error('[Z-API Webhook] Error saving message:', msgError);
+          } else {
+            console.log('[Z-API Webhook] Message saved:', savedMsg?.id);
+          }
+
+          // Registrar interação
+          await supabase.from('interacoes').insert({
+            cliente_id: leadId,
+            tipo: 'WhatsApp',
+            direcao: 'Entrada',
+            resumo: normalized.messageType === 'text' 
+              ? normalized.message.substring(0, 100) 
+              : `[${normalized.messageType}]`,
+            detalhes: normalized.message
+          });
         }
-      }).select().single();
-
-      if (msgError) {
-        console.error('[Z-API Webhook] Error saving message:', msgError);
       } else {
-        console.log('[Z-API Webhook] Message saved:', savedMsg?.id);
-      }
+        // Sem message_id, salvar normalmente (fallback)
+        const { data: savedMsg, error: msgError } = await supabase.from('manychat_mensagens').insert({
+          subscriber_id: subscriberId,
+          subscriber_nome: normalized.name || normalized.phone,
+          conteudo: normalized.message,
+          canal: 'whatsapp',
+          tipo: normalized.messageType || 'text',
+          direcao: 'entrada',
+          lead_id: leadId,
+          metadata: { 
+            source: 'zapi', 
+            original: body,
+            message_id: null
+          }
+        }).select().single();
 
-      // Registrar interação
-      await supabase.from('interacoes').insert({
-        cliente_id: leadId,
-        tipo: 'WhatsApp',
-        direcao: 'Entrada',
-        resumo: normalized.messageType === 'text' 
-          ? normalized.message.substring(0, 100) 
-          : `[${normalized.messageType}]`,
-        detalhes: normalized.message
-      });
+        if (msgError) {
+          console.error('[Z-API Webhook] Error saving message:', msgError);
+        } else {
+          console.log('[Z-API Webhook] Message saved:', savedMsg?.id);
+        }
+
+        // Registrar interação
+        await supabase.from('interacoes').insert({
+          cliente_id: leadId,
+          tipo: 'WhatsApp',
+          direcao: 'Entrada',
+          resumo: normalized.messageType === 'text' 
+            ? normalized.message.substring(0, 100) 
+            : `[${normalized.messageType}]`,
+          detalhes: normalized.message
+        });
+      }
     }
 
     // Se é mensagem, acionar Isa para processar
@@ -251,9 +299,22 @@ function normalizeZapiEvent(body: any): {
   let messageType = 'text';
   let media = null;
 
-  if (body.text?.message || body.message?.text || body.text) {
-    message = body.text?.message || body.message?.text || body.text;
-    messageType = 'text';
+  // Extrair texto - Z-API pode enviar em diversos formatos:
+  // 1. body.text.message (formato padrão)
+  // 2. body.text (string simples)
+  // 3. body.message.text
+  // 4. body.message (string simples)
+  // 5. body.body (alternativo)
+  if (body.text?.message) {
+    message = body.text.message;
+  } else if (typeof body.text === 'string' && body.text) {
+    message = body.text;
+  } else if (body.message?.text) {
+    message = body.message.text;
+  } else if (typeof body.message === 'string' && body.message) {
+    message = body.message;
+  } else if (typeof body.body === 'string' && body.body) {
+    message = body.body;
   } else if (body.audio) {
     message = '[Áudio recebido]';
     messageType = 'audio';
@@ -280,11 +341,13 @@ function normalizeZapiEvent(body: any): {
     media = body.location;
   }
 
+  console.log('[Z-API Normalize] Extracted message:', message ? message.substring(0, 50) : 'null', 'from body keys:', Object.keys(body).join(', '));
+
   return {
     phone: phone ? normalizePhone(phone) : null,
     name,
     message,
-    messageId: body.messageId || body.id,
+    messageId: body.messageId || body.id || body.zapiMessageId,
     messageType,
     timestamp: body.timestamp ? new Date(body.timestamp * 1000).toISOString() : new Date().toISOString(),
     media

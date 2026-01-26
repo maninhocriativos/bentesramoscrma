@@ -793,22 +793,43 @@ const ManyChatInboxContent = () => {
     return null;
   };
 
-  // Indicador Online Premium
-  const OnlineIndicator = ({ subscriberId, showText = false }: { subscriberId: string; showText?: boolean }) => {
-    const online = isOnline(subscriberId);
-    if (!online && !showText) return null;
+  // Indicador de atividade (baseado na última interação, não em presença real-time)
+  const getActivityStatus = (subscriber: Subscriber) => {
+    if (!subscriber.ultima_interacao) return { status: 'unknown', text: '' };
+    
+    const lastInteraction = new Date(subscriber.ultima_interacao);
+    const now = new Date();
+    const diffMinutes = Math.floor((now.getTime() - lastInteraction.getTime()) / (1000 * 60));
+    
+    if (diffMinutes < 5) return { status: 'active', text: 'Ativo agora' };
+    if (diffMinutes < 60) return { status: 'recent', text: `há ${diffMinutes} min` };
+    if (diffMinutes < 1440) return { status: 'today', text: `há ${Math.floor(diffMinutes / 60)}h` };
+    return { status: 'inactive', text: '' };
+  };
+
+  const ActivityIndicator = ({ subscriber, showText = false }: { subscriber: Subscriber; showText?: boolean }) => {
+    const activity = getActivityStatus(subscriber);
+    const isActive = activity.status === 'active' || activity.status === 'recent';
     
     return (
       <div className="flex items-center gap-1.5">
-        <span className={`relative flex h-2.5 w-2.5 ${online ? '' : 'opacity-50'}`}>
-          {online && (
+        <span className={`relative flex h-2.5 w-2.5 ${isActive ? '' : 'opacity-50'}`}>
+          {activity.status === 'active' && (
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
           )}
-          <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${online ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+          <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+            activity.status === 'active' ? 'bg-emerald-500' : 
+            activity.status === 'recent' ? 'bg-yellow-500' : 'bg-gray-400'
+          }`} />
         </span>
         {showText && (
-          <span className={`text-xs font-medium ${online ? 'text-emerald-500' : themeClasses.secondaryText}`}>
-            {online ? 'Online' : 'Offline'}
+          <span className={`text-xs font-medium ${
+            activity.status === 'active' ? 'text-emerald-500' : 
+            activity.status === 'recent' ? 'text-yellow-500' : themeClasses.secondaryText
+          }`}>
+            {activity.status === 'active' ? 'Ativo agora' : 
+             activity.status === 'recent' ? activity.text :
+             activity.status === 'today' ? activity.text : 'Offline'}
           </span>
         )}
       </div>
@@ -1068,7 +1089,7 @@ const ManyChatInboxContent = () => {
                   </h3>
                 </div>
                 <div className="flex items-center gap-2">
-                  <OnlineIndicator subscriberId={selectedSubscriber.subscriber_id} showText />
+                  <ActivityIndicator subscriber={selectedSubscriber} showText />
                   {isTyping(selectedSubscriber.subscriber_id) && (
                     <span className="text-xs text-[#00A884] font-medium animate-pulse">digitando...</span>
                   )}
