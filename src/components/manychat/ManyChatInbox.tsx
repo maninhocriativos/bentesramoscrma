@@ -434,58 +434,74 @@ const ManyChatInboxContent = () => {
   const loadMessages = async (subscriberId: string, loadAll = false) => {
     setIsLoadingMessages(true);
     try {
-      // Get subscriber phone for Z-API format lookup
+      // Get subscriber for phone and lead_id
       const currentSub = subscribers.find(s => s.subscriber_id === subscriberId);
       const phoneClean = currentSub?.telefone?.replace(/\D/g, '') || '';
-      
-      // Criar lista de possíveis subscriber_ids para buscar
-      const possibleIds: string[] = [subscriberId];
-      
-      // Adicionar formato zapi_ com telefone normalizado
-      if (phoneClean && phoneClean.length >= 10 && phoneClean.length <= 13) {
-        const normalizedPhone = phoneClean.startsWith('55') ? phoneClean : '55' + phoneClean;
-        possibleIds.push(`zapi_${normalizedPhone}`);
-        possibleIds.push(`zapi_${phoneClean}`);
-      }
-      
-      // Também tentar pelo lead_id se disponível
       const leadId = currentSub?.lead_id;
       
-      console.log('[loadMessages] Buscando mensagens para:', { subscriberId, possibleIds, leadId });
+      // Build comprehensive list of possible subscriber_ids
+      const possibleIds = new Set<string>([subscriberId]);
       
-      // Build query to match multiple possible subscriber_ids OR lead_id
+      // If subscriber_id already is zapi_ format, also try the phone directly
+      if (subscriberId.startsWith('zapi_')) {
+        const phoneFromZapi = subscriberId.replace('zapi_', '');
+        possibleIds.add(phoneFromZapi);
+        // Try with/without country code
+        if (phoneFromZapi.startsWith('55') && phoneFromZapi.length > 10) {
+          possibleIds.add(`zapi_${phoneFromZapi.slice(2)}`);
+        } else if (!phoneFromZapi.startsWith('55')) {
+          possibleIds.add(`zapi_55${phoneFromZapi}`);
+        }
+      }
+      
+      // Add zapi_ format with phone variations
+      if (phoneClean && phoneClean.length >= 8) {
+        const normalizedPhone = phoneClean.startsWith('55') ? phoneClean : '55' + phoneClean;
+        possibleIds.add(`zapi_${normalizedPhone}`);
+        possibleIds.add(`zapi_${phoneClean}`);
+        possibleIds.add(phoneClean);
+        possibleIds.add(normalizedPhone);
+      }
+      
+      const idsArray = Array.from(possibleIds);
+      console.log('[loadMessages] Buscando mensagens para:', { subscriberId, possibleIds: idsArray, leadId });
+      
+      // Build OR filter for subscriber_id
+      const idsFilter = idsArray.map(id => `subscriber_id.eq.${id}`).join(',');
+      
+      // Build query
       let query = supabase
         .from('manychat_mensagens' as any)
         .select('*')
         .order('created_at', { ascending: true });
 
-      // Match subscriber_id OU lead_id
+      // Match subscriber_id OR lead_id (lead_id is most reliable for unified history)
       if (leadId) {
-        const idsFilter = possibleIds.map(id => `subscriber_id.eq.${id}`).join(',');
         query = query.or(`${idsFilter},lead_id.eq.${leadId}`);
       } else {
-        const idsFilter = possibleIds.map(id => `subscriber_id.eq.${id}`).join(',');
         query = query.or(idsFilter);
       }
 
-      // Only limit if not loading all history
       if (!loadAll) {
         query = query.limit(200);
       }
 
       const { data, error } = await query;
-
       if (error) throw error;
       
-      // Deduplicar mensagens por ID
-      const uniqueMessages = (data as Message[])?.reduce((acc, msg) => {
-        if (!acc.find(m => m.id === msg.id)) {
-          acc.push(msg);
+      // Deduplicate by ID and sort by created_at
+      const messagesMap = new Map<string, Message>();
+      (data as Message[])?.forEach(msg => {
+        if (!messagesMap.has(msg.id)) {
+          messagesMap.set(msg.id, msg);
         }
-        return acc;
-      }, [] as Message[]) || [];
+      });
       
-      console.log('[loadMessages] Mensagens carregadas:', uniqueMessages.length);
+      const uniqueMessages = Array.from(messagesMap.values()).sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      
+      console.log('[loadMessages] Mensagens carregadas:', uniqueMessages.length, 'entrada:', uniqueMessages.filter(m => m.direcao === 'entrada').length, 'saída:', uniqueMessages.filter(m => m.direcao === 'saida').length);
       setMessages(uniqueMessages);
     } catch (error) {
       console.error('Erro ao carregar mensagens:', error);
@@ -498,18 +514,11 @@ const ManyChatInboxContent = () => {
     if (!selectedSubscriber) return;
     setIsLoadingFullHistory(true);
     try {
-      // Load ALL messages for this subscriber
-      const { data, error } = await supabase
-        .from('manychat_mensagens' as any)
-        .select('*')
-        .eq('subscriber_id', selectedSubscriber.subscriber_id)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-      setMessages((data as Message[]) || []);
+      // Use the same logic as loadMessages but with loadAll=true
+      await loadMessages(selectedSubscriber.subscriber_id, true);
       toast({ 
         title: '📜 Histórico Completo', 
-        description: `${(data as Message[])?.length || 0} mensagens carregadas` 
+        description: 'Todas as mensagens foram carregadas' 
       });
     } catch (error) {
       console.error('Erro ao carregar histórico:', error);
