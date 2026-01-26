@@ -22,17 +22,26 @@ export function formatPhone(phone?: string): string | null {
   if (!phone) return null;
   const clean = phone.replace(/\D/g, '');
   
-  // Format Brazilian phone: +55 (92) 99999-9999
-  if (clean.startsWith('55') && clean.length >= 12) {
+  // Se for número muito longo (possível ID de grupo), ignorar
+  if (clean.length > 15) return null;
+  
+  // Format Brazilian phone: (92) 99999-9999
+  if (clean.startsWith('55') && (clean.length === 12 || clean.length === 13)) {
     const ddd = clean.slice(2, 4);
-    const part1 = clean.slice(4, 9);
-    const part2 = clean.slice(9);
-    return `(${ddd}) ${part1}-${part2}`;
+    const rest = clean.slice(4);
+    if (rest.length === 9) {
+      return `(${ddd}) ${rest.slice(0, 5)}-${rest.slice(5)}`;
+    } else if (rest.length === 8) {
+      return `(${ddd}) ${rest.slice(0, 4)}-${rest.slice(4)}`;
+    }
   }
   
-  // Just format with spaces
-  if (clean.length >= 10) {
-    return phone.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+  // Without country code
+  if (clean.length === 11) {
+    return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7)}`;
+  }
+  if (clean.length === 10) {
+    return `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6)}`;
   }
   
   return phone;
@@ -50,6 +59,11 @@ export function getDisplayName(sub: ChatSubscriber): string {
   // Try formatted phone
   const formattedPhone = formatPhone(sub.telefone);
   if (formattedPhone) return formattedPhone;
+  
+  // Se o telefone é muito longo (grupo), mostrar indicador
+  if (sub.telefone && sub.telefone.replace(/\D/g, '').length > 15) {
+    return `Grupo #${sub.subscriber_id?.slice(-4) || '????'}`;
+  }
   
   // Fallback to raw phone or subscriber_id
   if (sub.telefone && sub.telefone !== '{{wa_id}}') return sub.telefone;

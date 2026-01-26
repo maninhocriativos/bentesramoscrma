@@ -54,6 +54,22 @@ serve(async (req: Request) => {
     // Normalizar evento Z-API para formato interno
     const normalized = normalizeZapiEvent(body);
     
+    // IMPORTANTE: Ignorar mensagens de grupos - apenas conversas individuais
+    if (normalized.isGroup) {
+      console.log('[Z-API Webhook] Ignorando mensagem de grupo');
+      return new Response(JSON.stringify({ success: true, skipped: true, reason: 'group_message' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // Ignorar reações
+    if (normalized.messageType === 'reaction' || !normalized.message) {
+      console.log('[Z-API Webhook] Ignorando reação ou mensagem vazia');
+      return new Response(JSON.stringify({ success: true, skipped: true, reason: 'reaction_or_empty' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
     if (!normalized.phone) {
       console.log('[Z-API Webhook] No phone found in payload');
       await logIntegration(supabase, 'zapi', 'inbound', body, null, 'error', 'No phone in payload', null, startTime);
@@ -218,16 +234,30 @@ serve(async (req: Request) => {
         try {
           console.log(`[Z-API Webhook] Calling isa-auto-process for lead ${leadId}`);
           
+          // Determinar a URL de mídia para transcrição/análise
+          const mediaUrlToProcess = normalized.mediaUrl || 
+            normalized.media?.audioUrl || 
+            normalized.media?.imageUrl || 
+            normalized.media?.link ||
+            normalized.media?.url;
+          
+          // Para áudio/imagem, enviar a URL para processamento
+          const mensagemParaProcessar = (normalized.messageType === 'audio' || normalized.messageType === 'image') && mediaUrlToProcess
+            ? mediaUrlToProcess  // Enviar URL para transcrição/análise
+            : normalized.message;
+          
+          console.log(`[Z-API Webhook] Tipo: ${normalized.messageType}, mediaUrl: ${mediaUrlToProcess ? 'presente' : 'ausente'}`);
+          
           const { data: isaResponse, error: isaError } = await supabase.functions.invoke('isa-auto-process', {
             body: {
               lead_id: leadId,
-              mensagem: normalized.message, // FIXED: isa-auto-process expects 'mensagem' not 'message'
+              mensagem: mensagemParaProcessar,
               lead_state: lead.lead_state || 'NEW',
-              canal: 'zapi', // FIXED: isa-auto-process expects 'canal' not 'channel'
+              canal: 'zapi',
               subscriber_id: gerarSubscriberId(normalized.phone),
               subscriber_nome: normalized.name || lead.nome || normalized.phone,
-              tipo_mensagem: normalized.messageType !== 'text' ? normalized.messageType : 'text', // FIXED: 'tipo_mensagem'
-              media_url: normalized.media?.url || normalized.media?.imageUrl || normalized.media?.audioUrl
+              tipo_mensagem: normalized.messageType,
+              media_url: mediaUrlToProcess
             }
           });
 
@@ -290,14 +320,26 @@ function normalizeZapiEvent(body: any): {
   messageType: string;
   timestamp: string;
   media: any | null;
+  isGroup: boolean;
+  mediaUrl: string | null;
 } {
   // Z-API pode enviar diferentes formatos
-  const phone = body.phone || body.from || body.sender?.phone || body.chatId?.replace('@c.us', '');
+  const rawPhone = body.phone || body.from || body.sender?.phone || body.chatId?.replace('@c.us', '');
   const name = body.senderName || body.sender?.name || body.pushName;
+  
+  // IMPORTANTE: Detectar se é grupo (formato: 559292304411-1521765965 ou contém "-")
+  const isGroup = body.isGroup === true || (rawPhone && rawPhone.includes('-'));
+  
+  // Para grupos, usar participantPhone (quem enviou) em vez do ID do grupo
+  let phone = rawPhone;
+  if (isGroup && body.participantPhone) {
+    phone = body.participantPhone;
+  }
   
   let message = null;
   let messageType = 'text';
   let media = null;
+  let mediaUrl: string | null = null;
 
   // Extrair texto - Z-API pode enviar em diversos formatos:
   // 1. body.text.message (formato padrão)
@@ -316,18 +358,24 @@ function normalizeZapiEvent(body: any): {
   } else if (typeof body.body === 'string' && body.body) {
     message = body.body;
   } else if (body.audio) {
-    message = '[Áudio recebido]';
+    // Extrair URL do áudio para transcrição
+    mediaUrl = body.audio.audioUrl || body.audio.link || body.audio.url;
+    message = mediaUrl || '[Áudio recebido]';
     messageType = 'audio';
     media = body.audio;
   } else if (body.image) {
-    message = body.image.caption || '[Imagem recebida]';
+    // Extrair URL da imagem para análise
+    mediaUrl = body.image.imageUrl || body.image.link || body.image.url;
+    message = body.image.caption || mediaUrl || '[Imagem recebida]';
     messageType = 'image';
     media = body.image;
   } else if (body.document) {
-    message = body.document.fileName || '[Documento recebido]';
+    mediaUrl = body.document.documentUrl || body.document.link || body.document.url;
+    message = body.document.fileName || mediaUrl || '[Documento recebido]';
     messageType = 'document';
     media = body.document;
   } else if (body.video) {
+    mediaUrl = body.video.videoUrl || body.video.link || body.video.url;
     message = '[Vídeo recebido]';
     messageType = 'video';
     media = body.video;
@@ -339,9 +387,20 @@ function normalizeZapiEvent(body: any): {
     message = `[Localização: ${body.location.latitude}, ${body.location.longitude}]`;
     messageType = 'location';
     media = body.location;
+  } else if (body.reaction) {
+    // Reações - ignorar
+    message = null;
+    messageType = 'reaction';
   }
 
-  console.log('[Z-API Normalize] Extracted message:', message ? message.substring(0, 50) : 'null', 'from body keys:', Object.keys(body).join(', '));
+  console.log('[Z-API Normalize] Extracted:', { 
+    message: message ? message.substring(0, 50) : 'null', 
+    type: messageType,
+    isGroup,
+    mediaUrl: mediaUrl ? 'presente' : 'ausente',
+    rawPhone,
+    phone
+  });
 
   return {
     phone: phone ? normalizePhone(phone) : null,
@@ -350,7 +409,9 @@ function normalizeZapiEvent(body: any): {
     messageId: body.messageId || body.id || body.zapiMessageId,
     messageType,
     timestamp: body.timestamp ? new Date(body.timestamp * 1000).toISOString() : new Date().toISOString(),
-    media
+    media,
+    isGroup,
+    mediaUrl
   };
 }
 
