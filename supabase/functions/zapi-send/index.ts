@@ -73,59 +73,21 @@ serve(async (req: Request) => {
       duration_ms: Date.now() - startTime
     });
 
-    // Buscar subscriber_id existente pelo telefone ou lead_id
-    let existingSubscriberId: string | null = null;
-    let existingSubscriberName = 'Escritório';
-    const phoneClean = to_phone.replace(/\D/g, '');
+    // IMPORTANTE: NÃO salvar mensagem aqui - quem chama zapi-send já salva
+    // Isso evita duplicação de mensagens. O salvamento é responsabilidade do chamador:
+    // - ManyChatInbox salva após enviar
+    // - isa-auto-process salva após enviar resposta da Isa
     
+    // Apenas atualizar ultima_interacao do subscriber se houver lead
     if (success && lead_id) {
-      // Primeiro tentar pelo lead_id
-      const { data: subByLead } = await supabase
+      const phoneClean = to_phone.replace(/\D/g, '');
+      const normalizedPhone = phoneClean.startsWith('55') ? phoneClean : '55' + phoneClean;
+      
+      await supabase
         .from('manychat_subscribers')
-        .select('subscriber_id, nome')
-        .eq('lead_id', lead_id)
-        .maybeSingle();
-      
-      if (subByLead) {
-        existingSubscriberId = subByLead.subscriber_id;
-        existingSubscriberName = subByLead.nome || 'Escritório';
-      } else {
-        // Tentar pelo telefone (normalizado)
-        const { data: subByPhone } = await supabase
-          .from('manychat_subscribers')
-          .select('subscriber_id, nome')
-          .or(`telefone.ilike.%${phoneClean.slice(-9)}%,subscriber_id.ilike.%${phoneClean.slice(-9)}%`)
-          .limit(1)
-          .maybeSingle();
-        
-        if (subByPhone) {
-          existingSubscriberId = subByPhone.subscriber_id;
-          existingSubscriberName = subByPhone.nome || 'Escritório';
-        }
-      }
-      
-      // Usar subscriber_id existente ou criar novo padrão Z-API
-      const finalSubscriberId = existingSubscriberId || `zapi_${phoneClean}`;
-      
-      await supabase.from('manychat_mensagens').insert({
-        subscriber_id: finalSubscriberId,
-        subscriber_nome: existingSubscriberName,
-        conteudo: message,
-        canal: 'whatsapp',
-        tipo: 'text',
-        direcao: 'saida',
-        lead_id,
-        metadata: { source: provider, zapi_message_id: result.messageId }
-      });
-
-      // Registrar interação
-      await supabase.from('interacoes').insert({
-        cliente_id: lead_id,
-        tipo: 'WhatsApp',
-        resumo: message.substring(0, 100),
-        detalhes: message,
-        direcao: 'Saída'
-      });
+        .update({ ultima_interacao: new Date().toISOString() })
+        .or(`telefone.ilike.%${phoneClean.slice(-9)}%,subscriber_id.eq.zapi_${normalizedPhone}`)
+        .eq('lead_id', lead_id);
     }
 
     return new Response(JSON.stringify({ 

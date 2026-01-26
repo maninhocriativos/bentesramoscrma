@@ -1,6 +1,7 @@
-import { CheckCheck } from 'lucide-react';
+import { CheckCheck, Play, Download } from 'lucide-react';
 import { formatMessageTime, detectMediaType } from '@/lib/chatUtils';
 import { ChatMessage } from '@/hooks/useChatMessages';
+import { useRef, useState } from 'react';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -13,42 +14,140 @@ interface MessageBubbleProps {
   };
 }
 
+// Extrair URL de áudio de diferentes fontes
+function extractAudioUrl(message: ChatMessage): string | null {
+  // 1. Tentar extrair de metadata.original (Z-API payload)
+  const metadata = message.metadata as any;
+  if (metadata?.original?.audio?.audioUrl) {
+    return metadata.original.audio.audioUrl;
+  }
+  if (metadata?.original?.audio?.link) {
+    return metadata.original.audio.link;
+  }
+  
+  // 2. Tentar media_url diretamente no metadata
+  if (metadata?.media_url) {
+    return metadata.media_url;
+  }
+  
+  // 3. Se conteúdo é uma URL de áudio
+  const content = message.conteudo || '';
+  const cleanUrl = content.replace(/^\[|\]$/g, '').trim();
+  if (cleanUrl.match(/^https?:\/\/.+\.(ogg|mp3|wav|m4a|opus|aac|webm)/i) ||
+      cleanUrl.includes('whatsapp') || 
+      cleanUrl.includes('z-api') ||
+      cleanUrl.includes('filesusr') ||
+      cleanUrl.includes('mmg.whatsapp')) {
+    return cleanUrl;
+  }
+  
+  return null;
+}
+
+// Extrair URL de imagem
+function extractImageUrl(message: ChatMessage): string | null {
+  const metadata = message.metadata as any;
+  if (metadata?.original?.image?.imageUrl) {
+    return metadata.original.image.imageUrl;
+  }
+  if (metadata?.original?.image?.link) {
+    return metadata.original.image.link;
+  }
+  if (metadata?.media_url) {
+    return metadata.media_url;
+  }
+  
+  const content = message.conteudo || '';
+  const cleanUrl = content.replace(/^\[|\]$/g, '').trim();
+  if (cleanUrl.match(/^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)/i)) {
+    return cleanUrl;
+  }
+  
+  return null;
+}
+
 export function MessageBubble({ message, themeClasses }: MessageBubbleProps) {
   const isSent = message.direcao === 'saida';
   const content = message.conteudo || '';
   const mediaType = detectMediaType(content, message.tipo);
-  const cleanUrl = content.replace(/^\[|\]$/g, '');
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [audioError, setAudioError] = useState(false);
 
   const renderContent = () => {
     switch (mediaType) {
-      case 'audio':
+      case 'audio': {
+        const audioUrl = extractAudioUrl(message);
+        
+        if (!audioUrl || audioError) {
+          return (
+            <div className="flex items-center gap-2 text-sm opacity-70">
+              <span>🎤</span>
+              <span>Áudio recebido</span>
+              {audioUrl && (
+                <a 
+                  href={audioUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:underline flex items-center gap-1"
+                >
+                  <Download className="h-3 w-3" />
+                  Baixar
+                </a>
+              )}
+            </div>
+          );
+        }
+        
         return (
-          <audio controls className="max-w-[220px] h-10" preload="metadata">
-            <source src={cleanUrl} type="audio/ogg" />
-          </audio>
+          <div className="flex items-center gap-2">
+            <audio 
+              ref={audioRef}
+              controls 
+              className="max-w-[220px] h-10" 
+              preload="metadata"
+              onError={() => setAudioError(true)}
+            >
+              <source src={audioUrl} type="audio/ogg" />
+              <source src={audioUrl} type="audio/mpeg" />
+              <source src={audioUrl} type="audio/mp4" />
+              <source src={audioUrl} type="audio/webm" />
+              Seu navegador não suporta áudio.
+            </audio>
+          </div>
         );
+      }
       
-      case 'image':
+      case 'image': {
+        const imageUrl = extractImageUrl(message);
+        const displayUrl = imageUrl || content.replace(/^\[|\]$/g, '');
+        
         return (
           <img 
-            src={cleanUrl} 
+            src={displayUrl} 
             alt="Imagem" 
             className="max-w-[280px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-            onClick={() => window.open(cleanUrl, '_blank')}
+            onClick={() => window.open(displayUrl, '_blank')}
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
           />
         );
+      }
       
-      case 'video':
+      case 'video': {
+        const videoUrl = content.replace(/^\[|\]$/g, '');
         return (
           <video controls className="max-w-[280px] rounded-lg" preload="metadata">
-            <source src={cleanUrl} />
+            <source src={videoUrl} />
           </video>
         );
+      }
       
-      case 'document':
+      case 'document': {
+        const docUrl = content.replace(/^\[|\]$/g, '');
         return (
           <a 
-            href={cleanUrl} 
+            href={docUrl} 
             target="_blank" 
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-blue-500 hover:underline"
@@ -56,6 +155,7 @@ export function MessageBubble({ message, themeClasses }: MessageBubbleProps) {
             📄 {content.split('/').pop() || 'Documento'}
           </a>
         );
+      }
       
       default:
         return (
