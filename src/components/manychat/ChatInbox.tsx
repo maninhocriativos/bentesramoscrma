@@ -168,10 +168,20 @@ const ManyChatInboxContent = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Chave de deduplicação (prioriza message_id do provedor)
+  // Chave de deduplicação ROBUSTA - múltiplas camadas para evitar duplicatas
   const getMessageDedupeKey = (msg: any) => {
-    const mid = msg?.metadata?.message_id || msg?.metadata?.original?.messageId || msg?.metadata?.original?.id;
-    return mid || msg?.id;
+    // 1. Provider message_id do metadata (mais confiável)
+    const mid = msg?.metadata?.message_id || msg?.metadata?.original?.messageId || msg?.metadata?.original?.id?.id || msg?.metadata?.original?.id;
+    if (mid && typeof mid === 'string' && mid.length > 5) return `mid_${mid}`;
+    
+    // 2. Fallback: hash do conteúdo + direção + timestamp (primeiros 16 chars do ISO)
+    const contentHash = (msg?.conteudo || '').substring(0, 100);
+    const timePrefix = (msg?.created_at || '').substring(0, 16); // yyyy-mm-ddTHH:MM
+    const direcao = msg?.direcao || 'unknown';
+    if (contentHash && timePrefix) return `hash_${direcao}_${timePrefix}_${contentHash}`;
+    
+    // 3. Último recurso: ID do banco
+    return `db_${msg?.id}`;
   };
 
   useEffect(() => {
@@ -998,17 +1008,38 @@ const ManyChatInboxContent = () => {
       );
     }
     if (isDocument) {
-      const display = fileName || urlCandidate.split('/').pop() || 'Documento';
+      const display = fileName || urlCandidate.split('/').pop()?.split('?')[0] || 'Documento';
+      const isPdf = urlCandidate.toLowerCase().includes('.pdf') || display.toLowerCase().endsWith('.pdf');
+      
       return (
-        <a
-          href={urlCandidate}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 underline underline-offset-2"
-        >
-          <Paperclip className="h-4 w-4" />
-          <span className="text-[14px] break-all">{display}</span>
-        </a>
+        <div className={`flex items-center gap-3 p-3 rounded-lg ${isDark ? 'bg-[#1F2C33]' : 'bg-[#F0F2F5]'} min-w-[200px] max-w-[300px]`}>
+          <div className={`p-2 rounded-lg ${isPdf ? 'bg-red-500/20' : 'bg-blue-500/20'}`}>
+            {isPdf ? (
+              <svg className="h-8 w-8 text-red-500" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M10.92,12.31C10.68,11.54 10.15,9.08 11.55,9.04C12.95,9 12.03,12.16 12.03,12.16C12.42,13.65 14.05,14.72 14.05,14.72C14.55,14.57 17.4,14.24 17,15.72C16.57,17.2 13.5,15.81 13.5,15.81C11.55,15.95 10.09,16.47 10.09,16.47C8.96,18.58 7.64,19.5 7.1,18.61C6.43,17.5 9.23,16.07 9.23,16.07C10.68,13.72 10.9,12.35 10.92,12.31Z" />
+              </svg>
+            ) : (
+              <Paperclip className="h-8 w-8 text-blue-500" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm font-medium truncate ${themeClasses.headerText}`}>{display}</p>
+            <p className={`text-xs ${themeClasses.secondaryText}`}>
+              {isPdf ? 'Documento PDF' : 'Documento'}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => window.open(urlCandidate, '_blank')}
+            className={`shrink-0 h-8 w-8 p-0 ${themeClasses.hoverBtn}`}
+            title="Baixar documento"
+          >
+            <svg className={`h-5 w-5 ${themeClasses.iconColor}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+            </svg>
+          </Button>
+        </div>
       );
     }
     return <p className="whitespace-pre-wrap break-words text-[14.2px] leading-[19px] text-inherit">{content}</p>;
