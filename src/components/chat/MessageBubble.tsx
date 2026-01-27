@@ -66,6 +66,34 @@ function extractImageUrl(message: ChatMessage): string | null {
   return null;
 }
 
+// Extrair URL de sticker
+function extractStickerUrl(message: ChatMessage): string | null {
+  const metadata = message.metadata as any;
+  if (metadata?.original?.sticker?.stickerUrl) {
+    return metadata.original.sticker.stickerUrl;
+  }
+  if (metadata?.original?.sticker?.link) {
+    return metadata.original.sticker.link;
+  }
+  if (metadata?.original?.sticker?.url) {
+    return metadata.original.sticker.url;
+  }
+  if (metadata?.original?.sticker?.imageUrl) {
+    return metadata.original.sticker.imageUrl;
+  }
+  if (metadata?.media_url) {
+    return metadata.media_url;
+  }
+  
+  const content = message.conteudo || '';
+  const cleanUrl = content.replace(/^\[|\]$/g, '').trim();
+  if (cleanUrl.match(/^https?:\/\/.+/i)) {
+    return cleanUrl;
+  }
+  
+  return null;
+}
+
 export function MessageBubble({ message, themeClasses }: MessageBubbleProps) {
   const isSent = message.direcao === 'saida';
   const content = message.conteudo || '';
@@ -154,6 +182,32 @@ export function MessageBubble({ message, themeClasses }: MessageBubbleProps) {
           >
             📄 {content.split('/').pop() || 'Documento'}
           </a>
+        );
+      }
+      
+      case 'sticker': {
+        const stickerUrl = extractStickerUrl(message);
+        
+        if (!stickerUrl) {
+          return (
+            <div className="flex items-center gap-2 text-sm opacity-70">
+              <span>🎭</span>
+              <span>Sticker</span>
+            </div>
+          );
+        }
+        
+        return (
+          <img 
+            src={stickerUrl} 
+            alt="Sticker" 
+            className="max-w-[120px] max-h-[120px] rounded cursor-pointer hover:opacity-90 transition-opacity"
+            onClick={() => window.open(stickerUrl, '_blank')}
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = '';
+              (e.target as HTMLImageElement).alt = '🎭 Sticker';
+            }}
+          />
         );
       }
       
