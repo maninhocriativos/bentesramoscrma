@@ -1,7 +1,8 @@
-import { CheckCheck, Play, Download, MapPin, ExternalLink } from 'lucide-react';
+import { CheckCheck, Play, Download, MapPin, ExternalLink, X } from 'lucide-react';
 import { formatMessageTime, detectMediaType, extractLocationData } from '@/lib/chatUtils';
 import { ChatMessage } from '@/hooks/useChatMessages';
 import { useRef, useState } from 'react';
+import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -100,6 +101,7 @@ export function MessageBubble({ message, themeClasses }: MessageBubbleProps) {
   const mediaType = detectMediaType(content, message.tipo);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [audioError, setAudioError] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const renderContent = () => {
     switch (mediaType) {
@@ -150,15 +152,32 @@ export function MessageBubble({ message, themeClasses }: MessageBubbleProps) {
         const displayUrl = imageUrl || content.replace(/^\[|\]$/g, '');
         
         return (
-          <img 
-            src={displayUrl} 
-            alt="Imagem" 
-            className="max-w-[280px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-            onClick={() => window.open(displayUrl, '_blank')}
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
+          <>
+            <img 
+              src={displayUrl} 
+              alt="Imagem" 
+              className="max-w-[280px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+              onClick={() => setPreviewImage(displayUrl)}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+            <Dialog open={previewImage === displayUrl} onOpenChange={(open) => !open && setPreviewImage(null)}>
+              <DialogContent className="max-w-[90vw] max-h-[90vh] p-0 bg-black/95 border-none overflow-hidden">
+                <button
+                  onClick={() => setPreviewImage(null)}
+                  className="absolute top-3 right-3 z-50 p-2 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+                <img 
+                  src={displayUrl} 
+                  alt="Imagem ampliada" 
+                  className="max-w-full max-h-[85vh] object-contain mx-auto"
+                />
+              </DialogContent>
+            </Dialog>
+          </>
         );
       }
       
