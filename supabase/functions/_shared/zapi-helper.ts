@@ -1,6 +1,6 @@
 /**
  * Z-API Helper - Utilitário centralizado para envio de mensagens WhatsApp via Z-API
- * Substitui a integração com ManyChat
+ * SUPORTA MÚLTIPLAS INSTÂNCIAS
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -13,6 +13,8 @@ export interface ZapiConfig {
   token: string;
   client_token?: string;
   webhook_secret?: string;
+  name?: string;
+  phone_number?: string;
 }
 
 export interface ZapiSendResult {
@@ -20,6 +22,7 @@ export interface ZapiSendResult {
   messageId?: string;
   error?: string;
   provider: 'zapi';
+  instance_name?: string;
 }
 
 /**
@@ -38,34 +41,86 @@ export function normalizePhone(phone: string): string {
 }
 
 /**
- * Busca configuração Z-API do banco de dados
+ * Busca todas as instâncias Z-API ativas
  */
-export async function getZapiConfig(supabase: any): Promise<ZapiConfig | null> {
-  const { data: config } = await supabase
-    .from('integrations_config')
+export async function getAllZapiInstances(supabase: any): Promise<ZapiConfig[]> {
+  const { data: instances } = await supabase
+    .from('zapi_instances')
     .select('*')
-    .eq('provider', 'zapi')
-    .single();
+    .eq('is_active', true)
+    .order('is_default', { ascending: false });
 
-  if (!config?.is_active) {
-    console.log('[Z-API Helper] Integração não ativa');
-    return null;
+  if (!instances || instances.length === 0) {
+    console.log('[Z-API Helper] Nenhuma instância Z-API ativa');
+    return [];
   }
 
-  const instanceId = config.config_json?.instance_id;
-  const token = config.config_json?.token;
-  const clientToken = config.config_json?.client_token;
+  return instances.map((inst: any) => ({
+    instance_id: inst.instance_id,
+    token: inst.token,
+    client_token: inst.client_token,
+    webhook_secret: inst.webhook_secret,
+    name: inst.name,
+    phone_number: inst.phone_number
+  }));
+}
 
-  if (!instanceId || !token) {
-    console.log('[Z-API Helper] Credenciais faltando');
-    return null;
+/**
+ * Busca configuração Z-API do banco de dados (instância padrão ou específica)
+ */
+export async function getZapiConfig(supabase: any, instanceId?: string): Promise<ZapiConfig | null> {
+  let query = supabase
+    .from('zapi_instances')
+    .select('*')
+    .eq('is_active', true);
+
+  if (instanceId) {
+    query = query.eq('instance_id', instanceId);
+  } else {
+    query = query.eq('is_default', true);
+  }
+
+  const { data: instance } = await query.maybeSingle();
+
+  // Fallback: se não encontrou na nova tabela, tentar legado
+  if (!instance) {
+    console.log('[Z-API Helper] Buscando config legado...');
+    const { data: config } = await supabase
+      .from('integrations_config')
+      .select('*')
+      .eq('provider', 'zapi')
+      .single();
+
+    if (!config?.is_active) {
+      console.log('[Z-API Helper] Integração não ativa');
+      return null;
+    }
+
+    const legacyInstanceId = config.config_json?.instance_id;
+    const token = config.config_json?.token;
+    const clientToken = config.config_json?.client_token;
+
+    if (!legacyInstanceId || !token) {
+      console.log('[Z-API Helper] Credenciais faltando');
+      return null;
+    }
+
+    return {
+      instance_id: legacyInstanceId,
+      token: token,
+      client_token: clientToken,
+      webhook_secret: config.config_json?.webhook_secret,
+      name: 'Legado'
+    };
   }
 
   return {
-    instance_id: instanceId,
-    token: token,
-    client_token: clientToken,
-    webhook_secret: config.config_json?.webhook_secret
+    instance_id: instance.instance_id,
+    token: instance.token,
+    client_token: instance.client_token,
+    webhook_secret: instance.webhook_secret,
+    name: instance.name,
+    phone_number: instance.phone_number
   };
 }
 
@@ -80,7 +135,7 @@ export async function sendText(
   const cleanPhone = normalizePhone(phone);
   
   try {
-    console.log(`[Z-API Helper] Enviando texto para ${cleanPhone}`);
+    console.log(`[Z-API Helper] Enviando texto para ${cleanPhone} via ${config.name || 'default'}`);
     
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (config.client_token) {
@@ -102,7 +157,8 @@ export async function sendText(
       return { 
         success: true, 
         messageId: data.messageId || data.id,
-        provider: 'zapi' 
+        provider: 'zapi',
+        instance_name: config.name
       };
     }
     
@@ -265,9 +321,10 @@ export async function enviarMensagemZapi(
     subscriberNome?: string;
     context?: string;
     tipo?: 'text' | 'image' | 'audio' | 'document';
+    instanceId?: string; // Permite especificar instância
   }
 ): Promise<ZapiSendResult> {
-  const config = await getZapiConfig(supabase);
+  const config = await getZapiConfig(supabase, options?.instanceId);
   
   if (!config) {
     return { 
@@ -294,7 +351,8 @@ export async function enviarMensagemZapi(
         metadata: { 
           source: 'zapi', 
           context: options.context || 'automation',
-          message_id: result.messageId
+          message_id: result.messageId,
+          instance_name: config.name
         }
       });
     } catch (err) {
@@ -307,7 +365,7 @@ export async function enviarMensagemZapi(
     provider: 'zapi',
     direction: 'outbound',
     endpoint: 'send-text',
-    payload_json: { phone: cleanPhone, message: message.substring(0, 100) },
+    payload_json: { phone: cleanPhone, message: message.substring(0, 100), instance: config.name },
     response_json: result,
     status: result.success ? 'ok' : 'error',
     error_message: result.error,

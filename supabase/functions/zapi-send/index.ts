@@ -19,7 +19,7 @@ serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { to_phone, message, type = 'text', provider = 'zapi', lead_id, file_name } = await req.json();
+    const { to_phone, message, type = 'text', provider = 'zapi', lead_id, file_name, instance_id } = await req.json();
 
     if (!to_phone || !message) {
       return new Response(JSON.stringify({ error: 'Missing to_phone or message' }), {
@@ -30,12 +30,46 @@ serve(async (req: Request) => {
 
     console.log(`[Send Message] Provider: ${provider}, Phone: ${to_phone}, Type: ${type}`);
 
-    // Buscar configuração do provider
-    const { data: config } = await supabase
-      .from('integrations_config')
-      .select('*')
-      .eq('provider', provider)
-      .single();
+    let config: any = null;
+
+    // NOVA LÓGICA: Primeiro buscar na tabela de múltiplas instâncias
+    if (provider === 'zapi') {
+      let query = supabase
+        .from('zapi_instances')
+        .select('*')
+        .eq('is_active', true);
+
+      if (instance_id) {
+        query = query.eq('instance_id', instance_id);
+      } else {
+        query = query.eq('is_default', true);
+      }
+
+      const { data: instance } = await query.maybeSingle();
+
+      if (instance) {
+        config = {
+          is_active: true,
+          config_json: {
+            instance_id: instance.instance_id,
+            token: instance.token,
+            client_token: instance.client_token,
+          },
+          name: instance.name
+        };
+        console.log(`[Send Message] Using instance: ${instance.name}`);
+      }
+    }
+
+    // Fallback para config legado
+    if (!config) {
+      const { data: legacyConfig } = await supabase
+        .from('integrations_config')
+        .select('*')
+        .eq('provider', provider)
+        .single();
+      config = legacyConfig;
+    }
 
     if (!config?.is_active) {
       return new Response(JSON.stringify({ error: `${provider} integration not active` }), {
