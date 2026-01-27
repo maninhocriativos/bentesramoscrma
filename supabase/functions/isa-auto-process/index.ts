@@ -2140,11 +2140,11 @@ function isAudioUrl(content: string): boolean {
 }
 
 // CRÍTICO: Sempre buscar o lead_state mais recente ANTES de processar
-// Retorna: null (não existe), 'LOST', 'BLOCKED', 'LEGACY_CLIENT' (cliente antigo), ou o estado real
+// Retorna: null (não existe), 'LOST', 'BLOCKED', 'BENTES_RAMOS' (cliente antigo/direto), ou o estado real
 async function getLeadState(supabase: any, leadId: string): Promise<string | null> {
   const { data: lead } = await supabase
     .from('leads_juridicos')
-    .select('lead_state, status, is_lost, fonte_trafego, canal_origem, created_at')
+    .select('lead_state, status, is_lost, tipo_origem, fonte_trafego, canal_origem, created_at')
     .eq('id', leadId)
     .single();
   
@@ -2162,8 +2162,26 @@ async function getLeadState(supabase: any, leadId: string): Promise<string | nul
     return 'BLOCKED';
   }
   
-  // 🚨 FILTRO DE TRÁFEGO: Isa só atende leads que vieram do tráfego
-  // Clientes antigos do escritório (sem fonte_trafego) não são processados pela Isa
+  // 🚨 FILTRO PRINCIPAL: ISA SÓ ATENDE LEADS DE TRÁFEGO
+  // Usando o campo tipo_origem para determinar se é tráfego ou lead antigo
+  const tipoOrigem = lead.tipo_origem || 'indefinido';
+  
+  // Se tipo_origem é explicitamente 'whatsapp_direto' → lead Bentes & Ramos (não automatizar)
+  if (tipoOrigem === 'whatsapp_direto') {
+    console.log('🏢 Lead Bentes & Ramos (whatsapp_direto) - Isa NÃO vai processar');
+    console.log('   - tipo_origem:', tipoOrigem);
+    console.log('   - created_at:', lead.created_at);
+    return 'BENTES_RAMOS';
+  }
+  
+  // Se tipo_origem é 'trafego' → processar normalmente
+  if (tipoOrigem === 'trafego') {
+    console.log('✅ Lead de TRÁFEGO detectado - Isa vai processar');
+    return lead.lead_state || 'NEW';
+  }
+  
+  // Se tipo_origem é 'indefinido', usar lógica legada de detecção
+  // Verificar se tem indicação de tráfego pelos campos antigos
   const isFromTraffic = Boolean(
     lead.fonte_trafego || 
     lead.canal_origem === 'trafego_pago' || 
@@ -2172,21 +2190,26 @@ async function getLeadState(supabase: any, leadId: string): Promise<string | nul
     lead.canal_origem === 'google'
   );
   
-  // Se não tem indicação de tráfego, verificar se é lead recente (últimos 30 dias)
-  // Leads recentes sem fonte ainda são processados (podem ser leads novos não classificados)
+  if (isFromTraffic) {
+    console.log('✅ Lead de tráfego detectado via campos legados - Isa vai processar');
+    return lead.lead_state || 'NEW';
+  }
+  
+  // Se não tem indicação de tráfego e tipo_origem é indefinido, verificar se é lead recente
+  // Leads criados nos últimos 30 dias sem classificação ainda são processados
   const createdAt = new Date(lead.created_at);
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const isRecentLead = createdAt > thirtyDaysAgo;
   
-  if (!isFromTraffic && !isRecentLead) {
-    console.log('🏢 Cliente legado do escritório detectado - Isa não vai processar');
-    console.log('   - fonte_trafego:', lead.fonte_trafego);
-    console.log('   - canal_origem:', lead.canal_origem);
+  if (!isRecentLead) {
+    console.log('🏢 Lead antigo sem classificação - assumindo Bentes & Ramos');
+    console.log('   - tipo_origem:', tipoOrigem);
     console.log('   - created_at:', lead.created_at);
-    return 'LEGACY_CLIENT';
+    return 'BENTES_RAMOS';
   }
   
+  console.log('⚠️ Lead indefinido recente - processando provisoriamente');
   return lead.lead_state || 'NEW';
 }
 
@@ -2308,18 +2331,20 @@ serve(async (req) => {
       });
     }
     
-    // Se bloqueado, perdido OU cliente legado do escritório, NÃO processar
-    if (currentState === 'BLOCKED' || currentState === 'LOST' || currentState === 'LEGACY_CLIENT') {
+    // Se bloqueado, perdido, cliente legado OU Bentes & Ramos, NÃO processar
+    if (currentState === 'BLOCKED' || currentState === 'LOST' || currentState === 'LEGACY_CLIENT' || currentState === 'BENTES_RAMOS') {
       const reasonMap: Record<string, string> = {
         'BLOCKED': 'status_bloqueado',
         'LOST': 'lead_perdido',
-        'LEGACY_CLIENT': 'cliente_legado_escritorio'
+        'LEGACY_CLIENT': 'cliente_legado_escritorio',
+        'BENTES_RAMOS': 'lead_bentes_ramos_nao_trafego'
       };
-      console.log(`🚫 Lead ${currentState}, abortando processamento automático`);
+      console.log(`🚫 Lead ${currentState}, abortando processamento automático - ISA só atende leads de TRÁFEGO`);
       return new Response(JSON.stringify({ 
         success: false, 
         skipped: true,
-        reason: reasonMap[currentState] || currentState
+        reason: reasonMap[currentState] || currentState,
+        message: 'Lead não é de tráfego pago - atendimento humano'
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

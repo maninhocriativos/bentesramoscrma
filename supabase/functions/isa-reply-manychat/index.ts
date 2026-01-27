@@ -598,15 +598,32 @@ serve(async (req: Request) => {
 
     const leadId = subscriber?.lead_id;
     
-    // Buscar estado atual do lead
+    // Buscar estado atual do lead e tipo de origem
     let currentLeadState: string | null = null;
+    let tipoOrigem: string | null = null;
+    
     if (leadId) {
       const { data: lead } = await supabase
         .from('leads_juridicos')
-        .select('lead_state')
+        .select('lead_state, tipo_origem')
         .eq('id', leadId)
         .maybeSingle();
       currentLeadState = lead?.lead_state || null;
+      tipoOrigem = lead?.tipo_origem || null;
+    }
+
+    // 🛑 ISA só processa leads de TRÁFEGO
+    // Leads "whatsapp_direto" (Bentes & Ramos antigos) não entram no fluxo automático
+    if (leadId && tipoOrigem && tipoOrigem !== 'trafego') {
+      console.log('[ISA-REPLY] ⏸️ Lead não é de tráfego, ignorando automação. tipo_origem:', tipoOrigem);
+      return new Response(JSON.stringify({ 
+        success: true, 
+        skipped: true,
+        reason: 'lead_nao_trafego',
+        tipo_origem: tipoOrigem
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
     // 📦 Processar mídia se presente
     let mediaContent = '';
