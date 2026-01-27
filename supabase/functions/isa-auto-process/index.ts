@@ -2381,9 +2381,12 @@ serve(async (req) => {
       respostaEnviada = sendResult.success;
       respostaMsgId = sendResult.messageId || null;
       
-      // Salvar resposta no banco (única vez, aqui)
-      if (respostaEnviada) {
-        await supabase.from('manychat_mensagens').insert({
+      // Salvar resposta no banco (única vez, aqui) - usar upsert para evitar duplicatas
+      if (respostaEnviada && respostaMsgId) {
+        // Usar RPC ou insert com ON CONFLICT via metadata->>'message_id'
+        // Como temos um índice único em (metadata->>'message_id'), usamos insert normal
+        // e deixamos o banco rejeitar duplicatas silenciosamente
+        const { error: insertErr } = await supabase.from('manychat_mensagens').insert({
           subscriber_id: subscriber_id,
           subscriber_nome: 'Isa (Assistente)',
           canal: canal || 'whatsapp',
@@ -2398,6 +2401,13 @@ serve(async (req) => {
             analise: resultado.analise 
           },
         });
+        
+        // Ignorar erro de duplicata (unique_violation = 23505)
+        if (insertErr && !insertErr.message?.includes('duplicate') && !insertErr.code?.includes('23505')) {
+          console.error('[Isa] Erro ao salvar resposta:', insertErr);
+        } else if (insertErr) {
+          console.log('[Isa] Mensagem já existe no banco, ignorando duplicata:', respostaMsgId);
+        }
       }
     }
 

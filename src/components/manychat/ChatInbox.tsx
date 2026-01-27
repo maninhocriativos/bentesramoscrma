@@ -732,32 +732,76 @@ const ManyChatInboxContent = () => {
         }
 
         // Salvar mensagem localmente (sempre, para histórico)
-        const { data: savedMsg } = await supabase.from('manychat_mensagens' as any).insert({
-          subscriber_id: subscriberSnapshot.subscriber_id,
-          subscriber_nome: subscriberSnapshot.nome,
-          canal: 'whatsapp',
-          conteudo: content,
-          tipo: mediaType || 'text',
-          direcao: 'saida',
-          lead_id: subscriberSnapshot.lead_id,
-          metadata: { 
-            sent_via: 'chat_interface', 
-            zapi_status: zapiResult?.success ? 'success' : 'error', 
-            message_id: zapiResult?.messageId,
-            file_name: fileName 
-          }
-        } as any).select().single();
+        // Usa message_id retornado pelo Z-API para evitar duplicatas
+        // Se o índice único rejeitar, ignoramos silenciosamente
+        const msgId = zapiResult?.messageId;
+        
+        if (msgId) {
+          const { data: savedMsg, error: insertErr } = await supabase.from('manychat_mensagens' as any).insert({
+            subscriber_id: subscriberSnapshot.subscriber_id,
+            subscriber_nome: subscriberSnapshot.nome,
+            canal: 'whatsapp',
+            conteudo: content,
+            tipo: mediaType || 'text',
+            direcao: 'saida',
+            lead_id: subscriberSnapshot.lead_id,
+            metadata: { 
+              sent_via: 'chat_interface', 
+              zapi_status: zapiResult?.success ? 'success' : 'error', 
+              message_id: msgId,
+              file_name: fileName 
+            }
+          } as any).select().single();
 
-        // Replace optimistic message with real one
-        if (savedMsg) {
-          setMessages(prev => {
-            // Se o realtime já inseriu a mensagem real, removemos o temp e não duplicamos
-            const withoutTemp = prev.filter(m => m.id !== tempId);
-            const savedKey = getMessageDedupeKey(savedMsg);
-            const alreadyExists = withoutTemp.some(m => getMessageDedupeKey(m) === savedKey || m.id === (savedMsg as any).id);
-            if (alreadyExists) return withoutTemp;
-            return [...withoutTemp, savedMsg as Message];
-          });
+          // Se houve erro de duplicata (unique_violation), ignorar silenciosamente
+          if (insertErr) {
+            if (insertErr.message?.includes('duplicate') || insertErr.code === '23505') {
+              console.log('[Chat] Mensagem já existe, ignorando duplicata:', msgId);
+            } else {
+              console.error('[Chat] Erro ao salvar mensagem:', insertErr);
+            }
+          }
+
+          // Replace optimistic message with real one
+          if (savedMsg) {
+            setMessages(prev => {
+              // Se o realtime já inseriu a mensagem real, removemos o temp e não duplicamos
+              const withoutTemp = prev.filter(m => m.id !== tempId);
+              const savedKey = getMessageDedupeKey(savedMsg);
+              const alreadyExists = withoutTemp.some(m => getMessageDedupeKey(m) === savedKey || m.id === (savedMsg as any).id);
+              if (alreadyExists) return withoutTemp;
+              return [...withoutTemp, savedMsg as Message];
+            });
+          } else {
+            // Mesmo sem savedMsg, remover o temp pois pode já existir via realtime
+            setMessages(prev => prev.filter(m => m.id !== tempId));
+          }
+        } else {
+          // Sem messageId do Z-API, salvar sem deduplicação (fallback)
+          const { data: savedMsg } = await supabase.from('manychat_mensagens' as any).insert({
+            subscriber_id: subscriberSnapshot.subscriber_id,
+            subscriber_nome: subscriberSnapshot.nome,
+            canal: 'whatsapp',
+            conteudo: content,
+            tipo: mediaType || 'text',
+            direcao: 'saida',
+            lead_id: subscriberSnapshot.lead_id,
+            metadata: { 
+              sent_via: 'chat_interface', 
+              zapi_status: zapiResult?.success ? 'success' : 'error',
+              file_name: fileName 
+            }
+          } as any).select().single();
+          
+          if (savedMsg) {
+            setMessages(prev => {
+              const withoutTemp = prev.filter(m => m.id !== tempId);
+              const savedKey = getMessageDedupeKey(savedMsg);
+              const alreadyExists = withoutTemp.some(m => getMessageDedupeKey(m) === savedKey || m.id === (savedMsg as any).id);
+              if (alreadyExists) return withoutTemp;
+              return [...withoutTemp, savedMsg as Message];
+            });
+          }
         }
 
         // Registrar interação se houver lead vinculado
