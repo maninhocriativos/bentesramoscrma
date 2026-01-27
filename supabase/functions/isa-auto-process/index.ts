@@ -2140,10 +2140,11 @@ function isAudioUrl(content: string): boolean {
 }
 
 // CRÍTICO: Sempre buscar o lead_state mais recente ANTES de processar
+// Retorna: null (não existe), 'LOST', 'BLOCKED', 'LEGACY_CLIENT' (cliente antigo), ou o estado real
 async function getLeadState(supabase: any, leadId: string): Promise<string | null> {
   const { data: lead } = await supabase
     .from('leads_juridicos')
-    .select('lead_state, status, is_lost')
+    .select('lead_state, status, is_lost, fonte_trafego, canal_origem, created_at')
     .eq('id', leadId)
     .single();
   
@@ -2159,6 +2160,31 @@ async function getLeadState(supabase: any, leadId: string): Promise<string | nul
   if (['Contrato Assinado', 'Ganho'].includes(lead.status)) {
     console.log('⚠️ Lead com status bloqueado:', lead.status);
     return 'BLOCKED';
+  }
+  
+  // 🚨 FILTRO DE TRÁFEGO: Isa só atende leads que vieram do tráfego
+  // Clientes antigos do escritório (sem fonte_trafego) não são processados pela Isa
+  const isFromTraffic = Boolean(
+    lead.fonte_trafego || 
+    lead.canal_origem === 'trafego_pago' || 
+    lead.canal_origem === 'instagram' ||
+    lead.canal_origem === 'facebook' ||
+    lead.canal_origem === 'google'
+  );
+  
+  // Se não tem indicação de tráfego, verificar se é lead recente (últimos 30 dias)
+  // Leads recentes sem fonte ainda são processados (podem ser leads novos não classificados)
+  const createdAt = new Date(lead.created_at);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const isRecentLead = createdAt > thirtyDaysAgo;
+  
+  if (!isFromTraffic && !isRecentLead) {
+    console.log('🏢 Cliente legado do escritório detectado - Isa não vai processar');
+    console.log('   - fonte_trafego:', lead.fonte_trafego);
+    console.log('   - canal_origem:', lead.canal_origem);
+    console.log('   - created_at:', lead.created_at);
+    return 'LEGACY_CLIENT';
   }
   
   return lead.lead_state || 'NEW';
@@ -2208,13 +2234,18 @@ serve(async (req) => {
       });
     }
     
-    // Se bloqueado ou perdido, NÃO processar
-    if (currentState === 'BLOCKED' || currentState === 'LOST') {
-      console.log('🚫 Lead bloqueado ou perdido, abortando processamento');
+    // Se bloqueado, perdido OU cliente legado do escritório, NÃO processar
+    if (currentState === 'BLOCKED' || currentState === 'LOST' || currentState === 'LEGACY_CLIENT') {
+      const reasonMap: Record<string, string> = {
+        'BLOCKED': 'status_bloqueado',
+        'LOST': 'lead_perdido',
+        'LEGACY_CLIENT': 'cliente_legado_escritorio'
+      };
+      console.log(`🚫 Lead ${currentState}, abortando processamento automático`);
       return new Response(JSON.stringify({ 
         success: false, 
         skipped: true,
-        reason: currentState === 'BLOCKED' ? 'status_bloqueado' : 'lead_perdido' 
+        reason: reasonMap[currentState] || currentState
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
