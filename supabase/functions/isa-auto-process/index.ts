@@ -2139,6 +2139,31 @@ function isAudioUrl(content: string): boolean {
          lowerContent.includes('audio');
 }
 
+// CRÍTICO: Sempre buscar o lead_state mais recente ANTES de processar
+async function getLeadState(supabase: any, leadId: string): Promise<string | null> {
+  const { data: lead } = await supabase
+    .from('leads_juridicos')
+    .select('lead_state, status, is_lost')
+    .eq('id', leadId)
+    .single();
+  
+  if (!lead) return null;
+  
+  // Se está perdido, sinalizar
+  if (lead.is_lost) {
+    console.log('⚠️ Lead está marcado como PERDIDO');
+    return 'LOST';
+  }
+  
+  // Se status bloqueado, sinalizar
+  if (['Contrato Assinado', 'Ganho'].includes(lead.status)) {
+    console.log('⚠️ Lead com status bloqueado:', lead.status);
+    return 'BLOCKED';
+  }
+  
+  return lead.lead_state || 'NEW';
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -2164,6 +2189,33 @@ serve(async (req) => {
         error: 'lead_id e mensagem são obrigatórios' 
       }), {
         status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // IMPORTANTE: Sempre buscar o estado REAL do lead do banco ANTES de processar
+    const currentState = await getLeadState(supabase, lead_id);
+    
+    // Se null, lead não existe
+    if (currentState === null) {
+      console.log('⚠️ Lead não encontrado:', lead_id);
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Lead não encontrado' 
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    // Se bloqueado ou perdido, NÃO processar
+    if (currentState === 'BLOCKED' || currentState === 'LOST') {
+      console.log('🚫 Lead bloqueado ou perdido, abortando processamento');
+      return new Response(JSON.stringify({ 
+        success: false, 
+        skipped: true,
+        reason: currentState === 'BLOCKED' ? 'status_bloqueado' : 'lead_perdido' 
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
