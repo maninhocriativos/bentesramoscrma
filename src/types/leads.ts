@@ -32,4 +32,9 @@ export interface Lead {
   contract_sent_at?: string | null;
   contract_signed_at?: string | null;
   last_contact_at?: string | null;
+  // Traffic source tracking
+  fonte_trafego?: string | null;
+  canal_origem?: string | null;
+  // Contract reuse tracking
+  contratos_adicionais?: number | null;
 }

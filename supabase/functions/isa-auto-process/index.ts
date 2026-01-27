@@ -278,6 +278,7 @@ async function buscarContextoLead(supabase: any, leadId: string): Promise<LeadCo
     { data: processos },
     { data: honorarios },
     { data: followup },
+    { data: zapiFollowup },
     { data: classification },
     { data: contractData },
     { data: docsChecklist },
@@ -291,6 +292,7 @@ async function buscarContextoLead(supabase: any, leadId: string): Promise<LeadCo
     supabase.from('processos').select('*').eq('cliente_id', leadId),
     supabase.from('honorarios').select('*, parcelas(*)').eq('cliente_id', leadId),
     supabase.from('lead_followups').select('*').eq('lead_id', leadId).maybeSingle(),
+    supabase.from('zapi_followups').select('*').eq('lead_id', leadId).maybeSingle(),
     supabase.from('lead_classifications').select('*').eq('lead_id', leadId).maybeSingle(),
     supabase.from('lead_contract_data').select('*').eq('lead_id', leadId).maybeSingle(),
     supabase.from('lead_docs_checklist').select('*').eq('lead_id', leadId),
@@ -300,6 +302,15 @@ async function buscarContextoLead(supabase: any, leadId: string): Promise<LeadCo
   if (!lead) return null;
 
   const parcelas = honorarios?.flatMap((h: any) => h.parcelas || []) || [];
+  
+  // Merge followup data from both tables (zapi_followups takes precedence)
+  const mergedFollowup = zapiFollowup ? {
+    ...followup,
+    ...zapiFollowup,
+    total_followups_enviados: zapiFollowup.total_followups_enviados || 0,
+    ultimo_tipo_enviado: zapiFollowup.ultimo_tipo_enviado || null,
+    respondido: zapiFollowup.respondido || followup?.respondido || false,
+  } : followup;
 
   return { 
     lead, 
@@ -310,7 +321,7 @@ async function buscarContextoLead(supabase: any, leadId: string): Promise<LeadCo
     processos: processos || [], 
     honorarios: honorarios || [], 
     parcelas,
-    followup: followup || null,
+    followup: mergedFollowup || null,
     classification: classification || null,
     contractData: contractData || null,
     docsChecklist: docsChecklist || [],
@@ -1976,6 +1987,16 @@ Telefone: ${contexto.lead.telefone || 'Não informado'}
 Email: ${contexto.lead.email || 'Não informado'}
 Origem: ${contexto.lead.origem || 'Não informada'}
 Tipo Ação: ${contexto.lead.tipo_acao || 'Não classificado'}
+Fonte Tráfego: ${contexto.lead.fonte_trafego || 'Não identificada'} ${contexto.lead.fonte_trafego === 'trafego_pago' ? '💰 (CLIENTE DE TRÁFEGO PAGO - PRIORIDADE!)' : contexto.lead.fonte_trafego === 'indicacao' ? '🤝 (INDICAÇÃO)' : ''}
+Canal Origem: ${contexto.lead.canal_origem || 'Não identificado'}
+Contratos Adicionais: ${contexto.lead.contratos_adicionais || 0} ${(contexto.lead.contratos_adicionais || 0) > 0 ? '⭐ (CLIENTE RECORRENTE!)' : ''}
+
+💡 MEMÓRIA DE FOLLOW-UP:
+${contexto.followup ? `
+- Este lead VEIO de follow-up? ${contexto.followup.total_followups_enviados > 0 ? 'SIM (' + contexto.followup.ultimo_tipo_enviado + ')' : 'NÃO'}
+- Total de follow-ups já enviados: ${contexto.followup.total_followups_enviados || 0}
+- Respondeu após follow-up? ${contexto.followup.respondido ? 'SIM ✅' : 'Ainda não'}
+` : '- Sem registro de follow-up'}
 
 📜 HISTÓRICO DA CONVERSA:
 ${historicoFormatado || '(Sem histórico)'}

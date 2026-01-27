@@ -52,6 +52,17 @@ const STATUSES: LeadStatus[] = [
 
 const ORIGENS: LeadOrigem[] = ['Instagram', 'Google', 'Site', 'Indicação', 'Outro'];
 
+const FONTES_TRAFEGO = [
+  { value: 'organico', label: 'Orgânico' },
+  { value: 'trafego_pago', label: 'Tráfego Pago 💰' },
+  { value: 'indicacao', label: 'Indicação 🤝' },
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'google_ads', label: 'Google Ads' },
+  { value: 'facebook_ads', label: 'Facebook Ads' },
+  { value: 'site', label: 'Site' },
+  { value: 'outro', label: 'Outro' },
+];
+
 export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = true }: LeadModalProps) {
   const { createLead, updateLead, deleteLead } = useLeads();
   const { interacoes } = useInteracoes(lead?.id);
@@ -65,6 +76,8 @@ export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = tr
     link_contrato: '',
     valor_causa: '' as string | number,
     tipo_acao: '',
+    fonte_trafego: 'organico',
+    contratos_adicionais: 0,
   });
   const [saving, setSaving] = useState(false);
 
@@ -80,6 +93,8 @@ export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = tr
         link_contrato: lead.link_contrato || '',
         valor_causa: lead.valor_causa ?? '',
         tipo_acao: lead.tipo_acao || '',
+        fonte_trafego: lead.fonte_trafego || 'organico',
+        contratos_adicionais: lead.contratos_adicionais || 0,
       });
     } else {
       setFormData({
@@ -92,6 +107,8 @@ export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = tr
         link_contrato: '',
         valor_causa: '',
         tipo_acao: '',
+        fonte_trafego: 'organico',
+        contratos_adicionais: 0,
       });
     }
   }, [lead, isOpen]);
@@ -104,6 +121,7 @@ export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = tr
     const dataToSave = {
       ...formData,
       valor_causa: formData.valor_causa ? Number(formData.valor_causa) : null,
+      contratos_adicionais: Number(formData.contratos_adicionais) || 0,
     };
     
     if (isNew) {
@@ -231,6 +249,39 @@ export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = tr
                 className="rounded-xl"
                 placeholder="R$ 0,00"
               />
+            </div>
+
+            <div>
+              <Label htmlFor="fonte_trafego">Fonte de Tráfego</Label>
+              <Select
+                value={formData.fonte_trafego}
+                onValueChange={(value) => setFormData({ ...formData, fonte_trafego: value })}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FONTES_TRAFEGO.map((ft) => (
+                    <SelectItem key={ft.value} value={ft.value}>
+                      {ft.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="contratos_adicionais">Contratos Adicionais</Label>
+              <Input
+                id="contratos_adicionais"
+                type="number"
+                min="0"
+                value={formData.contratos_adicionais}
+                onChange={(e) => setFormData({ ...formData, contratos_adicionais: parseInt(e.target.value) || 0 })}
+                className="rounded-xl"
+                placeholder="0"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Taxa de reaproveitamento</p>
             </div>
 
             <div className="col-span-2">

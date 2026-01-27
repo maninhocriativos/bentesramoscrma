@@ -92,3 +92,6 @@ verify_jwt = false
 
 [functions.fix-subscriber-ids]
 verify_jwt = false
+
+[functions.zapi-followup-automation]
+verify_jwt = false
