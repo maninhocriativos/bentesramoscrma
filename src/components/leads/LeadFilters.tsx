@@ -52,6 +52,7 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
   const [search, setSearch] = useState('');
   const [tipoAcao, setTipoAcao] = useState('all');
   const [valorRange, setValorRange] = useState('all');
+  const [tipoOrigem, setTipoOrigem] = useState('all');
   const [currentFiltered, setCurrentFiltered] = useState<Lead[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   
@@ -98,8 +99,16 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
       }
     }
 
+    // Tipo de origem filter (tráfego vs whatsapp direto)
+    if (tipoOrigem !== 'all') {
+      filtered = filtered.filter(lead => {
+        const origem = lead.tipo_origem || 'indefinido';
+        return origem === tipoOrigem;
+      });
+    }
+
     return filtered;
-  }, [leads, search, tipoAcao, valorRange]);
+  }, [leads, search, tipoAcao, valorRange, tipoOrigem]);
 
   // Update parent when filtered leads change - using ref to avoid loop
   useEffect(() => {
@@ -172,12 +181,14 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
     search.trim() !== '',
     tipoAcao !== 'all',
     valorRange !== 'all',
+    tipoOrigem !== 'all',
   ].filter(Boolean).length;
 
   const clearFilters = () => {
     setSearch('');
     setTipoAcao('all');
     setValorRange('all');
+    setTipoOrigem('all');
   };
 
   const FilterControls = () => (
@@ -213,6 +224,22 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
                 {range.label}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Tipo de Origem */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Origem do Contato</label>
+        <Select value={tipoOrigem} onValueChange={setTipoOrigem}>
+          <SelectTrigger className="w-full h-10 rounded-lg">
+            <SelectValue placeholder="Origem" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as origens</SelectItem>
+            <SelectItem value="trafego">🎯 Tráfego Pago</SelectItem>
+            <SelectItem value="whatsapp_direto">💬 WhatsApp Direto</SelectItem>
+            <SelectItem value="indefinido">❓ Indefinido</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -317,6 +344,18 @@ export function LeadFilters({ leads, onFilterChange }: LeadFiltersProps) {
                   {range.label}
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={tipoOrigem} onValueChange={setTipoOrigem}>
+            <SelectTrigger className="w-[170px] h-10 rounded-lg">
+              <SelectValue placeholder="Origem" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas origens</SelectItem>
+              <SelectItem value="trafego">🎯 Tráfego</SelectItem>
+              <SelectItem value="whatsapp_direto">💬 Direto</SelectItem>
+              <SelectItem value="indefinido">❓ Indefinido</SelectItem>
             </SelectContent>
           </Select>
         </div>

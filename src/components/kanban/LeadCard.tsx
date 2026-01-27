@@ -1,11 +1,11 @@
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useState } from 'react';
-import { Lead } from '@/types/leads';
+import { Lead, TipoOrigem } from '@/types/leads';
 import { cn } from '@/lib/utils';
 import { 
   MessageCircle, ExternalLink, User, Clock, 
-  CheckCircle2, Star, Flame, Sparkles
+  CheckCircle2, Star, Flame, Sparkles, Target, MessageSquare
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
@@ -51,6 +51,34 @@ function SentimentIndicator({ isaInsight }: { isaInsight?: LeadCardProps['isaIns
     <div className={cn("p-1 rounded-full", bg)}>
       <Icon className={cn("w-3 h-3", color)} />
     </div>
+  );
+}
+
+// Badge de origem do lead (tráfego vs direto)
+function OrigemBadge({ tipoOrigem }: { tipoOrigem?: TipoOrigem | null }) {
+  if (!tipoOrigem || tipoOrigem === 'indefinido') return null;
+
+  const config = {
+    trafego: { 
+      icon: Target, 
+      label: 'Tráfego', 
+      className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' 
+    },
+    whatsapp_direto: { 
+      icon: MessageSquare, 
+      label: 'Direto', 
+      className: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' 
+    },
+  };
+
+  const { icon: Icon, label, className } = config[tipoOrigem] || {};
+  if (!Icon) return null;
+
+  return (
+    <Badge variant="secondary" className={cn("h-5 text-[10px] font-medium gap-1 px-1.5", className)}>
+      <Icon className="w-3 h-3" />
+      {label}
+    </Badge>
   );
 }
 
@@ -153,12 +181,15 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProp
           </div>
         </div>
 
-        {/* Origin badge */}
-        {lead.origem && (
-          <div className="mt-2 pt-2 border-t border-border/40">
-            <Badge variant="secondary" className="h-5 text-[10px] font-medium">
-              {lead.origem}
-            </Badge>
+        {/* Origin and Origem badges */}
+        {(lead.origem || lead.tipo_origem) && (
+          <div className="mt-2 pt-2 border-t border-border/40 flex items-center gap-1.5 flex-wrap">
+            <OrigemBadge tipoOrigem={lead.tipo_origem as TipoOrigem} />
+            {lead.origem && (
+              <Badge variant="secondary" className="h-5 text-[10px] font-medium">
+                {lead.origem}
+              </Badge>
+            )}
           </div>
         )}
       </div>

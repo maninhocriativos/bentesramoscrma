@@ -1124,6 +1124,7 @@ export type Database = {
           status: string | null
           telefone: string | null
           tipo_acao: string | null
+          tipo_origem: string | null
           triage_started_at: string | null
           uf: string | null
           updated_at: string | null
@@ -1162,6 +1163,7 @@ export type Database = {
           status?: string | null
           telefone?: string | null
           tipo_acao?: string | null
+          tipo_origem?: string | null
           triage_started_at?: string | null
           uf?: string | null
           updated_at?: string | null
@@ -1200,6 +1202,7 @@ export type Database = {
           status?: string | null
           telefone?: string | null
           tipo_acao?: string | null
+          tipo_origem?: string | null
           triage_started_at?: string | null
           uf?: string | null
           updated_at?: string | null

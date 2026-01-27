@@ -515,6 +515,10 @@ async function findOrCreateLead(
   let fonteTrafego = 'organico'; // default
   let canalOrigem = 'whatsapp';
   
+  // Categorizar automaticamente como WhatsApp direto (não veio de campanha)
+  // Leads de tráfego pago viriam com UTMs ou metadata específica que ainda não temos
+  const tipoOrigem = 'whatsapp_direto';
+  
   // Heurística simples: nomes com certos padrões podem indicar tráfego pago
   // Em produção, isso viria de UTMs ou metadata do anúncio
   const { data: newLead, error } = await supabase
@@ -527,7 +531,8 @@ async function findOrCreateLead(
       origem: 'WhatsApp Z-API',
       fonte_trafego: fonteTrafego,
       canal_origem: canalOrigem,
-      resumo_ia: `Lead criado automaticamente via Z-API. Primeiro contato em ${new Date().toLocaleDateString('pt-BR')}.`
+      tipo_origem: tipoOrigem,
+      resumo_ia: `Lead criado automaticamente via Z-API (WhatsApp direto). Primeiro contato em ${new Date().toLocaleDateString('pt-BR')}.`
     })
     .select('id')
     .single();
@@ -583,11 +588,12 @@ async function findOrCreateLead(
       name: data.name,
       provider: 'zapi',
       fonte_trafego: fonteTrafego,
-      canal_origem: canalOrigem
+      canal_origem: canalOrigem,
+      tipo_origem: tipoOrigem
     }
   });
 
-  console.log(`[Z-API Webhook] Created new lead: ${newLead.id} (${fonteTrafego}/${canalOrigem})`);
+  console.log(`[Z-API Webhook] Created new lead: ${newLead.id} (tipo_origem: ${tipoOrigem})`);
 
   return { leadId: newLead.id, isNewLead: true };
 }
