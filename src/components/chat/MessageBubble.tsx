@@ -1,8 +1,9 @@
-import { CheckCheck, Play, Download, MapPin, ExternalLink, X } from 'lucide-react';
+import { CheckCheck, Download, MapPin, ExternalLink, X } from 'lucide-react';
 import { formatMessageTime, detectMediaType, extractLocationData } from '@/lib/chatUtils';
 import { ChatMessage } from '@/hooks/useChatMessages';
-import { useRef, useState } from 'react';
-import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog';
+import { useState } from 'react';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { AudioPlayer } from './AudioPlayer';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -13,36 +14,6 @@ interface MessageBubbleProps {
     messageReceivedText: string;
     messageTime: string;
   };
-}
-
-// Extrair URL de áudio de diferentes fontes
-function extractAudioUrl(message: ChatMessage): string | null {
-  // 1. Tentar extrair de metadata.original (Z-API payload)
-  const metadata = message.metadata as any;
-  if (metadata?.original?.audio?.audioUrl) {
-    return metadata.original.audio.audioUrl;
-  }
-  if (metadata?.original?.audio?.link) {
-    return metadata.original.audio.link;
-  }
-  
-  // 2. Tentar media_url diretamente no metadata
-  if (metadata?.media_url) {
-    return metadata.media_url;
-  }
-  
-  // 3. Se conteúdo é uma URL de áudio
-  const content = message.conteudo || '';
-  const cleanUrl = content.replace(/^\[|\]$/g, '').trim();
-  if (cleanUrl.match(/^https?:\/\/.+\.(ogg|mp3|wav|m4a|opus|aac|webm)/i) ||
-      cleanUrl.includes('whatsapp') || 
-      cleanUrl.includes('z-api') ||
-      cleanUrl.includes('filesusr') ||
-      cleanUrl.includes('mmg.whatsapp')) {
-    return cleanUrl;
-  }
-  
-  return null;
 }
 
 // Extrair URL de imagem
@@ -99,52 +70,12 @@ export function MessageBubble({ message, themeClasses }: MessageBubbleProps) {
   const isSent = message.direcao === 'saida';
   const content = message.conteudo || '';
   const mediaType = detectMediaType(content, message.tipo);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [audioError, setAudioError] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const renderContent = () => {
     switch (mediaType) {
       case 'audio': {
-        const audioUrl = extractAudioUrl(message);
-        
-        if (!audioUrl || audioError) {
-          return (
-            <div className="flex items-center gap-2 text-sm opacity-70">
-              <span>🎤</span>
-              <span>Áudio recebido</span>
-              {audioUrl && (
-                <a 
-                  href={audioUrl} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-400 hover:underline flex items-center gap-1"
-                >
-                  <Download className="h-3 w-3" />
-                  Baixar
-                </a>
-              )}
-            </div>
-          );
-        }
-        
-        return (
-          <div className="flex items-center gap-2">
-            <audio 
-              ref={audioRef}
-              controls 
-              className="max-w-[220px] h-10" 
-              preload="metadata"
-              onError={() => setAudioError(true)}
-            >
-              <source src={audioUrl} type="audio/ogg" />
-              <source src={audioUrl} type="audio/mpeg" />
-              <source src={audioUrl} type="audio/mp4" />
-              <source src={audioUrl} type="audio/webm" />
-              Seu navegador não suporta áudio.
-            </audio>
-          </div>
-        );
+        return <AudioPlayer message={message} isSent={isSent} />;
       }
       
       case 'image': {
