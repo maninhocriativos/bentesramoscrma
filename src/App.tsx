@@ -20,7 +20,7 @@ import ContratosPage from "./pages/ContratosPage";
 import LeadDetailPage from "./pages/LeadDetailPage";
 import AssistentePage from "./pages/AssistentePage";
 import IsaAutonomaPage from "./pages/IsaAutonomaPage";
-import ManyChatPage from "./pages/ManyChatPage";
+import ChatPage from "./pages/ChatPage";
 import ApiHubPage from "./pages/ApiHubPage";
 import ApiDocsPage from "./pages/ApiDocsPage";
 import Auth from "./pages/Auth";
@@ -75,7 +75,7 @@ const App = () => (
               <Route path="/configuracoes" element={<ConfiguracoesPage />} />
               <Route path="/assistente" element={<AssistentePage />} />
               <Route path="/isa-autonoma" element={<IsaAutonomaPage />} />
-              <Route path="/manychat" element={<ManyChatPage />} />
+              <Route path="/chat" element={<ChatPage />} />
               <Route path="/api-hub" element={<ApiHubPage />} />
               <Route path="/api-docs" element={<ApiDocsPage />} />
               <Route path="/peticoes" element={<PeticoesPage />} />

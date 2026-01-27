@@ -89,7 +89,7 @@ const menuItems: MenuItem[] = [
   },
   { 
     title: 'Chat', 
-    url: '/manychat', 
+    url: '/chat', 
     icon: MessageSquare,
     visibility: 'all'
   },
