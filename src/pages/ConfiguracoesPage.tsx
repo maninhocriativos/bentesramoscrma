@@ -10,7 +10,7 @@ import { SystemStatusTab } from '@/components/configuracoes/SystemStatusTab';
 import { IntegracoesTab } from '@/components/configuracoes/IntegracoesTab';
 import { OfficeSettingsTab } from '@/components/configuracoes/OfficeSettingsTab';
 import { IsaPromptEditor } from '@/components/configuracoes/IsaPromptEditor';
-import { ZApiIntegrationCard } from '@/components/configuracoes/ZApiIntegrationCard';
+import { ZApiInstancesManager } from '@/components/configuracoes/ZApiInstancesManager';
 import { FiqOnIntegrationCard } from '@/components/configuracoes/FiqOnIntegrationCard';
 import { Users, Server, Shield, Plug, Building2, Bot } from 'lucide-react';
 
@@ -117,10 +117,8 @@ export default function ConfiguracoesPage() {
 
           <TabsContent value="integracoes" className="animate-fade-in space-y-6">
             <IntegracoesTab />
-            <div className="grid gap-6 md:grid-cols-2">
-              <ZApiIntegrationCard />
-              <FiqOnIntegrationCard />
-            </div>
+            <ZApiInstancesManager />
+            <FiqOnIntegrationCard />
           </TabsContent>
 
           <TabsContent value="sistema" className="animate-fade-in">

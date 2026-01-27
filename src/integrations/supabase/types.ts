@@ -2361,6 +2361,54 @@ export type Database = {
           },
         ]
       }
+      zapi_instances: {
+        Row: {
+          client_token: string | null
+          created_at: string
+          id: string
+          instance_id: string
+          is_active: boolean | null
+          is_default: boolean | null
+          last_test_at: string | null
+          last_test_status: string | null
+          name: string
+          phone_number: string | null
+          token: string
+          updated_at: string
+          webhook_secret: string | null
+        }
+        Insert: {
+          client_token?: string | null
+          created_at?: string
+          id?: string
+          instance_id: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          last_test_at?: string | null
+          last_test_status?: string | null
+          name: string
+          phone_number?: string | null
+          token: string
+          updated_at?: string
+          webhook_secret?: string | null
+        }
+        Update: {
+          client_token?: string | null
+          created_at?: string
+          id?: string
+          instance_id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          last_test_at?: string | null
+          last_test_status?: string | null
+          name?: string
+          phone_number?: string | null
+          token?: string
+          updated_at?: string
+          webhook_secret?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

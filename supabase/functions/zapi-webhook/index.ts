@@ -97,12 +97,31 @@ serve(async (req: Request) => {
     
     console.log('[Z-API Webhook] Received:', JSON.stringify(body).substring(0, 500));
 
-    // Verificar configuração do Z-API
-    const { data: zapiConfig } = await supabase
-      .from('integrations_config')
+    // Verificar configuração do Z-API (primeiro nova tabela, depois legado)
+    let zapiConfig: any = null;
+    let webhookSecretConfig: string | null = null;
+
+    // Tentar buscar instância ativa na nova tabela
+    const { data: instances } = await supabase
+      .from('zapi_instances')
       .select('*')
-      .eq('provider', 'zapi')
-      .single();
+      .eq('is_active', true)
+      .limit(1);
+
+    if (instances && instances.length > 0) {
+      zapiConfig = { is_active: true, config_json: instances[0] };
+      webhookSecretConfig = instances[0].webhook_secret;
+      console.log('[Z-API Webhook] Using new instances table');
+    } else {
+      // Fallback para config legado
+      const { data: legacyConfig } = await supabase
+        .from('integrations_config')
+        .select('*')
+        .eq('provider', 'zapi')
+        .maybeSingle();
+      zapiConfig = legacyConfig;
+      webhookSecretConfig = legacyConfig?.config_json?.webhook_secret;
+    }
 
     if (!zapiConfig?.is_active) {
       console.log('[Z-API Webhook] Integration not active');
@@ -113,8 +132,7 @@ serve(async (req: Request) => {
     }
 
     // Validar webhook secret se configurado
-    const configSecret = zapiConfig.config_json?.webhook_secret;
-    if (configSecret && webhookSecret !== configSecret) {
+    if (webhookSecretConfig && webhookSecret !== webhookSecretConfig) {
       console.log('[Z-API Webhook] Invalid webhook secret');
       await logIntegration(supabase, 'zapi', 'inbound', body, null, 'error', 'Invalid webhook secret', null, startTime);
       return new Response(JSON.stringify({ error: 'Invalid secret' }), {
