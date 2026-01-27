@@ -2219,6 +2219,80 @@ serve(async (req) => {
       });
     }
 
+    // ============================================================
+    // 🔒 LOCK DE PROCESSAMENTO - Evitar respostas duplicadas
+    // ============================================================
+    const lockKey = `isa_processing_${lead_id}`;
+    const lockExpiry = 30; // 30 segundos de lock
+    
+    // Verificar se já existe um processamento recente (últimos 30s)
+    const { data: recentProcessing } = await supabase
+      .from('system_events')
+      .select('id, created_at')
+      .eq('lead_id', lead_id)
+      .eq('acao', 'isa_processing_lock')
+      .eq('processado', false)
+      .gte('created_at', new Date(Date.now() - lockExpiry * 1000).toISOString())
+      .maybeSingle();
+    
+    if (recentProcessing) {
+      console.log('⏳ Processamento em andamento para este lead, ignorando duplicata');
+      return new Response(JSON.stringify({ 
+        success: true, 
+        skipped: true,
+        reason: 'processamento_concorrente' 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    // Criar lock de processamento
+    const { data: lockData } = await supabase
+      .from('system_events')
+      .insert({
+        tipo: 'lock',
+        fonte: 'isa_auto',
+        acao: 'isa_processing_lock',
+        lead_id: lead_id,
+        dados: { mensagem_hash: mensagem.substring(0, 50), subscriber_id },
+        processado: false
+      })
+      .select()
+      .single();
+    
+    const lockId = lockData?.id;
+    
+    // Verificar se Isa já respondeu algo similar nos últimos 60 segundos
+    const { data: recentIsaMessages } = await supabase
+      .from('manychat_mensagens')
+      .select('id, conteudo, created_at')
+      .eq('lead_id', lead_id)
+      .eq('direcao', 'saida')
+      .eq('metadata->>source', 'isa')
+      .gte('created_at', new Date(Date.now() - 60 * 1000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(3);
+    
+    if (recentIsaMessages && recentIsaMessages.length > 0) {
+      console.log(`⚠️ Isa já enviou ${recentIsaMessages.length} mensagem(ns) nos últimos 60s`);
+      
+      // Se já enviou 2+ mensagens em 60s, pular
+      if (recentIsaMessages.length >= 2) {
+        console.log('🛑 Muitas respostas recentes, evitando spam');
+        // Liberar lock
+        if (lockId) {
+          await supabase.from('system_events').update({ processado: true }).eq('id', lockId);
+        }
+        return new Response(JSON.stringify({ 
+          success: true, 
+          skipped: true,
+          reason: 'rate_limit_respostas' 
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     // IMPORTANTE: Sempre buscar o estado REAL do lead do banco ANTES de processar
     const currentState = await getLeadState(supabase, lead_id);
     
@@ -2513,6 +2587,11 @@ serve(async (req) => {
       processado: true,
     });
 
+    // 🔓 LIBERAR LOCK após processamento
+    if (lockId) {
+      await supabase.from('system_events').update({ processado: true }).eq('id', lockId);
+    }
+
     console.log('✅ Processamento concluído');
     console.log(`   - Áudio transcrito: ${audioTranscrito}`);
     console.log(`   - Ações executadas: ${acoesExecutadas.length}`);
@@ -2535,6 +2614,16 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('❌ Erro no processamento:', error);
+    
+    // 🔓 LIBERAR LOCK em caso de erro (lockId pode estar no escopo)
+    // Note: lockId is in try block scope, so we need a different approach
+    // Clean up stale locks older than 2 minutes
+    await supabase
+      .from('system_events')
+      .update({ processado: true })
+      .eq('acao', 'isa_processing_lock')
+      .eq('processado', false)
+      .lt('created_at', new Date(Date.now() - 120 * 1000).toISOString());
     
     await supabase.from('system_events').insert({
       tipo: 'erro',
