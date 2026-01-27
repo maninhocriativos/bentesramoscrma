@@ -11,6 +11,78 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+// ============================================
+// DETECÇÃO DE TRÁFEGO PAGO (CTWA - Click to WhatsApp Ads)
+// ============================================
+interface TrafficSourceResult {
+  isTraffic: boolean;
+  source: string | null;
+  adData: {
+    adContext: any;
+    ctwaClid: string | null;
+    adId: string | null;
+    campaignName: string | null;
+  } | null;
+}
+
+function detectTrafficSource(body: any): TrafficSourceResult {
+  // Verificar múltiplos formatos possíveis de metadados de anúncio
+  // O WhatsApp/Z-API pode enviar em diferentes campos dependendo do provedor
+  const adContext = body.context?.ad || body.referral || body.ad || body.contextInfo?.ad;
+  const ctwaClid = body.context?.ctwa_clid || body.ctwa_clid || body.ctwa || 
+                   adContext?.ctwa || body.contextInfo?.ctwa_clid;
+  
+  // Campos adicionais do Meta Click to WhatsApp
+  const entryPoint = body.entry_point || body.entryPoint || body.context?.entry_point;
+  const sourceUrl = adContext?.source?.url || body.sourceUrl;
+  
+  console.log('[Traffic Detection] Checking:', {
+    hasAdContext: !!adContext,
+    hasCtwaClid: !!ctwaClid,
+    hasEntryPoint: !!entryPoint,
+    hasSourceUrl: !!sourceUrl,
+    bodyKeys: Object.keys(body).slice(0, 10)
+  });
+  
+  if (adContext || ctwaClid || entryPoint === 'ctwa') {
+    // Detectar plataforma de origem
+    let source = 'meta_ads';
+    const bodyStr = JSON.stringify(body).toLowerCase();
+    
+    // Tentar identificar se é Instagram ou Facebook
+    if (bodyStr.includes('instagram') || sourceUrl?.includes('instagram')) {
+      source = 'instagram_ads';
+    } else if (bodyStr.includes('facebook') || bodyStr.includes('fb.me') || sourceUrl?.includes('facebook')) {
+      source = 'facebook_ads';
+    }
+    
+    // Extrair dados do anúncio para analytics
+    const adId = adContext?.source?.id || adContext?.id || null;
+    const campaignName = adContext?.title || adContext?.campaign || null;
+    
+    console.log('[Traffic Detection] ✅ DETECTED PAID TRAFFIC:', {
+      source,
+      adId,
+      campaignName,
+      ctwaClid: ctwaClid ? 'present' : 'absent'
+    });
+    
+    return {
+      isTraffic: true,
+      source,
+      adData: {
+        adContext,
+        ctwaClid: ctwaClid || null,
+        adId,
+        campaignName
+      }
+    };
+  }
+  
+  console.log('[Traffic Detection] No paid traffic markers found');
+  return { isTraffic: false, source: null, adData: null };
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -51,6 +123,11 @@ serve(async (req: Request) => {
       });
     }
 
+    // ============================================
+    // DETECTAR TRÁFEGO PAGO ANTES DE NORMALIZAR
+    // ============================================
+    const trafficSource = detectTrafficSource(body);
+
     // Normalizar evento Z-API para formato interno
     const normalized = normalizeZapiEvent(body);
     
@@ -79,8 +156,13 @@ serve(async (req: Request) => {
       });
     }
 
-    // Buscar ou criar lead pelo telefone
-    const { leadId, isNewLead } = await findOrCreateLead(supabase, normalized);
+    // Buscar ou criar lead pelo telefone (PASSANDO DADOS DE TRÁFEGO)
+    const { leadId, isNewLead } = await findOrCreateLead(supabase, normalized, trafficSource);
+
+    // Se lead já existia e detectamos tráfego, atualizar se estava indefinido
+    if (leadId && !isNewLead && trafficSource.isTraffic) {
+      await updateLeadTrafficSource(supabase, leadId, trafficSource);
+    }
 
     // Atualizar last_contact_at e marcar followup como respondido APENAS em mensagens de entrada
     if (leadId && !normalized.fromMe) {
@@ -196,7 +278,10 @@ serve(async (req: Request) => {
               caption: normalized.caption,
               file_name: normalized.fileName,
               from_me: normalized.fromMe,
-              sent_via: normalized.fromMe ? 'whatsapp_phone' : null
+              sent_via: normalized.fromMe ? 'whatsapp_phone' : null,
+              // Adicionar dados de tráfego se disponíveis
+              traffic_source: trafficSource.isTraffic ? trafficSource.source : null,
+              ctwa_clid: trafficSource.adData?.ctwaClid || null
             }
           }).select().single();
 
@@ -237,7 +322,9 @@ serve(async (req: Request) => {
             caption: normalized.caption,
             file_name: normalized.fileName,
             from_me: normalized.fromMe,
-            sent_via: normalized.fromMe ? 'whatsapp_phone' : null
+            sent_via: normalized.fromMe ? 'whatsapp_phone' : null,
+            traffic_source: trafficSource.isTraffic ? trafficSource.source : null,
+            ctwa_clid: trafficSource.adData?.ctwaClid || null
           }
         }).select().single();
 
@@ -337,13 +424,16 @@ serve(async (req: Request) => {
     await logIntegration(supabase, 'zapi', 'inbound', body, { 
       lead_id: leadId, 
       is_new_lead: isNewLead,
+      traffic_source: trafficSource,
       normalized 
     }, 'ok', null, leadId, startTime);
 
     return new Response(JSON.stringify({ 
       success: true, 
       lead_id: leadId,
-      is_new_lead: isNewLead
+      is_new_lead: isNewLead,
+      traffic_detected: trafficSource.isTraffic,
+      traffic_source: trafficSource.source
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
@@ -492,7 +582,8 @@ function normalizeZapiEvent(body: any): {
 
 async function findOrCreateLead(
   supabase: any, 
-  data: { phone: string | null; name: string | null }
+  data: { phone: string | null; name: string | null },
+  trafficSource: TrafficSourceResult
 ): Promise<{ leadId: string | null; isNewLead: boolean }> {
   if (!data.phone) return { leadId: null, isNewLead: false };
 
@@ -510,17 +601,18 @@ async function findOrCreateLead(
     return { leadId: existingLead.id, isNewLead: false };
   }
 
-  // Criar novo lead
-  // Detectar fonte de tráfego baseado no nome/contexto
-  let fonteTrafego = 'organico'; // default
+  // Criar novo lead com detecção de tráfego
+  let fonteTrafego = 'organico';
   let canalOrigem = 'whatsapp';
+  let tipoOrigem = 'whatsapp_direto';
   
-  // Categorizar automaticamente como WhatsApp direto (não veio de campanha)
-  // Leads de tráfego pago viriam com UTMs ou metadata específica que ainda não temos
-  const tipoOrigem = 'whatsapp_direto';
+  // Se detectamos tráfego pago, categorizar corretamente
+  if (trafficSource.isTraffic) {
+    fonteTrafego = trafficSource.source || 'meta_ads';
+    tipoOrigem = 'trafego';
+    console.log(`[Z-API Webhook] 🎯 NEW LEAD FROM PAID TRAFFIC: ${fonteTrafego}`);
+  }
   
-  // Heurística simples: nomes com certos padrões podem indicar tráfego pago
-  // Em produção, isso viria de UTMs ou metadata do anúncio
   const { data: newLead, error } = await supabase
     .from('leads_juridicos')
     .insert({
@@ -528,11 +620,13 @@ async function findOrCreateLead(
       telefone: data.phone,
       status: 'Lead Frio',
       lead_state: 'NEW',
-      origem: 'WhatsApp Z-API',
+      origem: trafficSource.isTraffic ? 'Tráfego Pago' : 'WhatsApp Z-API',
       fonte_trafego: fonteTrafego,
       canal_origem: canalOrigem,
       tipo_origem: tipoOrigem,
-      resumo_ia: `Lead criado automaticamente via Z-API (WhatsApp direto). Primeiro contato em ${new Date().toLocaleDateString('pt-BR')}.`
+      resumo_ia: trafficSource.isTraffic 
+        ? `Lead de TRÁFEGO PAGO (${fonteTrafego}). Veio de anúncio Click to WhatsApp em ${new Date().toLocaleDateString('pt-BR')}.`
+        : `Lead criado automaticamente via Z-API (WhatsApp direto). Primeiro contato em ${new Date().toLocaleDateString('pt-BR')}.`
     })
     .select('id')
     .single();
@@ -548,7 +642,9 @@ async function findOrCreateLead(
     from_state: null,
     to_state: 'NEW',
     changed_by: 'zapi',
-    reason: 'Lead criado via webhook Z-API'
+    reason: trafficSource.isTraffic 
+      ? `Lead criado via Click to WhatsApp (${fonteTrafego})`
+      : 'Lead criado via webhook Z-API'
   });
 
   // Criar registro de followup na NOVA tabela zapi_followups
@@ -577,11 +673,11 @@ async function findOrCreateLead(
     followup_stage_slow: 0
   });
 
-  // Registrar evento de criação
+  // Registrar evento de criação com dados de atribuição
   await supabase.from('system_events').insert({
-    tipo: 'lead',
-    fonte: 'zapi-webhook',
-    acao: 'lead_criado',
+    tipo: trafficSource.isTraffic ? 'atribuicao' : 'lead',
+    fonte: trafficSource.isTraffic ? 'meta_ads' : 'zapi-webhook',
+    acao: trafficSource.isTraffic ? 'lead_from_ctwa' : 'lead_criado',
     lead_id: newLead.id,
     dados: {
       phone: data.phone,
@@ -589,13 +685,66 @@ async function findOrCreateLead(
       provider: 'zapi',
       fonte_trafego: fonteTrafego,
       canal_origem: canalOrigem,
-      tipo_origem: tipoOrigem
+      tipo_origem: tipoOrigem,
+      // Dados de atribuição para analytics
+      ad_id: trafficSource.adData?.adId || null,
+      campaign: trafficSource.adData?.campaignName || null,
+      ctwa_clid: trafficSource.adData?.ctwaClid || null,
+      source: trafficSource.source
     }
   });
 
-  console.log(`[Z-API Webhook] Created new lead: ${newLead.id} (tipo_origem: ${tipoOrigem})`);
+  console.log(`[Z-API Webhook] Created new lead: ${newLead.id} (tipo_origem: ${tipoOrigem}, fonte: ${fonteTrafego})`);
 
   return { leadId: newLead.id, isNewLead: true };
+}
+
+// Atualizar lead existente se detectarmos tráfego e ele estava indefinido
+async function updateLeadTrafficSource(
+  supabase: any,
+  leadId: string,
+  trafficSource: TrafficSourceResult
+): Promise<void> {
+  if (!trafficSource.isTraffic) return;
+  
+  // Verificar se lead ainda está como 'indefinido'
+  const { data: lead } = await supabase
+    .from('leads_juridicos')
+    .select('tipo_origem, fonte_trafego')
+    .eq('id', leadId)
+    .single();
+  
+  if (lead && lead.tipo_origem === 'indefinido') {
+    console.log(`[Z-API Webhook] 🔄 Updating existing lead ${leadId} with traffic source`);
+    
+    await supabase
+      .from('leads_juridicos')
+      .update({
+        tipo_origem: 'trafego',
+        fonte_trafego: trafficSource.source || 'meta_ads',
+        origem: 'Tráfego Pago',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', leadId);
+    
+    // Registrar evento de atualização
+    await supabase.from('system_events').insert({
+      tipo: 'atribuicao',
+      fonte: 'meta_ads',
+      acao: 'lead_atribuido_trafego',
+      lead_id: leadId,
+      dados: {
+        previous_tipo_origem: lead.tipo_origem,
+        new_tipo_origem: 'trafego',
+        fonte_trafego: trafficSource.source,
+        ad_id: trafficSource.adData?.adId,
+        campaign: trafficSource.adData?.campaignName,
+        ctwa_clid: trafficSource.adData?.ctwaClid
+      }
+    });
+    
+    console.log(`[Z-API Webhook] ✅ Lead ${leadId} updated to traffic source: ${trafficSource.source}`);
+  }
 }
 
 async function sendZapiMessage(
