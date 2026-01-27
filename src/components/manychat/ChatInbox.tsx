@@ -581,7 +581,7 @@ const ManyChatInboxContent = () => {
     }
   };
 
-  const sendMessage = async (mediaUrl?: string, mediaType?: string) => {
+  const sendMessage = async (mediaUrl?: string, mediaType?: string, fileName?: string) => {
     const content = mediaUrl || newMessage.trim();
     if (!content || !selectedSubscriber) return;
 
@@ -596,94 +596,101 @@ const ManyChatInboxContent = () => {
     };
     
     setMessages(prev => [...prev, optimisticMessage]);
-    setNewMessage('');
+    setNewMessage(''); // Limpa input IMEDIATAMENTE para permitir nova digitação
     setTyping(false);
+    setSelectedFile(null);
+    setPreviewUrl(null);
     scrollToBottom();
 
-    setIsSending(true);
-    try {
-      // Enviar via Z-API
-      const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-send', {
-        body: {
-          to_phone: selectedSubscriber.telefone,
-          message: content,
-          type: mediaType || 'text',
-          lead_id: selectedSubscriber.lead_id,
-        },
-      });
+    // Capturar valores do subscriber atual para uso no async
+    const subscriberSnapshot = { ...selectedSubscriber };
 
-      console.log('[Chat] Z-API response:', zapiResult, zapiError);
-
-      // Verificar se houve erro no envio
-      if (zapiError) {
-        throw new Error(zapiError.message || 'Erro ao enviar via Z-API');
-      }
-
-      if (!zapiResult?.success) {
-        console.warn('[Chat] Z-API retornou erro:', zapiResult);
-        toast({ 
-          title: '⚠️ Atenção', 
-          description: zapiResult?.error || 'Mensagem pode não ter chegado ao destinatário.',
-          variant: 'destructive'
+    // Enviar em background SEM bloquear o input (não usar setIsSending(true))
+    (async () => {
+      try {
+        // Enviar via Z-API com tipo correto
+        const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-send', {
+          body: {
+            to_phone: subscriberSnapshot.telefone,
+            message: content,
+            type: mediaType || 'text',
+            lead_id: subscriberSnapshot.lead_id,
+            file_name: fileName,
+          },
         });
-      }
 
-      // Salvar mensagem localmente (sempre, para histórico)
-      const { data: savedMsg } = await supabase.from('manychat_mensagens' as any).insert({
-        subscriber_id: selectedSubscriber.subscriber_id,
-        subscriber_nome: selectedSubscriber.nome,
-        canal: 'whatsapp',
-        conteudo: content,
-        tipo: mediaType || 'text',
-        direcao: 'saida',
-        lead_id: selectedSubscriber.lead_id,
-        metadata: { sent_via: 'chat_interface', zapi_status: zapiResult?.success ? 'success' : 'error', message_id: zapiResult?.messageId }
-      } as any).select().single();
+        console.log('[Chat] Z-API response:', zapiResult, zapiError);
 
-      // Replace optimistic message with real one
-      if (savedMsg) {
-        setMessages(prev => {
-          // Se o realtime já inseriu a mensagem real, removemos o temp e não duplicamos
-          const withoutTemp = prev.filter(m => m.id !== tempId);
-          const savedKey = getMessageDedupeKey(savedMsg);
-          const alreadyExists = withoutTemp.some(m => getMessageDedupeKey(m) === savedKey || m.id === (savedMsg as any).id);
-          if (alreadyExists) return withoutTemp;
-          return [...withoutTemp, savedMsg as Message];
-        });
-      }
+        // Verificar se houve erro no envio
+        if (zapiError) {
+          throw new Error(zapiError.message || 'Erro ao enviar via Z-API');
+        }
 
-      // Registrar interação se houver lead vinculado
-      if (selectedSubscriber.lead_id) {
-        await supabase.from('interacoes').insert({
-          cliente_id: selectedSubscriber.lead_id,
-          tipo: 'Chat',
-          resumo: `Mensagem via WhatsApp: ${content.substring(0, 100)}...`,
-          detalhes: content,
+        if (!zapiResult?.success) {
+          console.warn('[Chat] Z-API retornou erro:', zapiResult);
+          toast({ 
+            title: '⚠️ Atenção', 
+            description: zapiResult?.error || 'Mensagem pode não ter chegado ao destinatário.',
+            variant: 'destructive'
+          });
+        }
+
+        // Salvar mensagem localmente (sempre, para histórico)
+        const { data: savedMsg } = await supabase.from('manychat_mensagens' as any).insert({
+          subscriber_id: subscriberSnapshot.subscriber_id,
+          subscriber_nome: subscriberSnapshot.nome,
+          canal: 'whatsapp',
+          conteudo: content,
+          tipo: mediaType || 'text',
           direcao: 'saida',
-          data_interacao: new Date().toISOString(),
+          lead_id: subscriberSnapshot.lead_id,
+          metadata: { 
+            sent_via: 'chat_interface', 
+            zapi_status: zapiResult?.success ? 'success' : 'error', 
+            message_id: zapiResult?.messageId,
+            file_name: fileName 
+          }
+        } as any).select().single();
+
+        // Replace optimistic message with real one
+        if (savedMsg) {
+          setMessages(prev => {
+            // Se o realtime já inseriu a mensagem real, removemos o temp e não duplicamos
+            const withoutTemp = prev.filter(m => m.id !== tempId);
+            const savedKey = getMessageDedupeKey(savedMsg);
+            const alreadyExists = withoutTemp.some(m => getMessageDedupeKey(m) === savedKey || m.id === (savedMsg as any).id);
+            if (alreadyExists) return withoutTemp;
+            return [...withoutTemp, savedMsg as Message];
+          });
+        }
+
+        // Registrar interação se houver lead vinculado
+        if (subscriberSnapshot.lead_id) {
+          await supabase.from('interacoes').insert({
+            cliente_id: subscriberSnapshot.lead_id,
+            tipo: 'Chat',
+            resumo: `Mensagem via WhatsApp: ${content.substring(0, 100)}...`,
+            detalhes: content,
+            direcao: 'saida',
+            data_interacao: new Date().toISOString(),
+          });
+        }
+
+      } catch (error: any) {
+        console.error('[Chat] Erro ao enviar:', error);
+        // Update optimistic message to show error state
+        setMessages(prev => prev.map(m => 
+          m.id === tempId 
+            ? { ...m, metadata: { ...((m as any).metadata || {}), send_error: true } } 
+            : m
+        ));
+        toast({ 
+          title: 'Erro no envio', 
+          description: error.message || 'Não foi possível enviar a mensagem', 
+          variant: 'destructive' 
         });
       }
-
-      setSelectedFile(null);
-      setPreviewUrl(null);
-
-      // Toast de sucesso apenas se Z-API confirmou
-      if (zapiResult?.success) {
-        toast({ title: '✅ Enviado', description: 'Mensagem entregue via WhatsApp' });
-      }
-    } catch (error: any) {
-      console.error('[Chat] Erro ao enviar:', error);
-      // Remove optimistic message on error
-      setMessages(prev => prev.filter(m => m.id !== tempId));
-      setNewMessage(content); // Restore message
-      toast({ 
-        title: 'Erro no envio', 
-        description: error.message || 'Não foi possível enviar a mensagem', 
-        variant: 'destructive' 
-      });
-    } finally {
-      setIsSending(false);
-    }
+    })();
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -696,7 +703,10 @@ const ManyChatInboxContent = () => {
 
   const uploadAndSendFile = async () => {
     if (!selectedFile || !selectedSubscriber) return;
-    setIsSending(true);
+    
+    // Capturar nome do arquivo original ANTES de qualquer operação
+    const originalFileName = selectedFile.name;
+    
     try {
       const fileExt = selectedFile.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
@@ -717,11 +727,10 @@ const ManyChatInboxContent = () => {
             ? 'video'
             : 'document';
 
-      await sendMessage(signed.signedUrl, mediaType);
+      // Passar o nome original do arquivo para Z-API enviar como documento real
+      await sendMessage(signed.signedUrl, mediaType, originalFileName);
     } catch (error) {
       toast({ title: 'Erro', description: 'Falha no upload', variant: 'destructive' });
-    } finally {
-      setIsSending(false);
     }
   };
 
