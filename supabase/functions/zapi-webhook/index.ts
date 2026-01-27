@@ -132,27 +132,34 @@ serve(async (req: Request) => {
     if (normalized.message && leadId) {
       console.log('[Z-API Webhook] Saving message for subscriber:', subscriberId, 'messageId:', normalized.messageId, 'fromMe:', normalized.fromMe);
 
-      // IMPORTANTE: Não salvar eco de mensagens enviadas pela Isa (fromMe=true)
-      // A Isa já salva suas próprias mensagens em isa-auto-process
-      if (normalized.fromMe) {
-        console.log('[Z-API Webhook] Skipping message echo (fromMe=true)');
-        await logIntegration(supabase, 'zapi', 'inbound', body, { 
-          lead_id: leadId, 
-          skipped: true,
-          reason: 'echo_from_me'
-        }, 'ok', null, leadId, startTime);
-        
-        return new Response(JSON.stringify({ 
-          success: true, 
-          lead_id: leadId,
-          skipped: true,
-          reason: 'echo_from_me'
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
+      // Definir direção: entrada (cliente) ou saída (atendente/sistema)
+      const direcaoMensagem = normalized.fromMe ? 'saida' : 'entrada';
       
-      const direcao = 'entrada'; // Sempre entrada agora (fromMe já foi filtrado)
+      // Para mensagens de SAÍDA (fromMe=true), verificar se já foi salva pelo CRM
+      // Mensagens enviadas pela interface do chat já são salvas com sent_via: 'chat_interface'
+      // Aqui salvamos APENAS mensagens enviadas diretamente pelo WhatsApp do celular
+      if (normalized.fromMe && normalized.messageId) {
+        const { data: existingOutbound } = await supabase
+          .from('manychat_mensagens')
+          .select('id')
+          .or(`metadata->>message_id.eq.${normalized.messageId},metadata->>zapi_message_id.eq.${normalized.messageId}`)
+          .maybeSingle();
+        
+        if (existingOutbound) {
+          console.log('[Z-API Webhook] Outbound message already exists, skipping:', normalized.messageId);
+          return new Response(JSON.stringify({ 
+            success: true, 
+            lead_id: leadId,
+            skipped: true,
+            reason: 'outbound_already_saved'
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+        
+        // Salvar mensagem de saída do atendente (enviada pelo celular)
+        console.log('[Z-API Webhook] 📤 Saving OUTBOUND message from attendant (sent via phone)');
+      }
 
       // Conteúdo salvo: para mídia, priorizar URL (para renderizar no chat)
       const conteudoToSave =
@@ -172,14 +179,14 @@ serve(async (req: Request) => {
           console.log('[Z-API Webhook] Message already exists, skipping:', normalized.messageId);
           // Ainda precisamos chamar a Isa, então continuamos
         } else {
-          // Salvar nova mensagem
+          // Salvar nova mensagem com a direção correta
           const { data: savedMsg, error: msgError } = await supabase.from('manychat_mensagens').insert({
             subscriber_id: subscriberId,
-            subscriber_nome: normalized.name || normalized.phone,
+            subscriber_nome: normalized.fromMe ? 'Atendente' : (normalized.name || normalized.phone),
             conteudo: conteudoToSave,
             canal: 'whatsapp',
             tipo: normalized.messageType || 'text',
-            direcao,
+            direcao: direcaoMensagem,
             lead_id: leadId,
             metadata: { 
               source: 'zapi', 
@@ -188,7 +195,8 @@ serve(async (req: Request) => {
               media_url: normalized.mediaUrl,
               caption: normalized.caption,
               file_name: normalized.fileName,
-            from_me: normalized.fromMe
+              from_me: normalized.fromMe,
+              sent_via: normalized.fromMe ? 'whatsapp_phone' : null
             }
           }).select().single();
 
@@ -215,11 +223,11 @@ serve(async (req: Request) => {
         // Sem message_id, salvar normalmente (fallback)
         const { data: savedMsg, error: msgError } = await supabase.from('manychat_mensagens').insert({
           subscriber_id: subscriberId,
-          subscriber_nome: normalized.name || normalized.phone,
+          subscriber_nome: normalized.fromMe ? 'Atendente' : (normalized.name || normalized.phone),
           conteudo: conteudoToSave,
           canal: 'whatsapp',
           tipo: normalized.messageType || 'text',
-          direcao,
+          direcao: direcaoMensagem,
           lead_id: leadId,
           metadata: { 
             source: 'zapi', 
@@ -228,7 +236,8 @@ serve(async (req: Request) => {
             media_url: normalized.mediaUrl,
             caption: normalized.caption,
             file_name: normalized.fileName,
-            from_me: normalized.fromMe
+            from_me: normalized.fromMe,
+            sent_via: normalized.fromMe ? 'whatsapp_phone' : null
           }
         }).select().single();
 
