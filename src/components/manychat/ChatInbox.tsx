@@ -1011,22 +1011,66 @@ const ManyChatInboxContent = () => {
       const display = fileName || urlCandidate.split('/').pop()?.split('?')[0] || 'Documento';
       const isPdf = urlCandidate.toLowerCase().includes('.pdf') || display.toLowerCase().endsWith('.pdf');
       
+      if (isPdf) {
+        // PDF com preview embutido
+        return (
+          <div className={`flex flex-col rounded-lg overflow-hidden ${isDark ? 'bg-[#1F2C33]' : 'bg-[#F0F2F5]'} max-w-[320px]`}>
+            {/* Preview do PDF */}
+            <div className="relative w-full h-[200px] bg-gray-100 dark:bg-gray-800">
+              <iframe
+                src={`${urlCandidate}#toolbar=0&navpanes=0&scrollbar=0`}
+                className="w-full h-full border-0"
+                title={display}
+              />
+              {/* Overlay para abrir em tela cheia */}
+              <div 
+                className="absolute inset-0 cursor-pointer opacity-0 hover:opacity-100 transition-opacity bg-black/30 flex items-center justify-center"
+                onClick={() => window.open(urlCandidate, '_blank')}
+              >
+                <div className="bg-white/90 dark:bg-gray-800/90 rounded-lg px-4 py-2 flex items-center gap-2">
+                  <svg className="h-5 w-5 text-red-500" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M10.92,12.31C10.68,11.54 10.15,9.08 11.55,9.04C12.95,9 12.03,12.16 12.03,12.16C12.42,13.65 14.05,14.72 14.05,14.72C14.55,14.57 17.4,14.24 17,15.72C16.57,17.2 13.5,15.81 13.5,15.81C11.55,15.95 10.09,16.47 10.09,16.47C8.96,18.58 7.64,19.5 7.1,18.61C6.43,17.5 9.23,16.07 9.23,16.07C10.68,13.72 10.9,12.35 10.92,12.31Z" />
+                  </svg>
+                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200">Abrir PDF</span>
+                </div>
+              </div>
+            </div>
+            {/* Footer com nome e download */}
+            <div className={`flex items-center gap-3 p-3`}>
+              <div className={`p-2 rounded-lg bg-red-500/20`}>
+                <svg className="h-6 w-6 text-red-500" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M10.92,12.31C10.68,11.54 10.15,9.08 11.55,9.04C12.95,9 12.03,12.16 12.03,12.16C12.42,13.65 14.05,14.72 14.05,14.72C14.55,14.57 17.4,14.24 17,15.72C16.57,17.2 13.5,15.81 13.5,15.81C11.55,15.95 10.09,16.47 10.09,16.47C8.96,18.58 7.64,19.5 7.1,18.61C6.43,17.5 9.23,16.07 9.23,16.07C10.68,13.72 10.9,12.35 10.92,12.31Z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-medium truncate ${themeClasses.headerText}`}>{display}</p>
+                <p className={`text-xs ${themeClasses.secondaryText}`}>Documento PDF</p>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => window.open(urlCandidate, '_blank')}
+                className={`shrink-0 h-8 w-8 p-0 ${themeClasses.hoverBtn}`}
+                title="Baixar PDF"
+              >
+                <svg className={`h-5 w-5 ${themeClasses.iconColor}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                </svg>
+              </Button>
+            </div>
+          </div>
+        );
+      }
+      
+      // Outros documentos (não-PDF)
       return (
         <div className={`flex items-center gap-3 p-3 rounded-lg ${isDark ? 'bg-[#1F2C33]' : 'bg-[#F0F2F5]'} min-w-[200px] max-w-[300px]`}>
-          <div className={`p-2 rounded-lg ${isPdf ? 'bg-red-500/20' : 'bg-blue-500/20'}`}>
-            {isPdf ? (
-              <svg className="h-8 w-8 text-red-500" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M10.92,12.31C10.68,11.54 10.15,9.08 11.55,9.04C12.95,9 12.03,12.16 12.03,12.16C12.42,13.65 14.05,14.72 14.05,14.72C14.55,14.57 17.4,14.24 17,15.72C16.57,17.2 13.5,15.81 13.5,15.81C11.55,15.95 10.09,16.47 10.09,16.47C8.96,18.58 7.64,19.5 7.1,18.61C6.43,17.5 9.23,16.07 9.23,16.07C10.68,13.72 10.9,12.35 10.92,12.31Z" />
-              </svg>
-            ) : (
-              <Paperclip className="h-8 w-8 text-blue-500" />
-            )}
+          <div className={`p-2 rounded-lg bg-blue-500/20`}>
+            <Paperclip className="h-8 w-8 text-blue-500" />
           </div>
           <div className="flex-1 min-w-0">
             <p className={`text-sm font-medium truncate ${themeClasses.headerText}`}>{display}</p>
-            <p className={`text-xs ${themeClasses.secondaryText}`}>
-              {isPdf ? 'Documento PDF' : 'Documento'}
-            </p>
+            <p className={`text-xs ${themeClasses.secondaryText}`}>Documento</p>
           </div>
           <Button
             size="sm"
