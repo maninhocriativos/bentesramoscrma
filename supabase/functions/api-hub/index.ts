@@ -868,6 +868,36 @@ serve(async (req: Request) => {
       };
     }
 
+    // Admin: Manage Z-API instances
+    else if (path === '/admin/zapi-instances' && req.method === 'POST') {
+      const { action, data } = body;
+      
+      if (action === 'insert') {
+        const { data: inserted, error: insertError } = await supabase
+          .from('zapi_instances')
+          .insert({
+            name: data.name,
+            instance_id: data.instance_id,
+            token: data.token,
+            client_token: data.client_token || null,
+            webhook_secret: data.webhook_secret || null,
+            phone_number: data.phone_number || null,
+            is_active: data.is_active ?? true,
+            is_default: data.is_default ?? false
+          })
+          .select()
+          .single();
+        
+        if (insertError) {
+          response = { success: false, error: insertError.message };
+        } else {
+          response = { success: true, instance: inserted };
+        }
+      } else {
+        response = { success: false, error: 'Unknown action' };
+      }
+    }
+
     // Health check
     else if (path === '/health' || path === '/') {
       response = { 
@@ -880,6 +910,7 @@ serve(async (req: Request) => {
           'POST /webhook/clicksign', 
           'POST /webhook/automation',
           'POST /webhook/whatsapp',
+          'POST /admin/zapi-instances',
           'GET /events',
           'GET /stats',
           'GET /health'
