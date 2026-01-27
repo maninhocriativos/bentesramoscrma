@@ -38,7 +38,9 @@ import {
   Sparkles,
   PanelRightClose,
   Users,
-  History
+  History,
+  FileText,
+  Square
 } from 'lucide-react';
 import CalWidget from './CalWidget';
 import { format, isToday, isYesterday } from 'date-fns';
@@ -740,12 +742,41 @@ const ManyChatInboxContent = () => {
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
-      mediaRecorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/ogg' });
-        setSelectedFile(new File([audioBlob], `audio_${Date.now()}.ogg`, { type: 'audio/ogg' }));
-        stream.getTracks().forEach(track => track.stop());
+      
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
       };
+      
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(track => track.stop());
+        
+        if (audioChunksRef.current.length === 0) return;
+        
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/ogg' });
+        const audioFile = new File([audioBlob], `audio_${Date.now()}.ogg`, { type: 'audio/ogg' });
+        
+        // Enviar áudio diretamente após gravação (sem setSelectedFile)
+        if (!selectedSubscriber) return;
+        
+        try {
+          const filePath = `manychat/${selectedSubscriber.subscriber_id}/audio_${Date.now()}.ogg`;
+          await supabase.storage.from('documentos').upload(filePath, audioFile);
+          
+          const { data: signed, error: signError } = await supabase.storage
+            .from('documentos')
+            .createSignedUrl(filePath, 60 * 60 * 24 * 30);
+          
+          if (signError || !signed?.signedUrl) throw signError;
+          
+          await sendMessage(signed.signedUrl, 'audio', audioFile.name);
+        } catch (error) {
+          console.error('[Audio] Erro ao enviar áudio:', error);
+          toast({ title: 'Erro', description: 'Falha ao enviar áudio', variant: 'destructive' });
+        }
+      };
+      
       mediaRecorder.start();
       setIsRecording(true);
     } catch (error) {
@@ -1502,9 +1533,13 @@ const ManyChatInboxContent = () => {
                 <div className={`flex items-center gap-3 p-2 rounded-lg ${themeClasses.sidebar}`}>
                   {selectedFile.type.startsWith('image/') ? (
                     <img src={previewUrl || ''} alt="Preview" className="h-12 w-12 object-cover rounded" />
-                  ) : (
+                  ) : selectedFile.type.startsWith('audio/') ? (
                     <div className="h-12 w-12 rounded bg-[#00A884] flex items-center justify-center">
                       <Mic className="h-5 w-5 text-white" />
+                    </div>
+                  ) : (
+                    <div className="h-12 w-12 rounded bg-red-500 flex items-center justify-center">
+                      <FileText className="h-5 w-5 text-white" />
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
@@ -1556,13 +1591,21 @@ const ManyChatInboxContent = () => {
                 >
                   <Send className="h-5 w-5" />
                 </Button>
+              ) : isRecording ? (
+                <Button
+                  size="icon"
+                  onClick={stopRecording}
+                  className="h-11 w-11 rounded-full bg-red-500 hover:bg-red-600 text-white animate-pulse shadow-lg transition-all"
+                >
+                  <Square className="h-5 w-5" />
+                </Button>
               ) : (
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={isRecording ? stopRecording : startRecording}
+                  onClick={startRecording}
                   disabled={isSending}
-                  className={`h-11 w-11 rounded-full transition-all ${isRecording ? 'bg-red-500 text-white animate-pulse shadow-lg' : `${themeClasses.iconColor} ${themeClasses.hoverBtn}`}`}
+                  className={`h-11 w-11 rounded-full transition-all ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}
                 >
                   <Mic className="h-6 w-6" />
                 </Button>
