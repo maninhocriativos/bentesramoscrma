@@ -416,7 +416,9 @@ function normalizeZapiEvent(body: any): {
     messageType = 'video';
     media = body.video;
   } else if (body.sticker) {
-    message = '[Sticker]';
+    // Extrair URL do sticker para renderização
+    mediaUrl = body.sticker.stickerUrl || body.sticker.link || body.sticker.url || body.sticker.imageUrl;
+    message = mediaUrl || '[Sticker]';
     messageType = 'sticker';
     media = body.sticker;
   } else if (body.location) {

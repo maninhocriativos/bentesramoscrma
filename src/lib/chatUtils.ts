@@ -137,7 +137,8 @@ export function getDateLabel(msgs: { created_at: string }[], index: number): str
 /**
  * Detect media type from URL or content
  */
-export function detectMediaType(content: string, tipo?: string): 'audio' | 'image' | 'video' | 'text' | 'document' {
+export function detectMediaType(content: string, tipo?: string): 'audio' | 'image' | 'video' | 'text' | 'document' | 'sticker' {
+  if (tipo === 'sticker') return 'sticker';
   if (tipo && tipo !== 'text') return tipo as any;
   
   const url = content.replace(/^\[|\]$/g, '');
