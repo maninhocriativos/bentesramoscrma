@@ -72,6 +72,10 @@ interface Message {
   created_at: string;
   direcao: 'entrada' | 'saida';
   tipo: string;
+  subscriber_id?: string;
+  lead_id?: string;
+  subscriber_nome?: string;
+  metadata?: any;
 }
 
 type ConversationFilter = 'all' | 'unread' | 'human' | 'bot' | 'mine';
@@ -162,6 +166,12 @@ const ManyChatInboxContent = () => {
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Chave de deduplicação (prioriza message_id do provedor)
+  const getMessageDedupeKey = (msg: any) => {
+    const mid = msg?.metadata?.message_id || msg?.metadata?.original?.messageId || msg?.metadata?.original?.id;
+    return mid || msg?.id;
   };
 
   useEffect(() => {
@@ -489,11 +499,12 @@ const ManyChatInboxContent = () => {
       const { data, error } = await query;
       if (error) throw error;
       
-      // Deduplicate by ID and sort by created_at
+      // Deduplicate by provider message_id (when available) and sort by created_at
       const messagesMap = new Map<string, Message>();
-      (data as Message[])?.forEach(msg => {
-        if (!messagesMap.has(msg.id)) {
-          messagesMap.set(msg.id, msg);
+      (data as any[])?.forEach((msg) => {
+        const key = getMessageDedupeKey(msg);
+        if (!messagesMap.has(key)) {
+          messagesMap.set(key, msg as Message);
         }
       });
       
@@ -621,7 +632,14 @@ const ManyChatInboxContent = () => {
 
       // Replace optimistic message with real one
       if (savedMsg) {
-        setMessages(prev => prev.map(m => m.id === tempId ? savedMsg as Message : m));
+        setMessages(prev => {
+          // Se o realtime já inseriu a mensagem real, removemos o temp e não duplicamos
+          const withoutTemp = prev.filter(m => m.id !== tempId);
+          const savedKey = getMessageDedupeKey(savedMsg);
+          const alreadyExists = withoutTemp.some(m => getMessageDedupeKey(m) === savedKey || m.id === (savedMsg as any).id);
+          if (alreadyExists) return withoutTemp;
+          return [...withoutTemp, savedMsg as Message];
+        });
       }
 
       // Registrar interação se houver lead vinculado
@@ -674,10 +692,22 @@ const ManyChatInboxContent = () => {
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `manychat/${selectedSubscriber.subscriber_id}/${fileName}`;
       await supabase.storage.from('documentos').upload(filePath, selectedFile);
-      const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(filePath);
-      const mediaType = selectedFile.type.startsWith('image/') ? 'image' : 
-                       selectedFile.type.startsWith('audio/') ? 'audio' : 'document';
-      await sendMessage(urlData.publicUrl, mediaType);
+
+      // Bucket "documentos" é privado: usar signed URL para permitir envio/exibição
+      const { data: signed, error: signError } = await supabase.storage
+        .from('documentos')
+        .createSignedUrl(filePath, 60 * 60 * 24 * 30); // 30 dias
+      if (signError || !signed?.signedUrl) throw signError;
+
+      const mediaType = selectedFile.type.startsWith('image/')
+        ? 'image'
+        : selectedFile.type.startsWith('audio/')
+          ? 'audio'
+          : selectedFile.type.startsWith('video/')
+            ? 'video'
+            : 'document';
+
+      await sendMessage(signed.signedUrl, mediaType);
     } catch (error) {
       toast({ title: 'Erro', description: 'Falha no upload', variant: 'destructive' });
     } finally {
@@ -910,26 +940,76 @@ const ManyChatInboxContent = () => {
 
   const renderMessage = (message: Message) => {
     const content = message.conteudo || '';
-    const isAudio = content.match(/\.(ogg|mp3|wav|m4a)(\?|$)/i) || message.tipo === 'audio';
-    const isImage = content.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) || message.tipo === 'image';
-    const isVideo = content.match(/\.(mp4|webm)(\?|$)/i) || message.tipo === 'video';
-    const cleanUrl = content.replace(/^\[|\]$/g, '');
+    const type = (message.tipo || 'text').toLowerCase();
+    const metadata: any = (message as any).metadata || {};
+    const original: any = metadata.original || {};
+
+    // Extrair URL de mídia do payload original da Z-API (ou campos normalizados)
+    const mediaUrl =
+      metadata.media_url ||
+      original?.audio?.audioUrl || original?.audio?.link || original?.audio?.url ||
+      original?.image?.imageUrl || original?.image?.link || original?.image?.url ||
+      original?.video?.videoUrl || original?.video?.link || original?.video?.url ||
+      original?.document?.documentUrl || original?.document?.link || original?.document?.url;
+
+    const caption = metadata.caption || original?.image?.caption || null;
+    const fileName = metadata.file_name || original?.document?.fileName || original?.document?.filename || null;
+
+    const urlCandidate = (mediaUrl || content).replace(/^\[|\]$/g, '').trim();
+
+    const isAudio = type === 'audio' || urlCandidate.match(/\.(ogg|mp3|wav|m4a|opus|aac|webm)(\?|$)/i);
+    const isImage = type === 'image' || urlCandidate.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i);
+    const isVideo = type === 'video' || urlCandidate.match(/\.(mp4|webm|mov)(\?|$)/i);
+    const isDocument =
+      type === 'document' ||
+      urlCandidate.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt)(\?|$)/i);
 
     if (isAudio) {
-      return <audio controls className="max-w-[220px] h-10" preload="metadata"><source src={cleanUrl} type="audio/ogg" /></audio>;
+      return (
+        <audio controls className="max-w-[220px] h-10" preload="metadata">
+          <source src={urlCandidate} type="audio/ogg" />
+          <source src={urlCandidate} type="audio/mpeg" />
+          <source src={urlCandidate} type="audio/webm" />
+        </audio>
+      );
     }
     if (isImage) {
       return (
-        <img 
-          src={cleanUrl} 
-          alt="Imagem" 
-          className="max-w-[280px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-          onClick={() => window.open(cleanUrl, '_blank')}
-        />
+        <div className="space-y-1">
+          <img 
+            src={urlCandidate} 
+            alt="Imagem" 
+            className="max-w-[280px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+            onClick={() => window.open(urlCandidate, '_blank')}
+          />
+          {caption && (
+            <p className="whitespace-pre-wrap break-words text-[13px] leading-[18px] text-inherit opacity-90">
+              {caption}
+            </p>
+          )}
+        </div>
       );
     }
     if (isVideo) {
-      return <video controls className="max-w-[280px] rounded-lg" preload="metadata"><source src={cleanUrl} /></video>;
+      return (
+        <video controls className="max-w-[280px] rounded-lg" preload="metadata">
+          <source src={urlCandidate} />
+        </video>
+      );
+    }
+    if (isDocument) {
+      const display = fileName || urlCandidate.split('/').pop() || 'Documento';
+      return (
+        <a
+          href={urlCandidate}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 underline underline-offset-2"
+        >
+          <Paperclip className="h-4 w-4" />
+          <span className="text-[14px] break-all">{display}</span>
+        </a>
+      );
     }
     return <p className="whitespace-pre-wrap break-words text-[14.2px] leading-[19px] text-inherit">{content}</p>;
   };
