@@ -422,9 +422,14 @@ function normalizeZapiEvent(body: any): {
     messageType = 'sticker';
     media = body.sticker;
   } else if (body.location) {
-    message = `[Localização: ${body.location.latitude}, ${body.location.longitude}]`;
+    // Extrair dados completos de localização
+    const lat = body.location.latitude;
+    const lng = body.location.longitude;
+    const locName = body.location.name || body.location.address || '';
+    message = `[Localização: ${lat}, ${lng}]${locName ? ` - ${locName}` : ''}`;
     messageType = 'location';
     media = body.location;
+    mediaUrl = `https://www.google.com/maps?q=${lat},${lng}`;
   } else if (body.reaction) {
     // Reações - ignorar
     message = null;

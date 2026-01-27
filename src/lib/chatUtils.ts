@@ -137,11 +137,19 @@ export function getDateLabel(msgs: { created_at: string }[], index: number): str
 /**
  * Detect media type from URL or content
  */
-export function detectMediaType(content: string, tipo?: string): 'audio' | 'image' | 'video' | 'text' | 'document' | 'sticker' {
+export function detectMediaType(content: string, tipo?: string): 'audio' | 'image' | 'video' | 'text' | 'document' | 'sticker' | 'location' {
   if (tipo === 'sticker') return 'sticker';
+  if (tipo === 'location') return 'location';
   if (tipo && tipo !== 'text') return tipo as any;
   
   const url = content.replace(/^\[|\]$/g, '');
+  
+  // Detectar links de localização
+  if (url.match(/\[Localização:/i) || 
+      url.match(/maps\.google\.|google\.com\/maps|goo\.gl\/maps|share\.google/i) ||
+      url.match(/maps\.app\.goo\.gl/i)) {
+    return 'location';
+  }
   
   if (url.match(/\.(ogg|mp3|wav|m4a)(\?|$)/i)) return 'audio';
   if (url.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i)) return 'image';
@@ -149,6 +157,44 @@ export function detectMediaType(content: string, tipo?: string): 'audio' | 'imag
   if (url.match(/\.(pdf|doc|docx|xls|xlsx)(\?|$)/i)) return 'document';
   
   return 'text';
+}
+
+/**
+ * Extract location data from message
+ */
+export function extractLocationData(content: string, metadata?: any): { lat?: number; lng?: number; name?: string; url?: string } | null {
+  // Tentar extrair de metadata (Z-API location)
+  if (metadata?.original?.location) {
+    const loc = metadata.original.location;
+    return {
+      lat: loc.latitude,
+      lng: loc.longitude,
+      name: loc.name || loc.address,
+      url: `https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`
+    };
+  }
+  
+  // Tentar extrair coordenadas do conteúdo [Localização: lat, lng]
+  const coordMatch = content.match(/\[Localização:\s*([-\d.]+),\s*([-\d.]+)\]/i);
+  if (coordMatch) {
+    const lat = parseFloat(coordMatch[1]);
+    const lng = parseFloat(coordMatch[2]);
+    return {
+      lat,
+      lng,
+      url: `https://www.google.com/maps?q=${lat},${lng}`
+    };
+  }
+  
+  // Tentar extrair link de mapa do conteúdo
+  const mapLinkMatch = content.match(/(https?:\/\/(?:maps\.google\.|google\.com\/maps|goo\.gl\/maps|share\.google|maps\.app\.goo\.gl)[^\s]+)/i);
+  if (mapLinkMatch) {
+    return {
+      url: mapLinkMatch[1]
+    };
+  }
+  
+  return null;
 }
 
 /**

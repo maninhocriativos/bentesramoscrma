@@ -1,5 +1,5 @@
-import { CheckCheck, Play, Download } from 'lucide-react';
-import { formatMessageTime, detectMediaType } from '@/lib/chatUtils';
+import { CheckCheck, Play, Download, MapPin, ExternalLink } from 'lucide-react';
+import { formatMessageTime, detectMediaType, extractLocationData } from '@/lib/chatUtils';
 import { ChatMessage } from '@/hooks/useChatMessages';
 import { useRef, useState } from 'react';
 
@@ -208,6 +208,71 @@ export function MessageBubble({ message, themeClasses }: MessageBubbleProps) {
               (e.target as HTMLImageElement).alt = '🎭 Sticker';
             }}
           />
+        );
+      }
+      
+      case 'location': {
+        const locationData = extractLocationData(content, message.metadata);
+        
+        if (!locationData) {
+          return (
+            <div className="flex items-center gap-2 text-sm opacity-70">
+              <MapPin className="h-4 w-4" />
+              <span>Localização</span>
+            </div>
+          );
+        }
+        
+        const hasCoords = locationData.lat && locationData.lng;
+        const mapPreviewUrl = hasCoords 
+          ? `https://maps.googleapis.com/maps/api/staticmap?center=${locationData.lat},${locationData.lng}&zoom=15&size=280x150&markers=color:red%7C${locationData.lat},${locationData.lng}&key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8`
+          : null;
+        
+        return (
+          <div 
+            className="rounded-lg overflow-hidden cursor-pointer hover:opacity-95 transition-opacity max-w-[280px]"
+            onClick={() => locationData.url && window.open(locationData.url, '_blank')}
+          >
+            {/* Map Preview */}
+            <div className="relative bg-gradient-to-br from-emerald-500/20 to-teal-600/20 h-[120px] flex items-center justify-center">
+              {mapPreviewUrl ? (
+                <img 
+                  src={mapPreviewUrl} 
+                  alt="Mapa" 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-emerald-600">
+                  <MapPin className="h-10 w-10" />
+                  <span className="text-xs opacity-70">Clique para abrir</span>
+                </div>
+              )}
+              {/* Overlay com pin */}
+              {!mapPreviewUrl && (
+                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+              )}
+            </div>
+            
+            {/* Location Info */}
+            <div className="p-2 bg-black/5 dark:bg-white/5">
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  {locationData.name ? (
+                    <p className="text-sm font-medium truncate">{locationData.name}</p>
+                  ) : hasCoords ? (
+                    <p className="text-xs opacity-70">{locationData.lat?.toFixed(6)}, {locationData.lng?.toFixed(6)}</p>
+                  ) : (
+                    <p className="text-sm">Ver localização</p>
+                  )}
+                </div>
+                <ExternalLink className="h-3 w-3 opacity-50 flex-shrink-0" />
+              </div>
+            </div>
+          </div>
         );
       }
       
