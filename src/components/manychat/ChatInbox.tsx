@@ -681,6 +681,9 @@ const ManyChatInboxContent = () => {
     const content = mediaUrl || newMessage.trim();
     if (!content || !selectedSubscriber) return;
 
+    // Capturar subscriber_id ANTES de qualquer mudança de estado
+    const currentSubId = selectedSubscriber.subscriber_id;
+
     // Optimistic update - show message immediately
     const tempId = `temp_${Date.now()}`;
     const optimisticMessage: Message = {
@@ -689,9 +692,16 @@ const ManyChatInboxContent = () => {
       created_at: new Date().toISOString(),
       direcao: 'saida',
       tipo: mediaType || 'text',
+      subscriber_id: currentSubId,
     };
     
-    setMessages(prev => [...prev, optimisticMessage]);
+    // Atualizar estado E cache ao mesmo tempo
+    setMessages(prev => {
+      const updated = [...prev, optimisticMessage];
+      // Atualizar cache para que a mensagem persista ao trocar de conversa
+      messagesCacheRef.current.set(currentSubId, updated);
+      return updated;
+    });
     setNewMessage(''); // Limpa input IMEDIATAMENTE para permitir nova digitação
     setTyping(false);
     setSelectedFile(null);
@@ -769,12 +779,18 @@ const ManyChatInboxContent = () => {
               const withoutTemp = prev.filter(m => m.id !== tempId);
               const savedKey = getMessageDedupeKey(savedMsg);
               const alreadyExists = withoutTemp.some(m => getMessageDedupeKey(m) === savedKey || m.id === (savedMsg as any).id);
-              if (alreadyExists) return withoutTemp;
-              return [...withoutTemp, savedMsg as Message];
+              const updated = alreadyExists ? withoutTemp : [...withoutTemp, savedMsg as Message];
+              // Atualizar cache
+              messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
+              return updated;
             });
           } else {
             // Mesmo sem savedMsg, remover o temp pois pode já existir via realtime
-            setMessages(prev => prev.filter(m => m.id !== tempId));
+            setMessages(prev => {
+              const updated = prev.filter(m => m.id !== tempId);
+              messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
+              return updated;
+            });
           }
         } else {
           // Sem messageId do Z-API, salvar sem deduplicação (fallback)
@@ -798,8 +814,10 @@ const ManyChatInboxContent = () => {
               const withoutTemp = prev.filter(m => m.id !== tempId);
               const savedKey = getMessageDedupeKey(savedMsg);
               const alreadyExists = withoutTemp.some(m => getMessageDedupeKey(m) === savedKey || m.id === (savedMsg as any).id);
-              if (alreadyExists) return withoutTemp;
-              return [...withoutTemp, savedMsg as Message];
+              const updated = alreadyExists ? withoutTemp : [...withoutTemp, savedMsg as Message];
+              // Atualizar cache
+              messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
+              return updated;
             });
           }
         }
@@ -818,12 +836,16 @@ const ManyChatInboxContent = () => {
 
       } catch (error: any) {
         console.error('[Chat] Erro ao enviar:', error);
-        // Update optimistic message to show error state
-        setMessages(prev => prev.map(m => 
-          m.id === tempId 
-            ? { ...m, metadata: { ...((m as any).metadata || {}), send_error: true } } 
-            : m
-        ));
+        // Update optimistic message to show error state and update cache
+        setMessages(prev => {
+          const updated = prev.map(m => 
+            m.id === tempId 
+              ? { ...m, metadata: { ...((m as any).metadata || {}), send_error: true } } 
+              : m
+          );
+          messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
+          return updated;
+        });
         toast({ 
           title: 'Erro no envio', 
           description: error.message || 'Não foi possível enviar a mensagem', 
