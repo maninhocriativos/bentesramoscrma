@@ -61,6 +61,25 @@ export function MessageInput({
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          const namedFile = new File([file], `screenshot_${Date.now()}.png`, { type: file.type });
+          setSelectedFile(namedFile);
+          setPreviewUrl(URL.createObjectURL(namedFile));
+          toast({ title: 'Imagem colada!', description: 'Pressione Enter para enviar' });
+        }
+        break;
+      }
+    }
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setMessage(e.target.value);
     onTyping?.();
@@ -161,6 +180,7 @@ export function MessageInput({
           value={message}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={placeholder}
           disabled={disabled || isRecording}
           className={`flex-1 min-h-[44px] max-h-32 rounded-2xl resize-none border-0 ${themeClasses.input}`}
