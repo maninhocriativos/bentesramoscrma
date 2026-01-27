@@ -108,6 +108,12 @@ const ManyChatInboxContent = () => {
   const [showContextPanel, setShowContextPanel] = useState(false);
   const [showTeamPanel, setShowTeamPanel] = useState(false);
   const [isLoadingFullHistory, setIsLoadingFullHistory] = useState(false);
+  
+  // Cache de mensagens por subscriber (evita recarregar ao trocar de conversa)
+  const messagesCacheRef = useRef<Map<string, Message[]>>(new Map());
+  // Rastrear mensagens não lidas por subscriber
+  const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -292,14 +298,36 @@ const ManyChatInboxContent = () => {
                 (currentZapiId && currentSubId && newMsg.subscriber_id.includes(currentPhone.slice(-9)))
               );
               
-              // Update messages if current chat
+              // Update messages if current chat (adiciona direto em tempo real)
               if (isCurrentChat) {
                 console.log('[Realtime] Adicionando mensagem ao chat atual');
                 setMessages(prev => {
                   if (prev.some(m => m.id === newMsg.id)) return prev;
-                  return [...prev, newMsg];
+                  const updated = [...prev, newMsg];
+                  // Atualizar cache também
+                  if (currentSubId) {
+                    messagesCacheRef.current.set(currentSubId, updated);
+                  }
+                  return updated;
                 });
                 scrollToBottom();
+              } else {
+                // Mensagem para outro chat - atualizar cache e contador de não lidas
+                const msgSubId = newMsg.subscriber_id;
+                const cachedMsgs = messagesCacheRef.current.get(msgSubId) || [];
+                if (!cachedMsgs.some(m => m.id === newMsg.id)) {
+                  messagesCacheRef.current.set(msgSubId, [...cachedMsgs, newMsg]);
+                }
+                
+                // Incrementar contador de não lidas (só para mensagens de entrada)
+                if (newMsg.direcao === 'entrada') {
+                  setUnreadCounts(prev => {
+                    const newMap = new Map(prev);
+                    const current = newMap.get(msgSubId) || 0;
+                    newMap.set(msgSubId, current + 1);
+                    return newMap;
+                  });
+                }
               }
               
               // Play notification for incoming messages from other chats
@@ -405,7 +433,25 @@ const ManyChatInboxContent = () => {
       selectedSubscriberIdRef.current = newSubscriberId;
       
       if (selectedSubscriber) {
-        loadMessages(selectedSubscriber.subscriber_id);
+        // Verificar se já temos mensagens em cache
+        const cachedMessages = messagesCacheRef.current.get(selectedSubscriber.subscriber_id);
+        if (cachedMessages && cachedMessages.length > 0) {
+          // Usar cache instantaneamente (sem loading)
+          console.log('[Cache] Usando mensagens em cache para:', selectedSubscriber.subscriber_id);
+          setMessages(cachedMessages);
+          setIsLoadingMessages(false);
+        } else {
+          // Carregar do banco apenas se não houver cache
+          loadMessages(selectedSubscriber.subscriber_id);
+        }
+        
+        // Limpar contador de não lidas ao abrir conversa
+        setUnreadCounts(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(selectedSubscriber.subscriber_id);
+          return newMap;
+        });
+        
         setCurrentChat(selectedSubscriber.subscriber_id);
         setShowMobileChat(true);
       } else {
@@ -525,6 +571,10 @@ const ManyChatInboxContent = () => {
       );
       
       console.log('[loadMessages] Mensagens carregadas:', uniqueMessages.length, 'entrada:', uniqueMessages.filter(m => m.direcao === 'entrada').length, 'saída:', uniqueMessages.filter(m => m.direcao === 'saida').length);
+      
+      // Salvar no cache para acesso instantâneo
+      messagesCacheRef.current.set(subscriberId, uniqueMessages);
+      
       setMessages(uniqueMessages);
     } catch (error) {
       console.error('Erro ao carregar mensagens:', error);
@@ -1273,7 +1323,7 @@ const ManyChatInboxContent = () => {
                       <div className="flex items-center justify-between mb-0.5">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <ChannelIcon canal={subscriber.canal} size="sm" />
-                          <span className={`font-medium text-[15px] ${themeClasses.headerText} truncate`}>
+                          <span className={`font-medium text-[15px] ${unreadCounts.get(subscriber.subscriber_id) ? 'text-white' : themeClasses.headerText} truncate`}>
                             {getDisplayName(subscriber)}
                           </span>
                           {online && (
@@ -1282,13 +1332,23 @@ const ManyChatInboxContent = () => {
                             </span>
                           )}
                         </div>
-                        <span className={`text-[11px] ${themeClasses.secondaryText} shrink-0 ml-2`}>
-                          {subscriber.ultima_interacao && formatLastMessageTime(subscriber.ultima_interacao)}
-                        </span>
+                        <div className="flex items-center gap-2 shrink-0 ml-2">
+                          <span className={`text-[11px] ${unreadCounts.get(subscriber.subscriber_id) ? 'text-[#25D366] font-semibold' : themeClasses.secondaryText}`}>
+                            {subscriber.ultima_interacao && formatLastMessageTime(subscriber.ultima_interacao)}
+                          </span>
+                          {/* Badge de mensagens não lidas */}
+                          {unreadCounts.get(subscriber.subscriber_id) ? (
+                            <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center">
+                              {unreadCounts.get(subscriber.subscriber_id)}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <CheckCheck className="h-4 w-4 text-[#53BDEB] shrink-0" />
-                        <span className={`text-[13px] ${themeClasses.secondaryText} truncate`}>
+                        {unreadCounts.get(subscriber.subscriber_id) ? null : (
+                          <CheckCheck className="h-4 w-4 text-[#53BDEB] shrink-0" />
+                        )}
+                        <span className={`text-[13px] ${themeClasses.secondaryText} truncate flex-1`}>
                           {subscriber.telefone || subscriber.canal}
                         </span>
                       </div>
