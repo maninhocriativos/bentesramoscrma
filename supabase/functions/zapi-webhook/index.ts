@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { normalizePhone, gerarSubscriberId } from '../_shared/zapi-helper.ts';
+import { normalizePhone, gerarSubscriberId, identificarInstanciaOrigem, getZapiConfig, sendText } from '../_shared/zapi-helper.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -97,41 +97,35 @@ serve(async (req: Request) => {
     
     console.log('[Z-API Webhook] Received:', JSON.stringify(body).substring(0, 500));
 
-    // Verificar configuração do Z-API (primeiro nova tabela, depois legado)
-    let zapiConfig: any = null;
-    let webhookSecretConfig: string | null = null;
+    // ============================================
+    // IDENTIFICAR INSTÂNCIA DE ORIGEM
+    // ============================================
+    const instanceInfo = await identificarInstanciaOrigem(supabase, body);
+    const zapiInstanceId = instanceInfo?.instanceId || null;
+    const zapiInstanceName = instanceInfo?.instanceName || 'Unknown';
+    const zapiConfig = instanceInfo?.config || null;
 
-    // Tentar buscar instância ativa na nova tabela
-    const { data: instances } = await supabase
-      .from('zapi_instances')
-      .select('*')
-      .eq('is_active', true)
-      .limit(1);
+    console.log(`[Z-API Webhook] Instância identificada: ${zapiInstanceName}`);
 
-    if (instances && instances.length > 0) {
-      zapiConfig = { is_active: true, config_json: instances[0] };
-      webhookSecretConfig = instances[0].webhook_secret;
-      console.log('[Z-API Webhook] Using new instances table');
-    } else {
+    if (!zapiConfig) {
       // Fallback para config legado
       const { data: legacyConfig } = await supabase
         .from('integrations_config')
         .select('*')
         .eq('provider', 'zapi')
         .maybeSingle();
-      zapiConfig = legacyConfig;
-      webhookSecretConfig = legacyConfig?.config_json?.webhook_secret;
-    }
-
-    if (!zapiConfig?.is_active) {
-      console.log('[Z-API Webhook] Integration not active');
-      return new Response(JSON.stringify({ error: 'Integration not active' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      
+      if (!legacyConfig?.is_active) {
+        console.log('[Z-API Webhook] Integration not active');
+        return new Response(JSON.stringify({ error: 'Integration not active' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     // Validar webhook secret se configurado
+    const webhookSecretConfig = zapiConfig?.webhook_secret || null;
     if (webhookSecretConfig && webhookSecret !== webhookSecretConfig) {
       console.log('[Z-API Webhook] Invalid webhook secret');
       await logIntegration(supabase, 'zapi', 'inbound', body, null, 'error', 'Invalid webhook secret', null, startTime);
@@ -297,6 +291,9 @@ serve(async (req: Request) => {
               file_name: normalized.fileName,
               from_me: normalized.fromMe,
               sent_via: normalized.fromMe ? 'whatsapp_phone' : null,
+              // Identificação da instância Z-API
+              instance_id: zapiInstanceId,
+              instance_name: zapiInstanceName,
               // Adicionar dados de tráfego se disponíveis
               traffic_source: trafficSource.isTraffic ? trafficSource.source : null,
               ctwa_clid: trafficSource.adData?.ctwaClid || null
@@ -341,6 +338,9 @@ serve(async (req: Request) => {
             file_name: normalized.fileName,
             from_me: normalized.fromMe,
             sent_via: normalized.fromMe ? 'whatsapp_phone' : null,
+            // Identificação da instância Z-API
+            instance_id: zapiInstanceId,
+            instance_name: zapiInstanceName,
             traffic_source: trafficSource.isTraffic ? trafficSource.source : null,
             ctwa_clid: trafficSource.adData?.ctwaClid || null
           }
@@ -415,18 +415,38 @@ serve(async (req: Request) => {
             }
           });
 
-          if (!isaError && isaResponse?.response) {
-            // Enviar resposta via Z-API
-            await sendZapiMessage(
-              supabase, 
-              zapiConfig.config_json, 
-              normalized.phone, 
-              isaResponse.response,
-              leadId,
-              normalized.name || lead.nome
+          if (!isaError && isaResponse?.response && zapiConfig) {
+            // Enviar resposta via Z-API usando a mesma instância que recebeu a mensagem
+            const sendResult = await sendText(
+              zapiConfig, 
+              normalized.phone!, 
+              isaResponse.response
             );
             
-            console.log(`[Z-API Webhook] Isa response sent to ${normalized.phone}`);
+            if (sendResult.success) {
+              // Salvar resposta da Isa no histórico
+              await supabase.from('manychat_mensagens').insert({
+                subscriber_id: gerarSubscriberId(normalized.phone!),
+                subscriber_nome: 'Isa',
+                lead_id: leadId,
+                conteudo: isaResponse.response,
+                direcao: 'saida',
+                tipo: 'text',
+                canal: 'whatsapp',
+                metadata: { 
+                  source: 'zapi', 
+                  context: 'isa_auto_response',
+                  message_id: sendResult.messageId,
+                  instance_id: zapiInstanceId,
+                  instance_name: zapiInstanceName,
+                  sent_via: 'isa_auto'
+                }
+              });
+              
+              console.log(`[Z-API Webhook] Isa response sent to ${normalized.phone} via ${zapiInstanceName}`);
+            } else {
+              console.error('[Z-API Webhook] Failed to send Isa response:', sendResult.error);
+            }
           } else if (isaError) {
             console.error('[Z-API Webhook] Isa error:', isaError);
           }
@@ -762,73 +782,6 @@ async function updateLeadTrafficSource(
     });
     
     console.log(`[Z-API Webhook] ✅ Lead ${leadId} updated to traffic source: ${trafficSource.source}`);
-  }
-}
-
-async function sendZapiMessage(
-  supabase: any, 
-  config: any, 
-  phone: string, 
-  message: string,
-  leadId?: string,
-  leadNome?: string
-): Promise<boolean> {
-  const instanceId = config.instance_id;
-  const token = config.token;
-
-  if (!instanceId || !token) {
-    console.log('[Z-API] Missing instance_id or token');
-    return false;
-  }
-
-  const cleanPhone = normalizePhone(phone);
-
-  try {
-    const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        phone: cleanPhone,
-        message: message
-      })
-    });
-
-    const result = await response.json();
-    
-    // Registrar mensagem de saída
-    if (response.ok && leadId) {
-      await supabase.from('manychat_mensagens').insert({
-        subscriber_id: gerarSubscriberId(cleanPhone),
-        subscriber_nome: leadNome || 'Isa',
-        lead_id: leadId,
-        conteudo: message,
-        direcao: 'saida',
-        tipo: 'text',
-        canal: 'whatsapp',
-        metadata: { 
-          source: 'zapi', 
-          context: 'isa_auto_response',
-          message_id: result.messageId 
-        }
-      });
-    }
-
-    // Log outbound
-    await supabase.from('integration_logs').insert({
-      provider: 'zapi',
-      direction: 'outbound',
-      endpoint: 'send-text',
-      payload_json: { phone: cleanPhone, message: message.substring(0, 100) },
-      response_json: result,
-      status: response.ok ? 'ok' : 'error',
-      error_message: response.ok ? null : JSON.stringify(result),
-      lead_id: leadId
-    });
-
-    return response.ok;
-  } catch (error) {
-    console.error('[Z-API] Error sending message:', error);
-    return false;
   }
 }
 

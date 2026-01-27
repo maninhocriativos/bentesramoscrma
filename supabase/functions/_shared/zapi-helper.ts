@@ -43,7 +43,7 @@ export function normalizePhone(phone: string): string {
 /**
  * Busca todas as instâncias Z-API ativas
  */
-export async function getAllZapiInstances(supabase: any): Promise<ZapiConfig[]> {
+export async function getAllZapiInstances(supabase: any): Promise<(ZapiConfig & { id: string })[]> {
   const { data: instances } = await supabase
     .from('zapi_instances')
     .select('*')
@@ -56,6 +56,7 @@ export async function getAllZapiInstances(supabase: any): Promise<ZapiConfig[]> 
   }
 
   return instances.map((inst: any) => ({
+    id: inst.id,
     instance_id: inst.instance_id,
     token: inst.token,
     client_token: inst.client_token,
@@ -63,6 +64,56 @@ export async function getAllZapiInstances(supabase: any): Promise<ZapiConfig[]> 
     name: inst.name,
     phone_number: inst.phone_number
   }));
+}
+
+/**
+ * Identifica qual instância Z-API recebeu a mensagem
+ * Pode usar o número do destinatário ou o instance_id do payload
+ */
+export async function identificarInstanciaOrigem(
+  supabase: any, 
+  body: any
+): Promise<{ instanceId: string; instanceName: string; config: ZapiConfig } | null> {
+  // Tentar identificar pelo instance_id no payload (Z-API pode enviar)
+  const payloadInstanceId = body.instance_id || body.instanceId;
+  
+  // Tentar pelo número de telefone do destino (nosso número)
+  const toPhone = body.to || body.phone_to || body.destination;
+  
+  // Buscar todas as instâncias ativas
+  const instances = await getAllZapiInstances(supabase);
+  
+  if (instances.length === 0) {
+    return null;
+  }
+  
+  // Tentar match por instance_id
+  if (payloadInstanceId) {
+    const matched = instances.find(i => i.instance_id === payloadInstanceId);
+    if (matched) {
+      console.log(`[Z-API Helper] Instância identificada por instance_id: ${matched.name}`);
+      return { instanceId: matched.id, instanceName: matched.name || 'Default', config: matched };
+    }
+  }
+  
+  // Tentar match por telefone
+  if (toPhone) {
+    const cleanTo = normalizePhone(toPhone);
+    const matched = instances.find(i => i.phone_number && normalizePhone(i.phone_number) === cleanTo);
+    if (matched) {
+      console.log(`[Z-API Helper] Instância identificada por telefone: ${matched.name}`);
+      return { instanceId: matched.id, instanceName: matched.name || 'Default', config: matched };
+    }
+  }
+  
+  // Fallback: retornar a instância padrão (primeira, ordenada por is_default)
+  const defaultInstance = instances[0];
+  console.log(`[Z-API Helper] Usando instância padrão: ${defaultInstance.name}`);
+  return { 
+    instanceId: defaultInstance.id, 
+    instanceName: defaultInstance.name || 'Default', 
+    config: defaultInstance 
+  };
 }
 
 /**
