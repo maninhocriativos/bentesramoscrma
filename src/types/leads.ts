@@ -9,6 +9,9 @@ export type LeadStatus =
 
 export type LeadOrigem = 'Instagram' | 'Google' | 'Site' | 'Indicação' | 'Outro';
 
+// Tipo de origem do lead (tráfego pago vs contato direto)
+export type TipoOrigem = 'trafego' | 'whatsapp_direto' | 'indefinido';
+
 export interface Lead {
   id: string;
   nome: string;
@@ -35,6 +38,7 @@ export interface Lead {
   // Traffic source tracking
   fonte_trafego?: string | null;
   canal_origem?: string | null;
+  tipo_origem?: TipoOrigem | null;
   // Contract reuse tracking
   contratos_adicionais?: number | null;
 }

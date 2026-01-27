@@ -66,6 +66,8 @@ interface Subscriber {
   atendimento_humano?: boolean;
   atendimento_humano_desde?: string;
   assigned_to?: string;
+  // Dados do lead associado (para filtragem por origem)
+  lead_tipo_origem?: string;
 }
 
 interface Message {
@@ -81,6 +83,7 @@ interface Message {
 }
 
 type ConversationFilter = 'all' | 'unread' | 'human' | 'bot' | 'mine';
+type OrigemFilter = 'all' | 'trafego' | 'whatsapp_direto';
 
 // Componente interno que usa o tema
 const ManyChatInboxContent = () => {
@@ -104,6 +107,7 @@ const ManyChatInboxContent = () => {
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<ConversationFilter>('all');
+  const [origemFilter, setOrigemFilter] = useState<OrigemFilter>('all');
   const [pendingLeadId, setPendingLeadId] = useState<string | null>(null);
   const [showContextPanel, setShowContextPanel] = useState(false);
   const [showTeamPanel, setShowTeamPanel] = useState(false);
@@ -467,20 +471,45 @@ const ManyChatInboxContent = () => {
   const loadSubscribers = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      // Buscar subscribers
+      const { data: subsData, error: subsError } = await supabase
         .from('manychat_subscribers' as any)
         .select('*')
         .order('ultima_interacao', { ascending: false });
 
-      if (error) throw error;
+      if (subsError) throw subsError;
+      
+      const rawSubscribers = (subsData as Subscriber[]) || [];
+      
+      // Buscar leads para obter tipo_origem
+      const leadIds = [...new Set(rawSubscribers.map(s => s.lead_id).filter(Boolean))];
+      let leadsMap = new Map<string, string>();
+      
+      if (leadIds.length > 0) {
+        const { data: leadsData } = await supabase
+          .from('leads_juridicos')
+          .select('id, tipo_origem')
+          .in('id', leadIds);
+        
+        if (leadsData) {
+          leadsData.forEach((lead: any) => {
+            leadsMap.set(lead.id, lead.tipo_origem || 'indefinido');
+          });
+        }
+      }
       
       // Deduplicate subscribers by normalized phone or lead_id
       const deduplicatedMap = new Map<string, Subscriber>();
-      const rawSubscribers = (data as Subscriber[]) || [];
       
       for (const sub of rawSubscribers) {
         // Skip invalid phone placeholders
         if (sub.telefone === '{{wa_id}}') continue;
+        
+        // Adicionar tipo_origem do lead
+        const subWithOrigem = {
+          ...sub,
+          lead_tipo_origem: sub.lead_id ? leadsMap.get(sub.lead_id) : undefined
+        };
         
         // Normalize phone for deduplication key
         const phoneClean = sub.telefone?.replace(/\D/g, '') || '';
@@ -493,7 +522,7 @@ const ManyChatInboxContent = () => {
         const existing = deduplicatedMap.get(dedupeKey);
         
         if (!existing) {
-          deduplicatedMap.set(dedupeKey, sub);
+          deduplicatedMap.set(dedupeKey, subWithOrigem);
         } else {
           // Keep the one with more recent interaction or better data
           const existingTime = new Date(existing.ultima_interacao || 0).getTime();
@@ -505,10 +534,10 @@ const ManyChatInboxContent = () => {
           
           if (currentHasName && !existingHasName) {
             // Current has better name
-            deduplicatedMap.set(dedupeKey, { ...sub, lead_id: existing.lead_id || sub.lead_id });
+            deduplicatedMap.set(dedupeKey, { ...subWithOrigem, lead_id: existing.lead_id || sub.lead_id });
           } else if (currentTime > existingTime) {
             // Current is more recent
-            deduplicatedMap.set(dedupeKey, { ...sub, lead_id: existing.lead_id || sub.lead_id });
+            deduplicatedMap.set(dedupeKey, { ...subWithOrigem, lead_id: existing.lead_id || sub.lead_id });
           }
         }
       }
@@ -1149,6 +1178,13 @@ const ManyChatInboxContent = () => {
       if (activeFilter === 'human') return sub.atendimento_humano;
       if (activeFilter === 'bot') return !sub.atendimento_humano;
       return true;
+    })
+    .filter(sub => {
+      // Filtro por origem do lead
+      if (origemFilter === 'all') return true;
+      if (origemFilter === 'trafego') return sub.lead_tipo_origem === 'trafego';
+      if (origemFilter === 'whatsapp_direto') return sub.lead_tipo_origem === 'whatsapp_direto';
+      return true;
     });
 
   const renderMessage = (message: Message) => {
@@ -1372,7 +1408,30 @@ const ManyChatInboxContent = () => {
           </div>
         </div>
 
-        {/* Filtros */}
+        {/* Filtros por Origem (Tráfego vs Direto) */}
+        <div className={`px-3 py-2 ${themeClasses.sidebar} border-b ${themeClasses.border}`}>
+          <div className="flex items-center gap-2 overflow-x-auto">
+            {(['all', 'trafego', 'whatsapp_direto'] as OrigemFilter[]).map((filter) => (
+              <button
+                key={filter}
+                onClick={() => setOrigemFilter(filter)}
+                className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-all whitespace-nowrap ${
+                  origemFilter === filter
+                    ? filter === 'trafego' 
+                      ? 'bg-blue-500 text-white shadow-md'
+                      : filter === 'whatsapp_direto'
+                      ? 'bg-gray-600 text-white shadow-md'
+                      : 'bg-[#00A884] text-white shadow-md'
+                    : `${themeClasses.inputSearch} ${themeClasses.secondaryText} ${themeClasses.hoverBtn}`
+                }`}
+              >
+                {filter === 'all' ? '📋 Todos' : filter === 'trafego' ? '🎯 Tráfego' : '💬 Direto'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Filtros por Atendimento */}
         <div className={`px-3 py-2 ${themeClasses.sidebar} border-b ${themeClasses.border}`}>
           <div className="flex items-center gap-2">
             {(['all', 'human', 'bot'] as ConversationFilter[]).map((filter) => (
