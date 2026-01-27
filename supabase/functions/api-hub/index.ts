@@ -256,16 +256,30 @@ serve(async (req: Request) => {
         // Buscar lead pelo telefone (normalizado)
         if (telefone) {
           const telefoneLimpo = telefone.toString().replace(/\D/g, '');
-          const { data: leadByPhone } = await supabase
+          
+          // Busca 1: Telefone completo exato
+          let { data: leadByPhone } = await supabase
             .from('leads_juridicos')
             .select('id, nome')
-            .or(`telefone.ilike.%${telefoneLimpo.slice(-9)}%,telefone.ilike.%${telefoneLimpo}%`)
+            .ilike('telefone', `%${telefoneLimpo}%`)
             .limit(1)
             .maybeSingle();
           
+          // Busca 2: Se não encontrou, tentar com últimos 9 dígitos (fallback)
+          if (!leadByPhone && telefoneLimpo.length >= 9) {
+            const ultimos9 = telefoneLimpo.slice(-9);
+            const { data: leadByPhone9 } = await supabase
+              .from('leads_juridicos')
+              .select('id, nome')
+              .ilike('telefone', `%${ultimos9}%`)
+              .limit(1)
+              .maybeSingle();
+            leadByPhone = leadByPhone9;
+          }
+          
           if (leadByPhone) {
             leadId = leadByPhone.id;
-            console.log('[API-HUB] Lead encontrado por telefone:', leadByPhone.nome);
+            console.log('[API-HUB] ✅ Lead EXISTENTE encontrado por telefone:', leadByPhone.nome, '- NÃO criando duplicata');
           }
         }
         

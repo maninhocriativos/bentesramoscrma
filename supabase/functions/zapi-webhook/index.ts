@@ -132,7 +132,27 @@ serve(async (req: Request) => {
     if (normalized.message && leadId) {
       console.log('[Z-API Webhook] Saving message for subscriber:', subscriberId, 'messageId:', normalized.messageId, 'fromMe:', normalized.fromMe);
 
-      const direcao = normalized.fromMe ? 'saida' : 'entrada';
+      // IMPORTANTE: Não salvar eco de mensagens enviadas pela Isa (fromMe=true)
+      // A Isa já salva suas próprias mensagens em isa-auto-process
+      if (normalized.fromMe) {
+        console.log('[Z-API Webhook] Skipping message echo (fromMe=true)');
+        await logIntegration(supabase, 'zapi', 'inbound', body, { 
+          lead_id: leadId, 
+          skipped: true,
+          reason: 'echo_from_me'
+        }, 'ok', null, leadId, startTime);
+        
+        return new Response(JSON.stringify({ 
+          success: true, 
+          lead_id: leadId,
+          skipped: true,
+          reason: 'echo_from_me'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      const direcao = 'entrada'; // Sempre entrada agora (fromMe já foi filtrado)
 
       // Conteúdo salvo: para mídia, priorizar URL (para renderizar no chat)
       const conteudoToSave =
@@ -168,7 +188,7 @@ serve(async (req: Request) => {
               media_url: normalized.mediaUrl,
               caption: normalized.caption,
               file_name: normalized.fileName,
-              from_me: normalized.fromMe === true
+            from_me: normalized.fromMe
             }
           }).select().single();
 
@@ -208,7 +228,7 @@ serve(async (req: Request) => {
             media_url: normalized.mediaUrl,
             caption: normalized.caption,
             file_name: normalized.fileName,
-            from_me: normalized.fromMe === true
+            from_me: normalized.fromMe
           }
         }).select().single();
 
