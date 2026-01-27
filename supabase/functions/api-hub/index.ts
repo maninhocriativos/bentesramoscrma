@@ -893,8 +893,31 @@ serve(async (req: Request) => {
         } else {
           response = { success: true, instance: inserted };
         }
+      } else if (action === 'update') {
+        // Update instance by instance_id
+        const updateData: any = { updated_at: new Date().toISOString() };
+        if (data.client_token !== undefined) updateData.client_token = data.client_token;
+        if (data.phone_number !== undefined) updateData.phone_number = data.phone_number;
+        if (data.name !== undefined) updateData.name = data.name;
+        if (data.token !== undefined) updateData.token = data.token;
+        if (data.is_active !== undefined) updateData.is_active = data.is_active;
+        if (data.is_default !== undefined) updateData.is_default = data.is_default;
+        if (data.webhook_secret !== undefined) updateData.webhook_secret = data.webhook_secret;
+        
+        const { data: updated, error: updateError } = await supabase
+          .from('zapi_instances')
+          .update(updateData)
+          .eq('instance_id', data.instance_id)
+          .select()
+          .single();
+        
+        if (updateError) {
+          response = { success: false, error: updateError.message };
+        } else {
+          response = { success: true, instance: updated };
+        }
       } else {
-        response = { success: false, error: 'Unknown action' };
+        response = { success: false, error: 'Unknown action. Use insert or update.' };
       }
     }
 
