@@ -921,6 +921,42 @@ serve(async (req: Request) => {
       }
     }
 
+    // Admin: Update lead to traffic (for Bentes Ramos-2 instance leads)
+    else if (path === '/admin/update-lead-traffic' && req.method === 'POST') {
+      const { lead_id, fonte_trafego } = body;
+      
+      if (!lead_id) {
+        response = { success: false, error: 'lead_id é obrigatório' };
+      } else {
+        const { data: updatedLead, error: updateError } = await supabase
+          .from('leads_juridicos')
+          .update({
+            tipo_origem: 'trafego',
+            fonte_trafego: fonte_trafego || 'instagram_ads',
+            origem: 'Tráfego Pago',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', lead_id)
+          .select('id, nome, tipo_origem, fonte_trafego')
+          .single();
+        
+        if (updateError) {
+          response = { success: false, error: updateError.message };
+        } else {
+          // Log the change
+          await supabase.from('system_events').insert({
+            tipo: 'atribuicao',
+            fonte: 'admin',
+            acao: 'lead_marcado_trafego',
+            lead_id: lead_id,
+            dados: { fonte_trafego: fonte_trafego || 'instagram_ads' }
+          });
+          
+          response = { success: true, lead: updatedLead };
+        }
+      }
+    }
+
     // Health check
     else if (path === '/health' || path === '/') {
       response = { 
@@ -934,6 +970,7 @@ serve(async (req: Request) => {
           'POST /webhook/automation',
           'POST /webhook/whatsapp',
           'POST /admin/zapi-instances',
+          'POST /admin/update-lead-traffic',
           'GET /events',
           'GET /stats',
           'GET /health'
