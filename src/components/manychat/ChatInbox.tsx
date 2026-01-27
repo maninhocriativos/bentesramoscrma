@@ -941,7 +941,7 @@ const ManyChatInboxContent = () => {
         }
       };
       
-      mediaRecorder.onstop = async () => {
+      mediaRecorder.onstop = () => {
         stream.getTracks().forEach(track => track.stop());
         
         if (audioChunksRef.current.length === 0) return;
@@ -949,24 +949,9 @@ const ManyChatInboxContent = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/ogg' });
         const audioFile = new File([audioBlob], `audio_${Date.now()}.ogg`, { type: 'audio/ogg' });
         
-        // Enviar áudio diretamente após gravação (sem setSelectedFile)
-        if (!selectedSubscriber) return;
-        
-        try {
-          const filePath = `manychat/${selectedSubscriber.subscriber_id}/audio_${Date.now()}.ogg`;
-          await supabase.storage.from('documentos').upload(filePath, audioFile);
-          
-          const { data: signed, error: signError } = await supabase.storage
-            .from('documentos')
-            .createSignedUrl(filePath, 60 * 60 * 24 * 30);
-          
-          if (signError || !signed?.signedUrl) throw signError;
-          
-          await sendMessage(signed.signedUrl, 'audio', audioFile.name);
-        } catch (error) {
-          console.error('[Audio] Erro ao enviar áudio:', error);
-          toast({ title: 'Erro', description: 'Falha ao enviar áudio', variant: 'destructive' });
-        }
+        // Mostrar preview do áudio ao invés de enviar direto
+        setSelectedFile(audioFile);
+        setPreviewUrl(URL.createObjectURL(audioBlob));
       };
       
       mediaRecorder.start();
@@ -980,6 +965,107 @@ const ManyChatInboxContent = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+    }
+  };
+
+  const sendAudioFromPreview = async () => {
+    if (!selectedFile || !selectedSubscriber || !selectedFile.type.startsWith('audio/')) return;
+    
+    const audioFile = selectedFile;
+    const subscriberSnapshot = { ...selectedSubscriber };
+    
+    // Limpar preview imediatamente
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    
+    // Mostrar mensagem otimista
+    const tempId = `temp_${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: tempId,
+      conteudo: '🎤 Enviando áudio...',
+      created_at: new Date().toISOString(),
+      direcao: 'saida',
+      tipo: 'audio',
+      subscriber_id: subscriberSnapshot.subscriber_id,
+    };
+    
+    setMessages(prev => {
+      const updated = [...prev, optimisticMessage];
+      messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
+      return updated;
+    });
+    scrollToBottom();
+    
+    try {
+      const filePath = `manychat/${subscriberSnapshot.subscriber_id}/audio_${Date.now()}.ogg`;
+      
+      // Upload em background
+      const uploadPromise = supabase.storage.from('documentos').upload(filePath, audioFile);
+      
+      const { error: uploadError } = await uploadPromise;
+      if (uploadError) throw uploadError;
+      
+      const { data: signed, error: signError } = await supabase.storage
+        .from('documentos')
+        .createSignedUrl(filePath, 60 * 60 * 24 * 30);
+      
+      if (signError || !signed?.signedUrl) throw signError;
+      
+      // Enviar via Z-API
+      const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-send', {
+        body: {
+          to_phone: subscriberSnapshot.telefone,
+          message: signed.signedUrl,
+          type: 'audio',
+          lead_id: subscriberSnapshot.lead_id,
+          file_name: audioFile.name,
+        },
+      });
+      
+      if (zapiError) throw new Error(zapiError.message);
+      
+      // Salvar no banco
+      const msgId = zapiResult?.messageId;
+      const { data: savedMsg } = await supabase.from('manychat_mensagens' as any).insert({
+        subscriber_id: subscriberSnapshot.subscriber_id,
+        subscriber_nome: subscriberSnapshot.nome,
+        canal: 'whatsapp',
+        conteudo: signed.signedUrl,
+        tipo: 'audio',
+        direcao: 'saida',
+        lead_id: subscriberSnapshot.lead_id,
+        metadata: { 
+          sent_via: 'chat_interface', 
+          zapi_status: zapiResult?.success ? 'success' : 'error', 
+          message_id: msgId,
+          file_name: audioFile.name 
+        }
+      } as any).select().single();
+      
+      // Atualizar com mensagem real
+      if (savedMsg) {
+        setMessages(prev => {
+          const withoutTemp = prev.filter(m => m.id !== tempId);
+          const savedKey = getMessageDedupeKey(savedMsg);
+          const alreadyExists = withoutTemp.some(m => getMessageDedupeKey(m) === savedKey || m.id === (savedMsg as any).id);
+          const updated = alreadyExists ? withoutTemp : [...withoutTemp, savedMsg as Message];
+          messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
+          return updated;
+        });
+      }
+      
+    } catch (error: any) {
+      console.error('[Audio] Erro ao enviar áudio:', error);
+      setMessages(prev => {
+        const updated = prev.map(m => 
+          m.id === tempId 
+            ? { ...m, conteudo: '❌ Erro no envio do áudio', metadata: { send_error: true } } 
+            : m
+        );
+        messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
+        return updated;
+      });
+      toast({ title: 'Erro', description: 'Falha ao enviar áudio', variant: 'destructive' });
     }
   };
 
@@ -1766,21 +1852,39 @@ const ManyChatInboxContent = () => {
                   {selectedFile.type.startsWith('image/') ? (
                     <img src={previewUrl || ''} alt="Preview" className="h-12 w-12 object-cover rounded" />
                   ) : selectedFile.type.startsWith('audio/') ? (
-                    <div className="h-12 w-12 rounded bg-[#00A884] flex items-center justify-center">
-                      <Mic className="h-5 w-5 text-white" />
-                    </div>
+                    <audio controls src={previewUrl || ''} className="h-10 flex-1 max-w-[200px]" />
                   ) : (
                     <div className="h-12 w-12 rounded bg-red-500 flex items-center justify-center">
                       <FileText className="h-5 w-5 text-white" />
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className={`font-medium text-sm truncate ${themeClasses.headerText}`}>{selectedFile.name}</p>
-                    <p className={`text-xs ${themeClasses.secondaryText}`}>{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                    {!selectedFile.type.startsWith('audio/') && (
+                      <>
+                        <p className={`font-medium text-sm truncate ${themeClasses.headerText}`}>{selectedFile.name}</p>
+                        <p className={`text-xs ${themeClasses.secondaryText}`}>{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                      </>
+                    )}
+                    {selectedFile.type.startsWith('audio/') && (
+                      <p className={`text-xs ${themeClasses.secondaryText}`}>
+                        🎧 Ouça antes de enviar
+                      </p>
+                    )}
                   </div>
                   <Button variant="ghost" size="icon" onClick={() => { setSelectedFile(null); setPreviewUrl(null); }} className="h-8 w-8">
                     <X className="h-4 w-4" />
                   </Button>
+                  {/* Botão de envio direto para áudio */}
+                  {selectedFile.type.startsWith('audio/') && (
+                    <Button
+                      onClick={sendAudioFromPreview}
+                      disabled={isSending}
+                      size="icon"
+                      className="h-10 w-10 rounded-full bg-[#00A884] hover:bg-[#008069] text-white shadow-lg"
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
@@ -1808,13 +1912,30 @@ const ManyChatInboxContent = () => {
                   placeholder="Digite uma mensagem"
                   value={newMessage}
                   onChange={(e) => { setNewMessage(e.target.value); handleTyping(); }}
-                  onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && (selectedFile ? uploadAndSendFile() : sendMessage())}
+                  onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && (selectedFile ? (selectedFile.type.startsWith('audio/') ? sendAudioFromPreview() : uploadAndSendFile()) : sendMessage())}
+                  onPaste={(e) => {
+                    const items = e.clipboardData?.items;
+                    if (!items) return;
+                    for (const item of Array.from(items)) {
+                      if (item.type.startsWith('image/')) {
+                        e.preventDefault();
+                        const file = item.getAsFile();
+                        if (file) {
+                          const namedFile = new File([file], `screenshot_${Date.now()}.png`, { type: file.type });
+                          setSelectedFile(namedFile);
+                          setPreviewUrl(URL.createObjectURL(namedFile));
+                          toast({ title: '📷 Imagem colada!', description: 'Pressione Enter para enviar' });
+                        }
+                        break;
+                      }
+                    }
+                  }}
                   disabled={isSending || isRecording}
                   className={`h-[44px] rounded-xl ${themeClasses.input} border-0 text-[15px] focus-visible:ring-0 shadow-sm`}
                 />
               </div>
 
-              {newMessage.trim() || selectedFile ? (
+              {newMessage.trim() || (selectedFile && !selectedFile.type.startsWith('audio/')) ? (
                 <Button 
                   onClick={selectedFile ? uploadAndSendFile : () => sendMessage()} 
                   disabled={isSending}
@@ -1823,7 +1944,7 @@ const ManyChatInboxContent = () => {
                 >
                   <Send className="h-5 w-5" />
                 </Button>
-              ) : isRecording ? (
+              ) : selectedFile?.type.startsWith('audio/') ? null : isRecording ? (
                 <Button
                   size="icon"
                   onClick={stopRecording}
