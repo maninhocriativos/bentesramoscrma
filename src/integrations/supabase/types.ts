@@ -1093,16 +1093,19 @@ export type Database = {
       leads_juridicos: {
         Row: {
           bairro: string | null
+          canal_origem: string | null
           cep: string | null
           cidade: string | null
           contract_key: string | null
           contract_sent_at: string | null
           contract_signed_at: string | null
+          contratos_adicionais: number | null
           cpf: string | null
           created_at: string
           email: string | null
           endereco: string | null
           estado_civil: string | null
+          fonte_trafego: string | null
           id: string
           is_lost: boolean | null
           last_contact_at: string | null
@@ -1128,16 +1131,19 @@ export type Database = {
         }
         Insert: {
           bairro?: string | null
+          canal_origem?: string | null
           cep?: string | null
           cidade?: string | null
           contract_key?: string | null
           contract_sent_at?: string | null
           contract_signed_at?: string | null
+          contratos_adicionais?: number | null
           cpf?: string | null
           created_at?: string
           email?: string | null
           endereco?: string | null
           estado_civil?: string | null
+          fonte_trafego?: string | null
           id?: string
           is_lost?: boolean | null
           last_contact_at?: string | null
@@ -1163,16 +1169,19 @@ export type Database = {
         }
         Update: {
           bairro?: string | null
+          canal_origem?: string | null
           cep?: string | null
           cidade?: string | null
           contract_key?: string | null
           contract_sent_at?: string | null
           contract_signed_at?: string | null
+          contratos_adicionais?: number | null
           cpf?: string | null
           created_at?: string
           email?: string | null
           endereco?: string | null
           estado_civil?: string | null
+          fonte_trafego?: string | null
           id?: string
           is_lost?: boolean | null
           last_contact_at?: string | null
@@ -1261,6 +1270,7 @@ export type Database = {
           nome: string | null
           subscriber_id: string
           telefone: string | null
+          telefone_normalizado: string | null
           ultima_interacao: string | null
           updated_at: string
         }
@@ -1276,6 +1286,7 @@ export type Database = {
           nome?: string | null
           subscriber_id: string
           telefone?: string | null
+          telefone_normalizado?: string | null
           ultima_interacao?: string | null
           updated_at?: string
         }
@@ -1291,6 +1302,7 @@ export type Database = {
           nome?: string | null
           subscriber_id?: string
           telefone?: string | null
+          telefone_normalizado?: string | null
           ultima_interacao?: string | null
           updated_at?: string
         }
@@ -2275,6 +2287,77 @@ export type Database = {
         }
         Relationships: []
       }
+      zapi_followups: {
+        Row: {
+          created_at: string
+          id: string
+          last_inbound_at: string | null
+          last_outbound_at: string | null
+          lead_id: string
+          lock_reason: string | null
+          next_followup_at: string | null
+          primeiro_contato_em: string
+          respondido: boolean | null
+          respondido_em: string | null
+          stage_fast: number | null
+          stage_slow: number | null
+          status: string | null
+          subscriber_id: string
+          telefone: string
+          total_followups_enviados: number | null
+          ultimo_tipo_enviado: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_inbound_at?: string | null
+          last_outbound_at?: string | null
+          lead_id: string
+          lock_reason?: string | null
+          next_followup_at?: string | null
+          primeiro_contato_em?: string
+          respondido?: boolean | null
+          respondido_em?: string | null
+          stage_fast?: number | null
+          stage_slow?: number | null
+          status?: string | null
+          subscriber_id: string
+          telefone: string
+          total_followups_enviados?: number | null
+          ultimo_tipo_enviado?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_inbound_at?: string | null
+          last_outbound_at?: string | null
+          lead_id?: string
+          lock_reason?: string | null
+          next_followup_at?: string | null
+          primeiro_contato_em?: string
+          respondido?: boolean | null
+          respondido_em?: string | null
+          stage_fast?: number | null
+          stage_slow?: number | null
+          status?: string | null
+          subscriber_id?: string
+          telefone?: string
+          total_followups_enviados?: number | null
+          ultimo_tipo_enviado?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "zapi_followups_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -2304,6 +2387,7 @@ export type Database = {
           similarity: number
         }[]
       }
+      normalize_phone_number: { Args: { phone: string }; Returns: string }
       update_lead_state: {
         Args: {
           p_changed_by?: string

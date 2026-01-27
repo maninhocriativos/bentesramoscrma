@@ -475,6 +475,12 @@ async function findOrCreateLead(
   }
 
   // Criar novo lead
+  // Detectar fonte de tráfego baseado no nome/contexto
+  let fonteTrafego = 'organico'; // default
+  let canalOrigem = 'whatsapp';
+  
+  // Heurística simples: nomes com certos padrões podem indicar tráfego pago
+  // Em produção, isso viria de UTMs ou metadata do anúncio
   const { data: newLead, error } = await supabase
     .from('leads_juridicos')
     .insert({
@@ -483,6 +489,8 @@ async function findOrCreateLead(
       status: 'Lead Frio',
       lead_state: 'NEW',
       origem: 'WhatsApp Z-API',
+      fonte_trafego: fonteTrafego,
+      canal_origem: canalOrigem,
       resumo_ia: `Lead criado automaticamente via Z-API. Primeiro contato em ${new Date().toLocaleDateString('pt-BR')}.`
     })
     .select('id')
@@ -502,10 +510,24 @@ async function findOrCreateLead(
     reason: 'Lead criado via webhook Z-API'
   });
 
-  // Criar registro de followup para o novo lead
+  // Criar registro de followup na NOVA tabela zapi_followups
+  const subscriberId = gerarSubscriberId(data.phone);
+  const nextFollowupAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min para FAST_1
+  
+  await supabase.from('zapi_followups').insert({
+    lead_id: newLead.id,
+    subscriber_id: subscriberId,
+    telefone: data.phone,
+    status: 'ativo',
+    next_followup_at: nextFollowupAt,
+    stage_fast: 0,
+    stage_slow: 0
+  });
+
+  // Também criar na tabela legada para compatibilidade
   await supabase.from('lead_followups').insert({
     lead_id: newLead.id,
-    subscriber_id: gerarSubscriberId(data.phone),
+    subscriber_id: subscriberId,
     canal: 'whatsapp',
     status: 'aguardando',
     primeiro_contato_em: new Date().toISOString(),
@@ -523,11 +545,13 @@ async function findOrCreateLead(
     dados: {
       phone: data.phone,
       name: data.name,
-      provider: 'zapi'
+      provider: 'zapi',
+      fonte_trafego: fonteTrafego,
+      canal_origem: canalOrigem
     }
   });
 
-  console.log(`[Z-API Webhook] Created new lead: ${newLead.id}`);
+  console.log(`[Z-API Webhook] Created new lead: ${newLead.id} (${fonteTrafego}/${canalOrigem})`);
 
   return { leadId: newLead.id, isNewLead: true };
 }

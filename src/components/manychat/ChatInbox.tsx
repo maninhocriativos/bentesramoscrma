@@ -470,7 +470,51 @@ const ManyChatInboxContent = () => {
         .order('ultima_interacao', { ascending: false });
 
       if (error) throw error;
-      setSubscribers((data as Subscriber[]) || []);
+      
+      // Deduplicate subscribers by normalized phone or lead_id
+      const deduplicatedMap = new Map<string, Subscriber>();
+      const rawSubscribers = (data as Subscriber[]) || [];
+      
+      for (const sub of rawSubscribers) {
+        // Skip invalid phone placeholders
+        if (sub.telefone === '{{wa_id}}') continue;
+        
+        // Normalize phone for deduplication key
+        const phoneClean = sub.telefone?.replace(/\D/g, '') || '';
+        const normalizedPhone = phoneClean.startsWith('55') ? phoneClean : (phoneClean.length >= 8 ? '55' + phoneClean : phoneClean);
+        const phoneSuffix = normalizedPhone.slice(-9);
+        
+        // Use lead_id as primary key if available, else phone suffix
+        const dedupeKey = sub.lead_id || (phoneSuffix.length >= 9 ? `phone_${phoneSuffix}` : sub.subscriber_id);
+        
+        const existing = deduplicatedMap.get(dedupeKey);
+        
+        if (!existing) {
+          deduplicatedMap.set(dedupeKey, sub);
+        } else {
+          // Keep the one with more recent interaction or better data
+          const existingTime = new Date(existing.ultima_interacao || 0).getTime();
+          const currentTime = new Date(sub.ultima_interacao || 0).getTime();
+          
+          // Prefer subscriber with valid name over "Desconhecido"
+          const existingHasName = existing.nome && !existing.nome.includes('Desconhecido') && !existing.nome.includes('Contato');
+          const currentHasName = sub.nome && !sub.nome.includes('Desconhecido') && !sub.nome.includes('Contato');
+          
+          if (currentHasName && !existingHasName) {
+            // Current has better name
+            deduplicatedMap.set(dedupeKey, { ...sub, lead_id: existing.lead_id || sub.lead_id });
+          } else if (currentTime > existingTime) {
+            // Current is more recent
+            deduplicatedMap.set(dedupeKey, { ...sub, lead_id: existing.lead_id || sub.lead_id });
+          }
+        }
+      }
+      
+      const uniqueSubscribers = Array.from(deduplicatedMap.values())
+        .sort((a, b) => new Date(b.ultima_interacao || 0).getTime() - new Date(a.ultima_interacao || 0).getTime());
+      
+      console.log('[loadSubscribers] Original:', rawSubscribers.length, 'Deduplicated:', uniqueSubscribers.length);
+      setSubscribers(uniqueSubscribers);
     } catch (error) {
       console.error('Erro ao carregar subscribers:', error);
     } finally {
