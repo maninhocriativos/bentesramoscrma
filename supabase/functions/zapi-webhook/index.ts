@@ -82,8 +82,8 @@ serve(async (req: Request) => {
     // Buscar ou criar lead pelo telefone
     const { leadId, isNewLead } = await findOrCreateLead(supabase, normalized);
 
-    // Atualizar last_contact_at e marcar followup como respondido
-    if (leadId) {
+    // Atualizar last_contact_at e marcar followup como respondido APENAS em mensagens de entrada
+    if (leadId && !normalized.fromMe) {
       await supabase
         .from('leads_juridicos')
         .update({ last_contact_at: new Date().toISOString() })
@@ -130,7 +130,15 @@ serve(async (req: Request) => {
 
     // Salvar mensagem - com prevenção de duplicatas por message_id
     if (normalized.message && leadId) {
-      console.log('[Z-API Webhook] Saving message for subscriber:', subscriberId, 'messageId:', normalized.messageId);
+      console.log('[Z-API Webhook] Saving message for subscriber:', subscriberId, 'messageId:', normalized.messageId, 'fromMe:', normalized.fromMe);
+
+      const direcao = normalized.fromMe ? 'saida' : 'entrada';
+
+      // Conteúdo salvo: para mídia, priorizar URL (para renderizar no chat)
+      const conteudoToSave =
+        (normalized.messageType === 'audio' || normalized.messageType === 'image' || normalized.messageType === 'video' || normalized.messageType === 'document')
+          ? (normalized.mediaUrl || normalized.message)
+          : normalized.message;
       
       // IMPORTANTE: Verificar se mensagem já existe pelo message_id para evitar duplicatas
       if (normalized.messageId) {
@@ -148,15 +156,19 @@ serve(async (req: Request) => {
           const { data: savedMsg, error: msgError } = await supabase.from('manychat_mensagens').insert({
             subscriber_id: subscriberId,
             subscriber_nome: normalized.name || normalized.phone,
-            conteudo: normalized.message,
+            conteudo: conteudoToSave,
             canal: 'whatsapp',
             tipo: normalized.messageType || 'text',
-            direcao: 'entrada',
+            direcao,
             lead_id: leadId,
             metadata: { 
               source: 'zapi', 
               original: body,
-              message_id: normalized.messageId
+              message_id: normalized.messageId,
+              media_url: normalized.mediaUrl,
+              caption: normalized.caption,
+              file_name: normalized.fileName,
+              from_me: normalized.fromMe === true
             }
           }).select().single();
 
@@ -166,7 +178,48 @@ serve(async (req: Request) => {
             console.log('[Z-API Webhook] Message saved:', savedMsg?.id);
           }
 
-          // Registrar interação
+          // Registrar interação apenas para entrada (cliente)
+          if (!normalized.fromMe) {
+            await supabase.from('interacoes').insert({
+              cliente_id: leadId,
+              tipo: 'WhatsApp',
+              direcao: 'Entrada',
+              resumo: normalized.messageType === 'text' 
+                ? normalized.message.substring(0, 100) 
+                : `[${normalized.messageType}]`,
+              detalhes: normalized.message
+            });
+          }
+        }
+      } else {
+        // Sem message_id, salvar normalmente (fallback)
+        const { data: savedMsg, error: msgError } = await supabase.from('manychat_mensagens').insert({
+          subscriber_id: subscriberId,
+          subscriber_nome: normalized.name || normalized.phone,
+          conteudo: conteudoToSave,
+          canal: 'whatsapp',
+          tipo: normalized.messageType || 'text',
+          direcao,
+          lead_id: leadId,
+          metadata: { 
+            source: 'zapi', 
+            original: body,
+            message_id: null,
+            media_url: normalized.mediaUrl,
+            caption: normalized.caption,
+            file_name: normalized.fileName,
+            from_me: normalized.fromMe === true
+          }
+        }).select().single();
+
+        if (msgError) {
+          console.error('[Z-API Webhook] Error saving message:', msgError);
+        } else {
+          console.log('[Z-API Webhook] Message saved:', savedMsg?.id);
+        }
+
+        // Registrar interação apenas para entrada (cliente)
+        if (!normalized.fromMe) {
           await supabase.from('interacoes').insert({
             cliente_id: leadId,
             tipo: 'WhatsApp',
@@ -177,44 +230,11 @@ serve(async (req: Request) => {
             detalhes: normalized.message
           });
         }
-      } else {
-        // Sem message_id, salvar normalmente (fallback)
-        const { data: savedMsg, error: msgError } = await supabase.from('manychat_mensagens').insert({
-          subscriber_id: subscriberId,
-          subscriber_nome: normalized.name || normalized.phone,
-          conteudo: normalized.message,
-          canal: 'whatsapp',
-          tipo: normalized.messageType || 'text',
-          direcao: 'entrada',
-          lead_id: leadId,
-          metadata: { 
-            source: 'zapi', 
-            original: body,
-            message_id: null
-          }
-        }).select().single();
-
-        if (msgError) {
-          console.error('[Z-API Webhook] Error saving message:', msgError);
-        } else {
-          console.log('[Z-API Webhook] Message saved:', savedMsg?.id);
-        }
-
-        // Registrar interação
-        await supabase.from('interacoes').insert({
-          cliente_id: leadId,
-          tipo: 'WhatsApp',
-          direcao: 'Entrada',
-          resumo: normalized.messageType === 'text' 
-            ? normalized.message.substring(0, 100) 
-            : `[${normalized.messageType}]`,
-          detalhes: normalized.message
-        });
       }
     }
 
     // Se é mensagem, acionar Isa para processar
-    if (normalized.message && leadId) {
+    if (normalized.message && leadId && !normalized.fromMe) {
       // Buscar estado atual do lead
       const { data: lead } = await supabase
         .from('leads_juridicos')
@@ -322,10 +342,22 @@ function normalizeZapiEvent(body: any): {
   media: any | null;
   isGroup: boolean;
   mediaUrl: string | null;
+  caption: string | null;
+  fileName: string | null;
+  fromMe: boolean;
 } {
   // Z-API pode enviar diferentes formatos
   const rawPhone = body.phone || body.from || body.sender?.phone || body.chatId?.replace('@c.us', '');
   const name = body.senderName || body.sender?.name || body.pushName;
+
+  // Alguns payloads sinalizam que a mensagem foi enviada por nós (eco de saída)
+  const fromMe =
+    body.fromMe === true ||
+    body.fromMe === 'true' ||
+    body?.message?.fromMe === true ||
+    body?.sender?.isMe === true ||
+    body?.self === true ||
+    body?.isMe === true;
   
   // IMPORTANTE: Detectar se é grupo (formato: 559292304411-1521765965 ou contém "-")
   const isGroup = body.isGroup === true || (rawPhone && rawPhone.includes('-'));
@@ -340,6 +372,8 @@ function normalizeZapiEvent(body: any): {
   let messageType = 'text';
   let media = null;
   let mediaUrl: string | null = null;
+  let caption: string | null = null;
+  let fileName: string | null = null;
 
   // Extrair texto - Z-API pode enviar em diversos formatos:
   // 1. body.text.message (formato padrão)
@@ -366,12 +400,14 @@ function normalizeZapiEvent(body: any): {
   } else if (body.image) {
     // Extrair URL da imagem para análise
     mediaUrl = body.image.imageUrl || body.image.link || body.image.url;
-    message = body.image.caption || mediaUrl || '[Imagem recebida]';
+    caption = body.image.caption || null;
+    message = caption || mediaUrl || '[Imagem recebida]';
     messageType = 'image';
     media = body.image;
   } else if (body.document) {
     mediaUrl = body.document.documentUrl || body.document.link || body.document.url;
-    message = body.document.fileName || mediaUrl || '[Documento recebido]';
+    fileName = body.document.fileName || null;
+    message = fileName || mediaUrl || '[Documento recebido]';
     messageType = 'document';
     media = body.document;
   } else if (body.video) {
@@ -411,7 +447,10 @@ function normalizeZapiEvent(body: any): {
     timestamp: body.timestamp ? new Date(body.timestamp * 1000).toISOString() : new Date().toISOString(),
     media,
     isGroup,
-    mediaUrl
+    mediaUrl,
+    caption,
+    fileName,
+    fromMe,
   };
 }
 
