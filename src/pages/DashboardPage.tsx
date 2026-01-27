@@ -6,6 +6,7 @@ import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
 import { DashboardFiltersBar, DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { ConversionMetrics } from '@/components/dashboard/ConversionMetrics';
 import { RealtimeLeadsMonitor } from '@/components/dashboard/RealtimeLeadsMonitor';
+import { LeadOriginKPIs } from '@/components/dashboard/LeadOriginKPIs';
 import { AlertasWidget } from '@/components/AlertasWidget';
 import { useLeads } from '@/hooks/useLeads';
 import { useProcessos } from '@/hooks/useProcessos';
@@ -121,6 +122,9 @@ export default function DashboardPage() {
         ) : (
           <>
             <DashboardFiltersBar filters={filters} onFiltersChange={setFilters} />
+            
+            {/* Lead Origin KPIs - Segmentação por Origem */}
+            <LeadOriginKPIs leads={leads} />
             
             <DashboardKPIs leads={filteredLeads} processos={processos} />
 
