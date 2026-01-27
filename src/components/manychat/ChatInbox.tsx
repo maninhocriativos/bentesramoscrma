@@ -330,10 +330,13 @@ const ManyChatInboxContent = () => {
                 }
               }
               
-              // Play notification for incoming messages from other chats
-              if (newMsg.direcao === 'entrada' && !isCurrentChat) {
+              // Play notification for ALL incoming messages (both current chat and others)
+              if (newMsg.direcao === 'entrada') {
                 playNotificationSound();
-                notifyNewMessage(newMsg.subscriber_nome || 'Novo contato', newMsg.conteudo?.substring(0, 100) || '');
+                // Show browser notification only for other chats
+                if (!isCurrentChat) {
+                  notifyNewMessage(newMsg.subscriber_nome || 'Novo contato', newMsg.conteudo?.substring(0, 100) || '');
+                }
               }
               
               // Update subscriber order - find by subscriber_id OR by matching phone in zapi_ format
