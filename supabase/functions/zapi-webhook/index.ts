@@ -168,15 +168,13 @@ serve(async (req: Request) => {
       });
     }
 
-    // Buscar ou criar lead pelo telefone (PASSANDO DADOS DE TRÁFEGO E INSTÂNCIA)
-    const { leadId, isNewLead } = await findOrCreateLead(supabase, normalized, trafficSource, zapiInstanceName);
+    // Buscar ou criar lead pelo telefone (PASSANDO DADOS DE TRÁFEGO)
+    // NOTA: Isa só responde leads de TRÁFEGO PAGO (detectado via metadados do anúncio)
+    const { leadId, isNewLead } = await findOrCreateLead(supabase, normalized, trafficSource);
 
-    // 🎯 REGRA: Se veio da instância "Bentes Ramos-2", forçar como tráfego mesmo para leads existentes
-    const isTrafficInstance = zapiInstanceName === 'Bentes Ramos-2';
-    
-    // Se lead já existia e (detectamos tráfego OU é instância de tráfego), atualizar se estava indefinido/direto
-    if (leadId && !isNewLead && (trafficSource.isTraffic || isTrafficInstance)) {
-      await updateLeadTrafficSource(supabase, leadId, trafficSource, isTrafficInstance);
+    // Se lead já existia e detectamos tráfego pago (via metadados), atualizar origem
+    if (leadId && !isNewLead && trafficSource.isTraffic) {
+      await updateLeadTrafficSource(supabase, leadId, trafficSource);
     }
 
     // Atualizar last_contact_at e marcar followup como respondido APENAS em mensagens de entrada
@@ -624,8 +622,7 @@ function normalizeZapiEvent(body: any): {
 async function findOrCreateLead(
   supabase: any, 
   data: { phone: string | null; name: string | null },
-  trafficSource: TrafficSourceResult,
-  instanceName?: string
+  trafficSource: TrafficSourceResult
 ): Promise<{ leadId: string | null; isNewLead: boolean }> {
   if (!data.phone) return { leadId: null, isNewLead: false };
 
@@ -644,23 +641,20 @@ async function findOrCreateLead(
   }
 
   // Criar novo lead com detecção de tráfego
+  // REGRA: Isa só responde leads de TRÁFEGO PAGO (detectado via metadados do anúncio CTWA)
   let fonteTrafego = 'organico';
   let canalOrigem = 'whatsapp';
-  let tipoOrigem = 'whatsapp_direto';
+  let tipoOrigem = 'whatsapp_direto'; // Padrão: contato direto (não automatizado pela Isa)
   
-  // 🎯 REGRA ESPECIAL: Instância "Bentes Ramos-2" é dedicada a tráfego pago
-  // Todos os leads que chegam por ela são automaticamente marcados como tráfego
-  const isTrafficInstance = instanceName === 'Bentes Ramos-2';
-  
-  // Se detectamos tráfego pago OU veio da instância de tráfego
-  if (trafficSource.isTraffic || isTrafficInstance) {
-    fonteTrafego = trafficSource.source || (isTrafficInstance ? 'instagram_ads' : 'meta_ads');
+  // Se detectamos tráfego pago (via metadados do anúncio Click to WhatsApp)
+  if (trafficSource.isTraffic) {
+    fonteTrafego = trafficSource.source || 'meta_ads';
     tipoOrigem = 'trafego';
-    console.log(`[Z-API Webhook] 🎯 NEW LEAD FROM PAID TRAFFIC: ${fonteTrafego} (instance: ${instanceName})`);
+    console.log(`[Z-API Webhook] 🎯 NEW LEAD FROM PAID TRAFFIC: ${fonteTrafego}`);
   }
   
-  // Determinar se é lead de tráfego (por metadados OU por instância)
-  const isTrafficLead = trafficSource.isTraffic || isTrafficInstance;
+  // Determinar se é lead de tráfego (somente por metadados do anúncio)
+  const isTrafficLead = trafficSource.isTraffic;
   
   const { data: newLead, error } = await supabase
     .from('leads_juridicos')
@@ -674,7 +668,7 @@ async function findOrCreateLead(
       canal_origem: canalOrigem,
       tipo_origem: tipoOrigem,
       resumo_ia: isTrafficLead 
-        ? `Lead de TRÁFEGO PAGO (${fonteTrafego}). Veio ${isTrafficInstance ? 'via instância Bentes Ramos-2' : 'de anúncio Click to WhatsApp'} em ${new Date().toLocaleDateString('pt-BR')}.`
+        ? `Lead de TRÁFEGO PAGO (${fonteTrafego}). Veio de anúncio Click to WhatsApp em ${new Date().toLocaleDateString('pt-BR')}.`
         : `Lead criado automaticamente via Z-API (WhatsApp direto). Primeiro contato em ${new Date().toLocaleDateString('pt-BR')}.`
     })
     .select('id')
@@ -692,7 +686,7 @@ async function findOrCreateLead(
     to_state: 'NEW',
     changed_by: 'zapi',
     reason: isTrafficLead 
-      ? `Lead criado via ${isTrafficInstance ? 'instância Bentes Ramos-2' : 'Click to WhatsApp'} (${fonteTrafego})`
+      ? `Lead criado via Click to WhatsApp (${fonteTrafego})`
       : 'Lead criado via webhook Z-API'
   });
 
@@ -748,15 +742,14 @@ async function findOrCreateLead(
   return { leadId: newLead.id, isNewLead: true };
 }
 
-// Atualizar lead existente se detectarmos tráfego e ele estava indefinido/direto
+// Atualizar lead existente se detectarmos tráfego pago (via metadados do anúncio)
 async function updateLeadTrafficSource(
   supabase: any,
   leadId: string,
-  trafficSource: TrafficSourceResult,
-  isTrafficInstance: boolean = false
+  trafficSource: TrafficSourceResult
 ): Promise<void> {
-  // Se não tem tráfego detectado E não é instância de tráfego, sair
-  if (!trafficSource.isTraffic && !isTrafficInstance) return;
+  // Só atualiza se tiver tráfego detectado via metadados
+  if (!trafficSource.isTraffic) return;
   
   // Verificar se lead ainda está como 'indefinido' ou 'whatsapp_direto'
   const { data: lead } = await supabase
@@ -767,9 +760,9 @@ async function updateLeadTrafficSource(
   
   // Atualizar se não é tráfego ainda (indefinido ou whatsapp_direto)
   if (lead && lead.tipo_origem !== 'trafego') {
-    console.log(`[Z-API Webhook] 🔄 Updating existing lead ${leadId} with traffic source (instance: ${isTrafficInstance ? 'Bentes Ramos-2' : 'other'})`);
+    console.log(`[Z-API Webhook] 🔄 Updating existing lead ${leadId} with traffic source from ad metadata`);
     
-    const fonteTrafego = trafficSource.source || (isTrafficInstance ? 'instagram_ads' : 'meta_ads');
+    const fonteTrafego = trafficSource.source || 'meta_ads';
     
     await supabase
       .from('leads_juridicos')
@@ -784,7 +777,7 @@ async function updateLeadTrafficSource(
     // Registrar evento de atualização
     await supabase.from('system_events').insert({
       tipo: 'atribuicao',
-      fonte: isTrafficInstance ? 'instance_bentes_ramos_2' : 'meta_ads',
+      fonte: 'meta_ads',
       acao: 'lead_atribuido_trafego',
       lead_id: leadId,
       dados: {
@@ -793,8 +786,7 @@ async function updateLeadTrafficSource(
         fonte_trafego: fonteTrafego,
         ad_id: trafficSource.adData?.adId,
         campaign: trafficSource.adData?.campaignName,
-        ctwa_clid: trafficSource.adData?.ctwaClid,
-        from_traffic_instance: isTrafficInstance
+        ctwa_clid: trafficSource.adData?.ctwaClid
       }
     });
     
