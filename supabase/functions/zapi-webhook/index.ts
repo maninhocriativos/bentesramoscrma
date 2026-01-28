@@ -17,6 +17,7 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 interface TrafficSourceResult {
   isTraffic: boolean;
   source: string | null;
+  detectionMethod: 'ctwa_metadata' | 'message_content' | null;
   adData: {
     adContext: any;
     ctwaClid: string | null;
@@ -25,7 +26,10 @@ interface TrafficSourceResult {
   } | null;
 }
 
-function detectTrafficSource(body: any): TrafficSourceResult {
+// Mensagem padrão que vem do anúncio Click to WhatsApp
+const TRAFFIC_MESSAGE_PATTERN = 'quero saber se tenho dinheiro a receber';
+
+function detectTrafficSource(body: any, messageContent?: string): TrafficSourceResult {
   // Verificar múltiplos formatos possíveis de metadados de anúncio
   // O WhatsApp/Z-API pode enviar em diferentes campos dependendo do provedor
   const adContext = body.context?.ad || body.referral || body.ad || body.contextInfo?.ad;
@@ -41,9 +45,11 @@ function detectTrafficSource(body: any): TrafficSourceResult {
     hasCtwaClid: !!ctwaClid,
     hasEntryPoint: !!entryPoint,
     hasSourceUrl: !!sourceUrl,
+    messageContent: messageContent?.substring(0, 50),
     bodyKeys: Object.keys(body).slice(0, 10)
   });
   
+  // MÉTODO 1: Detecção por metadados do anúncio (CTWA)
   if (adContext || ctwaClid || entryPoint === 'ctwa') {
     // Detectar plataforma de origem
     let source = 'meta_ads';
@@ -60,7 +66,7 @@ function detectTrafficSource(body: any): TrafficSourceResult {
     const adId = adContext?.source?.id || adContext?.id || null;
     const campaignName = adContext?.title || adContext?.campaign || null;
     
-    console.log('[Traffic Detection] ✅ DETECTED PAID TRAFFIC:', {
+    console.log('[Traffic Detection] ✅ DETECTED PAID TRAFFIC via CTWA metadata:', {
       source,
       adId,
       campaignName,
@@ -70,6 +76,7 @@ function detectTrafficSource(body: any): TrafficSourceResult {
     return {
       isTraffic: true,
       source,
+      detectionMethod: 'ctwa_metadata',
       adData: {
         adContext,
         ctwaClid: ctwaClid || null,
@@ -79,8 +86,33 @@ function detectTrafficSource(body: any): TrafficSourceResult {
     };
   }
   
+  // MÉTODO 2: Detecção por conteúdo da mensagem (mensagem padrão do anúncio)
+  // "Quero saber se tenho dinheiro a receber."
+  if (messageContent) {
+    const normalizedMessage = messageContent.toLowerCase().trim().replace(/[.!?]+$/, '');
+    
+    if (normalizedMessage.includes(TRAFFIC_MESSAGE_PATTERN)) {
+      console.log('[Traffic Detection] ✅ DETECTED PAID TRAFFIC via MESSAGE CONTENT:', {
+        message: messageContent.substring(0, 60),
+        pattern: TRAFFIC_MESSAGE_PATTERN
+      });
+      
+      return {
+        isTraffic: true,
+        source: 'meta_ads', // Assumir Meta Ads quando detectado por mensagem
+        detectionMethod: 'message_content',
+        adData: {
+          adContext: null,
+          ctwaClid: null,
+          adId: null,
+          campaignName: 'auto_detected_by_message'
+        }
+      };
+    }
+  }
+  
   console.log('[Traffic Detection] No paid traffic markers found');
-  return { isTraffic: false, source: null, adData: null };
+  return { isTraffic: false, source: null, detectionMethod: null, adData: null };
 }
 
 serve(async (req: Request) => {
@@ -135,13 +167,14 @@ serve(async (req: Request) => {
       });
     }
 
-    // ============================================
-    // DETECTAR TRÁFEGO PAGO ANTES DE NORMALIZAR
-    // ============================================
-    const trafficSource = detectTrafficSource(body);
-
-    // Normalizar evento Z-API para formato interno
+    // Normalizar evento Z-API para formato interno PRIMEIRO
+    // (precisamos da mensagem para detectar tráfego pelo conteúdo)
     const normalized = normalizeZapiEvent(body);
+    
+    // ============================================
+    // DETECTAR TRÁFEGO PAGO (metadados OU mensagem do anúncio)
+    // ============================================
+    const trafficSource = detectTrafficSource(body, normalized.message || undefined);
     
     // IMPORTANTE: Ignorar mensagens de grupos - apenas conversas individuais
     if (normalized.isGroup) {
