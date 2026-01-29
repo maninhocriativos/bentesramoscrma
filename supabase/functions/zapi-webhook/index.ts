@@ -210,14 +210,17 @@ serve(async (req: Request) => {
       await updateLeadTrafficSource(supabase, leadId, trafficSource);
     }
 
-    // Atualizar last_contact_at e marcar followup como respondido APENAS em mensagens de entrada
+    // ============================================
+    // AUTOMAÇÃO DE FOLLOW-UP DE TRÁFEGO
+    // ============================================
     if (leadId && !normalized.fromMe) {
+      // Atualizar last_contact_at
       await supabase
         .from('leads_juridicos')
         .update({ last_contact_at: new Date().toISOString() })
         .eq('id', leadId);
 
-      // Marcar followup como respondido se existir
+      // Marcar lead_followups como respondido se existir
       await supabase
         .from('lead_followups')
         .update({ 
@@ -228,6 +231,49 @@ serve(async (req: Request) => {
         })
         .eq('lead_id', leadId)
         .eq('respondido', false);
+
+      // 🆕 MARCAR TRAFFIC FOLLOWUP COMO RESPONDIDO
+      await supabase
+        .from('traffic_followups')
+        .update({ 
+          status: 'responded', 
+          automation_active: false,
+          last_inbound_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('lead_id', leadId)
+        .eq('automation_active', true);
+    }
+    
+    // 🆕 INSCREVER LEAD DE TRÁFEGO NO FOLLOW-UP (se for novo lead de tráfego)
+    if (leadId && isNewLead && trafficSource.isTraffic && normalized.phone) {
+      try {
+        // Verificar se já está inscrito
+        const { data: existingFollowup } = await supabase
+          .from('traffic_followups')
+          .select('id')
+          .eq('lead_id', leadId)
+          .maybeSingle();
+        
+        if (!existingFollowup) {
+          const firstStageDelay = 10; // 10 minutos
+          const nextMessageAt = new Date(Date.now() + firstStageDelay * 60 * 1000);
+          
+          await supabase.from('traffic_followups').insert({
+            lead_id: leadId,
+            subscriber_id: gerarSubscriberId(normalized.phone),
+            telefone: normalizePhone(normalized.phone),
+            status: 'new',
+            automation_active: true,
+            current_stage: null,
+            next_message_at: nextMessageAt.toISOString()
+          });
+          
+          console.log(`[Z-API Webhook] 📊 Lead de tráfego inscrito no follow-up: ${leadId}`);
+        }
+      } catch (enrollErr) {
+        console.error('[Z-API Webhook] Error enrolling in traffic followup:', enrollErr);
+      }
     }
 
     // Gerar subscriber_id único baseado no telefone
