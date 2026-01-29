@@ -2269,6 +2269,68 @@ export type Database = {
           },
         ]
       }
+      traffic_followups: {
+        Row: {
+          automation_active: boolean | null
+          created_at: string
+          current_stage: string | null
+          id: string
+          last_inbound_at: string | null
+          last_message_at: string | null
+          lead_id: string
+          next_message_at: string | null
+          pause_reason: string | null
+          stages_sent: Json | null
+          status: string | null
+          subscriber_id: string | null
+          telefone: string
+          total_messages_sent: number | null
+          updated_at: string
+        }
+        Insert: {
+          automation_active?: boolean | null
+          created_at?: string
+          current_stage?: string | null
+          id?: string
+          last_inbound_at?: string | null
+          last_message_at?: string | null
+          lead_id: string
+          next_message_at?: string | null
+          pause_reason?: string | null
+          stages_sent?: Json | null
+          status?: string | null
+          subscriber_id?: string | null
+          telefone: string
+          total_messages_sent?: number | null
+          updated_at?: string
+        }
+        Update: {
+          automation_active?: boolean | null
+          created_at?: string
+          current_stage?: string | null
+          id?: string
+          last_inbound_at?: string | null
+          last_message_at?: string | null
+          lead_id?: string
+          next_message_at?: string | null
+          pause_reason?: string | null
+          stages_sent?: Json | null
+          status?: string | null
+          subscriber_id?: string | null
+          telefone?: string
+          total_messages_sent?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "traffic_followups_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: true
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string | null

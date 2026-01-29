@@ -98,3 +98,6 @@ verify_jwt = false
 
 [functions.zapi-bulk-campaign]
 verify_jwt = false
+
+[functions.traffic-followup-automation]
+verify_jwt = false
