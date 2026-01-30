@@ -11,9 +11,12 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 // ============================================
-// CONFIGURAÇÃO DOS 9 ESTÁGIOS DE FOLLOW-UP
+// CONFIGURAÇÃO DOS 11 ESTÁGIOS DE FOLLOW-UP
+// Novos estágios: 3min e 15min adicionados
 // ============================================
 const STAGES_CONFIG = {
+  '3min':   { delay_minutes: 3,      label: 'Triagem Rápida',    next: '15min' },
+  '15min':  { delay_minutes: 15,     label: 'Reforço Triagem',   next: '10min' },
   '10min':  { delay_minutes: 10,     label: 'Quebra de Padrão',  next: '3h'  },
   '3h':     { delay_minutes: 180,    label: 'Aversão à Perda',   next: '8h'  },
   '8h':     { delay_minutes: 480,    label: 'Escassez',          next: '24h' },
@@ -39,6 +42,34 @@ function getMessageTemplate(stage: string, leadNome: string): { text: string; im
   const nome = leadNome || 'Cliente';
   
   switch (stage) {
+    case '3min':
+      // Nova mensagem - Triagem rápida (Menu de opções)
+      return {
+        text: `Olá, aqui é a Isa do Bentes & Ramos Advogados. Recebi seu contato e para direcionar seu atendimento para o especialista correto agora mesmo, me diga:
+
+Qual dessas situações mais se aproxima do seu caso?
+
+1️⃣ Empréstimo consignado ou pessoal 
+2️⃣ Descontos indevidos no benefício ou salário 
+3️⃣ Seguro prestamista ou proteção financeira no empréstimo 
+4️⃣ Cartão de crédito consignado (RMC/RCC) 
+5️⃣ Juros abusivos 
+6️⃣ Tarifa bancária indevida 
+7️⃣ Outro problema bancário
+
+(Digite apenas o número)`
+      };
+    
+    case '15min':
+      // Nova mensagem - Reforço da triagem
+      return {
+        text: `${nome}, vi que você ainda não escolheu a opção. Sem problemas!
+
+Se estiver na dúvida, digite *7* que eu te ajudo a identificar seu caso.
+
+⏰ Não deixe para depois - em casos bancários, cada dia que passa é dinheiro que você pode estar perdendo para o banco.`
+      };
+    
     case '10min':
       return {
         text: `Oi, ${nome}. Vi que você clicou no nosso anúncio sobre os juros abusivos, mas não concluiu.
@@ -130,7 +161,7 @@ Cuide-se! 👋`
 // FUNÇÕES AUXILIARES
 // ============================================
 function getNextStage(currentStage: string | null): string {
-  if (!currentStage) return '10min';
+  if (!currentStage) return '3min'; // Começa com triagem rápida
   const config = STAGES_CONFIG[currentStage as keyof typeof STAGES_CONFIG];
   return config?.next || '';
 }
@@ -347,8 +378,9 @@ async function backfillTrafficLeads(supabase: any): Promise<any> {
     const minutesSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60);
     
     // Determinar estágio atual baseado no tempo decorrido
+    // Inclui os novos estágios de 3min e 15min
     let currentStage: string | null = null;
-    let nextStage = '10min';
+    let nextStage = '3min';
     
     if (minutesSinceCreation >= 10080) {
       // Mais de 7 dias - arquivar
@@ -375,9 +407,17 @@ async function backfillTrafficLeads(supabase: any): Promise<any> {
     } else if (minutesSinceCreation >= 180) {
       currentStage = '3h';
       nextStage = '8h';
-    } else if (minutesSinceCreation >= 10) {
+    } else if (minutesSinceCreation >= 25) {
+      // 10min + 15min = 25min
       currentStage = '10min';
       nextStage = '3h';
+    } else if (minutesSinceCreation >= 18) {
+      // 3min + 15min = 18min
+      currentStage = '15min';
+      nextStage = '10min';
+    } else if (minutesSinceCreation >= 3) {
+      currentStage = '3min';
+      nextStage = '15min';
     }
     
     // Se já passou de 7 dias, arquivar diretamente

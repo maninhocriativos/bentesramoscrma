@@ -140,6 +140,7 @@ export function getDateLabel(msgs: { created_at: string }[], index: number): str
 export function detectMediaType(content: string, tipo?: string): 'audio' | 'image' | 'video' | 'text' | 'document' | 'sticker' | 'location' {
   if (tipo === 'sticker') return 'sticker';
   if (tipo === 'location') return 'location';
+  if (tipo === 'document') return 'document';
   if (tipo && tipo !== 'text') return tipo as any;
   
   const url = content.replace(/^\[|\]$/g, '');
@@ -154,7 +155,14 @@ export function detectMediaType(content: string, tipo?: string): 'audio' | 'imag
   if (url.match(/\.(ogg|mp3|wav|m4a)(\?|$)/i)) return 'audio';
   if (url.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i)) return 'image';
   if (url.match(/\.(mp4|webm)(\?|$)/i)) return 'video';
-  if (url.match(/\.(pdf|doc|docx|xls|xlsx)(\?|$)/i)) return 'document';
+  
+  // Detectar documentos - incluindo links do Adobe Acrobat e outros
+  if (url.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|csv|rtf|odt|ods)(\?|$)/i) ||
+      url.match(/acrobat\.adobe\.com|adobeacrobat\.app\.link/i) ||
+      url.match(/drive\.google\.com\/file|docs\.google\.com/i) ||
+      url.match(/dropbox\.com|onedrive\.live|sharepoint\.com/i)) {
+    return 'document';
+  }
   
   return 'text';
 }
