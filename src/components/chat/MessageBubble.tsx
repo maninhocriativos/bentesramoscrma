@@ -123,14 +123,64 @@ export function MessageBubble({ message, themeClasses }: MessageBubbleProps) {
       
       case 'document': {
         const docUrl = content.replace(/^\[|\]$/g, '');
+        const metadata = message.metadata as any;
+        
+        // Tentar extrair nome do documento
+        let docName = metadata?.original?.document?.fileName 
+          || metadata?.original?.document?.title 
+          || metadata?.fileName
+          || content.split('/').pop()?.split('?')[0]
+          || 'Documento';
+          
+        // Remover extensão estranha
+        if (docName.length > 50) docName = docName.substring(0, 50) + '...';
+        
+        // Detectar tipo de documento para ícone adequado
+        const extension = docUrl.toLowerCase().split('.').pop()?.split('?')[0] || '';
+        const isPDF = extension === 'pdf' || docUrl.includes('acrobat.adobe') || docUrl.includes('.pdf');
+        const isWord = ['doc', 'docx'].includes(extension);
+        const isExcel = ['xls', 'xlsx'].includes(extension);
+        const isZip = ['zip', 'rar', '7z'].includes(extension);
+        
+        const getDocIcon = () => {
+          if (isPDF) return '📕';
+          if (isWord) return '📘';
+          if (isExcel) return '📗';
+          if (isZip) return '📦';
+          return '📄';
+        };
+        
+        const getDocTypeLabel = () => {
+          if (isPDF) return 'PDF';
+          if (isWord) return 'Word';
+          if (isExcel) return 'Excel';
+          if (isZip) return 'Arquivo';
+          return extension.toUpperCase() || 'DOC';
+        };
+        
         return (
           <a 
             href={docUrl} 
             target="_blank" 
             rel="noopener noreferrer"
-            className="flex items-center gap-2 text-blue-500 hover:underline"
+            className="flex items-center gap-3 p-3 rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors min-w-[200px] max-w-[280px] group"
           >
-            📄 {content.split('/').pop() || 'Documento'}
+            <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-red-500/10 dark:bg-red-400/20 rounded-lg text-2xl">
+              {getDocIcon()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate group-hover:text-blue-500 transition-colors">
+                {docName}
+              </p>
+              <p className="text-xs opacity-60 flex items-center gap-1">
+                <span>{getDocTypeLabel()}</span>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <Download className="h-3 w-3" />
+                  Abrir
+                </span>
+              </p>
+            </div>
           </a>
         );
       }
