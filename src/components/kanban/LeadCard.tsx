@@ -93,6 +93,11 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProp
   const hasContract = lead.status === 'Ganho' || lead.status === 'Contrato Assinado';
   const hasValue = lead.valor_causa && lead.valor_causa > 0;
 
+  // Ao clicar no card, abre o chat direto com o lead
+  const handleCardClick = () => {
+    navigate(`/chat?lead_id=${lead.id}`);
+  };
+
   const handleWhatsApp = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (lead.telefone) {
@@ -108,7 +113,7 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProp
 
   return (
     <div
-      onClick={onClick}
+      onClick={handleCardClick}
       className={cn(
         "rounded-xl cursor-pointer transition-all duration-200 group kanban-card-wrapper",
         "bg-card border border-border/60 overflow-hidden",
