@@ -110,9 +110,13 @@ export function TagSelector({
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1">
-            <Tag className="h-3.5 w-3.5" />
-            Tags
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-7 px-2.5 text-xs gap-1.5 border-dashed border-primary/40 hover:border-primary hover:bg-primary/5"
+          >
+            <Tag className="h-3.5 w-3.5 text-primary" />
+            <span className="text-primary font-medium">+ Tag</span>
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-72 p-2" align="start">
