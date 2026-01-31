@@ -16,7 +16,7 @@ import { TeamPresencePanel } from './TeamPresencePanel';
 import { ConversationAssignmentMenu } from './ConversationAssignmentMenu';
 import LeadContextPanel from './LeadContextPanel';
 import { InstanceBadge } from '@/components/chat/InstanceBadge';
-import { getInstanceFromPhone } from '@/lib/instanceUtils';
+import { InstanceInfo } from '@/lib/instanceUtils';
 import { 
   Send, 
   Search, 
@@ -70,6 +70,25 @@ interface Subscriber {
   assigned_to?: string;
   // Dados do lead associado (para filtragem por origem)
   lead_tipo_origem?: string;
+  // Instance info from messages metadata
+  instance_name?: string;
+}
+
+// Map instance names from DB to InstanceInfo
+function getInstanceInfoFromName(instanceName?: string): InstanceInfo | null {
+  if (!instanceName) return null;
+  
+  const name = instanceName.toLowerCase();
+  
+  if (name.includes('bentes ramos-2') || name.includes('trafego') || name.includes('tráfego')) {
+    return { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' };
+  }
+  
+  if (name.includes('bentes ramos') && !name.includes('-2')) {
+    return { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' };
+  }
+  
+  return null;
 }
 
 interface Message {
@@ -500,6 +519,30 @@ const ManyChatInboxContent = () => {
         }
       }
       
+      // Buscar instance_name das mensagens mais recentes de cada subscriber
+      const subscriberIds = rawSubscribers.map(s => s.subscriber_id);
+      const instanceMap = new Map<string, string>();
+      
+      if (subscriberIds.length > 0) {
+        const { data: messagesData } = await supabase
+          .from('manychat_mensagens')
+          .select('subscriber_id, metadata')
+          .in('subscriber_id', subscriberIds)
+          .not('metadata->instance_name', 'is', null)
+          .order('created_at', { ascending: false });
+        
+        if (messagesData) {
+          for (const msg of messagesData) {
+            if (!instanceMap.has(msg.subscriber_id)) {
+              const instanceName = (msg.metadata as any)?.instance_name;
+              if (instanceName) {
+                instanceMap.set(msg.subscriber_id, instanceName);
+              }
+            }
+          }
+        }
+      }
+      
       // Deduplicate subscribers by normalized phone or lead_id
       const deduplicatedMap = new Map<string, Subscriber>();
       
@@ -507,10 +550,11 @@ const ManyChatInboxContent = () => {
         // Skip invalid phone placeholders
         if (sub.telefone === '{{wa_id}}') continue;
         
-        // Adicionar tipo_origem do lead
+        // Adicionar tipo_origem do lead e instance_name
         const subWithOrigem = {
           ...sub,
-          lead_tipo_origem: sub.lead_id ? leadsMap.get(sub.lead_id) : undefined
+          lead_tipo_origem: sub.lead_id ? leadsMap.get(sub.lead_id) : undefined,
+          instance_name: instanceMap.get(sub.subscriber_id) || undefined
         };
         
         // Normalize phone for deduplication key
@@ -1586,6 +1630,11 @@ const ManyChatInboxContent = () => {
                           <span className={`font-medium text-[15px] ${unreadCounts.get(subscriber.subscriber_id) ? 'text-white' : themeClasses.headerText} truncate`}>
                             {getDisplayName(subscriber)}
                           </span>
+                          {/* Instance badge */}
+                          {(() => {
+                            const instanceInfo = getInstanceInfoFromName(subscriber.instance_name);
+                            return instanceInfo ? <InstanceBadge instance={instanceInfo} size="sm" /> : null;
+                          })()}
                           {online && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-medium">
                               online
@@ -1656,7 +1705,7 @@ const ManyChatInboxContent = () => {
                   </h3>
                   {/* Instance badge */}
                   {(() => {
-                    const instanceInfo = getInstanceFromPhone(selectedSubscriber.telefone);
+                    const instanceInfo = getInstanceInfoFromName(selectedSubscriber.instance_name);
                     return instanceInfo ? <InstanceBadge instance={instanceInfo} size="md" /> : null;
                   })()}
                 </div>
