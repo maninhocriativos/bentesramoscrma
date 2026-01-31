@@ -53,14 +53,19 @@ export function TagFilter({ availableTags, selectedTagIds, onTagsChange }: TagFi
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
-            variant={selectedTagIds.length > 0 ? 'secondary' : 'outline'}
+            variant={selectedTagIds.length > 0 ? 'default' : 'outline'}
             size="sm"
-            className="h-8 gap-1"
+            className={cn(
+              "h-8 gap-1.5 font-medium",
+              selectedTagIds.length > 0 
+                ? "bg-primary text-primary-foreground hover:bg-primary/90" 
+                : "border-primary/30 text-primary hover:bg-primary/10 hover:border-primary"
+            )}
           >
             <Filter className="h-3.5 w-3.5" />
-            Filtrar
+            <span>Filtrar por Tag</span>
             {selectedTagIds.length > 0 && (
-              <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
+              <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs bg-white/20 text-inherit">
                 {selectedTagIds.length}
               </Badge>
             )}
