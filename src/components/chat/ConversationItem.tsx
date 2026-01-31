@@ -28,13 +28,13 @@ function getInstanceInfoFromConnectedPhone(connectedPhone?: string): InstanceInf
   
   const phone = connectedPhone.replace(/\D/g, '');
   
-  // Tráfego instance: 92 98588-8190
-  if (phone.includes('985888190') || phone.includes('5592985888190')) {
+  // Tráfego instance: 92 98588-8190 (stored as 559285888190)
+  if (phone.includes('559285888190') || phone.includes('5592985888190') || phone.endsWith('85888190')) {
     return { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' };
   }
   
-  // Bentes Ramos antigo: 92 99160-4348
-  if (phone.includes('991604348') || phone.includes('5592991604348')) {
+  // Bentes Ramos antigo: 92 99160-4348 (stored as 559291604348)
+  if (phone.includes('559291604348') || phone.includes('5592991604348') || phone.endsWith('91604348')) {
     return { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' };
   }
   
