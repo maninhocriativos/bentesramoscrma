@@ -4,7 +4,7 @@ import { ChatSubscriber } from '@/hooks/useChatSubscribers';
 import { ChannelIcon } from './ChannelIcon';
 import { InstanceBadge } from './InstanceBadge';
 import { getDisplayName, getInitials, formatLastMessageTime } from '@/lib/chatUtils';
-import { getInstanceFromPhone } from '@/lib/instanceUtils';
+import { InstanceInfo } from '@/lib/instanceUtils';
 
 interface ConversationItemProps {
   subscriber: ChatSubscriber;
@@ -21,6 +21,23 @@ interface ConversationItemProps {
   };
 }
 
+// Map instance names from DB to InstanceInfo
+function getInstanceInfoFromName(instanceName?: string): InstanceInfo | null {
+  if (!instanceName) return null;
+  
+  const name = instanceName.toLowerCase();
+  
+  if (name.includes('bentes ramos-2') || name.includes('trafego') || name.includes('tráfego')) {
+    return { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' };
+  }
+  
+  if (name.includes('bentes ramos') && !name.includes('-2')) {
+    return { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' };
+  }
+  
+  return null;
+}
+
 export function ConversationItem({ 
   subscriber, 
   isSelected, 
@@ -32,8 +49,8 @@ export function ConversationItem({
   const displayName = getDisplayName(subscriber);
   const initials = getInitials(subscriber);
   
-  // Detect which instance this subscriber belongs to
-  const instanceInfo = getInstanceFromPhone(subscriber.telefone);
+  // Detect which instance this subscriber belongs to (from message metadata)
+  const instanceInfo = getInstanceInfoFromName(subscriber.instance_name);
 
   return (
     <div

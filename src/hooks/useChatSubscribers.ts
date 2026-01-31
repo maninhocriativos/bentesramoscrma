@@ -15,6 +15,8 @@ export interface ChatSubscriber {
   atendimento_humano?: boolean;
   atendimento_humano_desde?: string;
   assigned_to?: string;
+  // Instance info from messages metadata
+  instance_name?: string;
 }
 
 export type ConversationFilter = 'all' | 'unread' | 'human' | 'bot' | 'mine';
@@ -31,17 +33,56 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
   const [isSyncing, setIsSyncing] = useState(false);
   const { toast } = useToast();
 
-  // Load all subscribers
+  // Load all subscribers with instance info from messages
   const loadSubscribers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      // Get subscribers
+      const { data: subsData, error: subsError } = await supabase
         .from('manychat_subscribers' as any)
         .select('*')
         .order('ultima_interacao', { ascending: false });
 
-      if (error) throw error;
-      setSubscribers((data as ChatSubscriber[]) || []);
+      if (subsError) throw subsError;
+      
+      const subs = (subsData as ChatSubscriber[]) || [];
+      
+      // Get instance info from most recent message for each subscriber (in batches)
+      // We'll get the instance_name from the most recent message's metadata
+      if (subs.length > 0) {
+        const subscriberIds = subs.map(s => s.subscriber_id);
+        
+        // Get the most recent message for each subscriber to find instance_name
+        const { data: messagesData } = await supabase
+          .from('manychat_mensagens')
+          .select('subscriber_id, metadata')
+          .in('subscriber_id', subscriberIds)
+          .not('metadata->instance_name', 'is', null)
+          .order('created_at', { ascending: false });
+        
+        // Create a map of subscriber_id -> instance_name (first occurrence = most recent)
+        const instanceMap = new Map<string, string>();
+        if (messagesData) {
+          for (const msg of messagesData) {
+            if (!instanceMap.has(msg.subscriber_id)) {
+              const instanceName = (msg.metadata as any)?.instance_name;
+              if (instanceName) {
+                instanceMap.set(msg.subscriber_id, instanceName);
+              }
+            }
+          }
+        }
+        
+        // Enrich subscribers with instance info
+        const enrichedSubs = subs.map(sub => ({
+          ...sub,
+          instance_name: instanceMap.get(sub.subscriber_id) || undefined
+        }));
+        
+        setSubscribers(enrichedSubs);
+      } else {
+        setSubscribers(subs);
+      }
     } catch (error) {
       console.error('[useChatSubscribers] Erro ao carregar subscribers:', error);
     } finally {
