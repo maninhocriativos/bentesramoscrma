@@ -101,3 +101,6 @@ verify_jwt = false
 
 [functions.traffic-followup-automation]
 verify_jwt = false
+
+[functions.send-meta-event]
+verify_jwt = false

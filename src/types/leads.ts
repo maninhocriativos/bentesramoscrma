@@ -41,4 +41,6 @@ export interface Lead {
   tipo_origem?: TipoOrigem | null;
   // Contract reuse tracking
   contratos_adicionais?: number | null;
+  // Meta CAPI - Facebook Lead ID
+  facebook_lead_id?: string | null;
 }
