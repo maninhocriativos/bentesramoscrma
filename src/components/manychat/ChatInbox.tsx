@@ -16,7 +16,7 @@ import { TeamPresencePanel } from './TeamPresencePanel';
 import { ConversationAssignmentMenu } from './ConversationAssignmentMenu';
 import LeadContextPanel from './LeadContextPanel';
 import { InstanceBadge } from '@/components/chat/InstanceBadge';
-import { InstanceInfo, getInstanceFromMetadata } from '@/lib/instanceUtils';
+import { InstanceInfo } from '@/lib/instanceUtils';
 import { 
   Send, 
   Search, 
@@ -74,17 +74,20 @@ interface Subscriber {
   instance_name?: string;
 }
 
-// Map instance names from DB to InstanceInfo
-function getInstanceInfoFromName(instanceName?: string): InstanceInfo | null {
-  if (!instanceName) return null;
+// Map connected phone from DB to InstanceInfo
+// The instance_name in DB is unreliable - we use connectedPhone instead
+function getInstanceInfoFromConnectedPhone(connectedPhone?: string): InstanceInfo | null {
+  if (!connectedPhone) return null;
   
-  const name = instanceName.toLowerCase();
+  const phone = connectedPhone.replace(/\D/g, '');
   
-  if (name.includes('bentes ramos-2') || name.includes('trafego') || name.includes('tráfego')) {
+  // Tráfego instance: 92 98588-8190
+  if (phone.includes('985888190') || phone.includes('5592985888190')) {
     return { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' };
   }
   
-  if (name.includes('bentes ramos') && !name.includes('-2')) {
+  // Bentes Ramos antigo: 92 99160-4348
+  if (phone.includes('991604348') || phone.includes('5592991604348')) {
     return { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' };
   }
   
@@ -539,9 +542,9 @@ const ManyChatInboxContent = () => {
             const lid = msg.lead_id as string | null;
             if (!lid || instanceByLeadId.has(lid)) continue;
 
-            const info = getInstanceFromMetadata(msg.metadata);
-            const instanceName = info?.name || (msg.metadata as any)?.instance_name;
-            if (instanceName) instanceByLeadId.set(lid, instanceName);
+            // Usar connectedPhone diretamente - é mais confiável que instance_name
+            const connectedPhone = (msg.metadata as any)?.original?.connectedPhone;
+            if (connectedPhone) instanceByLeadId.set(lid, connectedPhone);
           }
         }
       }
@@ -560,9 +563,9 @@ const ManyChatInboxContent = () => {
             const sid = msg.subscriber_id as string;
             if (!sid || instanceBySubscriberId.has(sid)) continue;
 
-            const info = getInstanceFromMetadata(msg.metadata);
-            const instanceName = info?.name || (msg.metadata as any)?.instance_name;
-            if (instanceName) instanceBySubscriberId.set(sid, instanceName);
+            // Usar connectedPhone diretamente - é mais confiável que instance_name
+            const connectedPhone = (msg.metadata as any)?.original?.connectedPhone;
+            if (connectedPhone) instanceBySubscriberId.set(sid, connectedPhone);
           }
         }
       }
@@ -1666,7 +1669,7 @@ const ManyChatInboxContent = () => {
                           </span>
                           {/* Instance badge */}
                           {(() => {
-                            const instanceInfo = getInstanceInfoFromName(subscriber.instance_name);
+                            const instanceInfo = getInstanceInfoFromConnectedPhone(subscriber.instance_name);
                             return instanceInfo ? <InstanceBadge instance={instanceInfo} size="sm" /> : null;
                           })()}
                           {online && (
@@ -1739,7 +1742,7 @@ const ManyChatInboxContent = () => {
                   </h3>
                   {/* Instance badge */}
                   {(() => {
-                    const instanceInfo = getInstanceInfoFromName(selectedSubscriber.instance_name);
+                    const instanceInfo = getInstanceInfoFromConnectedPhone(selectedSubscriber.instance_name);
                     return instanceInfo ? <InstanceBadge instance={instanceInfo} size="md" /> : null;
                   })()}
                 </div>

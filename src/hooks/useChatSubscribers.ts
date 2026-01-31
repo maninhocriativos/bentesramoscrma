@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { getInstanceFromMetadata } from '@/lib/instanceUtils';
+
 
 export interface ChatSubscriber {
   id: string;
@@ -76,9 +76,9 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
             const leadId = msg.lead_id as string | null;
             if (!leadId || instanceByLeadId.has(leadId)) continue;
 
-            const info = getInstanceFromMetadata(msg.metadata);
-            const instanceName = info?.name || (msg.metadata as any)?.instance_name;
-            if (instanceName) instanceByLeadId.set(leadId, instanceName);
+            // Usar connectedPhone diretamente - é mais confiável que instance_name
+            const connectedPhone = (msg.metadata as any)?.original?.connectedPhone;
+            if (connectedPhone) instanceByLeadId.set(leadId, connectedPhone);
           }
         }
       }
@@ -97,9 +97,9 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
             const sid = msg.subscriber_id as string;
             if (!sid || instanceBySubscriberId.has(sid)) continue;
 
-            const info = getInstanceFromMetadata(msg.metadata);
-            const instanceName = info?.name || (msg.metadata as any)?.instance_name;
-            if (instanceName) instanceBySubscriberId.set(sid, instanceName);
+            // Usar connectedPhone diretamente - é mais confiável que instance_name
+            const connectedPhone = (msg.metadata as any)?.original?.connectedPhone;
+            if (connectedPhone) instanceBySubscriberId.set(sid, connectedPhone);
           }
         }
       }
