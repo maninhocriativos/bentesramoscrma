@@ -5,6 +5,7 @@ import { useLeads } from '@/hooks/useLeads';
 import { useToast } from '@/hooks/use-toast';
 import { useIsaInsights } from '@/hooks/useIsaInsights';
 import { useLeadExtras } from '@/hooks/useLeadExtras';
+import { useMetaCapi } from '@/hooks/useMetaCapi';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -27,6 +28,7 @@ const STATUSES: LeadStatus[] = [
 export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
   const { updateLeadStatus } = useLeads();
   const { toast } = useToast();
+  const { sendConversionEvent } = useMetaCapi();
   const [draggedLead, setDraggedLead] = useState<Lead | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<LeadStatus | null>(null);
   
@@ -105,11 +107,22 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
           title: 'Lead movido',
           description: `${draggedLead.nome || 'Lead'} → ${status}`,
         });
+
+        // Enviar evento de conversão para Meta CAPI quando lead vai para "Ganho"
+        if (status === 'Ganho') {
+          console.log('[Meta CAPI] Lead ganho - enviando evento de conversão');
+          sendConversionEvent(draggedLead.id, {
+            email: draggedLead.email,
+            phone: draggedLead.telefone,
+            facebook_lead_id: draggedLead.facebook_lead_id,
+            valor_causa: draggedLead.valor_causa
+          });
+        }
       }
     }
     
     setDraggedLead(null);
-  }, [draggedLead, updateLeadStatus, toast]);
+  }, [draggedLead, updateLeadStatus, toast, sendConversionEvent]);
 
   return (
     <div className="relative w-full h-full">

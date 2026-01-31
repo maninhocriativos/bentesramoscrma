@@ -1138,6 +1138,7 @@ export type Database = {
           email: string | null
           endereco: string | null
           estado_civil: string | null
+          facebook_lead_id: string | null
           fonte_trafego: string | null
           id: string
           is_lost: boolean | null
@@ -1177,6 +1178,7 @@ export type Database = {
           email?: string | null
           endereco?: string | null
           estado_civil?: string | null
+          facebook_lead_id?: string | null
           fonte_trafego?: string | null
           id?: string
           is_lost?: boolean | null
@@ -1216,6 +1218,7 @@ export type Database = {
           email?: string | null
           endereco?: string | null
           estado_civil?: string | null
+          facebook_lead_id?: string | null
           fonte_trafego?: string | null
           id?: string
           is_lost?: boolean | null
