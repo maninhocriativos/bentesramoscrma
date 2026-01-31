@@ -145,6 +145,7 @@ serve(async (req) => {
     let subscriberFoto: string | undefined;
     let telefone: string | undefined;
     let email: string | undefined;
+    let facebookLeadId: string | undefined;
     let messageContent: string | undefined;
     let direcao = 'entrada';
     let metadata: Record<string, unknown> = {};
@@ -191,6 +192,17 @@ serve(async (req) => {
       subscriberFoto = (subscriber.profile_pic || subscriber.picture || subscriber.avatar) as string | undefined;
       messageContent = (cleanBrackets(last_input_text) || cleanBrackets(message?.text) || cleanBrackets(message?.content)) as string | undefined;
       
+      // Extrair facebook_lead_id para atribuição de conversões (Meta CAPI)
+      facebookLeadId = (cleanBrackets(payload.facebook_lead_id) || 
+        cleanBrackets(payload.fb_lead_id) || 
+        cleanBrackets(payload.lead_id) ||
+        cleanBrackets(custom_fields?.facebook_lead_id) ||
+        cleanBrackets(custom_fields?.fb_lead_id)) as string | undefined;
+      
+      if (facebookLeadId) {
+        console.log('📊 Facebook Lead ID capturado:', facebookLeadId);
+      }
+      
       metadata = {
         page_id,
         custom_fields,
@@ -198,6 +210,7 @@ serve(async (req) => {
         ig_id: subscriber.ig_id,
         psid: subscriber.psid,
         wa_id: subscriber.wa_id,
+        facebook_lead_id: facebookLeadId,
         source_format: 'manychat_standard',
       };
       console.log('📋 Formato padrão ManyChat detectado');
@@ -330,6 +343,7 @@ serve(async (req) => {
             nome: nomeDoLead,
             telefone: telefone || null,
             email: email || null,
+            facebook_lead_id: facebookLeadId || null,
             status: 'Lead Frio',
             origem: origem,
             resumo_ia: `Lead criado automaticamente via ${origem}. Primeiro contato em ${new Date().toLocaleDateString('pt-BR')}.`,

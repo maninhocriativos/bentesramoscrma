@@ -221,6 +221,17 @@ serve(async (req: Request) => {
       const emailRaw = body.email || body.subscriber?.email;
       const email = cleanValue(emailRaw);
       
+      // Extrair facebook_lead_id para atribuição de conversões (Meta CAPI)
+      // O ManyChat envia isso quando o lead vem de Facebook Lead Ads
+      const facebookLeadIdRaw = body.facebook_lead_id || body.fb_lead_id || 
+        body.lead_id || body.subscriber?.facebook_lead_id || 
+        body.custom_fields?.facebook_lead_id || body.custom_fields?.fb_lead_id;
+      const facebookLeadId = cleanValue(facebookLeadIdRaw);
+      
+      if (facebookLeadId) {
+        console.log('[API-HUB] 📊 Facebook Lead ID capturado:', facebookLeadId);
+      }
+      
       const mensagemRaw = body.last_input_text || body.text || body.message || body.mensagem;
       const mensagem = cleanValue(mensagemRaw);
 
@@ -345,6 +356,7 @@ serve(async (req: Request) => {
               nome: nomeDoLead,
               telefone: telefone || null,
               email: email || null,
+              facebook_lead_id: facebookLeadId || null,
               status: 'Lead Frio',
               origem: origem,
               resumo_ia: `Lead criado automaticamente via ${origem}. Primeiro contato em ${new Date().toLocaleDateString('pt-BR')}.`,
