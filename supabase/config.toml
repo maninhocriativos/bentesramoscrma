@@ -104,3 +104,6 @@ verify_jwt = false
 
 [functions.send-meta-event]
 verify_jwt = false
+
+[functions.facebook-leadads]
+verify_jwt = false
