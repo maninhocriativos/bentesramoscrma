@@ -10,15 +10,19 @@ export interface InstanceInfo {
 
 // Known phone numbers mapped to instances
 const KNOWN_INSTANCES: Record<string, InstanceInfo> = {
-  // Tráfego - Bentes Ramos-2
+  // Tráfego - Bentes Ramos-2 (92 98588-8190)
+  '559285888190': { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' },
   '5592985888190': { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' },
   '92985888190': { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' },
-  '985888190': { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' },
+  '9285888190': { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' },
+  '85888190': { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' },
   
-  // Bentes Ramos Antigo
+  // Bentes Ramos Antigo (92 99160-4348)
+  '559291604348': { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' },
   '5592991604348': { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' },
   '92991604348': { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' },
-  '991604348': { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' },
+  '9291604348': { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' },
+  '91604348': { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' },
 };
 
 /**
