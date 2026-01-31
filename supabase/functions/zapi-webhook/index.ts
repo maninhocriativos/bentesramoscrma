@@ -88,13 +88,27 @@ function detectTrafficSource(body: any, messageContent?: string): TrafficSourceR
   
   // MÉTODO 2: Detecção por conteúdo da mensagem (mensagem padrão do anúncio)
   // "Quero saber se tenho dinheiro a receber."
+  // Este é o texto enviado automaticamente quando o usuário clica no anúncio
   if (messageContent) {
     const normalizedMessage = messageContent.toLowerCase().trim().replace(/[.!?]+$/, '');
     
-    if (normalizedMessage.includes(TRAFFIC_MESSAGE_PATTERN)) {
+    // Verificar padrão exato da mensagem de tráfego
+    const isTrafficMessage = normalizedMessage.includes(TRAFFIC_MESSAGE_PATTERN);
+    
+    // TAMBÉM detectar variações comuns da mensagem do anúncio
+    const trafficVariations = [
+      'quero saber se tenho dinheiro',
+      'tenho dinheiro a receber',
+      'dinheiro a receber',
+      'quero saber sobre dinheiro'
+    ];
+    const isTrafficVariation = trafficVariations.some(v => normalizedMessage.includes(v));
+    
+    if (isTrafficMessage || isTrafficVariation) {
       console.log('[Traffic Detection] ✅ DETECTED PAID TRAFFIC via MESSAGE CONTENT:', {
         message: messageContent.substring(0, 60),
-        pattern: TRAFFIC_MESSAGE_PATTERN
+        pattern: TRAFFIC_MESSAGE_PATTERN,
+        matchedVariation: isTrafficVariation
       });
       
       return {
@@ -111,7 +125,7 @@ function detectTrafficSource(body: any, messageContent?: string): TrafficSourceR
     }
   }
   
-  console.log('[Traffic Detection] No paid traffic markers found');
+  console.log('[Traffic Detection] No paid traffic markers found, classifying as direct');
   return { isTraffic: false, source: null, detectionMethod: null, adData: null };
 }
 
@@ -202,11 +216,13 @@ serve(async (req: Request) => {
     }
 
     // Buscar ou criar lead pelo telefone (PASSANDO DADOS DE TRÁFEGO)
-    // NOTA: Isa só responde leads de TRÁFEGO PAGO (detectado via metadados do anúncio)
+    // NOTA: Isa responde leads de TRÁFEGO PAGO (detectado via metadados do anúncio OU mensagem padrão)
     const { leadId, isNewLead } = await findOrCreateLead(supabase, normalized, trafficSource);
 
-    // Se lead já existia e detectamos tráfego pago (via metadados), atualizar origem
+    // Se lead já existia e detectamos tráfego pago (via metadados OU mensagem), atualizar origem
+    // IMPORTANTE: Isso garante que leads criados antes da detecção de tráfego sejam atualizados
     if (leadId && !isNewLead && trafficSource.isTraffic) {
+      console.log(`[Z-API Webhook] 🔄 Existing lead detected with traffic source, updating...`);
       await updateLeadTrafficSource(supabase, leadId, trafficSource);
     }
 
@@ -821,13 +837,13 @@ async function findOrCreateLead(
   return { leadId: newLead.id, isNewLead: true };
 }
 
-// Atualizar lead existente se detectarmos tráfego pago (via metadados do anúncio)
+// Atualizar lead existente se detectarmos tráfego pago (via metadados do anúncio OU mensagem)
 async function updateLeadTrafficSource(
   supabase: any,
   leadId: string,
   trafficSource: TrafficSourceResult
 ): Promise<void> {
-  // Só atualiza se tiver tráfego detectado via metadados
+  // Só atualiza se tiver tráfego detectado
   if (!trafficSource.isTraffic) return;
   
   // Verificar se lead ainda está como 'indefinido' ou 'whatsapp_direto'
@@ -839,7 +855,7 @@ async function updateLeadTrafficSource(
   
   // Atualizar se não é tráfego ainda (indefinido ou whatsapp_direto)
   if (lead && lead.tipo_origem !== 'trafego') {
-    console.log(`[Z-API Webhook] 🔄 Updating existing lead ${leadId} with traffic source from ad metadata`);
+    console.log(`[Z-API Webhook] 🔄 Updating existing lead ${leadId} with traffic source (method: ${trafficSource.detectionMethod})`);
     
     const fonteTrafego = trafficSource.source || 'meta_ads';
     
@@ -853,16 +869,49 @@ async function updateLeadTrafficSource(
       })
       .eq('id', leadId);
     
+    // Também inscrever no traffic_followups se não estiver
+    const { data: existingFollowup } = await supabase
+      .from('traffic_followups')
+      .select('id')
+      .eq('lead_id', leadId)
+      .maybeSingle();
+    
+    if (!existingFollowup) {
+      const { data: leadData } = await supabase
+        .from('leads_juridicos')
+        .select('telefone')
+        .eq('id', leadId)
+        .single();
+      
+      if (leadData?.telefone) {
+        const firstStageDelay = 3; // 3 minutos para o Menu de Triagem
+        const nextMessageAt = new Date(Date.now() + firstStageDelay * 60 * 1000);
+        
+        await supabase.from('traffic_followups').insert({
+          lead_id: leadId,
+          subscriber_id: gerarSubscriberId(leadData.telefone),
+          telefone: normalizePhone(leadData.telefone),
+          status: 'new',
+          automation_active: true,
+          current_stage: null,
+          next_message_at: nextMessageAt.toISOString()
+        });
+        
+        console.log(`[Z-API Webhook] 📊 Existing lead ${leadId} enrolled in traffic followup`);
+      }
+    }
+    
     // Registrar evento de atualização
     await supabase.from('system_events').insert({
       tipo: 'atribuicao',
-      fonte: 'meta_ads',
+      fonte: trafficSource.detectionMethod === 'message_content' ? 'message_detection' : 'meta_ads',
       acao: 'lead_atribuido_trafego',
       lead_id: leadId,
       dados: {
         previous_tipo_origem: lead.tipo_origem,
         new_tipo_origem: 'trafego',
         fonte_trafego: fonteTrafego,
+        detection_method: trafficSource.detectionMethod,
         ad_id: trafficSource.adData?.adId,
         campaign: trafficSource.adData?.campaignName,
         ctwa_clid: trafficSource.adData?.ctwaClid
@@ -870,6 +919,8 @@ async function updateLeadTrafficSource(
     });
     
     console.log(`[Z-API Webhook] ✅ Lead ${leadId} updated to traffic source: ${fonteTrafego}`);
+  } else if (lead?.tipo_origem === 'trafego') {
+    console.log(`[Z-API Webhook] Lead ${leadId} already marked as traffic, no update needed`);
   }
 }
 
