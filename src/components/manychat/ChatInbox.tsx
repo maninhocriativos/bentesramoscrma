@@ -1663,23 +1663,27 @@ const ManyChatInboxContent = () => {
               {filteredSubscribers.map((subscriber) => {
                 const isActive = selectedSubscriber?.id === subscriber.id;
                 const online = isOnline(subscriber.subscriber_id);
+                const hasUnread = unreadCounts.get(subscriber.subscriber_id);
+                const instanceInfo = getInstanceInfoFromConnectedPhone(subscriber.instance_name);
+                const subscriberTags = getSubscriberTags(subscriber.subscriber_id);
                 
                 return (
                   <div
                     key={subscriber.id}
                     onClick={() => setSelectedSubscriber(subscriber)}
-                    className={`flex items-center gap-3 px-3 py-3 cursor-pointer transition-all ${themeClasses.hover} ${
+                    className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-all border-b ${themeClasses.border} ${themeClasses.hover} ${
                       isActive ? themeClasses.active : ''
                     } ${online ? 'border-l-2 border-l-emerald-500' : ''}`}
                   >
-                    <div className="relative">
-                      <Avatar className="h-12 w-12 shrink-0 ring-2 ring-offset-2 ring-offset-transparent ring-transparent">
+                    {/* Avatar */}
+                    <div className="relative shrink-0 mt-0.5">
+                      <Avatar className="h-12 w-12">
                         <AvatarImage src={subscriber.foto} />
                         <AvatarFallback className="bg-gradient-to-br from-[#00A884] to-[#008069] text-white text-base font-medium">
                           {getInitials(subscriber)}
                         </AvatarFallback>
                       </Avatar>
-                      {/* Online indicator overlay */}
+                      {/* Online indicator */}
                       {online && (
                         <span className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-emerald-500 border-2 border-white dark:border-[#111B21] flex items-center justify-center">
                           <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
@@ -1693,49 +1697,48 @@ const ManyChatInboxContent = () => {
                       )}
                     </div>
                     
-                    <div className={`flex-1 min-w-0 border-b ${themeClasses.border} pb-3`}>
-                      <div className="flex items-center justify-between mb-0.5">
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      {/* Linha 1: Nome + Timestamp */}
+                      <div className="flex items-center justify-between gap-2 mb-1">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <ChannelIcon canal={subscriber.canal} size="sm" />
-                          <span className={`font-medium text-[15px] ${unreadCounts.get(subscriber.subscriber_id) ? 'text-white' : themeClasses.headerText} truncate`}>
+                          <span className={`font-medium text-[15px] truncate ${hasUnread ? 'text-white' : themeClasses.headerText}`}>
                             {getDisplayName(subscriber)}
                           </span>
+                        </div>
+                        <span className={`text-[11px] shrink-0 ${hasUnread ? 'text-[#25D366] font-semibold' : themeClasses.secondaryText}`}>
+                          {subscriber.ultima_interacao && formatLastMessageTime(subscriber.ultima_interacao)}
+                        </span>
+                      </div>
+                      
+                      {/* Linha 2: Badges + Unread count */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                           {/* Instance badge */}
-                          {(() => {
-                            const instanceInfo = getInstanceInfoFromConnectedPhone(subscriber.instance_name);
-                            return instanceInfo ? <InstanceBadge instance={instanceInfo} size="sm" /> : null;
-                          })()}
+                          {instanceInfo && <InstanceBadge instance={instanceInfo} size="sm" />}
+                          {/* Subscriber tags */}
+                          {subscriberTags.slice(0, 2).map((st) => (
+                            st.tag && <TagBadge key={st.id} tag={st.tag} size="sm" />
+                          ))}
+                          {subscriberTags.length > 2 && (
+                            <span className={`text-[10px] ${themeClasses.secondaryText}`}>
+                              +{subscriberTags.length - 2}
+                            </span>
+                          )}
                           {online && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-medium">
                               online
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 shrink-0 ml-2">
-                          <span className={`text-[11px] ${unreadCounts.get(subscriber.subscriber_id) ? 'text-[#25D366] font-semibold' : themeClasses.secondaryText}`}>
-                            {subscriber.ultima_interacao && formatLastMessageTime(subscriber.ultima_interacao)}
+                        {/* Unread badge */}
+                        {hasUnread ? (
+                          <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+                            {hasUnread}
                           </span>
-                          {/* Badge de mensagens não lidas */}
-                          {unreadCounts.get(subscriber.subscriber_id) ? (
-                            <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center">
-                              {unreadCounts.get(subscriber.subscriber_id)}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                      {/* Tags + Última mensagem */}
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {unreadCounts.get(subscriber.subscriber_id) ? null : (
+                        ) : (
                           <CheckCheck className="h-4 w-4 text-[#53BDEB] shrink-0" />
-                        )}
-                        {/* Subscriber tags */}
-                        {getSubscriberTags(subscriber.subscriber_id).slice(0, 2).map((st) => (
-                          st.tag && <TagBadge key={st.id} tag={st.tag} size="sm" />
-                        ))}
-                        {getSubscriberTags(subscriber.subscriber_id).length > 2 && (
-                          <span className={`text-[10px] ${themeClasses.secondaryText}`}>
-                            +{getSubscriberTags(subscriber.subscriber_id).length - 2}
-                          </span>
                         )}
                       </div>
                     </div>
