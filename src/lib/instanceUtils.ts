@@ -45,6 +45,15 @@ export function getInstanceFromPhone(phone?: string | null): InstanceInfo | null
 export function getInstanceFromMetadata(metadata?: any): InstanceInfo | null {
   if (!metadata) return null;
   
+  // Z-API (ReceivedCallback) costuma trazer o número conectado (o nosso número)
+  // como `original.connectedPhone`. Esse é o sinal mais confiável para definir
+  // qual instância recebeu a mensagem.
+  const connectedPhone = metadata?.original?.connectedPhone;
+  if (connectedPhone) {
+    const fromConnected = getInstanceFromPhone(connectedPhone);
+    if (fromConnected) return fromConnected;
+  }
+
   // Z-API includes instance info in metadata
   const instancePhone = metadata?.instance_phone || 
                         metadata?.original?.instance_phone ||

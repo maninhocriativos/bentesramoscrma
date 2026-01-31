@@ -16,7 +16,7 @@ import { TeamPresencePanel } from './TeamPresencePanel';
 import { ConversationAssignmentMenu } from './ConversationAssignmentMenu';
 import LeadContextPanel from './LeadContextPanel';
 import { InstanceBadge } from '@/components/chat/InstanceBadge';
-import { InstanceInfo } from '@/lib/instanceUtils';
+import { InstanceInfo, getInstanceFromMetadata } from '@/lib/instanceUtils';
 import { 
   Send, 
   Search, 
@@ -519,26 +519,50 @@ const ManyChatInboxContent = () => {
         }
       }
       
-      // Buscar instance_name das mensagens mais recentes de cada subscriber
+      // Detectar instância a partir do metadata da mensagem mais recente.
+      // Preferir `lead_id` (histórico unificado), pois `subscriber_id` pode variar (zapi_/sem 55 etc).
       const subscriberIds = rawSubscribers.map(s => s.subscriber_id);
-      const instanceMap = new Map<string, string>();
-      
-      if (subscriberIds.length > 0) {
-        const { data: messagesData } = await supabase
+      const instanceByLeadId = new Map<string, string>();
+      const instanceBySubscriberId = new Map<string, string>();
+
+      // 1) Por lead_id
+      if (leadIds.length > 0) {
+        const { data: messagesByLead } = await supabase
           .from('manychat_mensagens')
-          .select('subscriber_id, metadata')
+          .select('lead_id, metadata, created_at')
+          .in('lead_id', leadIds)
+          .order('created_at', { ascending: false })
+          .limit(2000);
+
+        if (messagesByLead) {
+          for (const msg of messagesByLead as any[]) {
+            const lid = msg.lead_id as string | null;
+            if (!lid || instanceByLeadId.has(lid)) continue;
+
+            const info = getInstanceFromMetadata(msg.metadata);
+            const instanceName = info?.name || (msg.metadata as any)?.instance_name;
+            if (instanceName) instanceByLeadId.set(lid, instanceName);
+          }
+        }
+      }
+
+      // 2) Fallback por subscriber_id
+      if (subscriberIds.length > 0) {
+        const { data: messagesBySubscriber } = await supabase
+          .from('manychat_mensagens')
+          .select('subscriber_id, metadata, created_at')
           .in('subscriber_id', subscriberIds)
-          .not('metadata->instance_name', 'is', null)
-          .order('created_at', { ascending: false });
-        
-        if (messagesData) {
-          for (const msg of messagesData) {
-            if (!instanceMap.has(msg.subscriber_id)) {
-              const instanceName = (msg.metadata as any)?.instance_name;
-              if (instanceName) {
-                instanceMap.set(msg.subscriber_id, instanceName);
-              }
-            }
+          .order('created_at', { ascending: false })
+          .limit(2000);
+
+        if (messagesBySubscriber) {
+          for (const msg of messagesBySubscriber as any[]) {
+            const sid = msg.subscriber_id as string;
+            if (!sid || instanceBySubscriberId.has(sid)) continue;
+
+            const info = getInstanceFromMetadata(msg.metadata);
+            const instanceName = info?.name || (msg.metadata as any)?.instance_name;
+            if (instanceName) instanceBySubscriberId.set(sid, instanceName);
           }
         }
       }
@@ -551,10 +575,10 @@ const ManyChatInboxContent = () => {
         if (sub.telefone === '{{wa_id}}') continue;
         
         // Adicionar tipo_origem do lead e instance_name
-        const subWithOrigem = {
+          const subWithOrigem = {
           ...sub,
           lead_tipo_origem: sub.lead_id ? leadsMap.get(sub.lead_id) : undefined,
-          instance_name: instanceMap.get(sub.subscriber_id) || undefined
+            instance_name: (sub.lead_id ? instanceByLeadId.get(sub.lead_id) : undefined) || instanceBySubscriberId.get(sub.subscriber_id) || undefined
         };
         
         // Normalize phone for deduplication key
@@ -593,6 +617,12 @@ const ManyChatInboxContent = () => {
       
       console.log('[loadSubscribers] Original:', rawSubscribers.length, 'Deduplicated:', uniqueSubscribers.length);
       setSubscribers(uniqueSubscribers);
+
+      // Se a conversa atual já está aberta, re-hidratar com os campos enriquecidos (ex: instance_name)
+      if (selectedSubscriber) {
+        const refreshedSelected = uniqueSubscribers.find(s => s.id === selectedSubscriber.id || s.subscriber_id === selectedSubscriber.subscriber_id);
+        if (refreshedSelected) setSelectedSubscriber(refreshedSelected);
+      }
     } catch (error) {
       console.error('Erro ao carregar subscribers:', error);
     } finally {
@@ -1364,7 +1394,7 @@ const ManyChatInboxContent = () => {
             onClick={() => window.open(urlCandidate, '_blank')}
           />
           {caption && (
-            <p className="whitespace-pre-wrap break-words text-[13px] leading-[18px] text-inherit opacity-90">
+            <p className="whitespace-pre-wrap break-words text-[13px] leading-[18px] text-inherit opacity-90 select-text cursor-text">
               {caption}
             </p>
           )}
@@ -1457,7 +1487,11 @@ const ManyChatInboxContent = () => {
         </div>
       );
     }
-    return <p className="whitespace-pre-wrap break-words text-[14.2px] leading-[19px] text-inherit">{content}</p>;
+    return (
+      <p className="whitespace-pre-wrap break-words text-[14.2px] leading-[19px] text-inherit select-text cursor-text">
+        {content}
+      </p>
+    );
   };
 
   return (
@@ -1854,7 +1888,7 @@ const ManyChatInboxContent = () => {
                         )}
                         <div className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'} mb-[3px]`}>
                           <div
-                            className={`relative max-w-[85%] md:max-w-[65%] rounded-xl px-3 pt-2 pb-2 shadow-md transition-all hover:shadow-lg ${
+                            className={`relative max-w-[85%] md:max-w-[65%] rounded-xl px-3 pt-2 pb-2 shadow-md transition-all hover:shadow-lg select-text ${
                               isOutgoing ? themeClasses.messageSent : themeClasses.messageReceived
                             }`}
                             style={{
