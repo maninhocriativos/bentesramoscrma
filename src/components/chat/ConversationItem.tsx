@@ -21,17 +21,20 @@ interface ConversationItemProps {
   };
 }
 
-// Map instance names from DB to InstanceInfo
-function getInstanceInfoFromName(instanceName?: string): InstanceInfo | null {
-  if (!instanceName) return null;
+// Map connected phone from DB to InstanceInfo
+// The instance_name in DB is unreliable - we use connectedPhone instead
+function getInstanceInfoFromConnectedPhone(connectedPhone?: string): InstanceInfo | null {
+  if (!connectedPhone) return null;
   
-  const name = instanceName.toLowerCase();
+  const phone = connectedPhone.replace(/\D/g, '');
   
-  if (name.includes('bentes ramos-2') || name.includes('trafego') || name.includes('tráfego')) {
+  // Tráfego instance: 92 98588-8190
+  if (phone.includes('985888190') || phone.includes('5592985888190')) {
     return { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' };
   }
   
-  if (name.includes('bentes ramos') && !name.includes('-2')) {
+  // Bentes Ramos antigo: 92 99160-4348
+  if (phone.includes('991604348') || phone.includes('5592991604348')) {
     return { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' };
   }
   
@@ -49,8 +52,8 @@ export function ConversationItem({
   const displayName = getDisplayName(subscriber);
   const initials = getInitials(subscriber);
   
-  // Detect which instance this subscriber belongs to (from message metadata)
-  const instanceInfo = getInstanceInfoFromName(subscriber.instance_name);
+  // Detect which instance this subscriber belongs to (from connectedPhone in metadata)
+  const instanceInfo = getInstanceInfoFromConnectedPhone(subscriber.instance_name);
 
   return (
     <div
