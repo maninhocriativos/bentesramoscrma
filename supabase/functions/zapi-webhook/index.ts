@@ -17,7 +17,7 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 interface TrafficSourceResult {
   isTraffic: boolean;
   source: string | null;
-  detectionMethod: 'ctwa_metadata' | 'message_content' | null;
+  detectionMethod: 'ctwa_metadata' | 'message_content' | 'instance_traffic' | null;
   adData: {
     adContext: any;
     ctwaClid: string | null;
@@ -29,7 +29,47 @@ interface TrafficSourceResult {
 // Mensagem padrão que vem do anúncio Click to WhatsApp
 const TRAFFIC_MESSAGE_PATTERN = 'quero saber se tenho dinheiro a receber';
 
-function detectTrafficSource(body: any, messageContent?: string): TrafficSourceResult {
+// ============================================
+// INSTÂNCIAS DEDICADAS A TRÁFEGO
+// Qualquer mensagem recebida nesses números é automaticamente classificada como tráfego
+// ============================================
+const TRAFFIC_INSTANCE_PHONES = [
+  '5592985888190',
+  '92985888190',
+  '985888190'
+];
+
+function detectTrafficSource(body: any, messageContent?: string, instancePhone?: string | null): TrafficSourceResult {
+  // ============================================
+  // MÉTODO 0: DETECÇÃO POR INSTÂNCIA DE TRÁFEGO
+  // Se a mensagem chegou numa instância dedicada a tráfego, é automaticamente tráfego
+  // ============================================
+  if (instancePhone) {
+    const cleanInstancePhone = instancePhone.replace(/\D/g, '');
+    const isTrafficInstance = TRAFFIC_INSTANCE_PHONES.some(phone => 
+      cleanInstancePhone === phone || cleanInstancePhone.endsWith(phone)
+    );
+    
+    if (isTrafficInstance) {
+      console.log('[Traffic Detection] ✅ DETECTED PAID TRAFFIC via TRAFFIC INSTANCE:', {
+        instancePhone,
+        source: 'meta_ads'
+      });
+      
+      return {
+        isTraffic: true,
+        source: 'meta_ads',
+        detectionMethod: 'instance_traffic',
+        adData: {
+          adContext: null,
+          ctwaClid: null,
+          adId: null,
+          campaignName: 'traffic_instance_auto'
+        }
+      };
+    }
+  }
+  
   // Verificar múltiplos formatos possíveis de metadados de anúncio
   // O WhatsApp/Z-API pode enviar em diferentes campos dependendo do provedor
   const adContext = body.context?.ad || body.referral || body.ad || body.contextInfo?.ad;
@@ -45,6 +85,7 @@ function detectTrafficSource(body: any, messageContent?: string): TrafficSourceR
     hasCtwaClid: !!ctwaClid,
     hasEntryPoint: !!entryPoint,
     hasSourceUrl: !!sourceUrl,
+    instancePhone,
     messageContent: messageContent?.substring(0, 50),
     bodyKeys: Object.keys(body).slice(0, 10)
   });
@@ -186,9 +227,10 @@ serve(async (req: Request) => {
     const normalized = normalizeZapiEvent(body);
     
     // ============================================
-    // DETECTAR TRÁFEGO PAGO (metadados OU mensagem do anúncio)
+    // DETECTAR TRÁFEGO PAGO (instância, metadados OU mensagem do anúncio)
     // ============================================
-    const trafficSource = detectTrafficSource(body, normalized.message || undefined);
+    const instancePhone = zapiConfig?.phone_number || null;
+    const trafficSource = detectTrafficSource(body, normalized.message || undefined, instancePhone);
     
     // IMPORTANTE: Ignorar mensagens de grupos - apenas conversas individuais
     if (normalized.isGroup) {
