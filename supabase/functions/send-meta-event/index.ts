@@ -50,6 +50,9 @@ serve(async (req) => {
   try {
     const PIXEL_ID = Deno.env.get('META_PIXEL_ID');
     const ACCESS_TOKEN = Deno.env.get('META_ACCESS_TOKEN');
+    // Nome do CRM exigido pelo guia de integração de CRM da Meta (lead_event_source)
+    // Pode ser sobrescrito via secret/env se você quiser personalizar.
+    const CRM_EVENT_SOURCE = Deno.env.get('META_LEAD_EVENT_SOURCE') || 'Bentes ramos-CRM';
 
     if (!PIXEL_ID || !ACCESS_TOKEN) {
       console.error('[Meta CAPI] Missing PIXEL_ID or ACCESS_TOKEN');
@@ -66,7 +69,9 @@ serve(async (req) => {
       phone, 
       event_name = 'Purchase', 
       value = 0,
-      status 
+      status,
+      // Opcional: permite enviar explícito do frontend, mas mantemos um default seguro
+      lead_event_source
     } = await req.json();
 
     console.log('[Meta CAPI] Received event request:', { 
@@ -128,7 +133,9 @@ serve(async (req) => {
           custom_data: {
             currency: 'BRL',
             value: parseFloat(value) || 0,
+            // Campos esperados no guia de CRM da Meta
             event_source: 'crm',
+            lead_event_source: (lead_event_source || CRM_EVENT_SOURCE),
             lead_status: status,
             internal_lead_id: lead_id
           }
