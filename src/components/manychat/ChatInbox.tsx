@@ -15,6 +15,8 @@ import { ChatThemeProvider, useChatTheme } from './ChatThemeProvider';
 import { TeamPresencePanel } from './TeamPresencePanel';
 import { ConversationAssignmentMenu } from './ConversationAssignmentMenu';
 import LeadContextPanel from './LeadContextPanel';
+import { InstanceBadge } from '@/components/chat/InstanceBadge';
+import { getInstanceFromPhone } from '@/lib/instanceUtils';
 import { 
   Send, 
   Search, 
@@ -1652,6 +1654,11 @@ const ManyChatInboxContent = () => {
                   <h3 className={`font-semibold text-[16px] ${themeClasses.headerText} truncate`}>
                     {getDisplayName(selectedSubscriber)}
                   </h3>
+                  {/* Instance badge */}
+                  {(() => {
+                    const instanceInfo = getInstanceFromPhone(selectedSubscriber.telefone);
+                    return instanceInfo ? <InstanceBadge instance={instanceInfo} size="md" /> : null;
+                  })()}
                 </div>
                 <div className="flex items-center gap-2">
                   <ActivityIndicator subscriber={selectedSubscriber} showText />
@@ -1912,10 +1919,25 @@ const ManyChatInboxContent = () => {
                   placeholder="Digite uma mensagem"
                   value={newMessage}
                   onChange={(e) => { setNewMessage(e.target.value); handleTyping(); }}
-                  onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && (selectedFile ? (selectedFile.type.startsWith('audio/') ? sendAudioFromPreview() : uploadAndSendFile()) : sendMessage())}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (selectedFile) {
+                        if (selectedFile.type.startsWith('audio/')) {
+                          sendAudioFromPreview();
+                        } else {
+                          uploadAndSendFile();
+                        }
+                      } else {
+                        sendMessage();
+                      }
+                    }
+                  }}
                   onPaste={(e) => {
                     const items = e.clipboardData?.items;
                     if (!items) return;
+                    
+                    // Check for images first
                     for (const item of Array.from(items)) {
                       if (item.type.startsWith('image/')) {
                         e.preventDefault();
@@ -1926,9 +1948,12 @@ const ManyChatInboxContent = () => {
                           setPreviewUrl(URL.createObjectURL(namedFile));
                           toast({ title: '📷 Imagem colada!', description: 'Pressione Enter para enviar' });
                         }
-                        break;
+                        return;
                       }
                     }
+                    
+                    // For text, let the default paste behavior work
+                    // The Input component handles Ctrl+V for text natively
                   }}
                   disabled={isSending || isRecording}
                   className={`h-[44px] rounded-xl ${themeClasses.input} border-0 text-[15px] focus-visible:ring-0 shadow-sm`}
