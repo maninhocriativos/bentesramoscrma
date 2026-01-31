@@ -341,6 +341,12 @@ serve(async (req: Request) => {
     // Isso garante que o chat vai mostrar a conversa
     console.log('[Z-API Webhook] Upserting subscriber:', subscriberId);
     
+    // Extrair connectedPhone para identificar a instância (usado para badges)
+    const connectedPhone = body.connectedPhone || 
+                           body.phone?.replace('@c.us', '') ||
+                           zapiConfig?.phone_number || 
+                           null;
+    
     const { error: subError } = await supabase
       .from('manychat_subscribers')
       .upsert({
@@ -350,7 +356,9 @@ serve(async (req: Request) => {
         canal: 'whatsapp',
         lead_id: leadId,
         ultima_interacao: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        // Salvar o número conectado para identificar a instância (badge Tráfego/Bentes Ramos)
+        instance_name: connectedPhone
       }, { 
         onConflict: 'subscriber_id',
         ignoreDuplicates: false 
