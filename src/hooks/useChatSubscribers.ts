@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { getInstanceFromMetadata } from '@/lib/instanceUtils';
 
 export interface ChatSubscriber {
   id: string;
@@ -47,42 +48,68 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
       
       const subs = (subsData as ChatSubscriber[]) || [];
       
-      // Get instance info from most recent message for each subscriber (in batches)
-      // We'll get the instance_name from the most recent message's metadata
-      if (subs.length > 0) {
-        const subscriberIds = subs.map(s => s.subscriber_id);
-        
-        // Get the most recent message for each subscriber to find instance_name
-        const { data: messagesData } = await supabase
+      // Enriquecer com instância a partir do metadata da mensagem mais recente.
+      // Importante: nem sempre `subscriber_id` bate (há variações zapi_/sem 55 etc),
+      // então usamos `lead_id` quando disponível.
+      if (subs.length === 0) {
+        setSubscribers(subs);
+        return;
+      }
+
+      const subscriberIds = subs.map(s => s.subscriber_id);
+      const leadIds = Array.from(new Set(subs.map(s => s.lead_id).filter(Boolean))) as string[];
+
+      const instanceByLeadId = new Map<string, string>();
+      const instanceBySubscriberId = new Map<string, string>();
+
+      // 1) Preferir lead_id (mais confiável)
+      if (leadIds.length > 0) {
+        const { data: byLeadMessages } = await supabase
           .from('manychat_mensagens')
-          .select('subscriber_id, metadata')
-          .in('subscriber_id', subscriberIds)
-          .not('metadata->instance_name', 'is', null)
-          .order('created_at', { ascending: false });
-        
-        // Create a map of subscriber_id -> instance_name (first occurrence = most recent)
-        const instanceMap = new Map<string, string>();
-        if (messagesData) {
-          for (const msg of messagesData) {
-            if (!instanceMap.has(msg.subscriber_id)) {
-              const instanceName = (msg.metadata as any)?.instance_name;
-              if (instanceName) {
-                instanceMap.set(msg.subscriber_id, instanceName);
-              }
-            }
+          .select('lead_id, metadata, created_at')
+          .in('lead_id', leadIds)
+          .order('created_at', { ascending: false })
+          .limit(2000);
+
+        if (byLeadMessages) {
+          for (const msg of byLeadMessages as any[]) {
+            const leadId = msg.lead_id as string | null;
+            if (!leadId || instanceByLeadId.has(leadId)) continue;
+
+            const info = getInstanceFromMetadata(msg.metadata);
+            const instanceName = info?.name || (msg.metadata as any)?.instance_name;
+            if (instanceName) instanceByLeadId.set(leadId, instanceName);
           }
         }
-        
-        // Enrich subscribers with instance info
-        const enrichedSubs = subs.map(sub => ({
-          ...sub,
-          instance_name: instanceMap.get(sub.subscriber_id) || undefined
-        }));
-        
-        setSubscribers(enrichedSubs);
-      } else {
-        setSubscribers(subs);
       }
+
+      // 2) Fallback por subscriber_id (quando não tem lead_id)
+      if (subscriberIds.length > 0) {
+        const { data: bySubscriberMessages } = await supabase
+          .from('manychat_mensagens')
+          .select('subscriber_id, metadata, created_at')
+          .in('subscriber_id', subscriberIds)
+          .order('created_at', { ascending: false })
+          .limit(2000);
+
+        if (bySubscriberMessages) {
+          for (const msg of bySubscriberMessages as any[]) {
+            const sid = msg.subscriber_id as string;
+            if (!sid || instanceBySubscriberId.has(sid)) continue;
+
+            const info = getInstanceFromMetadata(msg.metadata);
+            const instanceName = info?.name || (msg.metadata as any)?.instance_name;
+            if (instanceName) instanceBySubscriberId.set(sid, instanceName);
+          }
+        }
+      }
+
+      const enrichedSubs = subs.map(sub => ({
+        ...sub,
+        instance_name: (sub.lead_id ? instanceByLeadId.get(sub.lead_id) : undefined) || instanceBySubscriberId.get(sub.subscriber_id) || undefined,
+      }));
+
+      setSubscribers(enrichedSubs);
     } catch (error) {
       console.error('[useChatSubscribers] Erro ao carregar subscribers:', error);
     } finally {
