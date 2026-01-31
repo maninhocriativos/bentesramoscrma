@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useChatPresence } from '@/hooks/useChatPresence';
 import { useTeamPresence } from '@/hooks/useTeamPresence';
 import { useChatNotifications } from '@/hooks/useChatNotifications';
+import { useChatTags } from '@/hooks/useChatTags';
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
 import { ChatThemeProvider, useChatTheme } from './ChatThemeProvider';
@@ -16,6 +17,9 @@ import { TeamPresencePanel } from './TeamPresencePanel';
 import { ConversationAssignmentMenu } from './ConversationAssignmentMenu';
 import LeadContextPanel from './LeadContextPanel';
 import { InstanceBadge } from '@/components/chat/InstanceBadge';
+import { TagBadge } from '@/components/chat/TagBadge';
+import { TagSelector } from '@/components/chat/TagSelector';
+import { TagFilter } from '@/components/chat/TagFilter';
 import { InstanceInfo } from '@/lib/instanceUtils';
 import { 
   Send, 
@@ -132,10 +136,21 @@ const ManyChatInboxContent = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<ConversationFilter>('all');
   const [origemFilter, setOrigemFilter] = useState<OrigemFilter>('all');
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [pendingLeadId, setPendingLeadId] = useState<string | null>(null);
   const [showContextPanel, setShowContextPanel] = useState(false);
   const [showTeamPanel, setShowTeamPanel] = useState(false);
   const [isLoadingFullHistory, setIsLoadingFullHistory] = useState(false);
+  
+  // Tags hook
+  const {
+    tags: availableTags,
+    loadSubscriberTags,
+    getSubscriberTags,
+    addTagToSubscriber,
+    removeTagFromSubscriber,
+    createTag,
+  } = useChatTags();
   
   // Cache de mensagens por subscriber (evita recarregar ao trocar de conversa)
   const messagesCacheRef = useRef<Map<string, Message[]>>(new Map());
@@ -620,6 +635,12 @@ const ManyChatInboxContent = () => {
       
       console.log('[loadSubscribers] Original:', rawSubscribers.length, 'Deduplicated:', uniqueSubscribers.length);
       setSubscribers(uniqueSubscribers);
+      
+      // Carregar tags para os subscribers
+      const allSubscriberIds = uniqueSubscribers.map(s => s.subscriber_id);
+      if (allSubscriberIds.length > 0) {
+        loadSubscriberTags(allSubscriberIds);
+      }
 
       // Se a conversa atual já está aberta, re-hidratar com os campos enriquecidos (ex: instance_name)
       if (selectedSubscriber) {
@@ -1350,6 +1371,12 @@ const ManyChatInboxContent = () => {
       if (origemFilter === 'trafego') return sub.lead_tipo_origem === 'trafego';
       if (origemFilter === 'whatsapp_direto') return sub.lead_tipo_origem === 'whatsapp_direto';
       return true;
+    })
+    .filter(sub => {
+      // Filtro por tags
+      if (selectedTagIds.length === 0) return true;
+      const subTags = getSubscriberTags(sub.subscriber_id);
+      return selectedTagIds.every(tagId => subTags.some(st => st.tag_id === tagId));
     });
 
   const renderMessage = (message: Message) => {
@@ -1600,9 +1627,9 @@ const ManyChatInboxContent = () => {
           </div>
         </div>
 
-        {/* Filtros por Atendimento */}
+        {/* Filtros por Atendimento + Tags */}
         <div className={`px-3 py-2 ${themeClasses.sidebar} border-b ${themeClasses.border}`}>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {(['all', 'human', 'bot'] as ConversationFilter[]).map((filter) => (
               <button
                 key={filter}
@@ -1616,6 +1643,12 @@ const ManyChatInboxContent = () => {
                 {filter === 'all' ? 'Todos' : filter === 'human' ? '🙋 Humano' : '🤖 Isa'}
               </button>
             ))}
+            <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 mx-1" />
+            <TagFilter
+              availableTags={availableTags}
+              selectedTagIds={selectedTagIds}
+              onTagsChange={setSelectedTagIds}
+            />
           </div>
         </div>
 
@@ -1690,13 +1723,20 @@ const ManyChatInboxContent = () => {
                           ) : null}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      {/* Tags + Última mensagem */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         {unreadCounts.get(subscriber.subscriber_id) ? null : (
                           <CheckCheck className="h-4 w-4 text-[#53BDEB] shrink-0" />
                         )}
-                        <span className={`text-[13px] ${themeClasses.secondaryText} truncate flex-1`}>
-                          {subscriber.telefone || subscriber.canal}
-                        </span>
+                        {/* Subscriber tags */}
+                        {getSubscriberTags(subscriber.subscriber_id).slice(0, 2).map((st) => (
+                          st.tag && <TagBadge key={st.id} tag={st.tag} size="sm" />
+                        ))}
+                        {getSubscriberTags(subscriber.subscriber_id).length > 2 && (
+                          <span className={`text-[10px] ${themeClasses.secondaryText}`}>
+                            +{getSubscriberTags(subscriber.subscriber_id).length - 2}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1746,11 +1786,32 @@ const ManyChatInboxContent = () => {
                     return instanceInfo ? <InstanceBadge instance={instanceInfo} size="md" /> : null;
                   })()}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <ActivityIndicator subscriber={selectedSubscriber} showText />
                   {isTyping(selectedSubscriber.subscriber_id) && (
                     <span className="text-xs text-[#00A884] font-medium animate-pulse">digitando...</span>
                   )}
+                  {/* Tags do contato */}
+                  {getSubscriberTags(selectedSubscriber.subscriber_id).slice(0, 3).map((st) => (
+                    st.tag && (
+                      <TagBadge 
+                        key={st.id} 
+                        tag={st.tag} 
+                        reason={st.reason}
+                        size="sm" 
+                        showRemove 
+                        onRemove={() => removeTagFromSubscriber(selectedSubscriber.subscriber_id, st.tag_id)}
+                      />
+                    )
+                  ))}
+                  <TagSelector
+                    subscriberId={selectedSubscriber.subscriber_id}
+                    availableTags={availableTags}
+                    currentTags={getSubscriberTags(selectedSubscriber.subscriber_id)}
+                    onAddTag={(tagId, reason) => addTagToSubscriber(selectedSubscriber.subscriber_id, tagId, reason)}
+                    onRemoveTag={(tagId) => removeTagFromSubscriber(selectedSubscriber.subscriber_id, tagId)}
+                    onCreateTag={createTag}
+                  />
                 </div>
               </div>
               

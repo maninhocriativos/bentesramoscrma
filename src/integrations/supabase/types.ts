@@ -74,6 +74,39 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_tags: {
+        Row: {
+          category: string | null
+          color: string
+          created_at: string
+          id: string
+          is_system: boolean | null
+          name: string
+          requires_reason: boolean | null
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          color?: string
+          created_at?: string
+          id?: string
+          is_system?: boolean | null
+          name: string
+          requires_reason?: boolean | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          color?: string
+          created_at?: string
+          id?: string
+          is_system?: boolean | null
+          name?: string
+          requires_reason?: boolean | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       cnj_assuntos: {
         Row: {
           codigo: string
@@ -2073,6 +2106,41 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscriber_tags: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          id: string
+          reason: string | null
+          subscriber_id: string
+          tag_id: string
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          id?: string
+          reason?: string | null
+          subscriber_id: string
+          tag_id: string
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          id?: string
+          reason?: string | null
+          subscriber_id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriber_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "chat_tags"
             referencedColumns: ["id"]
           },
         ]
