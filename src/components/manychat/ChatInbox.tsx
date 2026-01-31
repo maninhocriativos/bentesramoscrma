@@ -1755,7 +1755,7 @@ const ManyChatInboxContent = () => {
         {selectedSubscriber ? (
           <>
             {/* Header do Chat */}
-            <div className={`h-[62px] px-4 flex items-center gap-3 ${themeClasses.header} border-b ${themeClasses.border}`}>
+            <div className={`min-h-[62px] px-4 py-2 flex items-start gap-3 ${themeClasses.header} border-b ${themeClasses.border}`}>
               <Button
                 variant="ghost"
                 size="icon"
@@ -1777,7 +1777,7 @@ const ManyChatInboxContent = () => {
                 )}
               </div>
               
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 pt-0.5">
                 <div className="flex items-center gap-2">
                   <ChannelIcon canal={selectedSubscriber.canal} size="md" />
                   <h3 className={`font-semibold text-[16px] ${themeClasses.headerText} truncate`}>
@@ -1789,7 +1789,7 @@ const ManyChatInboxContent = () => {
                     return instanceInfo ? <InstanceBadge instance={instanceInfo} size="md" /> : null;
                   })()}
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap mt-1">
                   <ActivityIndicator subscriber={selectedSubscriber} showText />
                   {isTyping(selectedSubscriber.subscriber_id) && (
                     <span className="text-xs text-[#00A884] font-medium animate-pulse">digitando...</span>
