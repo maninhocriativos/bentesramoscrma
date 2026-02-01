@@ -764,6 +764,70 @@ function normalizeZapiEvent(body: any): {
   };
 }
 
+// ============================================
+// BUSCAR DADOS DO FORMULÁRIO DO FACEBOOK LEAD ADS VIA API GRAPH
+// Quando detectamos CTWA, temos o sourceId que pode ser usado para buscar dados adicionais
+// ============================================
+async function fetchFacebookLeadData(sourceId: string | null): Promise<{
+  email: string | null;
+  phone: string | null;
+  name: string | null;
+} | null> {
+  if (!sourceId) return null;
+  
+  const accessToken = Deno.env.get('META_ACCESS_TOKEN');
+  if (!accessToken) {
+    console.log('[FB Lead Fetch] META_ACCESS_TOKEN not configured');
+    return null;
+  }
+  
+  try {
+    // O sourceId pode ser o ID do ad ou da lead_gen
+    // Tentamos buscar como lead primeiro
+    console.log('[FB Lead Fetch] Attempting to fetch lead data for sourceId:', sourceId);
+    
+    // Primeiro, tentar buscar leads recentes da página
+    // Nota: Isso requer permissões de leads_retrieval na página
+    const leadResponse = await fetch(
+      `https://graph.facebook.com/v20.0/${sourceId}?fields=id,field_data,created_time&access_token=${accessToken}`
+    );
+    
+    if (leadResponse.ok) {
+      const leadData = await leadResponse.json();
+      console.log('[FB Lead Fetch] Lead data found:', leadData);
+      
+      if (leadData.field_data) {
+        let email: string | null = null;
+        let phone: string | null = null;
+        let name: string | null = null;
+        
+        for (const field of leadData.field_data) {
+          const fieldName = field.name?.toLowerCase() || '';
+          const value = field.values?.[0] || null;
+          
+          if (fieldName.includes('email')) {
+            email = value;
+          } else if (fieldName.includes('phone') || fieldName.includes('telefone') || fieldName.includes('whatsapp')) {
+            phone = value;
+          } else if (fieldName.includes('name') || fieldName.includes('nome') || fieldName === 'full_name') {
+            name = value;
+          }
+        }
+        
+        return { email, phone, name };
+      }
+    } else {
+      const error = await leadResponse.json();
+      console.log('[FB Lead Fetch] Failed to fetch lead:', error?.error?.message || 'Unknown error');
+    }
+    
+    return null;
+  } catch (err) {
+    console.error('[FB Lead Fetch] Error fetching lead data:', err);
+    return null;
+  }
+}
+
 async function findOrCreateLead(
   supabase: any, 
   data: { phone: string | null; name: string | null },
@@ -776,13 +840,47 @@ async function findOrCreateLead(
   // Buscar lead existente
   const { data: existingLead } = await supabase
     .from('leads_juridicos')
-    .select('id')
+    .select('id, email, telefone')
     .ilike('telefone', `%${phoneSuffix}%`)
     .limit(1)
     .maybeSingle();
 
   if (existingLead) {
+    // Se temos dados de tráfego, tentar buscar email do Facebook
+    if (trafficSource.isTraffic && !existingLead.email) {
+      const sourceId = trafficSource.adData?.adId || null;
+      const fbData = await fetchFacebookLeadData(sourceId);
+      
+      if (fbData?.email) {
+        console.log('[Z-API Webhook] 📧 Updating lead with email from FB:', fbData.email);
+        await supabase
+          .from('leads_juridicos')
+          .update({ 
+            email: fbData.email.toLowerCase(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingLead.id);
+      }
+    }
+    
     return { leadId: existingLead.id, isNewLead: false };
+  }
+
+  // Se é tráfego, tentar buscar dados adicionais do Facebook antes de criar
+  let emailFromFb: string | null = null;
+  let phoneFromFb: string | null = null;
+  let nameFromFb: string | null = null;
+  
+  if (trafficSource.isTraffic) {
+    const sourceId = trafficSource.adData?.adId || null;
+    const fbData = await fetchFacebookLeadData(sourceId);
+    
+    if (fbData) {
+      emailFromFb = fbData.email;
+      phoneFromFb = fbData.phone;
+      nameFromFb = fbData.name;
+      console.log('[Z-API Webhook] 📊 FB Lead Data found:', { email: emailFromFb, phone: phoneFromFb, name: nameFromFb });
+    }
   }
 
   // Criar novo lead com detecção de tráfego
@@ -801,11 +899,15 @@ async function findOrCreateLead(
   // Determinar se é lead de tráfego (somente por metadados do anúncio)
   const isTrafficLead = trafficSource.isTraffic;
   
+  // Usar nome do FB se disponível, senão usar o do WhatsApp
+  const leadName = nameFromFb || data.name || `Contato ${data.phone}`;
+  
   const { data: newLead, error } = await supabase
     .from('leads_juridicos')
     .insert({
-      nome: data.name || `Contato ${data.phone}`,
+      nome: leadName,
       telefone: data.phone,
+      email: emailFromFb?.toLowerCase() || null, // Email do formulário do FB
       status: 'Lead Frio',
       lead_state: 'NEW',
       origem: isTrafficLead ? 'Tráfego Pago' : 'WhatsApp Z-API',
@@ -813,7 +915,7 @@ async function findOrCreateLead(
       canal_origem: canalOrigem,
       tipo_origem: tipoOrigem,
       resumo_ia: isTrafficLead 
-        ? `Lead de TRÁFEGO PAGO (${fonteTrafego}). Veio de anúncio Click to WhatsApp em ${new Date().toLocaleDateString('pt-BR')}.`
+        ? `Lead de TRÁFEGO PAGO (${fonteTrafego}). Veio de anúncio Click to WhatsApp em ${new Date().toLocaleDateString('pt-BR')}.${emailFromFb ? ` Email: ${emailFromFb}` : ''}`
         : `Lead criado automaticamente via Z-API (WhatsApp direto). Primeiro contato em ${new Date().toLocaleDateString('pt-BR')}.`
     })
     .select('id')
@@ -869,7 +971,8 @@ async function findOrCreateLead(
     lead_id: newLead.id,
     dados: {
       phone: data.phone,
-      name: data.name,
+      name: leadName,
+      email: emailFromFb,
       provider: 'zapi',
       fonte_trafego: fonteTrafego,
       canal_origem: canalOrigem,
@@ -882,7 +985,7 @@ async function findOrCreateLead(
     }
   });
 
-  console.log(`[Z-API Webhook] Created new lead: ${newLead.id} (tipo_origem: ${tipoOrigem}, fonte: ${fonteTrafego})`);
+  console.log(`[Z-API Webhook] Created new lead: ${newLead.id} (tipo_origem: ${tipoOrigem}, fonte: ${fonteTrafego}, email: ${emailFromFb || 'N/A'})`);
 
   return { leadId: newLead.id, isNewLead: true };
 }
