@@ -12,6 +12,26 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 // Facebook Webhook Verification Token (você define isso no Meta)
 const VERIFY_TOKEN = Deno.env.get('FB_LEADADS_VERIFY_TOKEN') || 'bentes_ramos_crm_2024';
 
+// Normalizar telefone para formato brasileiro
+function normalizePhone(phone: string | null): string | null {
+  if (!phone) return null;
+  
+  let cleaned = phone.replace(/\D/g, '');
+  if (cleaned.length === 0) return null;
+  
+  // Remover prefixo "p:" se existir
+  if (cleaned.startsWith('p')) {
+    cleaned = cleaned.substring(1);
+  }
+  
+  // Adicionar código do Brasil se necessário
+  if (cleaned.length === 10 || cleaned.length === 11) {
+    cleaned = '55' + cleaned;
+  }
+  
+  return cleaned;
+}
+
 serve(async (req) => {
   const url = new URL(req.url);
   
@@ -46,10 +66,198 @@ serve(async (req) => {
     }
 
     // ========================================
-    // POST: Receive Lead from Facebook
+    // POST: Receive Lead from Facebook OR Sync Request
     // ========================================
     if (req.method === 'POST') {
       const payload = await req.json();
+      
+      // ========================================
+      // ROTA DE SINCRONIZAÇÃO MANUAL
+      // Permite sincronizar leads do FB Lead Ads com CRM
+      // Envie: { action: 'sync', leads: [{ nome, email, telefone }] }
+      // ========================================
+      if (payload.action === 'sync' && Array.isArray(payload.leads)) {
+        console.log('[FB Lead Ads] 🔄 Manual sync request for', payload.leads.length, 'leads');
+        
+        const results = [];
+        
+        for (const fbLead of payload.leads) {
+          const nome = fbLead.nome || fbLead.name || fbLead.nome_completo || fbLead.full_name;
+          const email = fbLead.email?.toLowerCase();
+          const telefoneRaw = fbLead.telefone || fbLead.phone;
+          const telefone = normalizePhone(telefoneRaw);
+          
+          if (!nome && !email && !telefone) {
+            results.push({ success: false, error: 'Nenhum dado fornecido' });
+            continue;
+          }
+          
+          console.log('[FB Lead Ads] Processing:', { nome, email, telefone });
+          
+          // Buscar lead existente por telefone
+          let leadId: string | null = null;
+          let matchedBy: string | null = null;
+          
+          if (telefone) {
+            const phoneSuffix = telefone.slice(-9);
+            const { data: leadByPhone } = await supabase
+              .from('leads_juridicos')
+              .select('id, email, nome')
+              .ilike('telefone', `%${phoneSuffix}%`)
+              .maybeSingle();
+            
+            if (leadByPhone) {
+              leadId = leadByPhone.id;
+              matchedBy = 'telefone';
+              
+              // Atualizar email se não existir
+              if (email && !leadByPhone.email) {
+                await supabase
+                  .from('leads_juridicos')
+                  .update({ 
+                    email: email,
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('id', leadId);
+                console.log('[FB Lead Ads] ✅ Updated lead with email:', email);
+              }
+              
+              // Atualizar nome se genérico
+              if (nome && leadByPhone.nome && (
+                leadByPhone.nome.startsWith('Contato') || 
+                leadByPhone.nome === 'Desconhecido' ||
+                /^\d+$/.test(leadByPhone.nome)
+              )) {
+                await supabase
+                  .from('leads_juridicos')
+                  .update({ 
+                    nome: nome,
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('id', leadId);
+                console.log('[FB Lead Ads] ✅ Updated lead with name:', nome);
+              }
+            }
+          }
+          
+          // Buscar por email se não encontrou por telefone
+          if (!leadId && email) {
+            const { data: leadByEmail } = await supabase
+              .from('leads_juridicos')
+              .select('id')
+              .eq('email', email)
+              .maybeSingle();
+            
+            if (leadByEmail) {
+              leadId = leadByEmail.id;
+              matchedBy = 'email';
+              
+              // Atualizar telefone se não existir
+              if (telefone) {
+                const { data: currentLead } = await supabase
+                  .from('leads_juridicos')
+                  .select('telefone')
+                  .eq('id', leadId)
+                  .single();
+                
+                if (!currentLead?.telefone) {
+                  await supabase
+                    .from('leads_juridicos')
+                    .update({ 
+                      telefone: telefone,
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('id', leadId);
+                }
+              }
+            }
+          }
+          
+          // Buscar por nome (match parcial)
+          if (!leadId && nome) {
+            const { data: leadByName } = await supabase
+              .from('leads_juridicos')
+              .select('id, email, telefone')
+              .ilike('nome', `%${nome}%`)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            
+            if (leadByName) {
+              leadId = leadByName.id;
+              matchedBy = 'nome';
+              
+              // Atualizar dados que faltam
+              const updates: any = { updated_at: new Date().toISOString() };
+              if (email && !leadByName.email) updates.email = email;
+              if (telefone && !leadByName.telefone) updates.telefone = telefone;
+              
+              if (Object.keys(updates).length > 1) {
+                await supabase
+                  .from('leads_juridicos')
+                  .update(updates)
+                  .eq('id', leadId);
+              }
+            }
+          }
+          
+          // Se não encontrou, criar novo lead
+          if (!leadId) {
+            const { data: newLead, error: insertError } = await supabase
+              .from('leads_juridicos')
+              .insert({
+                nome: nome || 'Lead Facebook',
+                telefone: telefone || null,
+                email: email || null,
+                status: 'Lead Frio',
+                lead_state: 'NEW',
+                origem: 'Facebook',
+                tipo_origem: 'trafego',
+                fonte_trafego: 'facebook_lead_ads',
+                canal_origem: 'facebook',
+                resumo_ia: `Lead importado do Facebook Lead Ads em ${new Date().toLocaleDateString('pt-BR')}.`
+              })
+              .select('id')
+              .single();
+            
+            if (insertError) {
+              console.error('[FB Lead Ads] Error creating lead:', insertError);
+              results.push({ success: false, error: insertError.message, nome });
+              continue;
+            }
+            
+            leadId = newLead.id;
+            matchedBy = 'created';
+            console.log('[FB Lead Ads] ✅ Created new lead:', leadId);
+          }
+          
+          results.push({ 
+            success: true, 
+            lead_id: leadId, 
+            matched_by: matchedBy,
+            nome,
+            email,
+            telefone
+          });
+        }
+        
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            synced: results.filter(r => r.success).length,
+            failed: results.filter(r => !r.success).length,
+            results 
+          }),
+          { 
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+      
+      // ========================================
+      // WEBHOOK PADRÃO DO FACEBOOK LEAD ADS
+      // ========================================
       console.log('[FB Lead Ads] 📥 Received webhook:', JSON.stringify(payload, null, 2));
 
       // Facebook envia um objeto com entry[]
@@ -146,13 +354,7 @@ serve(async (req) => {
           }
 
           // Normalizar telefone
-          let telefoneNormalizado = telefone;
-          if (telefone) {
-            telefoneNormalizado = telefone.replace(/\D/g, '');
-            if (!telefoneNormalizado.startsWith('55') && telefoneNormalizado.length >= 10) {
-              telefoneNormalizado = '55' + telefoneNormalizado;
-            }
-          }
+          const telefoneNormalizado = normalizePhone(telefone);
 
           console.log('[FB Lead Ads] Extracted data:', { nome, email, telefone: telefoneNormalizado });
 
@@ -173,26 +375,41 @@ serve(async (req) => {
           let leadId: string | null = null;
           
           if (telefoneNormalizado) {
+            const phoneSuffix = telefoneNormalizado.slice(-9);
             const { data: leadByPhone } = await supabase
               .from('leads_juridicos')
-              .select('id')
-              .eq('telefone', telefoneNormalizado)
+              .select('id, email, nome')
+              .ilike('telefone', `%${phoneSuffix}%`)
               .maybeSingle();
             
             if (leadByPhone) {
               leadId = leadByPhone.id;
-              // Atualizar com facebook_lead_id
+              
+              // Atualizar com facebook_lead_id e dados faltantes
+              const updates: any = {
+                facebook_lead_id: leadgenId,
+                tipo_origem: 'trafego',
+                fonte_trafego: 'facebook_lead_ads',
+                updated_at: new Date().toISOString()
+              };
+              
+              if (email && !leadByPhone.email) {
+                updates.email = email.toLowerCase();
+              }
+              
+              if (nome && leadByPhone.nome && (
+                leadByPhone.nome.startsWith('Contato') || 
+                leadByPhone.nome === 'Desconhecido'
+              )) {
+                updates.nome = nome;
+              }
+              
               await supabase
                 .from('leads_juridicos')
-                .update({ 
-                  facebook_lead_id: leadgenId,
-                  tipo_origem: 'trafego',
-                  fonte_trafego: 'facebook_lead_ads',
-                  updated_at: new Date().toISOString()
-                })
+                .update(updates)
                 .eq('id', leadId);
               
-              console.log('[FB Lead Ads] Updated existing lead with facebook_lead_id:', leadId);
+              console.log('[FB Lead Ads] ✅ Updated existing lead with FB data:', leadId);
             }
           }
 
@@ -269,15 +486,20 @@ serve(async (req) => {
           // Registrar evento no system_events se existir
           try {
             await supabase.from('system_events').insert({
-              event_type: 'lead_created',
-              source: 'facebook_lead_ads',
-              entity_type: 'lead',
-              entity_id: leadId,
-              metadata: {
+              tipo: 'lead',
+              fonte: 'facebook_lead_ads',
+              acao: 'lead_created',
+              entidade_tipo: 'lead',
+              entidade_id: leadId,
+              lead_id: leadId,
+              dados: {
                 leadgen_id: leadgenId,
                 form_id: formId,
                 ad_id: adId,
-                channel: 'facebook'
+                channel: 'facebook',
+                nome,
+                email,
+                telefone: telefoneNormalizado
               }
             });
           } catch (e) {
