@@ -286,9 +286,9 @@ serve(async (req: Request) => {
       });
     }
 
-    // Buscar ou criar lead pelo telefone (PASSANDO DADOS DE TRÁFEGO)
+    // Buscar ou criar lead pelo telefone (PASSANDO DADOS DE TRÁFEGO E INSTÂNCIA)
     // NOTA: Isa responde leads de TRÁFEGO PAGO (detectado via metadados do anúncio OU mensagem padrão)
-    const { leadId, isNewLead } = await findOrCreateLead(supabase, normalized, trafficSource);
+    const { leadId, isNewLead } = await findOrCreateLead(supabase, normalized, trafficSource, instancePhone);
 
     // Se lead já existia e detectamos tráfego pago (via metadados OU mensagem), atualizar origem
     // IMPORTANTE: Isso garante que leads criados antes da detecção de tráfego sejam atualizados
@@ -897,7 +897,8 @@ async function fetchFacebookLeadData(sourceId: string | null): Promise<{
 async function findOrCreateLead(
   supabase: any, 
   data: { phone: string | null; name: string | null },
-  trafficSource: TrafficSourceResult
+  trafficSource: TrafficSourceResult,
+  instancePhone?: string | null
 ): Promise<{ leadId: string | null; isNewLead: boolean }> {
   if (!data.phone) return { leadId: null, isNewLead: false };
 
@@ -955,12 +956,26 @@ async function findOrCreateLead(
   let canalOrigem = 'whatsapp';
   let tipoOrigem = 'whatsapp_direto'; // Padrão: contato direto (não automatizado pela Isa)
   
+  // Detectar se é do escritório (número Bentes Ramos)
+  const cleanInstancePhone = instancePhone?.replace(/\D/g, '') || '';
+  const isFromOffice = OFFICE_INSTANCE_PHONES.some(phone => 
+    cleanInstancePhone === phone || cleanInstancePhone.endsWith(phone)
+  );
+  
   // Se detectamos tráfego pago (via metadados do anúncio Click to WhatsApp)
   if (trafficSource.isTraffic) {
     fonteTrafego = trafficSource.source || 'meta_ads';
     tipoOrigem = 'trafego';
     console.log(`[Z-API Webhook] 🎯 NEW LEAD FROM PAID TRAFFIC: ${fonteTrafego}`);
   }
+  
+  // Determinar status inicial baseado na origem
+  // - Escritório (Bentes Ramos): status "Bentes Ramos" 
+  // - Tráfego/Outros: status "Lead Frio"
+  const initialStatus = isFromOffice ? 'Bentes Ramos' : 'Lead Frio';
+  const leadOrigin = isFromOffice 
+    ? 'Escritório' 
+    : (trafficSource.isTraffic ? 'Tráfego Pago' : 'WhatsApp Z-API');
   
   // Determinar se é lead de tráfego (somente por metadados do anúncio)
   const isTrafficLead = trafficSource.isTraffic;
@@ -974,15 +989,17 @@ async function findOrCreateLead(
       nome: leadName,
       telefone: data.phone,
       email: emailFromFb?.toLowerCase() || null, // Email do formulário do FB
-      status: 'Lead Frio',
+      status: initialStatus,
       lead_state: 'NEW',
-      origem: isTrafficLead ? 'Tráfego Pago' : 'WhatsApp Z-API',
+      origem: leadOrigin,
       fonte_trafego: fonteTrafego,
       canal_origem: canalOrigem,
       tipo_origem: tipoOrigem,
-      resumo_ia: isTrafficLead 
-        ? `Lead de TRÁFEGO PAGO (${fonteTrafego}). Veio de anúncio Click to WhatsApp em ${new Date().toLocaleDateString('pt-BR')}.${emailFromFb ? ` Email: ${emailFromFb}` : ''}`
-        : `Lead criado automaticamente via Z-API (WhatsApp direto). Primeiro contato em ${new Date().toLocaleDateString('pt-BR')}.`
+      resumo_ia: isFromOffice
+        ? `Lead do ESCRITÓRIO (Bentes Ramos). Contato direto em ${new Date().toLocaleDateString('pt-BR')}.`
+        : isTrafficLead 
+          ? `Lead de TRÁFEGO PAGO (${fonteTrafego}). Veio de anúncio Click to WhatsApp em ${new Date().toLocaleDateString('pt-BR')}.${emailFromFb ? ` Email: ${emailFromFb}` : ''}`
+          : `Lead criado automaticamente via Z-API (WhatsApp direto). Primeiro contato em ${new Date().toLocaleDateString('pt-BR')}.`
     })
     .select('id')
     .single();
