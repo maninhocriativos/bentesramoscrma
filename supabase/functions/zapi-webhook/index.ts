@@ -397,6 +397,43 @@ serve(async (req: Request) => {
       console.error('[Z-API Webhook] Error upserting subscriber:', subError);
     }
 
+    // ============================================
+    // AUTO-TAGGING: Adicionar tag "Bentes Ramos" para contatos do escritório
+    // ============================================
+    const cleanConnectedPhone = connectedPhone?.replace(/\D/g, '') || '';
+    const isFromOffice = OFFICE_INSTANCE_PHONES.some(phone => 
+      cleanConnectedPhone === phone || cleanConnectedPhone.endsWith(phone)
+    );
+    
+    if (isFromOffice) {
+      try {
+        // Buscar ID da tag "Bentes Ramos"
+        const { data: bentesTag } = await supabase
+          .from('chat_tags')
+          .select('id')
+          .eq('name', 'Bentes Ramos')
+          .single();
+        
+        if (bentesTag) {
+          // Adicionar tag ao subscriber (ignora se já existir)
+          await supabase
+            .from('subscriber_tags')
+            .upsert({
+              subscriber_id: subscriberId,
+              tag_id: bentesTag.id,
+              reason: 'Auto: contato via número do escritório'
+            }, { 
+              onConflict: 'subscriber_id,tag_id',
+              ignoreDuplicates: true 
+            });
+          
+          console.log('[Z-API Webhook] 🏷️ Tag "Bentes Ramos" aplicada ao subscriber:', subscriberId);
+        }
+      } catch (tagErr) {
+        console.error('[Z-API Webhook] Error applying Bentes Ramos tag:', tagErr);
+      }
+    }
+
     // Salvar mensagem - com prevenção de duplicatas por message_id
     if (normalized.message && leadId) {
       console.log('[Z-API Webhook] Saving message for subscriber:', subscriberId, 'messageId:', normalized.messageId, 'fromMe:', normalized.fromMe);
