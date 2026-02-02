@@ -1,5 +1,6 @@
 export type LeadStatus = 
   | 'Lead Frio' 
+  | 'Bentes Ramos'
   | 'Em Atendimento'
   | 'Em Negociação'
   | 'Aguardando Contrato' 

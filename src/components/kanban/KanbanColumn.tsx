@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Lead, LeadStatus } from '@/types/leads';
 import { LeadCard } from './LeadCard';
 import { cn } from '@/lib/utils';
-import { Inbox, Snowflake, MessageSquare, Handshake, FileSignature, CheckCircle2, Trophy, XCircle } from 'lucide-react';
+import { Inbox, Snowflake, MessageSquare, Handshake, FileSignature, CheckCircle2, Trophy, XCircle, Building2 } from 'lucide-react';
 
 interface IsaInsight {
   sentimento: 'positivo' | 'neutro' | 'negativo' | null;
@@ -42,6 +42,13 @@ const STATUS_CONFIG: Record<LeadStatus, {
     dot: 'bg-slate-400',
     headerBg: 'bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-900',
     countBg: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
+  },
+  'Bentes Ramos': { 
+    icon: Building2, 
+    gradient: 'from-indigo-500/10 to-transparent',
+    dot: 'bg-indigo-500',
+    headerBg: 'bg-gradient-to-r from-indigo-100 to-indigo-50 dark:from-indigo-900/30 dark:to-indigo-900/10',
+    countBg: 'bg-indigo-200 text-indigo-700 dark:bg-indigo-800 dark:text-indigo-200'
   },
   'Em Atendimento': { 
     icon: MessageSquare, 
