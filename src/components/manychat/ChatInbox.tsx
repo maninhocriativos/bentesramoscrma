@@ -247,17 +247,82 @@ const ManyChatInboxContent = () => {
     }
   }, [searchParams, setSearchParams]);
 
+  // Buscar subscriber pelo lead_id - com fallback para buscar pelo telefone do lead
   useEffect(() => {
-    if (pendingLeadId && subscribers.length > 0) {
-      const subscriber = subscribers.find(s => s.lead_id === pendingLeadId);
+    const findSubscriberForLead = async () => {
+      if (!pendingLeadId || subscribers.length === 0) return;
+      
+      // 1. Primeiro tentar encontrar pelo lead_id direto
+      let subscriber = subscribers.find(s => s.lead_id === pendingLeadId);
+      
       if (subscriber) {
+        console.log('[ChatInbox] Subscriber encontrado pelo lead_id:', pendingLeadId);
         setSelectedSubscriber(subscriber);
         setPendingLeadId(null);
-      } else {
-        setPendingLeadId(null);
+        return;
       }
-    }
-  }, [pendingLeadId, subscribers]);
+      
+      // 2. Se não encontrou, buscar o telefone do lead e tentar pelo telefone
+      console.log('[ChatInbox] Subscriber não encontrado pelo lead_id, buscando pelo telefone...');
+      
+      try {
+        const { data: lead } = await supabase
+          .from('leads_juridicos')
+          .select('telefone, nome')
+          .eq('id', pendingLeadId)
+          .single();
+        
+        if (lead?.telefone) {
+          const phoneClean = lead.telefone.replace(/\D/g, '');
+          const phoneSuffix = phoneClean.slice(-9); // últimos 9 dígitos
+          
+          // Buscar subscriber pelo telefone (normalizado ou não)
+          subscriber = subscribers.find(s => {
+            if (!s.telefone) return false;
+            const subPhone = s.telefone.replace(/\D/g, '');
+            return subPhone === phoneClean || 
+                   subPhone.endsWith(phoneSuffix) || 
+                   phoneClean.endsWith(subPhone.slice(-9));
+          });
+          
+          // Também tentar pelo subscriber_id (formato zapi_55...)
+          if (!subscriber) {
+            const zapiId = `zapi_55${phoneClean.startsWith('55') ? phoneClean.slice(2) : phoneClean}`;
+            subscriber = subscribers.find(s => 
+              s.subscriber_id === zapiId || 
+              s.subscriber_id.includes(phoneSuffix)
+            );
+          }
+          
+          if (subscriber) {
+            console.log('[ChatInbox] Subscriber encontrado pelo telefone:', lead.telefone);
+            // Atualizar o subscriber com o lead_id para futuras buscas
+            await supabase
+              .from('manychat_subscribers')
+              .update({ lead_id: pendingLeadId })
+              .eq('subscriber_id', subscriber.subscriber_id);
+            
+            setSelectedSubscriber({ ...subscriber, lead_id: pendingLeadId });
+            setPendingLeadId(null);
+            return;
+          }
+          
+          console.log('[ChatInbox] Nenhum subscriber encontrado para o lead:', pendingLeadId, 'telefone:', lead.telefone);
+          toast({
+            title: 'Conversa não encontrada',
+            description: `O lead "${lead.nome || 'sem nome'}" ainda não iniciou uma conversa pelo WhatsApp.`,
+            variant: 'default'
+          });
+        }
+      } catch (err) {
+        console.error('[ChatInbox] Erro ao buscar lead:', err);
+      }
+      
+      setPendingLeadId(null);
+    };
+    
+    findSubscriberForLead();
+  }, [pendingLeadId, subscribers, toast]);
 
   // Track current subscriber ID to prevent unnecessary reloads
   const selectedSubscriberIdRef = useRef<string | null>(null);

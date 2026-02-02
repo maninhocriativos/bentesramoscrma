@@ -39,7 +39,36 @@ const TRAFFIC_INSTANCE_PHONES = [
   '985888190'
 ];
 
+// ============================================
+// INSTÂNCIAS DO ESCRITÓRIO (NÃO SÃO TRÁFEGO)
+// Leads que chegam por esses números são do escritório/contato direto
+// ============================================
+const OFFICE_INSTANCE_PHONES = [
+  '5592991604348',
+  '92991604348',
+  '991604348',
+  '91604348'
+];
+
 function detectTrafficSource(body: any, messageContent?: string, instancePhone?: string | null): TrafficSourceResult {
+  // ============================================
+  // MÉTODO -1: VERIFICAR SE É INSTÂNCIA DO ESCRITÓRIO (NUNCA classificar como tráfego)
+  // ============================================
+  if (instancePhone) {
+    const cleanInstancePhone = instancePhone.replace(/\D/g, '');
+    const isOfficeInstance = OFFICE_INSTANCE_PHONES.some(phone => 
+      cleanInstancePhone === phone || cleanInstancePhone.endsWith(phone)
+    );
+    
+    if (isOfficeInstance) {
+      console.log('[Traffic Detection] 📞 Office instance detected - NOT traffic:', {
+        instancePhone,
+        classifiedAs: 'whatsapp_direto'
+      });
+      
+      return { isTraffic: false, source: null, detectionMethod: null, adData: null };
+    }
+  }
   // ============================================
   // MÉTODO 0: DETECÇÃO POR INSTÂNCIA DE TRÁFEGO
   // Se a mensagem chegou numa instância dedicada a tráfego, é automaticamente tráfego
