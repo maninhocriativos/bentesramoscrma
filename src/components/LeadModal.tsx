@@ -42,6 +42,7 @@ interface LeadModalProps {
 
 const STATUSES: LeadStatus[] = [
   'Lead Frio',
+  'Bentes Ramos',
   'Em Atendimento',
   'Em Negociação',
   'Aguardando Contrato',
@@ -50,7 +51,7 @@ const STATUSES: LeadStatus[] = [
   'Perdido',
 ];
 
-const ORIGENS: LeadOrigem[] = ['Instagram', 'Google', 'Site', 'Indicação', 'Outro'];
+const ORIGENS: LeadOrigem[] = ['Instagram', 'Google', 'Site', 'Indicação', 'Bentes Ramos', 'Outro'];
 
 const FONTES_TRAFEGO = [
   { value: 'organico', label: 'Orgânico' },
@@ -147,7 +148,7 @@ export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = tr
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg rounded-xl">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto rounded-xl">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold">
             {isNew ? 'Novo Lead' : 'Detalhes do Lead'}

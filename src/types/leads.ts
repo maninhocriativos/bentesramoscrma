@@ -8,7 +8,7 @@ export type LeadStatus =
   | 'Ganho' 
   | 'Perdido';
 
-export type LeadOrigem = 'Instagram' | 'Google' | 'Site' | 'Indicação' | 'Outro';
+export type LeadOrigem = 'Instagram' | 'Google' | 'Site' | 'Indicação' | 'Bentes Ramos' | 'Escritório' | 'Tráfego Pago' | 'WhatsApp Z-API' | 'Outro';
 
 // Tipo de origem do lead (tráfego pago vs contato direto)
 export type TipoOrigem = 'trafego' | 'whatsapp_direto' | 'indefinido';

@@ -258,8 +258,10 @@ serve(async (req: Request) => {
     // ============================================
     // DETECTAR TRÁFEGO PAGO (instância, metadados OU mensagem do anúncio)
     // ============================================
-    const instancePhone = zapiConfig?.phone_number || null;
-    const trafficSource = detectTrafficSource(body, normalized.message || undefined, instancePhone);
+    // IMPORTANTE: Usar connectedPhone do body (mais confiável) ao invés de phone_number do config
+    const connectedPhoneForDetection = body.connectedPhone || body.phone?.replace('@c.us', '') || zapiConfig?.phone_number || null;
+    console.log('[Z-API Webhook] Instance detection using connectedPhone:', connectedPhoneForDetection);
+    const trafficSource = detectTrafficSource(body, normalized.message || undefined, connectedPhoneForDetection);
     
     // IMPORTANTE: Ignorar mensagens de grupos - apenas conversas individuais
     if (normalized.isGroup) {
@@ -288,7 +290,7 @@ serve(async (req: Request) => {
 
     // Buscar ou criar lead pelo telefone (PASSANDO DADOS DE TRÁFEGO E INSTÂNCIA)
     // NOTA: Isa responde leads de TRÁFEGO PAGO (detectado via metadados do anúncio OU mensagem padrão)
-    const { leadId, isNewLead } = await findOrCreateLead(supabase, normalized, trafficSource, instancePhone);
+    const { leadId, isNewLead } = await findOrCreateLead(supabase, normalized, trafficSource, connectedPhoneForDetection);
 
     // Se lead já existia e detectamos tráfego pago (via metadados OU mensagem), atualizar origem
     // IMPORTANTE: Isso garante que leads criados antes da detecção de tráfego sejam atualizados
