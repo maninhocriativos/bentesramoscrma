@@ -183,8 +183,9 @@ export function MessageInput({
           onPaste={handlePaste}
           placeholder={placeholder}
           disabled={disabled || isRecording}
-          className={`flex-1 min-h-[44px] max-h-32 rounded-2xl resize-none border-0 ${themeClasses.input}`}
+          className={`flex-1 min-h-[44px] max-h-32 rounded-2xl resize-none border-0 whitespace-pre-wrap ${themeClasses.input}`}
           rows={1}
+          style={{ whiteSpace: 'pre-wrap' }}
         />
 
         {message.trim() || selectedFile ? (
