@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Lead, LeadStatus } from '@/types/leads';
 import { KanbanColumn } from './KanbanColumn';
 import { useLeads } from '@/hooks/useLeads';
@@ -6,9 +6,6 @@ import { useToast } from '@/hooks/use-toast';
 import { useIsaInsights } from '@/hooks/useIsaInsights';
 import { useLeadExtras } from '@/hooks/useLeadExtras';
 import { useMetaCapi } from '@/hooks/useMetaCapi';
-import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 interface KanbanBoardProps {
   leads: Lead[];
@@ -32,46 +29,10 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
   const { sendConversionEvent } = useMetaCapi();
   const [draggedLead, setDraggedLead] = useState<Lead | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<LeadStatus | null>(null);
-  
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
 
   const leadIds = useMemo(() => leads.map(l => l.id), [leads]);
   const { insights: isaInsights } = useIsaInsights(leadIds);
   const { extras: leadExtras } = useLeadExtras(leadIds);
-
-  const updateScrollButtons = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    setCanScrollLeft(container.scrollLeft > 10);
-    setCanScrollRight(container.scrollLeft < container.scrollWidth - container.clientWidth - 10);
-  }, []);
-
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    updateScrollButtons();
-    container.addEventListener('scroll', updateScrollButtons);
-    window.addEventListener('resize', updateScrollButtons);
-
-    return () => {
-      container.removeEventListener('scroll', updateScrollButtons);
-      window.removeEventListener('resize', updateScrollButtons);
-    };
-  }, [updateScrollButtons]);
-
-  const scrollTo = useCallback((direction: 'left' | 'right') => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    
-    const columnWidth = 280;
-    container.scrollBy({
-      left: direction === 'left' ? -columnWidth : columnWidth,
-      behavior: 'smooth'
-    });
-  }, []);
 
   const handleDragStart = useCallback((e: React.DragEvent, lead: Lead) => {
     setDraggedLead(lead);
@@ -126,68 +87,35 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
   }, [draggedLead, updateLeadStatus, toast, sendConversionEvent]);
 
   return (
-    <div className="relative w-full h-full">
-      {/* Nav Arrows */}
-      {canScrollLeft && (
-        <div className="absolute left-0 top-0 bottom-0 z-10 flex items-center pointer-events-none">
-          <div className="bg-gradient-to-r from-background to-transparent h-full w-16 flex items-center pl-1">
-            <Button
-              variant="outline"
-              size="icon"
-              className="pointer-events-auto h-9 w-9 rounded-full shadow-md bg-card/95 backdrop-blur"
-              onClick={() => scrollTo('left')}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {canScrollRight && (
-        <div className="absolute right-0 top-0 bottom-0 z-10 flex items-center pointer-events-none">
-          <div className="bg-gradient-to-l from-background to-transparent h-full w-16 flex items-center justify-end pr-1">
-            <Button
-              variant="outline"
-              size="icon"
-              className="pointer-events-auto h-9 w-9 rounded-full shadow-md bg-card/95 backdrop-blur"
-              onClick={() => scrollTo('right')}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Scrollable Container */}
+    <div className="w-full h-full overflow-y-auto pb-4">
+      {/* Responsive Grid - todas colunas visíveis */}
       <div 
-        ref={scrollContainerRef}
-        className="w-full h-full overflow-x-auto overflow-y-hidden pb-2 scroll-smooth"
+        className="grid gap-2 px-1 h-full"
+        style={{
+          gridTemplateColumns: `repeat(${STATUSES.length}, minmax(140px, 1fr))`
+        }}
+        onDragLeave={handleDragLeave}
       >
-        <div 
-          className="inline-flex gap-3 px-1 min-w-max h-full"
-          onDragLeave={handleDragLeave}
-        >
-          {STATUSES.map((status) => (
-            <div 
-              key={status}
-              onDragEnter={() => handleDragEnter(status)}
-              className="h-full"
-            >
-              <KanbanColumn
-                status={status}
-                leads={leads}
-                onLeadClick={onLeadClick}
-                onDragStart={handleDragStart}
-                onDragEnd={handleDragEnd}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-                isDragOver={dragOverStatus === status}
-                isaInsights={isaInsights}
-                leadExtras={leadExtras}
-              />
-            </div>
-          ))}
-        </div>
+        {STATUSES.map((status) => (
+          <div 
+            key={status}
+            onDragEnter={() => handleDragEnter(status)}
+            className="h-full min-w-0"
+          >
+            <KanbanColumn
+              status={status}
+              leads={leads}
+              onLeadClick={onLeadClick}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              isDragOver={dragOverStatus === status}
+              isaInsights={isaInsights}
+              leadExtras={leadExtras}
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
