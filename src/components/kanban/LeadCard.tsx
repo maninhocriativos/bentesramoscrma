@@ -4,10 +4,9 @@ import { useState } from 'react';
 import { Lead, TipoOrigem } from '@/types/leads';
 import { cn } from '@/lib/utils';
 import { 
-  MessageCircle, ExternalLink, User, Clock, 
+  User, Clock, 
   CheckCircle2, Star, Flame, Sparkles, Target, MessageSquare
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { EnviarContratoModal } from '@/components/contratos/EnviarContratoModal';
 import { Badge } from '@/components/ui/badge';
@@ -98,24 +97,11 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProp
     navigate(`/chat?lead_id=${lead.id}`);
   };
 
-  const handleWhatsApp = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (lead.telefone) {
-      const phone = lead.telefone.replace(/\D/g, '');
-      window.open(`https://wa.me/55${phone}`, '_blank');
-    }
-  };
-
-  const handleViewDetails = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigate(`/leads/${lead.id}`);
-  };
-
   return (
     <div
       onClick={handleCardClick}
       className={cn(
-        "rounded-xl cursor-pointer transition-all duration-200 group kanban-card-wrapper",
+        "rounded-lg cursor-pointer transition-all duration-200 group kanban-card-wrapper",
         "bg-card border border-border/60 overflow-hidden",
         "hover:border-gold/40 hover:shadow-card-hover",
         hasValue && "gradient-gold",
@@ -131,100 +117,60 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProp
         "bg-gradient-to-r from-transparent via-border to-transparent"
       )} />
 
-      {/* Main Content */}
-      <div className="p-3">
+      {/* Main Content - compacto */}
+      <div className="p-2">
         {/* Header Row */}
-        <div className="flex items-start gap-2.5 mb-2">
-          {/* Avatar with gradient */}
+        <div className="flex items-start gap-2 mb-1.5">
+          {/* Avatar compacto */}
           <div className={cn(
-            "w-9 h-9 rounded-full flex items-center justify-center shrink-0 relative",
+            "w-7 h-7 rounded-full flex items-center justify-center shrink-0 relative",
             "bg-gradient-to-br from-primary/20 via-primary/10 to-gold/20",
             hasContract && "from-success/20 via-success/10 to-emerald-300/20"
           )}>
             <User className={cn(
-              "w-4 h-4",
+              "w-3.5 h-3.5",
               hasContract ? "text-success" : "text-primary"
             )} />
             {hasContract && (
               <div className="absolute -bottom-0.5 -right-0.5 bg-success text-success-foreground rounded-full p-0.5">
-                <CheckCircle2 className="w-2.5 h-2.5" />
+                <CheckCircle2 className="w-2 h-2" />
               </div>
             )}
           </div>
 
           {/* Name & Value */}
           <div className="flex-1 min-w-0">
-            <h4 className="font-semibold text-sm text-foreground truncate leading-tight">
+            <h4 className="font-semibold text-[11px] text-foreground truncate leading-tight">
               {lead.nome || 'Sem nome'}
             </h4>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              {hasValue && (
-                <span className={cn(
-                  "text-xs font-bold",
-                  hasContract ? "text-success" : "text-gold-foreground"
-                )}>
-                  {formatShortCurrency(lead.valor_causa)}
-                </span>
-              )}
-              {lead.tipo_acao && (
-                <Badge variant="outline" className="h-4 px-1 text-[9px] font-medium">
-                  {lead.tipo_acao.slice(0, 12)}
-                </Badge>
-              )}
-            </div>
+            {lead.tipo_acao && (
+              <p className="text-[9px] text-muted-foreground truncate">
+                {lead.tipo_acao}
+              </p>
+            )}
           </div>
 
           {/* Sentiment Indicator */}
           <SentimentIndicator isaInsight={isaInsight} />
         </div>
 
-        {/* Meta Row */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <Clock className="w-3 h-3" />
-            <span className="text-[10px]">{lastInteraction}</span>
-          </div>
+        {/* Meta Row - compacto */}
+        <div className="flex items-center gap-1.5 text-muted-foreground">
+          <Clock className="w-2.5 h-2.5" />
+          <span className="text-[9px]">{lastInteraction}</span>
         </div>
 
-        {/* Origin and Origem badges */}
+        {/* Origin badges - compacto */}
         {(lead.origem || lead.tipo_origem) && (
-          <div className="mt-2 pt-2 border-t border-border/40 flex items-center gap-1.5 flex-wrap">
+          <div className="mt-1.5 pt-1.5 border-t border-border/40 flex items-center gap-1 flex-wrap">
             <OrigemBadge tipoOrigem={lead.tipo_origem as TipoOrigem} />
             {lead.origem && (
-              <Badge variant="secondary" className="h-5 text-[10px] font-medium">
+              <Badge variant="secondary" className="h-4 text-[8px] font-medium px-1">
                 {lead.origem}
               </Badge>
             )}
           </div>
         )}
-      </div>
-
-      {/* Hover Actions */}
-      <div className={cn(
-        "flex border-t border-border/40 divide-x divide-border/40",
-        "opacity-0 group-hover:opacity-100 transition-opacity duration-200",
-        "bg-muted/30"
-      )}>
-        {lead.telefone && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="flex-1 h-8 rounded-none text-muted-foreground hover:text-green-600 hover:bg-green-50 gap-1.5"
-            onClick={handleWhatsApp}
-          >
-            <MessageCircle className="w-3.5 h-3.5" />
-            <span className="text-[10px] font-medium">WhatsApp</span>
-          </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="flex-1 h-8 rounded-none text-muted-foreground hover:text-primary hover:bg-primary/5 gap-1.5"
-          onClick={handleViewDetails}
-        >
-          <ExternalLink className="w-3.5 h-3.5" />
-          <span className="text-[10px] font-medium">Detalhes</span>
-        </Button>
       </div>
 
       <EnviarContratoModal

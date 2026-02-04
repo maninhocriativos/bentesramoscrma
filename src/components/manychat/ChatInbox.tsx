@@ -247,9 +247,9 @@ const ManyChatInboxContent = () => {
     }
   }, [searchParams, setSearchParams]);
 
-  // Buscar subscriber pelo lead_id - com fallback para buscar pelo telefone do lead
+  // Buscar subscriber pelo lead_id - com fallback para criar subscriber se não existir
   useEffect(() => {
-    const findSubscriberForLead = async () => {
+    const findOrCreateSubscriberForLead = async () => {
       if (!pendingLeadId || subscribers.length === 0) return;
       
       // 1. Primeiro tentar encontrar pelo lead_id direto
@@ -262,21 +262,32 @@ const ManyChatInboxContent = () => {
         return;
       }
       
-      // 2. Se não encontrou, buscar o telefone do lead e tentar pelo telefone
+      // 2. Buscar dados do lead
       console.log('[ChatInbox] Subscriber não encontrado pelo lead_id, buscando pelo telefone...');
       
       try {
         const { data: lead } = await supabase
           .from('leads_juridicos')
-          .select('telefone, nome')
+          .select('telefone, nome, email')
           .eq('id', pendingLeadId)
           .single();
         
-        if (lead?.telefone) {
-          const phoneClean = lead.telefone.replace(/\D/g, '');
-          const phoneSuffix = phoneClean.slice(-9); // últimos 9 dígitos
-          
-          // Buscar subscriber pelo telefone (normalizado ou não)
+        if (!lead) {
+          console.error('[ChatInbox] Lead não encontrado:', pendingLeadId);
+          toast({
+            title: 'Lead não encontrado',
+            description: 'Não foi possível encontrar os dados do lead.',
+            variant: 'destructive'
+          });
+          setPendingLeadId(null);
+          return;
+        }
+        
+        const phoneClean = lead.telefone?.replace(/\D/g, '') || '';
+        const phoneSuffix = phoneClean.slice(-9);
+        
+        // 3. Tentar encontrar subscriber existente pelo telefone
+        if (phoneClean) {
           subscriber = subscribers.find(s => {
             if (!s.telefone) return false;
             const subPhone = s.telefone.replace(/\D/g, '');
@@ -287,41 +298,103 @@ const ManyChatInboxContent = () => {
           
           // Também tentar pelo subscriber_id (formato zapi_55...)
           if (!subscriber) {
-            const zapiId = `zapi_55${phoneClean.startsWith('55') ? phoneClean.slice(2) : phoneClean}`;
+            const normalizedPhone = phoneClean.startsWith('55') ? phoneClean : '55' + phoneClean;
+            const zapiId = `zapi_${normalizedPhone}`;
             subscriber = subscribers.find(s => 
               s.subscriber_id === zapiId || 
               s.subscriber_id.includes(phoneSuffix)
             );
           }
-          
-          if (subscriber) {
-            console.log('[ChatInbox] Subscriber encontrado pelo telefone:', lead.telefone);
-            // Atualizar o subscriber com o lead_id para futuras buscas
-            await supabase
-              .from('manychat_subscribers')
-              .update({ lead_id: pendingLeadId })
-              .eq('subscriber_id', subscriber.subscriber_id);
-            
-            setSelectedSubscriber({ ...subscriber, lead_id: pendingLeadId });
-            setPendingLeadId(null);
-            return;
-          }
-          
-          console.log('[ChatInbox] Nenhum subscriber encontrado para o lead:', pendingLeadId, 'telefone:', lead.telefone);
-          toast({
-            title: 'Conversa não encontrada',
-            description: `O lead "${lead.nome || 'sem nome'}" ainda não iniciou uma conversa pelo WhatsApp.`,
-            variant: 'default'
-          });
         }
+        
+        if (subscriber) {
+          console.log('[ChatInbox] Subscriber encontrado pelo telefone:', lead.telefone);
+          // Atualizar o subscriber com o lead_id para futuras buscas
+          await supabase
+            .from('manychat_subscribers')
+            .update({ lead_id: pendingLeadId })
+            .eq('subscriber_id', subscriber.subscriber_id);
+          
+          setSelectedSubscriber({ ...subscriber, lead_id: pendingLeadId });
+          setPendingLeadId(null);
+          return;
+        }
+        
+        // 4. NÃO EXISTE SUBSCRIBER - CRIAR UM NOVO PARA PERMITIR INICIAR CONVERSA
+        console.log('[ChatInbox] Criando novo subscriber para o lead:', pendingLeadId);
+        
+        if (!phoneClean) {
+          toast({
+            title: 'Telefone não cadastrado',
+            description: `O lead "${lead.nome || 'sem nome'}" não possui telefone cadastrado. Adicione o telefone para iniciar uma conversa.`,
+            variant: 'destructive'
+          });
+          setPendingLeadId(null);
+          return;
+        }
+        
+        const normalizedPhone = phoneClean.startsWith('55') ? phoneClean : '55' + phoneClean;
+        const newSubscriberId = `zapi_${normalizedPhone}`;
+        
+        // Criar o subscriber no banco
+        const { data: newSubscriber, error: createError } = await supabase
+          .from('manychat_subscribers')
+          .insert({
+            subscriber_id: newSubscriberId,
+            nome: lead.nome || 'Contato',
+            telefone: normalizedPhone,
+            telefone_normalizado: normalizedPhone,
+            email: lead.email,
+            lead_id: pendingLeadId,
+            canal: 'whatsapp',
+            ultima_interacao: new Date().toISOString()
+          })
+          .select()
+          .single();
+        
+        if (createError) {
+          console.error('[ChatInbox] Erro ao criar subscriber:', createError);
+          toast({
+            title: 'Erro ao iniciar conversa',
+            description: 'Não foi possível criar a conversa. Tente novamente.',
+            variant: 'destructive'
+          });
+          setPendingLeadId(null);
+          return;
+        }
+        
+        console.log('[ChatInbox] ✅ Subscriber criado:', newSubscriber);
+        
+        // Adicionar à lista de subscribers e selecionar
+        const newSub: Subscriber = {
+          id: newSubscriber.id,
+          subscriber_id: newSubscriber.subscriber_id,
+          nome: newSubscriber.nome || 'Contato',
+          telefone: newSubscriber.telefone,
+          email: newSubscriber.email,
+          canal: 'whatsapp',
+          lead_id: pendingLeadId,
+          ultima_interacao: newSubscriber.ultima_interacao
+        };
+        
+        setSubscribers(prev => [newSub, ...prev]);
+        setSelectedSubscriber(newSub);
+        setMessages([]); // Conversa vazia - pronta para primeira mensagem
+        
+        toast({
+          title: 'Conversa iniciada',
+          description: `Você pode enviar a primeira mensagem para ${lead.nome || 'o contato'}.`,
+        });
+        
+        setPendingLeadId(null);
+        
       } catch (err) {
         console.error('[ChatInbox] Erro ao buscar lead:', err);
+        setPendingLeadId(null);
       }
-      
-      setPendingLeadId(null);
     };
     
-    findSubscriberForLead();
+    findOrCreateSubscriberForLead();
   }, [pendingLeadId, subscribers, toast]);
 
   // Track current subscriber ID to prevent unnecessary reloads

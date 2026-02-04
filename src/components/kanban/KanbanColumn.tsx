@@ -135,43 +135,41 @@ export function KanbanColumn({
       onDragOver={onDragOver}
       onDrop={(e) => onDrop(e, status)}
       className={cn(
-        "flex flex-col rounded-xl overflow-hidden",
+        "flex flex-col rounded-xl overflow-hidden h-full",
         "bg-card/50 backdrop-blur-sm border border-border/60",
-        "min-w-[260px] w-[260px] lg:min-w-[280px] lg:w-[280px]",
+        "w-full min-w-0",
         "transition-all duration-200 shadow-soft",
         isDragOver && "ring-2 ring-gold/50 shadow-glow-gold kanban-column-drag-over"
       )}
     >
-      {/* Header with gradient */}
-      <div className={cn("px-3 py-2.5", config.headerBg)}>
-        <div className="flex items-center gap-2">
-          <div className={cn("p-1.5 rounded-lg bg-card/80 shadow-sm")}>
-            <Icon className={cn("w-4 h-4", config.dot.replace('bg-', 'text-'))} />
+      {/* Header with gradient - compacto */}
+      <div className={cn("px-2 py-2", config.headerBg)}>
+        <div className="flex items-center gap-1.5">
+          <div className={cn("p-1 rounded-md bg-card/80 shadow-sm flex-shrink-0")}>
+            <Icon className={cn("w-3 h-3", config.dot.replace('bg-', 'text-'))} />
           </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-xs text-foreground truncate">
-              {status}
-            </h3>
-            {formattedValue && (
-              <p className="text-[10px] text-muted-foreground font-medium">
-                {formattedValue} em pipeline
-              </p>
-            )}
-          </div>
+          <h3 className="font-semibold text-[10px] text-foreground truncate flex-1 min-w-0">
+            {status}
+          </h3>
           <span className={cn(
-            "text-[11px] px-2 py-0.5 rounded-full font-bold min-w-[24px] text-center",
+            "text-[10px] px-1.5 py-0.5 rounded-full font-bold min-w-[20px] text-center flex-shrink-0",
             config.countBg,
             showCountPulse && "animate-pulse ring-2 ring-gold/50"
           )}>
             {columnLeads.length}
           </span>
         </div>
+        {formattedValue && (
+          <p className="text-[9px] text-muted-foreground font-medium mt-0.5 pl-6 truncate">
+            {formattedValue}
+          </p>
+        )}
       </div>
 
       {/* Cards with subtle gradient background */}
       <div className={cn(
-        "flex flex-col gap-2.5 p-2.5 flex-1 overflow-y-auto",
-        "max-h-[calc(100vh-300px)]",
+        "flex flex-col gap-1.5 p-1.5 flex-1 overflow-y-auto",
+        "max-h-[calc(100vh-280px)]",
         `bg-gradient-to-b ${config.gradient}`
       )}>
         {columnLeads.map((lead, index) => (
