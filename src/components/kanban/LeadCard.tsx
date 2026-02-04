@@ -1,15 +1,9 @@
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useState } from 'react';
 import { Lead, TipoOrigem } from '@/types/leads';
 import { cn } from '@/lib/utils';
-import { 
-  User, Clock, 
-  CheckCircle2, Star, Flame, Sparkles, Target, MessageSquare
-} from 'lucide-react';
+import { User, Clock, Star, Flame, Sparkles, Target, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { EnviarContratoModal } from '@/components/contratos/EnviarContratoModal';
-import { Badge } from '@/components/ui/badge';
 
 interface LeadCardProps {
   lead: Lead;
@@ -27,72 +21,51 @@ interface LeadCardProps {
   };
 }
 
-const formatShortCurrency = (value: number | null): string => {
-  if (value === null || value === undefined) return '';
-  if (value >= 1000000) return `R$ ${(value / 1000000).toFixed(1)}M`;
-  if (value >= 1000) return `R$ ${(value / 1000).toFixed(0)}k`;
-  return `R$ ${value.toFixed(0)}`;
-};
-
-// Sentiment indicator with glow
-function SentimentIndicator({ isaInsight }: { isaInsight?: LeadCardProps['isaInsight'] }) {
+// Sentiment indicator
+function SentimentDot({ isaInsight }: { isaInsight?: LeadCardProps['isaInsight'] }) {
   if (!isaInsight?.sentimento) return null;
 
   const config = {
-    positivo: { icon: Star, color: 'text-amber-500', bg: 'bg-amber-50', glow: 'shadow-glow-gold' },
-    neutro: { icon: Sparkles, color: 'text-blue-500', bg: 'bg-blue-50', glow: '' },
-    negativo: { icon: Flame, color: 'text-red-500', bg: 'bg-red-50', glow: '' },
+    positivo: { icon: Star, color: 'text-amber-500' },
+    neutro: { icon: Sparkles, color: 'text-blue-400' },
+    negativo: { icon: Flame, color: 'text-red-500' },
   };
 
-  const { icon: Icon, color, bg } = config[isaInsight.sentimento];
+  const { icon: Icon, color } = config[isaInsight.sentimento];
 
-  return (
-    <div className={cn("p-1 rounded-full", bg)}>
-      <Icon className={cn("w-3 h-3", color)} />
-    </div>
-  );
+  return <Icon className={cn("w-3 h-3", color)} />;
 }
 
-// Badge de origem do lead (tráfego vs direto)
-function OrigemBadge({ tipoOrigem }: { tipoOrigem?: TipoOrigem | null }) {
+// Origin badge
+function OriginBadge({ tipoOrigem }: { tipoOrigem?: TipoOrigem | null }) {
   if (!tipoOrigem || tipoOrigem === 'indefinido') return null;
 
   const config = {
-    trafego: { 
-      icon: Target, 
-      label: 'Tráfego', 
-      className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' 
-    },
-    whatsapp_direto: { 
-      icon: MessageSquare, 
-      label: 'Direto', 
-      className: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' 
-    },
+    trafego: { icon: Target, label: 'Ads', bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-600 dark:text-blue-400' },
+    whatsapp_direto: { icon: MessageSquare, label: 'Direto', bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-600 dark:text-gray-400' },
   };
 
-  const { icon: Icon, label, className } = config[tipoOrigem] || {};
-  if (!Icon) return null;
+  const item = config[tipoOrigem];
+  if (!item) return null;
+  const { icon: Icon, label, bg, text } = item;
 
   return (
-    <Badge variant="secondary" className={cn("h-5 text-[10px] font-medium gap-1 px-1.5", className)}>
-      <Icon className="w-3 h-3" />
+    <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium", bg, text)}>
+      <Icon className="w-2.5 h-2.5" />
       {label}
-    </Badge>
+    </span>
   );
 }
 
 export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProps) {
   const navigate = useNavigate();
-  const [isContratoModalOpen, setIsContratoModalOpen] = useState(false);
   
   const lastInteraction = lead.updated_at 
     ? formatDistanceToNow(new Date(lead.updated_at), { addSuffix: false, locale: ptBR })
     : formatDistanceToNow(new Date(lead.created_at), { addSuffix: false, locale: ptBR });
 
   const hasContract = lead.status === 'Ganho' || lead.status === 'Contrato Assinado';
-  const hasValue = lead.valor_causa && lead.valor_causa > 0;
 
-  // Ao clicar no card, abre o chat direto com o lead
   const handleCardClick = () => {
     navigate(`/chat?lead_id=${lead.id}`);
   };
@@ -101,84 +74,64 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProp
     <div
       onClick={handleCardClick}
       className={cn(
-        "rounded-lg cursor-pointer transition-all duration-200 group kanban-card-wrapper",
-        "bg-card border border-border/60 overflow-hidden",
-        "hover:border-gold/40 hover:shadow-card-hover",
-        hasValue && "gradient-gold",
-        hasContract && "ring-1 ring-success/30 gradient-success",
-        isDragging && "kanban-card-dragging"
+        "lead-card group",
+        "bg-card rounded-xl border border-border/60",
+        "cursor-pointer transition-all duration-200",
+        "hover:shadow-card-hover hover:border-border",
+        hasContract && "border-success/30",
+        isDragging && "kanban-card-dragging opacity-80"
       )}
     >
-      {/* Top accent line */}
-      <div className={cn(
-        "h-0.5 w-full",
-        hasContract ? "bg-gradient-to-r from-success/60 via-success to-success/60" :
-        hasValue ? "bg-gradient-to-r from-gold/40 via-gold to-gold/40" :
-        "bg-gradient-to-r from-transparent via-border to-transparent"
-      )} />
-
-      {/* Main Content - compacto */}
-      <div className="p-2">
-        {/* Header Row */}
-        <div className="flex items-start gap-2 mb-1.5">
-          {/* Avatar compacto */}
+      {/* Card Content - 2 row layout */}
+      <div className="p-3">
+        {/* Row 1: Avatar + Name + Time */}
+        <div className="flex items-center gap-2.5 mb-2">
+          {/* Avatar */}
           <div className={cn(
-            "w-7 h-7 rounded-full flex items-center justify-center shrink-0 relative",
-            "bg-gradient-to-br from-primary/20 via-primary/10 to-gold/20",
-            hasContract && "from-success/20 via-success/10 to-emerald-300/20"
+            "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+            "bg-gradient-to-br from-primary/15 to-primary/5",
+            hasContract && "from-success/20 to-success/5"
           )}>
             <User className={cn(
-              "w-3.5 h-3.5",
+              "w-4 h-4",
               hasContract ? "text-success" : "text-primary"
             )} />
-            {hasContract && (
-              <div className="absolute -bottom-0.5 -right-0.5 bg-success text-success-foreground rounded-full p-0.5">
-                <CheckCircle2 className="w-2 h-2" />
-              </div>
-            )}
           </div>
 
-          {/* Name & Value */}
+          {/* Name + Type */}
           <div className="flex-1 min-w-0">
-            <h4 className="font-semibold text-[11px] text-foreground truncate leading-tight">
+            <h4 className="font-semibold text-sm text-foreground truncate leading-tight">
               {lead.nome || 'Sem nome'}
             </h4>
             {lead.tipo_acao && (
-              <p className="text-[9px] text-muted-foreground truncate">
+              <p className="text-[11px] text-muted-foreground truncate">
                 {lead.tipo_acao}
               </p>
             )}
           </div>
 
-          {/* Sentiment Indicator */}
-          <SentimentIndicator isaInsight={isaInsight} />
+          {/* Sentiment + Time */}
+          <div className="flex items-center gap-2 shrink-0">
+            <SentimentDot isaInsight={isaInsight} />
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <Clock className="w-3 h-3" />
+              <span className="text-[10px]">{lastInteraction}</span>
+            </div>
+          </div>
         </div>
 
-        {/* Meta Row - compacto */}
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          <Clock className="w-2.5 h-2.5" />
-          <span className="text-[9px]">{lastInteraction}</span>
-        </div>
-
-        {/* Origin badges - compacto */}
+        {/* Row 2: Origin + Canal */}
         {(lead.origem || lead.tipo_origem) && (
-          <div className="mt-1.5 pt-1.5 border-t border-border/40 flex items-center gap-1 flex-wrap">
-            <OrigemBadge tipoOrigem={lead.tipo_origem as TipoOrigem} />
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <OriginBadge tipoOrigem={lead.tipo_origem as TipoOrigem} />
             {lead.origem && (
-              <Badge variant="secondary" className="h-4 text-[8px] font-medium px-1">
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[10px] font-medium">
                 {lead.origem}
-              </Badge>
+              </span>
             )}
           </div>
         )}
       </div>
-
-      <EnviarContratoModal
-        isOpen={isContratoModalOpen}
-        onClose={() => setIsContratoModalOpen(false)}
-        onSuccess={() => setIsContratoModalOpen(false)}
-        preSelectedLead={{ id: lead.id, nome: lead.nome || '', email: lead.email, telefone: lead.telefone }}
-      />
     </div>
   );
 }
