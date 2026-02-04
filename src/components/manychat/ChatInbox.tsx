@@ -366,130 +366,133 @@ const ManyChatInboxContent = () => {
     typingTimeoutRef.current = setTimeout(() => setTyping(false), 2000);
   }, [setTyping]);
 
-  // Realtime subscriptions - more robust with auto-reconnection
+  // Ref para o subscriber selecionado (evita re-render do useEffect)
+  const selectedSubscriberRef = useRef<Subscriber | null>(null);
+  useEffect(() => {
+    selectedSubscriberRef.current = selectedSubscriber;
+  }, [selectedSubscriber]);
+
+  // Realtime subscriptions - stable, no dependency on selectedSubscriber
   useEffect(() => {
     console.log('[ManyChatInbox] Configurando canais realtime...');
     
     let isSubscribed = true;
     let reconnectTimeout: NodeJS.Timeout | null = null;
-    let messagesChannel: ReturnType<typeof supabase.channel> | null = null;
-    let subscribersChannel: ReturnType<typeof supabase.channel> | null = null;
     
-    const setupChannels = () => {
-      // Messages channel with unique name to avoid conflicts
-      messagesChannel = supabase
-        .channel(`manychat-msgs-${Date.now()}`, {
-          config: {
-            broadcast: { self: true },
-            presence: { key: user?.id || 'anonymous' },
-          }
-        })
+    const setupMessagesChannel = () => {
+      const channel = supabase
+        .channel(`manychat-msgs-${user?.id || 'anon'}`)
         .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'manychat_mensagens' },
+          { event: 'INSERT', schema: 'public', table: 'manychat_mensagens' },
           (payload) => {
-            console.log('[Realtime] Mensagem evento:', payload.eventType, payload);
+            if (!isSubscribed) return;
             
-            if (payload.eventType === 'INSERT') {
-              const newMsg = payload.new as Message & { subscriber_id: string; subscriber_nome?: string };
-              
-              // Prevent duplicate notification for same message
-              if (lastMessageIdRef.current === newMsg.id) return;
-              lastMessageIdRef.current = newMsg.id;
-              
-              // Check if message belongs to currently selected conversation
-              // Match both exact subscriber_id AND phone-based zapi_ format
-              const currentSubId = selectedSubscriber?.subscriber_id;
-              const currentPhone = selectedSubscriber?.telefone?.replace(/\D/g, '') || '';
-              const normalizedPhone = currentPhone.startsWith('55') ? currentPhone : '55' + currentPhone;
-              const currentZapiId = currentPhone ? `zapi_${normalizedPhone}` : null;
-              
-              const isCurrentChat = selectedSubscriber && (
-                newMsg.subscriber_id === currentSubId ||
-                newMsg.subscriber_id === currentZapiId ||
-                (currentZapiId && currentSubId && newMsg.subscriber_id.includes(currentPhone.slice(-9)))
-              );
-              
-              // Update messages if current chat (adiciona direto em tempo real)
-              if (isCurrentChat) {
-                console.log('[Realtime] Adicionando mensagem ao chat atual');
-                setMessages(prev => {
-                  if (prev.some(m => m.id === newMsg.id)) return prev;
-                  const updated = [...prev, newMsg];
-                  // Atualizar cache também
-                  if (currentSubId) {
-                    messagesCacheRef.current.set(currentSubId, updated);
-                  }
-                  return updated;
-                });
-                scrollToBottom();
-              } else {
-                // Mensagem para outro chat - atualizar cache e contador de não lidas
-                const msgSubId = newMsg.subscriber_id;
-                const cachedMsgs = messagesCacheRef.current.get(msgSubId) || [];
-                if (!cachedMsgs.some(m => m.id === newMsg.id)) {
-                  messagesCacheRef.current.set(msgSubId, [...cachedMsgs, newMsg]);
+            const newMsg = payload.new as Message & { subscriber_id: string; subscriber_nome?: string };
+            console.log('[Realtime] Nova mensagem:', newMsg.id, newMsg.subscriber_id);
+            
+            // Prevent duplicate notification for same message
+            if (lastMessageIdRef.current === newMsg.id) return;
+            lastMessageIdRef.current = newMsg.id;
+            
+            // Check if message belongs to currently selected conversation using ref
+            const currentSub = selectedSubscriberRef.current;
+            const currentSubId = currentSub?.subscriber_id;
+            const currentPhone = currentSub?.telefone?.replace(/\D/g, '') || '';
+            const normalizedPhone = currentPhone.startsWith('55') ? currentPhone : '55' + currentPhone;
+            const currentZapiId = currentPhone ? `zapi_${normalizedPhone}` : null;
+            
+            const isCurrentChat = currentSub && (
+              newMsg.subscriber_id === currentSubId ||
+              newMsg.subscriber_id === currentZapiId ||
+              (currentZapiId && currentSubId && newMsg.subscriber_id.includes(currentPhone.slice(-9)))
+            );
+            
+            // Update messages if current chat
+            if (isCurrentChat) {
+              console.log('[Realtime] Adicionando mensagem ao chat atual');
+              setMessages(prev => {
+                if (prev.some(m => m.id === newMsg.id)) return prev;
+                const updated = [...prev, newMsg];
+                // Atualizar cache também
+                if (currentSubId) {
+                  messagesCacheRef.current.set(currentSubId, updated);
                 }
-                
-                // Incrementar contador de não lidas (só para mensagens de entrada)
-                if (newMsg.direcao === 'entrada') {
-                  setUnreadCounts(prev => {
-                    const newMap = new Map(prev);
-                    const current = newMap.get(msgSubId) || 0;
-                    newMap.set(msgSubId, current + 1);
-                    return newMap;
-                  });
-                }
-              }
-              
-              // Play notification for ALL incoming messages (both current chat and others)
-              if (newMsg.direcao === 'entrada') {
-                playNotificationSound();
-                // Show browser notification only for other chats
-                if (!isCurrentChat) {
-                  notifyNewMessage(newMsg.subscriber_nome || 'Novo contato', newMsg.conteudo?.substring(0, 100) || '');
-                }
-              }
-              
-              // Update subscriber order - find by subscriber_id OR by matching phone in zapi_ format
-              setSubscribers(prev => {
-                let idx = prev.findIndex(s => s.subscriber_id === newMsg.subscriber_id);
-                
-                // If not found, try to find by phone number pattern
-                if (idx === -1 && newMsg.subscriber_id.startsWith('zapi_')) {
-                  const phoneFromZapi = newMsg.subscriber_id.replace('zapi_', '');
-                  const phoneSuffix = phoneFromZapi.slice(-9);
-                  idx = prev.findIndex(s => s.telefone?.includes(phoneSuffix));
-                }
-                
-                if (idx === -1) { 
-                  // New subscriber - reload list
-                  console.log('[Realtime] Novo subscriber detectado, recarregando lista...');
-                  loadSubscribers(); 
-                  return prev; 
-                }
-                const updated = [...prev];
-                const [subscriber] = updated.splice(idx, 1);
-                return [{ ...subscriber, ultima_interacao: new Date().toISOString() }, ...updated];
+                return updated;
               });
+              scrollToBottom();
+            } else {
+              // Mensagem para outro chat - atualizar cache e contador de não lidas
+              const msgSubId = newMsg.subscriber_id;
+              const cachedMsgs = messagesCacheRef.current.get(msgSubId) || [];
+              if (!cachedMsgs.some(m => m.id === newMsg.id)) {
+                messagesCacheRef.current.set(msgSubId, [...cachedMsgs, newMsg]);
+              }
+              
+              // Incrementar contador de não lidas (só para mensagens de entrada)
+              if (newMsg.direcao === 'entrada') {
+                setUnreadCounts(prev => {
+                  const newMap = new Map(prev);
+                  const current = newMap.get(msgSubId) || 0;
+                  newMap.set(msgSubId, current + 1);
+                  return newMap;
+                });
+              }
             }
+            
+            // Play notification for ALL incoming messages
+            if (newMsg.direcao === 'entrada') {
+              playNotificationSound();
+              if (!isCurrentChat) {
+                notifyNewMessage(newMsg.subscriber_nome || 'Novo contato', newMsg.conteudo?.substring(0, 100) || '');
+              }
+            }
+            
+            // Update subscriber order
+            setSubscribers(prev => {
+              let idx = prev.findIndex(s => s.subscriber_id === newMsg.subscriber_id);
+              
+              if (idx === -1 && newMsg.subscriber_id.startsWith('zapi_')) {
+                const phoneFromZapi = newMsg.subscriber_id.replace('zapi_', '');
+                const phoneSuffix = phoneFromZapi.slice(-9);
+                idx = prev.findIndex(s => s.telefone?.includes(phoneSuffix));
+              }
+              
+              if (idx === -1) { 
+                console.log('[Realtime] Novo subscriber detectado, recarregando lista...');
+                loadSubscribers(); 
+                return prev; 
+              }
+              const updated = [...prev];
+              const [subscriber] = updated.splice(idx, 1);
+              return [{ ...subscriber, ultima_interacao: new Date().toISOString() }, ...updated];
+            });
           }
         )
         .subscribe((status) => {
           console.log('[Realtime] Messages channel status:', status);
-          if (status === 'CHANNEL_ERROR') {
-            console.error('[Realtime] Messages channel error, will retry...');
+          if (status === 'CHANNEL_ERROR' && isSubscribed) {
+            console.error('[Realtime] Messages channel error, reconnecting in 3s...');
+            if (reconnectTimeout) clearTimeout(reconnectTimeout);
+            reconnectTimeout = setTimeout(() => {
+              if (isSubscribed) {
+                supabase.removeChannel(channel);
+                setupMessagesChannel();
+              }
+            }, 3000);
           }
         });
-
-      // Subscribers channel
-      const subscribersChannel = supabase
-        .channel(`manychat-subs-${Date.now()}`, {
-          config: { broadcast: { self: true } }
-        })
+      
+      return channel;
+    };
+    
+    const setupSubscribersChannel = () => {
+      const channel = supabase
+        .channel(`manychat-subs-${user?.id || 'anon'}`)
         .on('postgres_changes', 
           { event: '*', schema: 'public', table: 'manychat_subscribers' },
           (payload) => {
-            console.log('[Realtime] Subscriber evento:', payload.eventType, payload);
+            if (!isSubscribed) return;
+            console.log('[Realtime] Subscriber evento:', payload.eventType);
             
             if (payload.eventType === 'INSERT') {
               const newSub = payload.new as Subscriber;
@@ -501,7 +504,6 @@ const ManyChatInboxContent = () => {
               const updatedSub = payload.new as Subscriber;
               const oldSub = payload.old as Subscriber;
               
-              // Check if conversation was assigned to current user
               if (updatedSub.assigned_to === user?.id && oldSub?.assigned_to !== user?.id) {
                 notifyAssignment(updatedSub.nome || 'Contato', 'Um colega');
               }
@@ -515,7 +517,7 @@ const ManyChatInboxContent = () => {
               });
               
               // Update selected subscriber if it's the current one
-              if (selectedSubscriber?.subscriber_id === updatedSub.subscriber_id) {
+              if (selectedSubscriberRef.current?.subscriber_id === updatedSub.subscriber_id) {
                 setSelectedSubscriber(prev => prev ? { ...prev, ...updatedSub } : null);
               }
             }
@@ -524,19 +526,21 @@ const ManyChatInboxContent = () => {
         .subscribe((status) => {
           console.log('[Realtime] Subscribers channel status:', status);
         });
-
-      return { messages: messagesChannel, subscribers: subscribersChannel };
+      
+      return channel;
     };
 
-    const channels = setupChannels();
+    const messagesChannel = setupMessagesChannel();
+    const subscribersChannel = setupSubscribersChannel();
 
     return () => {
       isSubscribed = false;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
       console.log('[ManyChatInbox] Removendo canais realtime...');
-      if (channels.messages) supabase.removeChannel(channels.messages);
-      if (channels.subscribers) supabase.removeChannel(channels.subscribers);
+      supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(subscribersChannel);
     };
-  }, [selectedSubscriber?.subscriber_id, user?.id, playNotificationSound, notifyNewMessage, notifyAssignment]);
+  }, [user?.id, playNotificationSound, notifyNewMessage, notifyAssignment]);
 
   // Update team presence and load messages when selecting a NEW chat
   useEffect(() => {
@@ -575,21 +579,8 @@ const ManyChatInboxContent = () => {
     }
   }, [selectedSubscriber?.subscriber_id, setCurrentChat]);
 
-  // Polling fallback for messages - runs every 3 seconds when chat is open
-  // This ensures messages arrive even if realtime fails
-  useEffect(() => {
-    if (!selectedSubscriber) return;
-    
-    const pollMessages = () => {
-      console.log('[Poll] Refreshing messages for active chat...');
-      loadMessages(selectedSubscriber.subscriber_id);
-    };
-    
-    // Poll every 3 seconds as fallback
-    const pollInterval = setInterval(pollMessages, 3000);
-    
-    return () => clearInterval(pollInterval);
-  }, [selectedSubscriber?.subscriber_id]);
+  // Polling fallback desativado - realtime é primário
+  // Se realtime falhar, reconexão automática é feita no useEffect acima
 
   const loadSubscribers = async () => {
     setIsLoading(true);
