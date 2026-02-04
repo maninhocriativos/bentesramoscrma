@@ -366,15 +366,18 @@ const ManyChatInboxContent = () => {
     typingTimeoutRef.current = setTimeout(() => setTyping(false), 2000);
   }, [setTyping]);
 
-  // Realtime subscriptions - more robust with reconnection
+  // Realtime subscriptions - more robust with auto-reconnection
   useEffect(() => {
     console.log('[ManyChatInbox] Configurando canais realtime...');
     
     let isSubscribed = true;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let messagesChannel: ReturnType<typeof supabase.channel> | null = null;
+    let subscribersChannel: ReturnType<typeof supabase.channel> | null = null;
     
     const setupChannels = () => {
       // Messages channel with unique name to avoid conflicts
-      const messagesChannel = supabase
+      messagesChannel = supabase
         .channel(`manychat-msgs-${Date.now()}`, {
           config: {
             broadcast: { self: true },
@@ -522,16 +525,16 @@ const ManyChatInboxContent = () => {
           console.log('[Realtime] Subscribers channel status:', status);
         });
 
-      return { messagesChannel, subscribersChannel };
+      return { messages: messagesChannel, subscribers: subscribersChannel };
     };
 
-    const { messagesChannel, subscribersChannel } = setupChannels();
+    const channels = setupChannels();
 
     return () => {
       isSubscribed = false;
       console.log('[ManyChatInbox] Removendo canais realtime...');
-      supabase.removeChannel(messagesChannel);
-      supabase.removeChannel(subscribersChannel);
+      if (channels.messages) supabase.removeChannel(channels.messages);
+      if (channels.subscribers) supabase.removeChannel(channels.subscribers);
     };
   }, [selectedSubscriber?.subscriber_id, user?.id, playNotificationSound, notifyNewMessage, notifyAssignment]);
 
@@ -571,6 +574,22 @@ const ManyChatInboxContent = () => {
       }
     }
   }, [selectedSubscriber?.subscriber_id, setCurrentChat]);
+
+  // Polling fallback for messages - runs every 3 seconds when chat is open
+  // This ensures messages arrive even if realtime fails
+  useEffect(() => {
+    if (!selectedSubscriber) return;
+    
+    const pollMessages = () => {
+      console.log('[Poll] Refreshing messages for active chat...');
+      loadMessages(selectedSubscriber.subscriber_id);
+    };
+    
+    // Poll every 3 seconds as fallback
+    const pollInterval = setInterval(pollMessages, 3000);
+    
+    return () => clearInterval(pollInterval);
+  }, [selectedSubscriber?.subscriber_id]);
 
   const loadSubscribers = async () => {
     setIsLoading(true);
