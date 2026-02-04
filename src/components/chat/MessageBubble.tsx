@@ -278,7 +278,10 @@ export function MessageBubble({ message, themeClasses }: MessageBubbleProps) {
       
       default:
         return (
-          <p className="whitespace-pre-wrap break-words text-[14.2px] leading-[19px] text-inherit select-text cursor-text">
+          <p 
+            className="whitespace-pre-wrap break-words text-[14.2px] leading-[19px] text-inherit select-text cursor-text"
+            style={{ whiteSpace: 'pre-wrap' }}
+          >
             {content}
           </p>
         );
