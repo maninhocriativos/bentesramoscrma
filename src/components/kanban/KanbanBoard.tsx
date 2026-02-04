@@ -1,18 +1,20 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Lead, LeadStatus } from '@/types/leads';
 import { KanbanColumn } from './KanbanColumn';
+import { KanbanMobileTabs } from './KanbanMobileTabs';
 import { useLeads } from '@/hooks/useLeads';
 import { useToast } from '@/hooks/use-toast';
 import { useIsaInsights } from '@/hooks/useIsaInsights';
 import { useLeadExtras } from '@/hooks/useLeadExtras';
 import { useMetaCapi } from '@/hooks/useMetaCapi';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface KanbanBoardProps {
   leads: Lead[];
   onLeadClick: (lead: Lead) => void;
 }
 
-const STATUSES: LeadStatus[] = [
+export const STATUSES: LeadStatus[] = [
   'Lead Frio',
   'Bentes Ramos',
   'Em Atendimento',
@@ -27,6 +29,7 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
   const { updateLeadStatus } = useLeads();
   const { toast } = useToast();
   const { sendConversionEvent } = useMetaCapi();
+  const isMobile = useIsMobile();
   const [draggedLead, setDraggedLead] = useState<Lead | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<LeadStatus | null>(null);
 
@@ -70,7 +73,6 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
           description: `${draggedLead.nome || 'Lead'} → ${status}`,
         });
 
-        // Enviar evento de conversão para Meta CAPI quando lead vai para "Ganho"
         if (status === 'Ganho') {
           console.log('[Meta CAPI] Lead ganho - enviando evento de conversão');
           sendConversionEvent(draggedLead.id, {
@@ -86,37 +88,43 @@ export function KanbanBoard({ leads, onLeadClick }: KanbanBoardProps) {
     setDraggedLead(null);
   }, [draggedLead, updateLeadStatus, toast, sendConversionEvent]);
 
+  // Mobile: Show tabs instead of columns
+  if (isMobile) {
+    return (
+      <KanbanMobileTabs
+        leads={leads}
+        onLeadClick={onLeadClick}
+        isaInsights={isaInsights}
+        leadExtras={leadExtras}
+      />
+    );
+  }
+
   return (
-    <div className="w-full h-full overflow-y-auto pb-4">
-      {/* Responsive Grid - todas colunas visíveis */}
-      <div 
-        className="grid gap-2 px-1 h-full"
-        style={{
-          gridTemplateColumns: `repeat(${STATUSES.length}, minmax(140px, 1fr))`
-        }}
-        onDragLeave={handleDragLeave}
-      >
-        {STATUSES.map((status) => (
-          <div 
-            key={status}
-            onDragEnter={() => handleDragEnter(status)}
-            className="h-full min-w-0"
-          >
-            <KanbanColumn
-              status={status}
-              leads={leads}
-              onLeadClick={onLeadClick}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              isDragOver={dragOverStatus === status}
-              isaInsights={isaInsights}
-              leadExtras={leadExtras}
-            />
-          </div>
-        ))}
-      </div>
+    <div 
+      className="kanban-grid-container"
+      onDragLeave={handleDragLeave}
+    >
+      {STATUSES.map((status) => (
+        <div 
+          key={status}
+          onDragEnter={() => handleDragEnter(status)}
+          className="kanban-column-wrapper"
+        >
+          <KanbanColumn
+            status={status}
+            leads={leads}
+            onLeadClick={onLeadClick}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            isDragOver={dragOverStatus === status}
+            isaInsights={isaInsights}
+            leadExtras={leadExtras}
+          />
+        </div>
+      ))}
     </div>
   );
 }
