@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import { Lead, LeadStatus } from '@/types/leads';
-import { LeadsTableGroup } from './LeadsTableGroup';
 import { LeadsTableHeader } from './LeadsTableHeader';
+import { LeadsDataTable } from './LeadsDataTable';
+import { PipelineStagePills } from './PipelineStagePills';
 import { LeadDetailDrawer } from './LeadDetailDrawer';
 import { useLeads } from '@/hooks/useLeads';
 import { Loader2 } from 'lucide-react';
@@ -26,7 +27,7 @@ export function LeadsTableView() {
   const [filterEtapa, setFilterEtapa] = useState('all');
   const [filterPrioridade, setFilterPrioridade] = useState('all');
   const [filterLinha, setFilterLinha] = useState('all');
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [activeStage, setActiveStage] = useState('all');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -43,6 +44,45 @@ export function LeadsTableView() {
     });
     return { countBentesRamos: bentes, countTrafego: trafego };
   }, [leads]);
+
+  // Count leads by stage (before other filters)
+  const stageCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    PIPELINE_STAGES.forEach(stage => { counts[stage.status] = 0; });
+    
+    // Apply linha filter first for accurate counts
+    let baseLeads = [...leads];
+    if (filterLinha !== 'all') {
+      baseLeads = baseLeads.filter(lead => {
+        if (filterLinha === 'bentes_ramos_antigo') {
+          return lead.linha_whatsapp === 'bentes_ramos_antigo' || 
+                 lead.empresa_tag === 'BENTES_RAMOS' ||
+                 lead.tipo_origem === 'whatsapp_direto';
+        }
+        if (filterLinha === 'trafego_isa') {
+          return lead.linha_whatsapp === 'trafego_isa' || 
+                 lead.tipo_origem === 'trafego';
+        }
+        return true;
+      });
+    }
+    
+    baseLeads.forEach(lead => {
+      const status = lead.status || 'Lead Frio';
+      if (counts[status] !== undefined) {
+        counts[status]++;
+      }
+    });
+    return counts;
+  }, [leads, filterLinha]);
+
+  // Create stages with counts for pills
+  const stagesWithCounts = useMemo(() => {
+    return PIPELINE_STAGES.map(stage => ({
+      ...stage,
+      count: stageCounts[stage.status] || 0,
+    }));
+  }, [stageCounts]);
 
   // Filter leads
   const filteredLeads = useMemo(() => {
@@ -64,6 +104,12 @@ export function LeadsTableView() {
       });
     }
 
+    // Filter by active stage (from pills)
+    if (activeStage !== 'all') {
+      result = result.filter(lead => lead.status === activeStage);
+    }
+
+    // Filter by search
     if (search.trim()) {
       const searchLower = search.toLowerCase();
       result = result.filter(lead =>
@@ -73,33 +119,18 @@ export function LeadsTableView() {
       );
     }
 
+    // Filter by origem
     if (filterOrigem !== 'all') {
       result = result.filter(lead => lead.origem === filterOrigem);
     }
 
+    // Filter by etapa (from dropdown - combine with activeStage)
     if (filterEtapa !== 'all') {
       result = result.filter(lead => lead.status === filterEtapa);
     }
 
     return result;
-  }, [leads, search, filterOrigem, filterEtapa, filterLinha]);
-
-  // Group leads by status
-  const groupedLeads = useMemo(() => {
-    const groups: Record<string, Lead[]> = {};
-    PIPELINE_STAGES.forEach(stage => {
-      groups[stage.status] = [];
-    });
-
-    filteredLeads.forEach(lead => {
-      const status = lead.status || 'Lead Frio';
-      if (groups[status]) {
-        groups[status].push(lead);
-      }
-    });
-
-    return groups;
-  }, [filteredLeads]);
+  }, [leads, search, filterOrigem, filterEtapa, filterLinha, activeStage]);
 
   // Get unique origins for filter
   const origens = useMemo(() => {
@@ -109,18 +140,6 @@ export function LeadsTableView() {
     });
     return Array.from(set).sort();
   }, [leads]);
-
-  const toggleGroup = (status: string) => {
-    setCollapsedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(status)) {
-        next.delete(status);
-      } else {
-        next.add(status);
-      }
-      return next;
-    });
-  };
 
   const handleLeadClick = (lead: Lead) => {
     setSelectedLead(lead);
@@ -165,23 +184,23 @@ export function LeadsTableView() {
         countTrafego={countTrafego}
       />
 
-      {/* Table Content */}
-      <div className="flex-1 overflow-y-auto px-4 lg:px-6 pb-6">
-        <div className="space-y-3">
-          {PIPELINE_STAGES.map(stage => (
-            <LeadsTableGroup
-              key={stage.status}
-              status={stage.status}
-              label={stage.label}
-              leads={groupedLeads[stage.status] || []}
-              isCollapsed={collapsedGroups.has(stage.status)}
-              onToggle={() => toggleGroup(stage.status)}
-              onLeadClick={handleLeadClick}
-              onMoveStage={handleMoveStage}
-              allStages={PIPELINE_STAGES}
-            />
-          ))}
-        </div>
+      {/* Pipeline Stage Pills */}
+      <div className="px-4 lg:px-6 py-3 border-b bg-background">
+        <PipelineStagePills
+          stages={stagesWithCounts}
+          activeStage={activeStage}
+          onStageChange={setActiveStage}
+        />
+      </div>
+
+      {/* Table Content - Fixed height with internal scroll */}
+      <div className="flex-1 overflow-hidden px-4 lg:px-6 py-4">
+        <LeadsDataTable
+          leads={filteredLeads}
+          onLeadClick={handleLeadClick}
+          onMoveStage={handleMoveStage}
+          allStages={PIPELINE_STAGES}
+        />
       </div>
 
       {/* Lead Detail Drawer */}
