@@ -3,12 +3,11 @@ import { AppLayout } from '@/components/layouts/AppLayout';
 import { MetaLeadsHeader } from '@/components/meta-leads/MetaLeadsHeader';
 import { MetaLeadsList } from '@/components/meta-leads/MetaLeadsList';
 import { MetaLeadDetail } from '@/components/meta-leads/MetaLeadDetail';
-import { MetaLeadChat } from '@/components/meta-leads/MetaLeadChat';
 import { useMetaFormLeads, useMetaFormChat } from '@/hooks/useMetaFormLeads';
 import { MetaFormLead, MetaFormLeadStatus } from '@/types/metaFormLeads';
 import { Loader2 } from 'lucide-react';
 
-type ViewMode = 'list' | 'detail' | 'chat';
+type ViewMode = 'list' | 'detail';
 
 export default function MetaLeadsPage() {
   const { leads, loading, fetchLeads, updateLeadStatus } = useMetaFormLeads();
@@ -17,8 +16,9 @@ export default function MetaLeadsPage() {
   const [selectedLead, setSelectedLead] = useState<MetaFormLead | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   
-  const { messages, loading: chatLoading, sending, sendMessage } = useMetaFormChat(
-    viewMode === 'chat' ? selectedLead?.id || null : null
+  // Load messages for selected lead (read-only history)
+  const { messages, loading: messagesLoading } = useMetaFormChat(
+    selectedLead?.id || null
   );
 
   // Filter leads
@@ -47,14 +47,6 @@ export default function MetaLeadsPage() {
     setViewMode('detail');
   };
 
-  const handleOpenChat = () => {
-    setViewMode('chat');
-  };
-
-  const handleBackFromChat = () => {
-    setViewMode('detail');
-  };
-
   const handleBackToList = () => {
     setSelectedLead(null);
     setViewMode('list');
@@ -65,10 +57,6 @@ export default function MetaLeadsPage() {
       await updateLeadStatus(selectedLead.id, status);
       setSelectedLead({ ...selectedLead, status });
     }
-  };
-
-  const handleSendMessage = async (text: string) => {
-    await sendMessage(text);
   };
 
   if (loading) {
@@ -121,19 +109,11 @@ export default function MetaLeadsPage() {
               <div className="flex-1 flex items-center justify-center text-muted-foreground">
                 <p>Selecione um lead para ver os detalhes</p>
               </div>
-            ) : viewMode === 'chat' ? (
-              <MetaLeadChat
-                leadName={selectedLead.nome || 'Lead'}
-                messages={messages}
-                loading={chatLoading}
-                sending={sending}
-                onSend={handleSendMessage}
-                onBack={handleBackFromChat}
-              />
             ) : (
               <MetaLeadDetail
                 lead={selectedLead}
-                onOpenChat={handleOpenChat}
+                messages={messages}
+                messagesLoading={messagesLoading}
                 onUpdateStatus={handleUpdateStatus}
               />
             )}
