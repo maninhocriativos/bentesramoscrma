@@ -21,14 +21,14 @@ interface LeadCardProps {
   };
 }
 
-// Sentiment indicator
+// Sentiment indicator - usando cores do design system
 function SentimentDot({ isaInsight }: { isaInsight?: LeadCardProps['isaInsight'] }) {
   if (!isaInsight?.sentimento) return null;
 
   const config = {
-    positivo: { icon: Star, color: 'text-amber-500' },
-    neutro: { icon: Sparkles, color: 'text-blue-400' },
-    negativo: { icon: Flame, color: 'text-red-500' },
+    positivo: { icon: Star, color: 'text-gold' },
+    neutro: { icon: Sparkles, color: 'text-primary/60' },
+    negativo: { icon: Flame, color: 'text-destructive' },
   };
 
   const { icon: Icon, color } = config[isaInsight.sentimento];
@@ -36,13 +36,13 @@ function SentimentDot({ isaInsight }: { isaInsight?: LeadCardProps['isaInsight']
   return <Icon className={cn("w-3 h-3", color)} />;
 }
 
-// Origin badge
+// Origin badge - usando cores do design system
 function OriginBadge({ tipoOrigem }: { tipoOrigem?: TipoOrigem | null }) {
   if (!tipoOrigem || tipoOrigem === 'indefinido') return null;
 
   const config = {
-    trafego: { icon: Target, label: 'Ads', bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-600 dark:text-blue-400' },
-    whatsapp_direto: { icon: MessageSquare, label: 'Direto', bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-600 dark:text-gray-400' },
+    trafego: { icon: Target, label: 'Ads', bg: 'bg-primary/10', text: 'text-primary' },
+    whatsapp_direto: { icon: MessageSquare, label: 'Direto', bg: 'bg-muted', text: 'text-muted-foreground' },
   };
 
   const item = config[tipoOrigem];
@@ -86,15 +86,15 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProp
       <div className="p-3">
         {/* Row 1: Avatar + Name + Time */}
         <div className="flex items-center gap-2.5 mb-2">
-          {/* Avatar */}
+          {/* Avatar - usando cores do design system */}
           <div className={cn(
             "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-            "bg-gradient-to-br from-primary/15 to-primary/5",
+            "bg-gradient-to-br from-gold/20 to-gold/5",
             hasContract && "from-success/20 to-success/5"
           )}>
             <User className={cn(
               "w-4 h-4",
-              hasContract ? "text-success" : "text-primary"
+              hasContract ? "text-success" : "text-gold-foreground"
             )} />
           </div>
 
@@ -110,11 +110,11 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProp
             )}
           </div>
 
-          {/* Sentiment + Time */}
+          {/* Sentiment + Time - usando cores do design system */}
           <div className="flex items-center gap-2 shrink-0">
             <SentimentDot isaInsight={isaInsight} />
-            <div className="flex items-center gap-1 text-muted-foreground">
-              <Clock className="w-3 h-3" />
+            <div className="flex items-center gap-1 text-muted-foreground/70">
+              <Clock className="w-3 h-3 text-gold/60" />
               <span className="text-[10px]">{lastInteraction}</span>
             </div>
           </div>

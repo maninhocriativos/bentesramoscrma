@@ -205,6 +205,8 @@ const ACOES_AUTOMATICAS = [
   'verificar_docs_pendentes', // Verificar documentos pendentes
   // CONSULTA DE PROCESSOS
   'consultar_processo', // Consultar status do processo do lead
+  // HANDOFF
+  'direcionar_atendimento_humano', // Direcionar para atendimento humano (Amanda)
 ];
 
 // Ações que precisam de confirmação do USUÁRIO INTERNO (híbrido)
@@ -1595,6 +1597,94 @@ Ou acesse nosso link de agendamento: https://cal.com/bentes-ramos-advocacia-1ucm
         }
       }
 
+      case 'direcionar_atendimento_humano': {
+        const lead_id = dados.lead_id;
+        const motivo = dados.motivo || 'Lead qualificado para atendimento humano';
+        const tipo_handoff = dados.tipo || 'qualificado'; // 'qualificado' | 'complexo' | 'pediu_humano'
+        
+        // 1. Marcar atendimento_humano no subscriber
+        if (subscriberId) {
+          await supabase
+            .from('manychat_subscribers')
+            .update({
+              atendimento_humano: true,
+              atendimento_humano_desde: new Date().toISOString()
+            })
+            .eq('subscriber_id', subscriberId);
+        }
+        
+        // 2. Atualizar lead para status apropriado
+        await supabase
+          .from('leads_juridicos')
+          .update({
+            status: 'Em Atendimento',
+            isa_ativa: false, // Desativar ISA para este lead
+            resumo_ia: `[HANDOFF] ${motivo}`
+          })
+          .eq('id', lead_id);
+        
+        // 3. Registrar evento de handoff
+        await supabase.from('system_events').insert({
+          tipo: 'handoff',
+          fonte: 'isa',
+          acao: 'direcionar_atendimento_humano',
+          lead_id: lead_id,
+          dados: {
+            tipo_handoff,
+            motivo,
+            subscriber_id: subscriberId,
+            timestamp: new Date().toISOString()
+          },
+          processado: false // Pendente para equipe
+        });
+        
+        // 4. Enviar notificação por email para equipe
+        if (RESEND_API_KEY) {
+          try {
+            const { data: lead } = await supabase
+              .from('leads_juridicos')
+              .select('nome, telefone, email, tipo_acao')
+              .eq('id', lead_id)
+              .single();
+            
+            const handoffLabels: Record<string, string> = {
+              'qualificado': '✅ Lead Qualificado',
+              'complexo': '🔍 Caso Complexo',
+              'pediu_humano': '🙋 Solicitou Humano'
+            };
+            
+            await fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${RESEND_API_KEY}`,
+              },
+              body: JSON.stringify({
+                from: 'Isa - Bentes & Ramos <onboarding@resend.dev>',
+                to: ['bentes@bentesramos.com.br'], // Amanda ou equipe
+                subject: `🔔 ${handoffLabels[tipo_handoff] || 'Handoff'}: ${lead?.nome || 'Lead'}`,
+                html: `
+                  <h2>🤖 Isa direcionou um lead para atendimento humano</h2>
+                  <p><strong>Lead:</strong> ${lead?.nome || 'Não informado'}</p>
+                  <p><strong>Telefone:</strong> ${lead?.telefone || 'Não informado'}</p>
+                  <p><strong>Tipo:</strong> ${lead?.tipo_acao || 'Não classificado'}</p>
+                  <p><strong>Motivo:</strong> ${motivo}</p>
+                  <p><a href="https://lovable.dev/projects/qgenaltkjtlvwfgykpxq/chat?lead_id=${lead_id}">Abrir Chat</a></p>
+                `,
+              }),
+            });
+          } catch (err) {
+            console.error('Erro ao enviar email de handoff:', err);
+          }
+        }
+        
+        return {
+          success: true,
+          message: `Lead direcionado para atendimento humano: ${motivo}`,
+          data: { tipo_handoff, motivo }
+        };
+      }
+
       default:
         return { success: false, message: `Ação "${acao}" não reconhecida` };
     }
@@ -2044,6 +2134,21 @@ ${historicoFormatado || '(Sem histórico)'}
 🔄 FOLLOW-UP:
 - pausar_followup / retomar_followup: Controlar automação
 
+🙋 HANDOFF PARA HUMANO (Amanda):
+- direcionar_atendimento_humano: Direcionar para atendimento humano (dados: { lead_id, motivo, tipo })
+  → tipo: 'qualificado' (lead passou triagem e está pronto), 'complexo' (caso precisa análise humana), 'pediu_humano' (cliente solicitou)
+  
+⚠️ CRITÉRIOS PARA DIRECIONAR PARA HUMANO:
+1. Lead QUALIFICADO: Após coletar dados básicos e classificar caso (estado DATA_CAPTURE ou superior)
+2. CASO COMPLEXO: Quando detectar situação que exige análise jurídica detalhada (valores altos, múltiplos contratos, situação atípica)
+3. PEDIU HUMANO: Quando cliente mencionar "falar com advogado", "falar com alguém", "atendente", "pessoa real"
+4. URGÊNCIA ALTA: Quando análise indicar urgência 'alta' ou 'urgente' E sentimento 'negativo'
+5. DÚVIDAS TÉCNICAS: Quando pergunta exigir conhecimento jurídico específico que você não pode responder
+
+Ao direcionar para humano:
+- Informe o cliente: "Vou transferir você para nossa equipe de atendimento especializada. Em instantes a Amanda ou outro membro vai continuar seu atendimento!"
+- Execute a ação direcionar_atendimento_humano
+
 Responda em JSON:
 {
   "analise": {
@@ -2051,7 +2156,9 @@ Responda em JSON:
     "sentimento": "positivo|neutro|negativo",
     "urgencia": "baixa|media|alta|urgente",
     "area_juridica": "bancario|aereo|trabalhista|outro|indefinido",
-    "proximo_estado_sugerido": "${leadState}" ou próximo estado lógico
+    "proximo_estado_sugerido": "${leadState}" ou próximo estado lógico,
+    "deve_direcionar_humano": true/false,
+    "motivo_handoff": "razão se deve_direcionar_humano for true"
   },
   "resposta": "Mensagem para o cliente (máximo 3-4 linhas)",
   "acoes": [{ "acao": "nome", "dados": {}, "motivo": "razão" }]
