@@ -1,9 +1,9 @@
 import { MetaFormLead, MetaFormLeadStatus } from '@/types/metaFormLeads';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { User, Phone, Mail, Clock } from 'lucide-react';
+import { User, Phone, Mail, Clock, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MetaLeadsListProps {
@@ -56,20 +56,20 @@ export function MetaLeadsList({ leads, selectedId, onSelect }: MetaLeadsListProp
                   <User className="h-4 w-4 text-primary" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium truncate">
+                  <p className="font-medium truncate" title={lead.nome || 'Sem nome'}>
                     {lead.nome || 'Sem nome'}
                   </p>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                     {lead.telefone && (
-                      <span className="flex items-center gap-1">
-                        <Phone className="h-3 w-3" />
-                        {lead.telefone}
+                      <span className="flex items-center gap-1" title={lead.telefone}>
+                        <Phone className="h-3 w-3 shrink-0" />
+                        <span className="truncate max-w-[120px]">{lead.telefone}</span>
                       </span>
                     )}
                     {lead.email && (
-                      <span className="flex items-center gap-1 truncate">
-                        <Mail className="h-3 w-3" />
-                        {lead.email}
+                      <span className="flex items-center gap-1 truncate" title={lead.email}>
+                        <Mail className="h-3 w-3 shrink-0" />
+                        <span className="truncate max-w-[150px]">{lead.email}</span>
                       </span>
                     )}
                   </div>
@@ -80,12 +80,12 @@ export function MetaLeadsList({ leads, selectedId, onSelect }: MetaLeadsListProp
               </Badge>
             </div>
             
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <Badge variant="secondary" className="text-[10px] bg-purple-100 text-purple-700 border-purple-200">
-                📋 FORM META
+            <div className="flex items-center justify-between text-xs text-muted-foreground gap-2">
+              <Badge variant="secondary" className="text-[10px] bg-purple-100 text-purple-700 border-purple-200 shrink-0">
+                📋 META
               </Badge>
-              <span className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
+              <span className="flex items-center gap-1 truncate" title={format(new Date(lead.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}>
+                <Calendar className="h-3 w-3 shrink-0" />
                 {formatDistanceToNow(new Date(lead.created_at), { 
                   addSuffix: true, 
                   locale: ptBR 
