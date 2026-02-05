@@ -307,6 +307,74 @@ export type Database = {
           },
         ]
       }
+      crm_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          lead_ref_id: string
+          lead_type: string
+          status: string
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lead_ref_id: string
+          lead_type?: string
+          status?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lead_ref_id?: string
+          lead_type?: string
+          status?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      crm_messages: {
+        Row: {
+          channel: string
+          conversation_id: string
+          created_at: string
+          id: string
+          message: string
+          sender_name: string | null
+          sender_type: string
+        }
+        Insert: {
+          channel?: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          message: string
+          sender_name?: string | null
+          sender_type?: string
+        }
+        Update: {
+          channel?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          message?: string
+          sender_name?: string | null
+          sender_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "crm_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       despesas: {
         Row: {
           cliente_id: string | null
@@ -1373,6 +1441,74 @@ export type Database = {
           {
             foreignKeyName: "manychat_subscribers_lead_id_fkey"
             columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meta_form_leads: {
+        Row: {
+          ad_id: string | null
+          adset_id: string | null
+          campaign_id: string | null
+          created_at: string
+          created_time: string | null
+          email: string | null
+          form_fields: Json | null
+          form_id: string | null
+          id: string
+          last_contact_at: string | null
+          linked_lead_id: string | null
+          meta_lead_id: string
+          nome: string | null
+          raw: Json | null
+          status: string
+          telefone: string | null
+          updated_at: string
+        }
+        Insert: {
+          ad_id?: string | null
+          adset_id?: string | null
+          campaign_id?: string | null
+          created_at?: string
+          created_time?: string | null
+          email?: string | null
+          form_fields?: Json | null
+          form_id?: string | null
+          id?: string
+          last_contact_at?: string | null
+          linked_lead_id?: string | null
+          meta_lead_id: string
+          nome?: string | null
+          raw?: Json | null
+          status?: string
+          telefone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ad_id?: string | null
+          adset_id?: string | null
+          campaign_id?: string | null
+          created_at?: string
+          created_time?: string | null
+          email?: string | null
+          form_fields?: Json | null
+          form_id?: string | null
+          id?: string
+          last_contact_at?: string | null
+          linked_lead_id?: string | null
+          meta_lead_id?: string
+          nome?: string | null
+          raw?: Json | null
+          status?: string
+          telefone?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_form_leads_linked_lead_id_fkey"
+            columns: ["linked_lead_id"]
             isOneToOne: false
             referencedRelation: "leads_juridicos"
             referencedColumns: ["id"]

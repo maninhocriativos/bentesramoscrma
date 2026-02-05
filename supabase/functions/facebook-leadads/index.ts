@@ -358,6 +358,47 @@ serve(async (req) => {
 
           console.log('[FB Lead Ads] Extracted data:', { nome, email, telefone: telefoneNormalizado });
 
+          // ========================================
+          // SAVE TO meta_form_leads TABLE (NEW)
+          // ========================================
+          const formFieldsMap: Record<string, string> = {};
+          for (const field of fieldData) {
+            const fieldName = field.name || 'unknown';
+            const values = field.values || [];
+            formFieldsMap[fieldName] = values[0] || '';
+          }
+
+          // Check if already exists in meta_form_leads
+          const { data: existingMetaLead } = await supabase
+            .from('meta_form_leads')
+            .select('id')
+            .eq('meta_lead_id', leadgenId)
+            .maybeSingle();
+
+          if (!existingMetaLead) {
+            const { error: metaInsertError } = await supabase
+              .from('meta_form_leads')
+              .insert({
+                meta_lead_id: leadgenId,
+                form_id: formId || null,
+                ad_id: adId || null,
+                campaign_id: adgroupId || null,
+                created_time: createdTime ? new Date(createdTime * 1000).toISOString() : null,
+                nome: nome || null,
+                telefone: telefoneNormalizado || null,
+                email: email?.toLowerCase() || null,
+                form_fields: formFieldsMap,
+                raw: leadData,
+                status: 'novo',
+              });
+
+            if (metaInsertError) {
+              console.error('[FB Lead Ads] Error saving to meta_form_leads:', metaInsertError);
+            } else {
+              console.log('[FB Lead Ads] ✅ Saved to meta_form_leads');
+            }
+          }
+
           // Verificar se já existe lead com esse facebook_lead_id
           const { data: existingLead } = await supabase
             .from('leads_juridicos')

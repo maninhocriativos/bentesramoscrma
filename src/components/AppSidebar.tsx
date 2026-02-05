@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare, Sparkles, Webhook, Zap, BookOpen } from 'lucide-react';
+import { LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare, Sparkles, Webhook, Zap, BookOpen, FormInput } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Sidebar,
@@ -37,6 +37,12 @@ const menuItems: MenuItem[] = [
     title: 'CRM de Leads', 
     url: '/leads', 
     icon: Users,
+    visibility: 'leads-only'
+  },
+  { 
+    title: 'Leads API (Meta)', 
+    url: '/meta-leads', 
+    icon: FormInput,
     visibility: 'leads-only'
   },
   { 
