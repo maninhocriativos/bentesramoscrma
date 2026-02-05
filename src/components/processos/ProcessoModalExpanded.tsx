@@ -87,25 +87,30 @@ export function ProcessoModalExpanded({
   const [partes, setPartes] = useState<ProcessoParte[]>([]);
   const [movimentos, setMovimentos] = useState<ProcessoMovimento[]>([]);
 
-  const fetchProcessoData = async (numeroProcesso: string) => {
+  const fetchProcessoData = async (numeroProcesso: string, tribunalOverride?: string) => {
     const numero = (numeroProcesso || '').trim();
     if (!CNJ_REGEX.test(numero)) return;
 
     setFetchingData(true);
     try {
+      const tribunal = (tribunalOverride || '').trim();
+
       const { data, error } = await supabase.functions.invoke('consulta-processos', {
-        body: { numeroProcesso: numero }
+        body: {
+          numeroProcesso: numero,
+          tribunal: tribunal ? tribunal : undefined,
+        },
       });
 
       if (error) throw error;
 
       if (data?.encontrado && data?.processo) {
         const proc = data.processo;
-        
-        const parteAutor = proc.partes?.find((p: any) => 
+
+        const parteAutor = proc.partes?.find((p: any) =>
           p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT' || p.polo?.toUpperCase() === 'PA'
         );
-        
+
         let clienteId = '';
         let nomeCliente = '';
         if (parteAutor?.nome) {
@@ -132,7 +137,7 @@ export function ProcessoModalExpanded({
           status: mapApiStatusToLocal(proc.status),
           cliente_id: clienteId || prev.cliente_id,
           advogado_responsavel: advogadoResponsavel || prev.advogado_responsavel,
-          tribunal: proc.tribunal || '',
+          tribunal: proc.tribunal || prev.tribunal || '',
           orgao_julgador: proc.orgaoJulgador || '',
           grau: proc.grau || '',
           assunto: proc.assuntos?.[0]?.nome || '',
@@ -143,16 +148,18 @@ export function ProcessoModalExpanded({
           setPartes(proc.partes);
         }
         if (proc.movimentos && Array.isArray(proc.movimentos)) {
-          setMovimentos(proc.movimentos.slice(0, 20));
+          setMovimentos(proc.movimentos.slice(0, 50));
         }
 
         toast.success('Dados do processo carregados!', {
-          description: nomeCliente 
-            ? `${proc.classe} - Cliente: ${nomeCliente}` 
-            : `${proc.classe} - ${proc.tribunal}`
+          description: nomeCliente
+            ? `${proc.classe} - Cliente: ${nomeCliente}`
+            : `${proc.classe} - ${(proc.tribunal || tribunal || 'DataJud')}`
         });
       } else {
-        toast.error('Processo não encontrado');
+        toast.error('Processo não encontrado', {
+          description: data?.mensagem || 'Não encontramos este processo no DataJud com os parâmetros informados.'
+        });
       }
     } catch (err) {
       console.error('Erro ao buscar dados do processo:', err);
@@ -176,7 +183,12 @@ export function ProcessoModalExpanded({
 
   const handleRefreshStatus = async () => {
     const numero = (formData.numero_processo || '').trim();
-    if (!numero) return;
+    if (!numero) {
+      toast.error('Informe o número do processo', {
+        description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
+      });
+      return;
+    }
 
     if (!CNJ_REGEX.test(numero)) {
       toast.error('Número do processo inválido', {
@@ -187,23 +199,28 @@ export function ProcessoModalExpanded({
 
     setFetchingData(true);
     try {
+      const tribunal = (formData.tribunal || '').trim();
+
       const { data, error } = await supabase.functions.invoke('consulta-processos', {
-        body: { numeroProcesso: numero }
+        body: {
+          numeroProcesso: numero,
+          tribunal: tribunal ? tribunal : undefined,
+        },
       });
 
       if (error) throw error;
 
       if (data?.encontrado && data?.processo) {
         const proc = data.processo;
-        
+
         // Extrair partes e movimentos
         const newPartes = proc.partes || [];
         const newMovimentos = (proc.movimentos || []).slice(0, 50);
-        
+
         // Atualizar states locais
         setPartes(newPartes);
         setMovimentos(newMovimentos);
-        
+
         // Preparar dados para atualização
         const updateData: any = {
           titulo_acao: proc.classe || formData.titulo_acao,
@@ -219,7 +236,7 @@ export function ProcessoModalExpanded({
           ultima_consulta_api_at: new Date().toISOString(),
           data_ultima_atualizacao: new Date().toISOString(),
         };
-        
+
         // Atualizar form local
         setFormData(prev => ({
           ...prev,
@@ -238,7 +255,7 @@ export function ProcessoModalExpanded({
             .from('processos')
             .update(updateData)
             .eq('id', processo.id);
-          
+
           if (updateError) {
             console.error('Erro ao salvar no banco:', updateError);
             toast.error('Erro ao salvar movimentações');
@@ -254,7 +271,9 @@ export function ProcessoModalExpanded({
           });
         }
       } else {
-        toast.error('Processo não encontrado no DataJud');
+        toast.error('Processo não encontrado', {
+          description: data?.mensagem || 'Não encontramos este processo no DataJud com os parâmetros informados.'
+        });
       }
     } catch (err) {
       console.error('Erro ao atualizar status:', err);
@@ -294,12 +313,13 @@ export function ProcessoModalExpanded({
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (isNew && formData.numero_processo.length >= 25) {
-        fetchProcessoData(formData.numero_processo);
+      const numero = (formData.numero_processo || '').trim();
+      if (isNew && CNJ_REGEX.test(numero)) {
+        fetchProcessoData(numero, formData.tribunal);
       }
     }, 500);
     return () => clearTimeout(timeoutId);
-  }, [formData.numero_processo, isNew]);
+  }, [formData.numero_processo, formData.tribunal, isNew]);
 
   useEffect(() => {
     if (processo) {
@@ -661,7 +681,7 @@ export function ProcessoModalExpanded({
                           <Badge variant="outline" className="text-xs mt-1">CNJ: {mov.codigo}</Badge>
                         )}
                         {mov.complemento && (
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{mov.complemento}</p>
+                          <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap break-words">{mov.complemento}</p>
                         )}
                       </CardContent>
                     </Card>
@@ -769,21 +789,19 @@ export function ProcessoModalExpanded({
           </div>
           
           <div className="flex gap-2">
-            {formData.numero_processo.trim() && (
-              <Button
-                variant="secondary"
-                onClick={handleRefreshStatus}
-                disabled={fetchingData}
-                className="rounded-xl"
-              >
-                {fetchingData ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                )}
-                {isNew ? 'Buscar DataJud' : 'Atualizar DataJud'}
-              </Button>
-            )}
+            <Button
+              variant="secondary"
+              onClick={handleRefreshStatus}
+              disabled={fetchingData || !(formData.numero_processo || '').trim()}
+              className="rounded-xl"
+            >
+              {fetchingData ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              {isNew ? 'Buscar DataJud' : 'Atualizar DataJud'}
+            </Button>
             <Button variant="outline" onClick={onClose} className="rounded-xl">
               Cancelar
             </Button>
