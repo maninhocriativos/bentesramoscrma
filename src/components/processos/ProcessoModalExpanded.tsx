@@ -173,8 +173,84 @@ export function ProcessoModalExpanded({
   };
 
   const handleRefreshStatus = async () => {
-    if (formData.numero_processo) {
-      await fetchProcessoData(formData.numero_processo);
+    if (!formData.numero_processo) return;
+    
+    setFetchingData(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('consulta-processos', {
+        body: { numeroProcesso: formData.numero_processo }
+      });
+
+      if (error) throw error;
+
+      if (data?.encontrado && data?.processo) {
+        const proc = data.processo;
+        
+        // Extrair partes e movimentos
+        const newPartes = proc.partes || [];
+        const newMovimentos = (proc.movimentos || []).slice(0, 50);
+        
+        // Atualizar states locais
+        setPartes(newPartes);
+        setMovimentos(newMovimentos);
+        
+        // Preparar dados para atualização
+        const updateData: any = {
+          titulo_acao: proc.classe || formData.titulo_acao,
+          status: mapApiStatusToLocal(proc.status),
+          tribunal: proc.tribunal || formData.tribunal,
+          orgao_julgador: proc.orgaoJulgador || formData.orgao_julgador,
+          grau: proc.grau || formData.grau,
+          assunto: proc.assuntos?.[0]?.nome || formData.assunto,
+          valor_causa: proc.valorCausa || null,
+          partes_json: newPartes.length > 0 ? newPartes : null,
+          movimentos_json: newMovimentos.length > 0 ? newMovimentos : null,
+          dados_datajud: proc.fonteRaw || null,
+          ultima_consulta_api_at: new Date().toISOString(),
+          data_ultima_atualizacao: new Date().toISOString(),
+        };
+        
+        // Atualizar form local
+        setFormData(prev => ({
+          ...prev,
+          titulo_acao: updateData.titulo_acao,
+          status: updateData.status,
+          tribunal: updateData.tribunal,
+          orgao_julgador: updateData.orgao_julgador,
+          grau: updateData.grau,
+          assunto: updateData.assunto,
+          valor_causa: proc.valorCausa?.toString() || '',
+        }));
+
+        // Se é um processo existente, salvar no banco imediatamente
+        if (processo?.id) {
+          const { error: updateError } = await supabase
+            .from('processos')
+            .update(updateData)
+            .eq('id', processo.id);
+          
+          if (updateError) {
+            console.error('Erro ao salvar no banco:', updateError);
+            toast.error('Erro ao salvar movimentações');
+          } else {
+            await fetchProcessos(); // Atualizar lista
+            toast.success('Processo atualizado!', {
+              description: `${newMovimentos.length} movimentações carregadas do DataJud`
+            });
+          }
+        } else {
+          toast.success('Dados carregados!', {
+            description: `${newMovimentos.length} movimentações encontradas`
+          });
+        }
+      } else {
+        toast.error('Processo não encontrado no DataJud');
+      }
+    } catch (err) {
+      console.error('Erro ao atualizar status:', err);
+      toast.error('Erro ao consultar DataJud');
+    } finally {
+      setFetchingData(false);
     }
   };
 
