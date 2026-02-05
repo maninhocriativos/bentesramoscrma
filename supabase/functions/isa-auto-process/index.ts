@@ -2144,7 +2144,7 @@ function isAudioUrl(content: string): boolean {
 async function getLeadState(supabase: any, leadId: string): Promise<string | null> {
   const { data: lead } = await supabase
     .from('leads_juridicos')
-    .select('lead_state, status, is_lost, tipo_origem, fonte_trafego, canal_origem, created_at')
+    .select('lead_state, status, is_lost, tipo_origem, fonte_trafego, canal_origem, created_at, linha_whatsapp, isa_ativa, empresa_tag')
     .eq('id', leadId)
     .single();
   
@@ -2162,21 +2162,34 @@ async function getLeadState(supabase: any, leadId: string): Promise<string | nul
     return 'BLOCKED';
   }
   
-  // 🚨 FILTRO PRINCIPAL: ISA SÓ ATENDE LEADS DE TRÁFEGO
-  // Usando o campo tipo_origem para determinar se é tráfego ou lead antigo
+  // 🚨 NOVO FILTRO PRINCIPAL: Verificar campo isa_ativa e linha_whatsapp
+  // Se isa_ativa for explicitamente false OU linha_whatsapp for bentes_ramos_antigo → NÃO processar
+  if (lead.isa_ativa === false || lead.linha_whatsapp === 'bentes_ramos_antigo') {
+    console.log('🏢 Lead Bentes & Ramos (ISA desativada) - Isa NÃO vai processar');
+    console.log('   - linha_whatsapp:', lead.linha_whatsapp);
+    console.log('   - isa_ativa:', lead.isa_ativa);
+    console.log('   - empresa_tag:', lead.empresa_tag);
+    return 'BENTES_RAMOS';
+  }
+  
+  // Se linha_whatsapp é trafego_isa → processar normalmente
+  if (lead.linha_whatsapp === 'trafego_isa') {
+    console.log('✅ Lead de TRÁFEGO (trafego_isa) detectado - Isa vai processar');
+    return lead.lead_state || 'NEW';
+  }
+  
+  // 🔄 LÓGICA LEGADA: usando tipo_origem para leads antigos
   const tipoOrigem = lead.tipo_origem || 'indefinido';
   
   // Se tipo_origem é explicitamente 'whatsapp_direto' → lead Bentes & Ramos (não automatizar)
   if (tipoOrigem === 'whatsapp_direto') {
-    console.log('🏢 Lead Bentes & Ramos (whatsapp_direto) - Isa NÃO vai processar');
-    console.log('   - tipo_origem:', tipoOrigem);
-    console.log('   - created_at:', lead.created_at);
+    console.log('🏢 Lead Bentes & Ramos (whatsapp_direto via legado) - Isa NÃO vai processar');
     return 'BENTES_RAMOS';
   }
   
   // Se tipo_origem é 'trafego' → processar normalmente
   if (tipoOrigem === 'trafego') {
-    console.log('✅ Lead de TRÁFEGO detectado - Isa vai processar');
+    console.log('✅ Lead de TRÁFEGO detectado via tipo_origem - Isa vai processar');
     return lead.lead_state || 'NEW';
   }
   

@@ -13,6 +13,12 @@ export type LeadOrigem = 'Instagram' | 'Google' | 'Site' | 'Indicação' | 'Bent
 // Tipo de origem do lead (tráfego pago vs contato direto)
 export type TipoOrigem = 'trafego' | 'whatsapp_direto' | 'indefinido';
 
+// Linha de WhatsApp (número de entrada)
+export type LinhaWhatsapp = 'trafego_isa' | 'bentes_ramos_antigo' | 'indefinido';
+
+// Tipo de owner (quem está atendendo)
+export type OwnerTipo = 'isa' | 'humano';
+
 export interface Lead {
   id: string;
   nome: string;
@@ -44,4 +50,10 @@ export interface Lead {
   contratos_adicionais?: number | null;
   // Meta CAPI - Facebook Lead ID
   facebook_lead_id?: string | null;
+  // Novos campos para separação Bentes Ramos vs Tráfego
+  linha_whatsapp?: LinhaWhatsapp | null;
+  empresa_tag?: string | null;
+  owner_tipo?: OwnerTipo | null;
+  isa_ativa?: boolean | null;
+  whatsapp_numero_destino?: string | null;
 }
