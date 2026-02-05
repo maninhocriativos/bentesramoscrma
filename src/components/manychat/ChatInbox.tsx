@@ -20,6 +20,8 @@ import { InstanceBadge } from '@/components/chat/InstanceBadge';
 import { TagBadge } from '@/components/chat/TagBadge';
 import { TagSelector } from '@/components/chat/TagSelector';
 import { TagFilter } from '@/components/chat/TagFilter';
+import { WhatsAppAudioPlayer } from '@/components/chat/WhatsAppAudioPlayer';
+import { formatWhatsAppText as formatWhatsAppTextHelper } from '@/lib/whatsappTextFormatter';
 import { InstanceInfo } from '@/lib/instanceUtils';
 import { 
   Send, 
@@ -1554,13 +1556,14 @@ const ManyChatInboxContent = () => {
       urlCandidate.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt)(\?|$)/i);
 
     if (isAudio) {
-      return (
-        <audio controls className="max-w-[220px] h-10" preload="metadata">
-          <source src={urlCandidate} type="audio/ogg" />
-          <source src={urlCandidate} type="audio/mpeg" />
-          <source src={urlCandidate} type="audio/webm" />
-        </audio>
-      );
+      // Use o novo WhatsAppAudioPlayer com waveform e velocidade
+      const isSent = message.direcao === 'saida';
+      const chatMessage = {
+        ...message,
+        conteudo: urlCandidate,
+        metadata: metadata
+      };
+      return <WhatsAppAudioPlayer message={chatMessage as any} isSent={isSent} />;
     }
     if (isImage) {
       return (
@@ -1573,7 +1576,7 @@ const ManyChatInboxContent = () => {
           />
           {caption && (
             <p className="whitespace-pre-wrap break-words text-[13px] leading-[18px] text-inherit opacity-90 select-text cursor-text">
-              {caption}
+              {formatWhatsAppTextHelper(caption)}
             </p>
           )}
         </div>
@@ -1665,10 +1668,11 @@ const ManyChatInboxContent = () => {
         </div>
       );
     }
+    // Texto com formatação WhatsApp (*negrito*, _itálico_, ~riscado~, ```mono```)
     return (
-      <p className="whitespace-pre-wrap break-words text-[14.2px] leading-[19px] text-inherit select-text cursor-text">
-        {content}
-      </p>
+      <div className="whitespace-pre-wrap break-words text-[14.2px] leading-[19px] text-inherit select-text cursor-text">
+        {formatWhatsAppTextHelper(content)}
+      </div>
     );
   };
 
