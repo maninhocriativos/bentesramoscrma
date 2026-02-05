@@ -1,53 +1,66 @@
- import { Lead, LeadStatus } from '@/types/leads';
- import { formatDistanceToNow } from 'date-fns';
- import { ptBR } from 'date-fns/locale';
- import { MessageCircle, Eye, MoreHorizontal, Phone, CheckCircle, XCircle } from 'lucide-react';
- import { Button } from '@/components/ui/button';
- import { Badge } from '@/components/ui/badge';
- import { Avatar, AvatarFallback } from '@/components/ui/avatar';
- import {
-   DropdownMenu,
-   DropdownMenuContent,
-   DropdownMenuItem,
-   DropdownMenuSeparator,
-   DropdownMenuSub,
-   DropdownMenuSubContent,
-   DropdownMenuSubTrigger,
-   DropdownMenuTrigger,
- } from '@/components/ui/dropdown-menu';
- import { cn } from '@/lib/utils';
- import { useNavigate } from 'react-router-dom';
- 
- interface LeadsTableRowProps {
-   lead: Lead;
-   onClick: () => void;
-   onMoveStage: (leadId: string, newStatus: LeadStatus) => void;
-   allStages: { status: LeadStatus; label: string }[];
- }
- 
- const STATUS_CHIP_COLORS: Record<string, string> = {
-   'Lead Frio': 'bg-slate-100 text-slate-700',
-   'Em Atendimento': 'bg-amber-100 text-amber-700',
-   'Em Negociação': 'bg-blue-100 text-blue-700',
-   'Aguardando Contrato': 'bg-purple-100 text-purple-700',
-   'Contrato Assinado': 'bg-cyan-100 text-cyan-700',
-   'Ganho': 'bg-emerald-100 text-emerald-700',
-   'Perdido': 'bg-red-100 text-red-700',
- };
- 
- const ORIGEM_CHIP_COLORS: Record<string, string> = {
-   'Instagram': 'bg-pink-100 text-pink-700',
-   'Google': 'bg-blue-100 text-blue-700',
-   'Site': 'bg-indigo-100 text-indigo-700',
-   'Indicação': 'bg-amber-100 text-amber-700',
-   'WhatsApp Z-API': 'bg-emerald-100 text-emerald-700',
-   'Tráfego Pago': 'bg-violet-100 text-violet-700',
- };
- 
- const formatCurrency = (value: number | null): string => {
-   if (!value) return '-';
-   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(value);
- };
+import { Lead, LeadStatus } from '@/types/leads';
+import { formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { MessageCircle, Eye, MoreHorizontal, Phone, CheckCircle, XCircle, Building2, Megaphone, Bot, User } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
+
+interface LeadsTableRowProps {
+  lead: Lead;
+  onClick: () => void;
+  onMoveStage: (leadId: string, newStatus: LeadStatus) => void;
+  allStages: { status: LeadStatus; label: string }[];
+}
+
+const STATUS_CHIP_COLORS: Record<string, string> = {
+  'Lead Frio': 'bg-slate-100 text-slate-700',
+  'Bentes Ramos': 'bg-blue-100 text-blue-700',
+  'Em Atendimento': 'bg-amber-100 text-amber-700',
+  'Em Negociação': 'bg-blue-100 text-blue-700',
+  'Aguardando Contrato': 'bg-purple-100 text-purple-700',
+  'Contrato Assinado': 'bg-cyan-100 text-cyan-700',
+  'Ganho': 'bg-emerald-100 text-emerald-700',
+  'Perdido': 'bg-red-100 text-red-700',
+};
+
+const ORIGEM_CHIP_COLORS: Record<string, string> = {
+  'Instagram': 'bg-pink-100 text-pink-700',
+  'Google': 'bg-blue-100 text-blue-700',
+  'Site': 'bg-indigo-100 text-indigo-700',
+  'Indicação': 'bg-amber-100 text-amber-700',
+  'WhatsApp Z-API': 'bg-emerald-100 text-emerald-700',
+  'Tráfego Pago': 'bg-violet-100 text-violet-700',
+  'Escritório': 'bg-blue-100 text-blue-700',
+};
+
+const formatCurrency = (value: number | null): string => {
+  if (!value) return '-';
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(value);
+};
+
+// Determinar se é lead Bentes Ramos ou Tráfego
+function getLeadLineInfo(lead: Lead): { isBentesRamos: boolean; isTraffic: boolean; isIsa: boolean } {
+  const isBentesRamos = lead.linha_whatsapp === 'bentes_ramos_antigo' || 
+                        lead.empresa_tag === 'BENTES_RAMOS' ||
+                        lead.tipo_origem === 'whatsapp_direto';
+  const isTraffic = lead.linha_whatsapp === 'trafego_isa' || 
+                    lead.tipo_origem === 'trafego';
+  const isIsa = lead.isa_ativa === true || lead.owner_tipo === 'isa';
+  return { isBentesRamos, isTraffic, isIsa };
+}
  
  export function LeadsTableRow({ lead, onClick, onMoveStage, allStages }: LeadsTableRowProps) {
    const navigate = useNavigate();
@@ -65,17 +78,20 @@
      }
    };
  
-   const initials = (lead.nome || 'L')
-     .split(' ')
-     .map(n => n[0])
-     .slice(0, 2)
-     .join('')
-     .toUpperCase();
- 
-   const statusColor = STATUS_CHIP_COLORS[lead.status || ''] || 'bg-muted text-muted-foreground';
-   const origemColor = ORIGEM_CHIP_COLORS[lead.origem || ''] || 'bg-muted text-muted-foreground';
- 
-   const lastContact = lead.last_contact_at || lead.updated_at || lead.created_at;
+  const initials = (lead.nome || 'L')
+    .split(' ')
+    .map(n => n[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
+  const statusColor = STATUS_CHIP_COLORS[lead.status || ''] || 'bg-muted text-muted-foreground';
+  const origemColor = ORIGEM_CHIP_COLORS[lead.origem || ''] || 'bg-muted text-muted-foreground';
+
+  const lastContact = lead.last_contact_at || lead.updated_at || lead.created_at;
+
+  // Badges de linha
+  const { isBentesRamos, isTraffic, isIsa } = getLeadLineInfo(lead);
  
    return (
      <tr 
@@ -92,18 +108,47 @@
          </div>
        </td>
  
-       {/* WhatsApp */}
-       <td className="px-3 py-3">
-         {lead.telefone ? (
-           <button 
-             onClick={handleCall}
-             className="text-muted-foreground hover:text-foreground transition-colors text-left"
-           >
-             {lead.telefone}
-           </button>
-         ) : (
-           <span className="text-muted-foreground">-</span>
-         )}
+        {/* Linha WhatsApp Badge */}
+        <td className="px-3 py-3">
+          <div className="flex items-center gap-1">
+            {isBentesRamos && (
+              <Badge variant="outline" className="text-[10px] font-normal bg-blue-50 text-blue-700 border-blue-200 gap-0.5">
+                <Building2 className="h-3 w-3" />
+                BR
+              </Badge>
+            )}
+            {isTraffic && (
+              <Badge variant="outline" className="text-[10px] font-normal bg-orange-50 text-orange-700 border-orange-200 gap-0.5">
+                <Megaphone className="h-3 w-3" />
+                ADS
+              </Badge>
+            )}
+            {isIsa && !isBentesRamos && (
+              <Badge variant="outline" className="text-[10px] font-normal bg-violet-50 text-violet-700 border-violet-200 gap-0.5">
+                <Bot className="h-3 w-3" />
+                ISA
+              </Badge>
+            )}
+            {!isIsa && !isBentesRamos && lead.owner_tipo === 'humano' && (
+              <Badge variant="outline" className="text-[10px] font-normal bg-slate-50 text-slate-700 border-slate-200 gap-0.5">
+                <User className="h-3 w-3" />
+              </Badge>
+            )}
+          </div>
+        </td>
+
+        {/* WhatsApp */}
+        <td className="px-3 py-3">
+          {lead.telefone ? (
+            <button 
+              onClick={handleCall}
+              className="text-muted-foreground hover:text-foreground transition-colors text-left"
+            >
+              {lead.telefone}
+            </button>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
        </td>
  
        {/* Origem */}

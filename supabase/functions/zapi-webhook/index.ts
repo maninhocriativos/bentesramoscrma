@@ -378,6 +378,19 @@ serve(async (req: Request) => {
                            zapiConfig?.phone_number || 
                            null;
     
+    // Determinar linha_whatsapp baseado no número conectado
+    const cleanConnPhoneForLine = connectedPhone?.replace(/\D/g, '') || '';
+    const isOfficeNumber = OFFICE_INSTANCE_PHONES.some(phone => 
+      cleanConnPhoneForLine === phone || cleanConnPhoneForLine.endsWith(phone)
+    );
+    const isTrafficNumber = TRAFFIC_INSTANCE_PHONES.some(phone => 
+      cleanConnPhoneForLine === phone || cleanConnPhoneForLine.endsWith(phone)
+    );
+    
+    const linhaWhatsapp = isOfficeNumber ? 'bentes_ramos_antigo' : 
+                          isTrafficNumber ? 'trafego_isa' : 'indefinido';
+    const empresaTag = isOfficeNumber ? 'BENTES_RAMOS' : null;
+    
     const { error: subError } = await supabase
       .from('manychat_subscribers')
       .upsert({
@@ -389,7 +402,10 @@ serve(async (req: Request) => {
         ultima_interacao: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         // Salvar o número conectado para identificar a instância (badge Tráfego/Bentes Ramos)
-        instance_name: connectedPhone
+        instance_name: connectedPhone,
+        // Novos campos para separação Bentes Ramos vs Tráfego
+        linha_whatsapp: linhaWhatsapp,
+        empresa_tag: empresaTag
       }, { 
         onConflict: 'subscriber_id',
         ignoreDuplicates: false 
@@ -964,12 +980,26 @@ async function findOrCreateLead(
     cleanInstancePhone === phone || cleanInstancePhone.endsWith(phone)
   );
   
-  // Se detectamos tráfego pago (via metadados do anúncio Click to WhatsApp)
-  if (trafficSource.isTraffic) {
+  // Detectar se é do número de tráfego
+  const isFromTrafficLine = TRAFFIC_INSTANCE_PHONES.some(phone => 
+    cleanInstancePhone === phone || cleanInstancePhone.endsWith(phone)
+  );
+  
+  // Se detectamos tráfego pago (via metadados do anúncio Click to WhatsApp OU número de tráfego)
+  if (trafficSource.isTraffic || isFromTrafficLine) {
     fonteTrafego = trafficSource.source || 'meta_ads';
     tipoOrigem = 'trafego';
     console.log(`[Z-API Webhook] 🎯 NEW LEAD FROM PAID TRAFFIC: ${fonteTrafego}`);
   }
+  
+  // Determinar linha_whatsapp
+  const linhaWhatsapp = isFromOffice ? 'bentes_ramos_antigo' : 
+                        (isFromTrafficLine || trafficSource.isTraffic) ? 'trafego_isa' : 'indefinido';
+  
+  // Determinar configurações Isa baseado na linha
+  const isaAtiva = !isFromOffice; // ISA desativada para escritório
+  const ownerTipo = isFromOffice ? 'humano' : 'isa';
+  const empresaTag = isFromOffice ? 'BENTES_RAMOS' : null;
   
   // Determinar status inicial baseado na origem
   // - Escritório (Bentes Ramos): status "Bentes Ramos" 
@@ -980,7 +1010,7 @@ async function findOrCreateLead(
     : (trafficSource.isTraffic ? 'Tráfego Pago' : 'WhatsApp Z-API');
   
   // Determinar se é lead de tráfego (somente por metadados do anúncio)
-  const isTrafficLead = trafficSource.isTraffic;
+  const isTrafficLead = trafficSource.isTraffic || isFromTrafficLine;
   
   // Usar nome do FB se disponível, senão usar o do WhatsApp
   const leadName = nameFromFb || data.name || `Contato ${data.phone}`;
@@ -997,8 +1027,14 @@ async function findOrCreateLead(
       fonte_trafego: fonteTrafego,
       canal_origem: canalOrigem,
       tipo_origem: tipoOrigem,
+      // Novos campos para separação Bentes Ramos vs Tráfego
+      linha_whatsapp: linhaWhatsapp,
+      empresa_tag: empresaTag,
+      owner_tipo: ownerTipo,
+      isa_ativa: isaAtiva,
+      whatsapp_numero_destino: instancePhone,
       resumo_ia: isFromOffice
-        ? `Lead do ESCRITÓRIO (Bentes Ramos). Contato direto em ${new Date().toLocaleDateString('pt-BR')}.`
+        ? `Lead do ESCRITÓRIO (Bentes Ramos). Contato direto em ${new Date().toLocaleDateString('pt-BR')}. ISA DESATIVADA - atendimento humano direto.`
         : isTrafficLead 
           ? `Lead de TRÁFEGO PAGO (${fonteTrafego}). Veio de anúncio Click to WhatsApp em ${new Date().toLocaleDateString('pt-BR')}.${emailFromFb ? ` Email: ${emailFromFb}` : ''}`
           : `Lead criado automaticamente via Z-API (WhatsApp direto). Primeiro contato em ${new Date().toLocaleDateString('pt-BR')}.`

@@ -1136,14 +1136,17 @@ export type Database = {
           cpf: string | null
           created_at: string
           email: string | null
+          empresa_tag: string | null
           endereco: string | null
           estado_civil: string | null
           facebook_lead_id: string | null
           fonte_trafego: string | null
           id: string
           is_lost: boolean | null
+          isa_ativa: boolean | null
           last_contact_at: string | null
           lead_state: string | null
+          linha_whatsapp: string | null
           link_contrato: string | null
           lost_at: string | null
           lost_reason: string | null
@@ -1151,6 +1154,7 @@ export type Database = {
           nome: string | null
           numero: string | null
           origem: string | null
+          owner_tipo: string | null
           profissao: string | null
           resumo_ia: string | null
           rg: string | null
@@ -1163,6 +1167,7 @@ export type Database = {
           uf: string | null
           updated_at: string | null
           valor_causa: number | null
+          whatsapp_numero_destino: string | null
         }
         Insert: {
           bairro?: string | null
@@ -1176,14 +1181,17 @@ export type Database = {
           cpf?: string | null
           created_at?: string
           email?: string | null
+          empresa_tag?: string | null
           endereco?: string | null
           estado_civil?: string | null
           facebook_lead_id?: string | null
           fonte_trafego?: string | null
           id?: string
           is_lost?: boolean | null
+          isa_ativa?: boolean | null
           last_contact_at?: string | null
           lead_state?: string | null
+          linha_whatsapp?: string | null
           link_contrato?: string | null
           lost_at?: string | null
           lost_reason?: string | null
@@ -1191,6 +1199,7 @@ export type Database = {
           nome?: string | null
           numero?: string | null
           origem?: string | null
+          owner_tipo?: string | null
           profissao?: string | null
           resumo_ia?: string | null
           rg?: string | null
@@ -1203,6 +1212,7 @@ export type Database = {
           uf?: string | null
           updated_at?: string | null
           valor_causa?: number | null
+          whatsapp_numero_destino?: string | null
         }
         Update: {
           bairro?: string | null
@@ -1216,14 +1226,17 @@ export type Database = {
           cpf?: string | null
           created_at?: string
           email?: string | null
+          empresa_tag?: string | null
           endereco?: string | null
           estado_civil?: string | null
           facebook_lead_id?: string | null
           fonte_trafego?: string | null
           id?: string
           is_lost?: boolean | null
+          isa_ativa?: boolean | null
           last_contact_at?: string | null
           lead_state?: string | null
+          linha_whatsapp?: string | null
           link_contrato?: string | null
           lost_at?: string | null
           lost_reason?: string | null
@@ -1231,6 +1244,7 @@ export type Database = {
           nome?: string | null
           numero?: string | null
           origem?: string | null
+          owner_tipo?: string | null
           profissao?: string | null
           resumo_ia?: string | null
           rg?: string | null
@@ -1243,6 +1257,7 @@ export type Database = {
           uf?: string | null
           updated_at?: string | null
           valor_causa?: number | null
+          whatsapp_numero_destino?: string | null
         }
         Relationships: []
       }
@@ -1303,9 +1318,12 @@ export type Database = {
           canal: string | null
           created_at: string
           email: string | null
+          empresa_tag: string | null
           foto: string | null
           id: string
+          instance_name: string | null
           lead_id: string | null
+          linha_whatsapp: string | null
           nome: string | null
           subscriber_id: string
           telefone: string | null
@@ -1319,9 +1337,12 @@ export type Database = {
           canal?: string | null
           created_at?: string
           email?: string | null
+          empresa_tag?: string | null
           foto?: string | null
           id?: string
+          instance_name?: string | null
           lead_id?: string | null
+          linha_whatsapp?: string | null
           nome?: string | null
           subscriber_id: string
           telefone?: string | null
@@ -1335,9 +1356,12 @@ export type Database = {
           canal?: string | null
           created_at?: string
           email?: string | null
+          empresa_tag?: string | null
           foto?: string | null
           id?: string
+          instance_name?: string | null
           lead_id?: string | null
+          linha_whatsapp?: string | null
           nome?: string | null
           subscriber_id?: string
           telefone?: string | null
