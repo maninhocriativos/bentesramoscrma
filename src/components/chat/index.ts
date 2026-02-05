@@ -1,6 +1,9 @@
 export { ChannelIcon } from './ChannelIcon';
 export { MessageBubble } from './MessageBubble';
+export { WhatsAppMessageBubble } from './WhatsAppMessageBubble';
+export { WhatsAppAudioPlayer } from './WhatsAppAudioPlayer';
 export { ConversationItem } from './ConversationItem';
 export { MessageInput } from './MessageInput';
 export { AudioPlayer } from './AudioPlayer';
 export { InstanceBadge } from './InstanceBadge';
+export { ReplyQuote } from './ReplyQuote';
