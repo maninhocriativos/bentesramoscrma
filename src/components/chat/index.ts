@@ -7,3 +7,5 @@ export { MessageInput } from './MessageInput';
 export { AudioPlayer } from './AudioPlayer';
 export { InstanceBadge } from './InstanceBadge';
 export { ReplyQuote } from './ReplyQuote';
+export { LinkPreview, extractUrls, isOnlyUrl } from './LinkPreview';
+export { TypingIndicator, TypingIndicatorInline } from './TypingIndicator';

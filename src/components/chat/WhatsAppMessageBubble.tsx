@@ -2,9 +2,10 @@ import { CheckCheck, Check, Download, MapPin, ExternalLink, X, Reply, Clock } fr
 import { formatMessageTime, detectMediaType, extractLocationData } from '@/lib/chatUtils';
 import { formatWhatsAppText } from '@/lib/whatsappTextFormatter';
 import { ChatMessage } from '@/hooks/useChatMessages';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { WhatsAppAudioPlayer } from './WhatsAppAudioPlayer';
+import { LinkPreview, extractUrls, isOnlyUrl } from './LinkPreview';
 import { cn } from '@/lib/utils';
 
 interface WhatsAppMessageBubbleProps {
@@ -67,6 +68,10 @@ export function WhatsAppMessageBubble({ message, themeClasses, onReply }: WhatsA
   const mediaType = detectMediaType(content, message.tipo);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showReplyOption, setShowReplyOption] = useState(false);
+  
+  // Extract URLs for link preview (must be at top level for hooks rules)
+  const urls = useMemo(() => extractUrls(content), [content]);
+  const showFullPreview = urls.length === 1 && isOnlyUrl(content);
   
   const deliveryStatus = isSent ? getDeliveryStatus(message) : null;
 
@@ -244,12 +249,27 @@ export function WhatsAppMessageBubble({ message, themeClasses, onReply }: WhatsA
         );
       }
       
-      default:
+      default: {
         return (
-          <div className="text-[14.2px] leading-[19px] text-inherit select-text cursor-text whitespace-pre-wrap break-words">
-            {formatWhatsAppText(content)}
+          <div className="space-y-2">
+            {/* Text content */}
+            {!showFullPreview && (
+              <div className="text-[14.2px] leading-[19px] text-inherit select-text cursor-text whitespace-pre-wrap break-words">
+                {formatWhatsAppText(content)}
+              </div>
+            )}
+            
+            {/* Link previews */}
+            {urls.slice(0, 2).map((url, index) => (
+              <LinkPreview 
+                key={`${url}-${index}`} 
+                url={url}
+                className={showFullPreview ? '' : 'mt-2'}
+              />
+            ))}
           </div>
         );
+      }
     }
   };
 
