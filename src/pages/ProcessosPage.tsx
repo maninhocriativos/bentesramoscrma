@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { ProcessosTable } from '@/components/processos/ProcessosTable';
-import { ProcessoModal } from '@/components/processos/ProcessoModal';
+import { ProcessoModalExpanded } from '@/components/processos/ProcessoModalExpanded';
 import { ConsultaProcessoExterno } from '@/components/processos/ConsultaProcessoExterno';
 import { useProcessos } from '@/hooks/useProcessos';
 import { usePerfil } from '@/hooks/usePerfil';
@@ -120,7 +120,7 @@ export default function ProcessosPage() {
         </Tabs>
       </div>
 
-      <ProcessoModal
+      <ProcessoModalExpanded
         processo={selectedProcesso}
         isOpen={isModalOpen}
         onClose={handleCloseModal}
