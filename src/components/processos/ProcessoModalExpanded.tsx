@@ -565,10 +565,10 @@ export function ProcessoModalExpanded({
                 </Select>
               </div>
 
-              {/* Botão Refresh */}
-              {!isNew && formData.numero_processo && (
+              {/* Botão Refresh - sempre visível quando tem número */}
+              {formData.numero_processo && formData.numero_processo.length >= 20 && (
                 <Button
-                  variant="outline"
+                  variant="default"
                   onClick={handleRefreshStatus}
                   disabled={fetchingData}
                   className="w-full rounded-xl"
@@ -578,7 +578,7 @@ export function ProcessoModalExpanded({
                   ) : (
                     <RefreshCw className="h-4 w-4 mr-2" />
                   )}
-                  Atualizar Status via DataJud
+                  {isNew ? 'Buscar Dados no DataJud' : 'Atualizar Status via DataJud'}
                 </Button>
               )}
             </TabsContent>
