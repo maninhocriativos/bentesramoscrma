@@ -1,4 +1,4 @@
-import { MetaFormLead, MetaFormLeadStatus } from '@/types/metaFormLeads';
+import { MetaFormLead, MetaFormLeadStatus, CrmMessage } from '@/types/metaFormLeads';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,19 +8,23 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
   User, Phone, Mail, MessageCircle, CheckCircle, XCircle, 
-  Clock, ChevronDown, FileText, Calendar, Copy
+  Clock, ChevronDown, FileText, Calendar, Copy, ExternalLink
 } from 'lucide-react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import { MetaLeadMessageHistory } from './MetaLeadMessageHistory';
 
 interface MetaLeadDetailProps {
   lead: MetaFormLead;
-  onOpenChat: () => void;
+  messages: CrmMessage[];
+  messagesLoading: boolean;
   onUpdateStatus: (status: MetaFormLeadStatus) => void;
 }
 
-export function MetaLeadDetail({ lead, onOpenChat, onUpdateStatus }: MetaLeadDetailProps) {
+export function MetaLeadDetail({ lead, messages, messagesLoading, onUpdateStatus }: MetaLeadDetailProps) {
   const [idsOpen, setIdsOpen] = useState(false);
+  const navigate = useNavigate();
   const { toast } = useToast();
 
   // Parse form_fields for display
@@ -99,9 +103,21 @@ export function MetaLeadDetail({ lead, onOpenChat, onUpdateStatus }: MetaLeadDet
 
       {/* Actions */}
       <div className="p-4 border-b space-y-2 shrink-0">
-        <Button onClick={onOpenChat} className="w-full" size="lg">
-          <MessageCircle className="h-4 w-4 mr-2" />
-          Abrir Chat
+        <Button 
+          onClick={() => {
+            // Navigate to main chat with lead phone to auto-select conversation
+            const phone = lead.telefone?.replace(/\D/g, '');
+            if (phone) {
+              navigate(`/chat?phone=${phone}`);
+            } else {
+              navigate('/chat');
+            }
+          }} 
+          className="w-full" 
+          size="lg"
+        >
+          <ExternalLink className="h-4 w-4 mr-2" />
+          Abrir no Chat Principal
         </Button>
         
         <div className="grid grid-cols-3 gap-2">
@@ -164,6 +180,19 @@ export function MetaLeadDetail({ lead, onOpenChat, onUpdateStatus }: MetaLeadDet
               </CardContent>
             </Card>
           )}
+
+          {/* Message History */}
+          <Card>
+            <CardHeader className="py-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <MessageCircle className="h-4 w-4" />
+                Histórico de Mensagens
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="py-0 pb-3">
+              <MetaLeadMessageHistory messages={messages} loading={messagesLoading} />
+            </CardContent>
+          </Card>
 
           {/* IDs Collapsible */}
           <Collapsible open={idsOpen} onOpenChange={setIdsOpen}>
