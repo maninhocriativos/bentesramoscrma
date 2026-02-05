@@ -17,22 +17,22 @@ export function KPICards({ leads }: KPICardsProps) {
       title: 'Total de Leads',
       value: totalLeads,
       icon: Users,
-      color: 'text-primary',
-      bgColor: 'bg-primary/10',
+      color: 'text-stage-all',
+      bgColor: 'bg-stage-all-bg',
     },
     {
       title: 'Em Atendimento',
       value: emAtendimento,
       icon: UserCheck,
-      color: 'text-accent',
-      bgColor: 'bg-accent/20',
+      color: 'text-stage-atendimento',
+      bgColor: 'bg-stage-atendimento-bg',
     },
     {
       title: 'Taxa de Conversão',
       value: `${taxaConversao}%`,
       icon: TrendingUp,
-      color: 'text-green-600',
-      bgColor: 'bg-green-100',
+      color: 'text-stage-ganho',
+      bgColor: 'bg-stage-ganho-bg',
     },
   ];
 

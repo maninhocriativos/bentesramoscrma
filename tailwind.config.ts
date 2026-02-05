@@ -78,6 +78,51 @@ export default {
           DEFAULT: "hsl(var(--success))",
           foreground: "hsl(var(--success-foreground))",
         },
+        // Pipeline Stages
+        stage: {
+          all: "hsl(var(--stage-all))",
+          "all-bg": "hsl(var(--stage-all-bg))",
+          frio: "hsl(var(--stage-frio))",
+          "frio-bg": "hsl(var(--stage-frio-bg))",
+          bentes: "hsl(var(--stage-bentes))",
+          "bentes-bg": "hsl(var(--stage-bentes-bg))",
+          atendimento: "hsl(var(--stage-atendimento))",
+          "atendimento-bg": "hsl(var(--stage-atendimento-bg))",
+          negociacao: "hsl(var(--stage-negociacao))",
+          "negociacao-bg": "hsl(var(--stage-negociacao-bg))",
+          aguardando: "hsl(var(--stage-aguardando))",
+          "aguardando-bg": "hsl(var(--stage-aguardando-bg))",
+          assinado: "hsl(var(--stage-assinado))",
+          "assinado-bg": "hsl(var(--stage-assinado-bg))",
+          ganho: "hsl(var(--stage-ganho))",
+          "ganho-bg": "hsl(var(--stage-ganho-bg))",
+          perdido: "hsl(var(--stage-perdido))",
+          "perdido-bg": "hsl(var(--stage-perdido-bg))",
+        },
+        // Linha WhatsApp
+        linha: {
+          escritorio: "hsl(var(--linha-escritorio))",
+          "escritorio-bg": "hsl(var(--linha-escritorio-bg))",
+          trafego: "hsl(var(--linha-trafego))",
+          "trafego-bg": "hsl(var(--linha-trafego-bg))",
+        },
+        // Origem
+        origem: {
+          ads: "hsl(var(--origem-ads))",
+          "ads-bg": "hsl(var(--origem-ads-bg))",
+          site: "hsl(var(--origem-site))",
+          "site-bg": "hsl(var(--origem-site-bg))",
+          organico: "hsl(var(--origem-organico))",
+          "organico-bg": "hsl(var(--origem-organico-bg))",
+        },
+        // Action Icons
+        action: {
+          chat: "hsl(var(--action-chat))",
+          "chat-bg": "hsl(var(--action-chat-bg))",
+          view: "hsl(var(--action-view))",
+          "view-bg": "hsl(var(--action-view-bg))",
+          menu: "hsl(var(--action-menu))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

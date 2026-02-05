@@ -29,15 +29,48 @@ interface PipelineStagePillsProps {
   onStageChange: (stage: string) => void;
 }
 
-const STAGE_CONFIG: Record<string, { icon: React.ElementType; color: string; activeColor: string }> = {
-  'Lead Frio': { icon: Snowflake, color: 'text-slate-500 bg-slate-100', activeColor: 'bg-slate-600 text-white' },
-  'Bentes Ramos': { icon: Building2, color: 'text-blue-500 bg-blue-100', activeColor: 'bg-blue-600 text-white' },
-  'Em Atendimento': { icon: Flame, color: 'text-amber-500 bg-amber-100', activeColor: 'bg-amber-600 text-white' },
-  'Em Negociação': { icon: Handshake, color: 'text-sky-500 bg-sky-100', activeColor: 'bg-sky-600 text-white' },
-  'Aguardando Contrato': { icon: Clock, color: 'text-purple-500 bg-purple-100', activeColor: 'bg-purple-600 text-white' },
-  'Contrato Assinado': { icon: FileSignature, color: 'text-cyan-500 bg-cyan-100', activeColor: 'bg-cyan-600 text-white' },
-  'Ganho': { icon: Trophy, color: 'text-emerald-500 bg-emerald-100', activeColor: 'bg-emerald-600 text-white' },
-  'Perdido': { icon: XCircle, color: 'text-red-500 bg-red-100', activeColor: 'bg-red-600 text-white' },
+// Mapeamento usando tokens do design system
+const STAGE_CONFIG: Record<string, { icon: React.ElementType; colorClass: string; bgClass: string }> = {
+  'Lead Frio': { 
+    icon: Snowflake, 
+    colorClass: 'text-stage-frio', 
+    bgClass: 'bg-stage-frio-bg' 
+  },
+  'Bentes Ramos': { 
+    icon: Building2, 
+    colorClass: 'text-stage-bentes', 
+    bgClass: 'bg-stage-bentes-bg' 
+  },
+  'Em Atendimento': { 
+    icon: Flame, 
+    colorClass: 'text-stage-atendimento', 
+    bgClass: 'bg-stage-atendimento-bg' 
+  },
+  'Em Negociação': { 
+    icon: Handshake, 
+    colorClass: 'text-stage-negociacao', 
+    bgClass: 'bg-stage-negociacao-bg' 
+  },
+  'Aguardando Contrato': { 
+    icon: Clock, 
+    colorClass: 'text-stage-aguardando', 
+    bgClass: 'bg-stage-aguardando-bg' 
+  },
+  'Contrato Assinado': { 
+    icon: FileSignature, 
+    colorClass: 'text-stage-assinado', 
+    bgClass: 'bg-stage-assinado-bg' 
+  },
+  'Ganho': { 
+    icon: Trophy, 
+    colorClass: 'text-stage-ganho', 
+    bgClass: 'bg-stage-ganho-bg' 
+  },
+  'Perdido': { 
+    icon: XCircle, 
+    colorClass: 'text-stage-perdido', 
+    bgClass: 'bg-stage-perdido-bg' 
+  },
 };
 
 export function PipelineStagePills({ stages, activeStage, onStageChange }: PipelineStagePillsProps) {
@@ -52,15 +85,15 @@ export function PipelineStagePills({ stages, activeStage, onStageChange }: Pipel
             <button
               onClick={() => onStageChange('all')}
               className={cn(
-                "flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-medium transition-all",
+                "flex items-center gap-1.5 h-[22px] px-2.5 rounded-full text-xs font-medium transition-all",
                 activeStage === 'all'
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "bg-muted/60 text-muted-foreground hover:bg-muted"
+                  ? "bg-stage-all text-white shadow-sm"
+                  : "bg-stage-all-bg text-stage-all hover:opacity-80"
               )}
             >
               <span>Todos</span>
               <span className={cn(
-                "text-[10px] px-1.5 py-0.5 rounded min-w-[18px] text-center font-semibold",
+                "text-[10px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center font-semibold",
                 activeStage === 'all' ? "bg-white/20" : "bg-black/5"
               )}>
                 {totalCount}
@@ -79,8 +112,8 @@ export function PipelineStagePills({ stages, activeStage, onStageChange }: Pipel
         {stages.map((stage) => {
           const config = STAGE_CONFIG[stage.status] || { 
             icon: Flame, 
-            color: 'text-muted-foreground bg-muted', 
-            activeColor: 'bg-primary text-primary-foreground' 
+            colorClass: 'text-muted-foreground', 
+            bgClass: 'bg-muted' 
           };
           const Icon = config.icon;
           const isActive = activeStage === stage.status;
@@ -91,15 +124,25 @@ export function PipelineStagePills({ stages, activeStage, onStageChange }: Pipel
                 <button
                   onClick={() => onStageChange(stage.status)}
                   className={cn(
-                    "flex items-center gap-1.5 h-8 px-2 rounded-md text-xs font-medium transition-all",
+                    "flex items-center gap-1.5 h-[22px] px-2 rounded-full text-xs font-medium transition-all",
                     isActive
-                      ? config.activeColor + " shadow-sm"
-                      : config.color + " hover:opacity-80"
+                      ? cn(config.colorClass, "bg-current text-white shadow-sm", 
+                          // Override para usar a cor como background quando ativo
+                          stage.status === 'Lead Frio' && "bg-stage-frio",
+                          stage.status === 'Bentes Ramos' && "bg-stage-bentes",
+                          stage.status === 'Em Atendimento' && "bg-stage-atendimento",
+                          stage.status === 'Em Negociação' && "bg-stage-negociacao",
+                          stage.status === 'Aguardando Contrato' && "bg-stage-aguardando",
+                          stage.status === 'Contrato Assinado' && "bg-stage-assinado",
+                          stage.status === 'Ganho' && "bg-stage-ganho",
+                          stage.status === 'Perdido' && "bg-stage-perdido"
+                        )
+                      : cn(config.bgClass, config.colorClass, "hover:opacity-80")
                   )}
                 >
                   <Icon className="h-3.5 w-3.5" />
                   <span className={cn(
-                    "text-[10px] px-1 py-0.5 rounded min-w-[16px] text-center font-semibold",
+                    "text-[10px] px-1 py-0.5 rounded-full min-w-[16px] text-center font-semibold",
                     isActive ? "bg-white/20" : "bg-black/5"
                   )}>
                     {stage.count}

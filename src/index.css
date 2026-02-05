@@ -74,6 +74,52 @@
     
     /* WhatsApp Chat Background */
     --chat-bg: #ECE5DD;
+
+    /* ============================================
+       PALETA CRM BENTES RAMOS - PADRONIZAÇÃO
+       "Uma cor, um significado. Tudo o resto é neutro."
+       ============================================ */
+
+    /* Pipeline Stages - Cores base (HSL) */
+    --stage-all: 24 16% 17%;
+    --stage-all-bg: 38 22% 92%;
+    --stage-frio: 217 100% 65%;
+    --stage-frio-bg: 217 100% 96%;
+    --stage-bentes: 24 16% 37%;
+    --stage-bentes-bg: 30 18% 92%;
+    --stage-atendimento: 35 88% 59%;
+    --stage-atendimento-bg: 38 100% 93%;
+    --stage-negociacao: 217 91% 60%;
+    --stage-negociacao-bg: 217 100% 96%;
+    --stage-aguardando: 263 67% 66%;
+    --stage-aguardando-bg: 263 100% 97%;
+    --stage-assinado: 174 58% 40%;
+    --stage-assinado-bg: 174 60% 94%;
+    --stage-ganho: 142 71% 45%;
+    --stage-ganho-bg: 142 50% 95%;
+    --stage-perdido: 0 84% 60%;
+    --stage-perdido-bg: 0 80% 97%;
+
+    /* Linha WhatsApp Badges */
+    --linha-escritorio: 24 16% 37%;
+    --linha-escritorio-bg: 30 18% 94%;
+    --linha-trafego: 256 54% 59%;
+    --linha-trafego-bg: 256 60% 97%;
+
+    /* Origem Badges */
+    --origem-ads: 24 94% 53%;
+    --origem-ads-bg: 24 100% 96%;
+    --origem-site: 217 91% 60%;
+    --origem-site-bg: 217 100% 96%;
+    --origem-organico: 215 16% 47%;
+    --origem-organico-bg: 215 20% 97%;
+
+    /* Action Icons */
+    --action-chat: 142 76% 36%;
+    --action-chat-bg: 142 50% 96%;
+    --action-view: 220 9% 46%;
+    --action-view-bg: 220 14% 96%;
+    --action-menu: 220 9% 64%;
   }
 
   .dark {
