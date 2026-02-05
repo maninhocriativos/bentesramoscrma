@@ -1728,21 +1728,43 @@ async function enviarRespostaZapi(supabaseClient: any, subscriberId: string, men
       return { success: false };
     }
 
-    // Buscar configuração do Z-API
-    const { data: zapiConfig } = await supabaseClient
-      .from('integrations_config')
-      .select('config_json, is_active')
-      .eq('provider', 'zapi')
-      .single();
+    // Buscar configuração do Z-API - PRIORIZAR zapi_instances (nova tabela)
+    const { data: zapiInstance } = await supabaseClient
+      .from('zapi_instances')
+      .select('instance_id, token, client_token, name')
+      .eq('is_active', true)
+      .eq('is_default', true)
+      .maybeSingle();
 
-    if (!zapiConfig?.is_active) {
-      console.log('⚠️ Z-API não está ativo');
-      return { success: false };
+    let instanceId: string | undefined;
+    let token: string | undefined;
+    let clientToken: string | undefined;
+    let instanceName = 'default';
+
+    if (zapiInstance) {
+      instanceId = zapiInstance.instance_id;
+      token = zapiInstance.token;
+      clientToken = zapiInstance.client_token;
+      instanceName = zapiInstance.name || 'default';
+      console.log(`[Isa Z-API] Usando instância: ${instanceName} (${instanceId?.substring(0, 8)}...)`);
+    } else {
+      // Fallback para config legado
+      const { data: legacyConfig } = await supabaseClient
+        .from('integrations_config')
+        .select('config_json, is_active')
+        .eq('provider', 'zapi')
+        .single();
+
+      if (!legacyConfig?.is_active) {
+        console.log('⚠️ Z-API não está ativo');
+        return { success: false };
+      }
+
+      instanceId = legacyConfig.config_json?.instance_id;
+      token = legacyConfig.config_json?.token;
+      clientToken = legacyConfig.config_json?.client_token;
+      console.log('[Isa Z-API] Usando config legado');
     }
-
-    const instanceId = zapiConfig.config_json?.instance_id;
-    const token = zapiConfig.config_json?.token;
-    const clientToken = zapiConfig.config_json?.client_token;
 
     if (!instanceId || !token) {
       console.log('⚠️ Z-API não configurado (falta instance_id ou token)');
