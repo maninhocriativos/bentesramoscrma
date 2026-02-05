@@ -597,26 +597,66 @@ serve(async (req: Request) => {
       }
     }
 
-    // Se é mensagem, acionar Isa para processar
+    // ============================================
+    // LÓGICA DE ACIONAMENTO DA ISA
+    // ISA só responde leads de:
+    // 1. Tráfego pago (número 92 98588-8190)
+    // 2. API Meta (Facebook Lead Ads)
+    // Leads do escritório (92 99160-4348) são EXCLUSIVAMENTE atendimento humano
+    // ============================================
     if (normalized.message && leadId && !normalized.fromMe) {
-      // Buscar estado atual do lead
+      // Buscar estado atual do lead com campos de segmentação
       const { data: lead } = await supabase
         .from('leads_juridicos')
-        .select('lead_state, nome, status')
+        .select('lead_state, nome, status, isa_ativa, tipo_origem, linha_whatsapp, fonte_trafego')
         .eq('id', leadId)
         .single();
 
       // Verificar se atendimento humano está ativo
       const { data: subscriber } = await supabase
         .from('manychat_subscribers')
-        .select('atendimento_humano')
+        .select('atendimento_humano, linha_whatsapp')
         .eq('lead_id', leadId)
         .maybeSingle();
 
-      // Só aciona Isa se não tiver atendimento humano ativo
-      if (lead && !subscriber?.atendimento_humano) {
+      // ============================================
+      // REGRA PRINCIPAL: ISA SÓ ATENDE TRÁFEGO
+      // ============================================
+      // ISA responde SE:
+      // - linha_whatsapp = 'trafego_isa' (número 92 98588-8190)
+      // - OU tipo_origem = 'trafego' (vindo de anúncio)
+      // - OU fonte_trafego inclui 'facebook' ou 'meta' (API Lead Ads)
+      // - E isa_ativa não está explicitamente desativada
+      // - E não há atendimento humano ativo
+      // ============================================
+      
+      const isTrafficLine = linhaWhatsapp === 'trafego_isa' || lead?.linha_whatsapp === 'trafego_isa';
+      const isTrafficOrigin = lead?.tipo_origem === 'trafego' || trafficSource.isTraffic;
+      const isMetaLeadAds = lead?.fonte_trafego?.includes('facebook') || lead?.fonte_trafego?.includes('meta');
+      const isaExplicitlyDisabled = lead?.isa_ativa === false;
+      const humanAttendanceActive = subscriber?.atendimento_humano === true;
+      
+      // ISA só atende se for tráfego E não estiver desabilitada
+      const shouldIsaRespond = (isTrafficLine || isTrafficOrigin || isMetaLeadAds) 
+                               && !isaExplicitlyDisabled 
+                               && !humanAttendanceActive;
+      
+      console.log(`[Z-API Webhook] ISA Decision for lead ${leadId}:`, {
+        isTrafficLine,
+        isTrafficOrigin,
+        isMetaLeadAds,
+        isaExplicitlyDisabled,
+        humanAttendanceActive,
+        shouldIsaRespond,
+        linhaWhatsapp,
+        leadLinhaWhatsapp: lead?.linha_whatsapp,
+        tipoOrigem: lead?.tipo_origem,
+        fonteTrafego: lead?.fonte_trafego
+      });
+
+      if (shouldIsaRespond && lead) {
         try {
-          console.log(`[Z-API Webhook] Calling isa-auto-process for lead ${leadId}`);
+          console.log(`[Z-API Webhook] ✅ Calling isa-auto-process for TRAFFIC lead ${leadId}`);
           
           // Determinar a URL de mídia para transcrição/análise
           const mediaUrlToProcess = normalized.mediaUrl || 
@@ -673,7 +713,7 @@ serve(async (req: Request) => {
                 }
               });
               
-              console.log(`[Z-API Webhook] Isa response sent to ${normalized.phone} via ${zapiInstanceName}`);
+              console.log(`[Z-API Webhook] ✅ Isa response sent to ${normalized.phone} via ${zapiInstanceName}`);
             } else {
               console.error('[Z-API Webhook] Failed to send Isa response:', sendResult.error);
             }
@@ -683,8 +723,15 @@ serve(async (req: Request) => {
         } catch (isaErr) {
           console.error('[Z-API Webhook] Error calling Isa:', isaErr);
         }
-      } else if (subscriber?.atendimento_humano) {
-        console.log(`[Z-API Webhook] Human attendance active for lead ${leadId}, skipping Isa`);
+      } else {
+        // Log detalhado do motivo de não acionar a ISA
+        if (humanAttendanceActive) {
+          console.log(`[Z-API Webhook] 👤 Human attendance active for lead ${leadId}, skipping Isa`);
+        } else if (isaExplicitlyDisabled) {
+          console.log(`[Z-API Webhook] 🚫 Isa explicitly disabled for lead ${leadId}`);
+        } else if (!isTrafficLine && !isTrafficOrigin && !isMetaLeadAds) {
+          console.log(`[Z-API Webhook] 📞 OFFICE lead (not traffic) - human-only attendance for lead ${leadId}`);
+        }
       }
     }
 
