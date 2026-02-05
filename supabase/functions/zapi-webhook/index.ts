@@ -501,6 +501,7 @@ serve(async (req: Request) => {
           : normalized.message;
       
       // IMPORTANTE: Verificar se mensagem já existe pelo message_id para evitar duplicatas
+      // Se já existe, NÃO processar novamente (evita chamadas duplicadas à Isa)
       if (normalized.messageId) {
         const { data: existingMsg } = await supabase
           .from('manychat_mensagens')
@@ -509,54 +510,63 @@ serve(async (req: Request) => {
           .maybeSingle();
         
         if (existingMsg) {
-          console.log('[Z-API Webhook] Message already exists, skipping:', normalized.messageId);
-          // Ainda precisamos chamar a Isa, então continuamos
-        } else {
-          // Salvar nova mensagem com a direção correta
-          const { data: savedMsg, error: msgError } = await supabase.from('manychat_mensagens').insert({
-            subscriber_id: subscriberId,
-            subscriber_nome: normalized.fromMe ? 'Atendente' : (normalized.name || normalized.phone),
-            conteudo: conteudoToSave,
-            canal: 'whatsapp',
-            tipo: normalized.messageType || 'text',
-            direcao: direcaoMensagem,
+          console.log('[Z-API Webhook] ⚠️ Message already exists, SKIPPING ENTIRE PROCESSING:', normalized.messageId);
+          // RETORNAR AQUI - não processar novamente, não chamar a Isa
+          return new Response(JSON.stringify({ 
+            success: true, 
             lead_id: leadId,
-            metadata: { 
-              source: 'zapi', 
-              original: body,
-              message_id: normalized.messageId,
-              media_url: normalized.mediaUrl,
-              caption: normalized.caption,
-              file_name: normalized.fileName,
-              from_me: normalized.fromMe,
-              sent_via: normalized.fromMe ? 'whatsapp_phone' : null,
-              // Identificação da instância Z-API
-              instance_id: zapiInstanceId,
-              instance_name: zapiInstanceName,
-              // Adicionar dados de tráfego se disponíveis
-              traffic_source: trafficSource.isTraffic ? trafficSource.source : null,
-              ctwa_clid: trafficSource.adData?.ctwaClid || null
-            }
-          }).select().single();
-
-          if (msgError) {
-            console.error('[Z-API Webhook] Error saving message:', msgError);
-          } else {
-            console.log('[Z-API Webhook] Message saved:', savedMsg?.id);
+            skipped: true,
+            reason: 'message_already_processed',
+            message_id: normalized.messageId
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+        
+        // Salvar nova mensagem com a direção correta
+        const { data: savedMsg, error: msgError } = await supabase.from('manychat_mensagens').insert({
+          subscriber_id: subscriberId,
+          subscriber_nome: normalized.fromMe ? 'Atendente' : (normalized.name || normalized.phone),
+          conteudo: conteudoToSave,
+          canal: 'whatsapp',
+          tipo: normalized.messageType || 'text',
+          direcao: direcaoMensagem,
+          lead_id: leadId,
+          metadata: { 
+            source: 'zapi', 
+            original: body,
+            message_id: normalized.messageId,
+            media_url: normalized.mediaUrl,
+            caption: normalized.caption,
+            file_name: normalized.fileName,
+            from_me: normalized.fromMe,
+            sent_via: normalized.fromMe ? 'whatsapp_phone' : null,
+            // Identificação da instância Z-API
+            instance_id: zapiInstanceId,
+            instance_name: zapiInstanceName,
+            // Adicionar dados de tráfego se disponíveis
+            traffic_source: trafficSource.isTraffic ? trafficSource.source : null,
+            ctwa_clid: trafficSource.adData?.ctwaClid || null
           }
+        }).select().single();
 
-          // Registrar interação apenas para entrada (cliente)
-          if (!normalized.fromMe) {
-            await supabase.from('interacoes').insert({
-              cliente_id: leadId,
-              tipo: 'WhatsApp',
-              direcao: 'Entrada',
-              resumo: normalized.messageType === 'text' 
-                ? normalized.message.substring(0, 100) 
-                : `[${normalized.messageType}]`,
-              detalhes: normalized.message
-            });
-          }
+        if (msgError) {
+          console.error('[Z-API Webhook] Error saving message:', msgError);
+        } else {
+          console.log('[Z-API Webhook] Message saved:', savedMsg?.id);
+        }
+
+        // Registrar interação apenas para entrada (cliente)
+        if (!normalized.fromMe) {
+          await supabase.from('interacoes').insert({
+            cliente_id: leadId,
+            tipo: 'WhatsApp',
+            direcao: 'Entrada',
+            resumo: normalized.messageType === 'text' 
+              ? normalized.message.substring(0, 100) 
+              : `[${normalized.messageType}]`,
+            detalhes: normalized.message
+          });
         }
       } else {
         // Sem message_id, salvar normalmente (fallback)
@@ -666,8 +676,42 @@ serve(async (req: Request) => {
       });
 
       if (shouldIsaRespond && lead) {
+        // ============================================
+        // LOCK DE PROCESSAMENTO: Evitar chamadas duplicadas à ISA
+        // Usa message_id + lead_id como chave única
+        // ============================================
+        const lockKey = `isa_msg_${normalized.messageId || Date.now()}_${leadId}`;
+        
+        // Verificar se já existe um lock recente (últimos 60 segundos)
+        const { data: existingLock } = await supabase
+          .from('system_events')
+          .select('id')
+          .eq('tipo', 'isa_processing_lock')
+          .eq('dados->>lock_key', lockKey)
+          .gte('created_at', new Date(Date.now() - 60000).toISOString())
+          .maybeSingle();
+        
+        if (existingLock) {
+          console.log(`[Z-API Webhook] ⚠️ ISA processing lock active for ${lockKey}, skipping duplicate call`);
+          return new Response(JSON.stringify({ 
+            success: true, 
+            lead_id: leadId,
+            skipped: true,
+            reason: 'isa_processing_locked'
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+        
+        // Criar lock
+        await supabase.from('system_events').insert({
+          tipo: 'isa_processing_lock',
+          fonte: 'zapi_webhook',
+          dados: { lock_key: lockKey, lead_id: leadId, message_id: normalized.messageId }
+        });
+        
         try {
-          console.log(`[Z-API Webhook] ✅ Calling isa-auto-process for TRAFFIC lead ${leadId}`);
+          console.log(`[Z-API Webhook] ✅ Calling isa-auto-process for TRAFFIC lead ${leadId} (lock: ${lockKey})`);
           
           // Determinar a URL de mídia para transcrição/análise
           const mediaUrlToProcess = normalized.mediaUrl || 
