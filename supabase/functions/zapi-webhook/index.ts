@@ -34,9 +34,18 @@ const TRAFFIC_MESSAGE_PATTERN = 'quero saber se tenho dinheiro a receber';
 // Qualquer mensagem recebida nesses números é automaticamente classificada como tráfego
 // ============================================
 const TRAFFIC_INSTANCE_PHONES = [
+  // Com 9º dígito (padrão)
   '5592985888190',
   '92985888190',
-  '985888190'
+  '985888190',
+
+  // Sem 9º dígito (alguns callbacks da Z-API vêm assim)
+  '559285888190',
+  '9285888190',
+  '85888190',
+
+  // Sufixo “estável” entre as duas variações acima
+  '5888190'
 ];
 
 // ============================================
@@ -638,9 +647,8 @@ serve(async (req: Request) => {
       const isaExplicitlyDisabled = lead?.isa_ativa === false;
       const humanAttendanceActive = subscriber?.atendimento_humano === true;
 
-      // ISA só atende se a mensagem entrou na linha de tráfego
+// ISA só atende se a mensagem entrou na linha de tráfego
       const shouldIsaRespond = isTrafficLine
-        && (isTrafficOrigin || isMetaLeadAds)
         && !isaExplicitlyDisabled
         && !humanAttendanceActive;
       
