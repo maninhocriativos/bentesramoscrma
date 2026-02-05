@@ -56,6 +56,8 @@ const STATUSES: ProcessoStatus[] = [
   'Perdido',
 ];
 
+const CNJ_REGEX = /^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$/;
+
 export function ProcessoModalExpanded({ 
   processo, 
   isOpen, 
@@ -86,13 +88,13 @@ export function ProcessoModalExpanded({
   const [movimentos, setMovimentos] = useState<ProcessoMovimento[]>([]);
 
   const fetchProcessoData = async (numeroProcesso: string) => {
-    const cnjPattern = /^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$/;
-    if (!cnjPattern.test(numeroProcesso)) return;
+    const numero = (numeroProcesso || '').trim();
+    if (!CNJ_REGEX.test(numero)) return;
 
     setFetchingData(true);
     try {
       const { data, error } = await supabase.functions.invoke('consulta-processos', {
-        body: { numeroProcesso }
+        body: { numeroProcesso: numero }
       });
 
       if (error) throw error;
@@ -173,12 +175,20 @@ export function ProcessoModalExpanded({
   };
 
   const handleRefreshStatus = async () => {
-    if (!formData.numero_processo) return;
-    
+    const numero = (formData.numero_processo || '').trim();
+    if (!numero) return;
+
+    if (!CNJ_REGEX.test(numero)) {
+      toast.error('Número do processo inválido', {
+        description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
+      });
+      return;
+    }
+
     setFetchingData(true);
     try {
       const { data, error } = await supabase.functions.invoke('consulta-processos', {
-        body: { numeroProcesso: formData.numero_processo }
+        body: { numeroProcesso: numero }
       });
 
       if (error) throw error;
@@ -369,7 +379,7 @@ export function ProcessoModalExpanded({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl rounded-xl max-h-[95vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-4xl rounded-xl max-h-[95vh] overflow-hidden flex flex-col min-h-0">
         <DialogHeader className="pb-2">
           <DialogTitle className="text-xl font-semibold flex items-center gap-2">
             <Scale className="h-5 w-5 text-primary" />
@@ -377,7 +387,7 @@ export function ProcessoModalExpanded({
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="dados" className="flex-1 overflow-hidden flex flex-col">
+        <Tabs defaultValue="dados" className="flex-1 min-h-0 overflow-hidden flex flex-col">
           <TabsList className="grid grid-cols-4 w-full">
             <TabsTrigger value="dados">Dados</TabsTrigger>
             <TabsTrigger value="partes">Partes</TabsTrigger>
@@ -385,7 +395,7 @@ export function ProcessoModalExpanded({
             <TabsTrigger value="notificacoes">Notificações</TabsTrigger>
           </TabsList>
 
-          <ScrollArea className="flex-1 pr-4">
+          <ScrollArea className="flex-1 min-h-0 pr-4 pb-2">
             {/* Tab: Dados */}
             <TabsContent value="dados" className="space-y-4 mt-4">
               {/* Número e Status */}
@@ -565,22 +575,7 @@ export function ProcessoModalExpanded({
                 </Select>
               </div>
 
-              {/* Botão Refresh - sempre visível quando tem número */}
-              {formData.numero_processo && formData.numero_processo.length >= 20 && (
-                <Button
-                  variant="default"
-                  onClick={handleRefreshStatus}
-                  disabled={fetchingData}
-                  className="w-full rounded-xl"
-                >
-                  {fetchingData ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                  )}
-                  {isNew ? 'Buscar Dados no DataJud' : 'Atualizar Status via DataJud'}
-                </Button>
-              )}
+              {/* Atualização via DataJud disponível no rodapé do modal */}
             </TabsContent>
 
             {/* Tab: Partes */}
@@ -774,6 +769,21 @@ export function ProcessoModalExpanded({
           </div>
           
           <div className="flex gap-2">
+            {formData.numero_processo.trim() && (
+              <Button
+                variant="secondary"
+                onClick={handleRefreshStatus}
+                disabled={fetchingData}
+                className="rounded-xl"
+              >
+                {fetchingData ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                {isNew ? 'Buscar DataJud' : 'Atualizar DataJud'}
+              </Button>
+            )}
             <Button variant="outline" onClick={onClose} className="rounded-xl">
               Cancelar
             </Button>
