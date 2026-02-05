@@ -23,6 +23,7 @@ import IsaAutonomaPage from "./pages/IsaAutonomaPage";
 import ChatPage from "./pages/ChatPage";
 import ApiHubPage from "./pages/ApiHubPage";
 import ApiDocsPage from "./pages/ApiDocsPage";
+import MetaLeadsPage from "./pages/MetaLeadsPage";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import PoliticaPrivacidadePage from "./pages/PoliticaPrivacidadePage";
@@ -76,6 +77,7 @@ const App = () => (
               <Route path="/assistente" element={<AssistentePage />} />
               <Route path="/isa-autonoma" element={<IsaAutonomaPage />} />
               <Route path="/chat" element={<ChatPage />} />
+              <Route path="/meta-leads" element={<MetaLeadsPage />} />
               <Route path="/api-hub" element={<ApiHubPage />} />
               <Route path="/api-docs" element={<ApiDocsPage />} />
               <Route path="/peticoes" element={<PeticoesPage />} />
