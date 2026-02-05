@@ -21,14 +21,14 @@ interface LeadCardProps {
   };
 }
 
-// Sentiment indicator - usando cores do design system
+// Sentiment indicator - usando tokens do design system
 function SentimentDot({ isaInsight }: { isaInsight?: LeadCardProps['isaInsight'] }) {
   if (!isaInsight?.sentimento) return null;
 
   const config = {
-    positivo: { icon: Star, color: 'text-gold' },
-    neutro: { icon: Sparkles, color: 'text-primary/60' },
-    negativo: { icon: Flame, color: 'text-destructive' },
+    positivo: { icon: Star, color: 'text-stage-ganho' },
+    neutro: { icon: Sparkles, color: 'text-stage-bentes' },
+    negativo: { icon: Flame, color: 'text-stage-perdido' },
   };
 
   const { icon: Icon, color } = config[isaInsight.sentimento];
@@ -36,13 +36,13 @@ function SentimentDot({ isaInsight }: { isaInsight?: LeadCardProps['isaInsight']
   return <Icon className={cn("w-3 h-3", color)} />;
 }
 
-// Origin badge - usando cores do design system
+// Origin badge - usando tokens do design system
 function OriginBadge({ tipoOrigem }: { tipoOrigem?: TipoOrigem | null }) {
   if (!tipoOrigem || tipoOrigem === 'indefinido') return null;
 
   const config = {
-    trafego: { icon: Target, label: 'Ads', bg: 'bg-primary/10', text: 'text-primary' },
-    whatsapp_direto: { icon: MessageSquare, label: 'Direto', bg: 'bg-muted', text: 'text-muted-foreground' },
+    trafego: { icon: Target, label: 'Ads', bg: 'bg-origem-ads-bg', text: 'text-origem-ads' },
+    whatsapp_direto: { icon: MessageSquare, label: 'Direto', bg: 'bg-linha-escritorio-bg', text: 'text-linha-escritorio' },
   };
 
   const item = config[tipoOrigem];
@@ -50,7 +50,7 @@ function OriginBadge({ tipoOrigem }: { tipoOrigem?: TipoOrigem | null }) {
   const { icon: Icon, label, bg, text } = item;
 
   return (
-    <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium", bg, text)}>
+    <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium h-[18px]", bg, text)}>
       <Icon className="w-2.5 h-2.5" />
       {label}
     </span>
@@ -78,7 +78,7 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProp
         "bg-card rounded-xl border border-border/60",
         "cursor-pointer transition-all duration-200",
         "hover:shadow-card-hover hover:border-border",
-        hasContract && "border-success/30",
+        hasContract && "border-stage-ganho/30",
         isDragging && "kanban-card-dragging opacity-80"
       )}
     >
@@ -86,15 +86,16 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProp
       <div className="p-3">
         {/* Row 1: Avatar + Name + Time */}
         <div className="flex items-center gap-2.5 mb-2">
-          {/* Avatar - usando cores do design system */}
+          {/* Avatar - usando tokens do design system */}
           <div className={cn(
             "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-            "bg-gradient-to-br from-gold/20 to-gold/5",
-            hasContract && "from-success/20 to-success/5"
+            hasContract 
+              ? "bg-stage-ganho-bg" 
+              : "bg-stage-bentes-bg"
           )}>
             <User className={cn(
               "w-4 h-4",
-              hasContract ? "text-success" : "text-gold-foreground"
+              hasContract ? "text-stage-ganho" : "text-stage-bentes"
             )} />
           </div>
 
@@ -110,11 +111,11 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProp
             )}
           </div>
 
-          {/* Sentiment + Time - usando cores do design system */}
+          {/* Sentiment + Time - usando tokens do design system */}
           <div className="flex items-center gap-2 shrink-0">
             <SentimentDot isaInsight={isaInsight} />
             <div className="flex items-center gap-1 text-muted-foreground/70">
-              <Clock className="w-3 h-3 text-gold/60" />
+              <Clock className="w-3 h-3 text-stage-atendimento/60" />
               <span className="text-[10px]">{lastInteraction}</span>
             </div>
           </div>
@@ -125,7 +126,7 @@ export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProp
           <div className="flex items-center gap-1.5 flex-wrap">
             <OriginBadge tipoOrigem={lead.tipo_origem as TipoOrigem} />
             {lead.origem && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[10px] font-medium">
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-origem-organico-bg text-origem-organico text-[10px] font-medium h-[18px]">
                 {lead.origem}
               </span>
             )}
