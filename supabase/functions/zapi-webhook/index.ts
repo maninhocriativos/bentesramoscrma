@@ -620,26 +620,29 @@ serve(async (req: Request) => {
         .maybeSingle();
 
       // ============================================
-      // REGRA PRINCIPAL: ISA SÓ ATENDE TRÁFEGO
+      // REGRA PRINCIPAL: ISA SÓ ATENDE NO NÚMERO DE TRÁFEGO
       // ============================================
-      // ISA responde SE:
-      // - linha_whatsapp = 'trafego_isa' (número 92 98588-8190)
-      // - OU tipo_origem = 'trafego' (vindo de anúncio)
-      // - OU fonte_trafego inclui 'facebook' ou 'meta' (API Lead Ads)
-      // - E isa_ativa não está explicitamente desativada
-      // - E não há atendimento humano ativo
+      // Para evitar responder “pelo número errado”, a Isa só responde quando a
+      // mensagem ENTRA pela linha de tráfego (92 98588-8190).
+      // Mesmo que o lead tenha tipo_origem=trafego, se ele falar pelo número do
+      // escritório (92 99160-4348), NÃO acionamos a Isa.
       // ============================================
-      
-      const isTrafficLine = linhaWhatsapp === 'trafego_isa' || lead?.linha_whatsapp === 'trafego_isa';
+
+      // Linha de WhatsApp da mensagem atual (derivada do connectedPhone do webhook)
+      const isTrafficLine = linhaWhatsapp === 'trafego_isa';
+
+      // Origem do lead (anúncio) / API Meta Lead Ads
       const isTrafficOrigin = lead?.tipo_origem === 'trafego' || trafficSource.isTraffic;
       const isMetaLeadAds = lead?.fonte_trafego?.includes('facebook') || lead?.fonte_trafego?.includes('meta');
+
       const isaExplicitlyDisabled = lead?.isa_ativa === false;
       const humanAttendanceActive = subscriber?.atendimento_humano === true;
-      
-      // ISA só atende se for tráfego E não estiver desabilitada
-      const shouldIsaRespond = (isTrafficLine || isTrafficOrigin || isMetaLeadAds) 
-                               && !isaExplicitlyDisabled 
-                               && !humanAttendanceActive;
+
+      // ISA só atende se a mensagem entrou na linha de tráfego
+      const shouldIsaRespond = isTrafficLine
+        && (isTrafficOrigin || isMetaLeadAds)
+        && !isaExplicitlyDisabled
+        && !humanAttendanceActive;
       
       console.log(`[Z-API Webhook] ISA Decision for lead ${leadId}:`, {
         isTrafficLine,
