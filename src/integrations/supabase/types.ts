@@ -2159,71 +2159,107 @@ export type Database = {
         Row: {
           advogado_responsavel: string | null
           ajuizado_em: string | null
+          assunto: string | null
+          classe_cnj: string | null
           classe_cnj_codigo: string | null
           classe_cnj_nome: string | null
           cliente_id: string | null
           created_at: string | null
+          dados_datajud: Json | null
+          data_ajuizamento: string | null
+          data_ultima_atualizacao: string | null
           fonte_raw: Json | null
           frequencia_notificacao_dias: number | null
+          grau: string | null
           grau_formato: string | null
           id: string
+          movimentos_json: Json | null
           notificacao_ativa: boolean | null
           numero_processo: string | null
           orgao_julgador: string | null
+          partes_json: Json | null
           sigilo: string | null
           sistema: string | null
           status: string | null
+          status_detalhado: string | null
           titulo_acao: string | null
           tribunal: string | null
           ultima_atualizacao: string | null
+          ultima_consulta_api_at: string | null
           ultima_notificacao_at: string | null
           updated_at: string | null
+          valor_causa: number | null
+          vara_comarca: string | null
         }
         Insert: {
           advogado_responsavel?: string | null
           ajuizado_em?: string | null
+          assunto?: string | null
+          classe_cnj?: string | null
           classe_cnj_codigo?: string | null
           classe_cnj_nome?: string | null
           cliente_id?: string | null
           created_at?: string | null
+          dados_datajud?: Json | null
+          data_ajuizamento?: string | null
+          data_ultima_atualizacao?: string | null
           fonte_raw?: Json | null
           frequencia_notificacao_dias?: number | null
+          grau?: string | null
           grau_formato?: string | null
           id?: string
+          movimentos_json?: Json | null
           notificacao_ativa?: boolean | null
           numero_processo?: string | null
           orgao_julgador?: string | null
+          partes_json?: Json | null
           sigilo?: string | null
           sistema?: string | null
           status?: string | null
+          status_detalhado?: string | null
           titulo_acao?: string | null
           tribunal?: string | null
           ultima_atualizacao?: string | null
+          ultima_consulta_api_at?: string | null
           ultima_notificacao_at?: string | null
           updated_at?: string | null
+          valor_causa?: number | null
+          vara_comarca?: string | null
         }
         Update: {
           advogado_responsavel?: string | null
           ajuizado_em?: string | null
+          assunto?: string | null
+          classe_cnj?: string | null
           classe_cnj_codigo?: string | null
           classe_cnj_nome?: string | null
           cliente_id?: string | null
           created_at?: string | null
+          dados_datajud?: Json | null
+          data_ajuizamento?: string | null
+          data_ultima_atualizacao?: string | null
           fonte_raw?: Json | null
           frequencia_notificacao_dias?: number | null
+          grau?: string | null
           grau_formato?: string | null
           id?: string
+          movimentos_json?: Json | null
           notificacao_ativa?: boolean | null
           numero_processo?: string | null
           orgao_julgador?: string | null
+          partes_json?: Json | null
           sigilo?: string | null
           sistema?: string | null
           status?: string | null
+          status_detalhado?: string | null
           titulo_acao?: string | null
           tribunal?: string | null
           ultima_atualizacao?: string | null
+          ultima_consulta_api_at?: string | null
           ultima_notificacao_at?: string | null
           updated_at?: string | null
+          valor_causa?: number | null
+          vara_comarca?: string | null
         }
         Relationships: [
           {
