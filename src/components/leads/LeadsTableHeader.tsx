@@ -116,20 +116,20 @@ export function LeadsTableHeader({
   return (
     <>
       <header className="sticky top-0 z-20 bg-background border-b">
-        <div className="h-[72px] px-4 lg:px-6 flex items-center gap-4">
+        <div className="h-14 px-4 lg:px-6 flex items-center gap-3">
           {/* Title & Count */}
-          <div className="flex items-baseline gap-3 min-w-fit">
-            <h1 className="text-xl font-semibold text-foreground">Pipeline</h1>
-            <span className="text-sm text-muted-foreground">{totalLeads} leads</span>
+          <div className="flex items-baseline gap-2 min-w-fit">
+            <h1 className="text-lg font-semibold text-foreground">Pipeline</h1>
+            <span className="text-xs text-muted-foreground">{totalLeads}</span>
           </div>
 
-          {/* Quick Filters - Linha WhatsApp */}
-          <div className="hidden md:flex items-center gap-2">
+          {/* Quick Filters - Linha WhatsApp - Compact */}
+          <div className="hidden md:flex items-center gap-1.5">
             <Button
               variant={filterLinha === 'all' ? 'secondary' : 'ghost'}
               size="sm"
               onClick={() => onFilterLinhaChange('all')}
-              className="h-8 gap-1.5"
+              className="h-7 px-2 text-xs"
             >
               Todos
             </Button>
@@ -138,13 +138,13 @@ export function LeadsTableHeader({
               size="sm"
               onClick={() => onFilterLinhaChange('bentes_ramos_antigo')}
               className={cn(
-                "h-8 gap-1.5",
+                "h-7 px-2 text-xs gap-1",
                 filterLinha === 'bentes_ramos_antigo' && "bg-blue-600 hover:bg-blue-700"
               )}
             >
-              <Building2 className="h-3.5 w-3.5" />
-              Bentes & Ramos
-              <Badge variant="outline" className="ml-1 h-5 px-1.5 bg-blue-100 text-blue-800 border-0">
+              <Building2 className="h-3 w-3" />
+              <span className="hidden lg:inline">B&R</span>
+              <Badge variant="outline" className="h-4 px-1 text-[10px] bg-blue-100 text-blue-800 border-0">
                 {countBentesRamos}
               </Badge>
             </Button>
@@ -153,37 +153,37 @@ export function LeadsTableHeader({
               size="sm"
               onClick={() => onFilterLinhaChange('trafego_isa')}
               className={cn(
-                "h-8 gap-1.5",
+                "h-7 px-2 text-xs gap-1",
                 filterLinha === 'trafego_isa' && "bg-orange-600 hover:bg-orange-700"
               )}
             >
-              <Megaphone className="h-3.5 w-3.5" />
-              Tráfego (ISA)
-              <Badge variant="outline" className="ml-1 h-5 px-1.5 bg-orange-100 text-orange-800 border-0">
+              <Megaphone className="h-3 w-3" />
+              <span className="hidden lg:inline">Tráfego</span>
+              <Badge variant="outline" className="h-4 px-1 text-[10px] bg-orange-100 text-orange-800 border-0">
                 {countTrafego}
               </Badge>
             </Button>
           </div>
 
-          {/* Search */}
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          {/* Search - Compact */}
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nome, WhatsApp ou e-mail"
+              placeholder="Buscar..."
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="pl-9 h-10 rounded-lg bg-muted/50"
+              className="pl-8 h-8 text-sm rounded-md bg-muted/50"
             />
           </div>
 
-          {/* Filters - Desktop */}
-          <div className="hidden lg:flex items-center gap-2">
+          {/* Filters - Desktop Compact */}
+          <div className="hidden lg:flex items-center gap-1.5">
             <Select value={filterOrigem} onValueChange={onFilterOrigemChange}>
-              <SelectTrigger className="w-[130px] h-10 rounded-lg bg-muted/50 border-0">
+              <SelectTrigger className="w-[100px] h-8 text-xs rounded-md bg-muted/50 border-0">
                 <SelectValue placeholder="Origem" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas Origens</SelectItem>
+                <SelectItem value="all">Origens</SelectItem>
                 {origens.map(origem => (
                   <SelectItem key={origem} value={origem}>{origem}</SelectItem>
                 ))}
@@ -191,11 +191,11 @@ export function LeadsTableHeader({
             </Select>
 
             <Select value={filterEtapa} onValueChange={onFilterEtapaChange}>
-              <SelectTrigger className="w-[150px] h-10 rounded-lg bg-muted/50 border-0">
+              <SelectTrigger className="w-[110px] h-8 text-xs rounded-md bg-muted/50 border-0">
                 <SelectValue placeholder="Etapa" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas Etapas</SelectItem>
+                <SelectItem value="all">Etapas</SelectItem>
                 {etapas.map(etapa => (
                   <SelectItem key={etapa} value={etapa}>{etapa}</SelectItem>
                 ))}
@@ -203,24 +203,25 @@ export function LeadsTableHeader({
             </Select>
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-2">
+          {/* Actions - Compact */}
+          <div className="flex items-center gap-1.5">
             <Button
               onClick={() => setIsNewLeadModalOpen(true)}
-              className="h-10 gap-2"
+              size="sm"
+              className="h-8 gap-1.5"
             >
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Novo Lead</span>
+              <Plus className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline text-xs">Novo</span>
             </Button>
 
             <Button
-              variant="outline"
+              variant="ghost"
               size="icon"
               onClick={exportToCSV}
-              className="h-10 w-10 rounded-lg"
+              className="h-8 w-8"
               title="Exportar CSV"
             >
-              <Download className="h-4 w-4" />
+              <Download className="h-3.5 w-3.5" />
             </Button>
           </div>
         </div>
