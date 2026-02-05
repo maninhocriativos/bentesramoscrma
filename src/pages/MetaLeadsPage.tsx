@@ -86,7 +86,7 @@ export default function MetaLeadsPage() {
 
   return (
     <AppLayout>
-      <div className="flex flex-col h-[calc(100vh-64px)]">
+      <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
         <MetaLeadsHeader
           search={search}
           onSearchChange={setSearch}
@@ -94,6 +94,7 @@ export default function MetaLeadsPage() {
           onFilterStatusChange={setFilterStatus}
           totalLeads={filteredLeads.length}
           onRefresh={fetchLeads}
+          leads={filteredLeads}
         />
 
         <div className="flex-1 flex overflow-hidden">

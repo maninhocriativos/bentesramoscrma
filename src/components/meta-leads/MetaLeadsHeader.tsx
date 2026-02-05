@@ -1,9 +1,10 @@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Search, RefreshCw, Filter } from 'lucide-react';
-import { MetaFormLeadStatus } from '@/types/metaFormLeads';
+import { Search, RefreshCw, Filter, Download } from 'lucide-react';
+import { MetaFormLeadStatus, MetaFormLead } from '@/types/metaFormLeads';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 interface MetaLeadsHeaderProps {
   search: string;
@@ -12,6 +13,7 @@ interface MetaLeadsHeaderProps {
   onFilterStatusChange: (status: MetaFormLeadStatus | 'all') => void;
   totalLeads: number;
   onRefresh: () => void;
+  leads: MetaFormLead[];
 }
 
 const statusFilters: { value: MetaFormLeadStatus | 'all'; label: string; color: string }[] = [
@@ -22,6 +24,13 @@ const statusFilters: { value: MetaFormLeadStatus | 'all'; label: string; color: 
   { value: 'perdido', label: 'Perdido', color: 'bg-red-100 text-red-700' },
 ];
 
+const statusLabels: Record<MetaFormLeadStatus, string> = {
+  novo: 'Novo',
+  em_atendimento: 'Em Atendimento',
+  concluido: 'Concluído',
+  perdido: 'Perdido',
+};
+
 export function MetaLeadsHeader({
   search,
   onSearchChange,
@@ -29,21 +38,75 @@ export function MetaLeadsHeader({
   onFilterStatusChange,
   totalLeads,
   onRefresh,
+  leads,
 }: MetaLeadsHeaderProps) {
+  const { toast } = useToast();
+
+  const exportToCSV = () => {
+    if (leads.length === 0) {
+      toast({
+        title: 'Nenhum lead para exportar',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Build CSV content
+    const headers = ['Nome', 'Telefone', 'Email', 'Status', 'Data Criação', 'Último Contato', 'Form ID', 'Campaign ID'];
+    
+    const rows = leads.map((lead) => [
+      lead.nome || '',
+      lead.telefone || '',
+      lead.email || '',
+      statusLabels[lead.status] || lead.status,
+      lead.created_at ? new Date(lead.created_at).toLocaleString('pt-BR') : '',
+      lead.last_contact_at ? new Date(lead.last_contact_at).toLocaleString('pt-BR') : '',
+      lead.form_id || '',
+      lead.campaign_id || '',
+    ]);
+
+    const csvContent = [
+      headers.join(';'),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
+    ].join('\n');
+
+    // Create and download file
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `leads-meta-${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: 'Exportação concluída',
+      description: `${leads.length} leads exportados com sucesso.`,
+    });
+  };
+
   return (
     <div className="border-b bg-card px-4 py-3 space-y-3">
       {/* Title row */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold">Leads da API (Meta Forms)</h1>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-xl font-bold whitespace-nowrap">Leads da API (Meta)</h1>
           <Badge variant="secondary" className="bg-purple-100 text-purple-700">
             {totalLeads} leads
           </Badge>
         </div>
-        <Button variant="outline" size="sm" onClick={onRefresh}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Atualizar
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportToCSV}>
+            <Download className="h-4 w-4 mr-2" />
+            Exportar CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={onRefresh}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       {/* Search and filters */}
