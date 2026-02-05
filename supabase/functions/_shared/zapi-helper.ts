@@ -68,47 +68,86 @@ export async function getAllZapiInstances(supabase: any): Promise<(ZapiConfig & 
 
 /**
  * Identifica qual instância Z-API recebeu a mensagem
- * Pode usar o número do destinatário ou o instance_id do payload
+ * PRIORIDADE: connectedPhone > phone_number > instance_id
+ * O connectedPhone é o número que realmente recebeu a mensagem
  */
 export async function identificarInstanciaOrigem(
   supabase: any, 
   body: any
 ): Promise<{ instanceId: string; instanceName: string; config: ZapiConfig } | null> {
-  // Tentar identificar pelo instance_id no payload (Z-API pode enviar)
-  const payloadInstanceId = body.instance_id || body.instanceId;
+  // PRIORIDADE 1: connectedPhone (número que RECEBEU a mensagem - mais confiável)
+  const connectedPhone = body.connectedPhone;
   
-  // Tentar pelo número de telefone do destino (nosso número)
+  // PRIORIDADE 2: Campos alternativos de telefone destino
   const toPhone = body.to || body.phone_to || body.destination;
+  
+  // PRIORIDADE 3: instance_id do payload (menos confiável - pode estar desatualizado)
+  const payloadInstanceId = body.instance_id || body.instanceId;
   
   // Buscar todas as instâncias ativas
   const instances = await getAllZapiInstances(supabase);
   
   if (instances.length === 0) {
+    console.log('[Z-API Helper] ⚠️ Nenhuma instância ativa encontrada');
     return null;
   }
   
-  // Tentar match por instance_id
+  // MATCH 1: Por connectedPhone (número real que recebeu)
+  if (connectedPhone) {
+    const cleanConnected = connectedPhone.replace(/\D/g, '');
+    const matched = instances.find(i => {
+      if (!i.phone_number) return false;
+      const cleanInstance = i.phone_number.replace(/\D/g, '');
+      
+      // Match exato
+      if (cleanInstance === cleanConnected) return true;
+      
+      // Match por últimos 8-11 dígitos (ignora código país e nono dígito)
+      const last8Connected = cleanConnected.slice(-8);
+      const last8Instance = cleanInstance.slice(-8);
+      if (last8Connected === last8Instance) return true;
+      
+      // Match parcial mais flexível
+      if (cleanConnected.endsWith(cleanInstance.slice(-9)) ||
+          cleanInstance.endsWith(cleanConnected.slice(-9))) return true;
+      
+      return false;
+    });
+    if (matched) {
+      console.log(`[Z-API Helper] ✅ Instância identificada por connectedPhone: ${matched.name} (${connectedPhone})`);
+      return { instanceId: matched.id, instanceName: matched.name || 'Default', config: matched };
+    }
+    console.log(`[Z-API Helper] ⚠️ connectedPhone ${connectedPhone} não encontrado nas instâncias cadastradas. Instâncias: ${instances.map(i => i.phone_number).join(', ')}`);
+  }
+  
+  // MATCH 2: Por telefone destino alternativo
+  if (toPhone) {
+    const cleanTo = normalizePhone(toPhone);
+    const matched = instances.find(i => {
+      if (!i.phone_number) return false;
+      const cleanInstance = normalizePhone(i.phone_number);
+      return cleanInstance === cleanTo || 
+             cleanTo.endsWith(cleanInstance.slice(-11)) ||
+             cleanInstance.endsWith(cleanTo.slice(-11));
+    });
+    if (matched) {
+      console.log(`[Z-API Helper] ✅ Instância identificada por toPhone: ${matched.name}`);
+      return { instanceId: matched.id, instanceName: matched.name || 'Default', config: matched };
+    }
+  }
+  
+  // MATCH 3: Por instance_id (menos confiável - fallback)
   if (payloadInstanceId) {
     const matched = instances.find(i => i.instance_id === payloadInstanceId);
     if (matched) {
-      console.log(`[Z-API Helper] Instância identificada por instance_id: ${matched.name}`);
+      console.log(`[Z-API Helper] ⚠️ Instância identificada por instance_id (fallback): ${matched.name}`);
       return { instanceId: matched.id, instanceName: matched.name || 'Default', config: matched };
     }
   }
   
-  // Tentar match por telefone
-  if (toPhone) {
-    const cleanTo = normalizePhone(toPhone);
-    const matched = instances.find(i => i.phone_number && normalizePhone(i.phone_number) === cleanTo);
-    if (matched) {
-      console.log(`[Z-API Helper] Instância identificada por telefone: ${matched.name}`);
-      return { instanceId: matched.id, instanceName: matched.name || 'Default', config: matched };
-    }
-  }
-  
-  // Fallback: retornar a instância padrão (primeira, ordenada por is_default)
+  // FALLBACK: retornar a instância padrão
   const defaultInstance = instances[0];
-  console.log(`[Z-API Helper] Usando instância padrão: ${defaultInstance.name}`);
+  console.log(`[Z-API Helper] ⚠️ Usando instância padrão (fallback): ${defaultInstance.name}`);
   return { 
     instanceId: defaultInstance.id, 
     instanceName: defaultInstance.name || 'Default', 
