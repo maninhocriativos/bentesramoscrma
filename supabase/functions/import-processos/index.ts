@@ -7,20 +7,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Lista de tribunais disponíveis na API DataJud (fallback para api_publica_{tribunal})
-const TRIBUNAIS: Record<string, string> = {
-  'trt11': 'api_publica_trt11',
-  'tjam': 'api_publica_tjam',
-  'trf1': 'api_publica_trf1',
-  'trf2': 'api_publica_trf2',
-  'trf3': 'api_publica_trf3',
-  'tjsp': 'api_publica_tjsp',
-  'tjrj': 'api_publica_tjrj',
-  'tjmg': 'api_publica_tjmg',
-  'tjrs': 'api_publica_tjrs',
-  'tjpr': 'api_publica_tjpr',
-};
-
 // =====================================================
 // ESCAVADOR API v2 - Fonte alternativa de busca
 // =====================================================
@@ -60,7 +46,17 @@ async function buscarProcessoEscavador(numeroProcesso: string): Promise<any> {
   }
 }
 
-function extrairDadosEscavador(escavadorData: any): { autorNome?: string; advogado?: string; status: string; classe: string } {
+function extrairDadosEscavador(escavadorData: any): { 
+  autorNome?: string; 
+  advogado?: string; 
+  status: string; 
+  classe: string;
+  tribunal?: string;
+  assunto?: string;
+  valorCausa?: number;
+  dataAjuizamento?: string;
+  orgaoJulgador?: string;
+} {
   const fonteTribunal = escavadorData?.fontes?.find((f: any) => f.tipo === 'TRIBUNAL') || escavadorData?.fontes?.[0];
   
   // Extrair partes
@@ -89,103 +85,57 @@ function extrairDadosEscavador(escavadorData: any): { autorNome?: string; advoga
   // Classe
   const classe = fonteTribunal?.classe?.nome || escavadorData?.titulo_classe || escavadorData?.classe || 'Processo Importado';
   
-  return { autorNome, advogado, status, classe };
+  // Tribunal
+  const tribunal = fonteTribunal?.nome?.match(/TJ|TRT|TRF|STJ|STF/)?.[0] || fonteTribunal?.sigla || escavadorData?.sigla_tribunal;
+  
+  // Assunto
+  const assunto = fonteTribunal?.assuntos?.[0]?.nome || escavadorData?.assuntos?.[0]?.nome;
+  
+  // Valor da causa
+  const valorCausa = fonteTribunal?.valor_causa || escavadorData?.valor_causa;
+  
+  // Data ajuizamento
+  const dataAjuizamento = fonteTribunal?.data_inicio || escavadorData?.data_inicio;
+  
+  // Órgão julgador
+  const orgaoJulgador = fonteTribunal?.orgao_julgador?.nome || fonteTribunal?.vara;
+  
+  return { autorNome, advogado, status, classe, tribunal, assunto, valorCausa, dataAjuizamento, orgaoJulgador };
 }
 
-// Extrai dados do DataJud
-function determinarStatusBasico(processo: any): string {
-  const movimentos = processo?.movimentos || [];
-  if (movimentos.length > 0) {
-    const ultima = (movimentos[0]?.nome || '').toLowerCase();
-    if (ultima.includes('arquiv')) return 'Arquivado';
-    if (ultima.includes('baixa') || ultima.includes('trânsito')) return 'Arquivado';
-    if (ultima.includes('suspen')) return 'Suspenso';
-  }
-  return 'Em Andamento';
-}
-
-function extrairAutorEAdvogado(processoData: any): { autorNome?: string; advogado?: string } {
-  const partes = processoData?.partes || [];
-  const parteAutor = partes.find((p: any) =>
-    p?.polo === 'AT' || p?.polo === 'PA' || String(p?.tipoParte || '').toUpperCase().includes('AUTOR')
-  );
-
-  const autorNome = parteAutor?.nome || parteAutor?.pessoa?.nome;
-
-  const adv0 = parteAutor?.advogados?.[0];
-  const advNome = adv0?.nome;
-  const advOab = adv0?.inscricao
-    ? `OAB/${adv0.inscricao.unidadeFederativa || ''} ${adv0.inscricao.numero || ''}`.trim()
-    : undefined;
-
-  const advogado = advNome ? (advOab ? `${advNome} (${advOab})` : advNome) : undefined;
-  return { autorNome, advogado };
-}
-
-// Detecta tribunal pelo número do processo
-function detectarTribunal(numeroProcesso: string): string | null {
-  const match = numeroProcesso.match(/\d{7}-\d{2}\.\d{4}\.(\d)\.(\d{2})\.\d{4}/);
-  if (!match) return null;
+async function buscarProcessosPorCPF(cpf: string): Promise<any[]> {
+  const ESCAVADOR_API_KEY = Deno.env.get('ESCAVADOR_API_KEY');
   
-  const justica = match[1];
-  const tribunal = match[2];
-  
-  if (justica === '5') {
-    const trtNum = parseInt(tribunal);
-    if (trtNum >= 1 && trtNum <= 24) return `trt${trtNum}`;
+  if (!ESCAVADOR_API_KEY) {
+    throw new Error('ESCAVADOR_API_KEY não configurada');
   }
   
-  if (justica === '4') {
-    const trfNum = parseInt(tribunal);
-    if (trfNum >= 1 && trfNum <= 6) return `trf${trfNum}`;
+  const cpfLimpo = cpf.replace(/[^\d]/g, '');
+  
+  console.log(`🔍 Buscando processos por CPF ${cpfLimpo} no Escavador...`);
+  
+  try {
+    const response = await fetch(`https://api.escavador.com/api/v2/envolvido/processos?cpf_cnpj=${cpfLimpo}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${ESCAVADOR_API_KEY}`,
+        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      console.error(`❌ Erro Escavador CPF: ${response.status}`);
+      return [];
+    }
+    
+    const data = await response.json();
+    console.log(`✅ Escavador encontrou ${data.items?.length || 0} processos para CPF`);
+    return data.items || [];
+  } catch (error) {
+    console.error('❌ Erro na busca por CPF:', error);
+    return [];
   }
-  
-  if (justica === '8') {
-    const tjNum = parseInt(tribunal);
-    const TJ_CODES: Record<number, string> = {
-      1: 'tjac', 2: 'tjal', 3: 'tjap', 4: 'tjam', 5: 'tjba',
-      6: 'tjce', 7: 'tjdft', 8: 'tjes', 9: 'tjgo', 10: 'tjma',
-      11: 'tjmt', 12: 'tjms', 13: 'tjmg', 14: 'tjpa', 15: 'tjpb',
-      16: 'tjpr', 17: 'tjpe', 18: 'tjpi', 19: 'tjrj', 20: 'tjrn',
-      21: 'tjrs', 22: 'tjro', 23: 'tjrr', 24: 'tjsc', 25: 'tjsp',
-      26: 'tjse', 27: 'tjto'
-    };
-    if (TJ_CODES[tjNum]) return TJ_CODES[tjNum];
-  }
-  
-  return null;
-}
-
-async function buscarProcessoDataJud(numeroProcesso: string, tribunal: string): Promise<any> {
-  const DATAJUD_API_KEY = Deno.env.get('DATAJUD_API_KEY');
-  if (!DATAJUD_API_KEY) throw new Error('DATAJUD_API_KEY not configured');
-  
-  const apiName = TRIBUNAIS[tribunal] || `api_publica_${tribunal}`;
-  const url = `https://api-publica.datajud.cnj.jus.br/${apiName}/_search`;
-  
-  console.log(`🔍 Buscando ${numeroProcesso} no ${tribunal}...`);
-  
-  const numeroLimpo = numeroProcesso.replace(/[^\d]/g, '');
-  
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `APIKey ${DATAJUD_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      query: { match: { numeroProcesso: numeroLimpo } },
-      size: 1
-    }),
-  });
-  
-  if (!response.ok) {
-    console.error(`❌ Erro API: ${response.status}`);
-    return null;
-  }
-  
-  const data = await response.json();
-  return data.hits?.hits?.[0]?._source || null;
 }
 
 serve(async (req) => {
@@ -199,11 +149,107 @@ serve(async (req) => {
   );
 
   try {
-    const { processos } = await req.json();
+    const { processos, cpf } = await req.json();
     
+    // Modo 1: Importar por CPF (busca todos os processos do CPF e importa)
+    if (cpf) {
+      console.log(`\n📋 Importando processos por CPF: ${cpf}`);
+      
+      const processosEncontrados = await buscarProcessosPorCPF(cpf);
+      
+      if (processosEncontrados.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Nenhum processo encontrado para este CPF', resultados: [] }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      const resultados = [];
+      
+      for (const proc of processosEncontrados) {
+        const numero = proc.numero_cnj;
+        if (!numero) continue;
+        
+        console.log(`\n📋 Processando: ${numero}`);
+        
+        // Verificar se já existe
+        const { data: existing } = await supabaseClient
+          .from('processos')
+          .select('id, numero_processo')
+          .eq('numero_processo', numero)
+          .maybeSingle();
+
+        if (existing) {
+          console.log(`ℹ️ Já existe: ${numero}`);
+          resultados.push({ numero, status: 'exists', id: existing.id });
+          continue;
+        }
+
+        // Buscar detalhes completos do processo
+        const escavadorData = await buscarProcessoEscavador(numero);
+        const extracted = escavadorData ? extrairDadosEscavador(escavadorData) : {
+          status: 'Em Andamento',
+          classe: proc.titulo || 'Processo Importado',
+          tribunal: proc.sigla_tribunal
+        };
+
+        const baseData = {
+          numero_processo: numero,
+          titulo_acao: extracted.classe,
+          status: extracted.status,
+          advogado_responsavel: extracted.advogado || null,
+          tribunal: extracted.tribunal || null,
+          assunto: extracted.assunto || null,
+          valor_causa: extracted.valorCausa || null,
+          data_ajuizamento: extracted.dataAjuizamento || null,
+          orgao_julgador: extracted.orgaoJulgador || null,
+          cliente_id: null as string | null,
+          frequencia_notificacao_dias: 7,
+          notificacao_ativa: true,
+        };
+
+        // Tentar vincular cliente pelo nome
+        if (extracted.autorNome) {
+          const { data: lead } = await supabaseClient
+            .from('leads_juridicos')
+            .select('id, nome')
+            .ilike('nome', `%${extracted.autorNome}%`)
+            .limit(1)
+            .maybeSingle();
+          
+          if (lead) {
+            baseData.cliente_id = lead.id;
+            console.log(`✅ Cliente vinculado: ${lead.nome}`);
+          }
+        }
+
+        const { data: inserted, error } = await supabaseClient
+          .from('processos')
+          .insert(baseData)
+          .select()
+          .single();
+        
+        if (error) {
+          console.error(`❌ Erro ao inserir: ${error.message}`);
+          resultados.push({ numero, status: 'error', message: error.message });
+        } else {
+          console.log(`✅ Processo importado: ${numero}`);
+          resultados.push({ numero, status: 'imported', id: inserted.id, titulo: baseData.titulo_acao });
+        }
+      }
+      
+      console.log(`\n📊 Resumo CPF: ${resultados.filter(r => r.status === 'imported').length} importados`);
+      
+      return new Response(
+        JSON.stringify({ success: true, resultados, total: processosEncontrados.length }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Modo 2: Importar por lista de números CNJ
     if (!processos || !Array.isArray(processos)) {
       return new Response(
-        JSON.stringify({ error: 'Array de processos é obrigatório' }),
+        JSON.stringify({ error: 'Array de processos ou CPF é obrigatório' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -220,65 +266,39 @@ serve(async (req) => {
         .eq('numero_processo', numero)
         .maybeSingle();
 
-      // Detectar tribunal
-      const tribunal = detectarTribunal(numero);
-      if (!tribunal) {
-        console.log(`❌ Tribunal não detectado: ${numero}`);
-        resultados.push({ numero, status: 'error', message: 'Tribunal não detectado' });
+      // Busca direta no Escavador
+      const escavadorData = await buscarProcessoEscavador(numero);
+      
+      if (!escavadorData) {
+        console.log(`❌ Processo não encontrado: ${numero}`);
+        resultados.push({ numero, status: 'error', message: 'Processo não encontrado no Escavador' });
         continue;
       }
       
-      // 1. Tentar DataJud primeiro
-      let processoData = await buscarProcessoDataJud(numero, tribunal);
-      let fonteUsada = 'DataJud';
-      let autorNome: string | undefined;
-      let advogado: string | undefined;
-      let statusBasico: string;
-      let tituloAcao: string;
-      
-      if (processoData) {
-        const extracted = extrairAutorEAdvogado(processoData);
-        autorNome = extracted.autorNome;
-        advogado = extracted.advogado;
-        statusBasico = determinarStatusBasico(processoData);
-        tituloAcao = processoData?.classe?.nome || processoData?.classeProcessual?.nome || 'Processo Importado';
-      } else {
-        // 2. Fallback: tentar Escavador
-        console.log(`⚠️ Não encontrado no DataJud, tentando Escavador...`);
-        const escavadorData = await buscarProcessoEscavador(numero);
-        
-        if (escavadorData) {
-          const extracted = extrairDadosEscavador(escavadorData);
-          autorNome = extracted.autorNome;
-          advogado = extracted.advogado;
-          statusBasico = extracted.status;
-          tituloAcao = extracted.classe;
-          fonteUsada = 'Escavador';
-          processoData = escavadorData;
-        } else {
-          // Nenhuma fonte encontrou
-          statusBasico = 'Em Andamento';
-          tituloAcao = 'Processo Importado';
-        }
-      }
+      const extracted = extrairDadosEscavador(escavadorData);
 
       // Preparar dados para inserção/atualização
       const baseData = {
         numero_processo: numero,
-        titulo_acao: tituloAcao,
-        status: statusBasico,
-        advogado_responsavel: advogado || null,
+        titulo_acao: extracted.classe,
+        status: extracted.status,
+        advogado_responsavel: extracted.advogado || null,
+        tribunal: extracted.tribunal || null,
+        assunto: extracted.assunto || null,
+        valor_causa: extracted.valorCausa || null,
+        data_ajuizamento: extracted.dataAjuizamento || null,
+        orgao_julgador: extracted.orgaoJulgador || null,
         cliente_id: null as string | null,
         frequencia_notificacao_dias: 7,
         notificacao_ativa: true,
       };
       
-      // Tentar vincular cliente pelo nome completo (mais assertivo)
-      if (autorNome) {
+      // Tentar vincular cliente pelo nome completo
+      if (extracted.autorNome) {
         const { data: lead } = await supabaseClient
           .from('leads_juridicos')
           .select('id, nome')
-          .ilike('nome', `%${autorNome}%`)
+          .ilike('nome', `%${extracted.autorNome}%`)
           .limit(1)
           .maybeSingle();
         
@@ -289,7 +309,7 @@ serve(async (req) => {
       }
 
       if (existing) {
-        // Atualiza somente campos faltantes/ruins, mantendo o que o usuário já editou manualmente
+        // Atualiza somente campos faltantes
         const updates: Record<string, any> = {};
 
         if (!existing.titulo_acao || existing.titulo_acao === 'Processo Importado') {
@@ -304,8 +324,6 @@ serve(async (req) => {
         if (!existing.cliente_id && baseData.cliente_id) {
           updates.cliente_id = baseData.cliente_id;
         }
-
-        // Não forçar configs de notificação em processos já existentes
 
         if (Object.keys(updates).length === 0) {
           console.log(`ℹ️ Já está atualizado: ${numero}`);

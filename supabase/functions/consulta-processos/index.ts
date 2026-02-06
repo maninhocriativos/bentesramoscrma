@@ -1,6 +1,5 @@
 import "npm:@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,17 +7,16 @@ const corsHeaders = {
 };
 
 // =====================================================
-// ESCAVADOR API v2 - Fonte alternativa de busca
+// ESCAVADOR API v2 - Fonte única de busca
 // =====================================================
+
 async function buscarProcessoEscavador(numeroProcesso: string): Promise<any> {
   const ESCAVADOR_API_KEY = Deno.env.get('ESCAVADOR_API_KEY');
   
   if (!ESCAVADOR_API_KEY) {
-    console.log('⚠️ ESCAVADOR_API_KEY não configurada, pulando busca no Escavador');
-    return null;
+    throw new Error('ESCAVADOR_API_KEY não configurada');
   }
   
-  // Remover formatação do número CNJ para a busca
   const numeroCNJ = numeroProcesso.trim();
   
   console.log(`🔍 Buscando processo ${numeroCNJ} no Escavador...`);
@@ -43,870 +41,213 @@ async function buscarProcessoEscavador(numeroProcesso: string): Promise<any> {
     console.log(`✅ Escavador retornou dados para ${numeroCNJ}`);
     return data;
   } catch (error) {
-    console.error('❌ Erro ao consultar Escavador:', error);
+    console.error('❌ Erro na chamada Escavador:', error);
     return null;
   }
 }
 
-// Formatar dados do Escavador para o formato padrão
+async function buscarProcessosPorCPF(cpf: string): Promise<any[]> {
+  const ESCAVADOR_API_KEY = Deno.env.get('ESCAVADOR_API_KEY');
+  
+  if (!ESCAVADOR_API_KEY) {
+    throw new Error('ESCAVADOR_API_KEY não configurada');
+  }
+  
+  // Limpar CPF (remover pontos, traços)
+  const cpfLimpo = cpf.replace(/[^\d]/g, '');
+  
+  console.log(`🔍 Buscando processos por CPF ${cpfLimpo} no Escavador...`);
+  
+  try {
+    const response = await fetch(`https://api.escavador.com/api/v2/envolvido/processos?cpf_cnpj=${cpfLimpo}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${ESCAVADOR_API_KEY}`,
+        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Erro Escavador CPF: ${response.status} - ${errorText}`);
+      return [];
+    }
+    
+    const data = await response.json();
+    console.log(`✅ Escavador encontrou ${data.items?.length || 0} processos para CPF`);
+    return data.items || [];
+  } catch (error) {
+    console.error('❌ Erro na busca por CPF:', error);
+    return [];
+  }
+}
+
+async function buscarProcessosPorNome(nome: string): Promise<any[]> {
+  const ESCAVADOR_API_KEY = Deno.env.get('ESCAVADOR_API_KEY');
+  
+  if (!ESCAVADOR_API_KEY) {
+    throw new Error('ESCAVADOR_API_KEY não configurada');
+  }
+  
+  console.log(`🔍 Buscando processos por nome "${nome}" no Escavador...`);
+  
+  try {
+    const response = await fetch(`https://api.escavador.com/api/v2/envolvido/processos?nome=${encodeURIComponent(nome)}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${ESCAVADOR_API_KEY}`,
+        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Erro Escavador Nome: ${response.status} - ${errorText}`);
+      return [];
+    }
+    
+    const data = await response.json();
+    console.log(`✅ Escavador encontrou ${data.items?.length || 0} processos para nome`);
+    return data.items || [];
+  } catch (error) {
+    console.error('❌ Erro na busca por nome:', error);
+    return [];
+  }
+}
+
+async function buscarProcessosPorOAB(oab: string): Promise<any[]> {
+  const ESCAVADOR_API_KEY = Deno.env.get('ESCAVADOR_API_KEY');
+  
+  if (!ESCAVADOR_API_KEY) {
+    throw new Error('ESCAVADOR_API_KEY não configurada');
+  }
+  
+  console.log(`🔍 Buscando processos por OAB "${oab}" no Escavador...`);
+  
+  try {
+    const response = await fetch(`https://api.escavador.com/api/v2/advogado/processos?oab=${encodeURIComponent(oab)}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${ESCAVADOR_API_KEY}`,
+        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Erro Escavador OAB: ${response.status} - ${errorText}`);
+      return [];
+    }
+    
+    const data = await response.json();
+    console.log(`✅ Escavador encontrou ${data.items?.length || 0} processos para OAB`);
+    return data.items || [];
+  } catch (error) {
+    console.error('❌ Erro na busca por OAB:', error);
+    return [];
+  }
+}
+
+// Formatar data para exibição
+function formatarData(dataStr: string | null | undefined): string {
+  if (!dataStr) return 'Não informado';
+  
+  try {
+    const date = new Date(dataStr);
+    if (isNaN(date.getTime())) return dataStr;
+    
+    return date.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return dataStr;
+  }
+}
+
 function formatarProcessoEscavador(escavadorData: any): any {
-  if (!escavadorData) return null;
-  
-  // O Escavador retorna estrutura diferente, vamos normalizar
-  const processo = escavadorData;
-  
-  // Extrair fontes do tribunal (a API v2 retorna um array de fontes)
-  const fonteTribunal = processo.fontes?.find((f: any) => f.tipo === 'TRIBUNAL') || processo.fontes?.[0];
-  
-  // Extrair movimentações
-  const movimentos = (fonteTribunal?.movimentacoes || processo.movimentacoes || [])
-    .slice(0, 50)
-    .map((m: any, idx: number) => ({
-      dataHora: m.data || m.dataHora,
-      dataHoraRaw: m.data || m.dataHora,
-      nome: m.titulo || m.tipo || m.descricao || 'Movimentação',
-      complemento: m.conteudo || m.descricao || m.texto,
-      codigo: m.codigo
-    }));
+  // Pega a fonte do tribunal (primeira fonte disponível)
+  const fonteTribunal = escavadorData?.fontes?.find((f: any) => f.tipo === 'TRIBUNAL') || escavadorData?.fontes?.[0];
   
   // Extrair partes
-  const partesRaw = fonteTribunal?.partes || processo.partes || processo.envolvidos || [];
-  const partes = partesRaw.map((p: any) => {
-    const advogadosRaw = p.advogados || [];
-    const advogados = advogadosRaw.map((adv: any) => ({
-      nome: adv.nome || adv.nomeAdvogado,
-      oab: adv.oab || (adv.inscricoes?.[0] ? `OAB/${adv.inscricoes[0].uf} ${adv.inscricoes[0].numero}` : undefined)
-    }));
-    
-    return {
-      nome: p.nome || p.pessoa?.nome || 'Não informado',
-      tipo: p.tipo_participacao || p.tipo || p.polo || 'Parte',
-      polo: p.polo || p.tipo_participacao || 'Não informado',
-      tipoPessoa: p.tipo_pessoa === 'FISICA' ? 'Pessoa Física' : p.tipo_pessoa === 'JURIDICA' ? 'Pessoa Jurídica' : 'Não informado',
-      documento: p.cpf || p.cnpj || p.documento,
-      advogados: advogados.length > 0 ? advogados : undefined
-    };
-  });
-  
-  // Determinar status
+  const partes = fonteTribunal?.partes || escavadorData?.partes || escavadorData?.envolvidos || [];
+  const partesFormatadas = partes.map((p: any) => ({
+    nome: p.nome || p.pessoa?.nome || 'Desconhecido',
+    tipo: p.tipo_participacao || p.tipo || 'Parte',
+    polo: p.polo?.toUpperCase() === 'ATIVO' ? 'AT' : (p.polo?.toUpperCase() === 'PASSIVO' ? 'PA' : 'OUTRO'),
+    tipoPessoa: p.tipo_pessoa || 'FISICA',
+    documento: p.cpf || p.cnpj || null,
+    advogados: (p.advogados || []).map((adv: any) => ({
+      nome: adv.nome,
+      oab: adv.inscricoes?.[0] ? `OAB/${adv.inscricoes[0].uf || ''} ${adv.inscricoes[0].numero || ''}`.trim() : adv.oab
+    }))
+  }));
+
+  // Extrair movimentos (limitar a 50)
+  const movimentosRaw = fonteTribunal?.movimentacoes || escavadorData?.movimentacoes || [];
+  const movimentosFormatados = movimentosRaw.slice(0, 50).map((m: any) => ({
+    dataHora: formatarData(m.data || m.data_hora),
+    dataHoraRaw: m.data || m.data_hora || new Date().toISOString(),
+    nome: m.titulo || m.conteudo || m.descricao || 'Movimentação',
+    complemento: m.conteudo || m.complemento || null,
+    codigo: null
+  }));
+
+  // Status
   let status = 'Em Andamento';
-  const statusPredito = fonteTribunal?.status_predito || processo.status_predito;
-  if (statusPredito === 'ATIVO') status = 'Em Andamento';
-  else if (statusPredito === 'INATIVO' || statusPredito === 'BAIXADO') status = 'Arquivado';
+  const statusPredito = fonteTribunal?.status_predito || escavadorData?.status_predito;
+  if (statusPredito === 'INATIVO' || statusPredito === 'BAIXADO') status = 'Arquivado';
   else if (statusPredito === 'SUSPENSO') status = 'Suspenso';
-  
-  // Extrair classe e assuntos
-  const classeNome = fonteTribunal?.classe?.nome || processo.titulo_classe || processo.classe || 'Não informado';
-  const classeCodigo = fonteTribunal?.classe?.codigo || null;
-  
-  const assuntosRaw = fonteTribunal?.assuntos || processo.assuntos || [];
+
+  // Assuntos
+  const assuntosRaw = fonteTribunal?.assuntos || escavadorData?.assuntos || [];
   const assuntos = assuntosRaw.map((a: any) => ({
     nome: typeof a === 'string' ? a : (a.nome || a.descricao || String(a)),
     codigo: a.codigo ? String(a.codigo) : undefined
   }));
-  
+
   return {
-    numeroProcesso: processo.numero_cnj || processo.numero,
-    classe: classeNome,
-    classeCodigo: classeCodigo ? String(classeCodigo) : undefined,
+    numeroProcesso: escavadorData.numero_cnj || fonteTribunal?.numero_processo,
+    classe: fonteTribunal?.classe?.nome || escavadorData?.titulo_classe || escavadorData?.classe || 'Processo',
+    classeCodigo: fonteTribunal?.classe?.codigo ? String(fonteTribunal.classe.codigo) : undefined,
     assuntos,
-    tribunal: (fonteTribunal?.tribunal?.sigla || fonteTribunal?.sigla_tribunal || processo.tribunal || 'Não informado').toUpperCase(),
-    dataAjuizamento: processo.data_inicio || fonteTribunal?.data_distribuicao || 'Não informado',
-    grau: fonteTribunal?.grau || processo.grau || '1º Grau',
-    nivelSigilo: processo.segredo_justica ? 'Segredo de Justiça' : 'Público',
+    tribunal: fonteTribunal?.nome?.match(/TJ|TRT|TRF|STJ|STF/)?.[0] || fonteTribunal?.sigla || escavadorData?.sigla_tribunal || 'Não informado',
+    dataAjuizamento: formatarData(fonteTribunal?.data_inicio || escavadorData?.data_inicio),
+    grau: fonteTribunal?.grau || '1º Grau',
+    nivelSigilo: escavadorData?.segredo_justica ? 'Segredo de Justiça' : 'Público',
     formato: 'Eletrônico',
-    sistemaProcessual: fonteTribunal?.sistema || 'PJe',
-    orgaoJulgador: fonteTribunal?.vara?.nome || fonteTribunal?.orgao_julgador || processo.vara || 'Não informado',
+    sistemaProcessual: fonteTribunal?.sistema || 'Escavador',
+    orgaoJulgador: fonteTribunal?.orgao_julgador?.nome || fonteTribunal?.vara || 'Não informado',
     status,
-    ultimaAtualizacao: movimentos[0]?.dataHora || 'Não informado',
-    valorCausa: fonteTribunal?.valor_causa || processo.valor_causa || null,
+    statusDetalhado: statusPredito || status,
+    ultimaAtualizacao: formatarData(fonteTribunal?.data_ultima_movimentacao || escavadorData?.data_ultima_movimentacao),
+    valorCausa: fonteTribunal?.valor_causa || escavadorData?.valor_causa || null,
     prioridade: [],
-    movimentos,
-    partes,
+    movimentos: movimentosFormatados,
+    partes: partesFormatadas,
+    fonte: 'Escavador',
     fonteEscavador: true,
     fonteRaw: escavadorData
   };
 }
 
-interface ProcessoResponse {
-  numeroProcesso: string;
-  classe: string;
-  classeCodigo?: string;
-  assuntos: Array<{ nome: string; codigo?: string }>;
-  tribunal: string;
-  dataAjuizamento: string;
-  // Campos adicionais detalhados
-  grau: string;
-  nivelSigilo: string;
-  formato: string;
-  sistemaProcessual: string;
-  orgaoJulgador: string;
-  status: string;
-  ultimaAtualizacao: string;
-  valorCausa: number | null;
-  prioridade: string[];
-  movimentos: Array<{
-    dataHora: string;
-    dataHoraRaw?: string;
-    nome: string;
-    complemento?: string;
-    codigo?: number;
-  }>;
-  partes: Array<{
-    nome: string;
-    tipo: string;
-    polo: string;
-    tipoPessoa: string;
-    documento?: string;
-    advogados?: Array<{
-      nome: string;
-      oab?: string;
-    }>;
-  }>;
-  // Dados brutos para debug
-  fonteRaw?: any;
-}
-
-// Lista de tribunais disponíveis na API DataJud
-const TRIBUNAIS: Record<string, string> = {
-  // Tribunais Regionais do Trabalho
-  'trt1': 'api_publica_trt1',
-  'trt2': 'api_publica_trt2',
-  'trt3': 'api_publica_trt3',
-  'trt4': 'api_publica_trt4',
-  'trt5': 'api_publica_trt5',
-  'trt6': 'api_publica_trt6',
-  'trt7': 'api_publica_trt7',
-  'trt8': 'api_publica_trt8',
-  'trt9': 'api_publica_trt9',
-  'trt10': 'api_publica_trt10',
-  'trt11': 'api_publica_trt11',
-  'trt12': 'api_publica_trt12',
-  'trt13': 'api_publica_trt13',
-  'trt14': 'api_publica_trt14',
-  'trt15': 'api_publica_trt15',
-  'trt16': 'api_publica_trt16',
-  'trt17': 'api_publica_trt17',
-  'trt18': 'api_publica_trt18',
-  'trt19': 'api_publica_trt19',
-  'trt20': 'api_publica_trt20',
-  'trt21': 'api_publica_trt21',
-  'trt22': 'api_publica_trt22',
-  'trt23': 'api_publica_trt23',
-  'trt24': 'api_publica_trt24',
-  // Tribunais de Justiça Estaduais
-  'tjac': 'api_publica_tjac',
-  'tjal': 'api_publica_tjal',
-  'tjam': 'api_publica_tjam',
-  'tjap': 'api_publica_tjap',
-  'tjba': 'api_publica_tjba',
-  'tjce': 'api_publica_tjce',
-  'tjdft': 'api_publica_tjdft',
-  'tjes': 'api_publica_tjes',
-  'tjgo': 'api_publica_tjgo',
-  'tjma': 'api_publica_tjma',
-  'tjmg': 'api_publica_tjmg',
-  'tjms': 'api_publica_tjms',
-  'tjmt': 'api_publica_tjmt',
-  'tjpa': 'api_publica_tjpa',
-  'tjpb': 'api_publica_tjpb',
-  'tjpe': 'api_publica_tjpe',
-  'tjpi': 'api_publica_tjpi',
-  'tjpr': 'api_publica_tjpr',
-  'tjrj': 'api_publica_tjrj',
-  'tjrn': 'api_publica_tjrn',
-  'tjro': 'api_publica_tjro',
-  'tjrr': 'api_publica_tjrr',
-  'tjrs': 'api_publica_tjrs',
-  'tjsc': 'api_publica_tjsc',
-  'tjse': 'api_publica_tjse',
-  'tjsp': 'api_publica_tjsp',
-  'tjto': 'api_publica_tjto',
-  // Tribunais Regionais Federais
-  'trf1': 'api_publica_trf1',
-  'trf2': 'api_publica_trf2',
-  'trf3': 'api_publica_trf3',
-  'trf4': 'api_publica_trf4',
-  'trf5': 'api_publica_trf5',
-  'trf6': 'api_publica_trf6',
-  // Tribunais Superiores
-  'stj': 'api_publica_stj',
-  'tst': 'api_publica_tst',
-};
-
-// Lista de tribunais para busca por CPF
-const TRIBUNAIS_PARA_BUSCA_CPF = [
-  'trt11',
-  'tjam',
-  'trf1',
-  'trf2',
-  'trf3',
-  'tjmg',
-  'tjrj',
-  'tjsp',
-  'tjrs',
-  'tjpr',
-];
-
-// Detecta se a entrada é CPF (11 dígitos numéricos)
-function isCPF(input: string): boolean {
-  const digits = input.replace(/[^\d]/g, '');
-  return digits.length === 11;
-}
-
-// Formatar CPF para exibição
-function formatCPF(cpf: string): string {
-  const digits = cpf.replace(/[^\d]/g, '');
-  if (digits.length !== 11) return cpf;
-  return `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6,9)}-${digits.slice(9)}`;
-}
-
-// Detecta tribunal pelo número do processo
-function detectarTribunal(numeroProcesso: string): string | null {
-  const match = numeroProcesso.match(/\d{7}-\d{2}\.\d{4}\.(\d)\.(\d{2})\.\d{4}/);
-  if (!match) return null;
-  
-  const justica = match[1];
-  const tribunal = match[2];
-  
-  // Justiça do Trabalho
-  if (justica === '5') {
-    const trtNum = parseInt(tribunal);
-    if (trtNum >= 1 && trtNum <= 24) {
-      return `trt${trtNum}`;
-    }
-  }
-  
-  // Justiça Federal
-  if (justica === '4') {
-    const trfNum = parseInt(tribunal);
-    if (trfNum >= 1 && trfNum <= 6) {
-      return `trf${trfNum}`;
-    }
-  }
-  
-  // Justiça Estadual
-  if (justica === '8') {
-    const tjNum = parseInt(tribunal);
-    const TJ_CODES: Record<number, string> = {
-      1: 'tjac', 2: 'tjal', 3: 'tjap', 4: 'tjam', 5: 'tjba',
-      6: 'tjce', 7: 'tjdft', 8: 'tjes', 9: 'tjgo', 10: 'tjma',
-      11: 'tjmt', 12: 'tjms', 13: 'tjmg', 14: 'tjpa', 15: 'tjpb',
-      16: 'tjpr', 17: 'tjpe', 18: 'tjpi', 19: 'tjrj', 20: 'tjrn',
-      21: 'tjrs', 22: 'tjro', 23: 'tjrr', 24: 'tjsc', 25: 'tjsp',
-      26: 'tjse', 27: 'tjto'
-    };
-    if (TJ_CODES[tjNum]) {
-      return TJ_CODES[tjNum];
-    }
-  }
-  
-  return null;
-}
-
-async function buscarProcesso(numeroProcesso: string, tribunal: string): Promise<any> {
-  const DATAJUD_API_KEY = Deno.env.get('DATAJUD_API_KEY');
-  
-  if (!DATAJUD_API_KEY) {
-    throw new Error('API Key do DataJud não configurada');
-  }
-  
-  const apiName = TRIBUNAIS[tribunal];
-  if (!apiName) {
-    throw new Error(`Tribunal ${tribunal} não suportado`);
-  }
-  
-  const url = `https://api-publica.datajud.cnj.jus.br/${apiName}/_search`;
-  
-  console.log(`🔍 Buscando processo ${numeroProcesso} no tribunal ${tribunal}...`);
-  
-  const numeroLimpo = numeroProcesso.replace(/[^\d]/g, '');
-  
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `APIKey ${DATAJUD_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      query: {
-        match: {
-          numeroProcesso: numeroLimpo
-        }
-      },
-      size: 10
-    }),
-  });
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`❌ Erro na API DataJud: ${response.status} - ${errorText}`);
-    throw new Error(`Erro ao consultar API: ${response.status}`);
-  }
-  
-  const data = await response.json();
-  return data;
-}
-
-async function buscarPorCPF(cpf: string, tribunais: string[]): Promise<any[]> {
-  const DATAJUD_API_KEY = Deno.env.get('DATAJUD_API_KEY');
-  
-  if (!DATAJUD_API_KEY) {
-    throw new Error('API Key do DataJud não configurada');
-  }
-  
-  const cpfLimpo = cpf.replace(/[^\d]/g, '');
-  const resultados: any[] = [];
-  
-  console.log(`🔍 Buscando processos por CPF ${formatCPF(cpfLimpo)} em ${tribunais.length} tribunais...`);
-  
-  for (const tribunal of tribunais) {
-    const apiName = TRIBUNAIS[tribunal];
-    if (!apiName) continue;
-    
-    const url = `https://api-publica.datajud.cnj.jus.br/${apiName}/_search`;
-    
-    try {
-      console.log(`📡 Consultando ${tribunal.toUpperCase()}...`);
-      
-      const queryBody = {
-        query: {
-          bool: {
-            should: [
-              { match: { "partes.numeroDocumentoPrincipal": cpfLimpo } },
-              { match: { "partes.pessoa.numeroDocumentoPrincipal": cpfLimpo } },
-              { wildcard: { "partes.numeroDocumentoPrincipal": `*${cpfLimpo}*` } },
-              { term: { "partes.numeroDocumentoPrincipal": cpfLimpo } }
-            ],
-            minimum_should_match: 1
-          }
-        },
-        size: 30
-      };
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `APIKey ${DATAJUD_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(queryBody),
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`📊 Total hits ${tribunal.toUpperCase()}: ${data.hits?.total?.value || 0}`);
-        
-        if (data.hits?.hits?.length > 0) {
-          for (const hit of data.hits.hits) {
-            resultados.push({
-              ...hit._source,
-              tribunal: tribunal.toUpperCase()
-            });
-          }
-        }
-      }
-    } catch (err) {
-      console.error(`⚠️ Erro ao consultar ${tribunal}:`, err);
-    }
-  }
-  
-  return resultados;
-}
-
-// =====================================================
-// NORMALIZAÇÃO DE DATAS (CRÍTICO!)
-// Suporta múltiplos formatos: YYYYMMDDHHmmss, ISO, timestamp, BR
-// =====================================================
-function formatarData(dataStr: string | number | null | undefined): string {
-  if (!dataStr) return 'Não informado';
-  
-  try {
-    let date: Date | null = null;
-    const input = String(dataStr).trim();
-    
-    console.log(`📅 Formatando data: ${input} (tipo: ${typeof dataStr})`);
-    
-    // FORMATO 1: YYYYMMDDHHmmss (14 dígitos) - formato DataJud/Projudi
-    // Ex: 20240720203148 -> 2024-07-20 20:31:48
-    if (/^\d{14}$/.test(input)) {
-      const year = parseInt(input.substring(0, 4));
-      const month = parseInt(input.substring(4, 6)) - 1;
-      const day = parseInt(input.substring(6, 8));
-      const hour = parseInt(input.substring(8, 10));
-      const minute = parseInt(input.substring(10, 12));
-      const second = parseInt(input.substring(12, 14));
-      
-      if (year >= 1900 && year <= 2100 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
-        date = new Date(year, month, day, hour, minute, second);
-        console.log(`✅ Parseado como YYYYMMDDHHmmss: ${date.toISOString()}`);
-      }
-    }
-    
-    // FORMATO 2: YYYYMMDDHHmm (12 dígitos)
-    if (!date && /^\d{12}$/.test(input)) {
-      const year = parseInt(input.substring(0, 4));
-      const month = parseInt(input.substring(4, 6)) - 1;
-      const day = parseInt(input.substring(6, 8));
-      const hour = parseInt(input.substring(8, 10));
-      const minute = parseInt(input.substring(10, 12));
-      
-      if (year >= 1900 && year <= 2100) {
-        date = new Date(year, month, day, hour, minute, 0);
-        console.log(`✅ Parseado como YYYYMMDDHHmm: ${date.toISOString()}`);
-      }
-    }
-    
-    // FORMATO 3: YYYYMMDD (8 dígitos)
-    if (!date && /^\d{8}$/.test(input)) {
-      const year = parseInt(input.substring(0, 4));
-      const month = parseInt(input.substring(4, 6)) - 1;
-      const day = parseInt(input.substring(6, 8));
-      
-      if (year >= 1900 && year <= 2100) {
-        date = new Date(year, month, day);
-        console.log(`✅ Parseado como YYYYMMDD: ${date.toISOString()}`);
-      }
-    }
-    
-    // FORMATO 4: Timestamp em milissegundos (número grande)
-    if (!date && /^\d{13}$/.test(input)) {
-      const timestamp = parseInt(input);
-      if (timestamp > 0 && timestamp < 4102444800000) {
-        date = new Date(timestamp);
-        console.log(`✅ Parseado como timestamp ms: ${date.toISOString()}`);
-      }
-    }
-    
-    // FORMATO 5: ISO 8601 (2023-10-17T00:00:00.000Z ou similar)
-    if (!date && input.includes('-') && input.length >= 10) {
-      const datePart = input.split('T')[0];
-      const parts = datePart.split('-');
-      if (parts.length === 3) {
-        const year = parseInt(parts[0]);
-        const month = parseInt(parts[1]) - 1;
-        const day = parseInt(parts[2]);
-        
-        if (year >= 1900 && year <= 2100 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
-          // Se tiver hora, usar
-          if (input.includes('T')) {
-            date = new Date(input);
-          } else {
-            date = new Date(year, month, day);
-          }
-          console.log(`✅ Parseado como ISO: ${date.toISOString()}`);
-        }
-      }
-    }
-    
-    // FORMATO 6: Brasileiro dd/mm/yyyy ou dd/mm/yyyy HH:mm
-    if (!date && input.includes('/')) {
-      const mainPart = input.split(' ')[0];
-      const timePart = input.split(' ')[1];
-      const parts = mainPart.split('/');
-      
-      if (parts.length === 3) {
-        const day = parseInt(parts[0]);
-        const month = parseInt(parts[1]) - 1;
-        const year = parseInt(parts[2]);
-        
-        if (year >= 1900 && year <= 2100) {
-          if (timePart && timePart.includes(':')) {
-            const [hour, minute] = timePart.split(':').map(Number);
-            date = new Date(year, month, day, hour || 0, minute || 0, 0);
-          } else {
-            date = new Date(year, month, day);
-          }
-          console.log(`✅ Parseado como BR: ${date.toISOString()}`);
-        }
-      }
-    }
-    
-    // Se conseguiu parsear, formatar como DD/MM/YYYY HH:mm
-    if (date && !isNaN(date.getTime())) {
-      const day = date.getDate().toString().padStart(2, '0');
-      const month = (date.getMonth() + 1).toString().padStart(2, '0');
-      const year = date.getFullYear();
-      const hour = date.getHours();
-      const minute = date.getMinutes();
-      
-      if (year >= 1900 && year <= 2100) {
-        // Se tiver hora diferente de 00:00, incluir
-        if (hour > 0 || minute > 0) {
-          const hourStr = hour.toString().padStart(2, '0');
-          const minStr = minute.toString().padStart(2, '0');
-          return `${day}/${month}/${year} ${hourStr}:${minStr}`;
-        }
-        return `${day}/${month}/${year}`;
-      }
-    }
-    
-    console.warn(`⚠️ Não foi possível formatar a data: ${input}`);
-  } catch (e) {
-    console.error('Erro ao formatar data:', e);
-  }
-  
-  return String(dataStr);
-}
-
-// Parsear data para timestamptz (para persistência no banco)
-function parseDataParaTimestamp(dataStr: string | number | null | undefined): string | null {
-  if (!dataStr) return null;
-  
-  try {
-    const input = String(dataStr).trim();
-    let date: Date | null = null;
-    
-    // YYYYMMDDHHmmss
-    if (/^\d{14}$/.test(input)) {
-      const year = parseInt(input.substring(0, 4));
-      const month = parseInt(input.substring(4, 6)) - 1;
-      const day = parseInt(input.substring(6, 8));
-      const hour = parseInt(input.substring(8, 10));
-      const minute = parseInt(input.substring(10, 12));
-      const second = parseInt(input.substring(12, 14));
-      date = new Date(year, month, day, hour, minute, second);
-    }
-    // YYYYMMDD
-    else if (/^\d{8}$/.test(input)) {
-      const year = parseInt(input.substring(0, 4));
-      const month = parseInt(input.substring(4, 6)) - 1;
-      const day = parseInt(input.substring(6, 8));
-      date = new Date(year, month, day);
-    }
-    // ISO
-    else if (input.includes('-')) {
-      date = new Date(input);
-    }
-    // Timestamp
-    else if (/^\d{13}$/.test(input)) {
-      date = new Date(parseInt(input));
-    }
-    
-    if (date && !isNaN(date.getTime())) {
-      return date.toISOString();
-    }
-  } catch (e) {
-    console.error('Erro ao parsear data para timestamp:', e);
-  }
-  
-  return null;
-}
-
-// Determina o status do processo baseado nas movimentações e campos
-function determinarStatus(processo: any): string {
-  if (processo.situacao) return processo.situacao;
-  
-  const movimentos = processo.movimentos || [];
-  if (movimentos.length > 0) {
-    const ultimaMovimentacao = movimentos[0].nome?.toLowerCase() || '';
-    
-    if (ultimaMovimentacao.includes('arquiv')) return 'Arquivado';
-    if (ultimaMovimentacao.includes('baixa') || ultimaMovimentacao.includes('trânsito em julgado')) return 'Transitado em Julgado';
-    if (ultimaMovimentacao.includes('sentença')) return 'Com Sentença';
-    if (ultimaMovimentacao.includes('suspen')) return 'Suspenso';
-    if (ultimaMovimentacao.includes('recurso') || ultimaMovimentacao.includes('apelação')) return 'Em Grau Recursal';
-    if (ultimaMovimentacao.includes('audiência')) return 'Aguardando Audiência';
-    if (ultimaMovimentacao.includes('pericia') || ultimaMovimentacao.includes('perícia')) return 'Em Perícia';
-    if (ultimaMovimentacao.includes('conclus')) return 'Concluso para Decisão';
-    if (ultimaMovimentacao.includes('citação') || ultimaMovimentacao.includes('intimação')) return 'Aguardando Citação/Intimação';
-    if (ultimaMovimentacao.includes('distribuí')) return 'Distribuído';
-  }
-  
-  return 'Em Andamento';
-}
-
-function formatarProcesso(processo: any, tribunalFallback: string): ProcessoResponse {
-  const movimentos = processo.movimentos || [];
-  const ultimaAtualizacao = movimentos.length > 0 ? movimentos[0].dataHora : null;
-  
-  const prioridades: string[] = [];
-  if (processo.prioridades) {
-    prioridades.push(...processo.prioridades.map((p: any) => p.nome || p));
-  }
-  
-  const grauMap: Record<string, string> = {
-    'G1': '1º Grau',
-    'G2': '2º Grau', 
-    'SUP': 'Superior',
-    'ORI': 'Originário'
-  };
-  
-  
-  // Extrair código da classe
-  const classeCodigo = processo.classe?.codigo || processo.classeProcessual?.codigo || null;
-  const classeNome = processo.classe?.nome || processo.classeProcessual?.nome || 'Não informado';
-  
-  // Processar assuntos com código
-  const assuntosRaw = processo.assuntos || processo.assuntosProcessuais || [];
-  const assuntos = assuntosRaw.map((a: any) => ({
-    nome: a.nome || String(a),
-    codigo: a.codigo ? String(a.codigo) : undefined
-  }));
-  
-  // Processar movimentações com código e data raw - extraindo complementos de todas as fontes
-  const movimentosFormatados = movimentos.slice(0, 50).map((m: any, index: number) => {
-    // Extrair complemento de múltiplas fontes possíveis
-    let complementoTexto = '';
-    
-    // Fonte 1: complementosTabelados (array com nome/descricao/valor)
-    if (m.complementosTabelados && Array.isArray(m.complementosTabelados)) {
-      const partes = m.complementosTabelados.map((c: any) => {
-        if (c.descricao) return c.descricao;
-        if (c.nome && c.valor) return `${c.nome}: ${c.valor}`;
-        if (c.nome) return c.nome;
-        if (c.valor) return c.valor;
-        return null;
-      }).filter(Boolean);
-      complementoTexto = partes.join(' | ');
-    }
-    
-    // Fonte 2: complemento direto (string)
-    if (!complementoTexto && m.complemento) {
-      complementoTexto = m.complemento;
-    }
-    
-    // Fonte 3: tipoDecisao ou tipoDocumento
-    if (!complementoTexto && m.tipoDecisao) {
-      complementoTexto = m.tipoDecisao;
-    }
-    if (!complementoTexto && m.tipoDocumento) {
-      complementoTexto = m.tipoDocumento;
-    }
-    
-    // Fonte 4: texto dos complementos como array de strings
-    if (!complementoTexto && m.complementos && Array.isArray(m.complementos)) {
-      complementoTexto = m.complementos.join(', ');
-    }
-    
-    return {
-      dataHora: formatarData(m.dataHora),
-      dataHoraRaw: m.dataHora,
-      nome: m.nome || m.movimentoNacional?.nome || m.tipoMovimento || 'Movimentação',
-      complemento: complementoTexto || undefined,
-      codigo: m.codigo || m.movimentoNacional?.codigo || m.codigoNacional
-    };
-  });
-  
+function formatarProcessoListaEscavador(processo: any): any {
   return {
-    numeroProcesso: processo.numeroProcesso,
-    classe: classeNome,
-    classeCodigo: classeCodigo ? String(classeCodigo) : undefined,
-    assuntos,
-    tribunal: processo.tribunal || processo.siglaTribunal || tribunalFallback.toUpperCase(),
-    dataAjuizamento: formatarData(processo.dataAjuizamento || processo.dataDistribuicao || processo.dataHoraUltimaAtualizacao),
-    grau: grauMap[processo.grau] || processo.grau || '1º Grau',
-    nivelSigilo: processo.nivelSigilo === 0 ? 'Público' : processo.nivelSigilo === 1 ? 'Segredo de Justiça' : `Nível ${processo.nivelSigilo || 0}`,
-    formato: processo.formato?.nome || processo.formato || 'Eletrônico',
-    sistemaProcessual: processo.sistema?.nome || processo.sistemaProcessual || 'PJe',
-    orgaoJulgador: processo.orgaoJulgador?.nome || processo.vara || processo.unidadeJudiciaria?.nome || 'Não informado',
-    status: determinarStatus(processo),
-    ultimaAtualizacao: formatarData(ultimaAtualizacao),
-    valorCausa: processo.valorCausa || null,
-    prioridade: prioridades,
-    movimentos: movimentosFormatados,
-    partes: extractPartes(processo),
-    fonteRaw: processo // Guardar dados brutos para debug
-  };
-}
-
-// Função auxiliar para extrair partes de múltiplas estruturas possíveis
-function extractPartes(processo: any): Array<any> {
-  const poloMap: Record<string, string> = {
-    AT: "Autor",
-    PA: "Autor",
-    AUTOR: "Autor",
-    ATIVO: "Autor",
-    "PÓLO ATIVO": "Autor",
-    REU: "Réu",
-    "RÉU": "Réu",
-    PP: "Réu",
-    PASSIVO: "Réu",
-    "PÓLO PASSIVO": "Réu",
-    TE: "Terceiro",
-    TERCEIRO: "Terceiro",
-    VI: "Vítima",
-    FL: "Falido",
-  };
-
-  const partesResult: any[] = [];
-
-  const asArray = (v: any): any[] => {
-    if (!v) return [];
-    if (Array.isArray(v)) return v;
-
-    if (typeof v === "object") {
-      const obj = v as any;
-      // wrappers comuns
-      if (Array.isArray(obj.partes)) return obj.partes;
-      if (Array.isArray(obj.itens)) return obj.itens;
-      if (Array.isArray(obj.pessoas)) return obj.pessoas;
-      if (Array.isArray(obj.participantes)) return obj.participantes;
-      if (Array.isArray(obj.participacoes)) return obj.participacoes;
-    }
-
-    return [v];
-  };
-
-  const pushMany = (items: any[], forcedTipo?: string, forcedPolo?: string) => {
-    for (const p of items) {
-      if (!p) continue;
-      const parte = processarParte(p, poloMap);
-      if (forcedTipo) parte.tipo = forcedTipo;
-      if (forcedPolo) parte.polo = forcedPolo;
-      partesResult.push(parte);
-    }
-  };
-
-  const candidates: Array<{ label: string; items: any[]; forcedTipo?: string; forcedPolo?: string }> = [
-    { label: "processo.partes", items: asArray(processo.partes) },
-    { label: "processo.partesProcessuais", items: asArray(processo.partesProcessuais) },
-    { label: "processo.partesDoProcesso", items: asArray(processo.partesDoProcesso) },
-    { label: "processo.dadosBasicos.partes", items: asArray(processo.dadosBasicos?.partes) },
-    { label: "processo.dadosBasicos.partesProcessuais", items: asArray(processo.dadosBasicos?.partesProcessuais) },
-
-    // polos (variações de estrutura)
-    { label: "processo.poloAtivo", items: asArray(processo.poloAtivo), forcedTipo: "Autor", forcedPolo: "ATIVO" },
-    { label: "processo.poloPassivo", items: asArray(processo.poloPassivo), forcedTipo: "Réu", forcedPolo: "PASSIVO" },
-
-    { label: "processo.partes.poloAtivo", items: asArray(processo.partes?.poloAtivo), forcedTipo: "Autor", forcedPolo: "ATIVO" },
-    { label: "processo.partes.poloPassivo", items: asArray(processo.partes?.poloPassivo), forcedTipo: "Réu", forcedPolo: "PASSIVO" },
-
-    { label: "processo.partes.poloAtivo.partes", items: asArray(processo.partes?.poloAtivo?.partes), forcedTipo: "Autor", forcedPolo: "ATIVO" },
-    { label: "processo.partes.poloPassivo.partes", items: asArray(processo.partes?.poloPassivo?.partes), forcedTipo: "Réu", forcedPolo: "PASSIVO" },
-
-    { label: "processo.partes.poloAtivo.pessoas", items: asArray(processo.partes?.poloAtivo?.pessoas), forcedTipo: "Autor", forcedPolo: "ATIVO" },
-    { label: "processo.partes.poloPassivo.pessoas", items: asArray(processo.partes?.poloPassivo?.pessoas), forcedTipo: "Réu", forcedPolo: "PASSIVO" },
-
-    { label: "processo.dadosBasicos.poloAtivo", items: asArray(processo.dadosBasicos?.poloAtivo), forcedTipo: "Autor", forcedPolo: "ATIVO" },
-    { label: "processo.dadosBasicos.poloPassivo", items: asArray(processo.dadosBasicos?.poloPassivo), forcedTipo: "Réu", forcedPolo: "PASSIVO" },
-
-    { label: "processo.dadosBasicos.poloAtivo.partes", items: asArray(processo.dadosBasicos?.poloAtivo?.partes), forcedTipo: "Autor", forcedPolo: "ATIVO" },
-    { label: "processo.dadosBasicos.poloPassivo.partes", items: asArray(processo.dadosBasicos?.poloPassivo?.partes), forcedTipo: "Réu", forcedPolo: "PASSIVO" },
-  ];
-
-  // Log para debug (resumo + chaves principais)
-  console.log("🔍 Estrutura do processo para partes:", {
-    keys: Object.keys(processo || {}).slice(0, 40),
-    hasPartes: !!processo?.partes,
-    partesType: typeof processo?.partes,
-    hasPoloAtivo: !!processo?.poloAtivo || !!processo?.partes?.poloAtivo || !!processo?.dadosBasicos?.poloAtivo,
-    hasPoloPassivo: !!processo?.poloPassivo || !!processo?.partes?.poloPassivo || !!processo?.dadosBasicos?.poloPassivo,
-  });
-
-  for (const c of candidates) {
-    if (c.items.length === 0) continue;
-    console.log(`📋 Extraindo partes de ${c.label} (qtd: ${c.items.length})`);
-    pushMany(c.items, c.forcedTipo, c.forcedPolo);
-  }
-
-  // Fallback: se só existir pessoa isolada
-  if (!partesResult.length && processo?.pessoa) {
-    pushMany([{ pessoa: processo.pessoa }]);
-  }
-
-  // Dedup por nome + tipo + polo
-  const seen = new Set<string>();
-  const uniq = partesResult
-    .filter((p) => p && p.nome && p.nome !== "Nome não informado")
-    .filter((p) => {
-      const key = `${String(p.nome).toLowerCase()}|${String(p.tipo).toLowerCase()}|${String(p.polo).toLowerCase()}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-  console.log(`✅ Total de ${uniq.length} partes extraídas`);
-  return uniq;
-}
-
-function processarParte(p: any, poloMap: Record<string, string>): any {
-  // Extrair advogados de múltiplas fontes
-  const advogadosRaw = p.advogados 
-    || p.representantes 
-    || p.procuradores 
-    || p.advogado 
-    || (p.pessoa?.advogados)
-    || [];
-  
-  const advogadosArray = Array.isArray(advogadosRaw) ? advogadosRaw : [advogadosRaw];
-  
-  const advogados = advogadosArray.filter(Boolean).map((adv: any) => {
-    // Nome pode estar em múltiplos lugares
-    const nomeAdv = adv.nome 
-      || adv.pessoa?.nome 
-      || adv.nomeAdvogado 
-      || adv.nomeCompleto
-      || 'Advogado não identificado';
-    
-    // OAB pode estar em múltiplas estruturas
-    let oab: string | undefined;
-    if (adv.inscricao) {
-      const inscricoes = Array.isArray(adv.inscricao) ? adv.inscricao : [adv.inscricao];
-      for (const insc of inscricoes) {
-        const uf = insc.unidadeFederativa || insc.uf || insc.estado || '';
-        const num = insc.numero || insc.numeroOAB || insc.numeroInscricao || '';
-        if (uf || num) {
-          oab = `OAB/${uf} ${num}`.trim();
-          break;
-        }
-      }
-    } else if (adv.numeroOAB) {
-      oab = `OAB ${adv.numeroOAB}`;
-    } else if (adv.oab) {
-      oab = typeof adv.oab === 'string' ? adv.oab : `OAB ${adv.oab}`;
-    } else if (adv.inscricaoOAB) {
-      oab = `OAB ${adv.inscricaoOAB}`;
-    }
-    
-    return { nome: nomeAdv, oab };
-  }).filter((adv: any) => adv.nome !== 'Advogado não identificado');
-  
-  // Determinar polo/tipo
-  const poloOriginal = (
-    p.polo 
-    || p.tipoParte 
-    || p.tipoParticipacao 
-    || p.tipoDeParticipacao
-    || p.poloProcessual
-    || ''
-  ).toUpperCase();
-  
-  // Nome da parte
-  const nomeParte = p.nome 
-    || p.pessoa?.nome 
-    || p.nomeCompleto 
-    || p.razaoSocial 
-    || p.nomeParte 
-    || p.nomeParteProcesso
-    || 'Nome não informado';
-  
-  // Tipo de pessoa
-  let tipoPessoa = 'Não informado';
-  const tipoPessoaRaw = p.tipoPessoa || p.pessoa?.tipoPessoa || '';
-  if (tipoPessoaRaw === 'FISICA' || p.cpf || p.pessoa?.cpf) {
-    tipoPessoa = 'Pessoa Física';
-  } else if (tipoPessoaRaw === 'JURIDICA' || p.cnpj || p.pessoa?.cnpj) {
-    tipoPessoa = 'Pessoa Jurídica';
-  }
-  
-  // Documento
-  const documento = p.numeroDocumentoPrincipal 
-    || p.pessoa?.numeroDocumentoPrincipal 
-    || p.cpf 
-    || p.pessoa?.cpf
-    || p.cnpj 
-    || p.pessoa?.cnpj
-    || p.documento
-    || undefined;
-  
-  return {
-    nome: nomeParte,
-    tipo: poloMap[poloOriginal] || p.polo || p.tipoParte || 'Parte',
-    polo: p.polo || p.tipoParte || 'Não informado',
-    tipoPessoa,
-    documento,
-    advogados: advogados.length > 0 ? advogados : undefined
+    numeroProcesso: processo.numero_cnj,
+    titulo: processo.titulo || `${processo.titulo_polo_ativo || 'Autor'} X ${processo.titulo_polo_passivo || 'Réu'}`,
+    tribunal: processo.sigla_tribunal || null,
+    dataAjuizamento: formatarData(processo.data_inicio),
+    ultimaAtualizacao: formatarData(processo.data_ultima_movimentacao),
+    status: processo.status_predito === 'ATIVO' ? 'Em Andamento' : 
+            processo.status_predito === 'INATIVO' ? 'Arquivado' : 
+            processo.status_predito || 'Indefinido',
+    fonte: 'Escavador'
   };
 }
 
@@ -915,201 +256,132 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const startTime = Date.now();
-
   try {
-    const { numeroProcesso, cpf, tribunal, persistir, advogadoResponsavel } = await req.json();
+    const { numero_processo, cpf, nome, oab, action } = await req.json();
     
-    // Criar cliente Supabase para persistência
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    
+    console.log(`📋 Consulta recebida - action: ${action}, numero: ${numero_processo}, cpf: ${cpf}, nome: ${nome}, oab: ${oab}`);
+
     // Busca por CPF
-    if (cpf) {
-      const cpfLimpo = cpf.replace(/[^\d]/g, '');
-      
-      if (cpfLimpo.length !== 11) {
-        return new Response(
-          JSON.stringify({ error: 'CPF inválido. Deve conter 11 dígitos.' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      console.log(`📋 Buscando por CPF: ${formatCPF(cpfLimpo)}`);
-      
-      const processos = await buscarPorCPF(cpfLimpo, TRIBUNAIS_PARA_BUSCA_CPF);
+    if ((action === 'buscar_por_cpf' || action === 'busca_cpf') && cpf) {
+      const processos = await buscarProcessosPorCPF(cpf);
       
       if (processos.length === 0) {
         return new Response(
           JSON.stringify({ 
-            encontrado: false, 
-            mensagem: 'Nenhum processo encontrado para este CPF nos tribunais consultados.',
-            tempoMs: Date.now() - startTime
+            success: false, 
+            error: 'Nenhum processo encontrado para este CPF',
+            processos: [] 
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
-      const processosFormatados = processos.map(p => formatarProcesso(p, p.tribunal));
-      
-      console.log(`✅ Total de ${processosFormatados.length} processos encontrados em ${Date.now() - startTime}ms`);
+      const processosFormatados = processos.map(formatarProcessoListaEscavador);
       
       return new Response(
         JSON.stringify({ 
-          encontrado: true, 
-          multiplos: true,
+          success: true, 
           processos: processosFormatados,
-          tempoMs: Date.now() - startTime
+          total: processosFormatados.length,
+          fonte: 'Escavador'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
-    // Busca por número do processo
-    if (!numeroProcesso) {
+    // Busca por nome
+    if ((action === 'buscar_por_nome' || action === 'busca_nome') && nome) {
+      const processos = await buscarProcessosPorNome(nome);
+      
+      if (processos.length === 0) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'Nenhum processo encontrado para este nome',
+            processos: [] 
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      const processosFormatados = processos.map(formatarProcessoListaEscavador);
+      
       return new Response(
-        JSON.stringify({ error: 'Número do processo ou CPF é obrigatório' }),
+        JSON.stringify({ 
+          success: true, 
+          processos: processosFormatados,
+          total: processosFormatados.length,
+          fonte: 'Escavador'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Busca por OAB
+    if ((action === 'buscar_por_oab' || action === 'busca_oab') && oab) {
+      const processos = await buscarProcessosPorOAB(oab);
+      
+      if (processos.length === 0) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'Nenhum processo encontrado para esta OAB',
+            processos: [] 
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      const processosFormatados = processos.map(formatarProcessoListaEscavador);
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          processos: processosFormatados,
+          total: processosFormatados.length,
+          fonte: 'Escavador'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Busca por número CNJ (padrão)
+    if (!numero_processo) {
+      return new Response(
+        JSON.stringify({ error: 'Número do processo, CPF, nome ou OAB é obrigatório' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Busca direta no Escavador
+    const escavadorData = await buscarProcessoEscavador(numero_processo);
     
-    // Verificar se o input é CPF
-    const inputLimpo = numeroProcesso.replace(/[^\d]/g, '');
-    if (inputLimpo.length === 11) {
-      console.log(`🔄 Input identificado como CPF, redirecionando...`);
-      
-      const processos = await buscarPorCPF(inputLimpo, TRIBUNAIS_PARA_BUSCA_CPF);
-      
-      if (processos.length === 0) {
-        return new Response(
-          JSON.stringify({ 
-            encontrado: false, 
-            mensagem: 'Nenhum processo encontrado para este CPF nos tribunais consultados.',
-            tempoMs: Date.now() - startTime
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      const processosFormatados = processos.map(p => formatarProcesso(p, p.tribunal));
-      
+    if (!escavadorData) {
       return new Response(
         JSON.stringify({ 
-          encontrado: true, 
-          multiplos: true,
-          processos: processosFormatados,
-          tempoMs: Date.now() - startTime
+          success: false, 
+          error: 'Processo não encontrado no Escavador. Verifique o número e tente novamente.' 
         }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
-    const numeroLimpo = numeroProcesso.trim();
-    console.log(`📋 Número do processo: ${numeroLimpo}`);
-    
-    let tribunalBusca = tribunal?.toLowerCase();
-    if (!tribunalBusca) {
-      tribunalBusca = detectarTribunal(numeroLimpo);
-      console.log(`🏛️ Tribunal detectado: ${tribunalBusca}`);
-    }
-    
-    if (!tribunalBusca) {
-      tribunalBusca = 'tjam';
-      console.log('⚠️ Tribunal não detectado, usando TJAM como padrão');
-    }
-    
-    // 1. Tentar buscar no DataJud primeiro
-    const resultado = await buscarProcesso(numeroLimpo, tribunalBusca);
-    
-    let processoFormatado: any = null;
-    let fonteUsada = 'DataJud';
-    
-    if (resultado.hits && resultado.hits.total.value > 0) {
-      const processoRaw = resultado.hits.hits[0]._source;
-      processoFormatado = formatarProcesso(processoRaw, tribunalBusca);
-      console.log(`✅ Processo encontrado no DataJud: ${processoFormatado.classe}`);
-    } else {
-      // 2. Fallback: tentar buscar no Escavador
-      console.log(`⚠️ Não encontrado no DataJud, tentando Escavador...`);
-      
-      const escavadorData = await buscarProcessoEscavador(numeroLimpo);
-      
-      if (escavadorData) {
-        processoFormatado = formatarProcessoEscavador(escavadorData);
-        fonteUsada = 'Escavador';
-        console.log(`✅ Processo encontrado no Escavador: ${processoFormatado?.classe || 'N/A'}`);
-      }
-    }
-    
-    // Se não encontrou em nenhuma fonte
-    if (!processoFormatado) {
-      return new Response(
-        JSON.stringify({ 
-          encontrado: false, 
-          mensagem: `Processo não encontrado no ${tribunalBusca.toUpperCase()} (DataJud) nem no Escavador. Verifique o número ou selecione outro tribunal.`,
-          tempoMs: Date.now() - startTime
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    console.log(`✅ Processo encontrado via ${fonteUsada}: ${processoFormatado.classe} em ${Date.now() - startTime}ms`);
-    
-    // Persistir no banco se solicitado
-    if (persistir) {
-      try {
-        console.log('💾 Persistindo processo no banco...');
-        
-        // Fonte raw para persistência (diferente se veio do Escavador)
-        const processoRaw = processoFormatado.fonteRaw;
-        
-        // Upsert do processo principal
-        const { data: processoDb, error: processoError } = await supabase
-          .from('processos')
-          .upsert({
-            numero_processo: numeroLimpo,
-            advogado_responsavel: advogadoResponsavel || null,
-            tribunal: processoFormatado.tribunal,
-            status: processoFormatado.status,
-            titulo_acao: processoFormatado.classe,
-            updated_at: new Date().toISOString()
-          }, {
-            onConflict: 'numero_processo',
-            ignoreDuplicates: false
-          })
-          .select('id')
-          .single();
-        
-        if (processoError) {
-          console.error('❌ Erro ao salvar processo:', processoError);
-        } else if (processoDb) {
-          const processoId = processoDb.id;
-          console.log(`✅ Processo salvo com ID: ${processoId}`);
-        }
-      } catch (persistError) {
-        console.error('❌ Erro na persistência:', persistError);
-      }
-    }
-    
-    // Adicionar info sobre a fonte usada na resposta
-    processoFormatado.fonte = fonteUsada;
+    const processoFormatado = formatarProcessoEscavador(escavadorData);
     
     return new Response(
       JSON.stringify({ 
-        encontrado: true, 
+        success: true, 
         processo: processoFormatado,
-        fonte: fonteUsada,
-        tempoMs: Date.now() - startTime
+        fonte: 'Escavador'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-    
+
   } catch (error: unknown) {
-    console.error('❌ Erro na consulta:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Erro ao consultar processo';
+    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+    console.error('❌ Erro:', errorMessage);
     return new Response(
-      JSON.stringify({ error: errorMessage, tempoMs: Date.now() - startTime }),
+      JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
