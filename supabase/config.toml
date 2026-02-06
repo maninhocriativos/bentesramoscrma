@@ -107,3 +107,9 @@ verify_jwt = false
 
 [functions.facebook-leadads]
 verify_jwt = false
+
+[functions.processo-auto-sync]
+verify_jwt = false
+
+[functions.processo-status-notify]
+verify_jwt = false
