@@ -49,7 +49,6 @@ function formatDateTime(dateStr: string) {
 }
 
 function buildPreviewMessage(d: ProcessoNotificacoesTabProps["previewData"]) {
-  const nomeCliente = d.nomeCliente || "Cliente";
   const numProcesso = d.numeroProcesso || "N/A";
   const statusProc = d.status || "Em Andamento";
   const tribunal = d.tribunal || "";
@@ -65,7 +64,7 @@ function buildPreviewMessage(d: ProcessoNotificacoesTabProps["previewData"]) {
     : "não disponível";
 
   return (
-    `Olá, ${nomeCliente}! 👋\n\n` +
+    `Olá, aqui é a Isa do Bentes & Ramos! 👋\n\n` +
     `Segue atualização do seu processo:\n\n` +
     `📋 *Número:* ${numProcesso}\n` +
     `⚖️ *Ação:* ${d.acao || "N/A"}\n` +

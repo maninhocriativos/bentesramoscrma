@@ -92,7 +92,6 @@ serve(async (req) => {
     // Montar mensagem
     let textoMensagem = mensagem;
     if (!textoMensagem) {
-      const nomeCliente = cliente.nome || "Cliente";
       const numProcesso = processo.numero_processo || "N/A";
       const statusProc = processo.status || "Em Andamento";
       const tribunal = processo.tribunal || "";
@@ -100,7 +99,7 @@ serve(async (req) => {
         ? new Date(processo.data_ultima_atualizacao).toLocaleDateString('pt-BR')
         : "não disponível";
 
-      textoMensagem = `Olá, ${nomeCliente}! 👋\n\n` +
+      textoMensagem = `Olá, aqui é a Isa do Bentes & Ramos! 👋\n\n` +
         `Segue atualização do seu processo:\n\n` +
         `📋 *Número:* ${numProcesso}\n` +
         `⚖️ *Ação:* ${processo.titulo_acao || "N/A"}\n` +
