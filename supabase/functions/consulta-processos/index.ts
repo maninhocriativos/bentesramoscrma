@@ -178,8 +178,99 @@ async function buscarEscavadorPorCPF(cpf: string): Promise<{ data: any[]; error:
 }
 
 // =====================================================
-// DATAJUD API (FALLBACK)
+// DATAJUD API (FALLBACK) - Mapeamento completo de tribunais
 // =====================================================
+
+function getDataJudEndpoint(cnj: string): string {
+  // Extrair código do tribunal do CNJ (posições 13-16 no formato sem pontuação)
+  const cnjClean = normalizarCNJ(cnj);
+  const justicaCode = cnjClean.slice(13, 14); // 8 = Estadual, 4 = Federal, 5 = Trabalho
+  const tribunalCode = cnjClean.slice(14, 16); // Código do tribunal
+  
+  console.log(`📍 [DataJud] Justiça: ${justicaCode}, Tribunal: ${tribunalCode}`);
+  
+  // Mapeamento completo de tribunais estaduais (J=8)
+  const tribunaisEstaduais: Record<string, string> = {
+    '01': 'api_publica_tjac', // Acre
+    '02': 'api_publica_tjal', // Alagoas
+    '03': 'api_publica_tjap', // Amapá
+    '04': 'api_publica_tjam', // Amazonas
+    '05': 'api_publica_tjba', // Bahia
+    '06': 'api_publica_tjce', // Ceará
+    '07': 'api_publica_tjdft', // DF
+    '08': 'api_publica_tjes', // Espírito Santo
+    '09': 'api_publica_tjgo', // Goiás
+    '10': 'api_publica_tjma', // Maranhão
+    '11': 'api_publica_tjmt', // Mato Grosso
+    '12': 'api_publica_tjms', // Mato Grosso do Sul
+    '13': 'api_publica_tjmg', // Minas Gerais
+    '14': 'api_publica_tjpa', // Pará
+    '15': 'api_publica_tjpb', // Paraíba
+    '16': 'api_publica_tjpr', // Paraná
+    '17': 'api_publica_tjpe', // Pernambuco
+    '18': 'api_publica_tjpi', // Piauí
+    '19': 'api_publica_tjrj', // Rio de Janeiro
+    '20': 'api_publica_tjrn', // Rio Grande do Norte
+    '21': 'api_publica_tjrs', // Rio Grande do Sul
+    '22': 'api_publica_tjro', // Rondônia
+    '23': 'api_publica_tjrr', // Roraima
+    '24': 'api_publica_tjsc', // Santa Catarina
+    '25': 'api_publica_tjsp', // São Paulo
+    '26': 'api_publica_tjse', // Sergipe
+    '27': 'api_publica_tjto', // Tocantins
+  };
+  
+  // Mapeamento de tribunais federais (J=4)
+  const tribunaisFederais: Record<string, string> = {
+    '01': 'api_publica_trf1',
+    '02': 'api_publica_trf2',
+    '03': 'api_publica_trf3',
+    '04': 'api_publica_trf4',
+    '05': 'api_publica_trf5',
+    '06': 'api_publica_trf6',
+  };
+  
+  // Mapeamento de tribunais do trabalho (J=5)
+  const tribunaisTrabalho: Record<string, string> = {
+    '01': 'api_publica_trt1',
+    '02': 'api_publica_trt2',
+    '03': 'api_publica_trt3',
+    '04': 'api_publica_trt4',
+    '05': 'api_publica_trt5',
+    '06': 'api_publica_trt6',
+    '07': 'api_publica_trt7',
+    '08': 'api_publica_trt8',
+    '09': 'api_publica_trt9',
+    '10': 'api_publica_trt10',
+    '11': 'api_publica_trt11',
+    '12': 'api_publica_trt12',
+    '13': 'api_publica_trt13',
+    '14': 'api_publica_trt14',
+    '15': 'api_publica_trt15',
+    '16': 'api_publica_trt16',
+    '17': 'api_publica_trt17',
+    '18': 'api_publica_trt18',
+    '19': 'api_publica_trt19',
+    '20': 'api_publica_trt20',
+    '21': 'api_publica_trt21',
+    '22': 'api_publica_trt22',
+    '23': 'api_publica_trt23',
+    '24': 'api_publica_trt24',
+  };
+  
+  let endpoint = 'api_publica_tjsp'; // fallback
+  
+  if (justicaCode === '8') {
+    endpoint = tribunaisEstaduais[tribunalCode] || 'api_publica_tjsp';
+  } else if (justicaCode === '4') {
+    endpoint = tribunaisFederais[tribunalCode] || 'api_publica_trf1';
+  } else if (justicaCode === '5') {
+    endpoint = tribunaisTrabalho[tribunalCode] || 'api_publica_trt1';
+  }
+  
+  console.log(`📍 [DataJud] Endpoint selecionado: ${endpoint}`);
+  return endpoint;
+}
 
 async function buscarDataJud(cnj: string): Promise<{ data: any; error: string | null; httpCode: number | null; durationMs: number }> {
   if (!DATAJUD_API_KEY) {
@@ -188,15 +279,7 @@ async function buscarDataJud(cnj: string): Promise<{ data: any; error: string | 
   
   console.log(`🔍 [DataJud] Buscando CNJ: ${formatarCNJ(cnj)}`);
   
-  // DataJud usa número do tribunal extraído do CNJ
-  const tribunalCode = cnj.slice(13, 16);
-  const tribunalMapping: Record<string, string> = {
-    '802': 'api_publica_tjam', // TJAM
-    '801': 'api_publica_tjac', // TJAC
-    // Adicione mais mapeamentos conforme necessário
-  };
-  
-  const endpoint = tribunalMapping[tribunalCode] || 'api_publica_tjsp';
+  const endpoint = getDataJudEndpoint(cnj);
   
   const { response, error, httpCode, durationMs } = await fetchWithRetry(
     `https://api-publica.datajud.cnj.jus.br/${endpoint}/_search`,
@@ -211,7 +294,8 @@ async function buscarDataJud(cnj: string): Promise<{ data: any; error: string | 
           match: {
             numeroProcesso: normalizarCNJ(cnj)
           }
-        }
+        },
+        size: 1
       })
     }
   );
@@ -228,13 +312,20 @@ async function buscarDataJud(cnj: string): Promise<{ data: any; error: string | 
   }
   
   const data = await response.json();
-  const hit = data?.hits?.hits?.[0]?._source;
+  const hits = data?.hits?.hits || [];
+  
+  if (hits.length === 0) {
+    console.log(`❌ [DataJud] Nenhum resultado para CNJ ${formatarCNJ(cnj)}`);
+    return { data: null, error: 'NOT_FOUND', httpCode: 200, durationMs };
+  }
+  
+  const hit = hits[0]?._source;
   
   if (!hit) {
     return { data: null, error: 'NOT_FOUND', httpCode: 200, durationMs };
   }
   
-  console.log(`✅ [DataJud] Sucesso em ${durationMs}ms`);
+  console.log(`✅ [DataJud] Sucesso em ${durationMs}ms - Movimentos: ${hit.movimentos?.length || 0}, Partes: ${hit.partes?.length || 0}`);
   return { data: hit, error: null, httpCode: 200, durationMs };
 }
 
@@ -302,40 +393,88 @@ function normalizarEscavador(data: any, cnj: string): any {
 }
 
 function normalizarDataJud(data: any, cnj: string): any {
-  const partes = (data.partes || []).map((p: any) => ({
-    nome: p.nome || 'Desconhecido',
-    tipo: p.tipo || 'Parte',
-    polo: p.polo || 'OUTRO',
-    tipoPessoa: p.tipoPessoa || 'FISICA',
-    documento: null,
-    advogados: []
+  console.log(`🔄 [DataJud] Normalizando dados - Raw partes: ${data.partes?.length || 0}, Raw movimentos: ${data.movimentos?.length || 0}`);
+  
+  // Processar partes - DataJud usa formato diferente
+  const partes = (data.partes || []).map((p: any) => {
+    // DataJud pode ter advogados dentro do objeto parte
+    const advogados = (p.advogados || []).map((adv: any) => ({
+      nome: adv.nome || adv,
+      oab: adv.numeroOAB || adv.inscricaoOAB || null
+    }));
+    
+    return {
+      nome: p.nome || p.nomeCompleto || 'Desconhecido',
+      tipo: p.tipo || p.tipoParte || 'Parte',
+      polo: (p.polo || 'OUTRO').toUpperCase(),
+      tipoPessoa: p.tipoPessoa || (p.cpf ? 'FISICA' : p.cnpj ? 'JURIDICA' : 'FISICA'),
+      documento: p.cpf || p.cnpj || p.numeroDocumentoPrincipal || null,
+      advogados
+    };
+  });
+
+  // Processar movimentos - DataJud usa campos específicos
+  const movimentos = (data.movimentos || []).slice(0, 100).map((m: any) => {
+    // DataJud pode usar diferentes formatos de data
+    let dataHoraRaw = m.dataHora || m.data || new Date().toISOString();
+    
+    // Se for timestamp numérico de 14 dígitos (YYYYMMDDHHmmss), converter
+    if (typeof dataHoraRaw === 'string' && /^\d{14}$/.test(dataHoraRaw)) {
+      const year = dataHoraRaw.slice(0, 4);
+      const month = dataHoraRaw.slice(4, 6);
+      const day = dataHoraRaw.slice(6, 8);
+      const hour = dataHoraRaw.slice(8, 10);
+      const min = dataHoraRaw.slice(10, 12);
+      const sec = dataHoraRaw.slice(12, 14);
+      dataHoraRaw = `${year}-${month}-${day}T${hour}:${min}:${sec}Z`;
+    }
+    
+    return {
+      dataHora: formatarData(dataHoraRaw),
+      dataHoraRaw,
+      nome: m.nome || m.movimentoNome || m.descricao || 'Movimentação',
+      complemento: m.complemento || m.complementosTabelados?.map((c: any) => c.descricao || c.nome).join('; ') || null,
+      codigo: m.codigo || m.codigoMovimento || m.codigoNacional || null
+    };
+  });
+
+  // Extrair informações de classe e assuntos
+  const classeNome = data.classe?.nome || data.classeProcessual?.nome || data.classeProcessual || 'Processo';
+  const classeCodigo = data.classe?.codigo || data.classeProcessual?.codigo;
+  
+  const assuntos = (data.assuntos || []).map((a: any) => ({
+    nome: typeof a === 'string' ? a : (a.nome || a.descricao || String(a)),
+    codigo: a.codigo ? String(a.codigo) : undefined
   }));
 
-  const movimentos = (data.movimentos || []).slice(0, 100).map((m: any) => ({
-    dataHora: formatarData(m.dataHora),
-    dataHoraRaw: m.dataHora || new Date().toISOString(),
-    nome: m.nome || 'Movimentação',
-    complemento: m.complemento || null,
-    codigo: m.codigo
-  }));
+  // Determinar status baseado em campos do DataJud
+  let status = 'Em Andamento';
+  if (data.situacao) {
+    const sit = data.situacao.toLowerCase();
+    if (sit.includes('arquivado') || sit.includes('baixado') || sit.includes('transitado')) {
+      status = 'Arquivado';
+    } else if (sit.includes('suspenso')) {
+      status = 'Suspenso';
+    }
+  }
 
-  return {
+  const resultado = {
     cnj: normalizarCNJ(cnj),
     cnjFormatado: formatarCNJ(cnj),
     numeroProcesso: data.numeroProcesso,
-    classe: data.classe?.nome || 'Processo',
-    classeCodigo: data.classe?.codigo ? String(data.classe.codigo) : undefined,
-    assuntos: (data.assuntos || []).map((a: any) => ({ nome: a.nome, codigo: a.codigo })),
-    tribunal: data.tribunal || 'Não informado',
+    classe: classeNome,
+    classeCodigo: classeCodigo ? String(classeCodigo) : undefined,
+    assuntos,
+    tribunal: data.tribunal || data.siglaTribunal || 'Não informado',
     dataAjuizamento: formatarData(data.dataAjuizamento),
-    grau: data.grau || '1º Grau',
-    nivelSigilo: data.nivelSigilo === 0 ? 'Público' : 'Segredo de Justiça',
-    formato: data.formato?.nome || 'Eletrônico',
+    grau: data.grau || data.grauProcesso || '1º Grau',
+    nivelSigilo: data.nivelSigilo === 0 || data.nivelSigilo === '0' ? 'Público' : 'Segredo de Justiça',
+    formato: data.formato?.nome || data.formatoProcesso || 'Eletrônico',
     sistemaProcessual: 'DataJud',
-    orgaoJulgador: data.orgaoJulgador?.nome || 'Não informado',
-    status: 'Em Andamento',
-    statusDetalhado: data.situacao || 'Em Andamento',
-    ultimaAtualizacao: formatarData(data.dataHoraUltimaAtualizacao),
+    orgaoJulgador: data.orgaoJulgador?.nome || data.orgaoJulgador || 'Não informado',
+    status,
+    statusDetalhado: data.situacao || status,
+    ultimaAtualizacao: formatarData(data.dataHoraUltimaAtualizacao || data.dataUltimaAtualizacao),
     valorCausa: data.valorCausa || null,
     prioridade: data.prioridade || [],
     movimentos,
@@ -343,6 +482,9 @@ function normalizarDataJud(data: any, cnj: string): any {
     fonte: 'datajud',
     fonteRaw: data
   };
+
+  console.log(`✅ [DataJud] Normalizado: ${partes.length} partes, ${movimentos.length} movimentos`);
+  return resultado;
 }
 
 // =====================================================
