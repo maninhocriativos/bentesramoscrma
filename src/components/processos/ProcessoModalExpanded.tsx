@@ -202,10 +202,13 @@ export function ProcessoModalExpanded({
     try {
       const tribunal = (formData.tribunal || '').trim();
 
+      // Usar force_refresh e persistir para salvar automaticamente
       const { data, error } = await supabase.functions.invoke('consulta-processos', {
         body: {
           numeroProcesso: numero,
           tribunal: tribunal ? tribunal : undefined,
+          force_refresh: true,
+          persistir: !!processo?.id, // Persistir se já existe no banco
         },
       });
 
@@ -223,7 +226,7 @@ export function ProcessoModalExpanded({
         setMovimentos(newMovimentos);
 
         // Preparar dados para atualização
-        const updateData: any = {
+        const updateData: Record<string, unknown> = {
           titulo_acao: proc.classe || formData.titulo_acao,
           status: mapApiStatusToLocal(proc.status),
           tribunal: proc.tribunal || formData.tribunal,
@@ -234,6 +237,7 @@ export function ProcessoModalExpanded({
           partes_json: newPartes.length > 0 ? newPartes : null,
           movimentos_json: newMovimentos.length > 0 ? newMovimentos : null,
           dados_datajud: proc.fonteRaw || null,
+          fonte_preferida: proc.fonte || 'datajud',
           ultima_consulta_api_at: new Date().toISOString(),
           data_ultima_atualizacao: new Date().toISOString(),
         };
@@ -241,17 +245,35 @@ export function ProcessoModalExpanded({
         // Atualizar form local
         setFormData(prev => ({
           ...prev,
-          titulo_acao: updateData.titulo_acao,
-          status: updateData.status,
-          tribunal: updateData.tribunal,
-          orgao_julgador: updateData.orgao_julgador,
-          grau: updateData.grau,
-          assunto: updateData.assunto,
+          titulo_acao: updateData.titulo_acao as string,
+          status: updateData.status as ProcessoStatus,
+          tribunal: updateData.tribunal as string,
+          orgao_julgador: updateData.orgao_julgador as string,
+          grau: updateData.grau as string,
+          assunto: updateData.assunto as string,
           valor_causa: proc.valorCausa?.toString() || '',
         }));
 
         // Se é um processo existente, salvar no banco imediatamente
         if (processo?.id) {
+          // Vincular cliente automaticamente se encontrado
+          if (!formData.cliente_id && newPartes.length > 0) {
+            const parteAutor = newPartes.find((p: { tipo?: string; polo?: string }) =>
+              p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT'
+            );
+            if (parteAutor?.nome) {
+              const nomeAutor = parteAutor.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+              const leadMatch = leads.find(l => {
+                const nomeLead = (l.nome || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                return nomeLead.includes(nomeAutor) || nomeAutor.includes(nomeLead);
+              });
+              if (leadMatch) {
+                (updateData as Record<string, unknown>).cliente_id = leadMatch.id;
+                setFormData(prev => ({ ...prev, cliente_id: leadMatch.id }));
+              }
+            }
+          }
+
           const { error: updateError } = await supabase
             .from('processos')
             .update(updateData)
@@ -263,22 +285,22 @@ export function ProcessoModalExpanded({
           } else {
             await fetchProcessos(); // Atualizar lista
             toast.success('Processo atualizado!', {
-              description: `${newMovimentos.length} movimentações carregadas do DataJud`
+              description: `${newMovimentos.length} movimentações e ${newPartes.length} partes carregadas`
             });
           }
         } else {
           toast.success('Dados carregados!', {
-            description: `${newMovimentos.length} movimentações encontradas`
+            description: `${newMovimentos.length} movimentações e ${newPartes.length} partes encontradas`
           });
         }
       } else {
         toast.error('Processo não encontrado', {
-          description: data?.mensagem || 'Não encontramos este processo no DataJud com os parâmetros informados.'
+          description: data?.mensagem || 'Não encontramos este processo com os parâmetros informados.'
         });
       }
     } catch (err) {
       console.error('Erro ao atualizar status:', err);
-      toast.error('Erro ao consultar DataJud');
+      toast.error('Erro ao consultar APIs');
     } finally {
       setFetchingData(false);
     }

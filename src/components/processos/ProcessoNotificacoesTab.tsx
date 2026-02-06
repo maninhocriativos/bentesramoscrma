@@ -122,20 +122,61 @@ export function ProcessoNotificacoesTab({
     <div className="space-y-4">
       {config}
 
-      <Card>
+      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <MessageSquare className="h-4 w-4 text-primary" />
-            Prévia da mensagem
+            Prévia da Mensagem WhatsApp
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            Esta é a mensagem padrão usada no envio (automático e manual) para este processo.
+            Esta é a mensagem que será enviada ao cliente via WhatsApp. Ela é gerada automaticamente com os dados do processo.
           </p>
-          <div className="rounded-lg bg-muted/50 p-3">
-            <pre className="whitespace-pre-wrap break-words text-sm">{previewText}</pre>
+          
+          {/* Simulação de celular WhatsApp */}
+          <div className="relative max-w-sm mx-auto">
+            <div className="bg-[#0b141a] rounded-2xl p-2 shadow-lg">
+              {/* Header do chat */}
+              <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gray-700">
+                <div className="w-8 h-8 rounded-full bg-primary/30 flex items-center justify-center">
+                  <span className="text-xs font-bold text-primary">BR</span>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-white">Bentes & Ramos</p>
+                  <p className="text-[10px] text-gray-400">Escritório</p>
+                </div>
+              </div>
+              
+              {/* Área de mensagens com fundo do WhatsApp */}
+              <div 
+                className="p-3 min-h-[200px]" 
+                style={{ 
+                  backgroundColor: '#0b141a',
+                  backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23182229\' fill-opacity=\'0.4\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")'
+                }}
+              >
+                {/* Balão de mensagem */}
+                <div className="bg-[#005c4b] rounded-lg p-3 max-w-[280px] ml-auto shadow">
+                  <pre className="whitespace-pre-wrap break-words text-sm text-white font-sans leading-relaxed">
+                    {previewText}
+                  </pre>
+                  <div className="flex items-center justify-end gap-1 mt-1">
+                    <span className="text-[10px] text-gray-300">
+                      {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <svg className="w-4 h-4 text-blue-400" fill="currentColor" viewBox="0 0 16 15">
+                      <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512zm-4.1 0l-.478-.372a.365.365 0 0 0-.51.063L4.566 9.879a.32.32 0 0 1-.484.033L1.891 7.769a.366.366 0 0 0-.515.006l-.423.433a.364.364 0 0 0 .006.514l3.258 3.185c.143.14.361.125.484-.033l6.272-8.048a.365.365 0 0 0-.063-.51z"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
+          
+          <p className="text-xs text-center text-muted-foreground">
+            Prévia ilustrativa — a mensagem real pode variar levemente
+          </p>
         </CardContent>
       </Card>
 
