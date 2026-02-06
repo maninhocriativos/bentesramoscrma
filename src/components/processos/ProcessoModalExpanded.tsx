@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trash2, Loader2, Users, Briefcase, BadgeCheck, RefreshCw, MessageSquare, Building2, Scale, Calendar, DollarSign, Gavel, MapPin } from 'lucide-react';
+import { Trash2, Loader2, Users, Briefcase, BadgeCheck, RefreshCw, MessageSquare, Building2, Scale, Calendar, DollarSign, Gavel, MapPin, ChevronRight } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -26,6 +27,7 @@ import { Lead } from '@/types/leads';
 import { useProcessos } from '@/hooks/useProcessos';
 import { ProcessoNotificacaoConfig } from './ProcessoNotificacaoConfig';
 import { ProcessoNotificacoesTab } from './ProcessoNotificacoesTab';
+import { MovimentoDetailModal } from './MovimentoDetailModal';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
@@ -87,6 +89,10 @@ export function ProcessoModalExpanded({
   
   const [partes, setPartes] = useState<ProcessoParte[]>([]);
   const [movimentos, setMovimentos] = useState<ProcessoMovimento[]>([]);
+  
+  // Estado para modal de detalhes do movimento
+  const [selectedMovimento, setSelectedMovimento] = useState<ProcessoMovimento | null>(null);
+  const [movimentoModalOpen, setMovimentoModalOpen] = useState(false);
 
   const fetchProcessoData = async (numeroProcesso: string, tribunalOverride?: string) => {
     const numero = (numeroProcesso || '').trim();
@@ -589,12 +595,13 @@ export function ProcessoModalExpanded({
                     </div>
                     <div>
                       <Label htmlFor="advogado_responsavel">Advogado Responsável</Label>
-                      <Input
+                      <Textarea
                         id="advogado_responsavel"
                         value={formData.advogado_responsavel}
                         onChange={(e) => setFormData({ ...formData, advogado_responsavel: e.target.value })}
-                        className="rounded-xl"
+                        className="rounded-xl min-h-[60px] resize-none"
                         placeholder="Nome do advogado"
+                        rows={2}
                       />
                     </div>
                   </div>
@@ -693,41 +700,56 @@ export function ProcessoModalExpanded({
 
             {/* Tab: Movimentos */}
             <TabsContent value="movimentos" className="h-full mt-0">
-              <ScrollArea className="h-full pr-4">
-                <div className="py-4">
+              <ScrollArea className="h-[350px] pr-4">
+                <div className="py-4 space-y-2">
                   {movimentos.length === 0 ? (
                     <Card>
                       <CardContent className="py-8 text-center">
                         <Calendar className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
                         <p className="text-muted-foreground">Nenhuma movimentação</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Use o botão “Atualizar DataJud” para carregar movimentações
+                          Use o botão "Atualizar DataJud" para carregar movimentações
                         </p>
                       </CardContent>
                     </Card>
                   ) : (
-                    <div className="space-y-2">
+                    <>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        {movimentos.length} movimentação(ões) • Clique para ver detalhes
+                      </p>
                       {movimentos.map((mov, i) => (
-                        <Card key={i}>
+                        <Card 
+                          key={i} 
+                          className="cursor-pointer hover:bg-accent/50 transition-colors group"
+                          onClick={() => {
+                            setSelectedMovimento(mov);
+                            setMovimentoModalOpen(true);
+                          }}
+                        >
                           <CardContent className="p-3">
                             <div className="flex justify-between items-start gap-2">
-                              <p className="text-sm font-medium flex-1 break-words">{mov.nome}</p>
-                              <span className="text-xs text-muted-foreground whitespace-nowrap">{mov.dataHora}</span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium break-words line-clamp-2">{mov.nome}</p>
+                                {mov.codigo && (
+                                  <Badge variant="outline" className="text-xs mt-1">
+                                    CNJ: {mov.codigo}
+                                  </Badge>
+                                )}
+                                {mov.complemento && (
+                                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                    {mov.complemento}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <span className="text-xs text-muted-foreground whitespace-nowrap">{mov.dataHora}</span>
+                                <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </div>
                             </div>
-                            {mov.codigo && (
-                              <Badge variant="outline" className="text-xs mt-1">
-                                CNJ: {mov.codigo}
-                              </Badge>
-                            )}
-                            {mov.complemento && (
-                              <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap break-words">
-                                {mov.complemento}
-                              </p>
-                            )}
                           </CardContent>
                         </Card>
                       ))}
-                    </div>
+                    </>
                   )}
                 </div>
               </ScrollArea>
@@ -735,7 +757,7 @@ export function ProcessoModalExpanded({
 
             {/* Tab: Notificações */}
             <TabsContent value="notificacoes" className="h-full mt-0">
-              <ScrollArea className="h-full pr-4">
+              <ScrollArea className="h-[350px] pr-4">
                 <div className="py-4 space-y-4">
                   {!isNew && processo ? (
                     <ProcessoNotificacoesTab
@@ -834,11 +856,21 @@ export function ProcessoModalExpanded({
               disabled={saving}
               className="rounded-xl"
             >
-              {saving ? 'Salvando...' : isNew ? 'Criar Processo' : 'Salvar Alterações'}
-            </Button>
-          </div>
+            {saving ? 'Salvando...' : isNew ? 'Criar Processo' : 'Salvar Alterações'}
+          </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+
+      {/* Modal de detalhes do movimento */}
+      <MovimentoDetailModal
+        movimento={selectedMovimento}
+        isOpen={movimentoModalOpen}
+        onClose={() => {
+          setMovimentoModalOpen(false);
+          setSelectedMovimento(null);
+        }}
+      />
+    </DialogContent>
+  </Dialog>
   );
 }
