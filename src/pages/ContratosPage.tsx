@@ -4,7 +4,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { ContratosKPIs } from '@/components/contratos/ContratosKPIs';
 import { ContratosTable } from '@/components/contratos/ContratosTable';
 import { ModelosContratos } from '@/components/contratos/ModelosContratos';
-import { EnviarContratoModal } from '@/components/contratos/EnviarContratoModal';
+import { GerarContratoModal } from '@/components/contratos/GerarContratoModal';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, FileText, FolderOpen, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -239,7 +239,7 @@ export default function ContratosPage() {
         )}
       </div>
 
-      <EnviarContratoModal 
+      <GerarContratoModal 
         isOpen={enviarModalOpen}
         onClose={() => setEnviarModalOpen(false)}
         onSuccess={handleRefresh}
