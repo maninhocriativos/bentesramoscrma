@@ -21,6 +21,78 @@ const TRIBUNAIS: Record<string, string> = {
   'tjpr': 'api_publica_tjpr',
 };
 
+// =====================================================
+// ESCAVADOR API v2 - Fonte alternativa de busca
+// =====================================================
+async function buscarProcessoEscavador(numeroProcesso: string): Promise<any> {
+  const ESCAVADOR_API_KEY = Deno.env.get('ESCAVADOR_API_KEY');
+  
+  if (!ESCAVADOR_API_KEY) {
+    console.log('⚠️ ESCAVADOR_API_KEY não configurada');
+    return null;
+  }
+  
+  const numeroCNJ = numeroProcesso.trim();
+  
+  console.log(`🔍 Buscando processo ${numeroCNJ} no Escavador...`);
+  
+  try {
+    const response = await fetch(`https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(numeroCNJ)}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${ESCAVADOR_API_KEY}`,
+        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      console.error(`❌ Erro Escavador: ${response.status}`);
+      return null;
+    }
+    
+    const data = await response.json();
+    console.log(`✅ Escavador retornou dados`);
+    return data;
+  } catch (error) {
+    console.error('❌ Erro Escavador:', error);
+    return null;
+  }
+}
+
+function extrairDadosEscavador(escavadorData: any): { autorNome?: string; advogado?: string; status: string; classe: string } {
+  const fonteTribunal = escavadorData?.fontes?.find((f: any) => f.tipo === 'TRIBUNAL') || escavadorData?.fontes?.[0];
+  
+  // Extrair partes
+  const partes = fonteTribunal?.partes || escavadorData?.partes || escavadorData?.envolvidos || [];
+  const parteAutor = partes.find((p: any) => 
+    p.tipo_participacao?.toUpperCase().includes('AUTOR') || 
+    p.polo?.toUpperCase() === 'ATIVO' ||
+    p.tipo?.toUpperCase().includes('AUTOR')
+  );
+  
+  const autorNome = parteAutor?.nome || parteAutor?.pessoa?.nome;
+  
+  const adv0 = parteAutor?.advogados?.[0];
+  const advNome = adv0?.nome;
+  const advOab = adv0?.inscricoes?.[0] 
+    ? `OAB/${adv0.inscricoes[0].uf || ''} ${adv0.inscricoes[0].numero || ''}`.trim()
+    : adv0?.oab;
+  const advogado = advNome ? (advOab ? `${advNome} (${advOab})` : advNome) : undefined;
+  
+  // Status
+  let status = 'Em Andamento';
+  const statusPredito = fonteTribunal?.status_predito || escavadorData?.status_predito;
+  if (statusPredito === 'INATIVO' || statusPredito === 'BAIXADO') status = 'Arquivado';
+  else if (statusPredito === 'SUSPENSO') status = 'Suspenso';
+  
+  // Classe
+  const classe = fonteTribunal?.classe?.nome || escavadorData?.titulo_classe || escavadorData?.classe || 'Processo Importado';
+  
+  return { autorNome, advogado, status, classe };
+}
+
+// Extrai dados do DataJud
 function determinarStatusBasico(processo: any): string {
   const movimentos = processo?.movimentos || [];
   if (movimentos.length > 0) {
@@ -156,16 +228,44 @@ serve(async (req) => {
         continue;
       }
       
-      // Buscar dados na API DataJud
-      const processoData = await buscarProcessoDataJud(numero, tribunal);
-
-      const { autorNome, advogado } = extrairAutorEAdvogado(processoData);
-      const statusBasico = processoData ? determinarStatusBasico(processoData) : 'Em Andamento';
+      // 1. Tentar DataJud primeiro
+      let processoData = await buscarProcessoDataJud(numero, tribunal);
+      let fonteUsada = 'DataJud';
+      let autorNome: string | undefined;
+      let advogado: string | undefined;
+      let statusBasico: string;
+      let tituloAcao: string;
+      
+      if (processoData) {
+        const extracted = extrairAutorEAdvogado(processoData);
+        autorNome = extracted.autorNome;
+        advogado = extracted.advogado;
+        statusBasico = determinarStatusBasico(processoData);
+        tituloAcao = processoData?.classe?.nome || processoData?.classeProcessual?.nome || 'Processo Importado';
+      } else {
+        // 2. Fallback: tentar Escavador
+        console.log(`⚠️ Não encontrado no DataJud, tentando Escavador...`);
+        const escavadorData = await buscarProcessoEscavador(numero);
+        
+        if (escavadorData) {
+          const extracted = extrairDadosEscavador(escavadorData);
+          autorNome = extracted.autorNome;
+          advogado = extracted.advogado;
+          statusBasico = extracted.status;
+          tituloAcao = extracted.classe;
+          fonteUsada = 'Escavador';
+          processoData = escavadorData;
+        } else {
+          // Nenhuma fonte encontrou
+          statusBasico = 'Em Andamento';
+          tituloAcao = 'Processo Importado';
+        }
+      }
 
       // Preparar dados para inserção/atualização
       const baseData = {
         numero_processo: numero,
-        titulo_acao: processoData?.classe?.nome || processoData?.classeProcessual?.nome || 'Processo Importado',
+        titulo_acao: tituloAcao,
         status: statusBasico,
         advogado_responsavel: advogado || null,
         cliente_id: null as string | null,

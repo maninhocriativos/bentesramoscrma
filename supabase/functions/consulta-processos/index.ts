@@ -7,6 +7,127 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// =====================================================
+// ESCAVADOR API v2 - Fonte alternativa de busca
+// =====================================================
+async function buscarProcessoEscavador(numeroProcesso: string): Promise<any> {
+  const ESCAVADOR_API_KEY = Deno.env.get('ESCAVADOR_API_KEY');
+  
+  if (!ESCAVADOR_API_KEY) {
+    console.log('⚠️ ESCAVADOR_API_KEY não configurada, pulando busca no Escavador');
+    return null;
+  }
+  
+  // Remover formatação do número CNJ para a busca
+  const numeroCNJ = numeroProcesso.trim();
+  
+  console.log(`🔍 Buscando processo ${numeroCNJ} no Escavador...`);
+  
+  try {
+    const response = await fetch(`https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(numeroCNJ)}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${ESCAVADOR_API_KEY}`,
+        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Erro Escavador: ${response.status} - ${errorText}`);
+      return null;
+    }
+    
+    const data = await response.json();
+    console.log(`✅ Escavador retornou dados para ${numeroCNJ}`);
+    return data;
+  } catch (error) {
+    console.error('❌ Erro ao consultar Escavador:', error);
+    return null;
+  }
+}
+
+// Formatar dados do Escavador para o formato padrão
+function formatarProcessoEscavador(escavadorData: any): any {
+  if (!escavadorData) return null;
+  
+  // O Escavador retorna estrutura diferente, vamos normalizar
+  const processo = escavadorData;
+  
+  // Extrair fontes do tribunal (a API v2 retorna um array de fontes)
+  const fonteTribunal = processo.fontes?.find((f: any) => f.tipo === 'TRIBUNAL') || processo.fontes?.[0];
+  
+  // Extrair movimentações
+  const movimentos = (fonteTribunal?.movimentacoes || processo.movimentacoes || [])
+    .slice(0, 50)
+    .map((m: any, idx: number) => ({
+      dataHora: m.data || m.dataHora,
+      dataHoraRaw: m.data || m.dataHora,
+      nome: m.titulo || m.tipo || m.descricao || 'Movimentação',
+      complemento: m.conteudo || m.descricao || m.texto,
+      codigo: m.codigo
+    }));
+  
+  // Extrair partes
+  const partesRaw = fonteTribunal?.partes || processo.partes || processo.envolvidos || [];
+  const partes = partesRaw.map((p: any) => {
+    const advogadosRaw = p.advogados || [];
+    const advogados = advogadosRaw.map((adv: any) => ({
+      nome: adv.nome || adv.nomeAdvogado,
+      oab: adv.oab || (adv.inscricoes?.[0] ? `OAB/${adv.inscricoes[0].uf} ${adv.inscricoes[0].numero}` : undefined)
+    }));
+    
+    return {
+      nome: p.nome || p.pessoa?.nome || 'Não informado',
+      tipo: p.tipo_participacao || p.tipo || p.polo || 'Parte',
+      polo: p.polo || p.tipo_participacao || 'Não informado',
+      tipoPessoa: p.tipo_pessoa === 'FISICA' ? 'Pessoa Física' : p.tipo_pessoa === 'JURIDICA' ? 'Pessoa Jurídica' : 'Não informado',
+      documento: p.cpf || p.cnpj || p.documento,
+      advogados: advogados.length > 0 ? advogados : undefined
+    };
+  });
+  
+  // Determinar status
+  let status = 'Em Andamento';
+  const statusPredito = fonteTribunal?.status_predito || processo.status_predito;
+  if (statusPredito === 'ATIVO') status = 'Em Andamento';
+  else if (statusPredito === 'INATIVO' || statusPredito === 'BAIXADO') status = 'Arquivado';
+  else if (statusPredito === 'SUSPENSO') status = 'Suspenso';
+  
+  // Extrair classe e assuntos
+  const classeNome = fonteTribunal?.classe?.nome || processo.titulo_classe || processo.classe || 'Não informado';
+  const classeCodigo = fonteTribunal?.classe?.codigo || null;
+  
+  const assuntosRaw = fonteTribunal?.assuntos || processo.assuntos || [];
+  const assuntos = assuntosRaw.map((a: any) => ({
+    nome: typeof a === 'string' ? a : (a.nome || a.descricao || String(a)),
+    codigo: a.codigo ? String(a.codigo) : undefined
+  }));
+  
+  return {
+    numeroProcesso: processo.numero_cnj || processo.numero,
+    classe: classeNome,
+    classeCodigo: classeCodigo ? String(classeCodigo) : undefined,
+    assuntos,
+    tribunal: (fonteTribunal?.tribunal?.sigla || fonteTribunal?.sigla_tribunal || processo.tribunal || 'Não informado').toUpperCase(),
+    dataAjuizamento: processo.data_inicio || fonteTribunal?.data_distribuicao || 'Não informado',
+    grau: fonteTribunal?.grau || processo.grau || '1º Grau',
+    nivelSigilo: processo.segredo_justica ? 'Segredo de Justiça' : 'Público',
+    formato: 'Eletrônico',
+    sistemaProcessual: fonteTribunal?.sistema || 'PJe',
+    orgaoJulgador: fonteTribunal?.vara?.nome || fonteTribunal?.orgao_julgador || processo.vara || 'Não informado',
+    status,
+    ultimaAtualizacao: movimentos[0]?.dataHora || 'Não informado',
+    valorCausa: fonteTribunal?.valor_causa || processo.valor_causa || null,
+    prioridade: [],
+    movimentos,
+    partes,
+    fonteEscavador: true,
+    fonteRaw: escavadorData
+  };
+}
+
 interface ProcessoResponse {
   numeroProcesso: string;
   classe: string;
@@ -898,48 +1019,60 @@ serve(async (req) => {
       console.log('⚠️ Tribunal não detectado, usando TJAM como padrão');
     }
     
+    // 1. Tentar buscar no DataJud primeiro
     const resultado = await buscarProcesso(numeroLimpo, tribunalBusca);
     
-    if (!resultado.hits || resultado.hits.total.value === 0) {
+    let processoFormatado: any = null;
+    let fonteUsada = 'DataJud';
+    
+    if (resultado.hits && resultado.hits.total.value > 0) {
+      const processoRaw = resultado.hits.hits[0]._source;
+      processoFormatado = formatarProcesso(processoRaw, tribunalBusca);
+      console.log(`✅ Processo encontrado no DataJud: ${processoFormatado.classe}`);
+    } else {
+      // 2. Fallback: tentar buscar no Escavador
+      console.log(`⚠️ Não encontrado no DataJud, tentando Escavador...`);
+      
+      const escavadorData = await buscarProcessoEscavador(numeroLimpo);
+      
+      if (escavadorData) {
+        processoFormatado = formatarProcessoEscavador(escavadorData);
+        fonteUsada = 'Escavador';
+        console.log(`✅ Processo encontrado no Escavador: ${processoFormatado?.classe || 'N/A'}`);
+      }
+    }
+    
+    // Se não encontrou em nenhuma fonte
+    if (!processoFormatado) {
       return new Response(
         JSON.stringify({ 
           encontrado: false, 
-          mensagem: `Processo não encontrado no ${tribunalBusca.toUpperCase()}. Verifique o número ou selecione outro tribunal.`,
+          mensagem: `Processo não encontrado no ${tribunalBusca.toUpperCase()} (DataJud) nem no Escavador. Verifique o número ou selecione outro tribunal.`,
           tempoMs: Date.now() - startTime
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
-    const processoRaw = resultado.hits.hits[0]._source;
-    const processoFormatado = formatarProcesso(processoRaw, tribunalBusca);
-    
-    console.log(`✅ Processo encontrado: ${processoFormatado.classe} em ${Date.now() - startTime}ms`);
+    console.log(`✅ Processo encontrado via ${fonteUsada}: ${processoFormatado.classe} em ${Date.now() - startTime}ms`);
     
     // Persistir no banco se solicitado
     if (persistir) {
       try {
         console.log('💾 Persistindo processo no banco...');
         
+        // Fonte raw para persistência (diferente se veio do Escavador)
+        const processoRaw = processoFormatado.fonteRaw;
+        
         // Upsert do processo principal
         const { data: processoDb, error: processoError } = await supabase
           .from('processos')
           .upsert({
-            // usa o número digitado pelo usuário (mantém máscara/pontuação), para bater com a busca do sistema
             numero_processo: numeroLimpo,
             advogado_responsavel: advogadoResponsavel || null,
             tribunal: processoFormatado.tribunal,
-            sistema: processoFormatado.sistemaProcessual,
-            sigilo: processoFormatado.nivelSigilo,
             status: processoFormatado.status,
-            classe_cnj_codigo: processoFormatado.classeCodigo,
-            classe_cnj_nome: processoFormatado.classe,
             titulo_acao: processoFormatado.classe,
-            orgao_julgador: processoFormatado.orgaoJulgador,
-            grau_formato: `${processoFormatado.grau} • ${processoFormatado.formato}`,
-            ajuizado_em: parseDataParaTimestamp(processoRaw.dataAjuizamento || processoRaw.dataDistribuicao),
-            ultima_atualizacao: parseDataParaTimestamp(processoRaw.movimentos?.[0]?.dataHora),
-            fonte_raw: processoRaw,
             updated_at: new Date().toISOString()
           }, {
             onConflict: 'numero_processo',
@@ -953,61 +1086,20 @@ serve(async (req) => {
         } else if (processoDb) {
           const processoId = processoDb.id;
           console.log(`✅ Processo salvo com ID: ${processoId}`);
-          
-          // Limpar e inserir assuntos
-          await supabase.from('processo_assuntos').delete().eq('processo_id', processoId);
-          
-          if (processoFormatado.assuntos.length > 0) {
-            const assuntosInsert = processoFormatado.assuntos.map(a => ({
-              processo_id: processoId,
-              assunto_cnj_codigo: a.codigo,
-              assunto_nome: a.nome
-            }));
-            
-            const { error: assuntosError } = await supabase
-              .from('processo_assuntos')
-              .insert(assuntosInsert);
-            
-            if (assuntosError) {
-              console.error('❌ Erro ao salvar assuntos:', assuntosError);
-            } else {
-              console.log(`✅ ${assuntosInsert.length} assuntos salvos`);
-            }
-          }
-          
-          // Limpar e inserir movimentações
-          await supabase.from('processo_movimentacoes').delete().eq('processo_id', processoId);
-          
-          if (processoFormatado.movimentos.length > 0) {
-            const movimentosInsert = processoFormatado.movimentos.map((m, idx) => ({
-              processo_id: processoId,
-              movimento_cnj_codigo: m.codigo ? String(m.codigo) : null,
-              movimento_titulo: m.nome,
-              movimento_descricao: m.complemento,
-              data_movimento: parseDataParaTimestamp(m.dataHoraRaw),
-              ordem: idx
-            }));
-            
-            const { error: movError } = await supabase
-              .from('processo_movimentacoes')
-              .insert(movimentosInsert);
-            
-            if (movError) {
-              console.error('❌ Erro ao salvar movimentações:', movError);
-            } else {
-              console.log(`✅ ${movimentosInsert.length} movimentações salvas`);
-            }
-          }
         }
       } catch (persistError) {
         console.error('❌ Erro na persistência:', persistError);
       }
     }
     
+    // Adicionar info sobre a fonte usada na resposta
+    processoFormatado.fonte = fonteUsada;
+    
     return new Response(
       JSON.stringify({ 
         encontrado: true, 
         processo: processoFormatado,
+        fonte: fonteUsada,
         tempoMs: Date.now() - startTime
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
