@@ -592,65 +592,111 @@ function formatarProcesso(processo: any, tribunalFallback: string): ProcessoResp
 // Função auxiliar para extrair partes de múltiplas estruturas possíveis
 function extractPartes(processo: any): Array<any> {
   const poloMap: Record<string, string> = {
-    'AT': 'Autor',
-    'PA': 'Autor', 
-    'AUTOR': 'Autor',
-    'ATIVO': 'Autor',
-    'RÉU': 'Réu',
-    'REU': 'Réu',
-    'PP': 'Réu',
-    'PASSIVO': 'Réu',
-    'PASSIVE': 'Réu',
-    'TE': 'Terceiro',
-    'TERCEIRO': 'Terceiro',
-    'VI': 'Vítima',
-    'FL': 'Falido'
+    AT: "Autor",
+    PA: "Autor",
+    AUTOR: "Autor",
+    ATIVO: "Autor",
+    "PÓLO ATIVO": "Autor",
+    REU: "Réu",
+    "RÉU": "Réu",
+    PP: "Réu",
+    PASSIVO: "Réu",
+    "PÓLO PASSIVO": "Réu",
+    TE: "Terceiro",
+    TERCEIRO: "Terceiro",
+    VI: "Vítima",
+    FL: "Falido",
   };
 
   const partesResult: any[] = [];
-  
-  // Log para debug
-  console.log('🔍 Estrutura do processo para partes:', {
-    hasPartes: !!processo.partes,
-    partesLength: processo.partes?.length,
-    hasPoloAtivo: !!processo.poloAtivo,
-    hasPoloPassivo: !!processo.poloPassivo
+
+  const asArray = (v: any): any[] => {
+    if (!v) return [];
+    if (Array.isArray(v)) return v;
+
+    if (typeof v === "object") {
+      const obj = v as any;
+      // wrappers comuns
+      if (Array.isArray(obj.partes)) return obj.partes;
+      if (Array.isArray(obj.itens)) return obj.itens;
+      if (Array.isArray(obj.pessoas)) return obj.pessoas;
+      if (Array.isArray(obj.participantes)) return obj.participantes;
+      if (Array.isArray(obj.participacoes)) return obj.participacoes;
+    }
+
+    return [v];
+  };
+
+  const pushMany = (items: any[], forcedTipo?: string, forcedPolo?: string) => {
+    for (const p of items) {
+      if (!p) continue;
+      const parte = processarParte(p, poloMap);
+      if (forcedTipo) parte.tipo = forcedTipo;
+      if (forcedPolo) parte.polo = forcedPolo;
+      partesResult.push(parte);
+    }
+  };
+
+  const candidates: Array<{ label: string; items: any[]; forcedTipo?: string; forcedPolo?: string }> = [
+    { label: "processo.partes", items: asArray(processo.partes) },
+    { label: "processo.partesProcessuais", items: asArray(processo.partesProcessuais) },
+    { label: "processo.partesDoProcesso", items: asArray(processo.partesDoProcesso) },
+    { label: "processo.dadosBasicos.partes", items: asArray(processo.dadosBasicos?.partes) },
+    { label: "processo.dadosBasicos.partesProcessuais", items: asArray(processo.dadosBasicos?.partesProcessuais) },
+
+    // polos (variações de estrutura)
+    { label: "processo.poloAtivo", items: asArray(processo.poloAtivo), forcedTipo: "Autor", forcedPolo: "ATIVO" },
+    { label: "processo.poloPassivo", items: asArray(processo.poloPassivo), forcedTipo: "Réu", forcedPolo: "PASSIVO" },
+
+    { label: "processo.partes.poloAtivo", items: asArray(processo.partes?.poloAtivo), forcedTipo: "Autor", forcedPolo: "ATIVO" },
+    { label: "processo.partes.poloPassivo", items: asArray(processo.partes?.poloPassivo), forcedTipo: "Réu", forcedPolo: "PASSIVO" },
+
+    { label: "processo.partes.poloAtivo.partes", items: asArray(processo.partes?.poloAtivo?.partes), forcedTipo: "Autor", forcedPolo: "ATIVO" },
+    { label: "processo.partes.poloPassivo.partes", items: asArray(processo.partes?.poloPassivo?.partes), forcedTipo: "Réu", forcedPolo: "PASSIVO" },
+
+    { label: "processo.partes.poloAtivo.pessoas", items: asArray(processo.partes?.poloAtivo?.pessoas), forcedTipo: "Autor", forcedPolo: "ATIVO" },
+    { label: "processo.partes.poloPassivo.pessoas", items: asArray(processo.partes?.poloPassivo?.pessoas), forcedTipo: "Réu", forcedPolo: "PASSIVO" },
+
+    { label: "processo.dadosBasicos.poloAtivo", items: asArray(processo.dadosBasicos?.poloAtivo), forcedTipo: "Autor", forcedPolo: "ATIVO" },
+    { label: "processo.dadosBasicos.poloPassivo", items: asArray(processo.dadosBasicos?.poloPassivo), forcedTipo: "Réu", forcedPolo: "PASSIVO" },
+
+    { label: "processo.dadosBasicos.poloAtivo.partes", items: asArray(processo.dadosBasicos?.poloAtivo?.partes), forcedTipo: "Autor", forcedPolo: "ATIVO" },
+    { label: "processo.dadosBasicos.poloPassivo.partes", items: asArray(processo.dadosBasicos?.poloPassivo?.partes), forcedTipo: "Réu", forcedPolo: "PASSIVO" },
+  ];
+
+  // Log para debug (resumo + chaves principais)
+  console.log("🔍 Estrutura do processo para partes:", {
+    keys: Object.keys(processo || {}).slice(0, 40),
+    hasPartes: !!processo?.partes,
+    partesType: typeof processo?.partes,
+    hasPoloAtivo: !!processo?.poloAtivo || !!processo?.partes?.poloAtivo || !!processo?.dadosBasicos?.poloAtivo,
+    hasPoloPassivo: !!processo?.poloPassivo || !!processo?.partes?.poloPassivo || !!processo?.dadosBasicos?.poloPassivo,
   });
 
-  // Fonte 1: Array de partes direto
-  if (processo.partes && Array.isArray(processo.partes)) {
-    for (const p of processo.partes) {
-      console.log('📋 Processando parte:', JSON.stringify(p).substring(0, 800));
-      partesResult.push(processarParte(p, poloMap));
-    }
+  for (const c of candidates) {
+    if (c.items.length === 0) continue;
+    console.log(`📋 Extraindo partes de ${c.label} (qtd: ${c.items.length})`);
+    pushMany(c.items, c.forcedTipo, c.forcedPolo);
   }
-  
-  // Fonte 2: poloAtivo e poloPassivo separados
-  if (processo.poloAtivo && Array.isArray(processo.poloAtivo)) {
-    for (const p of processo.poloAtivo) {
-      const parte = processarParte(p, poloMap);
-      parte.tipo = 'Autor';
-      parte.polo = 'ATIVO';
-      partesResult.push(parte);
-    }
+
+  // Fallback: se só existir pessoa isolada
+  if (!partesResult.length && processo?.pessoa) {
+    pushMany([{ pessoa: processo.pessoa }]);
   }
-  
-  if (processo.poloPassivo && Array.isArray(processo.poloPassivo)) {
-    for (const p of processo.poloPassivo) {
-      const parte = processarParte(p, poloMap);
-      parte.tipo = 'Réu';
-      parte.polo = 'PASSIVO';
-      partesResult.push(parte);
-    }
-  }
-  
-  // Fonte 3: Partes dentro de pessoa
-  if (!partesResult.length && processo.pessoa) {
-    partesResult.push(processarParte({ pessoa: processo.pessoa }, poloMap));
-  }
-  
-  console.log(`✅ Total de ${partesResult.length} partes extraídas`);
-  return partesResult;
+
+  // Dedup por nome + tipo + polo
+  const seen = new Set<string>();
+  const uniq = partesResult
+    .filter((p) => p && p.nome && p.nome !== "Nome não informado")
+    .filter((p) => {
+      const key = `${String(p.nome).toLowerCase()}|${String(p.tipo).toLowerCase()}|${String(p.polo).toLowerCase()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  console.log(`✅ Total de ${uniq.length} partes extraídas`);
+  return uniq;
 }
 
 function processarParte(p: any, poloMap: Record<string, string>): any {
