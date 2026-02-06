@@ -2118,36 +2118,136 @@ export type Database = {
         Row: {
           created_at: string | null
           data_movimento: string | null
+          hash_unico: string | null
           id: string
           movimento_cnj_codigo: string | null
           movimento_descricao: string | null
           movimento_titulo: string
           ordem: number | null
+          origem: string | null
           processo_id: string
         }
         Insert: {
           created_at?: string | null
           data_movimento?: string | null
+          hash_unico?: string | null
           id?: string
           movimento_cnj_codigo?: string | null
           movimento_descricao?: string | null
           movimento_titulo: string
           ordem?: number | null
+          origem?: string | null
           processo_id: string
         }
         Update: {
           created_at?: string | null
           data_movimento?: string | null
+          hash_unico?: string | null
           id?: string
           movimento_cnj_codigo?: string | null
           movimento_descricao?: string | null
           movimento_titulo?: string
           ordem?: number | null
+          origem?: string | null
           processo_id?: string
         }
         Relationships: [
           {
             foreignKeyName: "processo_movimentacoes_processo_id_fkey"
+            columns: ["processo_id"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processo_partes: {
+        Row: {
+          advogados: Json | null
+          created_at: string
+          documento: string | null
+          hash_unico: string | null
+          id: string
+          nome: string
+          polo: string | null
+          processo_id: string
+          tipo: string
+          tipo_pessoa: string | null
+        }
+        Insert: {
+          advogados?: Json | null
+          created_at?: string
+          documento?: string | null
+          hash_unico?: string | null
+          id?: string
+          nome: string
+          polo?: string | null
+          processo_id: string
+          tipo: string
+          tipo_pessoa?: string | null
+        }
+        Update: {
+          advogados?: Json | null
+          created_at?: string
+          documento?: string | null
+          hash_unico?: string | null
+          id?: string
+          nome?: string
+          polo?: string | null
+          processo_id?: string
+          tipo?: string
+          tipo_pessoa?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processo_partes_processo_id_fkey"
+            columns: ["processo_id"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processo_sync_log: {
+        Row: {
+          cnj: string | null
+          created_at: string
+          duracao_ms: number | null
+          http_code: number | null
+          id: string
+          mensagem: string | null
+          movimentacoes_novas: number | null
+          origem_tentada: string
+          processo_id: string | null
+          status: string
+        }
+        Insert: {
+          cnj?: string | null
+          created_at?: string
+          duracao_ms?: number | null
+          http_code?: number | null
+          id?: string
+          mensagem?: string | null
+          movimentacoes_novas?: number | null
+          origem_tentada: string
+          processo_id?: string | null
+          status: string
+        }
+        Update: {
+          cnj?: string | null
+          created_at?: string
+          duracao_ms?: number | null
+          http_code?: number | null
+          id?: string
+          mensagem?: string | null
+          movimentacoes_novas?: number | null
+          origem_tentada?: string
+          processo_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processo_sync_log_processo_id_fkey"
             columns: ["processo_id"]
             isOneToOne: false
             referencedRelation: "processos"
@@ -2744,6 +2844,24 @@ export type Database = {
     }
     Functions: {
       checar_cargo_usuario: { Args: never; Returns: string }
+      gerar_hash_movimentacao: {
+        Args: {
+          p_cnj: string
+          p_data: string
+          p_descricao: string
+          p_titulo: string
+        }
+        Returns: string
+      }
+      gerar_hash_parte: {
+        Args: {
+          p_documento: string
+          p_nome: string
+          p_processo_id: string
+          p_tipo: string
+        }
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

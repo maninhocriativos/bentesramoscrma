@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Loader2, Scale, Calendar, Users, FileText, AlertCircle, User, Building, Gavel, Clock, DollarSign, Shield, Briefcase, ChevronRight, Save, CheckCircle2, BadgeCheck } from 'lucide-react';
+import { Search, Loader2, Scale, Calendar, Users, FileText, AlertCircle, User, Building, Gavel, Clock, DollarSign, Shield, Briefcase, ChevronRight, Save, CheckCircle2, BadgeCheck, RefreshCw, Database, Cloud, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -69,6 +69,9 @@ export function ConsultaProcessoExterno() {
   const [selectedMovimento, setSelectedMovimento] = useState<Movimento | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tempoConsulta, setTempoConsulta] = useState<number | null>(null);
+  const [fonteUsada, setFonteUsada] = useState<string | null>(null);
+  const [cacheHit, setCacheHit] = useState(false);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   const { fullName } = usePerfil();
 
@@ -98,20 +101,26 @@ export function ConsultaProcessoExterno() {
     setProcesso(null);
     setProcessos([]);
     setTempoConsulta(null);
+    setFonteUsada(null);
+    setCacheHit(false);
+    setWarnings([]);
 
     try {
       const body = searchType === 'numero' 
         ? { numeroProcesso: query }
-        : { cpf: query };
+        : { cpf: query, action: 'buscar_por_cpf' };
 
       const { data, error } = await supabase.functions.invoke('consulta-processos', { body });
 
       if (error) throw error;
 
       setTempoConsulta(data.tempoMs);
+      setFonteUsada(data.fonte || null);
+      setCacheHit(data.cacheHit || false);
+      setWarnings(data.warnings || []);
 
-      if (!data.encontrado) {
-        setErro(data.mensagem || 'Processo não encontrado');
+      if (!data.encontrado && !data.success) {
+        setErro(data.error || data.mensagem || 'Processo não encontrado');
         return;
       }
 
@@ -120,11 +129,46 @@ export function ConsultaProcessoExterno() {
         toast.success(`${data.processos.length} processo(s) encontrado(s)!`);
       } else if (data.processo) {
         setProcesso(data.processo);
-        toast.success('Processo encontrado!');
+        toast.success(`Processo encontrado via ${data.fonte || 'API'}!`);
       }
     } catch (err) {
       console.error('Erro ao buscar processo:', err);
       setErro('Erro ao consultar processo. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForceRefresh = async () => {
+    const query = searchType === 'numero' ? numeroProcesso.trim() : cpf.replace(/\D/g, '');
+    
+    if (!query) return;
+
+    setLoading(true);
+    setErro(null);
+    setWarnings([]);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('consulta-processos', { 
+        body: { 
+          numeroProcesso: query,
+          force_refresh: true
+        } 
+      });
+
+      if (error) throw error;
+
+      setFonteUsada(data.fonte || null);
+      setCacheHit(false);
+      setWarnings(data.warnings || []);
+
+      if (data.processo) {
+        setProcesso(data.processo);
+        toast.success('Dados atualizados com sucesso!');
+      }
+    } catch (err) {
+      console.error('Erro ao atualizar:', err);
+      toast.error('Erro ao atualizar dados');
     } finally {
       setLoading(false);
     }
@@ -467,10 +511,49 @@ export function ConsultaProcessoExterno() {
           </TabsContent>
         </Tabs>
 
-        {tempoConsulta && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <CheckCircle2 className="h-3 w-3 text-green-500" />
-            Consulta realizada em {tempoConsulta}ms
+        {/* Status da consulta */}
+        {(fonteUsada || warnings.length > 0) && (
+          <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/50 rounded-lg">
+            {fonteUsada && (
+              <Badge variant="outline" className="gap-1">
+                {fonteUsada === 'cache' || fonteUsada === 'cache_stale' ? (
+                  <Database className="h-3 w-3" />
+                ) : (
+                  <Cloud className="h-3 w-3" />
+                )}
+                Fonte: {fonteUsada === 'both' ? 'Escavador + DataJud' : fonteUsada}
+              </Badge>
+            )}
+            {cacheHit && (
+              <Badge variant="secondary" className="gap-1">
+                <CheckCircle2 className="h-3 w-3 text-success" />
+                Cache
+              </Badge>
+            )}
+            {processo && (
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                onClick={handleForceRefresh}
+                disabled={loading}
+                className="gap-1 h-6 px-2 text-xs"
+              >
+                <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+                Atualizar agora
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Warnings */}
+        {warnings.length > 0 && (
+          <div className="flex flex-col gap-1 p-3 bg-warning/10 rounded-lg border border-warning/20">
+            {warnings.map((w, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs text-warning-foreground">
+                <AlertTriangle className="h-3 w-3 text-warning" />
+                {w}
+              </div>
+            ))}
           </div>
         )}
 
