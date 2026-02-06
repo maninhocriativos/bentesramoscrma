@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Trash2, Loader2, Users, Briefcase, BadgeCheck, RefreshCw, MessageSquare, Building2, Scale, Calendar, DollarSign, Gavel, MapPin, ChevronRight } from 'lucide-react';
 import {
   Dialog,
@@ -30,6 +30,7 @@ import { ProcessoNotificacoesTab } from './ProcessoNotificacoesTab';
 import { MovimentoDetailModal } from './MovimentoDetailModal';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { enrichMovements, MovimentoEnriquecido, getCategoriaColor } from '@/lib/cnjMovimentosMap';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -90,8 +91,11 @@ export function ProcessoModalExpanded({
   const [partes, setPartes] = useState<ProcessoParte[]>([]);
   const [movimentos, setMovimentos] = useState<ProcessoMovimento[]>([]);
   
+  // Movimentos enriquecidos com tradução humana
+  const movimentosEnriquecidos = useMemo(() => enrichMovements(movimentos), [movimentos]);
+  
   // Estado para modal de detalhes do movimento
-  const [selectedMovimento, setSelectedMovimento] = useState<ProcessoMovimento | null>(null);
+  const [selectedMovimento, setSelectedMovimento] = useState<MovimentoEnriquecido | null>(null);
   const [movimentoModalOpen, setMovimentoModalOpen] = useState(false);
 
   const fetchProcessoData = async (numeroProcesso: string, tribunalOverride?: string) => {
@@ -702,7 +706,7 @@ export function ProcessoModalExpanded({
             <TabsContent value="movimentos" className="h-full mt-0">
               <ScrollArea className="h-[350px] pr-4">
                 <div className="py-4 space-y-2">
-                  {movimentos.length === 0 ? (
+                  {movimentosEnriquecidos.length === 0 ? (
                     <Card>
                       <CardContent className="py-8 text-center">
                         <Calendar className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
@@ -715,9 +719,9 @@ export function ProcessoModalExpanded({
                   ) : (
                     <>
                       <p className="text-xs text-muted-foreground mb-2">
-                        {movimentos.length} movimentação(ões) • Clique para ver detalhes
+                        {movimentosEnriquecidos.length} movimentação(ões) • Clique para ver detalhes
                       </p>
-                      {movimentos.map((mov, i) => (
+                      {movimentosEnriquecidos.map((mov, i) => (
                         <Card 
                           key={i} 
                           className="cursor-pointer hover:bg-accent/50 transition-colors group"
@@ -729,17 +733,18 @@ export function ProcessoModalExpanded({
                           <CardContent className="p-3">
                             <div className="flex justify-between items-start gap-2">
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium break-words line-clamp-2">{mov.nome}</p>
-                                {mov.codigo && (
-                                  <Badge variant="outline" className="text-xs mt-1">
-                                    CNJ: {mov.codigo}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="text-sm font-medium">{mov.titulo_humano}</p>
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`text-xs ${getCategoriaColor(mov.categoria)}`}
+                                  >
+                                    {mov.badge}
                                   </Badge>
-                                )}
-                                {mov.complemento && (
-                                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                    {mov.complemento}
-                                  </p>
-                                )}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                  {mov.descricao_humana}
+                                </p>
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 <span className="text-xs text-muted-foreground whitespace-nowrap">{mov.dataHora}</span>
