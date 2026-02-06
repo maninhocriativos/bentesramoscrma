@@ -257,7 +257,15 @@ serve(async (req) => {
   }
 
   try {
-    const { numero_processo, cpf, nome, oab, action } = await req.json();
+    const body = await req.json();
+    // Support both camelCase (frontend) and snake_case naming
+    const numero_processo = body.numero_processo || body.numeroProcesso;
+    const cpf = body.cpf;
+    const nome = body.nome;
+    const oab = body.oab;
+    const action = body.action;
+    const persistir = body.persistir;
+    const advogadoResponsavel = body.advogadoResponsavel;
     
     console.log(`📋 Consulta recebida - action: ${action}, numero: ${numero_processo}, cpf: ${cpf}, nome: ${nome}, oab: ${oab}`);
 
