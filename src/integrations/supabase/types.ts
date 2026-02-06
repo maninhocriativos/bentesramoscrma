@@ -2260,14 +2260,17 @@ export type Database = {
           advogado_responsavel: string | null
           ajuizado_em: string | null
           assunto: string | null
+          cache_valid_until: string | null
           classe_cnj: string | null
           classe_cnj_codigo: string | null
           classe_cnj_nome: string | null
           cliente_id: string | null
+          cnj_normalizado: string | null
           created_at: string | null
           dados_datajud: Json | null
           data_ajuizamento: string | null
           data_ultima_atualizacao: string | null
+          fonte_preferida: string | null
           fonte_raw: Json | null
           frequencia_notificacao_dias: number | null
           grau: string | null
@@ -2295,14 +2298,17 @@ export type Database = {
           advogado_responsavel?: string | null
           ajuizado_em?: string | null
           assunto?: string | null
+          cache_valid_until?: string | null
           classe_cnj?: string | null
           classe_cnj_codigo?: string | null
           classe_cnj_nome?: string | null
           cliente_id?: string | null
+          cnj_normalizado?: string | null
           created_at?: string | null
           dados_datajud?: Json | null
           data_ajuizamento?: string | null
           data_ultima_atualizacao?: string | null
+          fonte_preferida?: string | null
           fonte_raw?: Json | null
           frequencia_notificacao_dias?: number | null
           grau?: string | null
@@ -2330,14 +2336,17 @@ export type Database = {
           advogado_responsavel?: string | null
           ajuizado_em?: string | null
           assunto?: string | null
+          cache_valid_until?: string | null
           classe_cnj?: string | null
           classe_cnj_codigo?: string | null
           classe_cnj_nome?: string | null
           cliente_id?: string | null
+          cnj_normalizado?: string | null
           created_at?: string | null
           dados_datajud?: Json | null
           data_ajuizamento?: string | null
           data_ultima_atualizacao?: string | null
+          fonte_preferida?: string | null
           fonte_raw?: Json | null
           frequencia_notificacao_dias?: number | null
           grau?: string | null
