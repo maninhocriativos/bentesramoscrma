@@ -393,68 +393,222 @@ function normalizarEscavador(data: any, cnj: string): any {
 }
 
 function normalizarDataJud(data: any, cnj: string): any {
-  console.log(`🔄 [DataJud] Normalizando dados - Raw partes: ${data.partes?.length || 0}, Raw movimentos: ${data.movimentos?.length || 0}`);
-  
-  // Processar partes - DataJud usa formato diferente
-  const partes = (data.partes || []).map((p: any) => {
-    // DataJud pode ter advogados dentro do objeto parte
-    const advogados = (p.advogados || []).map((adv: any) => ({
-      nome: adv.nome || adv,
-      oab: adv.numeroOAB || adv.inscricaoOAB || null
-    }));
-    
-    return {
-      nome: p.nome || p.nomeCompleto || 'Desconhecido',
-      tipo: p.tipo || p.tipoParte || 'Parte',
-      polo: (p.polo || 'OUTRO').toUpperCase(),
-      tipoPessoa: p.tipoPessoa || (p.cpf ? 'FISICA' : p.cnpj ? 'JURIDICA' : 'FISICA'),
-      documento: p.cpf || p.cnpj || p.numeroDocumentoPrincipal || null,
-      advogados
-    };
-  });
+  const rawMovCount = Array.isArray(data?.movimentos)
+    ? data.movimentos.length
+    : Array.isArray(data?.movimentacoes)
+      ? data.movimentacoes.length
+      : 0;
 
-  // Processar movimentos - DataJud usa campos específicos
-  const movimentos = (data.movimentos || []).slice(0, 100).map((m: any) => {
-    // DataJud pode usar diferentes formatos de data
-    let dataHoraRaw = m.dataHora || m.data || new Date().toISOString();
-    
-    // Se for timestamp numérico de 14 dígitos (YYYYMMDDHHmmss), converter
-    if (typeof dataHoraRaw === 'string' && /^\d{14}$/.test(dataHoraRaw)) {
-      const year = dataHoraRaw.slice(0, 4);
-      const month = dataHoraRaw.slice(4, 6);
-      const day = dataHoraRaw.slice(6, 8);
-      const hour = dataHoraRaw.slice(8, 10);
-      const min = dataHoraRaw.slice(10, 12);
-      const sec = dataHoraRaw.slice(12, 14);
-      dataHoraRaw = `${year}-${month}-${day}T${hour}:${min}:${sec}Z`;
+  const rawPartesCount = Array.isArray(data?.partes)
+    ? data.partes.length
+    : Array.isArray(data?.poloAtivo)
+      ? data.poloAtivo.length
+      : Array.isArray(data?.poloPassivo)
+        ? data.poloPassivo.length
+        : 0;
+
+  console.log(
+    `🔄 [DataJud] Normalizando dados - Raw partes: ${rawPartesCount}, Raw movimentos: ${rawMovCount}`,
+  );
+
+  const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+
+  const toIsoIfPossible = (v: unknown): string => {
+    if (!v) return new Date().toISOString();
+
+    if (typeof v === "string") {
+      const s = v.trim();
+      // YYYYMMDDHHmmss
+      if (/^\d{14}$/.test(s)) {
+        const year = s.slice(0, 4);
+        const month = s.slice(4, 6);
+        const day = s.slice(6, 8);
+        const hour = s.slice(8, 10);
+        const min = s.slice(10, 12);
+        const sec = s.slice(12, 14);
+        return `${year}-${month}-${day}T${hour}:${min}:${sec}Z`;
+      }
+
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) return d.toISOString();
+      return s;
     }
-    
+
+    // number | Date | other
+    const d = new Date(v as any);
+    if (!isNaN(d.getTime())) return d.toISOString();
+    return String(v);
+  };
+
+  const normalizePolo = (v: unknown): string => {
+    const s = String(v ?? "").trim().toUpperCase();
+    if (!s) return "OUTRO";
+
+    if (["AT", "ATIVO", "POLO ATIVO", "A"].includes(s)) return "AT";
+    if (["PA", "PASSIVO", "POLO PASSIVO", "R", "REU", "RÉU"].includes(s)) return "PA";
+
+    // Alguns tribunais retornam o polo como texto; manter.
+    return s;
+  };
+
+  const normalizeAdvogados = (p: any) => {
+    const raw = [
+      ...asArray<any>(p?.advogados),
+      ...asArray<any>(p?.representantes),
+      ...asArray<any>(p?.procuradores),
+    ];
+
+    return raw
+      .map((adv) => {
+        if (!adv) return null;
+        if (typeof adv === "string") return { nome: adv, oab: null };
+
+        return {
+          nome: adv.nome || adv.nomeCompleto || adv.nomeAdvogado || adv.advogado || "Advogado",
+          oab:
+            adv.oab ||
+            adv.numeroOAB ||
+            adv.inscricaoOAB ||
+            adv.oabNumero ||
+            adv.numero_inscricao ||
+            null,
+        };
+      })
+      .filter(Boolean);
+  };
+
+  // =====================================================
+  // PARTES (DataJud varia bastante entre índices/tribunais)
+  // =====================================================
+
+  const rawPartes: Array<any> = [];
+
+  // 1) padrão direto
+  rawPartes.push(...asArray<any>(data?.partes));
+
+  // 2) polos em arrays separados
+  rawPartes.push(
+    ...asArray<any>(data?.poloAtivo).map((p) => ({ ...p, __polo: "AT", __tipo: "Autor" })),
+  );
+  rawPartes.push(
+    ...asArray<any>(data?.poloPassivo).map((p) => ({ ...p, __polo: "PA", __tipo: "Réu" })),
+  );
+
+  // 3) polo como objeto com chaves comuns
+  if (data?.polo && typeof data.polo === "object") {
+    const poloObj = data.polo as Record<string, unknown>;
+    rawPartes.push(
+      ...asArray<any>(poloObj.ativo).map((p) => ({ ...p, __polo: "AT", __tipo: "Autor" })),
+    );
+    rawPartes.push(
+      ...asArray<any>(poloObj.passivo).map((p) => ({ ...p, __polo: "PA", __tipo: "Réu" })),
+    );
+    rawPartes.push(...asArray<any>(poloObj.outros).map((p) => ({ ...p, __polo: "OUTRO" })));
+  }
+
+  const partes = rawPartes
+    .map((p: any) => {
+      if (!p) return null;
+
+      const nome =
+        typeof p === "string"
+          ? p
+          : p.nome || p.nomeCompleto || p.pessoa?.nome || p.parte?.nome || "Desconhecido";
+
+      const documento =
+        typeof p === "object"
+          ? p.cpf || p.cnpj || p.cpfCnpj || p.numeroDocumentoPrincipal || p.documento || null
+          : null;
+
+      const polo = normalizePolo(p.polo ?? p.__polo ?? p.poloParte ?? p.poloProcessual);
+
+      let tipo =
+        (typeof p === "object" ? (p.tipo || p.tipoParte || p.qualificacao || p.__tipo) : null) ||
+        "Parte";
+
+      // Quando vier só polo, inferir um tipo amigável
+      if (tipo === "Parte") {
+        if (polo === "AT") tipo = "Autor";
+        else if (polo === "PA") tipo = "Réu";
+      }
+
+      const tipoPessoa =
+        p.tipoPessoa ||
+        p.tipo_pessoa ||
+        (documento
+          ? String(documento).replace(/\D/g, "").length > 11
+            ? "JURIDICA"
+            : "FISICA"
+          : "FISICA");
+
+      const advogados = normalizeAdvogados(p);
+
+      return {
+        nome,
+        tipo,
+        polo,
+        tipoPessoa,
+        documento,
+        advogados,
+      };
+    })
+    .filter(Boolean);
+
+  // =====================================================
+  // MOVIMENTOS
+  // =====================================================
+
+  const rawMovimentos = asArray<any>(data?.movimentos).length
+    ? asArray<any>(data.movimentos)
+    : asArray<any>(data?.movimentacoes);
+
+  const movimentos = rawMovimentos.slice(0, 100).map((m: any) => {
+    const dataHoraRaw = toIsoIfPossible(m?.dataHora ?? m?.data ?? m?.data_movimento);
+
+    const comp =
+      m?.complemento ||
+      (() => {
+        const comps = asArray<any>(m?.complementosTabelados);
+        if (comps.length === 0) return null;
+        const txt = comps
+          .map((c) => c?.nome || c?.descricao || c?.valor)
+          .filter(Boolean)
+          .join("; ");
+        return txt || null;
+      })();
+
     return {
       dataHora: formatarData(dataHoraRaw),
       dataHoraRaw,
-      nome: m.nome || m.movimentoNome || m.descricao || 'Movimentação',
-      complemento: m.complemento || m.complementosTabelados?.map((c: any) => c.descricao || c.nome).join('; ') || null,
-      codigo: m.codigo || m.codigoMovimento || m.codigoNacional || null
+      nome: m?.nome || m?.movimentoNome || m?.descricao || "Movimentação",
+      complemento: comp,
+      codigo: m?.codigo || m?.codigoMovimento || m?.codigoNacional || null,
     };
   });
 
   // Extrair informações de classe e assuntos
-  const classeNome = data.classe?.nome || data.classeProcessual?.nome || data.classeProcessual || 'Processo';
+  const classeNome =
+    data.classe?.nome ||
+    data.classeProcessual?.nome ||
+    data.classeProcessual ||
+    data.classe?.descricao ||
+    "Processo";
+
   const classeCodigo = data.classe?.codigo || data.classeProcessual?.codigo;
-  
-  const assuntos = (data.assuntos || []).map((a: any) => ({
-    nome: typeof a === 'string' ? a : (a.nome || a.descricao || String(a)),
-    codigo: a.codigo ? String(a.codigo) : undefined
+
+  const assuntos = asArray<any>(data.assuntos).map((a: any) => ({
+    nome: typeof a === "string" ? a : a?.nome || a?.descricao || String(a),
+    codigo: a?.codigo ? String(a.codigo) : undefined,
   }));
 
   // Determinar status baseado em campos do DataJud
-  let status = 'Em Andamento';
+  let status = "Em Andamento";
   if (data.situacao) {
-    const sit = data.situacao.toLowerCase();
-    if (sit.includes('arquivado') || sit.includes('baixado') || sit.includes('transitado')) {
-      status = 'Arquivado';
-    } else if (sit.includes('suspenso')) {
-      status = 'Suspenso';
+    const sit = String(data.situacao).toLowerCase();
+    if (sit.includes("arquivado") || sit.includes("baixado") || sit.includes("transitado")) {
+      status = "Arquivado";
+    } else if (sit.includes("suspenso")) {
+      status = "Suspenso";
     }
   }
 
@@ -465,22 +619,23 @@ function normalizarDataJud(data: any, cnj: string): any {
     classe: classeNome,
     classeCodigo: classeCodigo ? String(classeCodigo) : undefined,
     assuntos,
-    tribunal: data.tribunal || data.siglaTribunal || 'Não informado',
-    dataAjuizamento: formatarData(data.dataAjuizamento),
-    grau: data.grau || data.grauProcesso || '1º Grau',
-    nivelSigilo: data.nivelSigilo === 0 || data.nivelSigilo === '0' ? 'Público' : 'Segredo de Justiça',
-    formato: data.formato?.nome || data.formatoProcesso || 'Eletrônico',
-    sistemaProcessual: 'DataJud',
-    orgaoJulgador: data.orgaoJulgador?.nome || data.orgaoJulgador || 'Não informado',
+    tribunal: data.tribunal || data.siglaTribunal || "Não informado",
+    // Em vários índices do DataJud isso vem como string 14 dígitos
+    dataAjuizamento: formatarData(toIsoIfPossible(data.dataAjuizamento)),
+    grau: data.grau || data.grauProcesso || "1º Grau",
+    nivelSigilo: data.nivelSigilo === 0 || data.nivelSigilo === "0" ? "Público" : "Segredo de Justiça",
+    formato: data.formato?.nome || data.formatoProcesso || "Eletrônico",
+    sistemaProcessual: "DataJud",
+    orgaoJulgador: data.orgaoJulgador?.nome || data.orgaoJulgador || "Não informado",
     status,
     statusDetalhado: data.situacao || status,
-    ultimaAtualizacao: formatarData(data.dataHoraUltimaAtualizacao || data.dataUltimaAtualizacao),
+    ultimaAtualizacao: formatarData(toIsoIfPossible(data.dataHoraUltimaAtualizacao || data.dataUltimaAtualizacao)),
     valorCausa: data.valorCausa || null,
     prioridade: data.prioridade || [],
     movimentos,
     partes,
-    fonte: 'datajud',
-    fonteRaw: data
+    fonte: "datajud",
+    fonteRaw: data,
   };
 
   console.log(`✅ [DataJud] Normalizado: ${partes.length} partes, ${movimentos.length} movimentos`);
@@ -521,6 +676,8 @@ async function persistirProcesso(processo: any, advogadoResponsavel?: string): P
   const cacheValidUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 minutos
   
   // Upsert processo
+  const nowIso = new Date().toISOString();
+
   const { data: processoDb, error: processoError } = await supabase
     .from('processos')
     .upsert({
@@ -540,12 +697,21 @@ async function persistirProcesso(processo: any, advogadoResponsavel?: string): P
       ultima_atualizacao: processo.ultimaAtualizacao !== 'Não informado' ? processo.ultimaAtualizacao : null,
       fonte_preferida: processo.fonte,
       fonte_raw: processo.fonteRaw,
+      dados_datajud: processo.fonteRaw,
+      ultima_consulta_api_at: nowIso,
+      data_ultima_atualizacao: processo.fonteRaw?.dataHoraUltimaAtualizacao || nowIso,
+      partes_json: Array.isArray(processo.partes) && processo.partes.length > 0 ? processo.partes : null,
+      movimentos_json:
+        Array.isArray(processo.movimentos) && processo.movimentos.length > 0
+          ? processo.movimentos.slice(0, 50)
+          : null,
       cache_valid_until: cacheValidUntil.toISOString(),
       advogado_responsavel: advogadoResponsavel,
-      updated_at: new Date().toISOString()
+      updated_at: nowIso,
     }, {
-      onConflict: 'cnj_normalizado',
-      ignoreDuplicates: false
+      // 'cnj_normalizado' não é UNIQUE; usar o campo com UNIQUE index
+      onConflict: 'numero_processo',
+      ignoreDuplicates: false,
     })
     .select('id')
     .single();
