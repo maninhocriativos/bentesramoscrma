@@ -9,6 +9,40 @@ const corsHeaders = {
 const CLICKSIGN_API_KEY = Deno.env.get("CLICKSIGN_API_KEY");
 const CLICKSIGN_BASE_URL = "https://app.clicksign.com/api/v1";
 
+// Helper function to fetch with retry logic for transient HTTP/2 errors
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3,
+  baseDelay = 1000
+): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      return response;
+    } catch (error: any) {
+      lastError = error;
+      const isRetryable = 
+        error.message?.includes('http2 error') ||
+        error.message?.includes('connection error') ||
+        error.message?.includes('SendRequest') ||
+        error.message?.includes('ECONNRESET');
+      
+      if (!isRetryable || attempt === maxRetries - 1) {
+        throw error;
+      }
+      
+      const delay = baseDelay * Math.pow(2, attempt);
+      console.log(`[Clicksign] Retry ${attempt + 1}/${maxRetries} after ${delay}ms due to: ${error.message}`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError;
+}
+
 interface CreateDocumentRequest {
   action: "create_document" | "add_signer" | "create_list" | "get_document" | "cancel_document" | "list_documents";
   document_key?: string;
@@ -54,7 +88,7 @@ serve(async (req: Request): Promise<Response> => {
         formData.append("document[archive][name]", body.file_name);
         formData.append("document[archive][content]", body.file_content);
         
-        const response = await fetch(`${CLICKSIGN_BASE_URL}/documents?access_token=${CLICKSIGN_API_KEY}`, {
+        const response = await fetchWithRetry(`${CLICKSIGN_BASE_URL}/documents?access_token=${CLICKSIGN_API_KEY}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -83,7 +117,7 @@ serve(async (req: Request): Promise<Response> => {
           throw new Error("signer data is required");
         }
 
-        const response = await fetch(`${CLICKSIGN_BASE_URL}/signers?access_token=${CLICKSIGN_API_KEY}`, {
+        const response = await fetchWithRetry(`${CLICKSIGN_BASE_URL}/signers?access_token=${CLICKSIGN_API_KEY}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -116,7 +150,7 @@ serve(async (req: Request): Promise<Response> => {
           throw new Error("document_key and signer_key are required");
         }
 
-        const response = await fetch(`${CLICKSIGN_BASE_URL}/lists?access_token=${CLICKSIGN_API_KEY}`, {
+        const response = await fetchWithRetry(`${CLICKSIGN_BASE_URL}/lists?access_token=${CLICKSIGN_API_KEY}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -147,7 +181,7 @@ serve(async (req: Request): Promise<Response> => {
           throw new Error("document_key is required");
         }
 
-        const response = await fetch(`${CLICKSIGN_BASE_URL}/documents/${body.document_key}?access_token=${CLICKSIGN_API_KEY}`, {
+        const response = await fetchWithRetry(`${CLICKSIGN_BASE_URL}/documents/${body.document_key}?access_token=${CLICKSIGN_API_KEY}`, {
           method: "GET",
         });
 
@@ -171,7 +205,7 @@ serve(async (req: Request): Promise<Response> => {
         
         // Buscar todas as páginas
         while (hasMore) {
-          const response = await fetch(`${CLICKSIGN_BASE_URL}/documents?access_token=${CLICKSIGN_API_KEY}&page=${page}`, {
+          const response = await fetchWithRetry(`${CLICKSIGN_BASE_URL}/documents?access_token=${CLICKSIGN_API_KEY}&page=${page}`, {
             method: "GET",
           });
 
@@ -207,7 +241,7 @@ serve(async (req: Request): Promise<Response> => {
           throw new Error("document_key is required");
         }
 
-        const response = await fetch(`${CLICKSIGN_BASE_URL}/documents/${body.document_key}/cancel?access_token=${CLICKSIGN_API_KEY}`, {
+        const response = await fetchWithRetry(`${CLICKSIGN_BASE_URL}/documents/${body.document_key}/cancel?access_token=${CLICKSIGN_API_KEY}`, {
           method: "PATCH",
         });
 
