@@ -5,6 +5,7 @@ import { ContratosKPIs } from '@/components/contratos/ContratosKPIs';
 import { ContratosTable } from '@/components/contratos/ContratosTable';
 import { ModelosContratos } from '@/components/contratos/ModelosContratos';
 import { GerarContratoModal } from '@/components/contratos/GerarContratoModal';
+import { CleanupDuplicatesButton } from '@/components/contratos/CleanupDuplicatesButton';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, FileText, FolderOpen, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -186,12 +187,15 @@ export default function ContratosPage() {
           </div>
         ) : (
           <>
-            <ContratosKPIs 
-              data={kpiData} 
-              onRefresh={handleRefresh} 
-              onSendContract={() => setEnviarModalOpen(true)}
-              refreshing={refreshing} 
-            />
+            <div className="flex items-center justify-between gap-4">
+              <ContratosKPIs 
+                data={kpiData} 
+                onRefresh={handleRefresh} 
+                onSendContract={() => setEnviarModalOpen(true)}
+                refreshing={refreshing} 
+              />
+              <CleanupDuplicatesButton onComplete={handleRefresh} />
+            </div>
 
             {/* Custom Tabs */}
             <div className="space-y-4">
