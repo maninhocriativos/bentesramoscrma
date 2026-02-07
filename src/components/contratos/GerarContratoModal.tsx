@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -133,6 +133,9 @@ export function GerarContratoModal({
   // State
   const [sending, setSending] = useState(false);
   const [loadingLeads, setLoadingLeads] = useState(false);
+  
+  // Guard against double-clicks and race conditions
+  const submittingRef = useRef(false);
 
   // Fetch leads
   useEffect(() => {
@@ -285,6 +288,12 @@ export function GerarContratoModal({
   };
 
   const handleSubmit = async () => {
+    // Guard against duplicate submissions
+    if (submittingRef.current) {
+      console.warn('[GerarContrato] Submission already in progress');
+      return;
+    }
+    
     if (signatarios.length === 0) {
       toast({
         title: 'Adicione signatários',
@@ -294,9 +303,30 @@ export function GerarContratoModal({
       return;
     }
 
+    // Set guard immediately
+    submittingRef.current = true;
     setSending(true);
 
     try {
+      // Check if lead already has a pending contract (prevent duplicates)
+      if (dataSource === 'lead' && selectedLeadId) {
+        const { data: existingContract } = await supabase
+          .from('contract_reminders')
+          .select('id, status')
+          .eq('lead_id', selectedLeadId)
+          .eq('status', 'pending')
+          .maybeSingle();
+        
+        if (existingContract) {
+          toast({
+            title: 'Contrato pendente já existe',
+            description: 'Este lead já possui um contrato aguardando assinatura.',
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
+
       // Get file to send
       const fileData = await getFileToSend();
       if (!fileData) {
@@ -403,33 +433,56 @@ export function GerarContratoModal({
         });
       }
 
-      // 4. Send via WhatsApp if enabled
+      // 4. Send notifications
+      const notificationResults = { whatsapp: false, email: sendViaEmail };
+      
+      // Send via WhatsApp if enabled
       if (sendViaWhatsapp && signatarios[0]?.telefone) {
-        const mensagemWhatsapp = 
-          `Olá ${signatarios[0].nome}! 👋\n\n` +
-          `Seu contrato está pronto para assinatura.\n\n` +
-          `📋 Documento: ${fileData.filename}\n` +
-          `🔗 Link: ${clicksignUrl}\n\n` +
-          `${customMessage}`;
+        try {
+          const mensagemWhatsapp = 
+            `Olá ${signatarios[0].nome}! 👋\n\n` +
+            `Seu contrato está pronto para assinatura.\n\n` +
+            `📋 Documento: ${fileData.filename}\n` +
+            `🔗 Link: ${clicksignUrl}\n\n` +
+            `${customMessage}`;
 
-        await supabase.functions.invoke('zapi-send', {
-          body: {
-            phone: signatarios[0].telefone,
-            message: mensagemWhatsapp,
-          },
-        });
+          const { data: whatsappResult, error: whatsappError } = await supabase.functions.invoke('zapi-send', {
+            body: {
+              to_phone: signatarios[0].telefone,
+              message: mensagemWhatsapp,
+              lead_id: dataSource === 'lead' ? selectedLeadId : undefined,
+              type: 'text',
+            },
+          });
+          
+          if (whatsappError) {
+            console.error('[GerarContrato] WhatsApp error:', whatsappError);
+          } else if (whatsappResult?.success) {
+            notificationResults.whatsapp = true;
+            console.log('[GerarContrato] WhatsApp sent successfully');
+          } else {
+            console.warn('[GerarContrato] WhatsApp failed:', whatsappResult?.error);
+          }
+        } catch (whatsappErr) {
+          console.error('[GerarContrato] WhatsApp exception:', whatsappErr);
+        }
       }
 
+      // Build success message
+      const channels: string[] = [];
+      if (notificationResults.email) channels.push('Email (Clicksign)');
+      if (notificationResults.whatsapp) channels.push('WhatsApp');
+      
       toast({
         title: 'Contrato enviado com sucesso! 🎉',
-        description: `O contrato foi enviado para ${allSigners.length} signatário(s).`,
+        description: `Enviado para ${allSigners.length} signatário(s). ${channels.length > 0 ? `Notificação via: ${channels.join(', ')}` : ''}`,
       });
 
       onClose();
       onSuccess?.();
 
     } catch (error: any) {
-      console.error('Error sending contract:', error);
+      console.error('[GerarContrato] Error:', error);
       toast({
         title: 'Erro ao enviar contrato',
         description: error.message || 'Falha ao processar contrato no Clicksign.',
@@ -437,6 +490,7 @@ export function GerarContratoModal({
       });
     } finally {
       setSending(false);
+      submittingRef.current = false;
     }
   };
 
