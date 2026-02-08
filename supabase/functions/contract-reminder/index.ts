@@ -10,9 +10,83 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const MANYCHAT_API_URL = 'https://api.manychat.com';
 
+const CLICKSIGN_API_KEY = Deno.env.get("CLICKSIGN_API_KEY");
+const CLICKSIGN_BASE_URL = "https://app.clicksign.com/api/v1";
+
+// Helper: retry for transient HTTP/2 errors (same pattern used elsewhere)
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3,
+  baseDelay = 1000
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fetch(url, options);
+    } catch (error: any) {
+      lastError = error;
+      const msg = String(error?.message || error);
+      const isRetryable =
+        msg.includes('http2 error') ||
+        msg.includes('connection error') ||
+        msg.includes('SendRequest') ||
+        msg.includes('ECONNRESET');
+
+      if (!isRetryable || attempt === maxRetries - 1) throw error;
+
+      const delay = baseDelay * Math.pow(2, attempt);
+      console.log(`[Contract Reminder] Retry ${attempt + 1}/${maxRetries} after ${delay}ms due to: ${msg}`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
+
+function isBadClicksignLink(link: string | null | undefined, documentKey?: string | null) {
+  if (!link) return true;
+  if (!documentKey) return false;
+  // Padrão que gera 404: /sign/{documentKey} (o correto é /sign/{request_signature_key})
+  return link.includes(`/sign/${documentKey}`);
+}
+
+async function resolveClicksignSignerLink(documentKey: string): Promise<string | null> {
+  if (!CLICKSIGN_API_KEY) return null;
+
+  try {
+    const response = await fetchWithRetry(
+      `${CLICKSIGN_BASE_URL}/documents/${documentKey}?access_token=${CLICKSIGN_API_KEY}`,
+      { method: 'GET' }
+    );
+
+    if (!response.ok) {
+      const txt = await response.text();
+      console.error(`[Contract Reminder] Clicksign get_document failed [${response.status}]: ${txt.slice(0, 200)}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const doc = data?.document || data;
+    const lists = doc?.lists || doc?.document?.lists;
+
+    const requestKey: string | undefined =
+      lists?.[0]?.request_signature_key ||
+      lists?.[0]?.request_signature_key;
+
+    if (!requestKey) return null;
+
+    return `https://app.clicksign.com/sign/${requestKey}`;
+  } catch (err) {
+    console.error('[Contract Reminder] Error resolving signer link:', err);
+    return null;
+  }
+}
+
 // Messages for contract reminders
 const CONTRACT_MESSAGES = {
-  soft: (clientName: string, contractLink: string) => 
+  soft: (clientName: string, contractLink: string) =>
     `Oi ${clientName}! 👋\n\n` +
     `Passando para lembrar que seu contrato ainda aguarda assinatura.\n\n` +
     `🔗 Link para assinar: ${contractLink}\n\n` +
@@ -213,6 +287,37 @@ async function findLeadByDocumentName(
   return { lead: bestMatch, subscriber };
 }
 
+async function findLeadByDocumentKey(
+  supabase: any,
+  documentKey: string
+): Promise<{ lead: any; subscriber: any } | null> {
+  console.log(`[Contract Reminder] Searching for lead by documentKey: ${documentKey}`);
+
+  const { data: lead, error } = await supabase
+    .from('leads_juridicos')
+    .select('id, nome, telefone, email, link_contrato, status, contract_key')
+    .or(`contract_key.eq.${documentKey},link_contrato.ilike.%${documentKey}%`)
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !lead) {
+    console.log('[Contract Reminder] No lead found by documentKey');
+    return null;
+  }
+
+  const { data: subscriber } = await supabase
+    .from('manychat_subscribers')
+    .select('subscriber_id, nome, telefone')
+    .eq('lead_id', lead.id)
+    .maybeSingle();
+
+  if (!subscriber) {
+    console.log(`[Contract Reminder] No ManyChat subscriber found for lead ${lead.id}`);
+    return null;
+  }
+
+  return { lead, subscriber };
+}
 serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -230,20 +335,28 @@ serve(async (req: Request): Promise<Response> => {
 
     console.log('[Contract Reminder] Request:', { documentKey, documentName, reminderType });
 
-    if (!documentName) {
+    if (!documentName && !documentKey) {
       return new Response(
-        JSON.stringify({ success: false, error: 'documentName é obrigatório' }),
+        JSON.stringify({ success: false, error: 'documentName ou documentKey é obrigatório' }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
     // Find lead and subscriber
-    const result = await findLeadByDocumentName(supabase, documentName);
+    let result: { lead: any; subscriber: any } | null = null;
+
+    if (documentName) {
+      result = await findLeadByDocumentName(supabase, documentName);
+    }
+
+    if (!result && documentKey) {
+      result = await findLeadByDocumentKey(supabase, documentKey);
+    }
 
     if (!result) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
+        JSON.stringify({
+          success: false,
           error: 'Lead não encontrado ou sem subscriber ManyChat vinculado',
           details: 'Verifique se o cliente está cadastrado no CRM e vinculado ao ManyChat'
         }),
@@ -253,8 +366,43 @@ serve(async (req: Request): Promise<Response> => {
 
     const { lead, subscriber } = result;
     const clientName = lead.nome?.split(' ')[0] || 'Cliente';
-    const link = contractLink || `https://app.clicksign.com/sign/${documentKey}`;
 
+    // Resolve best possible link (evita /sign/{documentKey} que dá 404)
+    let link: string | null = contractLink || lead.link_contrato || null;
+
+    if (isBadClicksignLink(link, documentKey)) {
+      link = null;
+    }
+
+    if (!link && documentKey) {
+      const resolved = await resolveClicksignSignerLink(documentKey);
+      if (resolved) {
+        link = resolved;
+
+        // Best-effort: persist corrected link for next reminders
+        try {
+          await supabase
+            .from('leads_juridicos')
+            .update({ link_contrato: link })
+            .eq('id', lead.id);
+
+          await supabase
+            .from('contract_reminders')
+            .update({ contract_link: link, updated_at: new Date().toISOString() })
+            .eq('document_key', documentKey);
+        } catch (persistErr) {
+          console.warn('[Contract Reminder] Failed to persist corrected link:', persistErr);
+        }
+      }
+    }
+
+    if (!link && documentKey) {
+      link = `https://app.clicksign.com/document/${documentKey}`;
+    }
+
+    if (!link) {
+      link = 'https://app.clicksign.com';
+    }
     // Generate message based on reminder type
     const message = reminderType === 'urgent' 
       ? CONTRACT_MESSAGES.urgent(clientName, link)

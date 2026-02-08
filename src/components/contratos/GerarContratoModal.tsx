@@ -350,6 +350,10 @@ export function GerarContratoModal({
 
       // 2. Add each signer and create signature lists
       const allSigners = [...signatarios];
+
+      // Vamos capturar o link de assinatura (request_signature_key) do primeiro signatário (cliente)
+      const primarySigner = signatarios[0];
+      let primaryRequestSignatureKey: string | null = null;
       
       // Add advogado if enabled
       if (includeAdvogado && settings?.lawyer_name && settings?.email) {
@@ -397,16 +401,26 @@ export function GerarContratoModal({
 
         if (listError) throw listError;
         if (listData.error) throw new Error(listData.error);
+
+        // Clicksign retorna request_signature_key na criação da list
+        const requestKey: string | undefined = listData?.list?.request_signature_key;
+
+        if (!primaryRequestSignatureKey && primarySigner && signer.email === primarySigner.email) {
+          if (requestKey) primaryRequestSignatureKey = requestKey;
+        }
       }
 
       // 3. Update lead with contract link if using lead data
-      const clicksignUrl = `https://app.clicksign.com/document/${documentKey}`;
+      const clicksignDocumentUrl = `https://app.clicksign.com/document/${documentKey}`;
+      const clicksignSignUrl = primaryRequestSignatureKey
+        ? `https://app.clicksign.com/sign/${primaryRequestSignatureKey}`
+        : clicksignDocumentUrl;
       
       if (dataSource === 'lead' && selectedLeadId) {
         await supabase
           .from('leads_juridicos')
           .update({ 
-            link_contrato: clicksignUrl,
+            link_contrato: clicksignSignUrl,
             contract_key: documentKey,
             contract_sent_at: new Date().toISOString(),
           })
@@ -416,7 +430,7 @@ export function GerarContratoModal({
         await supabase.from('contract_reminders').insert({
           document_key: documentKey,
           document_name: fileData.filename,
-          contract_link: clicksignUrl,
+          contract_link: clicksignSignUrl,
           lead_id: selectedLeadId,
           signer_name: signatarios[0]?.nome,
           signer_email: signatarios[0]?.email,
@@ -433,6 +447,7 @@ export function GerarContratoModal({
         });
       }
 
+
       // 4. Send notifications
       const notificationResults = { whatsapp: false, email: sendViaEmail };
       
@@ -443,7 +458,7 @@ export function GerarContratoModal({
             `Olá ${signatarios[0].nome}! 👋\n\n` +
             `Seu contrato está pronto para assinatura.\n\n` +
             `📋 Documento: ${fileData.filename}\n` +
-            `🔗 Link: ${clicksignUrl}\n\n` +
+            `🔗 Link: ${clicksignSignUrl}\n\n` +
             `${customMessage}`;
 
           const { data: whatsappResult, error: whatsappError } = await supabase.functions.invoke('zapi-send', {

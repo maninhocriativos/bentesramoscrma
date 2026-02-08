@@ -97,7 +97,7 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
         body: {
           documentKey: contrato.key,
           documentName: contrato.leadNome,
-          contractLink: contrato.linkContrato,
+          // Não enviar contractLink daqui: o backend resolve o melhor link (e corrige links antigos)
           reminderType: type,
         },
       });
@@ -250,14 +250,14 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem 
-                                onClick={() => sendContractReminder(contrato, 'soft')}
+                                onSelect={() => sendContractReminder(contrato, 'soft')}
                                 className="gap-2"
                               >
                                 <MessageSquare className="h-4 w-4" />
                                 Lembrete amigável
                               </DropdownMenuItem>
                               <DropdownMenuItem 
-                                onClick={() => sendContractReminder(contrato, 'urgent')}
+                                onSelect={() => sendContractReminder(contrato, 'urgent')}
                                 className="gap-2 text-destructive"
                               >
                                 <AlertTriangle className="h-4 w-4" />
@@ -276,16 +276,16 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                             Ver Lead
                           </Button>
                         )}
-                        <a
-                          href={contrato.linkContrato}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <Button variant="outline" size="sm" className="gap-1.5">
+                        <Button asChild variant="outline" size="sm" className="gap-1.5">
+                          <a
+                            href={contrato.linkContrato}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
                             <ExternalLink className="h-3.5 w-3.5" />
                             Clicksign
-                          </Button>
-                        </a>
+                          </a>
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -364,14 +364,14 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem 
-                            onClick={() => sendContractReminder(contrato, 'soft')}
+                            onSelect={() => sendContractReminder(contrato, 'soft')}
                             className="gap-2 text-xs"
                           >
                             <MessageSquare className="h-3.5 w-3.5" />
                             Lembrete amigável
                           </DropdownMenuItem>
                           <DropdownMenuItem 
-                            onClick={() => sendContractReminder(contrato, 'urgent')}
+                            onSelect={() => sendContractReminder(contrato, 'urgent')}
                             className="gap-2 text-xs text-destructive"
                           >
                             <AlertTriangle className="h-3.5 w-3.5" />
@@ -380,16 +380,16 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}
-                    <a
-                      href={contrato.linkContrato}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Button variant="ghost" size="sm" className="gap-1 h-8 text-xs">
+                    <Button asChild variant="ghost" size="sm" className="gap-1 h-8 text-xs">
+                      <a
+                        href={contrato.linkContrato}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
                         Abrir
                         <ChevronRight className="h-3 w-3" />
-                      </Button>
-                    </a>
+                      </a>
+                    </Button>
                   </div>
                 </div>
               </CardContent>

@@ -150,10 +150,19 @@ export function EnviarContratoModal({ isOpen, onClose, onSuccess, preSelectedLea
 
       // Update lead with contract link if a lead was selected
       if (selectedLeadId && documentKey) {
-        const clicksignUrl = `https://app.clicksign.com/document/${documentKey}`;
+        const requestKey: string | undefined = listData?.list?.request_signature_key;
+        const clicksignDocumentUrl = `https://app.clicksign.com/document/${documentKey}`;
+        const clicksignSignUrl = requestKey
+          ? `https://app.clicksign.com/sign/${requestKey}`
+          : clicksignDocumentUrl;
+
         await supabase
           .from('leads_juridicos')
-          .update({ link_contrato: clicksignUrl })
+          .update({ 
+            link_contrato: clicksignSignUrl,
+            contract_key: documentKey,
+            contract_sent_at: new Date().toISOString(),
+          })
           .eq('id', selectedLeadId);
         
         // Also create an interaction record
