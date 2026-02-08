@@ -10,6 +10,75 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const MANYCHAT_API_URL = 'https://api.manychat.com';
 
+const CLICKSIGN_API_KEY = Deno.env.get("CLICKSIGN_API_KEY");
+const CLICKSIGN_BASE_URL = "https://app.clicksign.com/api/v1";
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3,
+  baseDelay = 1000
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fetch(url, options);
+    } catch (error: any) {
+      lastError = error;
+      const msg = String(error?.message || error);
+      const isRetryable =
+        msg.includes('http2 error') ||
+        msg.includes('connection error') ||
+        msg.includes('SendRequest') ||
+        msg.includes('ECONNRESET');
+
+      if (!isRetryable || attempt === maxRetries - 1) throw error;
+
+      const delay = baseDelay * Math.pow(2, attempt);
+      console.log(`[Clicksign Webhook] Retry ${attempt + 1}/${maxRetries} after ${delay}ms due to: ${msg}`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
+
+function isBadClicksignLink(link: string | null | undefined, documentKey?: string | null) {
+  if (!link) return true;
+  if (!documentKey) return false;
+  return link.includes(`/sign/${documentKey}`);
+}
+
+async function resolveClicksignSignerLink(documentKey: string): Promise<string | null> {
+  if (!CLICKSIGN_API_KEY) return null;
+
+  try {
+    const response = await fetchWithRetry(
+      `${CLICKSIGN_BASE_URL}/documents/${documentKey}?access_token=${CLICKSIGN_API_KEY}`,
+      { method: 'GET' }
+    );
+
+    if (!response.ok) {
+      const txt = await response.text();
+      console.error(`[Clicksign Webhook] Clicksign get_document failed [${response.status}]: ${txt.slice(0, 200)}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const doc = data?.document || data;
+    const lists = doc?.lists || doc?.document?.lists;
+
+    const requestKey: string | undefined = lists?.[0]?.request_signature_key;
+    if (!requestKey) return null;
+
+    return `https://app.clicksign.com/sign/${requestKey}`;
+  } catch (err) {
+    console.error('[Clicksign Webhook] Error resolving signer link:', err);
+    return null;
+  }
+}
+
 // Reminder schedule: 12h, 24h, 48h, 5d
 const REMINDER_INTERVALS_HOURS = [12, 24, 48, 120]; // 120 = 5 days
 
@@ -241,6 +310,11 @@ async function createOrUpdateContractReminder(
       status,
       updated_at: now.toISOString(),
     };
+
+    // Preencher/ajustar link (evita /sign/{documentKey} que gera 404)
+    if (contractLink && (!existing.contract_link || isBadClicksignLink(existing.contract_link, documentKey))) {
+      updates.contract_link = contractLink;
+    }
     
     if (leadId && !existing.lead_id) {
       updates.lead_id = leadId;
@@ -310,7 +384,25 @@ serve(async (req: Request): Promise<Response> => {
     const signers = document.signers || [];
     const firstSigner = signers[0] || {};
 
-    const contractLink = `https://app.clicksign.com/sign/${documentKey}`;
+    // Preferimos sempre um link de assinatura válido (request_signature_key)
+    // e evitamos /sign/{documentKey} (gera 404).
+    let contractLink = `https://app.clicksign.com/document/${documentKey}`;
+
+    const { data: existingReminder } = await supabase
+      .from('contract_reminders')
+      .select('contract_link')
+      .eq('document_key', documentKey)
+      .maybeSingle();
+
+    if (existingReminder?.contract_link) {
+      contractLink = existingReminder.contract_link;
+    }
+
+    if (isBadClicksignLink(contractLink, documentKey)) {
+      const resolved = await resolveClicksignSignerLink(documentKey);
+      if (resolved) contractLink = resolved;
+    }
+
     console.log(`Processing event: ${eventName} for document: ${documentKey}`);
 
     // Map event to status and message type
