@@ -85,16 +85,44 @@ export default function ContratosPage() {
 
       // Map Clicksign documents to our format
       const documents = data?.documents || [];
-      const mappedContracts: ContratoComStatus[] = documents.map((doc: any) => ({
-        id: doc.key,
-        key: doc.key,
-        leadNome: doc.filename?.replace(/\.[^/.]+$/, '') || 'Documento',
-        leadEmail: doc.signers?.[0]?.email || null,
-        tipoAcao: doc.path || null,
-        linkContrato: `https://app.clicksign.com/document/${doc.key}`,
-        status: mapClicksignStatus(doc),
-        lastUpdate: doc.updated_at || doc.created_at,
-      }));
+
+      // Prefer links persisted in DB (contract_reminders.contract_link) because they point to the
+      // correct Clicksign signing URL (/sign/[request_signature_key]) and avoid 404s.
+      const docKeys: string[] = documents.map((d: any) => d?.key).filter(Boolean);
+      const linksByDocKey = new Map<string, string>();
+
+      if (docKeys.length > 0) {
+        const { data: reminders, error: remindersError } = await supabase
+          .from('contract_reminders')
+          .select('document_key, contract_link')
+          .in('document_key', docKeys);
+
+        if (remindersError) {
+          console.warn('Could not load contract links from DB:', remindersError);
+        } else {
+          for (const r of reminders || []) {
+            if (r?.document_key && r?.contract_link && !linksByDocKey.has(r.document_key)) {
+              linksByDocKey.set(r.document_key, r.contract_link);
+            }
+          }
+        }
+      }
+
+      const mappedContracts: ContratoComStatus[] = documents.map((doc: any) => {
+        const key: string | undefined = doc?.key;
+        const linkContrato = (key && linksByDocKey.get(key)) || (key ? `https://app.clicksign.com/sign/${key}` : 'https://app.clicksign.com');
+
+        return {
+          id: key,
+          key,
+          leadNome: doc.filename?.replace(/\.[^/.]+$/, '') || 'Documento',
+          leadEmail: doc.signers?.[0]?.email || null,
+          tipoAcao: doc.path || null,
+          linkContrato,
+          status: mapClicksignStatus(doc),
+          lastUpdate: doc.updated_at || doc.created_at,
+        };
+      });
 
       // Sort by date
       mappedContracts.sort((a, b) => {
