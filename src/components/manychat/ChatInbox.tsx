@@ -22,7 +22,24 @@ import { TagSelector } from '@/components/chat/TagSelector';
 import { TagFilter } from '@/components/chat/TagFilter';
 import { WhatsAppAudioPlayer } from '@/components/chat/WhatsAppAudioPlayer';
 import { formatWhatsAppText as formatWhatsAppTextHelper } from '@/lib/whatsappTextFormatter';
-import { InstanceInfo } from '@/lib/instanceUtils';
+import { InstanceInfo, getInstanceFromPhone } from '@/lib/instanceUtils';
+
+// Map connectedPhone (stored in instance_name) to Z-API instance_id for outgoing routing
+const PHONE_TO_INSTANCE_ID: Record<string, string> = {
+  // Bentes Ramos-2 (Tráfego) - 92 98588-8190
+  '85888190': '3EDDF959BC2B81F86B410203B614D70E',
+  // Bentes Ramos (Escritório) - 92 99160-4348
+  '91604348': '3EDB5B4FF93662A609ADFAF4F663B13A',
+};
+
+function resolveInstanceId(subscriber: { instance_name?: string | null }): string | undefined {
+  const phone = subscriber.instance_name?.replace(/\D/g, '');
+  if (!phone) return undefined;
+  for (const [suffix, instanceId] of Object.entries(PHONE_TO_INSTANCE_ID)) {
+    if (phone.endsWith(suffix)) return instanceId;
+  }
+  return undefined;
+}
 import { 
   Send, 
   Search, 
@@ -997,6 +1014,7 @@ const ManyChatInboxContent = () => {
     (async () => {
       try {
         // Enviar via Z-API com tipo correto
+        const outboundInstanceId = resolveInstanceId(subscriberSnapshot);
         const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-send', {
           body: {
             to_phone: subscriberSnapshot.telefone,
@@ -1004,6 +1022,7 @@ const ManyChatInboxContent = () => {
             type: mediaType || 'text',
             lead_id: subscriberSnapshot.lead_id,
             file_name: fileName,
+            ...(outboundInstanceId && { instance_id: outboundInstanceId }),
           },
         });
 
@@ -1262,6 +1281,7 @@ const ManyChatInboxContent = () => {
       if (signError || !signed?.signedUrl) throw signError;
       
       // Enviar via Z-API
+      const outboundInstanceId = resolveInstanceId(subscriberSnapshot);
       const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-send', {
         body: {
           to_phone: subscriberSnapshot.telefone,
@@ -1269,6 +1289,7 @@ const ManyChatInboxContent = () => {
           type: 'audio',
           lead_id: subscriberSnapshot.lead_id,
           file_name: audioFile.name,
+          ...(outboundInstanceId && { instance_id: outboundInstanceId }),
         },
       });
       
