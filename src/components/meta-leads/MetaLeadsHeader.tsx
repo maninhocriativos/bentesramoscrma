@@ -1,7 +1,7 @@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Search, RefreshCw, Filter, Download } from 'lucide-react';
+import { Search, RefreshCw, Filter, Download, CloudDownload, Loader2 } from 'lucide-react';
 import { MetaFormLeadStatus, MetaFormLead } from '@/types/metaFormLeads';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -13,6 +13,8 @@ interface MetaLeadsHeaderProps {
   onFilterStatusChange: (status: MetaFormLeadStatus | 'all') => void;
   totalLeads: number;
   onRefresh: () => void;
+  onSync?: () => void;
+  syncing?: boolean;
   leads: MetaFormLead[];
 }
 
@@ -38,6 +40,8 @@ export function MetaLeadsHeader({
   onFilterStatusChange,
   totalLeads,
   onRefresh,
+  onSync,
+  syncing,
   leads,
 }: MetaLeadsHeaderProps) {
   const { toast } = useToast();
@@ -102,6 +106,12 @@ export function MetaLeadsHeader({
             <Download className="h-4 w-4 mr-2" />
             Exportar CSV
           </Button>
+          {onSync && (
+            <Button variant="default" size="sm" onClick={onSync} disabled={syncing}>
+              {syncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CloudDownload className="h-4 w-4 mr-2" />}
+              {syncing ? 'Sincronizando...' : 'Sincronizar Meta'}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={onRefresh}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Atualizar
