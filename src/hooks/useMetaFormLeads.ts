@@ -3,6 +3,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { MetaFormLead, MetaFormLeadStatus, CrmConversation, CrmMessage } from '@/types/metaFormLeads';
 
+// Map leads_juridicos status to MetaFormLeadStatus
+function mapLeadStatus(status: string | null, isLost: boolean | null): MetaFormLeadStatus {
+  if (isLost) return 'perdido';
+  if (!status) return 'novo';
+  const s = status.toLowerCase();
+  if (s === 'ganho' || s === 'contrato assinado') return 'concluido';
+  if (s === 'perdido') return 'perdido';
+  if (s === 'lead frio') return 'novo';
+  return 'em_atendimento';
+}
+
 export function useMetaFormLeads() {
   const [leads, setLeads] = useState<MetaFormLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -11,13 +22,37 @@ export function useMetaFormLeads() {
   const fetchLeads = useCallback(async () => {
     try {
       setLoading(true);
+      // Pull directly from leads_juridicos where tipo_origem = 'trafego'
       const { data, error } = await supabase
-        .from('meta_form_leads')
+        .from('leads_juridicos')
         .select('*')
+        .eq('tipo_origem', 'trafego')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setLeads((data as MetaFormLead[]) || []);
+
+      // Map leads_juridicos rows to MetaFormLead interface
+      const mapped: MetaFormLead[] = (data || []).map((lead: any) => ({
+        id: lead.id,
+        meta_lead_id: lead.facebook_lead_id || `lead_${lead.id}`,
+        form_id: null,
+        ad_id: null,
+        campaign_id: null,
+        adset_id: null,
+        created_time: lead.created_at,
+        nome: lead.nome,
+        telefone: lead.telefone,
+        email: lead.email,
+        form_fields: {},
+        raw: {},
+        status: mapLeadStatus(lead.status, lead.is_lost),
+        linked_lead_id: lead.id,
+        last_contact_at: lead.last_contact_at,
+        created_at: lead.created_at,
+        updated_at: lead.updated_at || lead.created_at,
+      }));
+
+      setLeads(mapped);
     } catch (err: any) {
       console.error('[useMetaFormLeads] Error fetching leads:', err);
       toast({
@@ -36,20 +71,31 @@ export function useMetaFormLeads() {
 
   const updateLeadStatus = async (leadId: string, status: MetaFormLeadStatus) => {
     try {
-      const updates: any = { status, updated_at: new Date().toISOString() };
+      // Map MetaFormLeadStatus back to leads_juridicos status
+      let ljStatus: string;
+      const updates: any = { updated_at: new Date().toISOString() };
       
-      if (status === 'em_atendimento') {
-        updates.last_contact_at = new Date().toISOString();
+      switch (status) {
+        case 'novo': ljStatus = 'Lead Frio'; break;
+        case 'em_atendimento': 
+          ljStatus = 'Em Atendimento'; 
+          updates.last_contact_at = new Date().toISOString();
+          break;
+        case 'concluido': ljStatus = 'Ganho'; break;
+        case 'perdido': ljStatus = 'Perdido'; updates.is_lost = true; updates.lost_at = new Date().toISOString(); break;
+        default: ljStatus = 'Em Atendimento';
       }
+      
+      updates.status = ljStatus;
 
       const { error } = await supabase
-        .from('meta_form_leads')
+        .from('leads_juridicos')
         .update(updates)
         .eq('id', leadId);
 
       if (error) throw error;
 
-      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, ...updates } : l));
+      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status, ...updates } : l));
       toast({ title: 'Status atualizado' });
     } catch (err: any) {
       toast({ title: 'Erro ao atualizar status', description: err.message, variant: 'destructive' });
@@ -78,7 +124,6 @@ export function useMetaFormChat(leadId: string | null) {
 
     setLoading(true);
     try {
-      // Check if conversation exists
       const { data: existingConv, error: convError } = await supabase
         .from('crm_conversations')
         .select('*')
@@ -90,7 +135,6 @@ export function useMetaFormChat(leadId: string | null) {
 
       let conv = existingConv as CrmConversation | null;
 
-      // If no conversation exists, create one with greeting
       if (!conv) {
         const { data: newConv, error: createError } = await supabase
           .from('crm_conversations')
@@ -106,7 +150,6 @@ export function useMetaFormChat(leadId: string | null) {
         if (createError) throw createError;
         conv = newConv as CrmConversation;
 
-        // Create initial greeting message
         const { error: msgError } = await supabase
           .from('crm_messages')
           .insert({
@@ -119,11 +162,10 @@ export function useMetaFormChat(leadId: string | null) {
 
         if (msgError) console.error('Error creating greeting:', msgError);
 
-        // Update lead status to em_atendimento
         await supabase
-          .from('meta_form_leads')
+          .from('leads_juridicos')
           .update({ 
-            status: 'em_atendimento',
+            status: 'Em Atendimento',
             last_contact_at: new Date().toISOString(),
           })
           .eq('id', leadId);
@@ -131,7 +173,6 @@ export function useMetaFormChat(leadId: string | null) {
 
       setConversation(conv);
 
-      // Load messages
       if (conv) {
         const { data: msgs, error: msgsError } = await supabase
           .from('crm_messages')
@@ -158,7 +199,6 @@ export function useMetaFormChat(leadId: string | null) {
     loadConversation();
   }, [loadConversation]);
 
-  // Realtime subscription for messages
   useEffect(() => {
     if (!conversation?.id) return;
 
@@ -200,9 +240,8 @@ export function useMetaFormChat(leadId: string | null) {
 
       if (error) throw error;
 
-      // Update last_contact_at
       await supabase
-        .from('meta_form_leads')
+        .from('leads_juridicos')
         .update({ last_contact_at: new Date().toISOString() })
         .eq('id', leadId);
 
