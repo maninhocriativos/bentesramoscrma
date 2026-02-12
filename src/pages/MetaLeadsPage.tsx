@@ -10,7 +10,7 @@ import { Loader2 } from 'lucide-react';
 type ViewMode = 'list' | 'detail';
 
 export default function MetaLeadsPage() {
-  const { leads, loading, fetchLeads, updateLeadStatus } = useMetaFormLeads();
+  const { leads, loading, syncing, fetchLeads, syncFromMeta, updateLeadStatus } = useMetaFormLeads();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<MetaFormLeadStatus | 'all'>('all');
   const [selectedLead, setSelectedLead] = useState<MetaFormLead | null>(null);
@@ -82,6 +82,8 @@ export default function MetaLeadsPage() {
           onFilterStatusChange={setFilterStatus}
           totalLeads={filteredLeads.length}
           onRefresh={fetchLeads}
+          onSync={syncFromMeta}
+          syncing={syncing}
           leads={filteredLeads}
         />
 
