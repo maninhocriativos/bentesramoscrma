@@ -65,7 +65,7 @@ export function useMetaFormLeads() {
     setSyncing(true);
     try {
       const { data, error } = await supabase.functions.invoke('meta-leads-sync', {
-        body: { form_ids: ['806114115222300'] },
+        body: { page_id: '61585487574008' },
       });
 
       if (error) throw error;
