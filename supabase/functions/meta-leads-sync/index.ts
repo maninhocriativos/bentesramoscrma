@@ -57,8 +57,14 @@ serve(async (req) => {
     }
 
     // If still no form IDs, try fetching leads for known form
-    if (formIds.length === 0) {
-      formIds = ['806114115222300'];
+    // If no page_id provided and no form_ids, use default page
+    if (formIds.length === 0 && !pageId) {
+      const defaultPageId = '61585487574008';
+      formIds = await fetchFormIdsFromPage(defaultPageId, accessToken);
+      // Fallback to known form ID
+      if (formIds.length === 0) {
+        formIds = ['806114115222300'];
+      }
     }
 
     let totalSynced = 0;
