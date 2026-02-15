@@ -12,28 +12,14 @@ interface LeadOriginKPIsProps {
 export function LeadOriginKPIs({ leads }: LeadOriginKPIsProps) {
   const metrics = useMemo(() => {
     const totalLeads = leads.length;
-    
-    // Leads de Tráfego (marketing campaigns)
     const leadsTrafego = leads.filter(l => l.tipo_origem === 'trafego').length;
-    
-    // Leads Bentes & Ramos (whatsapp_direto + indefinido + null)
     const leadsBentesRamos = leads.filter(l => 
-      l.tipo_origem === 'whatsapp_direto' || 
-      l.tipo_origem === 'indefinido' || 
-      !l.tipo_origem
+      l.tipo_origem === 'whatsapp_direto' || l.tipo_origem === 'indefinido' || !l.tipo_origem
     ).length;
-    
-    // Percentage calculations
     const trafegoPercent = totalLeads > 0 ? Math.round((leadsTrafego / totalLeads) * 100) : 0;
     const bentesRamosPercent = totalLeads > 0 ? Math.round((leadsBentesRamos / totalLeads) * 100) : 0;
     
-    return {
-      totalLeads,
-      leadsTrafego,
-      leadsBentesRamos,
-      trafegoPercent,
-      bentesRamosPercent,
-    };
+    return { totalLeads, leadsTrafego, leadsBentesRamos, trafegoPercent, bentesRamosPercent };
   }, [leads]);
 
   const kpis = [
@@ -43,10 +29,8 @@ export function LeadOriginKPIs({ leads }: LeadOriginKPIsProps) {
       value: metrics.totalLeads,
       icon: Users,
       subtitle: 'Todos os leads no CRM',
-      gradient: 'from-slate-500/20 via-slate-400/10 to-transparent',
-      iconBg: 'bg-slate-500/15 group-hover:bg-slate-500/25',
-      iconColor: 'text-slate-600',
-      borderColor: 'border-l-slate-500',
+      accentColor: 'bg-foreground/80',
+      iconBg: 'bg-muted/60',
     },
     {
       id: 'leadsTrafego',
@@ -54,11 +38,10 @@ export function LeadOriginKPIs({ leads }: LeadOriginKPIsProps) {
       value: metrics.leadsTrafego,
       icon: Megaphone,
       subtitle: 'Atendimento automático — ISA',
-      badge: { icon: Bot, text: 'ISA', color: 'bg-success/10 text-success' },
-      gradient: 'from-blue-500/20 via-blue-400/10 to-transparent',
-      iconBg: 'bg-blue-500/15 group-hover:bg-blue-500/25',
+      badge: { icon: Bot, text: 'ISA', color: 'bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]' },
+      accentColor: 'bg-blue-500',
+      iconBg: 'bg-blue-500/10',
       iconColor: 'text-blue-600',
-      borderColor: 'border-l-blue-500',
       percent: metrics.trafegoPercent,
     },
     {
@@ -68,10 +51,9 @@ export function LeadOriginKPIs({ leads }: LeadOriginKPIsProps) {
       icon: Building2,
       subtitle: 'Uso interno / histórico',
       badge: { icon: UserCircle, text: 'Humano', color: 'bg-amber-500/10 text-amber-600' },
-      gradient: 'from-amber-500/20 via-amber-400/10 to-transparent',
-      iconBg: 'bg-amber-500/15 group-hover:bg-amber-500/25',
+      accentColor: 'bg-amber-500',
+      iconBg: 'bg-amber-500/10',
       iconColor: 'text-amber-600',
-      borderColor: 'border-l-amber-500',
       percent: metrics.bentesRamosPercent,
     },
   ];
@@ -82,39 +64,34 @@ export function LeadOriginKPIs({ leads }: LeadOriginKPIsProps) {
         <Card 
           key={kpi.id} 
           className={cn(
-            "group relative rounded-xl border border-border/50 overflow-hidden bg-card",
-            "transition-all duration-300 ease-out border-l-4",
-            "hover:shadow-card-hover hover:-translate-y-1 hover:border-border",
-            kpi.borderColor
+            "group relative rounded-2xl border-0 overflow-hidden bg-card",
+            "shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)]",
+            "transition-all duration-300 ease-out",
+            "hover:shadow-[0_4px_20px_rgba(0,0,0,0.08)] hover:-translate-y-0.5",
           )}
           style={{ animationDelay: `${index * 80}ms` }}
         >
-          {/* Gradient overlay */}
-          <div className={cn(
-            "absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-100 transition-opacity duration-500",
-            kpi.gradient
-          )} />
+          {/* Top accent */}
+          <div className={cn("h-1 w-full", kpi.accentColor)} />
           
-          <CardContent className="relative p-5">
+          <CardContent className="p-5">
             <div className="flex items-start gap-4">
-              {/* Icon */}
               <div className={cn(
-                "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
+                "w-11 h-11 rounded-xl flex items-center justify-center shrink-0",
                 "transition-all duration-300",
                 kpi.iconBg
               )}>
-                <kpi.icon className={cn("h-6 w-6 transition-transform group-hover:scale-110", kpi.iconColor)} />
+                <kpi.icon className={cn("h-5 w-5", kpi.iconColor || 'text-foreground/70')} />
               </div>
               
-              {/* Content */}
-              <div className="flex-1 min-w-0 space-y-2">
+              <div className="flex-1 min-w-0 space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide truncate">
                     {kpi.title}
                   </p>
                   {kpi.badge && (
                     <span className={cn(
-                      "flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full",
+                      "flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap",
                       kpi.badge.color
                     )}>
                       <kpi.badge.icon className="h-3 w-3" />
@@ -125,21 +102,14 @@ export function LeadOriginKPIs({ leads }: LeadOriginKPIsProps) {
                 
                 <div className="flex items-baseline gap-2">
                   <p className="text-3xl font-bold text-foreground tracking-tight">
-                    <AnimatedCounter 
-                      value={kpi.value} 
-                      duration={1200}
-                    />
+                    <AnimatedCounter value={kpi.value} duration={1200} />
                   </p>
                   {kpi.percent !== undefined && (
-                    <span className="text-sm text-muted-foreground">
-                      ({kpi.percent}%)
-                    </span>
+                    <span className="text-sm text-muted-foreground">({kpi.percent}%)</span>
                   )}
                 </div>
                 
-                <p className="text-xs text-muted-foreground">
-                  {kpi.subtitle}
-                </p>
+                <p className="text-[11px] text-muted-foreground/70">{kpi.subtitle}</p>
               </div>
             </div>
           </CardContent>
