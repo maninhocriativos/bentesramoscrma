@@ -121,14 +121,12 @@ export default function DashboardPage() {
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest pl-1">
                 Métricas Principais
               </h3>
-              <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-stretch">
+              <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
                 <DashboardKPIs leads={filteredLeads} processos={processos} />
-                <div className="h-full">
-                  <AlertasWidget 
-                    alertas={alertas} 
-                    onAlertClick={handleAlertClick}
-                  />
-                </div>
+                <AlertasWidget 
+                  alertas={alertas} 
+                  onAlertClick={handleAlertClick}
+                />
               </div>
             </section>
 
