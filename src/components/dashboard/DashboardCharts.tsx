@@ -157,8 +157,8 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
           </CardHeader>
           <CardContent className="p-5">
             {origemData.length > 0 ? (
-              <div className="flex flex-col h-full">
-                <div className="flex-1 min-h-0">
+              <div className="flex flex-col">
+                <div className="h-[220px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie data={origemData} cx="50%" cy="50%" innerRadius={55} outerRadius={95} paddingAngle={3} dataKey="value" stroke="none">
