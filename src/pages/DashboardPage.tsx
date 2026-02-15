@@ -11,7 +11,7 @@ import { AlertasWidget } from '@/components/AlertasWidget';
 import { useLeads } from '@/hooks/useLeads';
 import { useProcessos } from '@/hooks/useProcessos';
 import { useAlertas } from '@/hooks/useAlertas';
-import { Loader2, LayoutDashboard } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, isAfter } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 
@@ -22,17 +22,8 @@ export default function DashboardPage() {
   const navigate = useNavigate();
 
   const handleRefreshLeads = useCallback(() => {
-    console.log('🔄 Dashboard: Solicitando atualização manual dos leads');
     fetchLeads();
   }, [fetchLeads]);
-  
-  useEffect(() => {
-    console.log('📊 Dashboard: leads atualizados, total:', leads.length);
-  }, [leads]);
-
-  useEffect(() => {
-    console.log('📊 Dashboard: processos atualizados, total:', processos.length);
-  }, [processos]);
   
   const [filters, setFilters] = useState<DashboardFilters>({
     period: 'all',
@@ -78,6 +69,16 @@ export default function DashboardPage() {
     else if (alerta.processoId) navigate('/processos');
   };
 
+  const totalValorCausa = useMemo(() => {
+    return leads.reduce((sum, lead) => sum + (lead.valor_causa || 0), 0);
+  }, [leads]);
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency', currency: 'BRL', minimumFractionDigits: 2,
+    }).format(value);
+  };
+
   return (
     <AppLayout>
       <AppHeader title="Dashboard" />
@@ -93,66 +94,73 @@ export default function DashboardPage() {
             </div>
           </div>
         ) : (
-          <div className="px-4 md:px-6 lg:px-8 py-6 space-y-8 animate-fade-in">
-            {/* Header Section with greeting */}
-            <div className="flex flex-col gap-1">
-              <h2 className="text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
-                <LayoutDashboard className="h-6 w-6 text-primary" />
-                Visão Geral
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Acompanhe o desempenho do escritório em tempo real
-              </p>
+          <div className="px-4 md:px-6 lg:px-8 py-6 space-y-6 animate-fade-in">
+            
+            {/* ===== TOP: Hero KPIs (big numbers like the reference) ===== */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Qtd. de Leads */}
+              <div className="bg-card rounded-xl overflow-hidden shadow-soft border border-border/40">
+                <div className="bg-primary px-4 py-2">
+                  <span className="text-primary-foreground text-xs font-semibold uppercase tracking-wider">
+                    Qtd. de Leads
+                  </span>
+                </div>
+                <div className="px-6 py-5 text-center">
+                  <p className="text-5xl font-bold text-foreground tracking-tight">{leads.length}</p>
+                  <p className="text-xs text-muted-foreground mt-1">leads no CRM</p>
+                </div>
+              </div>
+              
+              {/* Faturamento */}
+              <div className="bg-card rounded-xl overflow-hidden shadow-soft border border-border/40">
+                <div className="bg-[hsl(var(--gold))] px-4 py-2">
+                  <span className="text-[hsl(var(--gold-foreground))] text-xs font-semibold uppercase tracking-wider">
+                    Faturamento (Valor Causa)
+                  </span>
+                </div>
+                <div className="px-6 py-5 text-center">
+                  <p className="text-4xl font-bold text-foreground tracking-tight">{formatCurrency(totalValorCausa)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">total em pipeline</p>
+                </div>
+              </div>
+              
+              {/* Processos */}
+              <div className="bg-card rounded-xl overflow-hidden shadow-soft border border-border/40">
+                <div className="bg-[hsl(var(--success))] px-4 py-2">
+                  <span className="text-[hsl(var(--success-foreground))] text-xs font-semibold uppercase tracking-wider">
+                    Processos Ativos
+                  </span>
+                </div>
+                <div className="px-6 py-5 text-center">
+                  <p className="text-5xl font-bold text-foreground tracking-tight">{processos.length}</p>
+                  <p className="text-xs text-muted-foreground mt-1">processos cadastrados</p>
+                </div>
+              </div>
             </div>
 
-            {/* Filters */}
+            {/* ===== FILTERS ===== */}
             <DashboardFiltersBar filters={filters} onFiltersChange={setFilters} />
 
-            {/* Section: Origem */}
-            <section className="space-y-3">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest pl-1">
-                Segmentação por Origem
-              </h3>
-              <LeadOriginKPIs leads={leads} />
-            </section>
-            
-            {/* Section: KPIs + Alertas side by side on desktop */}
-            <section className="space-y-3">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest pl-1">
-                Métricas Principais
-              </h3>
-              <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
+            {/* ===== ROW 2: Origem + KPIs Métricas ===== */}
+            <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
+              <div className="space-y-6">
+                <LeadOriginKPIs leads={leads} />
                 <DashboardKPIs leads={filteredLeads} processos={processos} />
-                <AlertasWidget 
-                  alertas={alertas} 
-                  onAlertClick={handleAlertClick}
-                />
               </div>
-            </section>
+              <AlertasWidget 
+                alertas={alertas} 
+                onAlertClick={handleAlertClick}
+              />
+            </div>
 
-            {/* Section: Conversion */}
-            <section className="space-y-3">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest pl-1">
-                Conversão & Performance
-              </h3>
-              <ConversionMetrics leads={leads} />
-            </section>
+            {/* ===== ROW 3: Conversão ===== */}
+            <ConversionMetrics leads={leads} />
 
-            {/* Section: Monitor */}
-            <section className="space-y-3">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest pl-1">
-                Monitor em Tempo Real
-              </h3>
-              <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
-            </section>
-
-            {/* Section: Charts */}
-            <section className="space-y-3">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest pl-1">
-                Análise Visual
-              </h3>
+            {/* ===== ROW 4: Charts + Monitor ===== */}
+            <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
               <DashboardCharts leads={filteredLeads} />
-            </section>
+              <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
+            </div>
           </div>
         )}
       </div>
