@@ -86,19 +86,25 @@ export default function ContratosPage() {
       const documents = data?.documents || [];
       const docKeys: string[] = documents.map((d: any) => d?.key).filter(Boolean);
       const linksByDocKey = new Map<string, string>();
+      const signerByDocKey = new Map<string, string>();
 
       if (docKeys.length > 0) {
         const { data: reminders, error: remindersError } = await supabase
           .from('contract_reminders')
-          .select('document_key, contract_link')
+          .select('document_key, contract_link, signer_name, document_name')
           .in('document_key', docKeys);
 
         if (remindersError) {
-          console.warn('Could not load contract links from DB:', remindersError);
+          console.warn('Could not load contract data from DB:', remindersError);
         } else {
           for (const r of reminders || []) {
-            if (r?.document_key && r?.contract_link && !linksByDocKey.has(r.document_key)) {
-              linksByDocKey.set(r.document_key, r.contract_link);
+            if (r?.document_key) {
+              if (r.contract_link && !linksByDocKey.has(r.document_key)) {
+                linksByDocKey.set(r.document_key, r.contract_link);
+              }
+              if (r.signer_name && !signerByDocKey.has(r.document_key)) {
+                signerByDocKey.set(r.document_key, r.signer_name);
+              }
             }
           }
         }
@@ -107,18 +113,22 @@ export default function ContratosPage() {
       const mappedContracts: ContratoComStatus[] = documents.map((doc: any) => {
         const key: string | undefined = doc?.key;
         const linkContrato = (key && linksByDocKey.get(key)) || (key ? `https://app.clicksign.com/sign/${key}` : 'https://app.clicksign.com');
-        // Extract signer names
-        const signers = doc.signers || [];
-        const signerNames = signers.map((s: any) => s.name).filter(Boolean);
-        // Extract category from path (e.g. "/folder/file.pdf" → "folder")
+        // Get signer from DB first, fallback to API signers array
+        const dbSignerName = key ? signerByDocKey.get(key) : null;
+        const apiSigners = doc.signers || [];
+        const apiSignerNames = apiSigners.map((s: any) => s.name).filter(Boolean);
+        const signatarioNome = dbSignerName || (apiSignerNames.length > 0 ? apiSignerNames.join(', ') : null);
+        // Extract category from filename pattern "Documento - Nome.pdf" or path
         const pathParts = (doc.path || '').split('/').filter(Boolean);
         const categoria = pathParts.length > 1 ? pathParts[0] : null;
+        // Try to extract email from API or leave null
+        const leadEmail = doc.signers?.[0]?.email || null;
         return {
           id: key,
           key,
           leadNome: doc.filename?.replace(/\.[^/.]+$/, '') || 'Documento',
-          leadEmail: doc.signers?.[0]?.email || null,
-          signatarioNome: signerNames.length > 0 ? signerNames.join(', ') : null,
+          leadEmail,
+          signatarioNome,
           tipoAcao: categoria,
           linkContrato,
           status: mapClicksignStatus(doc),
