@@ -10,13 +10,13 @@ import { Loader2 } from 'lucide-react';
 type ViewMode = 'list' | 'detail';
 
 export default function MetaLeadsPage() {
-  const { leads, loading, syncing, fetchLeads, syncFromMeta, updateLeadStatus } = useMetaFormLeads();
+  const { leads, loading, syncing, syncError, formIds, fetchLeads, syncFromMeta, updateLeadStatus } = useMetaFormLeads();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<MetaFormLeadStatus | 'all'>('all');
+  const [filterFormId, setFilterFormId] = useState<string | 'all'>('all');
   const [selectedLead, setSelectedLead] = useState<MetaFormLead | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   
-  // Load messages for selected lead (read-only history)
   const { messages, loading: messagesLoading } = useMetaFormChat(
     selectedLead?.id || null
   );
@@ -27,6 +27,10 @@ export default function MetaLeadsPage() {
 
     if (filterStatus !== 'all') {
       result = result.filter((l) => l.status === filterStatus);
+    }
+
+    if (filterFormId !== 'all') {
+      result = result.filter((l) => l.form_id === filterFormId);
     }
 
     if (search.trim()) {
@@ -40,7 +44,7 @@ export default function MetaLeadsPage() {
     }
 
     return result;
-  }, [leads, filterStatus, search]);
+  }, [leads, filterStatus, filterFormId, search]);
 
   const handleSelectLead = (lead: MetaFormLead) => {
     setSelectedLead(lead);
@@ -80,10 +84,14 @@ export default function MetaLeadsPage() {
           onSearchChange={setSearch}
           filterStatus={filterStatus}
           onFilterStatusChange={setFilterStatus}
+          filterFormId={filterFormId}
+          onFilterFormIdChange={setFilterFormId}
+          formIds={formIds}
           totalLeads={filteredLeads.length}
           onRefresh={fetchLeads}
           onSync={syncFromMeta}
           syncing={syncing}
+          syncError={syncError}
           leads={filteredLeads}
         />
 
@@ -101,7 +109,7 @@ export default function MetaLeadsPage() {
             />
           </div>
 
-          {/* Right Panel - Detail or Chat */}
+          {/* Right Panel - Detail */}
           <div 
             className={`flex-1 flex flex-col ${
               viewMode === 'list' ? 'hidden md:flex' : ''
@@ -109,7 +117,10 @@ export default function MetaLeadsPage() {
           >
             {!selectedLead ? (
               <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                <p>Selecione um lead para ver os detalhes</p>
+                <div className="text-center space-y-2">
+                  <p className="text-lg font-medium">Selecione um lead</p>
+                  <p className="text-sm">Clique em um lead na lista para ver os detalhes completos</p>
+                </div>
               </div>
             ) : (
               <MetaLeadDetail
@@ -120,7 +131,6 @@ export default function MetaLeadsPage() {
               />
             )}
 
-            {/* Mobile back button when in detail/chat view */}
             {viewMode !== 'list' && (
               <div className="md:hidden p-3 border-t">
                 <button
