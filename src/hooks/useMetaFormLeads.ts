@@ -7,12 +7,13 @@ export function useMetaFormLeads() {
   const [leads, setLeads] = useState<MetaFormLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [formIds, setFormIds] = useState<string[]>([]);
   const { toast } = useToast();
 
   const fetchLeads = useCallback(async () => {
     try {
       setLoading(true);
-      // Fetch from both meta_form_leads AND leads_juridicos with trafego
       const [metaResult, leadsResult] = await Promise.all([
         supabase.from('meta_form_leads').select('*').order('created_at', { ascending: false }),
         supabase.from('leads_juridicos').select('*').eq('tipo_origem', 'trafego').order('created_at', { ascending: false }),
@@ -23,7 +24,10 @@ export function useMetaFormLeads() {
       const metaLeads = (metaResult.data as MetaFormLead[]) || [];
       const linkedIds = new Set(metaLeads.map(m => m.linked_lead_id).filter(Boolean));
 
-      // Add trafego leads that are NOT already linked in meta_form_leads
+      // Extract unique form IDs
+      const uniqueFormIds = [...new Set(metaLeads.map(m => m.form_id).filter(Boolean))] as string[];
+      setFormIds(uniqueFormIds);
+
       const extraLeads: MetaFormLead[] = ((leadsResult.data || []) as any[])
         .filter((l: any) => !linkedIds.has(l.id))
         .map((l: any) => ({
@@ -46,7 +50,6 @@ export function useMetaFormLeads() {
           updated_at: l.updated_at || l.created_at,
         }));
 
-      // Merge: meta_form_leads first, then extra leads from leads_juridicos
       const allLeads = [...metaLeads, ...extraLeads];
       allLeads.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       
@@ -61,8 +64,26 @@ export function useMetaFormLeads() {
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
+  // Realtime subscription for new leads
+  useEffect(() => {
+    const channel = supabase
+      .channel('meta-leads-realtime')
+      .on('postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'leads_juridicos', filter: 'tipo_origem=eq.trafego' },
+        () => { fetchLeads(); }
+      )
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'meta_form_leads' },
+        () => { fetchLeads(); }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchLeads]);
+
   const syncFromMeta = useCallback(async () => {
     setSyncing(true);
+    setSyncError(null);
     try {
       const { data, error } = await supabase.functions.invoke('meta-leads-sync', {
         body: { page_id: '61585487574008' },
@@ -70,17 +91,36 @@ export function useMetaFormLeads() {
 
       if (error) throw error;
 
+      // Check for structured error responses
+      if (data?.error) {
+        setSyncError(data.error);
+        toast({
+          title: 'Erro na sincronização',
+          description: data.error,
+          variant: 'destructive',
+        });
+        return data;
+      }
+
+      const parts: string[] = [];
+      parts.push(`${data.total_processed || 0} processados, ${data.new_leads || 0} novos`);
+      
+      if (data.errors?.length) {
+        parts.push(`⚠️ ${data.errors.length} erro(s)`);
+      }
+
       toast({
-        title: 'Sincronização concluída',
-        description: `${data.total_processed || 0} leads processados, ${data.new_leads || 0} novos.`,
+        title: data.new_leads > 0 ? '✅ Sincronização concluída' : 'Sincronização concluída',
+        description: parts.join(' · '),
       });
 
-      // Refresh list
       await fetchLeads();
       return data;
     } catch (err: any) {
       console.error('[useMetaFormLeads] Sync error:', err);
-      toast({ title: 'Erro na sincronização', description: err.message, variant: 'destructive' });
+      const msg = err.message || 'Falha na sincronização';
+      setSyncError(msg);
+      toast({ title: 'Erro na sincronização', description: msg, variant: 'destructive' });
     } finally {
       setSyncing(false);
     }
@@ -91,10 +131,8 @@ export function useMetaFormLeads() {
       const updates: any = { status, updated_at: new Date().toISOString() };
       if (status === 'em_atendimento') updates.last_contact_at = new Date().toISOString();
 
-      // Try updating meta_form_leads first
       await supabase.from('meta_form_leads').update(updates).eq('id', leadId);
       
-      // Also update leads_juridicos if linked
       const lead = leads.find(l => l.id === leadId);
       const targetId = lead?.linked_lead_id || leadId;
       
@@ -117,7 +155,7 @@ export function useMetaFormLeads() {
     }
   };
 
-  return { leads, loading, syncing, fetchLeads, syncFromMeta, updateLeadStatus };
+  return { leads, loading, syncing, syncError, formIds, fetchLeads, syncFromMeta, updateLeadStatus };
 }
 
 function mapLeadStatus(status: string | null, isLost: boolean | null): MetaFormLeadStatus {

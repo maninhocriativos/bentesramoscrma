@@ -1,7 +1,8 @@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Search, RefreshCw, Filter, Download, CloudDownload, Loader2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Search, RefreshCw, Filter, Download, CloudDownload, Loader2, AlertTriangle } from 'lucide-react';
 import { MetaFormLeadStatus, MetaFormLead } from '@/types/metaFormLeads';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -11,15 +12,19 @@ interface MetaLeadsHeaderProps {
   onSearchChange: (value: string) => void;
   filterStatus: MetaFormLeadStatus | 'all';
   onFilterStatusChange: (status: MetaFormLeadStatus | 'all') => void;
+  filterFormId: string | 'all';
+  onFilterFormIdChange: (formId: string | 'all') => void;
+  formIds: string[];
   totalLeads: number;
   onRefresh: () => void;
   onSync?: () => void;
   syncing?: boolean;
+  syncError?: string | null;
   leads: MetaFormLead[];
 }
 
 const statusFilters: { value: MetaFormLeadStatus | 'all'; label: string; color: string }[] = [
-  { value: 'all', label: 'Todos', color: 'bg-gray-100 text-gray-700' },
+  { value: 'all', label: 'Todos', color: 'bg-muted text-muted-foreground' },
   { value: 'novo', label: 'Novo', color: 'bg-blue-100 text-blue-700' },
   { value: 'em_atendimento', label: 'Em Atendimento', color: 'bg-yellow-100 text-yellow-700' },
   { value: 'concluido', label: 'Concluído', color: 'bg-green-100 text-green-700' },
@@ -38,26 +43,25 @@ export function MetaLeadsHeader({
   onSearchChange,
   filterStatus,
   onFilterStatusChange,
+  filterFormId,
+  onFilterFormIdChange,
+  formIds,
   totalLeads,
   onRefresh,
   onSync,
   syncing,
+  syncError,
   leads,
 }: MetaLeadsHeaderProps) {
   const { toast } = useToast();
 
   const exportToCSV = () => {
     if (leads.length === 0) {
-      toast({
-        title: 'Nenhum lead para exportar',
-        variant: 'destructive',
-      });
+      toast({ title: 'Nenhum lead para exportar', variant: 'destructive' });
       return;
     }
 
-    // Build CSV content
     const headers = ['Nome', 'Telefone', 'Email', 'Status', 'Data Criação', 'Último Contato', 'Form ID', 'Campaign ID'];
-    
     const rows = leads.map((lead) => [
       lead.nome || '',
       lead.telefone || '',
@@ -74,7 +78,6 @@ export function MetaLeadsHeader({
       ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
     ].join('\n');
 
-    // Create and download file
     const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -85,14 +88,22 @@ export function MetaLeadsHeader({
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    toast({
-      title: 'Exportação concluída',
-      description: `${leads.length} leads exportados com sucesso.`,
-    });
+    toast({ title: 'Exportação concluída', description: `${leads.length} leads exportados.` });
   };
 
   return (
     <div className="border-b bg-card px-4 py-3 space-y-3">
+      {/* Sync error banner */}
+      {syncError && (
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm">
+          <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-destructive">Erro na sincronização</p>
+            <p className="text-muted-foreground text-xs mt-1 break-words">{syncError}</p>
+          </div>
+        </div>
+      )}
+
       {/* Title row */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3 flex-wrap">
@@ -131,6 +142,23 @@ export function MetaLeadsHeader({
           />
         </div>
         
+        {/* Form filter */}
+        {formIds.length > 1 && (
+          <Select value={filterFormId} onValueChange={onFilterFormIdChange}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Formulário" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os formulários</SelectItem>
+              {formIds.map((fid) => (
+                <SelectItem key={fid} value={fid}>
+                  Form ...{fid.slice(-6)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
         <div className="flex items-center gap-2 flex-wrap">
           <Filter className="h-4 w-4 text-muted-foreground hidden sm:block" />
           {statusFilters.map((filter) => (

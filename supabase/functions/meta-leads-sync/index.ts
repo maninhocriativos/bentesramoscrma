@@ -3,7 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -17,29 +17,19 @@ function normalizePhone(phone: string | null): string | null {
   return cleaned;
 }
 
-async function getPageAccessToken(pageId: string, userAccessToken: string): Promise<string | null> {
-  // Get page access token from user token
-  const url = `https://graph.facebook.com/v20.0/${pageId}?fields=access_token&access_token=${userAccessToken}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    console.error('[Meta Sync] Failed to get page access token:', await res.text());
-    return null;
+async function fetchWithToken(url: string, token: string): Promise<{ ok: boolean; data?: any; error?: string }> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({ error: { message: res.statusText } }));
+      const msg = errData?.error?.message || res.statusText;
+      return { ok: false, error: msg };
+    }
+    const data = await res.json();
+    return { ok: true, data };
+  } catch (e: any) {
+    return { ok: false, error: e.message };
   }
-  const data = await res.json();
-  return data.access_token || null;
-}
-
-async function fetchFormIdsFromPage(pageId: string, accessToken: string): Promise<string[]> {
-  const url = `https://graph.facebook.com/v20.0/${pageId}/leadgen_forms?access_token=${accessToken}&fields=id,name,status&limit=50`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    console.error('[Meta Sync] Failed to fetch forms from page:', await res.text());
-    return [];
-  }
-  const data = await res.json();
-  const forms = data.data || [];
-  console.log(`[Meta Sync] Found ${forms.length} forms for page ${pageId}`);
-  return forms.map((f: any) => f.id);
 }
 
 serve(async (req) => {
@@ -51,64 +41,105 @@ serve(async (req) => {
   const accessToken = Deno.env.get('META_ACCESS_TOKEN');
 
   if (!accessToken) {
-    return new Response(JSON.stringify({ error: 'META_ACCESS_TOKEN not configured' }), {
+    return new Response(JSON.stringify({ 
+      error: 'META_ACCESS_TOKEN não configurado. Configure nas secrets do Supabase.',
+      error_type: 'missing_token',
+    }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
 
   try {
     const body = await req.json().catch(() => ({}));
-    
-    let formIds: string[] = body.form_ids || [];
     const pageId = body.page_id || '61585487574008';
 
-    // Try to get Page Access Token; if it fails, assume the token IS already a page token
+    // Step 1: Try to get Page Access Token from User token
     let effectiveToken = accessToken;
-    const pageAccessToken = await getPageAccessToken(pageId, accessToken);
-    if (pageAccessToken) {
-      console.log('[Meta Sync] Got page access token from user token');
-      effectiveToken = pageAccessToken;
+    let tokenType = 'direct';
+    
+    const pageResult = await fetchWithToken(
+      `https://graph.facebook.com/v20.0/${pageId}?fields=access_token,name&access_token=${accessToken}`,
+      accessToken
+    );
+    
+    if (pageResult.ok && pageResult.data?.access_token) {
+      effectiveToken = pageResult.data.access_token;
+      tokenType = 'page_from_user';
+      console.log(`[Meta Sync] Got page token for: ${pageResult.data.name}`);
     } else {
-      console.log('[Meta Sync] Using token directly (might already be a page token)');
+      console.log(`[Meta Sync] Using token directly. Page lookup result: ${pageResult.error}`);
     }
 
-    // Discover forms from page
+    // Step 2: Discover forms
+    let formIds: string[] = body.form_ids || [];
+    const formNames: Record<string, string> = {};
+    
     if (formIds.length === 0) {
-      formIds = await fetchFormIdsFromPage(pageId, effectiveToken);
-      if (formIds.length === 0) {
-        formIds = ['806114115222300'];
+      const formsResult = await fetchWithToken(
+        `https://graph.facebook.com/v20.0/${pageId}/leadgen_forms?access_token=${effectiveToken}&fields=id,name,status&limit=50`,
+        effectiveToken
+      );
+      
+      if (formsResult.ok && formsResult.data?.data?.length > 0) {
+        const forms = formsResult.data.data;
+        formIds = forms.map((f: any) => f.id);
+        forms.forEach((f: any) => { formNames[f.id] = f.name || f.id; });
+        console.log(`[Meta Sync] Found ${formIds.length} forms`);
+      } else {
+        // If can't discover forms, the token likely lacks permissions
+        const errorMsg = formsResult.error || 'Nenhum formulário encontrado';
+        const isPermissionError = errorMsg.includes('permission') || errorMsg.includes('nonexisting field') || errorMsg.includes('does not exist');
+        
+        return new Response(JSON.stringify({
+          error: isPermissionError
+            ? 'Token sem permissão para acessar formulários da página. Gere um novo Page Access Token com as permissões: pages_read_engagement, leads_retrieval, pages_manage_ads'
+            : `Erro ao buscar formulários: ${errorMsg}`,
+          error_type: isPermissionError ? 'permission_error' : 'api_error',
+          details: errorMsg,
+          help: 'Acesse https://developers.facebook.com/tools/explorer/ para gerar um novo token',
+        }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
     }
 
+    // Step 3: Fetch leads from each form
     let totalSynced = 0;
     let totalNew = 0;
     const errors: string[] = [];
+    const formStats: Record<string, { total: number; new: number; name: string }> = {};
 
     for (const formId of formIds) {
-      console.log(`[Meta Sync] Fetching leads for form ${formId}...`);
+      const formName = formNames[formId] || formId;
+      formStats[formId] = { total: 0, new: 0, name: formName };
+      console.log(`[Meta Sync] Fetching leads for form "${formName}" (${formId})...`);
 
       let url: string | null = `https://graph.facebook.com/v20.0/${formId}/leads?access_token=${effectiveToken}&limit=50&fields=id,created_time,field_data,ad_id,adset_id,campaign_id,form_id`;
       let pageCount = 0;
 
       while (url && pageCount < 10) {
         pageCount++;
-        const res = await fetch(url);
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error(`[Meta Sync] API error for form ${formId}:`, errText);
-          errors.push(`Form ${formId}: ${errText}`);
+        const result = await fetchWithToken(url, effectiveToken);
+        
+        if (!result.ok) {
+          const errMsg = result.error || 'Unknown error';
+          console.error(`[Meta Sync] API error for form ${formId}:`, errMsg);
+          
+          if (errMsg.includes('leads_retrieval')) {
+            errors.push(`Permissão "leads_retrieval" necessária para o formulário "${formName}"`);
+          } else {
+            errors.push(`${formName}: ${errMsg}`);
+          }
           break;
         }
 
-        const data = await res.json();
-        const leads = data.data || [];
+        const leads = result.data?.data || [];
         console.log(`[Meta Sync] Page ${pageCount}: ${leads.length} leads`);
 
         for (const lead of leads) {
           const leadgenId = lead.id;
           if (!leadgenId) continue;
 
-          // Parse field_data
           const fields = lead.field_data || [];
           let nome = null, email = null, telefone = null;
           const formFields: Record<string, string> = {};
@@ -151,6 +182,7 @@ serve(async (req) => {
               console.error(`[Meta Sync] Insert error:`, insertErr);
             } else {
               totalNew++;
+              formStats[formId].new++;
             }
           }
 
@@ -224,10 +256,10 @@ serve(async (req) => {
           }
 
           totalSynced++;
+          formStats[formId].total++;
         }
 
-        // Pagination
-        url = data.paging?.next || null;
+        url = result.data?.paging?.next || null;
       }
     }
 
@@ -238,6 +270,8 @@ serve(async (req) => {
       total_processed: totalSynced,
       new_leads: totalNew,
       forms_checked: formIds.length,
+      form_stats: formStats,
+      token_type: tokenType,
       errors: errors.length > 0 ? errors : undefined,
     }), {
       status: 200,
@@ -246,7 +280,10 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('[Meta Sync] Error:', error);
-    return new Response(JSON.stringify({ error: String(error) }), {
+    return new Response(JSON.stringify({ 
+      error: String(error),
+      error_type: 'internal_error',
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });

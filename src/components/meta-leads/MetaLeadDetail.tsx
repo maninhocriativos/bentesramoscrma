@@ -4,11 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { format } from 'date-fns';
+import { Separator } from '@/components/ui/separator';
+import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
   User, Phone, Mail, MessageCircle, CheckCircle, XCircle, 
-  Clock, ChevronDown, FileText, Calendar, Copy, ExternalLink
+  Clock, ChevronDown, FileText, Calendar, Copy, ExternalLink,
+  Megaphone, Target, Hash
 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -22,14 +24,20 @@ interface MetaLeadDetailProps {
   onUpdateStatus: (status: MetaFormLeadStatus) => void;
 }
 
+const statusConfig: Record<MetaFormLeadStatus, { label: string; color: string; icon: any }> = {
+  novo: { label: 'Novo', color: 'bg-blue-100 text-blue-800 border-blue-200', icon: Clock },
+  em_atendimento: { label: 'Em Atendimento', color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: MessageCircle },
+  concluido: { label: 'Concluído', color: 'bg-green-100 text-green-800 border-green-200', icon: CheckCircle },
+  perdido: { label: 'Perdido', color: 'bg-red-100 text-red-800 border-red-200', icon: XCircle },
+};
+
 export function MetaLeadDetail({ lead, messages, messagesLoading, onUpdateStatus }: MetaLeadDetailProps) {
   const [idsOpen, setIdsOpen] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Parse form_fields for display
   const formFields = lead.form_fields && typeof lead.form_fields === 'object' 
-    ? Object.entries(lead.form_fields).filter(([_, v]) => v != null)
+    ? Object.entries(lead.form_fields).filter(([_, v]) => v != null && v !== '')
     : [];
 
   const copyToClipboard = (text: string, label: string) => {
@@ -37,11 +45,14 @@ export function MetaLeadDetail({ lead, messages, messagesLoading, onUpdateStatus
     toast({ title: `${label} copiado!` });
   };
 
+  const currentStatus = statusConfig[lead.status];
+  const StatusIcon = currentStatus.icon;
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="p-4 border-b bg-card shrink-0">
-        <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-start gap-3 mb-3">
           <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
             <User className="h-6 w-6 text-primary" />
           </div>
@@ -49,23 +60,29 @@ export function MetaLeadDetail({ lead, messages, messagesLoading, onUpdateStatus
             <h2 className="text-lg font-semibold truncate" title={lead.nome || 'Sem nome'}>
               {lead.nome || 'Sem nome'}
             </h2>
-            <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-700">
-              📋 FORM META
-            </Badge>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <Badge variant="outline" className={currentStatus.color}>
+                <StatusIcon className="h-3 w-3 mr-1" />
+                {currentStatus.label}
+              </Badge>
+              <Badge variant="secondary" className="text-[10px] bg-purple-100 text-purple-700">
+                📋 META
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                {formatDistanceToNow(new Date(lead.created_at), { addSuffix: true, locale: ptBR })}
+              </span>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 text-sm">
+        {/* Contact info */}
+        <div className="grid grid-cols-1 gap-1.5 text-sm">
           {lead.telefone && (
             <div className="flex items-center gap-2 text-muted-foreground group">
               <Phone className="h-4 w-4 shrink-0" />
-              <span className="truncate flex-1" title={lead.telefone}>{lead.telefone}</span>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={() => copyToClipboard(lead.telefone!, 'Telefone')}
-              >
+              <span className="truncate flex-1">{lead.telefone}</span>
+              <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                onClick={() => copyToClipboard(lead.telefone!, 'Telefone')}>
                 <Copy className="h-3 w-3" />
               </Button>
             </div>
@@ -73,83 +90,58 @@ export function MetaLeadDetail({ lead, messages, messagesLoading, onUpdateStatus
           {lead.email && (
             <div className="flex items-center gap-2 text-muted-foreground group">
               <Mail className="h-4 w-4 shrink-0" />
-              <span className="truncate flex-1" title={lead.email}>{lead.email}</span>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={() => copyToClipboard(lead.email!, 'Email')}
-              >
+              <span className="truncate flex-1">{lead.email}</span>
+              <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                onClick={() => copyToClipboard(lead.email!, 'Email')}>
                 <Copy className="h-3 w-3" />
               </Button>
             </div>
           )}
           <div className="flex items-center gap-2 text-muted-foreground">
             <Calendar className="h-4 w-4 shrink-0" />
-            <span>
-              {format(new Date(lead.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-            </span>
+            <span>{format(new Date(lead.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</span>
           </div>
           {lead.last_contact_at && (
             <div className="flex items-center gap-2 text-muted-foreground">
               <Clock className="h-4 w-4 shrink-0" />
-              <span>
-                Último contato: {format(new Date(lead.last_contact_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-              </span>
+              <span>Último contato: {format(new Date(lead.last_contact_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}</span>
             </div>
           )}
         </div>
       </div>
 
       {/* Actions */}
-      <div className="p-4 border-b space-y-2 shrink-0">
+      <div className="p-3 border-b space-y-2 shrink-0">
         <Button 
           onClick={() => {
-            // Navigate to main chat with lead phone to auto-select conversation
             const phone = lead.telefone?.replace(/\D/g, '');
-            if (phone) {
-              navigate(`/chat?phone=${phone}`);
-            } else {
-              navigate('/chat');
-            }
+            navigate(phone ? `/chat?phone=${phone}` : '/chat');
           }} 
           className="w-full" 
-          size="lg"
+          size="default"
         >
           <ExternalLink className="h-4 w-4 mr-2" />
           Abrir no Chat Principal
         </Button>
         
         <div className="grid grid-cols-3 gap-2">
-          <Button
-            variant="outline"
-            size="sm"
+          <Button variant="outline" size="sm"
             onClick={() => onUpdateStatus('em_atendimento')}
             disabled={lead.status === 'em_atendimento'}
-            className="text-xs"
-          >
-            <Clock className="h-3 w-3 mr-1" />
-            Atendimento
+            className="text-xs">
+            <Clock className="h-3 w-3 mr-1" /> Atendimento
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
+          <Button variant="outline" size="sm"
             onClick={() => onUpdateStatus('concluido')}
             disabled={lead.status === 'concluido'}
-            className="text-xs text-green-600 hover:text-green-700"
-          >
-            <CheckCircle className="h-3 w-3 mr-1" />
-            Concluído
+            className="text-xs text-green-600 hover:text-green-700">
+            <CheckCircle className="h-3 w-3 mr-1" /> Concluído
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
+          <Button variant="outline" size="sm"
             onClick={() => onUpdateStatus('perdido')}
             disabled={lead.status === 'perdido'}
-            className="text-xs text-red-600 hover:text-red-700"
-          >
-            <XCircle className="h-3 w-3 mr-1" />
-            Perdido
+            className="text-xs text-red-600 hover:text-red-700">
+            <XCircle className="h-3 w-3 mr-1" /> Perdido
           </Button>
         </div>
       </div>
@@ -163,20 +155,52 @@ export function MetaLeadDetail({ lead, messages, messagesLoading, onUpdateStatus
               <CardHeader className="py-3">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <FileText className="h-4 w-4" />
-                  Campos do Formulário
+                  Dados do Formulário ({formFields.length} campos)
                 </CardTitle>
               </CardHeader>
               <CardContent className="py-0 pb-3">
                 <div className="space-y-2">
                   {formFields.map(([key, value]) => (
-                    <div key={key} className="text-sm">
-                      <span className="text-muted-foreground capitalize">
-                        {key.replace(/_/g, ' ')}:
+                    <div key={key} className="flex justify-between items-start gap-2 text-sm">
+                      <span className="text-muted-foreground capitalize shrink-0">
+                        {key.replace(/_/g, ' ')}
                       </span>
-                      <p className="font-medium break-words">{String(value)}</p>
+                      <p className="font-medium text-right break-words">{String(value)}</p>
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Campaign Info */}
+          {(lead.campaign_id || lead.ad_id || lead.form_id) && (
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Megaphone className="h-4 w-4" />
+                  Dados da Campanha
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="py-0 pb-3 space-y-1.5 text-sm">
+                {lead.form_id && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Hash className="h-3 w-3 shrink-0" />
+                    <span className="text-xs">Form: {lead.form_id}</span>
+                  </div>
+                )}
+                {lead.campaign_id && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Target className="h-3 w-3 shrink-0" />
+                    <span className="text-xs">Campanha: {lead.campaign_id}</span>
+                  </div>
+                )}
+                {lead.ad_id && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Megaphone className="h-3 w-3 shrink-0" />
+                    <span className="text-xs">Anúncio: {lead.ad_id}</span>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
