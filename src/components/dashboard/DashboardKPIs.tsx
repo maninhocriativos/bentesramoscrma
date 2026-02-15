@@ -117,12 +117,12 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
         )}
       </div>
       
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 items-start">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi, index) => (
           <Card 
             key={kpi.title} 
             className={cn(
-              "group relative rounded-2xl border-0 overflow-hidden bg-card",
+              "group relative rounded-2xl border-0 overflow-hidden bg-card flex flex-col",
               "shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)]",
               "transition-all duration-300 ease-out",
               "hover:shadow-[0_4px_20px_rgba(0,0,0,0.08)] hover:-translate-y-0.5",
@@ -133,7 +133,7 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
             {/* Top accent bar */}
             <div className={cn("h-1 w-full", kpi.accentColor)} />
             
-            <CardContent className="p-5">
+            <CardContent className="p-5 flex-1 flex flex-col">
               <div className="flex items-start justify-between mb-4">
                 <div className={cn(
                   "w-10 h-10 rounded-xl flex items-center justify-center",
@@ -152,6 +152,8 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
                   {kpi.trend}
                 </div>
               </div>
+
+              <div className="mt-auto pt-2">
               
               <p className="text-3xl font-bold text-foreground tracking-tight mb-1">
                 <AnimatedCounter 
@@ -166,9 +168,10 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
               </p>
               
               <p className="text-[11px] text-muted-foreground/70 flex items-center gap-1">
-                <Sparkles className="h-3 w-3" />
+                <Sparkles className="h-3 w-3 shrink-0" />
                 {kpi.description}
               </p>
+              </div>
             </CardContent>
           </Card>
         ))}
