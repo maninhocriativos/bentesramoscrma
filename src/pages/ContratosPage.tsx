@@ -45,7 +45,6 @@ const mapClicksignStatus = (doc: any): string => {
     const signers = doc.signers || [];
     const allSigned = signers.length > 0 && signers.every((s: any) => s.signed_at);
     const anySigned = signers.some((s: any) => s.signed_at);
-    
     if (allSigned) return 'Assinado';
     if (anySigned) return 'Assinatura Parcial';
     return 'Aguardando Assinatura';
@@ -83,11 +82,7 @@ export default function ContratosPage() {
         throw error;
       }
 
-      // Map Clicksign documents to our format
       const documents = data?.documents || [];
-
-      // Prefer links persisted in DB (contract_reminders.contract_link) because they point to the
-      // correct Clicksign signing URL (/sign/[request_signature_key]) and avoid 404s.
       const docKeys: string[] = documents.map((d: any) => d?.key).filter(Boolean);
       const linksByDocKey = new Map<string, string>();
 
@@ -111,7 +106,6 @@ export default function ContratosPage() {
       const mappedContracts: ContratoComStatus[] = documents.map((doc: any) => {
         const key: string | undefined = doc?.key;
         const linkContrato = (key && linksByDocKey.get(key)) || (key ? `https://app.clicksign.com/sign/${key}` : 'https://app.clicksign.com');
-
         return {
           id: key,
           key,
@@ -124,7 +118,6 @@ export default function ContratosPage() {
         };
       });
 
-      // Sort by date
       mappedContracts.sort((a, b) => {
         if (a.lastUpdate && b.lastUpdate) {
           return new Date(b.lastUpdate).getTime() - new Date(a.lastUpdate).getTime();
@@ -135,19 +128,12 @@ export default function ContratosPage() {
       setContratos(mappedContracts);
       
       if (showToast) {
-        toast({
-          title: 'Contratos atualizados',
-          description: `${mappedContracts.length} documentos encontrados.`,
-        });
+        toast({ title: 'Contratos atualizados', description: `${mappedContracts.length} documentos encontrados.` });
       }
     } catch (error: any) {
       console.error('Error fetching contracts:', error);
       if (showToast) {
-        toast({
-          title: 'Erro ao buscar contratos',
-          description: error.message || 'Não foi possível conectar ao Clicksign.',
-          variant: 'destructive',
-        });
+        toast({ title: 'Erro ao buscar contratos', description: error.message || 'Não foi possível conectar ao Clicksign.', variant: 'destructive' });
       }
     } finally {
       setLoading(false);
@@ -155,20 +141,13 @@ export default function ContratosPage() {
     }
   }, [toast]);
 
-  // Fetch on mount and set up auto-refresh every 30 seconds
   useEffect(() => {
     fetchContractsFromClicksign();
-    
-    const interval = setInterval(() => {
-      fetchContractsFromClicksign(false);
-    }, 30000); // 30 seconds
-
+    const interval = setInterval(() => { fetchContractsFromClicksign(false); }, 30000);
     return () => clearInterval(interval);
   }, [fetchContractsFromClicksign]);
 
-  const handleRefresh = () => {
-    fetchContractsFromClicksign(false, true); // Manual refresh shows toast
-  };
+  const handleRefresh = () => { fetchContractsFromClicksign(false, true); };
 
   const filteredContratos = contratos.filter(contrato => {
     switch (activeTab) {
@@ -206,7 +185,7 @@ export default function ContratosPage() {
     <AppLayout>
       <AppHeader title="Contratos" />
       
-      <div className="flex-1 px-4 md:px-6 lg:px-8 py-4 space-y-4 md:space-y-6 animate-fade-in overflow-auto">
+      <div className="flex-1 px-4 md:px-6 lg:px-8 py-4 space-y-4 animate-fade-in overflow-auto">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -214,60 +193,57 @@ export default function ContratosPage() {
           </div>
         ) : (
           <>
-            <ContratosKPIs 
-              data={kpiData} 
-              onRefresh={handleRefresh} 
+            {/* KPI Bar + Actions */}
+            <ContratosKPIs
+              data={kpiData}
+              onRefresh={handleRefresh}
               onSendContract={() => setEnviarModalOpen(true)}
-              refreshing={refreshing} 
+              refreshing={refreshing}
             />
 
-            {/* Custom Tabs */}
-            <div className="space-y-4">
-              {/* Tab Navigation */}
-              <div className="flex gap-1 p-1 bg-muted/50 rounded-lg overflow-x-auto">
-                {TABS.map((tab) => {
-                  const Icon = tab.icon;
-                  const count = getTabCount(tab.id);
-                  const isActive = activeTab === tab.id;
-                  
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={cn(
-                        "flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-all",
-                        isActive 
-                          ? "bg-background text-foreground shadow-sm" 
-                          : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-                      )}
-                    >
-                      <Icon className="h-4 w-4" />
-                      <span className="hidden sm:inline">{tab.label}</span>
-                      {count !== null && (
-                        <span className={cn(
-                          "text-xs px-1.5 py-0.5 rounded-full",
-                          isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                        )}>
-                          {count}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Tab Content */}
-              {activeTab === 'modelos' ? (
-                <ModelosContratos />
-              ) : (
-                <ContratosTable contratos={filteredContratos} />
-              )}
+            {/* Tab Navigation */}
+            <div className="flex gap-1 p-1 bg-muted/50 rounded-lg overflow-x-auto">
+              {TABS.map((tab) => {
+                const Icon = tab.icon;
+                const count = getTabCount(tab.id);
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-all",
+                      isActive
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground hover:bg-card/50"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="hidden sm:inline">{tab.label}</span>
+                    {count !== null && (
+                      <span className={cn(
+                        "text-xs px-1.5 py-0.5 rounded-full",
+                        isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                      )}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
+
+            {/* Tab Content */}
+            {activeTab === 'modelos' ? (
+              <ModelosContratos />
+            ) : (
+              <ContratosTable contratos={filteredContratos} />
+            )}
           </>
         )}
       </div>
 
-      <GerarContratoModal 
+      <GerarContratoModal
         isOpen={enviarModalOpen}
         onClose={() => setEnviarModalOpen(false)}
         onSuccess={handleRefresh}
