@@ -146,6 +146,33 @@ async function buscarEscavador(cnj: string): Promise<{ data: any; error: string 
   
   const data = await response.json();
   console.log(`✅ [Escavador] Sucesso em ${durationMs}ms`);
+
+  // Fetch movimentações separately (v2 doesn't include them in main response)
+  try {
+    const movUrl = `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(formatarCNJ(cnj))}/movimentacoes?pagina=1`;
+    const { response: movResp } = await fetchWithRetry(movUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${ESCAVADOR_API_KEY}`,
+        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/json',
+      },
+    }, 2, 10000);
+
+    if (movResp && movResp.ok) {
+      const movData = await movResp.json();
+      const items = movData?.items || movData?.data || [];
+      console.log(`✅ [Escavador] ${items.length} movimentações obtidas`);
+      data._movimentacoes = items;
+    } else {
+      console.log(`⚠️ [Escavador] Movimentações não disponíveis`);
+      data._movimentacoes = [];
+    }
+  } catch (e) {
+    console.log(`⚠️ [Escavador] Erro ao buscar movimentações: ${e}`);
+    data._movimentacoes = [];
+  }
+
   return { data, error: null, httpCode: response.status, durationMs };
 }
 
@@ -335,55 +362,118 @@ async function buscarDataJud(cnj: string): Promise<{ data: any; error: string | 
 
 function normalizarEscavador(data: any, cnj: string): any {
   const fonteTribunal = data?.fontes?.find((f: any) => f.tipo === 'TRIBUNAL') || data?.fontes?.[0];
+  const capa = fonteTribunal?.capa || {};
   
-  const partes = (fonteTribunal?.partes || data?.partes || data?.envolvidos || []).map((p: any) => ({
-    nome: p.nome || p.pessoa?.nome || 'Desconhecido',
-    tipo: p.tipo_participacao || p.tipo || 'Parte',
-    polo: p.polo?.toUpperCase() === 'ATIVO' ? 'AT' : (p.polo?.toUpperCase() === 'PASSIVO' ? 'PA' : 'OUTRO'),
-    tipoPessoa: p.tipo_pessoa || 'FISICA',
-    documento: p.cpf || p.cnpj || null,
-    advogados: (p.advogados || []).map((adv: any) => ({
-      nome: adv.nome,
-      oab: adv.inscricoes?.[0] ? `OAB/${adv.inscricoes[0].uf || ''} ${adv.inscricoes[0].numero || ''}`.trim() : adv.oab
-    }))
-  }));
+  // Partes: v2 uses 'envolvidos' inside fontes, not 'partes'
+  const rawEnvolvidos = fonteTribunal?.envolvidos || data?.envolvidos || fonteTribunal?.partes || data?.partes || [];
+  const partes = rawEnvolvidos.map((p: any) => {
+    const polo = (p.polo || '').toUpperCase();
+    let tipoNorm = p.tipo_normalizado || p.tipo || p.tipo_participacao || 'Parte';
+    const poloNorm = polo === 'ATIVO' ? 'AT' : (polo === 'PASSIVO' ? 'PA' : 'OUTRO');
+    
+    if (tipoNorm === 'Outro' || tipoNorm === 'ATIVO' || tipoNorm === 'PASSIVO') {
+      if (poloNorm === 'AT') tipoNorm = 'Autor';
+      else if (poloNorm === 'PA') tipoNorm = 'Réu';
+    }
 
-  const movimentos = (fonteTribunal?.movimentacoes || data?.movimentacoes || []).slice(0, 100).map((m: any) => ({
-    dataHora: formatarData(m.data || m.data_hora),
-    dataHoraRaw: m.data || m.data_hora || new Date().toISOString(),
-    nome: m.titulo || m.conteudo || m.descricao || 'Movimentação',
-    complemento: m.conteudo || m.complemento || null,
-    codigo: null
-  }));
+    return {
+      nome: p.nome || p.pessoa?.nome || 'Desconhecido',
+      tipo: tipoNorm,
+      polo: poloNorm,
+      tipoPessoa: p.tipo_pessoa || 'FISICA',
+      documento: p.cpf || p.cnpj || null,
+      advogados: (p.advogados || []).map((adv: any) => ({
+        nome: adv.nome,
+        oab: adv.oabs?.[0] ? `OAB/${adv.oabs[0].uf || ''} ${adv.oabs[0].numero || ''}`.trim() :
+             adv.inscricoes?.[0] ? `OAB/${adv.inscricoes[0].uf || ''} ${adv.inscricoes[0].numero || ''}`.trim() :
+             adv.oab || null
+      }))
+    };
+  });
 
+  // Movimentações: fetched separately and stored in data._movimentacoes
+  const rawMovs = data._movimentacoes || fonteTribunal?.movimentacoes || data?.movimentacoes || [];
+  const movimentos = rawMovs.slice(0, 100).map((m: any) => {
+    let rawDate = m.data || m.data_hora || new Date().toISOString();
+    // Ensure date-only strings become valid timestamps
+    if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate.trim())) {
+      rawDate = rawDate.trim() + 'T00:00:00Z';
+    }
+    return {
+      dataHora: formatarData(rawDate),
+      dataHoraRaw: rawDate,
+      nome: m.classificacao_predita?.nome || m.titulo || m.tipo_movimento || m.conteudo || m.descricao || 'Movimentação',
+      complemento: m.conteudo || m.complemento || m.descricao_complementar || null,
+      codigo: m.codigo || null
+    };
+  });
+
+  // Status
   let status = 'Em Andamento';
   const statusPredito = fonteTribunal?.status_predito || data?.status_predito;
   if (statusPredito === 'INATIVO' || statusPredito === 'BAIXADO') status = 'Arquivado';
   else if (statusPredito === 'SUSPENSO') status = 'Suspenso';
 
-  const assuntos = (fonteTribunal?.assuntos || data?.assuntos || []).map((a: any) => ({
-    nome: typeof a === 'string' ? a : (a.nome || a.descricao || String(a)),
-    codigo: a.codigo ? String(a.codigo) : undefined
-  }));
+  // Assuntos from capa
+  let assuntos: any[] = [];
+  if (capa.assuntos_normalizados?.length) {
+    assuntos = capa.assuntos_normalizados.map((a: any) => ({
+      nome: a.nome || a.descricao || String(a),
+      codigo: a.codigo ? String(a.codigo) : undefined
+    }));
+  } else if (capa.assunto_principal_normalizado) {
+    assuntos = [{
+      nome: capa.assunto_principal_normalizado.nome_com_pai || capa.assunto_principal_normalizado.nome || capa.assunto,
+      codigo: capa.assunto_principal_normalizado.id ? String(capa.assunto_principal_normalizado.id) : undefined
+    }];
+  } else if (capa.assunto) {
+    assuntos = [{ nome: capa.assunto }];
+  } else {
+    assuntos = (fonteTribunal?.assuntos || data?.assuntos || []).map((a: any) => ({
+      nome: typeof a === 'string' ? a : (a.nome || a.descricao || String(a)),
+      codigo: a.codigo ? String(a.codigo) : undefined
+    }));
+  }
+
+  // Classe from capa
+  const classe = capa.classe || fonteTribunal?.classe?.nome || data?.titulo_classe || data?.classe || 'Processo';
+  const classeCodigo = fonteTribunal?.classe?.codigo ? String(fonteTribunal.classe.codigo) : undefined;
+
+  // Tribunal
+  const tribunalSigla = fonteTribunal?.tribunal?.sigla || fonteTribunal?.sigla || 
+    fonteTribunal?.nome?.match(/TJ\w+|TRT\d+|TRF\d+|STJ|STF/)?.[0] || 'Não informado';
+
+  // Data ajuizamento - use ISO format, not formatted
+  const dataAjuiz = capa.data_distribuicao || fonteTribunal?.data_inicio || data?.data_inicio || null;
+
+  // Órgão julgador
+  const orgaoJulgador = capa.orgao_julgador || capa.orgao_julgador_normatizado?.nome || 
+    fonteTribunal?.orgao_julgador?.nome || fonteTribunal?.vara || 'Não informado';
+
+  // Valor causa
+  const valorCausa = capa.valor_causa?.valor ? parseFloat(capa.valor_causa.valor) : 
+    (fonteTribunal?.valor_causa || data?.valor_causa || null);
+
+  console.log(`✅ [Escavador] Normalizado: ${partes.length} partes, ${movimentos.length} movimentos, classe: ${classe}`);
 
   return {
     cnj: normalizarCNJ(cnj),
     cnjFormatado: formatarCNJ(cnj),
     numeroProcesso: data.numero_cnj || fonteTribunal?.numero_processo,
-    classe: fonteTribunal?.classe?.nome || data?.titulo_classe || data?.classe || 'Processo',
-    classeCodigo: fonteTribunal?.classe?.codigo ? String(fonteTribunal.classe.codigo) : undefined,
+    classe,
+    classeCodigo,
     assuntos,
-    tribunal: fonteTribunal?.nome?.match(/TJ|TRT|TRF|STJ|STF/)?.[0] || fonteTribunal?.sigla || data?.sigla_tribunal || 'Não informado',
-    dataAjuizamento: formatarData(fonteTribunal?.data_inicio || data?.data_inicio),
-    grau: fonteTribunal?.grau || '1º Grau',
-    nivelSigilo: data?.segredo_justica ? 'Segredo de Justiça' : 'Público',
+    tribunal: tribunalSigla,
+    dataAjuizamento: dataAjuiz, // Keep as ISO/raw, format only for display
+    grau: fonteTribunal?.grau_formatado || fonteTribunal?.grau || (fonteTribunal?.grau === 1 ? '1º Grau' : '1º Grau'),
+    nivelSigilo: data?.segredo_justica || fonteTribunal?.segredo_justica ? 'Segredo de Justiça' : 'Público',
     formato: 'Eletrônico',
     sistemaProcessual: fonteTribunal?.sistema || 'Escavador',
-    orgaoJulgador: fonteTribunal?.orgao_julgador?.nome || fonteTribunal?.vara || 'Não informado',
+    orgaoJulgador,
     status,
     statusDetalhado: statusPredito || status,
-    ultimaAtualizacao: formatarData(fonteTribunal?.data_ultima_movimentacao || data?.data_ultima_movimentacao),
-    valorCausa: fonteTribunal?.valor_causa || data?.valor_causa || null,
+    ultimaAtualizacao: fonteTribunal?.data_ultima_movimentacao || data?.data_ultima_movimentacao || null,
+    valorCausa,
     prioridade: [],
     movimentos,
     partes,
@@ -621,7 +711,7 @@ function normalizarDataJud(data: any, cnj: string): any {
     assuntos,
     tribunal: data.tribunal || data.siglaTribunal || "Não informado",
     // Em vários índices do DataJud isso vem como string 14 dígitos
-    dataAjuizamento: formatarData(toIsoIfPossible(data.dataAjuizamento)),
+    dataAjuizamento: toIsoIfPossible(data.dataAjuizamento),
     grau: data.grau || data.grauProcesso || "1º Grau",
     nivelSigilo: data.nivelSigilo === 0 || data.nivelSigilo === "0" ? "Público" : "Segredo de Justiça",
     formato: data.formato?.nome || data.formatoProcesso || "Eletrônico",
@@ -629,7 +719,7 @@ function normalizarDataJud(data: any, cnj: string): any {
     orgaoJulgador: data.orgaoJulgador?.nome || data.orgaoJulgador || "Não informado",
     status,
     statusDetalhado: data.situacao || status,
-    ultimaAtualizacao: formatarData(toIsoIfPossible(data.dataHoraUltimaAtualizacao || data.dataUltimaAtualizacao)),
+    ultimaAtualizacao: toIsoIfPossible(data.dataHoraUltimaAtualizacao || data.dataUltimaAtualizacao),
     valorCausa: data.valorCausa || null,
     prioridade: data.prioridade || [],
     movimentos,
@@ -671,6 +761,21 @@ async function verificarCache(cnj: string): Promise<{ cached: boolean; processo:
   return { cached: false, processo: data };
 }
 
+function toDbDate(val: any): string | null {
+  if (!val || val === 'Não informado') return null;
+  // If already ISO-like (YYYY-MM-DD...), use directly
+  if (typeof val === 'string') {
+    const s = val.trim();
+    // Already ISO format: 2026-02-06 or 2026-02-06T...
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s;
+    // pt-BR format DD/MM/YYYY -> convert to YYYY-MM-DD
+    const ptBr = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (ptBr) return `${ptBr[3]}-${ptBr[2]}-${ptBr[1]}`;
+  }
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 async function persistirProcesso(processo: any, advogadoResponsavel?: string): Promise<{ id: string; movimentacoesNovas: number }> {
   const cnjNorm = normalizarCNJ(processo.cnj);
   const cacheValidUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 minutos
@@ -693,13 +798,13 @@ async function persistirProcesso(processo: any, advogadoResponsavel?: string): P
       valor_causa: processo.valorCausa,
       status: processo.status,
       status_detalhado: processo.statusDetalhado,
-      ajuizado_em: processo.dataAjuizamento !== 'Não informado' ? processo.dataAjuizamento : null,
-      ultima_atualizacao: processo.ultimaAtualizacao !== 'Não informado' ? processo.ultimaAtualizacao : null,
+      ajuizado_em: toDbDate(processo.dataAjuizamento),
+      ultima_atualizacao: toDbDate(processo.ultimaAtualizacao),
       fonte_preferida: processo.fonte,
       fonte_raw: processo.fonteRaw,
       dados_datajud: processo.fonteRaw,
       ultima_consulta_api_at: nowIso,
-      data_ultima_atualizacao: processo.fonteRaw?.dataHoraUltimaAtualizacao || nowIso,
+      data_ultima_atualizacao: toDbDate(processo.fonteRaw?.dataHoraUltimaAtualizacao) || nowIso,
       partes_json: Array.isArray(processo.partes) && processo.partes.length > 0 ? processo.partes : null,
       movimentos_json:
         Array.isArray(processo.movimentos) && processo.movimentos.length > 0
@@ -709,7 +814,6 @@ async function persistirProcesso(processo: any, advogadoResponsavel?: string): P
       advogado_responsavel: advogadoResponsavel,
       updated_at: nowIso,
     }, {
-      // 'cnj_normalizado' não é UNIQUE; usar o campo com UNIQUE index
       onConflict: 'numero_processo',
       ignoreDuplicates: false,
     })
@@ -745,10 +849,11 @@ async function persistirProcesso(processo: any, advogadoResponsavel?: string): P
         hash_unico: hashUnico
       }, {
         onConflict: 'hash_unico',
-        ignoreDuplicates: true
       });
     
-    if (!movError) {
+    if (movError) {
+      console.error(`❌ Mov insert error: ${JSON.stringify(movError)}`);
+    } else {
       movimentacoesNovas++;
     }
   }
