@@ -113,3 +113,6 @@ verify_jwt = false
 
 [functions.processo-status-notify]
 verify_jwt = false
+
+[functions.isa-followup-prova-social]
+verify_jwt = false
