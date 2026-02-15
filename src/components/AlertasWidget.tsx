@@ -12,15 +12,15 @@ interface AlertasWidgetProps {
 }
 
 const TIPO_CONFIG = {
-  risco: { icon: AlertTriangle, color: 'text-destructive', bg: 'bg-destructive/10' },
-  prazo: { icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-  tarefa: { icon: FileText, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+  risco: { icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10' },
+  prazo: { icon: Clock, color: 'text-[hsl(var(--gold))]', bg: 'bg-[hsl(var(--gold))]/10' },
+  tarefa: { icon: FileText, color: 'text-primary/70', bg: 'bg-primary/10' },
   resposta: { icon: AlertTriangle, color: 'text-[hsl(var(--success))]', bg: 'bg-[hsl(var(--success))]/10' },
 };
 
 const PRIORIDADE_BADGE = {
-  alta: 'bg-destructive text-destructive-foreground',
-  media: 'bg-amber-500 text-white',
+  alta: 'bg-primary text-primary-foreground',
+  media: 'bg-[hsl(var(--gold))] text-[hsl(var(--gold-foreground))]',
   baixa: 'bg-muted text-muted-foreground',
 };
 
@@ -54,20 +54,20 @@ export function AlertasWidget({ alertas, compact = false, onAlertClick }: Alerta
 
   return (
     <Card className="rounded-2xl border-0 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)]">
-      <div className="h-1 w-full bg-destructive" />
+      <div className="h-1 w-full bg-primary" />
       <CardHeader className="pb-2 pt-4 px-5">
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center">
-            <AlertTriangle className="h-4 w-4 text-destructive" />
+          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+            <AlertTriangle className="h-4 w-4 text-primary" />
           </div>
           Alertas
-          <Badge className="ml-auto bg-destructive text-destructive-foreground text-[10px] px-1.5 py-0 h-5">
+          <Badge className="ml-auto bg-primary text-primary-foreground text-[10px] px-1.5 py-0 h-5">
             {alertas.length}
           </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        <ScrollArea className={compact ? 'h-[200px]' : 'max-h-[280px]'}>
+        <ScrollArea className="h-[300px]">
           <div className="divide-y divide-border/40">
             {displayAlertas.map((alerta) => {
               const config = TIPO_CONFIG[alerta.tipo];
