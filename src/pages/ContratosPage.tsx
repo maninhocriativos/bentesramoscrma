@@ -30,6 +30,7 @@ export interface ContratoComStatus {
   leadId?: string;
   leadNome: string;
   leadEmail: string | null;
+  signatarioNome: string | null;
   tipoAcao: string | null;
   linkContrato: string;
   status: string;
@@ -106,12 +107,19 @@ export default function ContratosPage() {
       const mappedContracts: ContratoComStatus[] = documents.map((doc: any) => {
         const key: string | undefined = doc?.key;
         const linkContrato = (key && linksByDocKey.get(key)) || (key ? `https://app.clicksign.com/sign/${key}` : 'https://app.clicksign.com');
+        // Extract signer names
+        const signers = doc.signers || [];
+        const signerNames = signers.map((s: any) => s.name).filter(Boolean);
+        // Extract category from path (e.g. "/folder/file.pdf" → "folder")
+        const pathParts = (doc.path || '').split('/').filter(Boolean);
+        const categoria = pathParts.length > 1 ? pathParts[0] : null;
         return {
           id: key,
           key,
           leadNome: doc.filename?.replace(/\.[^/.]+$/, '') || 'Documento',
           leadEmail: doc.signers?.[0]?.email || null,
-          tipoAcao: doc.path || null,
+          signatarioNome: signerNames.length > 0 ? signerNames.join(', ') : null,
+          tipoAcao: categoria,
           linkContrato,
           status: mapClicksignStatus(doc),
           lastUpdate: doc.updated_at || doc.created_at,
