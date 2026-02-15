@@ -106,6 +106,7 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                   <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wider">Documento</th>
                   <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wider">Signatário</th>
                   <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wider">Categoria</th>
+                  <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Email</th>
                   <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wider">Atualização</th>
                   <th className="text-right px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wider">Ações</th>
                 </tr>
@@ -131,14 +132,25 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                         <span className="font-medium text-foreground truncate max-w-[220px] block">{contrato.leadNome}</span>
                       </td>
                       <td className="px-4 py-2.5">
-                        {contrato.leadEmail ? (
-                          <span className="text-muted-foreground truncate max-w-[200px] block">{contrato.leadEmail}</span>
+                        {contrato.signatarioNome ? (
+                          <span className="text-foreground text-xs truncate max-w-[200px] block">{contrato.signatarioNome}</span>
                         ) : (
                           <span className="text-muted-foreground/40">—</span>
                         )}
                       </td>
                       <td className="px-4 py-2.5">
-                        <span className="text-muted-foreground text-xs">{contrato.tipoAcao || '—'}</span>
+                        {contrato.tipoAcao ? (
+                          <Badge variant="secondary" className="text-[10px] font-normal bg-muted text-muted-foreground">{contrato.tipoAcao}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground/40">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 hidden lg:table-cell">
+                        {contrato.leadEmail ? (
+                          <span className="text-muted-foreground text-xs truncate max-w-[180px] block">{contrato.leadEmail}</span>
+                        ) : (
+                          <span className="text-muted-foreground/40">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-2.5">
                         {contrato.lastUpdate ? (
