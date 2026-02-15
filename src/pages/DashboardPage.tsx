@@ -8,6 +8,7 @@ import { ConversionMetrics } from '@/components/dashboard/ConversionMetrics';
 import { RealtimeLeadsMonitor } from '@/components/dashboard/RealtimeLeadsMonitor';
 import { LeadOriginKPIs } from '@/components/dashboard/LeadOriginKPIs';
 import { AlertasWidget } from '@/components/AlertasWidget';
+import { TeamStatusWidget } from '@/components/dashboard/TeamStatusWidget';
 import { useLeads } from '@/hooks/useLeads';
 import { useProcessos } from '@/hooks/useProcessos';
 import { useAlertas } from '@/hooks/useAlertas';
@@ -159,7 +160,10 @@ export default function DashboardPage() {
             {/* ===== ROW 4: Charts + Monitor ===== */}
             <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
               <DashboardCharts leads={filteredLeads} />
-              <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
+              <div className="space-y-6">
+                <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
+                <TeamStatusWidget />
+              </div>
             </div>
           </div>
         )}
