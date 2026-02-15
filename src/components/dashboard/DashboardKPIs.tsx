@@ -117,7 +117,7 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
         )}
       </div>
       
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 items-start">
         {kpis.map((kpi, index) => (
           <Card 
             key={kpi.title} 
