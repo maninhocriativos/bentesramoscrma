@@ -143,7 +143,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2 items-start">
         {/* Origem */}
         <Card className="rounded-2xl border-0 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)]">
           <div className="h-1 w-full bg-primary" />
@@ -155,7 +155,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
               Origem dos Leads
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-5 h-[340px]">
+          <CardContent className="p-5">
             {origemData.length > 0 ? (
               <div className="flex flex-col h-full">
                 <div className="flex-1 min-h-0">
@@ -197,13 +197,13 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
               Funil de Vendas
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-5 h-[340px] flex flex-col">
+          <CardContent className="p-5 flex flex-col">
             {leads.length > 0 ? (
-              <div className="flex-1 flex flex-col justify-between">
+              <div className="flex flex-col gap-4">
                 <div className="space-y-3">
                   {funnelData.map((stage, index) => {
                     const maxCount = Math.max(...funnelData.map(s => s.count), 1);
-                    const widthPercent = Math.max((stage.count / maxCount) * 100, 30);
+                    const widthPercent = Math.max((stage.count / maxCount) * 100, 45);
                     const conversionRate = getConversionRate(index);
                     
                     return (
@@ -220,7 +220,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
                           style={{ width: `${widthPercent}%`, backgroundColor: stage.color }}
                         >
                           <div className="py-2.5 px-4 flex items-center justify-between min-w-0">
-                            <span className="text-white text-xs font-medium truncate mr-2">{stage.label}</span>
+                            <span className="text-white text-xs font-medium whitespace-nowrap mr-2">{stage.label}</span>
                             <span className="text-white text-sm font-bold shrink-0">{stage.count}</span>
                           </div>
                         </div>
