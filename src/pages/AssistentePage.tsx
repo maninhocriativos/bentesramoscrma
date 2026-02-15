@@ -44,6 +44,14 @@ const agents: Agent[] = [
     gradient: 'from-amber-500 to-orange-600',
     route: '/peticoes',
   },
+  {
+    id: 'modelo-editor',
+    name: 'Editor de Modelos',
+    description: 'Envie um modelo Word e edite mantendo o layout original.',
+    icon: <FileText className="h-5 w-5" />,
+    gradient: 'from-sky-500 to-blue-600',
+    route: '/peticoes/modelo-editor',
+  },
 ];
 
 const capabilities = [
