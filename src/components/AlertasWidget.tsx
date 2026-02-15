@@ -53,7 +53,7 @@ export function AlertasWidget({ alertas, compact = false, onAlertClick }: Alerta
   const displayAlertas = compact ? alertas.slice(0, 5) : alertas;
 
   return (
-    <Card className="rounded-2xl border-0 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)]">
+    <Card className="rounded-2xl border-0 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] h-full flex flex-col">
       <div className="h-1 w-full bg-destructive" />
       <CardHeader className="pb-2 pt-4 px-5">
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -66,8 +66,8 @@ export function AlertasWidget({ alertas, compact = false, onAlertClick }: Alerta
           </Badge>
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
-        <ScrollArea className={compact ? 'h-[200px]' : 'h-[320px]'}>
+      <CardContent className="p-0 flex-1 min-h-0">
+        <ScrollArea className="h-full">
           <div className="divide-y divide-border/40">
             {displayAlertas.map((alerta) => {
               const config = TIPO_CONFIG[alerta.tipo];
