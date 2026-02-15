@@ -17,6 +17,18 @@ function normalizePhone(phone: string | null): string | null {
   return cleaned;
 }
 
+async function getPageAccessToken(pageId: string, userAccessToken: string): Promise<string | null> {
+  // Get page access token from user token
+  const url = `https://graph.facebook.com/v20.0/${pageId}?fields=access_token&access_token=${userAccessToken}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    console.error('[Meta Sync] Failed to get page access token:', await res.text());
+    return null;
+  }
+  const data = await res.json();
+  return data.access_token || null;
+}
+
 async function fetchFormIdsFromPage(pageId: string, accessToken: string): Promise<string[]> {
   const url = `https://graph.facebook.com/v20.0/${pageId}/leadgen_forms?access_token=${accessToken}&fields=id,name,status&limit=50`;
   const res = await fetch(url);
@@ -47,21 +59,21 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     
-    // Try Page ID approach first (more reliable), fall back to form IDs
     let formIds: string[] = body.form_ids || [];
-    const pageId = body.page_id || null;
+    const pageId = body.page_id || '61585487574008';
 
-    // If page_id provided, discover forms automatically
-    if (pageId) {
-      formIds = await fetchFormIdsFromPage(pageId, accessToken);
+    // Get Page Access Token from User Access Token
+    const pageAccessToken = await getPageAccessToken(pageId, accessToken);
+    if (!pageAccessToken) {
+      return new Response(JSON.stringify({ error: 'Failed to get Page Access Token. Check permissions.' }), {
+        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
+    console.log('[Meta Sync] Got page access token successfully');
 
-    // If still no form IDs, try fetching leads for known form
-    // If no page_id provided and no form_ids, use default page
-    if (formIds.length === 0 && !pageId) {
-      const defaultPageId = '61585487574008';
-      formIds = await fetchFormIdsFromPage(defaultPageId, accessToken);
-      // Fallback to known form ID
+    // Discover forms from page
+    if (formIds.length === 0) {
+      formIds = await fetchFormIdsFromPage(pageId, pageAccessToken);
       if (formIds.length === 0) {
         formIds = ['806114115222300'];
       }
@@ -74,7 +86,7 @@ serve(async (req) => {
     for (const formId of formIds) {
       console.log(`[Meta Sync] Fetching leads for form ${formId}...`);
 
-      let url: string | null = `https://graph.facebook.com/v20.0/${formId}/leads?access_token=${accessToken}&limit=50&fields=id,created_time,field_data,ad_id,adset_id,campaign_id,form_id`;
+      let url: string | null = `https://graph.facebook.com/v20.0/${formId}/leads?access_token=${pageAccessToken}&limit=50&fields=id,created_time,field_data,ad_id,adset_id,campaign_id,form_id`;
       let pageCount = 0;
 
       while (url && pageCount < 10) {
