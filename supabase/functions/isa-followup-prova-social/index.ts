@@ -10,10 +10,8 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-// URL pública da imagem de prova social
 const IMAGE_URL = 'https://bentesramoscrma.lovable.app/images/prova-social-bradesco.jpg';
 
-// Mensagem de follow-up com prova social
 const MENSAGEM_FOLLOWUP = (nome: string) => {
   const primeiro = nome?.split(' ')[0] || '';
   return `Olá${primeiro ? ` ${primeiro}` : ''}! Aqui é a *Isa do Bentes & Ramos* 🏛️
@@ -36,36 +34,78 @@ serve(async (req: Request) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { dry_run = false, intervalo_minutos = 10 } = body;
+    const { 
+      dry_run = false, 
+      intervalo_minutos = 10,
+      mode = 'meta_form' // 'meta_form' ou 'stagnant'
+    } = body;
 
-    console.log(`[Prova Social Campaign] Iniciando - dry_run: ${dry_run}, intervalo: ${intervalo_minutos}min`);
+    console.log(`[Prova Social Campaign] Mode: ${mode}, dry_run: ${dry_run}, intervalo: ${intervalo_minutos}min`);
 
-    // Buscar TODOS os leads de formulário Meta que têm telefone
-    const { data: metaLeads, error: metaError } = await supabase
-      .from('meta_form_leads')
-      .select('id, nome, telefone, linked_lead_id, status')
-      .not('telefone', 'is', null);
+    let leadsParaEnviar: { nome: string; telefone: string; lead_id: string | null }[] = [];
 
-    if (metaError) {
-      console.error('[Prova Social Campaign] Erro ao buscar meta leads:', metaError);
-      return new Response(JSON.stringify({ error: metaError.message }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (mode === 'meta_form') {
+      // ===== LEADS DE FORMULÁRIO META =====
+      const { data: metaLeads, error } = await supabase
+        .from('meta_form_leads')
+        .select('id, nome, telefone, linked_lead_id, status')
+        .not('telefone', 'is', null);
+
+      if (error) throw new Error(`Erro meta_form_leads: ${error.message}`);
+
+      leadsParaEnviar = (metaLeads || [])
+        .filter(l => {
+          const tel = l.telefone?.replace(/\D/g, '');
+          return tel && tel.length >= 10 && l.status !== 'converted';
+        })
+        .map(l => ({ nome: l.nome || '', telefone: l.telefone, lead_id: l.linked_lead_id }));
+
+    } else if (mode === 'stagnant') {
+      // ===== LEADS ESTAGNADOS =====
+      // Leads sem contato há 3+ dias, excluindo convertidos/perdidos
+      const cutoffDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+
+      const { data: stagnantLeads, error } = await supabase
+        .from('leads_juridicos')
+        .select('id, nome, telefone, status, last_contact_at, lead_state')
+        .not('telefone', 'is', null)
+        .not('status', 'in', '("Contrato Assinado","Ganho","Perdido")')
+        .not('lead_state', 'in', '("CONTRACT_SIGNED","READY_FOR_LAWYER")')
+        .or(`last_contact_at.lt.${cutoffDate},last_contact_at.is.null`)
+        .order('last_contact_at', { ascending: true, nullsFirst: true });
+
+      if (error) throw new Error(`Erro leads_juridicos: ${error.message}`);
+
+      // Excluir leads que já foram enviados pelo modo meta_form (evitar duplicação)
+      const { data: metaLinked } = await supabase
+        .from('meta_form_leads')
+        .select('linked_lead_id')
+        .not('linked_lead_id', 'is', null);
+      
+      const metaLinkedIds = new Set((metaLinked || []).map(m => m.linked_lead_id));
+
+      leadsParaEnviar = (stagnantLeads || [])
+        .filter(l => !metaLinkedIds.has(l.id)) // Não duplicar com leads de formulário
+        .map(l => ({ nome: l.nome || '', telefone: l.telefone, lead_id: l.id }));
     }
 
-    // Filtrar leads válidos (com telefone, excluir convertidos)
-    const leadsValidos = (metaLeads || []).filter(l => {
-      const tel = l.telefone?.replace(/\D/g, '');
-      return tel && tel.length >= 10 && l.status !== 'converted';
+    // Deduplicar por telefone normalizado
+    const seen = new Set<string>();
+    leadsParaEnviar = leadsParaEnviar.filter(l => {
+      const tel = normalizePhone(l.telefone);
+      if (seen.has(tel)) return false;
+      seen.add(tel);
+      return true;
     });
 
-    console.log(`[Prova Social Campaign] ${leadsValidos.length} leads de formulário elegíveis`);
+    console.log(`[Prova Social Campaign] ${leadsParaEnviar.length} leads elegíveis (mode: ${mode})`);
 
     if (dry_run) {
       return new Response(JSON.stringify({
         dry_run: true,
-        total_leads: leadsValidos.length,
-        leads: leadsValidos.map(l => ({ id: l.id, nome: l.nome, telefone: l.telefone })),
+        mode,
+        total_leads: leadsParaEnviar.length,
+        leads: leadsParaEnviar.map(l => ({ nome: l.nome, telefone: l.telefone })),
         mensagem_exemplo: MENSAGEM_FOLLOWUP('Cliente'),
         imagem_url: IMAGE_URL,
         intervalo_minutos,
@@ -74,7 +114,6 @@ serve(async (req: Request) => {
       });
     }
 
-    // Get Z-API config (instância de tráfego)
     const zapiConfig = await getZapiConfig(supabase);
     if (!zapiConfig) {
       return new Response(JSON.stringify({ error: 'Z-API não configurado' }), {
@@ -85,97 +124,88 @@ serve(async (req: Request) => {
     let enviados = 0;
     let erros = 0;
     const results: any[] = [];
-    const intervaloMs = intervalo_minutos * 60 * 1000; // 10 min em ms
+    const intervaloMs = intervalo_minutos * 60 * 1000;
 
-    for (let i = 0; i < leadsValidos.length; i++) {
-      const lead = leadsValidos[i];
+    for (let i = 0; i < leadsParaEnviar.length; i++) {
+      const lead = leadsParaEnviar[i];
       try {
         const telefone = normalizePhone(lead.telefone);
         if (!telefone) continue;
 
-        console.log(`[Prova Social Campaign] [${i + 1}/${leadsValidos.length}] Enviando para ${lead.nome} (${telefone})`);
+        console.log(`[Prova Social Campaign] [${i + 1}/${leadsParaEnviar.length}] Enviando para ${lead.nome} (${telefone})`);
 
-        // 1. Enviar imagem com caption
+        // 1. Enviar imagem
         const imgResult = await sendImage(zapiConfig, telefone, IMAGE_URL, 'Decisão judicial real | Caso ganho ✅');
-
-        // 2. Aguardar 3 segundos e enviar texto
+        
+        // 2. Aguardar e enviar texto
         await new Promise(r => setTimeout(r, 3000));
-        const mensagem = MENSAGEM_FOLLOWUP(lead.nome || '');
+        const mensagem = MENSAGEM_FOLLOWUP(lead.nome);
         const txtResult = await sendText(zapiConfig, telefone, mensagem);
 
         const success = imgResult.success || txtResult.success;
 
         if (success) {
           enviados++;
-
-          // Salvar mensagem no histórico
           const subscriberId = `zapi_${telefone}`;
+          
           await supabase.from('manychat_mensagens').insert([
             {
               subscriber_id: subscriberId,
               subscriber_nome: 'Isa do Bentes & Ramos',
-              lead_id: lead.linked_lead_id,
+              lead_id: lead.lead_id,
               conteudo: IMAGE_URL,
               direcao: 'saida',
               tipo: 'image',
               canal: 'whatsapp',
-              metadata: { source: 'prova_social_campaign', campaign: 'bradesco_sentenca' },
+              metadata: { source: 'prova_social_campaign', campaign: 'bradesco_sentenca', mode },
             },
             {
               subscriber_id: subscriberId,
               subscriber_nome: 'Isa do Bentes & Ramos',
-              lead_id: lead.linked_lead_id,
+              lead_id: lead.lead_id,
               conteudo: mensagem,
               direcao: 'saida',
               tipo: 'text',
               canal: 'whatsapp',
-              metadata: { source: 'prova_social_campaign', campaign: 'bradesco_sentenca' },
+              metadata: { source: 'prova_social_campaign', campaign: 'bradesco_sentenca', mode },
             }
           ]);
 
-          // Registrar interação no lead vinculado
-          if (lead.linked_lead_id) {
+          if (lead.lead_id) {
             await supabase.from('interacoes').insert({
-              cliente_id: lead.linked_lead_id,
+              cliente_id: lead.lead_id,
               tipo: 'WhatsApp',
               direcao: 'Saída',
-              resumo: 'Campanha Prova Social - Sentença Bradesco R$ 8.000',
+              resumo: `Campanha Prova Social (${mode}) - Sentença Bradesco R$ 8.000`,
               detalhes: mensagem.substring(0, 200),
             });
-
             await supabase.from('leads_juridicos')
               .update({ last_contact_at: new Date().toISOString() })
-              .eq('id', lead.linked_lead_id);
+              .eq('id', lead.lead_id);
           }
 
           results.push({ nome: lead.nome, telefone, success: true });
-          console.log(`[Prova Social Campaign] ✅ Enviado para ${lead.nome}`);
+          console.log(`[Prova Social Campaign] ✅ ${lead.nome}`);
         } else {
           erros++;
           results.push({ nome: lead.nome, telefone, success: false, error: txtResult.error || imgResult.error });
-          console.error(`[Prova Social Campaign] ❌ Falha para ${lead.nome}:`, txtResult.error);
+          console.error(`[Prova Social Campaign] ❌ ${lead.nome}:`, txtResult.error);
         }
 
-        // Aguardar intervalo entre leads (10 min) - exceto para o último
-        if (i < leadsValidos.length - 1) {
-          console.log(`[Prova Social Campaign] Aguardando ${intervalo_minutos} minutos...`);
+        if (i < leadsParaEnviar.length - 1) {
+          console.log(`[Prova Social Campaign] Aguardando ${intervalo_minutos} min...`);
           await new Promise(r => setTimeout(r, intervaloMs));
         }
       } catch (err: any) {
         erros++;
         results.push({ nome: lead.nome, success: false, error: err.message });
-        console.error(`[Prova Social Campaign] Erro:`, err);
       }
     }
 
-    console.log(`[Prova Social Campaign] Concluído - Enviados: ${enviados}, Erros: ${erros}`);
+    console.log(`[Prova Social Campaign] Concluído (${mode}) - Enviados: ${enviados}, Erros: ${erros}`);
 
     return new Response(JSON.stringify({
-      success: true,
-      total: leadsValidos.length,
-      enviados,
-      erros,
-      results,
+      success: true, mode, total: leadsParaEnviar.length, enviados, erros, results,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
