@@ -15,21 +15,28 @@ const formatCurrency = (value: number): string => {
   }).format(value);
 };
 
+// Harmonized with Bentes Ramos palette - warm tones + stage tokens
 const ORIGEM_COLORS: Record<string, string> = {
-  'Instagram': '#E1306C',
-  'Google': '#4285F4',
-  'Site': '#10B981',
-  'Indicação': '#8B5CF6',
-  'Outro': '#94A3B8',
+  'Escritório': 'hsl(24, 16%, 37%)',      // stage-bentes
+  'Tráfego Pago': 'hsl(38, 30%, 70%)',    // gold
+  'Bentes Ramos': 'hsl(24, 21%, 21%)',    // primary
+  'Site': 'hsl(142, 76%, 36%)',           // success
+  'WhatsApp Z-API': 'hsl(24, 16%, 50%)',  // warm brown mid
+  'Facebook': 'hsl(38, 30%, 55%)',        // darker gold
+  'WhatsApp': 'hsl(24, 21%, 35%)',        // mid brown
+  'Instagram': 'hsl(0, 84%, 60%)',        // destructive (accent)
+  'Indicação': 'hsl(142, 50%, 50%)',      // success lighter
+  'Google': 'hsl(38, 40%, 60%)',          // gold variation
+  'Outro': 'hsl(24, 10%, 65%)',           // neutral warm
 };
 
 const STATUS_CONFIG = [
-  { status: 'Lead Frio', color: '#64748B', label: 'Lead Frio' },
-  { status: 'Em Atendimento', color: '#3B82F6', label: 'Em Atendimento' },
-  { status: 'Em Negociação', color: '#06B6D4', label: 'Em Negociação' },
-  { status: 'Aguardando Contrato', color: '#F59E0B', label: 'Aguardando Contrato' },
-  { status: 'Contrato Assinado', color: '#8B5CF6', label: 'Contrato Assinado' },
-  { status: 'Ganho', color: '#10B981', label: 'Ganho' },
+  { status: 'Lead Frio', color: 'hsl(24, 10%, 55%)', label: 'Lead Frio' },
+  { status: 'Em Atendimento', color: 'hsl(38, 30%, 70%)', label: 'Em Atendimento' },
+  { status: 'Em Negociação', color: 'hsl(24, 21%, 35%)', label: 'Em Negociação' },
+  { status: 'Aguardando Contrato', color: 'hsl(38, 40%, 55%)', label: 'Aguardando Contrato' },
+  { status: 'Contrato Assinado', color: 'hsl(24, 21%, 21%)', label: 'Contrato Assinado' },
+  { status: 'Ganho', color: 'hsl(142, 76%, 36%)', label: 'Ganho' },
 ];
 
 const CustomTooltip = ({ active, payload }: any) => {
@@ -55,7 +62,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
 
   const totalLeads = leads.length;
   const origemData = Object.entries(origemCounts).map(([name, value]) => ({
-    name, value, total: totalLeads, color: ORIGEM_COLORS[name] || '#94A3B8',
+    name, value, total: totalLeads, color: ORIGEM_COLORS[name] || 'hsl(24, 10%, 65%)',
   }));
 
   const statusCounts = leads.reduce((acc, lead) => {
@@ -188,11 +195,11 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
 
         {/* Funnel */}
         <Card className="rounded-2xl border-0 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)]">
-          <div className="h-1 w-full bg-primary" />
+          <div className="h-1 w-full bg-[hsl(var(--gold))]" />
           <CardHeader className="px-5 pt-5 pb-2">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Layers className="h-4 w-4 text-primary" />
+              <div className="w-8 h-8 rounded-lg bg-[hsl(var(--gold))]/10 flex items-center justify-center">
+                <Layers className="h-4 w-4 text-[hsl(var(--gold))]" />
               </div>
               Funil de Vendas
             </CardTitle>

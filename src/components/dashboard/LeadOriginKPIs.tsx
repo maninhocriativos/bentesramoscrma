@@ -29,8 +29,9 @@ export function LeadOriginKPIs({ leads }: LeadOriginKPIsProps) {
       value: metrics.totalLeads,
       icon: Users,
       subtitle: 'Todos os leads no CRM',
-      accentColor: 'bg-foreground/80',
-      iconBg: 'bg-muted/60',
+      accentColor: 'bg-primary',
+      iconBg: 'bg-primary/10',
+      iconColor: 'text-primary',
     },
     {
       id: 'leadsTrafego',
@@ -39,9 +40,9 @@ export function LeadOriginKPIs({ leads }: LeadOriginKPIsProps) {
       icon: Megaphone,
       subtitle: 'Atendimento automático — ISA',
       badge: { icon: Bot, text: 'ISA', color: 'bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]' },
-      accentColor: 'bg-blue-500',
-      iconBg: 'bg-blue-500/10',
-      iconColor: 'text-blue-600',
+      accentColor: 'bg-[hsl(var(--gold))]',
+      iconBg: 'bg-[hsl(var(--gold))]/10',
+      iconColor: 'text-[hsl(var(--gold))]',
       percent: metrics.trafegoPercent,
     },
     {
@@ -50,10 +51,10 @@ export function LeadOriginKPIs({ leads }: LeadOriginKPIsProps) {
       value: metrics.leadsBentesRamos,
       icon: Building2,
       subtitle: 'Uso interno / histórico',
-      badge: { icon: UserCircle, text: 'Humano', color: 'bg-amber-500/10 text-amber-600' },
-      accentColor: 'bg-amber-500',
-      iconBg: 'bg-amber-500/10',
-      iconColor: 'text-amber-600',
+      badge: { icon: UserCircle, text: 'Humano', color: 'bg-primary/10 text-primary' },
+      accentColor: 'bg-primary',
+      iconBg: 'bg-primary/10',
+      iconColor: 'text-primary',
       percent: metrics.bentesRamosPercent,
     },
   ];
@@ -81,7 +82,7 @@ export function LeadOriginKPIs({ leads }: LeadOriginKPIsProps) {
                 "transition-all duration-300",
                 kpi.iconBg
               )}>
-                <kpi.icon className={cn("h-5 w-5", kpi.iconColor || 'text-foreground/70')} />
+                <kpi.icon className={cn("h-5 w-5", kpi.iconColor)} />
               </div>
               
               <div className="flex-1 min-w-0 space-y-1.5">

@@ -93,7 +93,7 @@ export function RealtimeLeadsMonitor({ leads, onRefresh }: RealtimeLeadsMonitorP
   const getActivityIcon = (type: string) => {
     switch (type) {
       case 'INSERT': return <UserPlus className="w-3 h-3 text-[hsl(var(--success))]" />;
-      case 'UPDATE': return <Activity className="w-3 h-3 text-blue-500" />;
+      case 'UPDATE': return <Activity className="w-3 h-3 text-[hsl(var(--gold))]" />;
       case 'DELETE': return <AlertTriangle className="w-3 h-3 text-destructive" />;
       case 'refresh': return <RefreshCw className="w-3 h-3 text-primary" />;
       default: return <Activity className="w-3 h-3 text-muted-foreground" />;
@@ -133,12 +133,12 @@ export function RealtimeLeadsMonitor({ leads, onRefresh }: RealtimeLeadsMonitorP
       
       <CardContent className="px-5 pb-5 space-y-4">
         {stats.leadsNaoContabilizados > 0 && (
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
-            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-            <p className="text-xs text-amber-700 flex-1">
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-[hsl(var(--gold))]/10 border border-[hsl(var(--gold))]/20">
+            <AlertTriangle className="w-4 h-4 text-[hsl(var(--gold))] shrink-0" />
+            <p className="text-xs text-foreground/80 flex-1">
               {stats.leadsNaoContabilizados} lead{stats.leadsNaoContabilizados > 1 ? 's' : ''} não contabilizado{stats.leadsNaoContabilizados > 1 ? 's' : ''}
             </p>
-            <Button size="sm" variant="outline" onClick={handleRefresh} className="h-7 text-[10px] border-amber-500/30 text-amber-700 px-2">
+            <Button size="sm" variant="outline" onClick={handleRefresh} className="h-7 text-[10px] border-[hsl(var(--gold))]/30 text-foreground px-2">
               Sync
             </Button>
           </div>
@@ -155,9 +155,9 @@ export function RealtimeLeadsMonitor({ leads, onRefresh }: RealtimeLeadsMonitorP
             <p className="text-2xl font-bold text-[hsl(var(--success))]"><AnimatedCounter value={stats.leadsHoje} duration={800} /></p>
             <p className="text-[10px] text-muted-foreground">Hoje</p>
           </div>
-          <div className="p-3 rounded-xl bg-blue-500/8 text-center">
-            <TrendingUp className="w-4 h-4 text-blue-500 mx-auto mb-1" />
-            <p className="text-2xl font-bold text-blue-600"><AnimatedCounter value={stats.leadsUltima24h} duration={800} /></p>
+          <div className="p-3 rounded-xl bg-[hsl(var(--gold))]/10 text-center">
+            <TrendingUp className="w-4 h-4 text-[hsl(var(--gold))] mx-auto mb-1" />
+            <p className="text-2xl font-bold text-[hsl(var(--gold))]"><AnimatedCounter value={stats.leadsUltima24h} duration={800} /></p>
             <p className="text-[10px] text-muted-foreground">24h</p>
           </div>
           <div className="p-3 rounded-xl bg-muted/30 text-center">

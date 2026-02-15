@@ -68,7 +68,9 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
       trend: metrics.leadsHoje > 0 ? `+${metrics.leadsHoje} hoje` : '+0 hoje',
       trendUp: metrics.leadsHoje > 0,
       description: `${metrics.leadsNovos} novos aguardando`,
-      accentColor: 'bg-blue-500',
+      accentColor: 'bg-primary',
+      iconBg: 'bg-primary/10',
+      iconColor: 'text-primary',
     },
     {
       id: 'leadsEmProgresso',
@@ -78,7 +80,9 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
       trend: metrics.leadsEmProgresso > 0 ? 'Ativos' : 'Nenhum',
       trendUp: metrics.leadsEmProgresso > 0,
       description: 'Triagem a Contrato',
-      accentColor: 'bg-amber-500',
+      accentColor: 'bg-[hsl(var(--gold))]',
+      iconBg: 'bg-[hsl(var(--gold))]/10',
+      iconColor: 'text-[hsl(var(--gold))]',
     },
     {
       id: 'taxaConversao',
@@ -90,6 +94,8 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
       trendUp: metrics.taxaConversao >= 50,
       description: 'Convertidos vs Perdidos',
       accentColor: 'bg-[hsl(var(--gold))]',
+      iconBg: 'bg-[hsl(var(--gold))]/10',
+      iconColor: 'text-[hsl(var(--gold))]',
     },
     {
       id: 'leadsConvertidos',
@@ -100,6 +106,8 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
       trendUp: metrics.leadsConvertidos > 0,
       description: 'Contratos assinados+',
       accentColor: 'bg-[hsl(var(--success))]',
+      iconBg: 'bg-[hsl(var(--success))]/10',
+      iconColor: 'text-[hsl(var(--success))]',
     },
   ];
 
@@ -137,9 +145,9 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
               <div className="flex items-start justify-between mb-4">
                 <div className={cn(
                   "w-10 h-10 rounded-xl flex items-center justify-center",
-                  "bg-muted/60 group-hover:bg-muted transition-colors"
+                  kpi.iconBg
                 )}>
-                  <kpi.icon className="h-5 w-5 text-foreground/70 group-hover:text-foreground transition-colors" />
+                  <kpi.icon className={cn("h-5 w-5", kpi.iconColor)} />
                 </div>
                 
                 <div className={cn(
@@ -152,8 +160,6 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
                   {kpi.trend}
                 </div>
               </div>
-
-              <div className="mt-auto pt-2">
               
               <p className="text-3xl font-bold text-foreground tracking-tight mb-1">
                 <AnimatedCounter 
@@ -162,7 +168,8 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
                   duration={1200}
                 />
               </p>
-              
+
+              <div className="mt-auto pt-2">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                 {kpi.title}
               </p>

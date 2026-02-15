@@ -97,7 +97,7 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
   };
 
   const periodCards = [
-    { label: 'Esta Semana', data: metrics.week, icon: Calendar, accentColor: 'bg-blue-500', iconBg: 'bg-blue-500/10', iconColor: 'text-blue-500' },
+    { label: 'Esta Semana', data: metrics.week, icon: Calendar, accentColor: 'bg-primary', iconBg: 'bg-primary/10', iconColor: 'text-primary' },
     { label: 'Este Mês', data: metrics.month, icon: Target, accentColor: 'bg-[hsl(var(--gold))]', iconBg: 'bg-[hsl(var(--gold))]/10', iconColor: 'text-[hsl(var(--gold))]' },
     { label: 'Este Trimestre', data: metrics.quarter, icon: DollarSign, accentColor: 'bg-[hsl(var(--success))]', iconBg: 'bg-[hsl(var(--success))]/10', iconColor: 'text-[hsl(var(--success))]', showValue: true },
   ];
@@ -178,9 +178,9 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
                 <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
                 <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '12px', fontSize: '12px' }} />
                 <Legend wrapperStyle={{ fontSize: '11px' }} />
-                <Line yAxisId="left" type="monotone" dataKey="leads" stroke="#3B82F6" strokeWidth={2} dot={{ r: 3, strokeWidth: 2 }} name="Novos Leads" />
-                <Line yAxisId="left" type="monotone" dataKey="conversoes" stroke="hsl(var(--success))" strokeWidth={2} dot={{ r: 3, strokeWidth: 2 }} name="Conversões" />
-                <Line yAxisId="right" type="monotone" dataKey="taxa" stroke="#8B5CF6" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3, strokeWidth: 2 }} name="Taxa (%)" />
+                <Line yAxisId="left" type="monotone" dataKey="leads" stroke="hsl(24, 21%, 21%)" strokeWidth={2} dot={{ r: 3, strokeWidth: 2 }} name="Novos Leads" />
+                <Line yAxisId="left" type="monotone" dataKey="conversoes" stroke="hsl(142, 76%, 36%)" strokeWidth={2} dot={{ r: 3, strokeWidth: 2 }} name="Conversões" />
+                <Line yAxisId="right" type="monotone" dataKey="taxa" stroke="hsl(38, 30%, 70%)" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3, strokeWidth: 2 }} name="Taxa (%)" />
               </LineChart>
             </ResponsiveContainer>
           </div>
