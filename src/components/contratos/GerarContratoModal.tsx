@@ -540,7 +540,7 @@ export function GerarContratoModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSignature className="h-5 w-5 text-primary" />
@@ -577,8 +577,8 @@ export function GerarContratoModal({
           ))}
         </div>
 
-        <ScrollArea className="flex-1 px-1">
-          <div className="p-4 space-y-4">
+        <ScrollArea className="flex-1 min-h-0 px-1">
+          <div className="p-4 pb-6 space-y-4">
             {/* Step 1: Data Source */}
             {currentStep === 1 && (
               <div className="space-y-4">
