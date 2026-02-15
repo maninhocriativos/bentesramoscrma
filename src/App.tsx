@@ -34,6 +34,7 @@ import PeticaoEditarPage from "./pages/PeticaoEditarPage";
 import PeticaoRevisaoPage from "./pages/PeticaoRevisaoPage";
 import PeticaoSaidaPage from "./pages/PeticaoSaidaPage";
 import ModelosPage from "./pages/ModelosPage";
+import PeticaoModeloEditorPage from "./pages/PeticaoModeloEditorPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -86,6 +87,7 @@ const App = () => (
               <Route path="/peticoes/:id/revisao" element={<PeticaoRevisaoPage />} />
               <Route path="/peticoes/:id/saida" element={<PeticaoSaidaPage />} />
               <Route path="/modelos" element={<ModelosPage />} />
+              <Route path="/peticoes/modelo-editor" element={<PeticaoModeloEditorPage />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />
