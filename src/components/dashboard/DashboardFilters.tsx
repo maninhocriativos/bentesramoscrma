@@ -27,33 +27,28 @@ export function DashboardFiltersBar({ filters, onFiltersChange }: DashboardFilte
   };
 
   const clearFilters = () => {
-    onFiltersChange({
-      period: 'all',
-      origem: 'all',
-      status: 'all',
-      search: '',
-    });
+    onFiltersChange({ period: 'all', origem: 'all', status: 'all', search: '' });
   };
 
   const hasActiveFilters = filters.period !== 'all' || filters.origem !== 'all' || filters.status !== 'all' || filters.search !== '';
 
   return (
-    <div className="bg-card rounded-xl shadow-enterprise p-4 border border-border/50">
-      <div className="flex flex-col gap-4">
-        {/* Search Bar */}
+    <div className="bg-card rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 border border-border/40">
+      <div className="flex flex-col gap-3">
+        {/* Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
           <Input
             placeholder="Buscar por nome ou email..."
             value={filters.search}
             onChange={(e) => handleChange('search', e.target.value)}
-            className="pl-10 pr-10 h-10 bg-muted/30 border-border/50"
+            className="pl-10 pr-10 h-11 bg-muted/30 border-0 rounded-xl text-sm placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-ring"
           />
           {filters.search && (
             <Button
               variant="ghost"
               size="sm"
-              className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+              className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0 hover:bg-muted"
               onClick={() => handleChange('search', '')}
             >
               <X className="h-4 w-4" />
@@ -61,75 +56,65 @@ export function DashboardFiltersBar({ filters, onFiltersChange }: DashboardFilte
           )}
         </div>
 
-        {/* Filters Row */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <Filter className="h-4 w-4 text-gold-foreground" />
-            <span>Filtros:</span>
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mr-1">
+            <Filter className="h-3.5 w-3.5" />
+            <span>Filtros</span>
           </div>
           
-          {/* Period Filter */}
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-            <Select value={filters.period} onValueChange={(v) => handleChange('period', v)}>
-              <SelectTrigger className="w-[140px] h-9 bg-muted/30 border-border/50 text-sm">
-                <SelectValue placeholder="Período" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todo Período</SelectItem>
-                <SelectItem value="today">Hoje</SelectItem>
-                <SelectItem value="week">Esta Semana</SelectItem>
-                <SelectItem value="month">Este Mês</SelectItem>
-                <SelectItem value="quarter">Últimos 90 dias</SelectItem>
-                <SelectItem value="year">Este Ano</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Select value={filters.period} onValueChange={(v) => handleChange('period', v)}>
+            <SelectTrigger className="w-[130px] h-8 bg-muted/30 border-0 text-xs rounded-lg">
+              <Calendar className="h-3 w-3 mr-1 text-muted-foreground/60" />
+              <SelectValue placeholder="Período" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todo Período</SelectItem>
+              <SelectItem value="today">Hoje</SelectItem>
+              <SelectItem value="week">Esta Semana</SelectItem>
+              <SelectItem value="month">Este Mês</SelectItem>
+              <SelectItem value="quarter">Últimos 90 dias</SelectItem>
+              <SelectItem value="year">Este Ano</SelectItem>
+            </SelectContent>
+          </Select>
 
-          {/* Origem Filter */}
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-muted-foreground" />
-            <Select value={filters.origem} onValueChange={(v) => handleChange('origem', v)}>
-              <SelectTrigger className="w-[130px] h-9 bg-muted/30 border-border/50 text-sm">
-                <SelectValue placeholder="Origem" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas Origens</SelectItem>
-                <SelectItem value="Instagram">Instagram</SelectItem>
-                <SelectItem value="Google">Google</SelectItem>
-                <SelectItem value="Site">Site</SelectItem>
-                <SelectItem value="Indicação">Indicação</SelectItem>
-                <SelectItem value="Outro">Outro</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Select value={filters.origem} onValueChange={(v) => handleChange('origem', v)}>
+            <SelectTrigger className="w-[120px] h-8 bg-muted/30 border-0 text-xs rounded-lg">
+              <MapPin className="h-3 w-3 mr-1 text-muted-foreground/60" />
+              <SelectValue placeholder="Origem" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              <SelectItem value="Instagram">Instagram</SelectItem>
+              <SelectItem value="Google">Google</SelectItem>
+              <SelectItem value="Site">Site</SelectItem>
+              <SelectItem value="Indicação">Indicação</SelectItem>
+              <SelectItem value="Outro">Outro</SelectItem>
+            </SelectContent>
+          </Select>
 
-          {/* Status Filter */}
-          <div className="flex items-center gap-2">
-            <Target className="h-4 w-4 text-muted-foreground" />
-            <Select value={filters.status} onValueChange={(v) => handleChange('status', v)}>
-              <SelectTrigger className="w-[160px] h-9 bg-muted/30 border-border/50 text-sm">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos Status</SelectItem>
-                <SelectItem value="Lead Frio">Lead Frio</SelectItem>
-                <SelectItem value="Em Atendimento">Em Atendimento</SelectItem>
-                <SelectItem value="Aguardando Contrato">Aguardando Contrato</SelectItem>
-                <SelectItem value="Contrato Assinado">Contrato Assinado</SelectItem>
-                <SelectItem value="Ganho">Ganho</SelectItem>
-                <SelectItem value="Perdido">Perdido</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Select value={filters.status} onValueChange={(v) => handleChange('status', v)}>
+            <SelectTrigger className="w-[140px] h-8 bg-muted/30 border-0 text-xs rounded-lg">
+              <Target className="h-3 w-3 mr-1 text-muted-foreground/60" />
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="Lead Frio">Lead Frio</SelectItem>
+              <SelectItem value="Em Atendimento">Em Atendimento</SelectItem>
+              <SelectItem value="Aguardando Contrato">Aguardando Contrato</SelectItem>
+              <SelectItem value="Contrato Assinado">Contrato Assinado</SelectItem>
+              <SelectItem value="Ganho">Ganho</SelectItem>
+              <SelectItem value="Perdido">Perdido</SelectItem>
+            </SelectContent>
+          </Select>
 
-          {/* Clear Filters */}
           {hasActiveFilters && (
             <Button
               variant="ghost"
               size="sm"
               onClick={clearFilters}
-              className="h-9 text-xs text-muted-foreground hover:text-foreground gap-1"
+              className="h-8 text-xs text-muted-foreground hover:text-foreground gap-1 px-2"
             >
               <X className="h-3 w-3" />
               Limpar
