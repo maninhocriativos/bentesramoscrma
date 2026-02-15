@@ -62,18 +62,19 @@ serve(async (req) => {
     let formIds: string[] = body.form_ids || [];
     const pageId = body.page_id || '61585487574008';
 
-    // Get Page Access Token from User Access Token
+    // Try to get Page Access Token; if it fails, assume the token IS already a page token
+    let effectiveToken = accessToken;
     const pageAccessToken = await getPageAccessToken(pageId, accessToken);
-    if (!pageAccessToken) {
-      return new Response(JSON.stringify({ error: 'Failed to get Page Access Token. Check permissions.' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+    if (pageAccessToken) {
+      console.log('[Meta Sync] Got page access token from user token');
+      effectiveToken = pageAccessToken;
+    } else {
+      console.log('[Meta Sync] Using token directly (might already be a page token)');
     }
-    console.log('[Meta Sync] Got page access token successfully');
 
     // Discover forms from page
     if (formIds.length === 0) {
-      formIds = await fetchFormIdsFromPage(pageId, pageAccessToken);
+      formIds = await fetchFormIdsFromPage(pageId, effectiveToken);
       if (formIds.length === 0) {
         formIds = ['806114115222300'];
       }
@@ -86,7 +87,7 @@ serve(async (req) => {
     for (const formId of formIds) {
       console.log(`[Meta Sync] Fetching leads for form ${formId}...`);
 
-      let url: string | null = `https://graph.facebook.com/v20.0/${formId}/leads?access_token=${pageAccessToken}&limit=50&fields=id,created_time,field_data,ad_id,adset_id,campaign_id,form_id`;
+      let url: string | null = `https://graph.facebook.com/v20.0/${formId}/leads?access_token=${effectiveToken}&limit=50&fields=id,created_time,field_data,ad_id,adset_id,campaign_id,form_id`;
       let pageCount = 0;
 
       while (url && pageCount < 10) {
