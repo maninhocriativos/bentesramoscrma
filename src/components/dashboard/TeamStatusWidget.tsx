@@ -1,5 +1,6 @@
-import { Users, Circle, Bell, CheckCircle2, Clock, MessageSquare, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Users, Circle, Bell, CheckCircle2, Clock, MessageSquare, AlertTriangle, ChevronDown, ChevronUp, Calendar, User } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -28,6 +29,7 @@ export function TeamStatusWidget() {
   const { getTeamWithStatus, getOnlineCount } = useTeamPresence(user?.id, userName);
   const { tarefas } = useTarefas();
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
+  const [selectedTarefa, setSelectedTarefa] = useState<Tarefa | null>(null);
 
   const team = getTeamWithStatus();
   const onlineCount = getOnlineCount();
@@ -192,7 +194,14 @@ export function TeamStatusWidget() {
                         {memberTarefas.slice(0, 5).map(tarefa => {
                           const config = PRIORIDADE_CONFIG[tarefa.prioridade] || PRIORIDADE_CONFIG.Media;
                           return (
-                            <div key={tarefa.id} className="flex items-center gap-2 py-1">
+                            <div
+                              key={tarefa.id}
+                              className="flex items-center gap-2 py-1 cursor-pointer hover:bg-muted/40 rounded px-1 -mx-1 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedTarefa(tarefa);
+                              }}
+                            >
                               <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", config.bg, config.color === 'text-destructive' && 'bg-destructive', config.color === 'text-primary' && 'bg-primary', config.color === 'text-[hsl(var(--gold))]' && 'bg-[hsl(var(--gold))]')} />
                               <span className="text-[11px] text-foreground truncate flex-1">
                                 {tarefa.titulo}
@@ -217,6 +226,71 @@ export function TeamStatusWidget() {
           </div>
         </ScrollArea>
       </CardContent>
+      {/* Task detail modal */}
+      <Dialog open={!!selectedTarefa} onOpenChange={(open) => !open && setSelectedTarefa(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              {selectedTarefa && (
+                <>
+                  <div className={cn(
+                    "w-2.5 h-2.5 rounded-full shrink-0",
+                    selectedTarefa.prioridade === 'Urgente' && 'bg-destructive',
+                    selectedTarefa.prioridade === 'Alta' && 'bg-primary',
+                    selectedTarefa.prioridade === 'Media' && 'bg-[hsl(var(--gold))]',
+                    selectedTarefa.prioridade === 'Baixa' && 'bg-muted-foreground',
+                  )} />
+                  {selectedTarefa.titulo}
+                </>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedTarefa && (() => {
+            const config = PRIORIDADE_CONFIG[selectedTarefa.prioridade] || PRIORIDADE_CONFIG.Media;
+            const responsavel = team.find(m => m.id === selectedTarefa.responsavel_id);
+            return (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Status</p>
+                    <Badge variant="secondary" className="text-xs">{selectedTarefa.status}</Badge>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Prioridade</p>
+                    <Badge className={cn("text-xs", config.bg, config.color)}>{config.label}</Badge>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Responsável</p>
+                    <div className="flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-sm">{responsavel?.fullName || 'Não atribuído'}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Data Limite</p>
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-sm">
+                        {selectedTarefa.data_limite
+                          ? new Date(selectedTarefa.data_limite).toLocaleDateString('pt-BR')
+                          : 'Sem prazo'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {selectedTarefa.descricao && (
+                  <div className="space-y-1">
+                    <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Descrição</p>
+                    <p className="text-sm text-foreground bg-muted/30 rounded-lg p-3">
+                      {selectedTarefa.descricao}
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
