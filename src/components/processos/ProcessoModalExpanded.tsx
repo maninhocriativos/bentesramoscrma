@@ -433,7 +433,7 @@ export function ProcessoModalExpanded({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl rounded-xl max-h-[95vh] overflow-hidden flex flex-col min-h-0">
-        <DialogHeader className="pb-2">
+        <DialogHeader className="pb-2 flex-shrink-0">
           <DialogTitle className="text-xl font-semibold flex items-center gap-2">
             <Scale className="h-5 w-5 text-primary" />
             {isNew ? 'Novo Processo' : 'Detalhes do Processo'}
@@ -441,14 +441,14 @@ export function ProcessoModalExpanded({
         </DialogHeader>
 
         <Tabs defaultValue="dados" className="flex-1 min-h-0 overflow-hidden flex flex-col">
-          <TabsList className="grid grid-cols-4 w-full">
+          <TabsList className="grid grid-cols-4 w-full flex-shrink-0">
             <TabsTrigger value="dados">Dados</TabsTrigger>
             <TabsTrigger value="partes">Partes</TabsTrigger>
             <TabsTrigger value="movimentos">Movimentos</TabsTrigger>
             <TabsTrigger value="notificacoes">Notificações</TabsTrigger>
           </TabsList>
 
-          <div className="flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-auto">
             {/* Tab: Dados */}
             <TabsContent value="dados" className="h-full mt-0">
               <ScrollArea className="h-full pr-4">
@@ -640,7 +640,7 @@ export function ProcessoModalExpanded({
 
             {/* Tab: Partes */}
             <TabsContent value="partes" className="h-full mt-0">
-              <ScrollArea className="h-full pr-4">
+              <ScrollArea className="h-[400px] pr-2">
                 <div className="py-4">
                   {partes.length === 0 ? (
                     <Card>
@@ -663,27 +663,29 @@ export function ProcessoModalExpanded({
                             : 'bg-secondary/25 text-secondary-foreground border-secondary/30';
 
                         return (
-                          <Card key={i}>
-                            <CardContent className="p-3">
-                              <div className="flex justify-between items-start gap-2">
-                                <span className="font-medium text-sm break-words">{parte.nome}</span>
-                                <Badge variant="outline" className={poloClasses}>
+                          <Card key={i} className="overflow-hidden">
+                            <CardContent className="p-4">
+                              <div className="flex flex-wrap justify-between items-start gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <span className="font-medium text-sm break-words block">{parte.nome}</span>
+                                  {parte.documento && (
+                                    <p className="text-xs text-muted-foreground mt-0.5">Doc: {parte.documento}</p>
+                                  )}
+                                </div>
+                                <Badge variant="outline" className={`${poloClasses} flex-shrink-0`}>
                                   {parte.tipo}
                                 </Badge>
                               </div>
-                              {parte.documento && (
-                                <p className="text-xs text-muted-foreground mt-1">Doc: {parte.documento}</p>
-                              )}
                               {parte.advogados && parte.advogados.length > 0 && (
-                                <div className="mt-2 pl-3 border-l-2 border-primary/30">
+                                <div className="mt-3 pl-3 border-l-2 border-primary/30">
                                   <p className="text-xs text-muted-foreground mb-1 inline-flex items-center gap-1">
                                     <Briefcase className="h-3 w-3" /> Advogado(s)
                                   </p>
                                   {parte.advogados.map((adv, j) => (
-                                    <div key={j} className="flex items-center justify-between gap-2">
-                                      <p className="text-xs font-medium break-words">{adv.nome}</p>
+                                    <div key={j} className="flex flex-wrap items-center justify-between gap-1 mt-1">
+                                      <p className="text-xs font-medium break-words min-w-0 flex-1">{adv.nome}</p>
                                       {adv.oab && (
-                                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
                                           <BadgeCheck className="h-3 w-3 text-primary" />
                                           {adv.oab}
                                         </span>
@@ -786,6 +788,7 @@ export function ProcessoModalExpanded({
                         status: (formData.status as unknown as string) || (processo.status as unknown as string),
                         tribunal: formData.tribunal || processo.tribunal,
                         ultimaAtualizacao: processo.data_ultima_atualizacao,
+                        movimentos: movimentos.slice(0, 3),
                       }}
                     />
                   ) : isNew ? (
