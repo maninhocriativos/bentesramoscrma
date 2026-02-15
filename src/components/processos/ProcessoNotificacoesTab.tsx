@@ -31,6 +31,7 @@ export interface ProcessoNotificacoesTabProps {
     status?: string | null;
     tribunal?: string | null;
     ultimaAtualizacao?: string | null;
+    movimentos?: Array<{ dataHora: string; nome: string; complemento?: string }>;
   };
 }
 
@@ -48,30 +49,85 @@ function formatDateTime(dateStr: string) {
   }
 }
 
+function traduzirStatus(status: string): string {
+  const mapa: Record<string, string> = {
+    "Em Andamento": "em andamento — o processo segue tramitando normalmente",
+    "Suspenso": "temporariamente suspenso — aguardando uma decisão ou prazo",
+    "Arquivado": "arquivado — o processo foi encerrado",
+    "Ganho": "encerrado com decisão favorável 🎉",
+    "Perdido": "encerrado com decisão desfavorável",
+  };
+  return mapa[status] || status;
+}
+
+function traduzirMovimento(nome: string): string {
+  const n = nome.toLowerCase();
+  if (n.includes("juntada de petição")) return "Uma petição foi anexada ao processo";
+  if (n.includes("juntada de documento")) return "Um novo documento foi anexado";
+  if (n.includes("juntada")) return "Novos documentos foram anexados";
+  if (n.includes("conclusão") || n.includes("conclusos")) return "O processo foi enviado ao juiz para análise";
+  if (n.includes("despacho")) return "O juiz emitiu um despacho";
+  if (n.includes("sentença")) return "Foi proferida sentença";
+  if (n.includes("intimação")) return "Foi enviada uma intimação";
+  if (n.includes("citação")) return "Foi realizada a citação da parte contrária";
+  if (n.includes("audiência") || n.includes("audiencia")) return "Uma audiência foi agendada ou realizada";
+  if (n.includes("recurso")) return "Um recurso foi interposto";
+  if (n.includes("distribuição")) return "O processo foi distribuído";
+  if (n.includes("decisão") || n.includes("decisao")) return "O juiz tomou uma decisão";
+  return `Movimentação: ${nome}`;
+}
+
+function formatarDataLonga(dateStr: string): string {
+  try {
+    return new Date(dateStr).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
 function buildPreviewMessage(d: ProcessoNotificacoesTabProps["previewData"]) {
   const numProcesso = d.numeroProcesso || "N/A";
-  const statusProc = d.status || "Em Andamento";
+  const statusTraduzido = traduzirStatus(d.status || "Em Andamento");
   const tribunal = d.tribunal || "";
 
   const ultimaAtualizacao = d.ultimaAtualizacao
     ? (() => {
         try {
-          return new Date(d.ultimaAtualizacao).toLocaleDateString("pt-BR");
+          return formatarDataLonga(d.ultimaAtualizacao);
         } catch {
           return d.ultimaAtualizacao;
         }
       })()
     : "não disponível";
 
+  const movimentos = (d.movimentos || []).slice(0, 3);
+  let movimentosTexto = "";
+  if (movimentos.length > 0) {
+    movimentosTexto = "\n📌 *Últimas movimentações:*\n";
+    for (const mov of movimentos) {
+      const dataFormatada = mov.dataHora ? formatarDataLonga(mov.dataHora) : "";
+      const traducao = traduzirMovimento(mov.nome || "");
+      movimentosTexto += `• ${traducao}${dataFormatada ? ` (${dataFormatada})` : ""}\n`;
+    }
+  }
+
+  const nomeCliente = (d.nomeCliente || "").split(" ")[0] || "";
+  const saudacao = nomeCliente ? `Olá ${nomeCliente}, aqui` : "Olá, aqui";
+
   return (
-    `Olá, aqui é a Isa do Bentes & Ramos! 👋\n\n` +
-    `Segue atualização do seu processo:\n\n` +
-    `📋 *Número:* ${numProcesso}\n` +
+    `${saudacao} é a Isa do Bentes & Ramos! 👋\n\n` +
+    `Segue a atualização semanal do seu processo:\n\n` +
+    `📋 *Processo:* ${numProcesso}\n` +
     `⚖️ *Ação:* ${d.acao || "N/A"}\n` +
-    `📊 *Status:* ${statusProc}\n` +
+    `📊 *Situação atual:* ${statusTraduzido}\n` +
     (tribunal ? `🏛️ *Tribunal:* ${tribunal}\n` : "") +
-    `📅 *Última atualização:* ${ultimaAtualizacao}\n\n` +
-    `Caso tenha dúvidas, estamos à disposição! 🙂\n\n` +
+    `📅 *Última atualização:* ${ultimaAtualizacao}\n` +
+    movimentosTexto +
+    `\nQualquer dúvida, pode nos chamar por aqui mesmo! 🙂\n\n` +
     `*Bentes & Ramos Advogados*`
   );
 }

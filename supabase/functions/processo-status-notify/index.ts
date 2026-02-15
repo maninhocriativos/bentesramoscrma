@@ -12,6 +12,58 @@ interface NotificationPayload {
   tipo?: 'status_update' | 'movimento' | 'audiencia' | 'prazo';
 }
 
+// Traduz status técnico para linguagem acessível ao cliente
+function traduzirStatus(status: string): string {
+  const mapa: Record<string, string> = {
+    "Em Andamento": "em andamento — o processo segue tramitando normalmente",
+    "Suspenso": "temporariamente suspenso — aguardando uma decisão ou prazo",
+    "Arquivado": "arquivado — o processo foi encerrado",
+    "Ganho": "encerrado com decisão favorável 🎉",
+    "Perdido": "encerrado com decisão desfavorável",
+  };
+  return mapa[status] || status;
+}
+
+// Traduz movimentações técnicas para linguagem acessível
+function traduzirMovimento(nome: string): string {
+  const n = nome.toLowerCase();
+  if (n.includes("juntada de petição")) return "Uma petição foi anexada ao processo";
+  if (n.includes("juntada de documento")) return "Um novo documento foi anexado ao processo";
+  if (n.includes("juntada")) return "Novos documentos foram anexados";
+  if (n.includes("conclusão") || n.includes("conclusos")) return "O processo foi enviado ao juiz para análise";
+  if (n.includes("despacho")) return "O juiz emitiu um despacho (decisão intermediária)";
+  if (n.includes("sentença")) return "Foi proferida sentença no processo";
+  if (n.includes("intimação")) return "Foi enviada uma intimação (comunicação oficial do tribunal)";
+  if (n.includes("citação")) return "Foi realizada a citação da parte contrária";
+  if (n.includes("audiência") || n.includes("audiencia")) return "Uma audiência foi agendada ou realizada";
+  if (n.includes("recurso")) return "Um recurso foi interposto";
+  if (n.includes("distribuição") || n.includes("distribuicao")) return "O processo foi distribuído a uma vara";
+  if (n.includes("trânsito em julgado") || n.includes("transito em julgado")) return "A decisão se tornou definitiva (sem mais recursos)";
+  if (n.includes("acordo") || n.includes("homologação")) return "Um acordo foi firmado ou homologado";
+  if (n.includes("penhora")) return "Foi realizada penhora de bens";
+  if (n.includes("alvará")) return "Foi expedido um alvará";
+  if (n.includes("perícia") || n.includes("pericia")) return "Uma perícia foi solicitada ou realizada";
+  if (n.includes("decisão") || n.includes("decisao")) return "O juiz tomou uma decisão no processo";
+  if (n.includes("expedição") || n.includes("expedicao")) return "Um documento oficial foi expedido";
+  if (n.includes("remessa")) return "O processo foi encaminhado para outra instância";
+  if (n.includes("baixa") || n.includes("arquivamento")) return "O processo foi arquivado";
+  if (n.includes("suspensão") || n.includes("suspensao")) return "O processo foi suspenso temporariamente";
+  // Fallback genérico
+  return `Houve uma movimentação: ${nome}`;
+}
+
+function formatarData(dateStr: string): string {
+  try {
+    return new Date(dateStr).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -57,28 +109,48 @@ serve(async (req) => {
       );
     }
 
-    // Buscar configuração Z-API
-    const { data: zapiConfig } = await supabase
-      .from("integrations_config")
-      .select("config_json")
-      .eq("provider", "zapi")
+    // Buscar instância Z-API ativa e padrão
+    const { data: zapiInstance } = await supabase
+      .from("zapi_instances")
+      .select("*")
       .eq("is_active", true)
+      .eq("is_default", true)
       .maybeSingle();
 
-    if (!zapiConfig?.config_json) {
-      return new Response(
-        JSON.stringify({ error: "Z-API não configurado" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // Fallback para integrations_config
+    let instance: { instanceId: string; token: string; clientToken: string } | null = null;
 
-    const config = zapiConfig.config_json as any;
-    const instances = config.instances || [];
-    const instance = instances.find((i: any) => i.isDefault) || instances[0];
+    if (zapiInstance) {
+      instance = {
+        instanceId: zapiInstance.instance_id,
+        token: zapiInstance.token,
+        clientToken: zapiInstance.client_token || "",
+      };
+    } else {
+      const { data: zapiConfig } = await supabase
+        .from("integrations_config")
+        .select("config_json")
+        .eq("provider", "zapi")
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (zapiConfig?.config_json) {
+        const config = zapiConfig.config_json as any;
+        const instances = config.instances || [];
+        const inst = instances.find((i: any) => i.isDefault) || instances[0];
+        if (inst) {
+          instance = {
+            instanceId: inst.instanceId,
+            token: inst.token,
+            clientToken: inst.clientToken || "",
+          };
+        }
+      }
+    }
 
     if (!instance) {
       return new Response(
-        JSON.stringify({ error: "Nenhuma instância Z-API configurada" }),
+        JSON.stringify({ error: "Z-API não configurado" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -93,20 +165,36 @@ serve(async (req) => {
     let textoMensagem = mensagem;
     if (!textoMensagem) {
       const numProcesso = processo.numero_processo || "N/A";
-      const statusProc = processo.status || "Em Andamento";
+      const statusTraduzido = traduzirStatus(processo.status || "Em Andamento");
       const tribunal = processo.tribunal || "";
       const ultimaAtualizacao = processo.data_ultima_atualizacao 
-        ? new Date(processo.data_ultima_atualizacao).toLocaleDateString('pt-BR')
+        ? formatarData(processo.data_ultima_atualizacao)
         : "não disponível";
 
-      textoMensagem = `Olá, aqui é a Isa do Bentes & Ramos! 👋\n\n` +
-        `Segue atualização do seu processo:\n\n` +
-        `📋 *Número:* ${numProcesso}\n` +
+      // Pegar últimas movimentações (até 3) e traduzir
+      const movimentos = (processo.movimentos_json || []).slice(0, 3);
+      let movimentosTexto = "";
+      if (movimentos.length > 0) {
+        movimentosTexto = "\n📌 *Últimas movimentações:*\n";
+        for (const mov of movimentos) {
+          const dataFormatada = mov.dataHora ? formatarData(mov.dataHora) : "";
+          const traducao = traduzirMovimento(mov.nome || "");
+          movimentosTexto += `• ${traducao}${dataFormatada ? ` (${dataFormatada})` : ""}\n`;
+        }
+      }
+
+      const nomeCliente = (cliente.nome || "").split(" ")[0] || "";
+      const saudacao = nomeCliente ? `Olá ${nomeCliente}, aqui` : "Olá, aqui";
+
+      textoMensagem = `${saudacao} é a Isa do Bentes & Ramos! 👋\n\n` +
+        `Segue a atualização semanal do seu processo:\n\n` +
+        `📋 *Processo:* ${numProcesso}\n` +
         `⚖️ *Ação:* ${processo.titulo_acao || "N/A"}\n` +
-        `📊 *Status:* ${statusProc}\n` +
+        `📊 *Situação atual:* ${statusTraduzido}\n` +
         (tribunal ? `🏛️ *Tribunal:* ${tribunal}\n` : "") +
-        `📅 *Última atualização:* ${ultimaAtualizacao}\n\n` +
-        `Caso tenha dúvidas, estamos à disposição! 🙂\n\n` +
+        `📅 *Última atualização:* ${ultimaAtualizacao}\n` +
+        movimentosTexto +
+        `\nQualquer dúvida, pode nos chamar por aqui mesmo! 🙂\n\n` +
         `*Bentes & Ramos Advogados*`;
     }
 
