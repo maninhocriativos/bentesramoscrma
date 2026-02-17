@@ -98,7 +98,7 @@ export default function MetaLeadsPage() {
         <div className="flex-1 flex overflow-hidden">
           {/* Left Panel - List */}
           <div 
-            className={`w-full md:w-[400px] border-r flex flex-col ${
+            className={`w-full md:w-[420px] lg:w-[460px] border-r flex flex-col shrink-0 ${
               viewMode !== 'list' ? 'hidden md:flex' : ''
             }`}
           >
