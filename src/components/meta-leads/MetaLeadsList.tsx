@@ -50,47 +50,46 @@ export function MetaLeadsList({ leads, selectedId, onSelect }: MetaLeadsListProp
               selectedId === lead.id && "bg-accent"
             )}
           >
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <User className="h-4 w-4 text-primary" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium truncate" title={lead.nome || 'Sem nome'}>
+            <div className="flex items-start gap-2 mb-2">
+              <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <User className="h-4 w-4 text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-1">
+                  <p className="font-medium truncate text-sm" title={lead.nome || 'Sem nome'}>
                     {lead.nome || 'Sem nome'}
                   </p>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                    {lead.telefone && (
-                      <span className="flex items-center gap-1" title={lead.telefone}>
-                        <Phone className="h-3 w-3 shrink-0" />
-                        <span className="truncate max-w-[120px]">{lead.telefone}</span>
-                      </span>
-                    )}
-                    {lead.email && (
-                      <span className="flex items-center gap-1 truncate" title={lead.email}>
-                        <Mail className="h-3 w-3 shrink-0" />
-                        <span className="truncate max-w-[150px]">{lead.email}</span>
-                      </span>
-                    )}
-                  </div>
+                  <Badge variant="outline" className={cn("shrink-0 text-[10px] px-1.5 whitespace-nowrap", statusColors[lead.status])}>
+                    {statusLabels[lead.status]}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                  {lead.telefone && (
+                    <span className="flex items-center gap-1" title={lead.telefone}>
+                      <Phone className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{lead.telefone}</span>
+                    </span>
+                  )}
+                  {lead.email && (
+                    <span className="flex items-center gap-1 truncate" title={lead.email}>
+                      <Mail className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{lead.email}</span>
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground mt-1 gap-2">
+                  <Badge variant="secondary" className="text-[10px] bg-purple-100 text-purple-700 border-purple-200 shrink-0 px-1.5 py-0">
+                    📋 META
+                  </Badge>
+                  <span className="flex items-center gap-1 whitespace-nowrap" title={format(new Date(lead.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}>
+                    <Calendar className="h-3 w-3 shrink-0" />
+                    {formatDistanceToNow(new Date(lead.created_at), { 
+                      addSuffix: true, 
+                      locale: ptBR 
+                    })}
+                  </span>
                 </div>
               </div>
-              <Badge variant="outline" className={cn("shrink-0 text-[10px] px-1.5", statusColors[lead.status])}>
-                {statusLabels[lead.status]}
-              </Badge>
-            </div>
-            
-            <div className="flex items-center justify-between text-xs text-muted-foreground gap-2">
-              <Badge variant="secondary" className="text-[10px] bg-purple-100 text-purple-700 border-purple-200 shrink-0">
-                📋 META
-              </Badge>
-              <span className="flex items-center gap-1 truncate" title={format(new Date(lead.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}>
-                <Calendar className="h-3 w-3 shrink-0" />
-                {formatDistanceToNow(new Date(lead.created_at), { 
-                  addSuffix: true, 
-                  locale: ptBR 
-                })}
-              </span>
             </div>
           </div>
         ))}
