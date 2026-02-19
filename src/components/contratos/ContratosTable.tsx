@@ -43,14 +43,26 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
       const { data, error } = await supabase.functions.invoke('contract-reminder', {
         body: { documentKey: contrato.key, documentName: contrato.leadNome, reminderType: type },
       });
-      if (error) throw error;
+      if (error) {
+        let errorMsg = 'Não foi possível enviar.';
+        try {
+          const body = await (error as any)?.context?.json?.();
+          if (body?.error) errorMsg = body.error;
+          if (body?.details) errorMsg += ` — ${body.details}`;
+        } catch {
+          if (error.message) errorMsg = error.message;
+        }
+        toast({ title: 'Erro ao enviar cobrança', description: errorMsg, variant: 'destructive' });
+        return;
+      }
       if (data?.success) {
         toast({ title: 'Cobrança enviada!', description: `Mensagem ${type === 'urgent' ? 'urgente' : 'de lembrete'} enviada para ${data.lead?.nome || 'o cliente'}.` });
       } else {
-        throw new Error(data?.error || 'Erro ao enviar cobrança');
+        const details = data?.details ? ` — ${data.details}` : '';
+        toast({ title: 'Falha ao enviar', description: (data?.error || 'Erro desconhecido') + details, variant: 'destructive' });
       }
     } catch (error: any) {
-      toast({ title: 'Erro ao enviar cobrança', description: error.message || 'Não foi possível enviar.', variant: 'destructive' });
+      toast({ title: 'Erro ao enviar cobrança', description: error?.message || 'Não foi possível enviar.', variant: 'destructive' });
     } finally {
       setSendingReminder(null);
     }
