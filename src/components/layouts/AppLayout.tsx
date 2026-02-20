@@ -7,6 +7,7 @@ import { PageTransition } from '@/components/layouts/PageTransition';
 
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
+import { useAccessLog } from '@/hooks/useAccessLog';
 import { Loader2, Menu } from 'lucide-react';
 
 interface AppLayoutProps {
@@ -17,6 +18,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const { loading: perfilLoading, needsOnboarding } = usePerfil();
+  useAccessLog();
 
   useEffect(() => {
     if (!authLoading && !user) {
