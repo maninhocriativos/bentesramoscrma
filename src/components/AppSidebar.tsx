@@ -128,7 +128,7 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       
-      <SidebarContent className="px-3 py-1 overflow-y-auto">
+      <SidebarContent className="px-3 py-1 overflow-y-auto scrollbar-thin scrollbar-thumb-sidebar-accent/40 scrollbar-track-transparent">
         {menuSections.map((section) => {
           const visibleItems = section.items.filter(item => canShow(item.visibility));
           if (visibleItems.length === 0) return null;
@@ -154,7 +154,7 @@ export function AppSidebar() {
                           className={cn(
                             "rounded-lg transition-all duration-200 h-9 group/item relative",
                             isActive 
-                              ? 'bg-primary/15 text-primary font-medium' 
+                              ? 'bg-primary/15 text-sidebar-foreground font-semibold' 
                               : 'text-sidebar-foreground/65 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
                           )}
                         >
@@ -166,7 +166,7 @@ export function AppSidebar() {
                               "h-[18px] w-[18px] shrink-0 transition-all duration-200",
                               isActive ? 'text-primary' : 'group-hover/item:text-sidebar-foreground'
                             )} />
-                            <span className="text-[13px] truncate">{item.title}</span>
+                            <span className={cn("text-[13px] truncate", isActive && "text-sidebar-foreground")}>{item.title}</span>
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
