@@ -2544,11 +2544,19 @@ export type Database = {
       }
       tarefas: {
         Row: {
+          aprovacao_feedback: string | null
+          aprovacao_nota: number | null
+          aprovacao_status: string | null
+          aprovado_em: string | null
+          aprovado_por: string | null
           cliente_id: string | null
           created_at: string
           data_conclusao: string | null
           data_limite: string | null
           descricao: string | null
+          entrega_anexo_url: string | null
+          entrega_texto: string | null
+          entregue_em: string | null
           id: string
           prioridade: string | null
           processo_id: string | null
@@ -2558,11 +2566,19 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          aprovacao_feedback?: string | null
+          aprovacao_nota?: number | null
+          aprovacao_status?: string | null
+          aprovado_em?: string | null
+          aprovado_por?: string | null
           cliente_id?: string | null
           created_at?: string
           data_conclusao?: string | null
           data_limite?: string | null
           descricao?: string | null
+          entrega_anexo_url?: string | null
+          entrega_texto?: string | null
+          entregue_em?: string | null
           id?: string
           prioridade?: string | null
           processo_id?: string | null
@@ -2572,11 +2588,19 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          aprovacao_feedback?: string | null
+          aprovacao_nota?: number | null
+          aprovacao_status?: string | null
+          aprovado_em?: string | null
+          aprovado_por?: string | null
           cliente_id?: string | null
           created_at?: string
           data_conclusao?: string | null
           data_limite?: string | null
           descricao?: string | null
+          entrega_anexo_url?: string | null
+          entrega_texto?: string | null
+          entregue_em?: string | null
           id?: string
           prioridade?: string | null
           processo_id?: string | null

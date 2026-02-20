@@ -95,6 +95,14 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModa
         data_conclusao: null,
         processo_id: null,
         cliente_id: null,
+        entrega_texto: null,
+        entrega_anexo_url: null,
+        entregue_em: null,
+        aprovacao_status: null,
+        aprovacao_nota: null,
+        aprovacao_feedback: null,
+        aprovado_por: null,
+        aprovado_em: null,
       });
     }
 
