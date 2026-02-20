@@ -6,7 +6,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState, useEffect } from 'react';
 import { useTarefas } from '@/hooks/useTarefas';
+import { Tarefa } from '@/types/tarefas';
 import { supabase } from '@/integrations/supabase/client';
+import { Trash2 } from 'lucide-react';
 
 interface TeamMember {
   id: string;
@@ -18,14 +20,40 @@ interface TeamMember {
 interface TarefaModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  tarefa?: Tarefa | null;
+  onDelete?: (id: string) => Promise<boolean>;
 }
 
-export function TarefaModal({ open, onOpenChange }: TarefaModalProps) {
-  const { createTarefa } = useTarefas();
+export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModalProps) {
+  const { createTarefa, updateTarefa } = useTarefas();
   const [saving, setSaving] = useState(false);
+  const [titulo, setTitulo] = useState('');
+  const [descricao, setDescricao] = useState('');
   const [prioridade, setPrioridade] = useState<'Baixa' | 'Media' | 'Alta' | 'Urgente'>('Media');
+  const [status, setStatus] = useState<'Pendente' | 'Em Andamento' | 'Concluída' | 'Cancelada'>('Pendente');
   const [responsavelId, setResponsavelId] = useState<string>('none');
+  const [dataLimite, setDataLimite] = useState('');
   const [members, setMembers] = useState<TeamMember[]>([]);
+
+  const isEditing = !!tarefa;
+
+  useEffect(() => {
+    if (open && tarefa) {
+      setTitulo(tarefa.titulo);
+      setDescricao(tarefa.descricao || '');
+      setPrioridade(tarefa.prioridade);
+      setStatus(tarefa.status);
+      setResponsavelId(tarefa.responsavel_id || 'none');
+      setDataLimite(tarefa.data_limite || '');
+    } else if (open && !tarefa) {
+      setTitulo('');
+      setDescricao('');
+      setPrioridade('Media');
+      setStatus('Pendente');
+      setResponsavelId('none');
+      setDataLimite('');
+    }
+  }, [open, tarefa]);
 
   useEffect(() => {
     const fetchMembers = async () => {
@@ -46,23 +74,39 @@ export function TarefaModal({ open, onOpenChange }: TarefaModalProps) {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSaving(true);
-    const formData = new FormData(e.currentTarget);
-    
-    await createTarefa({
-      titulo: formData.get('titulo') as string,
-      descricao: formData.get('descricao') as string || null,
+
+    const payload = {
+      titulo,
+      descricao: descricao || null,
       prioridade,
-      status: 'Pendente',
-      data_limite: formData.get('data_limite') as string || null,
-      data_conclusao: null,
+      status,
+      data_limite: dataLimite || null,
       responsavel_id: responsavelId !== 'none' ? responsavelId : null,
-      processo_id: null,
-      cliente_id: null,
-    });
-    
+    };
+
+    if (isEditing && tarefa) {
+      await updateTarefa(tarefa.id, {
+        ...payload,
+        data_conclusao: status === 'Concluída' ? new Date().toISOString() : null,
+      });
+    } else {
+      await createTarefa({
+        ...payload,
+        data_conclusao: null,
+        processo_id: null,
+        cliente_id: null,
+      });
+    }
+
     setSaving(false);
-    setPrioridade('Media');
-    setResponsavelId('none');
+    onOpenChange(false);
+  };
+
+  const handleDelete = async () => {
+    if (!tarefa || !onDelete) return;
+    setSaving(true);
+    await onDelete(tarefa.id);
+    setSaving(false);
     onOpenChange(false);
   };
 
@@ -70,17 +114,17 @@ export function TarefaModal({ open, onOpenChange }: TarefaModalProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Nova Tarefa</DialogTitle>
+          <DialogTitle>{isEditing ? 'Editar Tarefa' : 'Nova Tarefa'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="titulo">Título</Label>
-            <Input id="titulo" name="titulo" required placeholder="Digite o título da tarefa" />
+            <Input id="titulo" value={titulo} onChange={e => setTitulo(e.target.value)} required placeholder="Digite o título da tarefa" />
           </div>
           
           <div className="space-y-2">
             <Label htmlFor="descricao">Descrição</Label>
-            <Textarea id="descricao" name="descricao" placeholder="Descreva a tarefa..." rows={3} />
+            <Textarea id="descricao" value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Descreva a tarefa..." rows={3} />
           </div>
 
           <div className="space-y-2">
@@ -117,14 +161,37 @@ export function TarefaModal({ open, onOpenChange }: TarefaModalProps) {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="data_limite">Data Limite</Label>
-              <Input id="data_limite" name="data_limite" type="date" />
+              <Label>Status</Label>
+              <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Pendente">Pendente</SelectItem>
+                  <SelectItem value="Em Andamento">Em Andamento</SelectItem>
+                  <SelectItem value="Concluída">Concluída</SelectItem>
+                  <SelectItem value="Cancelada">Cancelada</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="data_limite">Data Limite</Label>
+            <Input id="data_limite" type="date" value={dataLimite} onChange={e => setDataLimite(e.target.value)} />
+          </div>
           
-          <Button type="submit" disabled={saving} className="w-full">
-            {saving ? 'Salvando...' : 'Criar Tarefa'}
-          </Button>
+          <div className="flex gap-2">
+            {isEditing && onDelete && (
+              <Button type="button" variant="destructive" size="sm" onClick={handleDelete} disabled={saving}>
+                <Trash2 className="h-4 w-4 mr-1" />
+                Excluir
+              </Button>
+            )}
+            <Button type="submit" disabled={saving} className="flex-1">
+              {saving ? 'Salvando...' : isEditing ? 'Salvar Alterações' : 'Criar Tarefa'}
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
