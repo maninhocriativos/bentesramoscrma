@@ -9,6 +9,7 @@ import { TimesheetModal } from '@/components/tarefas/TimesheetModal';
 import { TarefasKanban } from '@/components/tarefas/TarefasKanban';
 import { TimesheetTable } from '@/components/tarefas/TimesheetTable';
 import { AppLayout } from '@/components/layouts/AppLayout';
+import { Tarefa } from '@/types/tarefas';
 
 export default function TarefasPage() {
   const { tarefas, loading: loadingTarefas, updateTarefa, deleteTarefa } = useTarefas();
@@ -16,6 +17,17 @@ export default function TarefasPage() {
   
   const [tarefaModalOpen, setTarefaModalOpen] = useState(false);
   const [timesheetModalOpen, setTimesheetModalOpen] = useState(false);
+  const [selectedTarefa, setSelectedTarefa] = useState<Tarefa | null>(null);
+
+  const handleSelectTarefa = (tarefa: Tarefa) => {
+    setSelectedTarefa(tarefa);
+    setTarefaModalOpen(true);
+  };
+
+  const handleNewTarefa = () => {
+    setSelectedTarefa(null);
+    setTarefaModalOpen(true);
+  };
 
   // KPIs
   const tarefasPendentes = tarefas.filter(t => t.status === 'Pendente').length;
@@ -38,7 +50,7 @@ export default function TarefasPage() {
             <Clock className="h-4 w-4 mr-2" />
             Registrar Horas
           </Button>
-          <Button onClick={() => setTarefaModalOpen(true)}>
+          <Button onClick={handleNewTarefa}>
             <Plus className="h-4 w-4 mr-2" />
             Nova Tarefa
           </Button>
@@ -111,6 +123,7 @@ export default function TarefasPage() {
             loading={loadingTarefas}
             onUpdateTarefa={updateTarefa}
             onDeleteTarefa={deleteTarefa}
+            onSelectTarefa={handleSelectTarefa}
           />
         </TabsContent>
 
@@ -126,7 +139,7 @@ export default function TarefasPage() {
         </TabsContent>
       </Tabs>
 
-      <TarefaModal open={tarefaModalOpen} onOpenChange={setTarefaModalOpen} />
+      <TarefaModal open={tarefaModalOpen} onOpenChange={setTarefaModalOpen} tarefa={selectedTarefa} onDelete={deleteTarefa} />
       <TimesheetModal open={timesheetModalOpen} onOpenChange={setTimesheetModalOpen} />
     </div>
     </AppLayout>

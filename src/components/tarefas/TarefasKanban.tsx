@@ -9,11 +9,12 @@ const columns = [
   { id: 'Concluída', title: 'Concluída', color: 'bg-green-500' },
 ];
 
-export function TarefasKanban({ tarefas, loading, onUpdateTarefa }: { 
+export function TarefasKanban({ tarefas, loading, onUpdateTarefa, onDeleteTarefa, onSelectTarefa }: { 
   tarefas: Tarefa[]; 
   loading: boolean;
   onUpdateTarefa: (id: string, updates: Partial<Tarefa>) => Promise<boolean>;
   onDeleteTarefa: (id: string) => Promise<boolean>;
+  onSelectTarefa?: (tarefa: Tarefa) => void;
 }) {
   if (loading) return <div className="grid grid-cols-3 gap-4">{[1,2,3].map(i => <Skeleton key={i} className="h-64" />)}</div>;
 
@@ -37,7 +38,11 @@ export function TarefasKanban({ tarefas, loading, onUpdateTarefa }: {
           </CardHeader>
           <CardContent className="space-y-2 min-h-[200px]">
             {tarefas.filter(t => t.status === col.id).map(tarefa => (
-              <div key={tarefa.id} className="p-3 bg-muted rounded-lg border cursor-pointer hover:shadow-sm">
+              <div 
+                key={tarefa.id} 
+                className="p-3 bg-muted rounded-lg border cursor-pointer hover:shadow-sm transition-shadow"
+                onClick={() => onSelectTarefa?.(tarefa)}
+              >
                 <p className="font-medium text-sm">{tarefa.titulo}</p>
                 {tarefa.descricao && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{tarefa.descricao}</p>}
                 <div className="flex items-center gap-2 mt-2">
