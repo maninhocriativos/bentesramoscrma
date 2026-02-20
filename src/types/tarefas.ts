@@ -11,6 +11,15 @@ export interface Tarefa {
   data_conclusao: string | null;
   created_at: string;
   updated_at: string;
+  // Approval workflow
+  entrega_texto: string | null;
+  entrega_anexo_url: string | null;
+  entregue_em: string | null;
+  aprovacao_status: 'aguardando_aprovacao' | 'aprovada' | 'devolvida' | null;
+  aprovacao_nota: number | null;
+  aprovacao_feedback: string | null;
+  aprovado_por: string | null;
+  aprovado_em: string | null;
 }
 
 export interface Timesheet {
