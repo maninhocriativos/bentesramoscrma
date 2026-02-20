@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, CheckSquare, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useTarefas, useTimesheet } from '@/hooks/useTarefas';
 import { TarefaModal } from '@/components/tarefas/TarefaModal';
+import { TarefaDetailModal } from '@/components/tarefas/TarefaDetailModal';
 import { TimesheetModal } from '@/components/tarefas/TimesheetModal';
 import { TarefasKanban } from '@/components/tarefas/TarefasKanban';
 import { TimesheetTable } from '@/components/tarefas/TimesheetTable';
@@ -18,8 +19,14 @@ export default function TarefasPage() {
   const [tarefaModalOpen, setTarefaModalOpen] = useState(false);
   const [timesheetModalOpen, setTimesheetModalOpen] = useState(false);
   const [selectedTarefa, setSelectedTarefa] = useState<Tarefa | null>(null);
+  const [detailTarefa, setDetailTarefa] = useState<Tarefa | null>(null);
 
   const handleSelectTarefa = (tarefa: Tarefa) => {
+    setDetailTarefa(tarefa);
+  };
+
+  const handleEditFromDetail = (tarefa: Tarefa) => {
+    setDetailTarefa(null);
     setSelectedTarefa(tarefa);
     setTarefaModalOpen(true);
   };
@@ -139,6 +146,7 @@ export default function TarefasPage() {
         </TabsContent>
       </Tabs>
 
+      <TarefaDetailModal open={!!detailTarefa} onOpenChange={(o) => !o && setDetailTarefa(null)} tarefa={detailTarefa} onEdit={handleEditFromDetail} />
       <TarefaModal open={tarefaModalOpen} onOpenChange={setTarefaModalOpen} tarefa={selectedTarefa} onDelete={deleteTarefa} />
       <TimesheetModal open={timesheetModalOpen} onOpenChange={setTimesheetModalOpen} />
     </div>
