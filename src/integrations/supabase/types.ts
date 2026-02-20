@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      access_logs: {
+        Row: {
+          accessed_at: string
+          id: string
+          page_path: string
+          page_title: string | null
+          user_email: string | null
+          user_id: string
+          user_name: string | null
+        }
+        Insert: {
+          accessed_at?: string
+          id?: string
+          page_path: string
+          page_title?: string | null
+          user_email?: string | null
+          user_id: string
+          user_name?: string | null
+        }
+        Update: {
+          accessed_at?: string
+          id?: string
+          page_path?: string
+          page_title?: string | null
+          user_email?: string | null
+          user_id?: string
+          user_name?: string | null
+        }
+        Relationships: []
+      }
       ai_prompts: {
         Row: {
           content: string
