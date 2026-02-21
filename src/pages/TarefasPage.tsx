@@ -46,26 +46,26 @@ export default function TarefasPage() {
 
   return (
     <AppLayout>
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Tarefas & Timesheet</h1>
-          <p className="text-muted-foreground">Gestão de tarefas e controle de horas</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Tarefas & Timesheet</h1>
+          <p className="text-sm text-muted-foreground">Gestão de tarefas e controle de horas</p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={() => setTimesheetModalOpen(true)} variant="outline">
-            <Clock className="h-4 w-4 mr-2" />
-            Registrar Horas
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button onClick={() => setTimesheetModalOpen(true)} variant="outline" size="sm" className="flex-1 sm:flex-none">
+            <Clock className="h-4 w-4 mr-1 md:mr-2" />
+            <span className="hidden md:inline">Registrar</span> Horas
           </Button>
-          <Button onClick={handleNewTarefa}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nova Tarefa
+          <Button onClick={handleNewTarefa} size="sm" className="flex-1 sm:flex-none">
+            <Plus className="h-4 w-4 mr-1 md:mr-2" />
+            <span className="hidden md:inline">Nova</span> Tarefa
           </Button>
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Pendentes</CardTitle>

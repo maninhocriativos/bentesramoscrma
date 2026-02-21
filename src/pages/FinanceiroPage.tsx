@@ -34,20 +34,20 @@ export default function FinanceiroPage() {
 
   return (
     <AppLayout>
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Financeiro</h1>
-          <p className="text-muted-foreground">Gestão de honorários, parcelas e despesas</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Financeiro</h1>
+          <p className="text-sm text-muted-foreground">Gestão de honorários, parcelas e despesas</p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={() => setDespesaModalOpen(true)} variant="outline">
-            <Plus className="h-4 w-4 mr-2" />
-            Nova Despesa
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button onClick={() => setDespesaModalOpen(true)} variant="outline" size="sm" className="flex-1 sm:flex-none">
+            <Plus className="h-4 w-4 mr-1" />
+            <span className="hidden md:inline">Nova</span> Despesa
           </Button>
-          <Button onClick={() => setHonorarioModalOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Honorário
+          <Button onClick={() => setHonorarioModalOpen(true)} size="sm" className="flex-1 sm:flex-none">
+            <Plus className="h-4 w-4 mr-1" />
+            <span className="hidden md:inline">Novo</span> Honorário
           </Button>
         </div>
       </div>
