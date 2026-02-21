@@ -1698,7 +1698,7 @@ const ManyChatInboxContent = () => {
   };
 
   return (
-    <div className={`flex h-screen w-screen overflow-hidden ${themeClasses.bg}`}>
+    <div className={`flex h-dvh w-screen overflow-hidden ${themeClasses.bg}`}>
       {/* Sidebar - Lista de Conversas */}
       <div className={`${showMobileChat ? 'hidden md:flex' : 'flex'} w-full md:w-[380px] lg:w-[420px] flex-col ${themeClasses.sidebar} border-r ${themeClasses.border}`}>
         {/* Header */}
