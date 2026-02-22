@@ -2096,24 +2096,41 @@ const ManyChatInboxContent = () => {
                       <MoreVertical className="h-4 w-4 md:h-5 md:w-5" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuItem className="md:hidden" onClick={() => {
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuItem className="md:hidden" onClick={async () => {
                       const novoStatus = !selectedSubscriber.atendimento_humano;
-                      supabase.from('manychat_subscribers').update({ 
+                      const { error } = await supabase.from('manychat_subscribers').update({ 
                         atendimento_humano: novoStatus,
                         atendimento_humano_desde: novoStatus ? new Date().toISOString() : null
                       }).eq('subscriber_id', selectedSubscriber.subscriber_id);
+                      if (!error) {
+                        setSelectedSubscriber(prev => prev ? { ...prev, atendimento_humano: novoStatus } : null);
+                        setSubscribers(prev => prev.map(s => 
+                          s.subscriber_id === selectedSubscriber.subscriber_id 
+                            ? { ...s, atendimento_humano: novoStatus }
+                            : s
+                        ));
+                        toast({
+                          title: novoStatus ? '🙋 Atendimento Humano' : '🤖 Isa Ativada',
+                          description: novoStatus ? 'Você assumiu a conversa' : 'Isa voltou a responder',
+                        });
+                      }
                     }}>
                       {selectedSubscriber.atendimento_humano ? '🤖 Ativar Isa' : '🙋 Atendimento Humano'}
                     </DropdownMenuItem>
+                    {selectedSubscriber.telefone && (
+                      <>
+                        <DropdownMenuItem className="md:hidden" onClick={() => window.open(`https://wa.me/${selectedSubscriber.telefone?.replace(/\D/g, '')}`, '_blank')}>
+                          💬 Abrir no WhatsApp
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="md:hidden" onClick={() => window.open(`tel:${selectedSubscriber.telefone}`, '_self')}>
+                          📞 Ligar
+                        </DropdownMenuItem>
+                      </>
+                    )}
                     {selectedSubscriber.lead_id && (
                       <DropdownMenuItem onClick={() => navigate(`/leads/${selectedSubscriber.lead_id}`)}>
                         📋 Ver Lead no CRM
-                      </DropdownMenuItem>
-                    )}
-                    {selectedSubscriber.telefone && (
-                      <DropdownMenuItem className="md:hidden" onClick={() => window.open(`tel:${selectedSubscriber.telefone}`, '_self')}>
-                        📞 Ligar
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>
@@ -2123,7 +2140,7 @@ const ManyChatInboxContent = () => {
 
             {/* Área de Mensagens */}
             <div 
-              className={`flex-1 overflow-y-auto px-4 md:px-16 lg:px-[63px] py-4 ${themeClasses.bg}`}
+              className={`flex-1 overflow-y-auto px-3 md:px-16 lg:px-[63px] py-4 ${themeClasses.bg}`}
               style={{
                 backgroundImage: isDark 
                   ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cdefs%3E%3Cpattern id='p' width='80' height='80' patternUnits='userSpaceOnUse'%3E%3Ccircle cx='40' cy='40' r='1.5' fill='%23ffffff08'/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill='url(%23p)' width='100%25' height='100%25'/%3E%3C/svg%3E")`
@@ -2159,7 +2176,7 @@ const ManyChatInboxContent = () => {
                         )}
                         <div className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'} mb-[3px]`}>
                           <div
-                            className={`relative max-w-[85%] md:max-w-[65%] rounded-xl px-3 pt-2 pb-2 shadow-md transition-all hover:shadow-lg select-text ${
+                            className={`relative max-w-[80%] md:max-w-[65%] rounded-xl px-2.5 md:px-3 pt-2 pb-2 shadow-md transition-all hover:shadow-lg select-text ${
                               isOutgoing ? themeClasses.messageSent : themeClasses.messageReceived
                             }`}
                             style={{
@@ -2251,7 +2268,7 @@ const ManyChatInboxContent = () => {
             )}
 
             {/* Input de Mensagem */}
-            <div className={`min-h-[56px] md:h-[66px] px-2 md:px-4 py-2 flex items-center gap-1 md:gap-2 ${themeClasses.header}`}>
+            <div className={`min-h-[52px] md:h-[66px] px-2 md:px-4 py-1.5 md:py-2 flex items-center gap-1 md:gap-2 ${themeClasses.header}`}>
               <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*,audio/*,video/*" className="hidden" />
               
               <Button variant="ghost" size="icon" className={`hidden md:flex h-10 w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}>
