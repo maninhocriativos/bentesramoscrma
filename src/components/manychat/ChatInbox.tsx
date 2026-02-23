@@ -1548,6 +1548,20 @@ const ManyChatInboxContent = () => {
       if (selectedTagIds.length === 0) return true;
       const subTags = getSubscriberTags(sub.subscriber_id);
       return selectedTagIds.every(tagId => subTags.some(st => st.tag_id === tagId));
+    })
+    // Ordenar: conversas com mensagens não lidas primeiro, depois por última interação
+    .sort((a, b) => {
+      const aUnread = unreadCounts.get(a.subscriber_id) || 0;
+      const bUnread = unreadCounts.get(b.subscriber_id) || 0;
+      
+      // Não lidas primeiro
+      if (aUnread > 0 && bUnread === 0) return -1;
+      if (bUnread > 0 && aUnread === 0) return 1;
+      
+      // Dentro do mesmo grupo, ordenar por última interação (mais recente primeiro)
+      const aTime = new Date(a.ultima_interacao || 0).getTime();
+      const bTime = new Date(b.ultima_interacao || 0).getTime();
+      return bTime - aTime;
     });
 
   const renderMessage = (message: Message) => {
