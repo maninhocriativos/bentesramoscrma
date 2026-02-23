@@ -5,8 +5,9 @@ import {
   X, User, Phone, Mail, Briefcase, DollarSign, Calendar,
   MessageCircle, Clock, Tag, Sparkles,
   MessageSquare, Zap, ZapOff, Plus, 
-  Loader2, ExternalLink, History
+  Loader2, ExternalLink, History, Link2, Pencil, Check
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -47,6 +48,65 @@ const formatCurrency = (value: number | null): string => {
   if (!value) return 'Não informado';
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 };
+
+function ContractLinkField({ leadId, initialValue }: { leadId: string; initialValue: string | null }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(initialValue || '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase
+      .from('leads_juridicos')
+      .update({ link_contrato: value || null })
+      .eq('id', leadId);
+    setSaving(false);
+    if (error) {
+      toast.error('Erro ao salvar link');
+    } else {
+      toast.success('Link salvo');
+      setEditing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+        <Link2 className="w-3 h-3" />
+        Link do Contrato
+      </h3>
+      {editing ? (
+        <div className="flex items-center gap-1.5">
+          <Input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="https://..."
+            className="h-8 text-xs"
+          />
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={save} disabled={saving}>
+            <Check className="w-3.5 h-3.5 text-emerald-600" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => { setEditing(false); setValue(initialValue || ''); }}>
+            <X className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 text-sm">
+          {value ? (
+            <a href={value} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline truncate max-w-[220px]">
+              {value}
+            </a>
+          ) : (
+            <span className="text-xs text-muted-foreground">Nenhum link</span>
+          )}
+          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setEditing(true)}>
+            <Pencil className="w-3 h-3 text-muted-foreground" />
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function LeadDetailDrawer({ lead, isOpen, onClose }: LeadDetailDrawerProps) {
   const navigate = useNavigate();
@@ -317,6 +377,10 @@ export function LeadDetailDrawer({ lead, isOpen, onClose }: LeadDetailDrawerProp
                       </div>
                     )}
                   </div>
+
+                  {/* Contract Link */}
+                  <Separator />
+                  <ContractLinkField leadId={lead.id} initialValue={lead.link_contrato} />
 
                   {/* AI Summary */}
                   {lead.resumo_ia && (
