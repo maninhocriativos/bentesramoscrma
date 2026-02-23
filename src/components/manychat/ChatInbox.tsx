@@ -175,6 +175,117 @@ const ManyChatInboxContent = () => {
   const messagesCacheRef = useRef<Map<string, Message[]>>(new Map());
   // Rastrear mensagens não lidas por subscriber
   const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
+  const lastReadRef = useRef<Record<string, string>>({});
+
+  // Load lastRead from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('chat_last_read');
+      if (stored) lastReadRef.current = JSON.parse(stored);
+    } catch { /* ignore */ }
+  }, []);
+
+  // Helper to save lastRead
+  const saveLastRead = useCallback((subscriberId: string) => {
+    const now = new Date().toISOString();
+    lastReadRef.current[subscriberId] = now;
+    try {
+      localStorage.setItem('chat_last_read', JSON.stringify(lastReadRef.current));
+    } catch { /* ignore */ }
+  }, []);
+
+  // Calculate unread counts from DB after subscribers load
+  const computeInitialUnreads = useCallback(async (subs: typeof subscribers) => {
+    if (subs.length === 0) return;
+    const lastRead = lastReadRef.current;
+    
+    // Only check subscribers that have a lastRead entry (others are "all read" by default first visit)
+    // OR subscribers whose ultima_interacao is after their lastRead
+    const toCheck: { subscriber_id: string; since: string }[] = [];
+    for (const sub of subs) {
+      const lr = lastRead[sub.subscriber_id];
+      if (!lr) {
+        // First time seeing this subscriber - mark as read now (don't flood with old unreads)
+        // But if it has a very recent interaction (last 2 min), show it
+        if (sub.ultima_interacao) {
+          const diff = Date.now() - new Date(sub.ultima_interacao).getTime();
+          if (diff < 120000) { // 2 minutes
+            toCheck.push({ subscriber_id: sub.subscriber_id, since: new Date(Date.now() - 120000).toISOString() });
+          } else {
+            lastReadRef.current[sub.subscriber_id] = sub.ultima_interacao;
+          }
+        }
+        continue;
+      }
+      // If ultima_interacao is after lastRead, there might be unreads
+      if (sub.ultima_interacao && sub.ultima_interacao > lr) {
+        toCheck.push({ subscriber_id: sub.subscriber_id, since: lr });
+      }
+    }
+
+    if (toCheck.length === 0) {
+      // Save any new entries
+      try { localStorage.setItem('chat_last_read', JSON.stringify(lastReadRef.current)); } catch {}
+      return;
+    }
+
+    // Query unread counts in batches
+    const newUnreads = new Map<string, number>();
+    const batchSize = 50;
+    for (let i = 0; i < toCheck.length; i += batchSize) {
+      const batch = toCheck.slice(i, i + batchSize);
+      // Use individual queries for accurate counts per subscriber
+      const promises = batch.map(async ({ subscriber_id, since }) => {
+        // Build possible IDs for this subscriber
+        const possibleIds = [subscriber_id];
+        const phone = subscriber_id.replace('zapi_', '');
+        if (phone !== subscriber_id) possibleIds.push(phone);
+        
+        const sub = subs.find(s => s.subscriber_id === subscriber_id);
+        const leadId = sub?.lead_id;
+
+        let query = supabase
+          .from('manychat_mensagens')
+          .select('id', { count: 'exact', head: true })
+          .eq('direcao', 'entrada')
+          .gt('created_at', since);
+        
+        if (leadId) {
+          query = query.or(`subscriber_id.in.(${possibleIds.join(',')}),lead_id.eq.${leadId}`);
+        } else {
+          query = query.in('subscriber_id', possibleIds);
+        }
+
+        const { count } = await query;
+        if (count && count > 0) {
+          newUnreads.set(subscriber_id, count);
+        }
+      });
+      await Promise.all(promises);
+    }
+
+    if (newUnreads.size > 0) {
+      setUnreadCounts(prev => {
+        const merged = new Map(prev);
+        for (const [k, v] of newUnreads) {
+          // Only set if not already tracked (realtime might have set it)
+          if (!merged.has(k)) merged.set(k, v);
+        }
+        return merged;
+      });
+    }
+    
+    try { localStorage.setItem('chat_last_read', JSON.stringify(lastReadRef.current)); } catch {}
+  }, []);
+
+  // Trigger unread computation when subscribers change
+  const subscribersLoadedRef = useRef(false);
+  useEffect(() => {
+    if (subscribers.length > 0 && !subscribersLoadedRef.current) {
+      subscribersLoadedRef.current = true;
+      computeInitialUnreads(subscribers);
+    }
+  }, [subscribers, computeInitialUnreads]);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -655,12 +766,13 @@ const ManyChatInboxContent = () => {
           loadMessages(selectedSubscriber.subscriber_id);
         }
         
-        // Limpar contador de não lidas ao abrir conversa
+        // Limpar contador de não lidas ao abrir conversa e salvar lastRead
         setUnreadCounts(prev => {
           const newMap = new Map(prev);
           newMap.delete(selectedSubscriber.subscriber_id);
           return newMap;
         });
+        saveLastRead(selectedSubscriber.subscriber_id);
         
         setCurrentChat(selectedSubscriber.subscriber_id);
         setShowMobileChat(true);
