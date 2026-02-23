@@ -1,11 +1,12 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Phone, Mail, Calendar, Globe, FileText, MessageSquare, Scale, DollarSign, User, ScrollText } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, Calendar, Globe, FileText, MessageSquare, Scale, DollarSign, User, ScrollText, Link2, Pencil, Check, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Lead } from '@/types/leads';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -27,6 +28,55 @@ const statusColors: Record<string, string> = {
   'Ganho': 'bg-green-600',
   'Perdido': 'bg-red-500',
 };
+
+function ContractLinkInline({ leadId, initialValue }: { leadId: string; initialValue: string | null }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(initialValue || '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase
+      .from('leads_juridicos')
+      .update({ link_contrato: value || null })
+      .eq('id', leadId);
+    setSaving(false);
+    if (!error) setEditing(false);
+  };
+
+  return (
+    <div className="mt-4 p-3 rounded-lg bg-muted/50">
+      <div className="flex items-center gap-2 mb-1">
+        <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
+        <p className="text-xs text-muted-foreground">Link do Contrato</p>
+      </div>
+      {editing ? (
+        <div className="flex items-center gap-2">
+          <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://..." className="h-8 text-sm" />
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={save} disabled={saving}>
+            <Check className="h-4 w-4 text-emerald-600" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => { setEditing(false); setValue(initialValue || ''); }}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          {value ? (
+            <a href={value} target="_blank" rel="noopener noreferrer" className="text-sm text-primary underline truncate">
+              {value}
+            </a>
+          ) : (
+            <span className="text-sm text-muted-foreground">Nenhum link cadastrado</span>
+          )}
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setEditing(true)}>
+            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -154,6 +204,8 @@ export default function LeadDetailPage() {
                 <p className="text-sm">{lead.resumo_ia}</p>
               </div>
             )}
+            {/* Contract Link */}
+            <ContractLinkInline leadId={lead.id} initialValue={lead.link_contrato} />
           </CardContent>
         </Card>
 
