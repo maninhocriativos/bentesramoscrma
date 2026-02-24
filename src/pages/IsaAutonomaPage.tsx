@@ -16,6 +16,7 @@ import { format, subDays, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { IsaAcoesPendentes } from '@/components/assistentes/IsaAcoesPendentes';
 import { IsaAutomacoesConfig } from '@/components/assistentes/IsaAutomacoesConfig';
+import { FollowupTrafegoEstagnado } from '@/components/assistentes/FollowupTrafegoEstagnado';
 import isaAvatar from '@/assets/isa-avatar.png';
 
 interface Stats {
@@ -261,7 +262,10 @@ export default function IsaAutonomaPage() {
             </TabsContent>
 
             <TabsContent value="automacoes">
-              <IsaAutomacoesConfig />
+              <div className="space-y-4">
+                <IsaAutomacoesConfig />
+                <FollowupTrafegoEstagnado />
+              </div>
             </TabsContent>
 
             <TabsContent value="historico">

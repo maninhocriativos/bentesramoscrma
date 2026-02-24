@@ -116,3 +116,6 @@ verify_jwt = false
 
 [functions.isa-followup-prova-social]
 verify_jwt = false
+
+[functions.followup-trafego-estagnado]
+verify_jwt = false
