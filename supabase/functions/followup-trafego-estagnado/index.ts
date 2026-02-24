@@ -10,11 +10,9 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const IMAGE_URL = 'https://bentesramoscrma.lovable.app/images/prova-social-bradesco.jpg';
+const DEFAULT_IMAGE_URL = 'https://bentesramoscrma.lovable.app/images/prova-social-bradesco.jpg';
 
-const MENSAGEM_FOLLOWUP = (nome: string) => {
-  const primeiro = nome?.split(' ')[0] || '';
-  return `Olá${primeiro ? ` ${primeiro}` : ''}! Aqui é a *Isa do Bentes & Ramos* 🏛️
+const DEFAULT_MENSAGEM = `Olá{nome_prefix}! Aqui é a *Isa do Bentes & Ramos* 🏛️
 
 Passando para te lembrar que ainda estamos à disposição para te ajudar! 💼
 
@@ -23,7 +21,15 @@ Olha só essa decisão recente que conquistamos: um banco foi *condenado a pagar
 Se você está enfrentando problemas com cobranças abusivas, empréstimos indevidos ou qualquer irregularidade bancária, *nós podemos te ajudar a buscar seus direitos*.
 
 📩 Me responda aqui que eu te oriento sobre os próximos passos!`;
-};
+
+function buildMessage(template: string, nome: string): string {
+  const primeiro = nome?.split(' ')[0] || '';
+  // Support {nome} placeholder
+  let msg = template.replace(/\{nome\}/g, primeiro || '');
+  // Support legacy {nome_prefix} placeholder
+  msg = msg.replace(/\{nome_prefix\}/g, primeiro ? ` ${primeiro}` : '');
+  return msg;
+}
 
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -37,14 +43,18 @@ serve(async (req: Request) => {
     const { 
       dry_run = false, 
       intervalo_minutos = 10,
-      dias_sem_contato = 7
+      dias_sem_contato = 7,
+      mensagem_template,
+      imagem_url,
     } = body;
+
+    const template = mensagem_template || DEFAULT_MENSAGEM;
+    const imageUrl = imagem_url || DEFAULT_IMAGE_URL;
 
     console.log(`[Follow-up Tráfego] dry_run: ${dry_run}, intervalo: ${intervalo_minutos}min, dias: ${dias_sem_contato}`);
 
     const cutoffDate = new Date(Date.now() - dias_sem_contato * 24 * 60 * 60 * 1000).toISOString();
 
-    // Buscar leads de tráfego estagnados
     const { data: leads, error } = await supabase
       .from('leads_juridicos')
       .select('id, nome, telefone, status, last_contact_at, lead_state, tipo_origem, fonte_trafego')
@@ -58,7 +68,6 @@ serve(async (req: Request) => {
 
     if (error) throw new Error(`Erro ao buscar leads: ${error.message}`);
 
-    // Filtrar telefones válidos e deduplicar
     const seen = new Set<string>();
     const leadsElegiveis = (leads || []).filter(l => {
       const tel = l.telefone?.replace(/\D/g, '');
@@ -83,15 +92,14 @@ serve(async (req: Request) => {
           last_contact_at: l.last_contact_at,
           fonte_trafego: l.fonte_trafego,
         })),
-        mensagem_exemplo: MENSAGEM_FOLLOWUP('Cliente'),
-        imagem_url: IMAGE_URL,
+        mensagem_exemplo: buildMessage(template, 'Cliente'),
+        imagem_url: imageUrl,
         intervalo_minutos,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Buscar config Z-API
     const zapiConfig = await getZapiConfig(supabase);
     if (!zapiConfig) {
       return new Response(JSON.stringify({ error: 'Z-API não configurado' }), {
@@ -108,15 +116,12 @@ serve(async (req: Request) => {
       const lead = leadsElegiveis[i];
       try {
         const telefone = normalizePhone(lead.telefone);
+        const mensagem = buildMessage(template, lead.nome || '');
 
         console.log(`[Follow-up Tráfego] [${i + 1}/${leadsElegiveis.length}] Enviando para ${lead.nome} (${telefone})`);
 
-        // 1. Enviar imagem de prova social
-        const imgResult = await sendImage(zapiConfig, telefone, IMAGE_URL, 'Decisão judicial real | Caso ganho ✅');
-
-        // 2. Aguardar 3s e enviar texto
+        const imgResult = await sendImage(zapiConfig, telefone, imageUrl, 'Decisão judicial real | Caso ganho ✅');
         await new Promise(r => setTimeout(r, 3000));
-        const mensagem = MENSAGEM_FOLLOWUP(lead.nome || '');
         const txtResult = await sendText(zapiConfig, telefone, mensagem);
 
         const success = imgResult.success || txtResult.success;
@@ -125,13 +130,12 @@ serve(async (req: Request) => {
           enviados++;
           const subscriberId = `zapi_${telefone}`;
 
-          // Registrar mensagens no chat
           await supabase.from('manychat_mensagens').insert([
             {
               subscriber_id: subscriberId,
               subscriber_nome: 'Isa do Bentes & Ramos',
               lead_id: lead.id,
-              conteudo: IMAGE_URL,
+              conteudo: imageUrl,
               direcao: 'saida',
               tipo: 'image',
               canal: 'whatsapp',
@@ -149,7 +153,6 @@ serve(async (req: Request) => {
             }
           ]);
 
-          // Registrar interação
           await supabase.from('interacoes').insert({
             cliente_id: lead.id,
             tipo: 'WhatsApp',
@@ -158,7 +161,6 @@ serve(async (req: Request) => {
             detalhes: mensagem.substring(0, 200),
           });
 
-          // Atualizar last_contact_at
           await supabase.from('leads_juridicos')
             .update({ last_contact_at: new Date().toISOString() })
             .eq('id', lead.id);
@@ -171,7 +173,6 @@ serve(async (req: Request) => {
           console.error(`[Follow-up Tráfego] ❌ ${lead.nome}:`, txtResult.error);
         }
 
-        // Intervalo entre envios (anti-spam)
         if (i < leadsElegiveis.length - 1) {
           console.log(`[Follow-up Tráfego] Aguardando ${intervalo_minutos} min...`);
           await new Promise(r => setTimeout(r, intervaloMs));
@@ -182,7 +183,6 @@ serve(async (req: Request) => {
       }
     }
 
-    // Registrar evento no sistema
     await supabase.from('system_events').insert({
       tipo: 'campanha',
       fonte: 'followup_trafego',
