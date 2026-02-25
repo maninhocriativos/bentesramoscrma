@@ -38,8 +38,14 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
     const taxaConversao = leadsFinalizados > 0 
       ? Math.round((leadsConvertidos / leadsFinalizados) * 100) 
       : 0;
+
+    // Métricas específicas de tráfego
+    const trafficLeads = leads.filter(l => l.tipo_origem === 'trafego');
+    const trafficConvertidos = trafficLeads.filter(l => 
+      l.lead_state && ESTADOS_CONVERTIDOS.includes(l.lead_state as LeadState)
+    ).length;
     
-    return { totalLeads, leadsEmProgresso, leadsConvertidos, leadsPerdidos, leadsNovos, leadsReady, leadsHoje, taxaConversao };
+    return { totalLeads, leadsEmProgresso, leadsConvertidos, leadsPerdidos, leadsNovos, leadsReady, leadsHoje, taxaConversao, trafficConvertidos, trafficTotal: trafficLeads.length };
   }, [leads]);
 
   useEffect(() => {
@@ -99,12 +105,12 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
     },
     {
       id: 'leadsConvertidos',
-      title: 'Convertidos',
-      value: metrics.leadsConvertidos,
+      title: 'Contratos (Tráfego)',
+      value: metrics.trafficConvertidos,
       icon: Briefcase,
-      trend: metrics.leadsReady > 0 ? `${metrics.leadsReady} prontos` : 'Contratos',
-      trendUp: metrics.leadsConvertidos > 0,
-      description: 'Contratos assinados+',
+      trend: metrics.trafficTotal > 0 ? `de ${metrics.trafficTotal} leads` : 'Tráfego',
+      trendUp: metrics.trafficConvertidos > 0,
+      description: `${metrics.leadsConvertidos} total geral`,
       accentColor: 'bg-[hsl(var(--success))]',
       iconBg: 'bg-[hsl(var(--success))]/10',
       iconColor: 'text-[hsl(var(--success))]',
