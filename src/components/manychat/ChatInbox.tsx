@@ -624,12 +624,10 @@ const ManyChatInboxContent = () => {
               });
               scrollToBottom();
             } else {
-              // Mensagem para outro chat - atualizar cache e contador de não lidas
+              // Mensagem para outro chat - NÃO popular cache parcial (causa histórico incompleto)
+              // Apenas invalidar o cache para forçar recarga completa quando abrir
               const msgSubId = newMsg.subscriber_id;
-              const cachedMsgs = messagesCacheRef.current.get(msgSubId) || [];
-              if (!cachedMsgs.some(m => m.id === newMsg.id)) {
-                messagesCacheRef.current.set(msgSubId, [...cachedMsgs, newMsg]);
-              }
+              messagesCacheRef.current.delete(msgSubId);
               
               // Incrementar contador de não lidas (só para mensagens de entrada)
               if (newMsg.direcao === 'entrada') {
@@ -754,17 +752,16 @@ const ManyChatInboxContent = () => {
       selectedSubscriberIdRef.current = newSubscriberId;
       
       if (selectedSubscriber) {
-        // Verificar se já temos mensagens em cache
+        // Verificar se já temos mensagens em cache para exibição instantânea
         const cachedMessages = messagesCacheRef.current.get(selectedSubscriber.subscriber_id);
         if (cachedMessages && cachedMessages.length > 0) {
-          // Usar cache instantaneamente (sem loading)
+          // Usar cache instantaneamente para UX rápida
           console.log('[Cache] Usando mensagens em cache para:', selectedSubscriber.subscriber_id);
           setMessages(cachedMessages);
           setIsLoadingMessages(false);
-        } else {
-          // Carregar do banco apenas se não houver cache
-          loadMessages(selectedSubscriber.subscriber_id);
         }
+        // SEMPRE carregar do banco para garantir histórico completo
+        loadMessages(selectedSubscriber.subscriber_id);
         
         // Limpar contador de não lidas ao abrir conversa e salvar lastRead
         setUnreadCounts(prev => {
