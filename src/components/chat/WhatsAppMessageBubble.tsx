@@ -250,12 +250,16 @@ export function WhatsAppMessageBubble({ message, themeClasses, onReply }: WhatsA
       }
       
       default: {
+        // Only apply WhatsApp formatting to messages NOT sent from the chat interface
+        const metadata = message.metadata as any;
+        const sentFromInterface = metadata?.sent_via === 'chat_interface';
+        
         return (
           <div className="space-y-2">
             {/* Text content */}
             {!showFullPreview && (
               <div className="text-[14.2px] leading-[19px] text-inherit select-text cursor-text whitespace-pre-wrap break-words">
-                {formatWhatsAppText(content)}
+                {sentFromInterface ? content : formatWhatsAppText(content)}
               </div>
             )}
             
