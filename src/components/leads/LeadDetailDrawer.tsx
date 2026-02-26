@@ -5,7 +5,8 @@ import {
   X, User, Phone, Mail, Briefcase, DollarSign, Calendar,
   MessageCircle, Clock, Tag, Sparkles,
   MessageSquare, Zap, ZapOff, Plus, 
-  Loader2, ExternalLink, History, Link2, Pencil, Check
+  Loader2, ExternalLink, History, Link2, Pencil, Check,
+  FileSignature, Minus
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -105,6 +106,133 @@ function ContractLinkField({ leadId, initialValue }: { leadId: string; initialVa
         </div>
       )}
     </div>
+  );
+}
+
+function ContratosExtrasTab({ lead }: { lead: Lead }) {
+  const [contratosAdicionais, setContratosAdicionais] = useState(lead.contratos_adicionais || 0);
+  const [saving, setSaving] = useState(false);
+  const [nota, setNota] = useState('');
+
+  useEffect(() => {
+    setContratosAdicionais(lead.contratos_adicionais || 0);
+  }, [lead.id, lead.contratos_adicionais]);
+
+  const updateContratos = async (newValue: number) => {
+    if (newValue < 0) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from('leads_juridicos')
+      .update({ contratos_adicionais: newValue, updated_at: new Date().toISOString() })
+      .eq('id', lead.id);
+    setSaving(false);
+    if (error) {
+      toast.error('Erro ao atualizar');
+    } else {
+      setContratosAdicionais(newValue);
+      toast.success(`Contratos adicionais: ${newValue}`);
+    }
+  };
+
+  const addContrato = async () => {
+    const newValue = contratosAdicionais + 1;
+    await updateContratos(newValue);
+    if (nota.trim()) {
+      await supabase.from('interacoes').insert({
+        cliente_id: lead.id,
+        tipo: 'Contrato',
+        resumo: `Contrato adicional #${newValue} registrado`,
+        detalhes: nota.trim(),
+        direcao: 'Entrada',
+        data_interacao: new Date().toISOString(),
+      });
+      setNota('');
+    }
+  };
+
+  const isConverted = ['CONTRACT_SIGNED', 'DOCS_PENDING', 'READY_FOR_LAWYER'].includes(lead.lead_state || '');
+  const totalContratos = (isConverted ? 1 : 0) + contratosAdicionais;
+
+  return (
+    <ScrollArea className="h-[calc(100vh-340px)]">
+      <div className="p-4 space-y-5">
+        <div className="text-center p-4 rounded-xl bg-muted/30 border">
+          <p className="text-3xl font-bold text-foreground">{totalContratos}</p>
+          <p className="text-xs text-muted-foreground mt-1">Contratos Totais</p>
+          <div className="flex items-center justify-center gap-3 mt-3 text-xs text-muted-foreground">
+            {isConverted && (
+              <span className="flex items-center gap-1 text-[hsl(var(--success))]">
+                <FileSignature className="w-3 h-3" />
+                1 principal
+              </span>
+            )}
+            {contratosAdicionais > 0 && (
+              <span className="flex items-center gap-1">
+                <Plus className="w-3 h-3" />
+                {contratosAdicionais} adicional(is)
+              </span>
+            )}
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-3">
+          <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+            <Plus className="w-3 h-3" />
+            Registrar Contrato Adicional
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Contratos fechados por fora do fluxo automático. Serão contabilizados nas métricas do dashboard.
+          </p>
+          <Input
+            value={nota}
+            onChange={(e) => setNota(e.target.value)}
+            placeholder="Descrição do contrato (opcional)..."
+            className="h-9 text-xs"
+          />
+          <Button
+            onClick={addContrato}
+            disabled={saving}
+            className="w-full h-9 gap-2 text-xs"
+            variant="default"
+          >
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSignature className="w-3.5 h-3.5" />}
+            Adicionar Contrato
+          </Button>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-2">
+          <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+            Ajustar Quantidade Manual
+          </h3>
+          <div className="flex items-center justify-center gap-4">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              onClick={() => updateContratos(contratosAdicionais - 1)}
+              disabled={contratosAdicionais <= 0 || saving}
+            >
+              <Minus className="w-4 h-4" />
+            </Button>
+            <span className="text-2xl font-bold w-12 text-center">{contratosAdicionais}</span>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              onClick={() => updateContratos(contratosAdicionais + 1)}
+              disabled={saving}
+            >
+              <Plus className="w-4 h-4" />
+            </Button>
+          </div>
+          <p className="text-[10px] text-muted-foreground text-center">contratos adicionais</p>
+        </div>
+      </div>
+    </ScrollArea>
   );
 }
 
@@ -311,6 +439,10 @@ export function LeadDetailDrawer({ lead, isOpen, onClose }: LeadDetailDrawerProp
               <TabsTrigger value="info" className="text-xs h-7 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
                 Informações
               </TabsTrigger>
+              <TabsTrigger value="contratos" className="text-xs h-7 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none gap-1">
+                <FileSignature className="w-3 h-3" />
+                Contratos
+              </TabsTrigger>
               <TabsTrigger value="historico" className="text-xs h-7 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none gap-1">
                 <History className="w-3 h-3" />
                 Histórico
@@ -397,6 +529,11 @@ export function LeadDetailDrawer({ lead, isOpen, onClose }: LeadDetailDrawerProp
                   )}
                 </div>
               </ScrollArea>
+            </TabsContent>
+
+            {/* Contratos Tab */}
+            <TabsContent value="contratos" className="mt-0 flex-1">
+              <ContratosExtrasTab lead={lead} />
             </TabsContent>
 
             {/* History Tab */}

@@ -34,18 +34,29 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const leadsHoje = leads.filter(l => new Date(l.created_at) >= today).length;
-    const leadsFinalizados = leadsConvertidos + leadsPerdidos;
-    const taxaConversao = leadsFinalizados > 0 
-      ? Math.round((leadsConvertidos / leadsFinalizados) * 100) 
-      : 0;
 
     // Métricas específicas de tráfego
     const trafficLeads = leads.filter(l => l.tipo_origem === 'trafego');
-    const trafficConvertidos = trafficLeads.filter(l => 
-      l.lead_state && ESTADOS_CONVERTIDOS.includes(l.lead_state as LeadState)
-    ).length;
+    const trafficTotal = trafficLeads.length;
     
-    return { totalLeads, leadsEmProgresso, leadsConvertidos, leadsPerdidos, leadsNovos, leadsReady, leadsHoje, taxaConversao, trafficConvertidos, trafficTotal: trafficLeads.length };
+    // Contar contratos de tráfego: lead convertido = 1 contrato + contratos_adicionais
+    const countContracts = (leadsArr: Lead[]) => {
+      return leadsArr.reduce((sum, l) => {
+        const isConverted = l.lead_state && ESTADOS_CONVERTIDOS.includes(l.lead_state as LeadState);
+        const base = isConverted ? 1 : 0;
+        return sum + base + (l.contratos_adicionais || 0);
+      }, 0);
+    };
+    
+    const totalTrafficContratos = countContracts(trafficLeads);
+    const totalContratos = countContracts(leads);
+    
+    // Taxa de conversão real: contratos assinados / total leads de tráfego
+    const taxaConversao = trafficTotal > 0 
+      ? Math.round((totalTrafficContratos / trafficTotal) * 100) 
+      : 0;
+    
+    return { totalLeads, leadsEmProgresso, leadsConvertidos, leadsPerdidos, leadsNovos, leadsReady, leadsHoje, taxaConversao, totalTrafficContratos, trafficTotal, totalContratos };
   }, [leads]);
 
   useEffect(() => {
@@ -96,9 +107,9 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
       value: metrics.taxaConversao,
       isPercentage: true,
       icon: Scale,
-      trend: metrics.taxaConversao >= 50 ? 'Excelente' : 'Em progresso',
-      trendUp: metrics.taxaConversao >= 50,
-      description: 'Convertidos vs Perdidos',
+      trend: metrics.taxaConversao >= 50 ? 'Excelente' : metrics.taxaConversao >= 20 ? 'Bom' : 'Em progresso',
+      trendUp: metrics.taxaConversao >= 20,
+      description: 'Contratos vs Leads de Tráfego',
       accentColor: 'bg-[hsl(var(--gold))]',
       iconBg: 'bg-[hsl(var(--gold))]/10',
       iconColor: 'text-[hsl(var(--gold))]',
@@ -106,11 +117,11 @@ export function DashboardKPIs({ leads, processos }: DashboardKPIsProps) {
     {
       id: 'leadsConvertidos',
       title: 'Contratos (Tráfego)',
-      value: metrics.trafficConvertidos,
+      value: metrics.totalTrafficContratos,
       icon: Briefcase,
       trend: metrics.trafficTotal > 0 ? `de ${metrics.trafficTotal} leads` : 'Tráfego',
-      trendUp: metrics.trafficConvertidos > 0,
-      description: `${metrics.leadsConvertidos} total geral`,
+      trendUp: metrics.totalTrafficContratos > 0,
+      description: `${metrics.totalContratos} total geral`,
       accentColor: 'bg-[hsl(var(--success))]',
       iconBg: 'bg-[hsl(var(--success))]/10',
       iconColor: 'text-[hsl(var(--success))]',

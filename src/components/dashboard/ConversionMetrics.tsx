@@ -53,12 +53,16 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
         return isAfter(date, start) && isBefore(date, end);
       });
       const total = periodLeads.length;
-      const converted = periodLeads.filter(isConverted).length;
+      // Contar contratos reais: 1 por lead convertido + contratos_adicionais de qualquer lead
+      const contracts = periodLeads.reduce((sum, l) => {
+        const base = isConverted(l) ? 1 : 0;
+        return sum + base + (l.contratos_adicionais || 0);
+      }, 0);
       const lost = periodLeads.filter(l => l.is_lost === true || l.status === 'Perdido').length;
-      const conversionRate = total > 0 ? (converted / total) * 100 : 0;
+      const conversionRate = total > 0 ? (contracts / total) * 100 : 0;
       const lossRate = total > 0 ? (lost / total) * 100 : 0;
       const totalValue = periodLeads.filter(isConverted).reduce((sum, l) => sum + (l.valor_causa || 0), 0);
-      return { total, converted, lost, conversionRate, lossRate, totalValue };
+      return { total, converted: contracts, lost, conversionRate, lossRate, totalValue };
     };
 
     return {
@@ -79,7 +83,10 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
         return isAfter(date, monthStart) && isBefore(date, monthEnd);
       });
       const total = monthLeads.length;
-      const converted = monthLeads.filter(isConverted).length;
+      const converted = monthLeads.reduce((sum, l) => {
+        const base = isConverted(l) ? 1 : 0;
+        return sum + base + (l.contratos_adicionais || 0);
+      }, 0);
       const valor = monthLeads.filter(isConverted).reduce((sum, l) => sum + (l.valor_causa || 0), 0);
       months.push({
         month: format(monthStart, 'MMM/yy', { locale: ptBR }),
@@ -95,7 +102,10 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
   // Totais globais de tráfego
   const globalTraffic = useMemo(() => {
     const total = trafficLeads.length;
-    const converted = trafficLeads.filter(isConverted).length;
+    const converted = trafficLeads.reduce((sum, l) => {
+      const base = isConverted(l) ? 1 : 0;
+      return sum + base + (l.contratos_adicionais || 0);
+    }, 0);
     const valor = trafficLeads.filter(isConverted).reduce((sum, l) => sum + (l.valor_causa || 0), 0);
     return { total, converted, taxa: total > 0 ? Math.round((converted / total) * 100) : 0, valor };
   }, [trafficLeads]);
