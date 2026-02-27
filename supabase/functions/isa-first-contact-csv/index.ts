@@ -34,8 +34,8 @@ serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     const { dry_run = false, intervalo_segundos = 15 } = body;
 
-    // Buscar os 7 leads específicos do CSV importado
-    const metaLeadIds = [
+    // Accept dynamic meta_lead_ids or use defaults
+    const metaLeadIds = body.meta_lead_ids || [
       '944081828184073', '766011589918501', '1272900245032056',
       '913101351177501', '1204462675184779', '1429963975280587', '1528241038273179'
     ];
