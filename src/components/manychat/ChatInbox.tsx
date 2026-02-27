@@ -3208,33 +3208,51 @@ const ManyChatInboxContent = () => {
                             
                             {/* Inline edit mode */}
                             {editingMessageId === message.id ? (
-                              <div className="flex flex-col gap-1.5 min-w-[200px]">
+                              <div className="flex flex-col min-w-[260px] max-w-[420px]">
+                                {/* Edit header bar */}
+                                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-[11px] font-medium ${
+                                  isDark ? 'bg-[#00A884]/15 text-[#00A884]' : 'bg-[#00A884]/10 text-[#00A884]'
+                                }`}>
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                                  Editando mensagem
+                                </div>
+                                {/* Textarea */}
                                 <textarea
                                   value={editingText}
                                   onChange={(e) => setEditingText(e.target.value)}
-                                  className={`w-full rounded-md px-2 py-1.5 text-[14.2px] resize-none border-0 focus:ring-1 focus:ring-[#00A884] outline-none ${
-                                    isDark ? 'bg-[#2A3942] text-[#E9EDEF]' : 'bg-white text-[#111B21]'
+                                  className={`w-full px-3 py-2 text-[14.2px] resize-none border-0 outline-none leading-[1.45] ${
+                                    isDark ? 'bg-[#2A3942] text-[#E9EDEF]' : 'bg-[#F0F2F5] text-[#111B21]'
                                   }`}
-                                  rows={Math.min(editingText.split('\n').length + 1, 6)}
+                                  rows={Math.min(Math.max(editingText.split('\n').length, 2), 8)}
                                   autoFocus
                                   onKeyDown={(e) => {
                                     if (e.key === 'Escape') handleCancelEdit();
                                     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleConfirmEdit(); }
                                   }}
                                 />
-                                <div className="flex items-center justify-end gap-1.5">
-                                  <button
-                                    onClick={handleCancelEdit}
-                                    className={`text-[11px] px-2 py-0.5 rounded ${isDark ? 'text-[#8696A0] hover:bg-white/10' : 'text-gray-500 hover:bg-black/5'}`}
-                                  >
-                                    Cancelar
-                                  </button>
-                                  <button
-                                    onClick={handleConfirmEdit}
-                                    className="text-[11px] px-2 py-0.5 rounded bg-[#00A884] text-white hover:bg-[#00A884]/90"
-                                  >
-                                    Salvar
-                                  </button>
+                                {/* Action buttons */}
+                                <div className={`flex items-center justify-between px-3 py-1.5 rounded-b-lg ${
+                                  isDark ? 'bg-[#2A3942]' : 'bg-[#F0F2F5]'
+                                }`}>
+                                  <span className={`text-[10px] ${isDark ? 'text-[#8696A0]' : 'text-gray-400'}`}>
+                                    Esc para cancelar · Enter para salvar
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={handleCancelEdit}
+                                      className={`text-[12px] px-3 py-1 rounded-full font-medium transition-colors ${
+                                        isDark ? 'text-[#E9EDEF] hover:bg-white/10' : 'text-[#3B4A54] hover:bg-black/5'
+                                      }`}
+                                    >
+                                      Cancelar
+                                    </button>
+                                    <button
+                                      onClick={handleConfirmEdit}
+                                      className="text-[12px] px-4 py-1 rounded-full bg-[#00A884] text-white font-medium hover:bg-[#00976F] transition-colors"
+                                    >
+                                      Salvar
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             ) : (
