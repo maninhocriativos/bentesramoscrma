@@ -120,28 +120,34 @@ const CalWidget = ({
         },
       });
 
-      // Enviar mensagem de confirmação para o ManyChat
+      // Enviar mensagem de confirmação via Z-API
       try {
-        await supabase.functions.invoke('manychat', {
-          body: {
-            action: 'enviar_mensagem',
-            subscriberId: subscriberId,
-            message: `✅ Agendamento confirmado!\n\nSua consulta jurídica foi agendada com sucesso. Você receberá um e-mail com os detalhes.\n\nAguardamos você! 📅`,
-            type: 'text',
-          },
-        });
+        const confirmMsg = `✅ Agendamento confirmado!\n\nSua consulta jurídica foi agendada com sucesso. Você receberá um e-mail com os detalhes.\n\nAguardamos você! 📅`;
+        
+        // Extrair telefone do subscriberId (formato zapi_55XXXXXXXXXXX)
+        const phone = subscriberId?.replace('zapi_', '') || '';
+        if (phone) {
+          await supabase.functions.invoke('zapi-send', {
+            body: {
+              to_phone: phone,
+              message: confirmMsg,
+              type: 'text',
+              lead_id: leadId,
+            },
+          });
+        }
         
         // Salvar mensagem no histórico
         await supabase.from('manychat_mensagens').insert({
           subscriber_id: subscriberId,
           subscriber_nome: subscriberName,
-          conteudo: `✅ Agendamento confirmado!\n\nSua consulta jurídica foi agendada com sucesso. Você receberá um e-mail com os detalhes.\n\nAguardamos você! 📅`,
+          conteudo: confirmMsg,
           tipo: 'text',
           direcao: 'saida',
           lead_id: leadId,
         });
       } catch (msgError) {
-        console.error('Erro ao enviar confirmação ManyChat:', msgError);
+        console.error('Erro ao enviar confirmação via Z-API:', msgError);
       }
 
       setIsScheduled(true);

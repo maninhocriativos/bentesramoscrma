@@ -800,61 +800,45 @@ serve(async (req) => {
 
       case 'notificar_documento_pendente': {
         const { lead_id, subscriber_id, tipo_documento } = data;
-        const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY');
         
         if (!subscriber_id) {
           result = { success: false, message: 'Subscriber ID não fornecido' };
           break;
         }
 
-        if (!MANYCHAT_API_KEY) {
-          result = { success: false, message: 'MANYCHAT_API_KEY não configurada' };
-          break;
-        }
-
         // Buscar dados do lead
         const { data: lead } = await supabase
           .from('leads_juridicos')
-          .select('nome, status')
+          .select('nome, status, telefone')
           .eq('id', lead_id)
           .single();
 
         const nomeCliente = lead?.nome || 'cliente';
         const tipoDoc = tipo_documento || 'os documentos necessários';
 
-        // Mensagem de lembrete de documento
-        const mensagem = `Olá ${nomeCliente}! 👋
+        const mensagem = `Olá ${nomeCliente}! 👋\n\nPassando para lembrar sobre ${tipoDoc} que precisamos para dar continuidade ao seu processo.\n\n📄 A documentação é essencial para analisarmos seu caso com precisão.\n\nPrecisa de ajuda para enviar? Pode responder essa mensagem que te orientamos! 📲`;
 
-Passando para lembrar sobre ${tipoDoc} que precisamos para dar continuidade ao seu processo.
-
-📄 A documentação é essencial para analisarmos seu caso com precisão.
-
-Precisa de ajuda para enviar? Pode responder essa mensagem que te orientamos! 📲`;
-
-        // Enviar via ManyChat
+        // Enviar via Z-API
         try {
-          const response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
+          const phone = subscriber_id.replace('zapi_', '') || lead?.telefone?.replace(/\D/g, '');
+          
+          if (!phone) {
+            result = { success: false, message: 'Telefone não encontrado para envio' };
+            break;
+          }
+
+          const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-send', {
+            body: {
+              to_phone: phone,
+              message: mensagem,
+              type: 'text',
+              lead_id,
             },
-            body: JSON.stringify({
-              subscriber_id,
-              data: {
-                version: 'v2',
-                content: {
-                  messages: [{ type: 'text', text: mensagem }],
-                },
-              },
-              message_tag: 'ACCOUNT_UPDATE',
-            }),
           });
 
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Erro ManyChat:', errorText);
-            result = { success: false, message: 'Falha ao enviar mensagem via ManyChat' };
+          if (zapiError) {
+            console.error('Erro Z-API:', zapiError);
+            result = { success: false, message: 'Falha ao enviar mensagem via Z-API' };
             break;
           }
 
@@ -890,6 +874,8 @@ Precisa de ajuda para enviar? Pode responder essa mensagem que te orientamos! �
         }
         break;
       }
+
+
 
       case 'analisar_documentos_conversa': {
         const { lead_id } = data;
@@ -1151,7 +1137,7 @@ Responda em JSON:
                 booking_id: agendamentoData.booking?.id,
                 compromisso_id: agendamentoData.compromisso_id,
                 meet_link: meetLink,
-                send_via_manychat: true
+                send_via_zapi: true
               }
             };
           } else {

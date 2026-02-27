@@ -229,7 +229,7 @@ export function IntegracoesTab() {
   "nome": "{{nome_do_lead}}",
   "telefone": "{{telefone}}",
   "email": "{{email}}",
-  "origem": "ManyChat",
+  "origem": "Webhook",
   "status": "Lead Frio"
 }`;
 
@@ -365,7 +365,7 @@ export function IntegracoesTab() {
               <div>
                 <CardTitle className="text-lg">Recebimento de Leads</CardTitle>
                 <CardDescription className="text-primary-foreground/80 text-sm">
-                  Configure o ManyChat ou outras automações para enviar leads automaticamente
+                  Configure automações para enviar leads automaticamente
                 </CardDescription>
               </div>
             </div>

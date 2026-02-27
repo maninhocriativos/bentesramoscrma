@@ -35,7 +35,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 const FONTE_ICONS: Record<string, any> = {
-  manychat: MessageSquare,
+  zapi: MessageSquare,
   clicksign: FileSignature,
   zapier: Zap,
   make: Zap,
@@ -47,7 +47,7 @@ const FONTE_ICONS: Record<string, any> = {
 };
 
 const FONTE_COLORS: Record<string, string> = {
-  manychat: 'bg-blue-500/10 text-blue-500 border-blue-500/30',
+  zapi: 'bg-blue-500/10 text-blue-500 border-blue-500/30',
   clicksign: 'bg-green-500/10 text-green-500 border-green-500/30',
   zapier: 'bg-orange-500/10 text-orange-500 border-orange-500/30',
   make: 'bg-purple-500/10 text-purple-500 border-purple-500/30',
@@ -83,7 +83,7 @@ export default function ApiHubPage() {
   });
 
   const baseUrl = 'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/api-hub';
-  const manychatWebhookUrl = 'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/manychat-webhook';
+  const zapiWebhookUrl = 'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/zapi-webhook';
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -122,18 +122,18 @@ export default function ApiHubPage() {
       let payload = {};
 
       switch (webhookType) {
-        case 'manychat':
-          url = manychatWebhookUrl;
+        case 'zapi':
+          url = zapiWebhookUrl;
           payload = {
-            'Id do Manychat': `teste_${Date.now()}`,
-            'Nome do Usuário': 'Teste Diagnóstico',
-            'Numero Whatsapp': '+5511999999999',
-            'Pergunta do Usuário': `Mensagem de teste enviada em ${new Date().toLocaleString('pt-BR')}`,
-            'Formato': 'teste'
+            phone: '5511999999999',
+            message: {
+              text: `Mensagem de teste enviada em ${new Date().toLocaleString('pt-BR')}`
+            },
+            isGroupMessage: false
           };
           break;
-        case 'api-hub-manychat':
-          url = `${baseUrl}/webhook/manychat`;
+        case 'api-hub':
+          url = `${baseUrl}/webhook/automation`;
           payload = {
             subscriber_id: `teste_${Date.now()}`,
             name: 'Teste API Hub',
@@ -219,23 +219,23 @@ export default function ApiHubPage() {
 
   const webhookEndpoints = [
     { 
-      name: 'ManyChat (Dedicado)', 
-      url: manychatWebhookUrl,
+      name: 'Z-API Webhook', 
+      url: zapiWebhookUrl,
       path: '',
-      description: 'URL principal para configurar no ManyChat',
+      description: 'URL para receber mensagens do WhatsApp via Z-API',
       icon: MessageSquare,
       color: 'text-blue-500',
-      testKey: 'manychat',
+      testKey: 'zapi',
       recommended: true
     },
     { 
-      name: 'ManyChat (via API Hub)', 
+      name: 'API Hub', 
       url: baseUrl,
-      path: '/webhook/manychat', 
-      description: 'Alternativa via API Hub centralizado',
-      icon: MessageSquare,
+      path: '/webhook/automation', 
+      description: 'Endpoint centralizado para automações externas',
+      icon: Webhook,
       color: 'text-blue-400',
-      testKey: 'api-hub-manychat'
+      testKey: 'api-hub'
     },
     { 
       name: 'Clicksign', 
@@ -360,32 +360,32 @@ export default function ApiHubPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                   <Button
                     variant="outline"
-                    onClick={() => testWebhook('manychat')}
+                    onClick={() => testWebhook('zapi')}
                     disabled={testingWebhook !== null}
                     className="h-auto py-3 flex flex-col items-center gap-2"
                   >
-                    {testingWebhook === 'manychat' ? (
+                    {testingWebhook === 'zapi' ? (
                       <RefreshCw className="w-5 h-5 animate-spin text-blue-500" />
                     ) : (
                       <MessageSquare className="w-5 h-5 text-blue-500" />
                     )}
-                    <span className="text-sm">Testar ManyChat</span>
-                    <span className="text-xs text-muted-foreground">(Dedicado)</span>
+                    <span className="text-sm">Testar Z-API</span>
+                    <span className="text-xs text-muted-foreground">(WhatsApp)</span>
                   </Button>
 
                   <Button
                     variant="outline"
-                    onClick={() => testWebhook('api-hub-manychat')}
+                    onClick={() => testWebhook('api-hub')}
                     disabled={testingWebhook !== null}
                     className="h-auto py-3 flex flex-col items-center gap-2"
                   >
-                    {testingWebhook === 'api-hub-manychat' ? (
+                    {testingWebhook === 'api-hub' ? (
                       <RefreshCw className="w-5 h-5 animate-spin text-blue-400" />
                     ) : (
                       <Webhook className="w-5 h-5 text-blue-400" />
                     )}
                     <span className="text-sm">Testar API Hub</span>
-                    <span className="text-xs text-muted-foreground">(ManyChat)</span>
+                    <span className="text-xs text-muted-foreground">(Automação)</span>
                   </Button>
 
                   <Button
@@ -431,27 +431,26 @@ export default function ApiHubPage() {
                 <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
                     <MessageSquare className="w-5 h-5 text-blue-500" />
-                    <span className="font-medium text-blue-600">URL do ManyChat (RECOMENDADA)</span>
+                    <span className="font-medium text-blue-600">URL do Z-API Webhook (RECOMENDADA)</span>
                     <Badge className="bg-blue-500">Principal</Badge>
                   </div>
                   <code className="block text-sm bg-muted p-2 rounded mb-2 break-all">
-                    {manychatWebhookUrl}
+                    {zapiWebhookUrl}
                   </code>
-                  <Button size="sm" onClick={() => copyToClipboard(manychatWebhookUrl)}>
+                  <Button size="sm" onClick={() => copyToClipboard(zapiWebhookUrl)}>
                     <Copy className="w-4 h-4 mr-2" />
-                    Copiar URL do ManyChat
+                    Copiar URL do Webhook
                   </Button>
                 </div>
 
                 <div className="text-sm text-muted-foreground p-3 bg-muted/50 rounded-lg">
-                  <p className="font-medium mb-2">Como configurar no ManyChat:</p>
+                  <p className="font-medium mb-2">Como configurar no Z-API:</p>
                   <ol className="list-decimal list-inside space-y-1">
-                    <li>Acesse seu flow no ManyChat</li>
-                    <li>Adicione uma ação "External Request" ou "Webhook"</li>
+                    <li>Acesse o painel do Z-API</li>
+                    <li>Configure a URL de webhook da instância</li>
                     <li>Cole a URL acima no campo de URL</li>
-                    <li>Método: POST</li>
-                    <li>Content-Type: application/json</li>
-                    <li>No body, envie os dados do subscriber</li>
+                    <li>Ative os eventos de recebimento de mensagens</li>
+                    <li>Salve a configuração</li>
                   </ol>
                 </div>
               </CardContent>
@@ -478,8 +477,8 @@ export default function ApiHubPage() {
                     <p className="text-sm text-muted-foreground">Total</p>
                   </div>
                   <div className="p-4 bg-blue-500/10 rounded-lg text-center">
-                    <p className="text-3xl font-bold text-blue-500">{stats?.by_fonte?.manychat || 0}</p>
-                    <p className="text-sm text-muted-foreground">ManyChat</p>
+                    <p className="text-3xl font-bold text-blue-500">{stats?.by_fonte?.zapi || stats?.by_fonte?.whatsapp || 0}</p>
+                    <p className="text-sm text-muted-foreground">Z-API</p>
                   </div>
                   <div className="p-4 bg-green-500/10 rounded-lg text-center">
                     <p className="text-3xl font-bold text-green-500">{stats?.by_fonte?.clicksign || 0}</p>
@@ -576,7 +575,7 @@ export default function ApiHubPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todas as fontes</SelectItem>
-                      <SelectItem value="manychat">ManyChat</SelectItem>
+                      <SelectItem value="zapi">Z-API</SelectItem>
                       <SelectItem value="clicksign">Clicksign</SelectItem>
                       <SelectItem value="zapier">Zapier</SelectItem>
                       <SelectItem value="make">Make</SelectItem>
@@ -740,17 +739,18 @@ export default function ApiHubPage() {
                 <h3>Autenticação</h3>
                 <p>Os webhooks não requerem autenticação. Para endpoints protegidos, use o header <code>Authorization: Bearer YOUR_TOKEN</code></p>
 
-                <h3>ManyChat</h3>
-                <p>Configure a URL do webhook nas ações do seu fluxo:</p>
+                <h3>Z-API (WhatsApp)</h3>
+                <p>Configure a URL do webhook no painel do Z-API:</p>
                 <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
-{`POST ${baseUrl}/webhook/manychat
+{`POST ${zapiWebhookUrl}
 Content-Type: application/json
 
 {
-  "subscriber_id": "123456",
-  "name": "João Silva",
-  "phone": "+5511999999999",
-  "last_input_text": "Mensagem do usuário"
+  "phone": "5511999999999",
+  "message": {
+    "text": "Mensagem do usuário"
+  },
+  "isGroupMessage": false
 }`}
                 </pre>
 

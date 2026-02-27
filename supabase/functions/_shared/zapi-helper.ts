@@ -400,7 +400,6 @@ export async function sendAudio(
 
 /**
  * Função principal: envia mensagem e registra no banco
- * Substitui completamente a integração ManyChat
  */
 export async function enviarMensagemZapi(
   supabase: any,
