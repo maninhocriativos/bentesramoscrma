@@ -1584,35 +1584,111 @@ const ManyChatInboxContent = () => {
   const uploadAndSendFile = async () => {
     if (!selectedFile || !selectedSubscriber) return;
     
-    // Capturar nome do arquivo original ANTES de qualquer operação
     const originalFileName = selectedFile.name;
+    const fileToUpload = selectedFile;
+    const subscriberSnapshot = { ...selectedSubscriber };
+    
+    // Determinar tipo de mídia ANTES de limpar estado
+    const mediaType = fileToUpload.type.startsWith('image/')
+      ? 'image'
+      : fileToUpload.type.startsWith('audio/')
+        ? 'audio'
+        : fileToUpload.type.startsWith('video/')
+          ? 'video'
+          : 'document';
+    
+    // Limpar preview imediatamente para liberar UI
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    
+    // Optimistic message
+    const tempId = `temp_${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: tempId,
+      conteudo: mediaType === 'image' ? '📷 Enviando imagem...' : mediaType === 'video' ? '🎥 Enviando vídeo...' : `📄 Enviando ${originalFileName}...`,
+      created_at: new Date().toISOString(),
+      direcao: 'saida',
+      tipo: mediaType,
+      subscriber_id: subscriberSnapshot.subscriber_id,
+    };
+    
+    setMessages(prev => {
+      const updated = [...prev, optimisticMessage];
+      messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
+      return updated;
+    });
+    scrollToBottom();
     
     try {
-      const fileExt = selectedFile.name.split('.').pop();
+      const fileExt = fileToUpload.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
-      const filePath = `manychat/${selectedSubscriber.subscriber_id}/${fileName}`;
+      const filePath = `manychat/${subscriberSnapshot.subscriber_id}/${fileName}`;
       
       // Upload file
-      const { error: uploadErr } = await supabase.storage.from('documentos').upload(filePath, selectedFile);
+      const { error: uploadErr } = await supabase.storage.from('documentos').upload(filePath, fileToUpload);
       if (uploadErr) throw uploadErr;
       
-      // Sign URL (upload already done)
+      // Sign URL
       const { data: signed, error: signError } = await supabase.storage
         .from('documentos')
-        .createSignedUrl(filePath, 60 * 60 * 24 * 30); // 30 dias
+        .createSignedUrl(filePath, 60 * 60 * 24 * 30);
       if (signError || !signed?.signedUrl) throw signError;
 
-      const mediaType = selectedFile.type.startsWith('image/')
-        ? 'image'
-        : selectedFile.type.startsWith('audio/')
-          ? 'audio'
-          : selectedFile.type.startsWith('video/')
-            ? 'video'
-            : 'document';
+      // Send via Z-API (non-blocking DB save)
+      const outboundInstanceId = resolveInstanceId(subscriberSnapshot);
+      const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-send', {
+        body: {
+          to_phone: subscriberSnapshot.telefone,
+          message: signed.signedUrl,
+          type: mediaType,
+          lead_id: subscriberSnapshot.lead_id,
+          file_name: originalFileName,
+          ...(outboundInstanceId && { instance_id: outboundInstanceId }),
+        },
+      });
 
-      // Passar o nome original do arquivo para Z-API enviar como documento real
-      await sendMessage(signed.signedUrl, mediaType, originalFileName);
-    } catch (error) {
+      if (zapiError) throw new Error(zapiError.message);
+
+      // Non-blocking DB persistence
+      const msgId = zapiResult?.messageId;
+      supabase.from('manychat_mensagens' as any).insert({
+        subscriber_id: subscriberSnapshot.subscriber_id,
+        subscriber_nome: subscriberSnapshot.nome,
+        canal: 'whatsapp',
+        conteudo: signed.signedUrl,
+        tipo: mediaType,
+        direcao: 'saida',
+        lead_id: subscriberSnapshot.lead_id,
+        metadata: { 
+          sent_via: 'chat_interface', 
+          zapi_status: zapiResult?.success ? 'success' : 'error', 
+          message_id: msgId,
+          file_name: originalFileName 
+        }
+      } as any).select().single().then(({ data: savedMsg }) => {
+        if (savedMsg) {
+          setMessages(prev => {
+            const withoutTemp = prev.filter(m => m.id !== tempId);
+            const savedKey = getMessageDedupeKey(savedMsg);
+            const alreadyExists = withoutTemp.some(m => getMessageDedupeKey(m) === savedKey || m.id === (savedMsg as any).id);
+            const updated = alreadyExists ? withoutTemp : [...withoutTemp, savedMsg as Message];
+            messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
+            return updated;
+          });
+        }
+      });
+
+    } catch (error: any) {
+      console.error('[File] Erro ao enviar arquivo:', error);
+      setMessages(prev => {
+        const updated = prev.map(m => 
+          m.id === tempId 
+            ? { ...m, conteudo: `❌ Erro no envio de ${originalFileName}`, metadata: { send_error: true } } 
+            : m
+        );
+        messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
+        return updated;
+      });
       toast({ title: 'Erro', description: 'Falha no upload', variant: 'destructive' });
     }
   };
