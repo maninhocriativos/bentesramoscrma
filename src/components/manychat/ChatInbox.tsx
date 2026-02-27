@@ -2131,59 +2131,74 @@ const ManyChatInboxContent = () => {
                       const isSameConversation = selectedSubscriber?.subscriber_id === subscriber.subscriber_id;
                       setSelectedSubscriber(subscriber);
                       if (isSameConversation) {
-                        // Manual refresh when re-clicking the same conversation
                         loadMessages(subscriber.subscriber_id, true, subscriber);
                       }
                     }}
-                    className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-all border-b ${themeClasses.border} ${themeClasses.hover} ${
+                    className={`flex items-center gap-3 px-3 py-[10px] cursor-pointer transition-colors border-b ${themeClasses.border} ${themeClasses.hover} ${
                       isActive ? themeClasses.active : ''
-                    } ${online ? 'border-l-2 border-l-emerald-500' : ''}`}
+                    }`}
                   >
-                    {/* Avatar */}
-                    <div className="relative shrink-0 mt-0.5">
-                      <Avatar className="h-12 w-12">
+                    {/* Avatar - 49px like WhatsApp */}
+                    <div className="relative shrink-0">
+                      <Avatar className="h-[49px] w-[49px]">
                         <AvatarImage src={subscriber.foto} />
                         <AvatarFallback className="bg-gradient-to-br from-[#00A884] to-[#008069] text-white text-base font-medium">
                           {getInitials(subscriber)}
                         </AvatarFallback>
                       </Avatar>
-                      {/* Online indicator */}
-                      {online && (
-                        <span className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-emerald-500 border-2 border-white dark:border-[#111B21] flex items-center justify-center">
-                          <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
-                        </span>
-                      )}
                       {/* Atendimento humano indicator */}
                       {subscriber.atendimento_humano && (
-                        <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-amber-500 flex items-center justify-center text-[10px]">
+                        <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-amber-500 flex items-center justify-center text-[9px]">
                           🙋
                         </span>
                       )}
+                      {/* Online indicator */}
+                      {online && (
+                        <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-[#111B21]" />
+                      )}
                     </div>
                     
-                    {/* Content - WhatsApp style layout */}
+                    {/* Content */}
                     <div className="flex-1 min-w-0">
                       {/* Row 1: Name + Timestamp */}
                       <div className="flex items-center justify-between gap-2">
-                        <span className={`font-medium text-[15px] truncate ${hasUnread ? 'text-white font-semibold' : themeClasses.headerText}`}>
-                          {getDisplayName(subscriber)}
-                        </span>
-                        <span className={`text-[11px] shrink-0 ${hasUnread ? 'text-[#25D366] font-semibold' : themeClasses.secondaryText}`}>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className={`text-[16px] truncate leading-tight ${hasUnread ? 'text-[#E9EDEF] font-semibold' : themeClasses.headerText}`}>
+                            {getDisplayName(subscriber)}
+                          </span>
+                          {/* Instance badge small inline */}
+                          {instanceInfo && (
+                            <span className={`text-[9px] px-1 py-px rounded font-medium shrink-0 ${
+                              instanceInfo.color === 'orange' 
+                                ? 'bg-orange-500/15 text-orange-400' 
+                                : 'bg-blue-500/15 text-blue-400'
+                            }`}>
+                              {instanceInfo.label === 'Tráfego' ? 'T' : 'BR'}
+                            </span>
+                          )}
+                        </div>
+                        <span className={`text-[12px] shrink-0 leading-tight ${hasUnread ? 'text-[#25D366]' : themeClasses.secondaryText}`}>
                           {subscriber.ultima_interacao && formatLastMessageTime(subscriber.ultima_interacao)}
                         </span>
                       </div>
                       
                       {/* Row 2: Message preview + Unread badge */}
-                      <div className="flex items-center justify-between gap-2 mt-1">
-                        <p className={`text-[13px] truncate flex-1 ${hasUnread ? 'text-[#D1D7DB] font-medium' : themeClasses.secondaryText}`}>
+                      <div className="flex items-center justify-between gap-2 mt-[2px]">
+                        <p className={`text-[13px] truncate flex-1 leading-tight ${hasUnread ? 'text-[#D1D7DB]' : themeClasses.secondaryText}`}>
                           {msgPreview || 'Nenhuma mensagem'}
                         </p>
-                        {/* Unread badge - WhatsApp style */}
-                        {hasUnread ? (
-                          <span className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center shrink-0">
-                            {hasUnread > 99 ? '99+' : hasUnread}
-                          </span>
-                        ) : null}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Tags */}
+                          {subscriberTags.length > 0 && subscriberTags[0].tag && (
+                            <TagBadge tag={subscriberTags[0].tag} size="sm" />
+                          )}
+                          {/* Unread badge */}
+                          {hasUnread ? (
+                            <span className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center">
+                              {hasUnread > 99 ? '99+' : hasUnread}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   </div>
