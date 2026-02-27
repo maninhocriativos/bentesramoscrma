@@ -2172,8 +2172,8 @@ const ManyChatInboxContent = () => {
                             </span>
                           )}
                         </div>
-                        <span className={`text-[11px] shrink-0 leading-tight ${hasUnread ? 'text-[#25D366] font-medium' : themeClasses.secondaryText}`}>
-                          {subscriber.ultima_interacao && formatLastMessageTime(subscriber.ultima_interacao)}
+                        <span className={`text-[12px] shrink-0 leading-tight whitespace-nowrap ${hasUnread ? 'text-[#25D366] font-semibold' : themeClasses.secondaryText}`}>
+                          {subscriber.ultima_interacao ? formatLastMessageTime(subscriber.ultima_interacao) : ''}
                         </span>
                       </div>
                       

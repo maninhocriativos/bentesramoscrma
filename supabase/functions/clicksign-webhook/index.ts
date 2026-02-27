@@ -421,7 +421,8 @@ serve(async (req: Request): Promise<Response> => {
         const allSigned = signers.every((s: any) => s.signed_at !== null);
         newStatus = allSigned ? "Assinado" : "Assinatura Parcial";
         messageType = allSigned ? 'signed' : null;
-        reminderStatus = allSigned ? 'signed' : 'pending';
+        // CRITICAL: Stop reminders as soon as ANY signer signs
+        reminderStatus = 'signed';
         break;
       case "close":
         newStatus = "Finalizado";
