@@ -1813,6 +1813,45 @@ const ManyChatInboxContent = () => {
     );
   };
 
+  // Resolver de não lidas resiliente a variações de subscriber_id (zapi_, com/sem 55, deduplicação por lead)
+  const getUnreadCountForSubscriber = (sub: Subscriber): number => {
+    const direct = unreadCounts.get(sub.subscriber_id) || 0;
+    if (direct > 0) return direct;
+
+    const phone = sub.telefone?.replace(/\D/g, '') || '';
+    const normalizedPhone = phone && !phone.startsWith('55') ? `55${phone}` : phone;
+    const aliases = [
+      phone,
+      normalizedPhone,
+      phone ? `zapi_${phone}` : '',
+      normalizedPhone ? `zapi_${normalizedPhone}` : '',
+    ].filter(Boolean);
+
+    for (const alias of aliases) {
+      const value = unreadCounts.get(alias) || 0;
+      if (value > 0) return value;
+    }
+
+    if (sub.lead_id) {
+      const siblingByLead = subscribers.find(
+        s => s.lead_id === sub.lead_id && s.subscriber_id !== sub.subscriber_id
+      );
+      if (siblingByLead) {
+        const leadValue = unreadCounts.get(siblingByLead.subscriber_id) || 0;
+        if (leadValue > 0) return leadValue;
+      }
+    }
+
+    if (normalizedPhone) {
+      const suffix = normalizedPhone.slice(-9);
+      for (const [key, value] of unreadCounts.entries()) {
+        if (value > 0 && key.includes(suffix)) return value;
+      }
+    }
+
+    return 0;
+  };
+
   // Filtros aplicados - busca melhorada
   const filteredSubscribers = subscribers
     .filter(sub => {
@@ -1828,7 +1867,7 @@ const ManyChatInboxContent = () => {
       );
     })
     .filter(sub => {
-      if (activeFilter === 'unread') return (unreadCounts.get(sub.subscriber_id) || 0) > 0;
+      if (activeFilter === 'unread') return getUnreadCountForSubscriber(sub) > 0;
       if (activeFilter === 'human') return sub.atendimento_humano;
       if (activeFilter === 'bot') return !sub.atendimento_humano;
       return true;
@@ -1848,8 +1887,8 @@ const ManyChatInboxContent = () => {
     })
     // Ordenar: conversas com mensagens não lidas primeiro, depois por última interação
     .sort((a, b) => {
-      const aUnread = unreadCounts.get(a.subscriber_id) || 0;
-      const bUnread = unreadCounts.get(b.subscriber_id) || 0;
+      const aUnread = getUnreadCountForSubscriber(a);
+      const bUnread = getUnreadCountForSubscriber(b);
       
       // Não lidas primeiro
       if (aUnread > 0 && bUnread === 0) return -1;
@@ -2325,7 +2364,8 @@ const ManyChatInboxContent = () => {
               {filteredSubscribers.map((subscriber) => {
                 const isActive = selectedSubscriber?.id === subscriber.id;
                 const online = isOnline(subscriber.subscriber_id);
-                const hasUnread = unreadCounts.get(subscriber.subscriber_id);
+                const unreadCount = getUnreadCountForSubscriber(subscriber);
+                const hasUnread = unreadCount > 0;
                 const msgPreview = lastMessagePreviews.get(subscriber.subscriber_id);
                 const instanceInfo = getInstanceInfoFromConnectedPhone(subscriber.instance_name);
                 const subscriberTags = getSubscriberTags(subscriber.subscriber_id);
@@ -2365,10 +2405,10 @@ const ManyChatInboxContent = () => {
                     </div>
                     
                     {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      {/* Row 1: Name + Instance badge + Timestamp */}
-                      <div className="flex items-center justify-between gap-1">
-                        <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+                    <div className="flex-1 min-w-0 flex items-start gap-2 pr-1">
+                      <div className="min-w-0 flex-1">
+                        {/* Row 1: Name + Instance badge */}
+                        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
                           <span className={`text-[15px] truncate leading-tight font-medium ${hasUnread ? 'text-[#E9EDEF] font-semibold' : themeClasses.headerText}`}>
                             {getDisplayName(subscriber)}
                           </span>
@@ -2382,14 +2422,9 @@ const ManyChatInboxContent = () => {
                             </span>
                           )}
                         </div>
-                        <span className={`text-[12px] shrink-0 leading-tight whitespace-nowrap ml-1 ${hasUnread ? 'text-[#25D366] font-semibold' : themeClasses.secondaryText}`}>
-                          {subscriber.ultima_interacao ? formatLastMessageTime(subscriber.ultima_interacao) : ''}
-                        </span>
-                      </div>
-                      
-                      {/* Row 2: Message preview + Unread badge */}
-                      <div className="flex items-center justify-between gap-1 mt-[3px]">
-                        <div className="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
+
+                        {/* Row 2: Message preview */}
+                        <div className="flex items-center gap-1 min-w-0 mt-[3px] overflow-hidden">
                           {msgPreview?.startsWith('Você:') && (
                             <CheckCheck className="h-3.5 w-3.5 shrink-0 text-[#53BDEB]" />
                           )}
@@ -2397,13 +2432,20 @@ const ManyChatInboxContent = () => {
                             {msgPreview ? (msgPreview.startsWith('Você: ') ? msgPreview.slice(6) : msgPreview) : 'Nenhuma mensagem'}
                           </p>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                      </div>
+
+                      {/* Right column: time + badges (never truncates) */}
+                      <div className="min-w-[68px] shrink-0 flex flex-col items-end justify-between self-stretch gap-1">
+                        <span className={`text-[12px] leading-tight whitespace-nowrap ${hasUnread ? 'text-[#25D366] font-semibold' : themeClasses.secondaryText}`}>
+                          {subscriber.ultima_interacao ? formatLastMessageTime(subscriber.ultima_interacao) : ''}
+                        </span>
+                        <div className="flex items-center gap-1.5">
                           {subscriberTags.length > 0 && subscriberTags[0].tag && (
                             <TagBadge tag={subscriberTags[0].tag} size="sm" />
                           )}
                           {hasUnread ? (
                             <span className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center shadow-sm">
-                              {hasUnread > 99 ? '99+' : hasUnread}
+                              {unreadCount > 99 ? '99+' : unreadCount}
                             </span>
                           ) : null}
                         </div>
