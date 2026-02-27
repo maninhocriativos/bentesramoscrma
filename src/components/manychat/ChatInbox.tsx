@@ -761,7 +761,7 @@ const ManyChatInboxContent = () => {
           setIsLoadingMessages(false);
         }
         // SEMPRE carregar do banco para garantir histórico completo
-        loadMessages(selectedSubscriber.subscriber_id);
+        loadMessages(selectedSubscriber.subscriber_id, false, selectedSubscriber);
         
         // Limpar contador de não lidas ao abrir conversa e salvar lastRead
         setUnreadCounts(prev => {
@@ -951,11 +951,11 @@ const ManyChatInboxContent = () => {
     }
   };
 
-  const loadMessages = async (subscriberId: string, loadAll = false) => {
+  const loadMessages = async (subscriberId: string, loadAll = false, subscriberOverride?: Subscriber | null) => {
     setIsLoadingMessages(true);
     try {
-      // Get subscriber for phone and lead_id
-      const currentSub = subscribers.find(s => s.subscriber_id === subscriberId);
+      // Get subscriber for phone and lead_id - prefer override to avoid stale state
+      const currentSub = subscriberOverride || subscribers.find(s => s.subscriber_id === subscriberId) || selectedSubscriberRef.current;
       const phoneClean = currentSub?.telefone?.replace(/\D/g, '') || '';
       const leadId = currentSub?.lead_id;
       
@@ -982,9 +982,18 @@ const ManyChatInboxContent = () => {
         possibleIds.add(phoneClean);
         possibleIds.add(normalizedPhone);
       }
+      // Also try phone suffix from subscriber_id (when it contains digits)
+      const subIdDigits = subscriberId.replace(/\D/g, '');
+      if (subIdDigits.length >= 8) {
+        const normalizedSubIdPhone = subIdDigits.startsWith('55') ? subIdDigits : '55' + subIdDigits;
+        possibleIds.add(`zapi_${normalizedSubIdPhone}`);
+        possibleIds.add(`zapi_${subIdDigits}`);
+        possibleIds.add(subIdDigits);
+        possibleIds.add(normalizedSubIdPhone);
+      }
       
       const idsArray = Array.from(possibleIds);
-      console.log('[loadMessages] Buscando mensagens para:', { subscriberId, possibleIds: idsArray, leadId });
+      console.log('[loadMessages] Buscando mensagens para:', { subscriberId, possibleIds: idsArray, leadId, phoneClean });
       
       // Build OR filter for subscriber_id
       const idsFilter = idsArray.map(id => `subscriber_id.eq.${id}`).join(',');
@@ -1003,7 +1012,7 @@ const ManyChatInboxContent = () => {
       }
 
       if (!loadAll) {
-        query = query.limit(200);
+        query = query.limit(500);
       }
 
       const { data, error } = await query;
@@ -1040,7 +1049,7 @@ const ManyChatInboxContent = () => {
     setIsLoadingFullHistory(true);
     try {
       // Use the same logic as loadMessages but with loadAll=true
-      await loadMessages(selectedSubscriber.subscriber_id, true);
+      await loadMessages(selectedSubscriber.subscriber_id, true, selectedSubscriber);
       toast({ 
         title: '📜 Histórico Completo', 
         description: 'Todas as mensagens foram carregadas' 
