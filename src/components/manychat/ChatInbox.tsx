@@ -2363,8 +2363,8 @@ const ManyChatInboxContent = () => {
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                       {/* Row 1: Name + Instance badge + Timestamp */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
                           <span className={`text-[15px] truncate leading-tight font-medium ${hasUnread ? 'text-[#E9EDEF] font-semibold' : themeClasses.headerText}`}>
                             {getDisplayName(subscriber)}
                           </span>
@@ -2378,14 +2378,14 @@ const ManyChatInboxContent = () => {
                             </span>
                           )}
                         </div>
-                        <span className={`text-[12px] shrink-0 leading-tight whitespace-nowrap ${hasUnread ? 'text-[#25D366] font-semibold' : themeClasses.secondaryText}`}>
+                        <span className={`text-[12px] shrink-0 leading-tight whitespace-nowrap ml-1 ${hasUnread ? 'text-[#25D366] font-semibold' : themeClasses.secondaryText}`}>
                           {subscriber.ultima_interacao ? formatLastMessageTime(subscriber.ultima_interacao) : ''}
                         </span>
                       </div>
                       
                       {/* Row 2: Message preview + Unread badge */}
-                      <div className="flex items-center justify-between gap-2 mt-[3px]">
-                        <div className="flex items-center gap-1 min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1 mt-[3px]">
+                        <div className="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
                           {msgPreview?.startsWith('Você:') && (
                             <CheckCheck className="h-3.5 w-3.5 shrink-0 text-[#53BDEB]" />
                           )}
@@ -2393,7 +2393,7 @@ const ManyChatInboxContent = () => {
                             {msgPreview ? (msgPreview.startsWith('Você: ') ? msgPreview.slice(6) : msgPreview) : 'Nenhuma mensagem'}
                           </p>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0 ml-1">
                           {subscriberTags.length > 0 && subscriberTags[0].tag && (
                             <TagBadge tag={subscriberTags[0].tag} size="sm" />
                           )}
