@@ -63,7 +63,7 @@ serve(async (req: Request): Promise<Response> => {
       .select(`
         *,
         leads_juridicos!contract_reminders_lead_id_fkey(
-          id, nome, telefone, status, lead_state
+          id, nome, telefone, status, lead_state, contract_signed_at
         )
       `)
       .eq('status', 'pending')
@@ -86,13 +86,17 @@ serve(async (req: Request): Promise<Response> => {
     for (const reminder of pendingReminders || []) {
       const lead = reminder.leads_juridicos;
       
-      // Skip if lead is already won or contract signed
-      if (lead && (lead.status === 'Ganho' || lead.lead_state === 'CONTRACT_SIGNED')) {
-        console.log(`[Contract Reminder] Skipping ${reminder.document_key} - lead already won`);
+      // Skip if lead is already won, contract signed, or if contract_reminders status changed
+      if (lead && (
+        lead.status === 'Ganho' || 
+        lead.lead_state === 'CONTRACT_SIGNED' ||
+        lead.contract_signed_at
+      )) {
+        console.log(`[Contract Reminder] Skipping ${reminder.document_key} - lead already signed/won`);
         
         await supabase
           .from('contract_reminders')
-          .update({ status: 'signed', updated_at: now.toISOString() })
+          .update({ status: 'signed', next_reminder_at: null, updated_at: now.toISOString() })
           .eq('id', reminder.id);
         
         skipped++;
