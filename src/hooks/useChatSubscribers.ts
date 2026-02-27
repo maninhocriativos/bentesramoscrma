@@ -118,35 +118,31 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
     loadSubscribers();
   }, [loadSubscribers]);
 
-  // Polling and visibility handlers
+  // Polling and visibility handlers — realtime is primary, polling is fallback only
   useEffect(() => {
-    // Reduced polling - realtime is primary
     const pollInterval = setInterval(() => {
-      console.log('[useChatSubscribers] Polling refresh...');
       loadSubscribers();
-    }, 30000);
+    }, 120000); // 2 min fallback (realtime handles instant updates)
 
-    const handleFocus = () => {
-      console.log('[useChatSubscribers] Window focus - reloading...');
-      loadSubscribers();
-    };
-    window.addEventListener('focus', handleFocus);
-
+    let lastFocusLoad = 0;
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        loadSubscribers();
+        const now = Date.now();
+        if (now - lastFocusLoad > 30000) { // debounce: max once per 30s
+          lastFocusLoad = now;
+          loadSubscribers();
+        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       clearInterval(pollInterval);
-      window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [loadSubscribers]);
 
-  // Realtime subscription
+  // Realtime subscription (primary update mechanism)
   useEffect(() => {
     console.log('[useChatSubscribers] Configurando realtime...');
     
@@ -155,7 +151,6 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'manychat_subscribers' },
         (payload) => {
-          console.log('[useChatSubscribers] Realtime evento:', payload.eventType, payload);
           
           if (payload.eventType === 'INSERT') {
             const newSub = payload.new as ChatSubscriber;
@@ -177,9 +172,7 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
           }
         }
       )
-      .subscribe((status) => {
-        console.log('[useChatSubscribers] Realtime status:', status);
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);

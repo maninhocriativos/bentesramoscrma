@@ -59,7 +59,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
         }
       }
 
-      console.log('[useChatMessages] Buscando por:', possibleIds);
+      
 
       const idsFilter = possibleIds.map(id => `subscriber_id.eq.${id}`).join(',');
       
@@ -102,7 +102,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
   useEffect(() => {
     if (!subscriberId) return;
 
-    console.log('[useChatMessages] Configurando realtime para:', subscriberId);
+    
     
     const channel = supabase
       .channel(`chat-messages-${subscriberId}-${Date.now()}`)
@@ -114,7 +114,6 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
           filter: `subscriber_id=eq.${subscriberId}`
         },
         (payload) => {
-          console.log('[useChatMessages] Nova mensagem realtime:', payload);
           const newMsg = payload.new as ChatMessage;
           
           // Prevent duplicates
@@ -129,14 +128,9 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
           onNewMessage?.(newMsg);
         }
       )
-      .subscribe((status) => {
-        console.log('[useChatMessages] Realtime status:', status);
-      });
+      .subscribe();
 
-    return () => {
-      console.log('[useChatMessages] Removendo canal realtime');
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [subscriberId, onNewMessage]);
 
   // Send message via Z-API
