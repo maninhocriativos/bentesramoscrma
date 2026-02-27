@@ -193,6 +193,8 @@ const ManyChatInboxContent = () => {
   const messageCacheTimestampRef = useRef<Map<string, number>>(new Map());
   // Set-based dedup keys for O(1) lookup
   const dedupKeysRef = useRef<Set<string>>(new Set());
+  // Guard anti-disparo duplo (Enter/click rápido)
+  const outboundSendGuardRef = useRef<Map<string, number>>(new Map());
   // Debounce subscriber reorder
   const pendingBumpsRef = useRef<Map<string, string>>(new Map()); // subscriberId -> ISO timestamp
   const bumpTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -530,6 +532,44 @@ const ManyChatInboxContent = () => {
     return `db_${msg?.id}`;
   };
 
+  const shouldSkipRapidDuplicateSend = useCallback((sendKey: string, windowMs = 1200) => {
+    const now = Date.now();
+    const lastSentAt = outboundSendGuardRef.current.get(sendKey) || 0;
+    if (now - lastSentAt < windowMs) return true;
+    outboundSendGuardRef.current.set(sendKey, now);
+
+    // Limpeza simples para evitar crescimento indefinido
+    if (outboundSendGuardRef.current.size > 200) {
+      const cutoff = now - 60_000;
+      for (const [key, ts] of outboundSendGuardRef.current.entries()) {
+        if (ts < cutoff) outboundSendGuardRef.current.delete(key);
+      }
+    }
+
+    return false;
+  }, []);
+
+  const isLikelyDuplicateOutbound = (a: Message, b: Message) => {
+    if (a.direcao !== 'saida' || b.direcao !== 'saida') return false;
+    if ((a.tipo || 'text') !== (b.tipo || 'text')) return false;
+    if ((a.subscriber_id || '') !== (b.subscriber_id || '')) return false;
+    if ((a.conteudo || '').trim() !== (b.conteudo || '').trim()) return false;
+
+    const ta = new Date(a.created_at).getTime();
+    const tb = new Date(b.created_at).getTime();
+    if (!Number.isFinite(ta) || !Number.isFinite(tb)) return false;
+    return Math.abs(ta - tb) <= 8000;
+  };
+
+  const mergeMessageDedup = (current: Message[], incoming: Message) => {
+    const incomingKey = getMessageDedupeKey(incoming);
+    return [...current.filter(msg => (
+      msg.id !== incoming.id &&
+      getMessageDedupeKey(msg) !== incomingKey &&
+      !isLikelyDuplicateOutbound(msg, incoming)
+    )), incoming].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  };
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -821,7 +861,7 @@ const ManyChatInboxContent = () => {
               dedupKeysRef.current.add(newMsgDedupeKey);
               dedupKeysRef.current.add(`db_${newMsg.id}`);
               setMessages(prev => {
-                const updated = [...prev, newMsg];
+                const updated = mergeMessageDedup(prev, newMsg as Message);
                 if (currentSubId) {
                   messagesCacheRef.current.set(currentSubId, updated);
                   messageCacheTimestampRef.current.set(currentSubId, Date.now());
@@ -1399,6 +1439,11 @@ const ManyChatInboxContent = () => {
 
     // Capturar subscriber_id ANTES de qualquer mudança de estado
     const currentSubId = selectedSubscriber.subscriber_id;
+    const rapidSendKey = `${currentSubId}|${mediaType || 'text'}|${content.trim().slice(0, 180)}`;
+    if (shouldSkipRapidDuplicateSend(rapidSendKey, 1200)) {
+      console.log('[SendGuard] Envio duplicado bloqueado:', rapidSendKey);
+      return;
+    }
 
     // Optimistic update - show message immediately
     const tempId = `temp_${Date.now()}`;
@@ -1492,13 +1537,13 @@ const ManyChatInboxContent = () => {
 
           // Replace optimistic message with real one
           if (savedMsg) {
+            const savedAsMessage = savedMsg as Message;
+            dedupKeysRef.current.add(getMessageDedupeKey(savedAsMessage));
+            dedupKeysRef.current.add(`db_${savedAsMessage.id}`);
+
             setMessages(prev => {
-              // Se o realtime já inseriu a mensagem real, removemos o temp e não duplicamos
               const withoutTemp = prev.filter(m => m.id !== tempId);
-              const savedKey = getMessageDedupeKey(savedMsg);
-              const alreadyExists = withoutTemp.some(m => getMessageDedupeKey(m) === savedKey || m.id === (savedMsg as any).id);
-              const updated = alreadyExists ? withoutTemp : [...withoutTemp, savedMsg as Message];
-              // Atualizar cache
+              const updated = mergeMessageDedup(withoutTemp, savedAsMessage);
               messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
               return updated;
             });
@@ -1528,12 +1573,13 @@ const ManyChatInboxContent = () => {
           } as any).select().single();
           
           if (savedMsg) {
+            const savedAsMessage = savedMsg as Message;
+            dedupKeysRef.current.add(getMessageDedupeKey(savedAsMessage));
+            dedupKeysRef.current.add(`db_${savedAsMessage.id}`);
+
             setMessages(prev => {
               const withoutTemp = prev.filter(m => m.id !== tempId);
-              const savedKey = getMessageDedupeKey(savedMsg);
-              const alreadyExists = withoutTemp.some(m => getMessageDedupeKey(m) === savedKey || m.id === (savedMsg as any).id);
-              const updated = alreadyExists ? withoutTemp : [...withoutTemp, savedMsg as Message];
-              // Atualizar cache
+              const updated = mergeMessageDedup(withoutTemp, savedAsMessage);
               messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
               return updated;
             });
@@ -1596,6 +1642,12 @@ const ManyChatInboxContent = () => {
         : fileToUpload.type.startsWith('video/')
           ? 'video'
           : 'document';
+
+    const fileSendKey = `${subscriberSnapshot.subscriber_id}|${mediaType}|${originalFileName}|${fileToUpload.size}`;
+    if (shouldSkipRapidDuplicateSend(fileSendKey, 1800)) {
+      console.log('[SendGuard] Upload duplicado bloqueado:', fileSendKey);
+      return;
+    }
     
     // Limpar preview imediatamente para liberar UI
     setSelectedFile(null);
@@ -1667,11 +1719,19 @@ const ManyChatInboxContent = () => {
         }
       } as any).select().single().then(({ data: savedMsg }) => {
         if (savedMsg) {
+          const savedAsMessage = savedMsg as Message;
+          dedupKeysRef.current.add(getMessageDedupeKey(savedAsMessage));
+          dedupKeysRef.current.add(`db_${savedAsMessage.id}`);
+
           setMessages(prev => {
             const withoutTemp = prev.filter(m => m.id !== tempId);
-            const savedKey = getMessageDedupeKey(savedMsg);
-            const alreadyExists = withoutTemp.some(m => getMessageDedupeKey(m) === savedKey || m.id === (savedMsg as any).id);
-            const updated = alreadyExists ? withoutTemp : [...withoutTemp, savedMsg as Message];
+            const updated = mergeMessageDedup(withoutTemp, savedAsMessage);
+            messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
+            return updated;
+          });
+        } else {
+          setMessages(prev => {
+            const updated = prev.filter(m => m.id !== tempId);
             messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
             return updated;
           });
@@ -1738,6 +1798,11 @@ const ManyChatInboxContent = () => {
     
     const audioFile = selectedFile;
     const subscriberSnapshot = { ...selectedSubscriber };
+    const audioSendKey = `${subscriberSnapshot.subscriber_id}|audio|${audioFile.name}|${audioFile.size}`;
+    if (shouldSkipRapidDuplicateSend(audioSendKey, 1800)) {
+      console.log('[SendGuard] Áudio duplicado bloqueado:', audioSendKey);
+      return;
+    }
     
     // Limpar preview imediatamente
     setSelectedFile(null);
@@ -1811,11 +1876,19 @@ const ManyChatInboxContent = () => {
       } as any).select().single().then(({ data: savedMsg }) => {
         // Atualizar com mensagem real
         if (savedMsg) {
+          const savedAsMessage = savedMsg as Message;
+          dedupKeysRef.current.add(getMessageDedupeKey(savedAsMessage));
+          dedupKeysRef.current.add(`db_${savedAsMessage.id}`);
+
           setMessages(prev => {
             const withoutTemp = prev.filter(m => m.id !== tempId);
-            const savedKey = getMessageDedupeKey(savedMsg);
-            const alreadyExists = withoutTemp.some(m => getMessageDedupeKey(m) === savedKey || m.id === (savedMsg as any).id);
-            const updated = alreadyExists ? withoutTemp : [...withoutTemp, savedMsg as Message];
+            const updated = mergeMessageDedup(withoutTemp, savedAsMessage);
+            messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
+            return updated;
+          });
+        } else {
+          setMessages(prev => {
+            const updated = prev.filter(m => m.id !== tempId);
             messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
             return updated;
           });
