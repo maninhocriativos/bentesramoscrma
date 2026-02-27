@@ -740,38 +740,25 @@ const ManyChatInboxContent = () => {
   };
   const selectedConversationHistoryKeyRef = useRef<string | null>(null);
 
-  // Initial load only - no aggressive polling (realtime handles updates)
+  // Initial load only — realtime is primary, polling is a light fallback
   useEffect(() => {
     loadSubscribers();
     
-    // Polling fallback every 60 seconds (reduced - realtime is primary)
-    const pollInterval = setInterval(() => {
-      console.log('[ManyChatInbox] Polling - atualizando lista...');
-      loadSubscribers();
-    }, 60000);
-
-    // Refetch on window focus (but not messages - only subscriber list)
-    const handleFocus = () => {
-      console.log('[ManyChatInbox] Window focus - recarregando lista...');
-      loadSubscribers();
-    };
-    window.addEventListener('focus', handleFocus);
-
-    // Visibility change handler for mobile/tab switching
+    // Remove duplicate polling — useChatSubscribers already handles this
+    // Only keep a very light visibility handler here for tab switches
+    let lastLoad = Date.now();
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('[ManyChatInbox] Tab visible - recarregando lista...');
+      if (document.visibilityState === 'visible' && Date.now() - lastLoad > 60000) {
+        lastLoad = Date.now();
         loadSubscribers();
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
-      clearInterval(pollInterval);
-      window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, []); // Empty dependency - only run once on mount
+  }, []);
 
   const handleTyping = useCallback(() => {
     setTyping(true);
