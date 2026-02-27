@@ -65,7 +65,9 @@ import {
   Users,
   History,
   FileText,
-  Square
+  Square,
+  LayoutGrid,
+  Megaphone
 } from 'lucide-react';
 import CalWidget from './CalWidget';
 import { format, isToday, isYesterday } from 'date-fns';
@@ -2061,41 +2063,58 @@ const ManyChatInboxContent = () => {
         </div>
 
         {/* Filtros unificados */}
-        <div className={`px-3 py-2 ${themeClasses.sidebar} border-b ${themeClasses.border}`}>
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            {(['all', 'trafego', 'whatsapp_direto'] as OrigemFilter[]).map((filter) => (
-              <button
-                key={filter}
-                onClick={() => setOrigemFilter(filter)}
-                className={`px-3 py-1.5 rounded-full text-[12px] font-medium transition-all whitespace-nowrap ${
-                  origemFilter === filter
-                    ? filter === 'trafego' 
-                      ? 'bg-red-500 text-white shadow-md'
-                      : filter === 'whatsapp_direto'
-                      ? 'bg-blue-500 text-white shadow-md'
-                      : 'bg-[#00A884] text-white shadow-md'
-                    : `${themeClasses.inputSearch} ${themeClasses.secondaryText} ${themeClasses.hoverBtn}`
-                }`}
-              >
-                {filter === 'all' ? '📋 Todos' : filter === 'trafego' ? '🎯 Tráfego' : '💬 Direto'}
-              </button>
-            ))}
+        <div className={`px-3 py-2 ${themeClasses.sidebar} border-b ${themeClasses.border} space-y-2`}>
+          {/* Linha 1: Origem */}
+          <div className="flex items-center gap-1.5">
+            {([
+              { key: 'all', label: 'Todos', icon: 'LayoutGrid', color: '#00A884' },
+              { key: 'trafego', label: 'Tráfego', icon: 'Megaphone', color: '#ef4444' },
+              { key: 'whatsapp_direto', label: 'Direto', icon: 'MessageCircle', color: '#3b82f6' },
+            ] as const).map(({ key, label, icon, color }) => {
+              const isActive = origemFilter === key;
+              const IconComp = icon === 'LayoutGrid' ? LayoutGrid : icon === 'Megaphone' ? Megaphone : MessageCircle;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setOrigemFilter(key as OrigemFilter)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all whitespace-nowrap ${
+                    isActive
+                      ? 'text-white shadow-sm'
+                      : `${themeClasses.inputSearch} ${themeClasses.secondaryText} hover:brightness-110`
+                  }`}
+                  style={isActive ? { backgroundColor: color } : undefined}
+                >
+                  <IconComp className="h-3.5 w-3.5" />
+                  {label}
+                </button>
+              );
+            })}
           </div>
-          <div className="flex items-center gap-2 mt-1.5">
-            {(['all', 'human', 'bot'] as ConversationFilter[]).map((filter) => (
-              <button
-                key={filter}
-                onClick={() => setActiveFilter(filter)}
-                className={`px-3 py-1.5 rounded-full text-[12px] font-medium transition-all ${
-                  activeFilter === filter
-                    ? 'bg-[#00A884] text-white shadow-md'
-                    : `${themeClasses.inputSearch} ${themeClasses.secondaryText} ${themeClasses.hoverBtn}`
-                }`}
-              >
-                {filter === 'all' ? 'Todos' : filter === 'human' ? '🙋 Humano' : '🤖 Isa'}
-              </button>
-            ))}
-            <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 mx-1" />
+          {/* Linha 2: Tipo + Tag filter */}
+          <div className="flex items-center gap-1.5">
+            {([
+              { key: 'all', label: 'Todos', icon: 'Users' },
+              { key: 'human', label: 'Humano', icon: 'UserRound' },
+              { key: 'bot', label: 'Isa', icon: 'Bot' },
+            ] as const).map(({ key, label, icon }) => {
+              const isActive = activeFilter === key;
+              const IconComp = icon === 'Users' ? Users : icon === 'UserRound' ? UserRound : Bot;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setActiveFilter(key as ConversationFilter)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all ${
+                    isActive
+                      ? 'bg-[#00A884] text-white shadow-sm'
+                      : `${themeClasses.inputSearch} ${themeClasses.secondaryText} hover:brightness-110`
+                  }`}
+                >
+                  <IconComp className="h-3.5 w-3.5" />
+                  {label}
+                </button>
+              );
+            })}
+            <div className="h-4 w-px bg-gray-500/30 mx-0.5" />
             <TagFilter
               availableTags={availableTags}
               selectedTagIds={selectedTagIds}
