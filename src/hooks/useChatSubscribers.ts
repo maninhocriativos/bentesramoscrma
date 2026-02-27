@@ -48,26 +48,26 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
       
       const subs = (subsData as ChatSubscriber[]) || [];
       
-      // Enriquecer com instância a partir do metadata da mensagem mais recente.
-      // Importante: nem sempre `subscriber_id` bate (há variações zapi_/sem 55 etc),
-      // então usamos `lead_id` quando disponível.
-      if (subs.length === 0) {
+      // Skip heavy message queries for subscribers that already have instance_name
+      const subsWithoutInstance = subs.filter(s => !s.instance_name);
+      
+      if (subs.length === 0 || subsWithoutInstance.length === 0) {
         setSubscribers(subs);
         return;
       }
 
-      const subscriberIds = subs.map(s => s.subscriber_id);
-      const leadIds = Array.from(new Set(subs.map(s => s.lead_id).filter(Boolean))) as string[];
+      const missingLeadIds = Array.from(new Set(subsWithoutInstance.map(s => s.lead_id).filter(Boolean))) as string[];
+      const missingSubIds = subsWithoutInstance.map(s => s.subscriber_id);
 
       const instanceByLeadId = new Map<string, string>();
       const instanceBySubscriberId = new Map<string, string>();
 
-      // 1) Preferir lead_id (mais confiável)
-      if (leadIds.length > 0) {
+      // 1) Por lead_id (only for subs missing instance_name)
+      if (missingLeadIds.length > 0) {
         const { data: byLeadMessages } = await supabase
           .from('manychat_mensagens')
           .select('lead_id, metadata, created_at')
-          .in('lead_id', leadIds)
+          .in('lead_id', missingLeadIds)
           .order('created_at', { ascending: false })
           .limit(2000);
 
@@ -75,20 +75,18 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
           for (const msg of byLeadMessages as any[]) {
             const leadId = msg.lead_id as string | null;
             if (!leadId || instanceByLeadId.has(leadId)) continue;
-
-            // Usar connectedPhone diretamente - é mais confiável que instance_name
             const connectedPhone = (msg.metadata as any)?.original?.connectedPhone;
             if (connectedPhone) instanceByLeadId.set(leadId, connectedPhone);
           }
         }
       }
 
-      // 2) Fallback por subscriber_id (quando não tem lead_id)
-      if (subscriberIds.length > 0) {
+      // 2) Fallback por subscriber_id (only for subs missing instance_name)
+      if (missingSubIds.length > 0) {
         const { data: bySubscriberMessages } = await supabase
           .from('manychat_mensagens')
           .select('subscriber_id, metadata, created_at')
-          .in('subscriber_id', subscriberIds)
+          .in('subscriber_id', missingSubIds)
           .order('created_at', { ascending: false })
           .limit(2000);
 
@@ -96,8 +94,6 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
           for (const msg of bySubscriberMessages as any[]) {
             const sid = msg.subscriber_id as string;
             if (!sid || instanceBySubscriberId.has(sid)) continue;
-
-            // Usar connectedPhone diretamente - é mais confiável que instance_name
             const connectedPhone = (msg.metadata as any)?.original?.connectedPhone;
             if (connectedPhone) instanceBySubscriberId.set(sid, connectedPhone);
           }
@@ -106,7 +102,7 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
 
       const enrichedSubs = subs.map(sub => ({
         ...sub,
-        instance_name: (sub.lead_id ? instanceByLeadId.get(sub.lead_id) : undefined) || instanceBySubscriberId.get(sub.subscriber_id) || undefined,
+        instance_name: sub.instance_name || (sub.lead_id ? instanceByLeadId.get(sub.lead_id) : undefined) || instanceBySubscriberId.get(sub.subscriber_id) || undefined,
       }));
 
       setSubscribers(enrichedSubs);
