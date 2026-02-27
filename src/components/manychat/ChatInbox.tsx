@@ -1035,13 +1035,16 @@ const ManyChatInboxContent = () => {
     prevSelectedSubIdRef.current = currentSubId;
 
     if (selectedSubscriber) {
+      // ALWAYS clear messages immediately to prevent cross-conversation leakage
+      setMessages([]);
+      dedupKeysRef.current = new Set();
+      
       // Cache-first: show cached messages immediately if fresh (< 30s)
       const cachedMessages = messagesCacheRef.current.get(selectedSubscriber.subscriber_id);
       const cacheAge = Date.now() - (messageCacheTimestampRef.current.get(selectedSubscriber.subscriber_id) || 0);
       const isCacheFresh = cacheAge < 30000; // 30 seconds
       
       if (cachedMessages && cachedMessages.length > 0) {
-        console.log('[Cache] Usando mensagens em cache para:', selectedSubscriber.subscriber_id, isCacheFresh ? '(fresh)' : '(stale)');
         setMessages(cachedMessages);
         // Rebuild dedup set from cache
         dedupKeysRef.current = new Set(cachedMessages.map(m => getMessageDedupeKey(m)));
