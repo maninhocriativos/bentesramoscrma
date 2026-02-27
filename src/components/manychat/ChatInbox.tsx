@@ -2172,7 +2172,7 @@ const ManyChatInboxContent = () => {
   return (
     <div className={`flex h-dvh w-full overflow-hidden ${themeClasses.bg}`}>
       {/* Sidebar - Lista de Conversas */}
-      <div className={`${showMobileChat ? 'hidden md:flex' : 'flex'} w-full md:w-[380px] lg:w-[420px] flex-col ${themeClasses.sidebar} border-r ${themeClasses.border}`}>
+      <div className={`${showMobileChat ? 'hidden md:flex' : 'flex'} w-full md:w-[440px] lg:w-[500px] xl:w-[540px] flex-col ${themeClasses.sidebar} border-r ${themeClasses.border}`}>
         {/* Header */}
         <div className={`h-[60px] px-4 flex items-center justify-between ${themeClasses.header}`}>
           <div className="flex items-center gap-3">
