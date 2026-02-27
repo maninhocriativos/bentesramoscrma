@@ -2338,9 +2338,32 @@ const ManyChatInboxContent = () => {
       } as any)
       .eq('id', editingMessageId);
 
-    toast({ title: '✏️ Mensagem editada' });
+    // Edit on WhatsApp via Z-API if we have a provider message_id
+    const providerMessageId = (originalMsg as any)?.metadata?.message_id;
+    if (providerMessageId && selectedSubscriber?.telefone) {
+      const outboundInstanceId = resolveInstanceId(selectedSubscriber);
+      supabase.functions.invoke('zapi-send', {
+        body: {
+          to_phone: selectedSubscriber.telefone,
+          message: editingText.trim(),
+          type: 'edit',
+          message_id: providerMessageId,
+          instance_id: outboundInstanceId,
+        },
+      }).then(({ data, error }) => {
+        if (error || !data?.success) {
+          console.error('[EditMessage] Erro ao editar no WhatsApp:', error || data?.error);
+          toast({ title: '⚠️ Editada localmente', description: 'Não foi possível editar no WhatsApp', variant: 'destructive' });
+        } else {
+          toast({ title: '✏️ Mensagem editada no WhatsApp' });
+        }
+      });
+    } else {
+      toast({ title: '✏️ Mensagem editada' });
+    }
+    
     handleCancelEdit();
-  }, [editingMessageId, editingText, messages, toast, handleCancelEdit]);
+  }, [editingMessageId, editingText, messages, toast, handleCancelEdit, selectedSubscriber]);
 
   // Reply to message
   const handleReplyMessage = useCallback((messageId: string) => {

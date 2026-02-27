@@ -232,7 +232,6 @@ async function sendViaZapi(
 
       case 'delete':
         endpoint = `${baseUrl}/messages/${messageId}`;
-        // Z-API uses DELETE method for message deletion
         console.log(`[Z-API Send] Deleting message: ${messageId}`);
         const deleteResponse = await fetch(endpoint, {
           method: 'DELETE',
@@ -244,6 +243,22 @@ async function sendViaZapi(
           return { success: true, data: deleteData };
         } else {
           return { success: false, error: deleteData.error || deleteData.message || 'Z-API delete error', data: deleteData };
+        }
+
+      case 'edit':
+        endpoint = `${baseUrl}/messages/${messageId}`;
+        console.log(`[Z-API Send] Editing message: ${messageId}, new text: ${message.substring(0, 50)}`);
+        const editResponse = await fetch(endpoint, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({ value: message }),
+        });
+        const editData = await editResponse.json();
+        console.log('[Z-API Send] Edit Response:', JSON.stringify(editData).substring(0, 300));
+        if (editResponse.ok && !editData.error) {
+          return { success: true, data: editData };
+        } else {
+          return { success: false, error: editData.error || editData.message || 'Z-API edit error', data: editData };
         }
 
       default:
