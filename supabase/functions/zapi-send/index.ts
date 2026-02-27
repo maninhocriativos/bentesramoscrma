@@ -109,7 +109,7 @@ serve(async (req: Request) => {
 
     // IMPORTANTE: NÃO salvar mensagem aqui - quem chama zapi-send já salva
     // Isso evita duplicação de mensagens. O salvamento é responsabilidade do chamador:
-    // - ManyChatInbox salva após enviar
+    // - ChatInbox salva após enviar
     // - isa-auto-process salva após enviar resposta da Isa
     
     // Apenas atualizar ultima_interacao do subscriber se houver lead

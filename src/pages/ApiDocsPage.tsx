@@ -13,7 +13,7 @@ const apiDocumentation = `
 # API DE INTEGRAÇÃO - CRM JURÍDICO BENTES RAMOS
 
 ## VISÃO GERAL
-Sistema de CRM jurídico com automação de follow-ups via ManyChat/WhatsApp.
+Sistema de CRM jurídico com automação de follow-ups via Z-API/WhatsApp.
 Base URL: ${API_BASE_URL}
 
 ---
@@ -27,7 +27,7 @@ Endpoint principal para receber novos leads de qualquer fonte externa.
 ### Headers:
 \`\`\`
 Content-Type: application/json
-x-integration-source: [nome_da_fonte] (ex: "manychat", "zapier", "whatsapp")
+x-integration-source: [nome_da_fonte] (ex: "zapier", "whatsapp", "zapi")
 \`\`\`
 
 ### Body (JSON):
@@ -38,9 +38,9 @@ x-integration-source: [nome_da_fonte] (ex: "manychat", "zapier", "whatsapp")
   "email": "cliente@email.com",
   "tipo_acao": "Trabalhista",
   "valor_causa": 50000,
-  "origem": "ManyChat",
+  "origem": "WhatsApp",
   "resumo_ia": "Resumo do caso gerado por IA",
-  "subscriber_id": "manychat_subscriber_id"
+  "subscriber_id": "zapi_subscriber_id"
 }
 \`\`\`
 
@@ -61,36 +61,16 @@ x-integration-source: [nome_da_fonte] (ex: "manychat", "zapier", "whatsapp")
 
 ---
 
-## 2. MANYCHAT WEBHOOK
-Recebe eventos e mensagens do ManyChat.
+## 2. Z-API WEBHOOK
+Recebe eventos e mensagens do WhatsApp via Z-API.
 
-**URL:** POST ${API_BASE_URL}/manychat-webhook
+**URL:** POST ${API_BASE_URL}/zapi-webhook
 **Autenticação:** Não requerida
 
-### Body (JSON):
-\`\`\`json
-{
-  "type": "message",
-  "subscriber": {
-    "id": "123456789",
-    "first_name": "João",
-    "last_name": "Silva",
-    "phone": "+5511999999999",
-    "email": "joao@email.com",
-    "profile_pic": "https://..."
-  },
-  "message": {
-    "text": "Quero consultar sobre meu caso",
-    "type": "text"
-  }
-}
-\`\`\`
-
-### Tipos de evento:
-- "message": Nova mensagem recebida
-- "subscriber_created": Novo subscriber
-- "subscriber_updated": Dados atualizados
-- "flow_completed": Fluxo concluído
+### Eventos suportados:
+- Mensagem de texto recebida
+- Mensagem de mídia (áudio, imagem, documento)
+- Status de mensagem enviada
 
 ---
 
@@ -122,22 +102,19 @@ Botões: ["🎯 Quero aproveitar", "📱 Me ligue", "❌ Não tenho interesse"]
 
 ---
 
-## 4. MANYCHAT - ENVIO DE MENSAGENS
-Para enviar mensagens de volta ao ManyChat.
+## 4. Z-API - ENVIO DE MENSAGENS
+Para enviar mensagens via WhatsApp (Z-API).
 
-**URL:** POST ${API_BASE_URL}/manychat
-**Autenticação:** Requer MANYCHAT_API_KEY configurada no servidor
+**URL:** POST ${API_BASE_URL}/zapi-send
+**Autenticação:** Requer configuração de instância Z-API
 
 ### Body:
 \`\`\`json
 {
-  "action": "sendMessage",
-  "subscriber_id": "123456789",
+  "to_phone": "5511999999999",
   "message": "Texto da mensagem",
-  "buttons": [
-    {"title": "Botão 1", "url": "https://..."},
-    {"title": "Botão 2", "payload": "action_2"}
-  ]
+  "type": "text",
+  "lead_id": "uuid-do-lead"
 }
 \`\`\`
 
@@ -170,36 +147,22 @@ Recebe eventos de assinatura de contratos.
 
 ---
 
-## 7. EXEMPLO COMPLETO - INTEGRAÇÃO MANYCHAT
+## 7. EXEMPLO COMPLETO - INTEGRAÇÃO VIA API HUB
 
-### Configuração no ManyChat:
-1. Vá em Settings → Integrations → Webhooks
-2. Adicione webhook: ${API_BASE_URL}/manychat-webhook
-3. Configure triggers: "Message Received", "Flow Completed"
+### Configuração de Webhook Externo:
+1. Configure o webhook na sua ferramenta (Zapier, Make, n8n, etc.)
+2. URL: ${API_BASE_URL}/api-hub
+3. Método: POST
 
-### Fluxo no ManyChat para captura de lead:
-\`\`\`
-[Trigger: User Input]
-    ↓
-[Collect: Nome, Telefone, Tipo de Caso]
-    ↓
-[Action: External Request]
-    URL: ${API_BASE_URL}/api-hub
-    Method: POST
-    Headers: 
-      Content-Type: application/json
-      x-integration-source: manychat
-    Body:
-      {
-        "nome": "{{first_name}} {{last_name}}",
-        "telefone": "{{phone}}",
-        "email": "{{email}}",
-        "tipo_acao": "{{custom_field_tipo_caso}}",
-        "origem": "ManyChat",
-        "subscriber_id": "{{user_id}}"
-      }
-    ↓
-[Message: Obrigado! Em breve entraremos em contato.]
+### Exemplo de payload:
+\`\`\`json
+{
+  "nome": "João Silva",
+  "telefone": "+5511999999999",
+  "email": "joao@email.com",
+  "tipo_acao": "Trabalhista",
+  "origem": "WhatsApp"
+}
 \`\`\`
 
 ---
@@ -221,7 +184,7 @@ Recebe eventos de assinatura de contratos.
 - SUPABASE_URL
 - SUPABASE_ANON_KEY
 - SUPABASE_SERVICE_ROLE_KEY
-- MANYCHAT_API_KEY
+- Z-API Instance Tokens
 - OPENAI_API_KEY (para resumos IA)
 
 ---
@@ -296,10 +259,10 @@ export default function ApiDocsPage() {
                 onCopy={copyToClipboard}
               />
               <EndpointCard
-                title="ManyChat Webhook"
+                title="Z-API Webhook"
                 method="POST"
-                url={`${API_BASE_URL}/manychat-webhook`}
-                description="Recebe eventos e mensagens do ManyChat."
+                url={`${API_BASE_URL}/zapi-webhook`}
+                description="Recebe eventos e mensagens do WhatsApp via Z-API."
                 onCopy={copyToClipboard}
               />
               <EndpointCard
