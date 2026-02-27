@@ -1618,24 +1618,25 @@ const ManyChatInboxContent = () => {
     try {
       const filePath = `manychat/${subscriberSnapshot.subscriber_id}/audio_${Date.now()}.ogg`;
       
-      // Upload em background
-      const uploadPromise = supabase.storage.from('documentos').upload(filePath, audioFile);
-      
-      const { error: uploadError } = await uploadPromise;
+      // Upload and sign URL in parallel
+      const { error: uploadError } = await supabase.storage.from('documentos').upload(filePath, audioFile);
       if (uploadError) throw uploadError;
       
-      const { data: signed, error: signError } = await supabase.storage
-        .from('documentos')
-        .createSignedUrl(filePath, 60 * 60 * 24 * 30);
+      // Sign URL and send via Z-API in parallel
+      const outboundInstanceId = resolveInstanceId(subscriberSnapshot);
+      const [signResult, _] = await Promise.all([
+        supabase.storage.from('documentos').createSignedUrl(filePath, 60 * 60 * 24 * 30),
+        Promise.resolve(), // placeholder for parallel structure
+      ]);
       
-      if (signError || !signed?.signedUrl) throw signError;
+      if (signResult.error || !signResult.data?.signedUrl) throw signResult.error;
+      const signedUrl = signResult.data.signedUrl;
       
       // Enviar via Z-API
-      const outboundInstanceId = resolveInstanceId(subscriberSnapshot);
       const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-send', {
         body: {
           to_phone: subscriberSnapshot.telefone,
-          message: signed.signedUrl,
+          message: signedUrl,
           type: 'audio',
           lead_id: subscriberSnapshot.lead_id,
           file_name: audioFile.name,
@@ -1645,13 +1646,13 @@ const ManyChatInboxContent = () => {
       
       if (zapiError) throw new Error(zapiError.message);
       
-      // Salvar no banco
+      // Salvar no banco (não bloquear UI)
       const msgId = zapiResult?.messageId;
-      const { data: savedMsg } = await supabase.from('manychat_mensagens' as any).insert({
+      supabase.from('manychat_mensagens' as any).insert({
         subscriber_id: subscriberSnapshot.subscriber_id,
         subscriber_nome: subscriberSnapshot.nome,
         canal: 'whatsapp',
-        conteudo: signed.signedUrl,
+        conteudo: signedUrl,
         tipo: 'audio',
         direcao: 'saida',
         lead_id: subscriberSnapshot.lead_id,
@@ -1661,19 +1662,19 @@ const ManyChatInboxContent = () => {
           message_id: msgId,
           file_name: audioFile.name 
         }
-      } as any).select().single();
-      
-      // Atualizar com mensagem real
-      if (savedMsg) {
-        setMessages(prev => {
-          const withoutTemp = prev.filter(m => m.id !== tempId);
-          const savedKey = getMessageDedupeKey(savedMsg);
-          const alreadyExists = withoutTemp.some(m => getMessageDedupeKey(m) === savedKey || m.id === (savedMsg as any).id);
-          const updated = alreadyExists ? withoutTemp : [...withoutTemp, savedMsg as Message];
-          messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
-          return updated;
-        });
-      }
+      } as any).select().single().then(({ data: savedMsg }) => {
+        // Atualizar com mensagem real
+        if (savedMsg) {
+          setMessages(prev => {
+            const withoutTemp = prev.filter(m => m.id !== tempId);
+            const savedKey = getMessageDedupeKey(savedMsg);
+            const alreadyExists = withoutTemp.some(m => getMessageDedupeKey(m) === savedKey || m.id === (savedMsg as any).id);
+            const updated = alreadyExists ? withoutTemp : [...withoutTemp, savedMsg as Message];
+            messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
+            return updated;
+          });
+        }
+      });
       
     } catch (error: any) {
       console.error('[Audio] Erro ao enviar áudio:', error);
@@ -2472,7 +2473,7 @@ const ManyChatInboxContent = () => {
                                 ? 'bg-red-500/15 text-red-400' 
                                 : 'bg-blue-500/15 text-blue-400'
                             }`}>
-                              {instanceInfo.label}
+                              {formatPhone(subscriber.telefone) ? `${formatPhone(subscriber.telefone)} · ` : ''}{instanceInfo.label}
                             </span>
                           )}
                         </div>
@@ -2932,7 +2933,7 @@ const ManyChatInboxContent = () => {
                 <Contact className="h-5 w-5" />
               </Button>
               <div className="flex-1">
-                <Input
+                <textarea
                   placeholder="Digite uma mensagem"
                   value={newMessage}
                   onChange={(e) => { setNewMessage(e.target.value); handleTyping(); }}
@@ -2969,11 +2970,17 @@ const ManyChatInboxContent = () => {
                       }
                     }
                     
-                    // For text, let the default paste behavior work
-                    // The Input component handles Ctrl+V for text natively
+                    // For text, let the default paste behavior work - textarea preserves line breaks
                   }}
                   disabled={isSending || isRecording}
-                  className={`h-[44px] rounded-xl ${themeClasses.input} border-0 text-[15px] focus-visible:ring-0 shadow-sm`}
+                  rows={1}
+                  style={{ minHeight: '44px', maxHeight: '120px', resize: 'none' }}
+                  onInput={(e) => {
+                    const target = e.target as HTMLTextAreaElement;
+                    target.style.height = '44px';
+                    target.style.height = Math.min(target.scrollHeight, 120) + 'px';
+                  }}
+                  className={`w-full rounded-xl ${themeClasses.input} border-0 text-[15px] focus-visible:ring-0 focus-visible:outline-none shadow-sm py-[10px] px-3 overflow-y-auto`}
                 />
               </div>
 
