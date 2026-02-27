@@ -16,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ChevronDown, Star, StarOff, Trash2, Forward, Copy, Reply, Pencil } from 'lucide-react';
+import { ChevronDown, Star, StarOff, Trash2, Forward, Copy, Reply, Pencil, Pin, PinOff, CheckSquare, Flag } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface MessageContextMenuProps {
@@ -25,10 +25,16 @@ interface MessageContextMenuProps {
   messageType?: string;
   isOutgoing: boolean;
   isStarred: boolean;
+  isPinned?: boolean;
+  isSelected?: boolean;
   isDark: boolean;
   isEdited?: boolean;
   onStar: (messageId: string) => void;
   onUnstar: (messageId: string) => void;
+  onPin?: (messageId: string) => void;
+  onUnpin?: (messageId: string) => void;
+  onSelect?: (messageId: string) => void;
+  onReport?: (messageId: string) => void;
   onDeleteForMe: (messageId: string) => void;
   onDeleteForAll: (messageId: string) => void;
   onForward: (messageId: string) => void;
@@ -42,9 +48,15 @@ export function MessageContextMenu({
   messageType = 'text',
   isOutgoing,
   isStarred,
+  isPinned = false,
+  isSelected = false,
   isDark,
   onStar,
   onUnstar,
+  onPin,
+  onUnpin,
+  onSelect,
+  onReport,
   onDeleteForMe,
   onDeleteForAll,
   onForward,
@@ -107,6 +119,25 @@ export function MessageContextMenu({
               Marcar como favorita
             </DropdownMenuItem>
           )}
+          {isPinned ? (
+            <DropdownMenuItem onClick={() => { onUnpin?.(messageId); setOpen(false); }}>
+              <PinOff className="h-4 w-4 mr-2" />
+              Desfixar
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem onClick={() => { onPin?.(messageId); setOpen(false); }}>
+              <Pin className="h-4 w-4 mr-2" />
+              Fixar
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onClick={() => { onSelect?.(messageId); setOpen(false); }}>
+            <CheckSquare className="h-4 w-4 mr-2" />
+            {isSelected ? 'Desselecionar' : 'Selecionar'}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => { onReport?.(messageId); setOpen(false); }}>
+            <Flag className="h-4 w-4 mr-2" />
+            Denunciar
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem 
             onClick={() => { setOpen(false); setDeleteDialog('forMe'); }}
