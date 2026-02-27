@@ -1944,21 +1944,8 @@ const ManyChatInboxContent = () => {
       const subTags = getSubscriberTags(sub.subscriber_id);
       return selectedTagIds.every(tagId => subTags.some(st => st.tag_id === tagId));
     })
-    // Ordenar: conversas com mensagens não lidas primeiro, depois por última interação
+    // Ordenar por última interação (mais recente primeiro) — mensagens novas sobem automaticamente
     .sort((a, b) => {
-      const aUnread = getUnreadCountForSubscriber(a);
-      const bUnread = getUnreadCountForSubscriber(b);
-      const aHasUnread = aUnread > 0 || hasUnreadHintForSubscriber(a);
-      const bHasUnread = bUnread > 0 || hasUnreadHintForSubscriber(b);
-
-      // Não lidas primeiro
-      if (aHasUnread && !bHasUnread) return -1;
-      if (bHasUnread && !aHasUnread) return 1;
-
-      // Dentro das não lidas, maior contador primeiro
-      if (aUnread !== bUnread) return bUnread - aUnread;
-
-      // Dentro do mesmo grupo, ordenar por última interação (mais recente primeiro)
       const aTime = new Date(a.ultima_interacao || 0).getTime();
       const bTime = new Date(b.ultima_interacao || 0).getTime();
       return bTime - aTime;
