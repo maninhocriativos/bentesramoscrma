@@ -2506,9 +2506,6 @@ const ManyChatInboxContent = () => {
                           {subscriber.ultima_interacao ? formatLastMessageTime(subscriber.ultima_interacao) : ''}
                         </span>
                         <div className="flex items-center justify-end gap-1.5 min-h-[20px] w-full">
-                          {subscriberTags.length > 0 && subscriberTags[0].tag && (
-                            <TagBadge tag={subscriberTags[0].tag} size="sm" />
-                          )}
                           {hasUnread ? (
                             <span className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center shadow-sm">
                               {unreadCount > 99 ? '99+' : unreadCount}
