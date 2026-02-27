@@ -6,26 +6,40 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ChevronDown, Star, StarOff, Trash2, Forward, Copy, Reply } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { ChevronDown, Star, StarOff, Trash2, Forward, Copy, Reply, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface MessageContextMenuProps {
   messageId: string;
   messageContent: string;
+  messageType?: string;
   isOutgoing: boolean;
   isStarred: boolean;
   isDark: boolean;
+  isEdited?: boolean;
   onStar: (messageId: string) => void;
   onUnstar: (messageId: string) => void;
   onDeleteForMe: (messageId: string) => void;
   onDeleteForAll: (messageId: string) => void;
   onForward: (messageId: string) => void;
   onReply?: (messageId: string) => void;
+  onEdit?: (messageId: string) => void;
 }
 
 export function MessageContextMenu({
   messageId,
   messageContent,
+  messageType = 'text',
   isOutgoing,
   isStarred,
   isDark,
@@ -35,8 +49,10 @@ export function MessageContextMenu({
   onDeleteForAll,
   onForward,
   onReply,
+  onEdit,
 }: MessageContextMenuProps) {
   const [open, setOpen] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState<'forMe' | 'forAll' | null>(null);
   const { toast } = useToast();
 
   const handleCopy = () => {
@@ -45,61 +61,103 @@ export function MessageContextMenu({
     setOpen(false);
   };
 
+  const canEdit = isOutgoing && messageType === 'text' && !messageContent.startsWith('🚫');
+
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <button
-          className={`absolute top-1 ${isOutgoing ? 'left-1' : 'right-1'} opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md ${
-            isDark ? 'hover:bg-white/10 text-white/60' : 'hover:bg-black/5 text-black/40'
-          }`}
-        >
-          <ChevronDown className="h-4 w-4" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align={isOutgoing ? 'start' : 'end'} className="w-48">
-        {onReply && (
-          <DropdownMenuItem onClick={() => { onReply(messageId); setOpen(false); }}>
-            <Reply className="h-4 w-4 mr-2" />
-            Responder
+    <>
+      <DropdownMenu open={open} onOpenChange={setOpen}>
+        <DropdownMenuTrigger asChild>
+          <button
+            className={`absolute top-1 ${isOutgoing ? 'left-1' : 'right-1'} opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md ${
+              isDark ? 'hover:bg-white/10 text-white/60' : 'hover:bg-black/5 text-black/40'
+            }`}
+          >
+            <ChevronDown className="h-4 w-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align={isOutgoing ? 'start' : 'end'} className="w-48">
+          {onReply && (
+            <DropdownMenuItem onClick={() => { onReply(messageId); setOpen(false); }}>
+              <Reply className="h-4 w-4 mr-2" />
+              Responder
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onClick={() => { onForward(messageId); setOpen(false); }}>
+            <Forward className="h-4 w-4 mr-2" />
+            Encaminhar
           </DropdownMenuItem>
-        )}
-        <DropdownMenuItem onClick={() => { onForward(messageId); setOpen(false); }}>
-          <Forward className="h-4 w-4 mr-2" />
-          Encaminhar
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleCopy}>
-          <Copy className="h-4 w-4 mr-2" />
-          Copiar
-        </DropdownMenuItem>
-        {isStarred ? (
-          <DropdownMenuItem onClick={() => { onUnstar(messageId); setOpen(false); }}>
-            <StarOff className="h-4 w-4 mr-2" />
-            Desmarcar favorita
+          <DropdownMenuItem onClick={handleCopy}>
+            <Copy className="h-4 w-4 mr-2" />
+            Copiar
           </DropdownMenuItem>
-        ) : (
-          <DropdownMenuItem onClick={() => { onStar(messageId); setOpen(false); }}>
-            <Star className="h-4 w-4 mr-2 text-yellow-500" />
-            Marcar como favorita
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem 
-          onClick={() => { onDeleteForMe(messageId); setOpen(false); }}
-          className="text-red-500 focus:text-red-500"
-        >
-          <Trash2 className="h-4 w-4 mr-2" />
-          Apagar para mim
-        </DropdownMenuItem>
-        {isOutgoing && (
+          {canEdit && onEdit && (
+            <DropdownMenuItem onClick={() => { onEdit(messageId); setOpen(false); }}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Editar
+            </DropdownMenuItem>
+          )}
+          {isStarred ? (
+            <DropdownMenuItem onClick={() => { onUnstar(messageId); setOpen(false); }}>
+              <StarOff className="h-4 w-4 mr-2" />
+              Desmarcar favorita
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem onClick={() => { onStar(messageId); setOpen(false); }}>
+              <Star className="h-4 w-4 mr-2 text-yellow-500" />
+              Marcar como favorita
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuSeparator />
           <DropdownMenuItem 
-            onClick={() => { onDeleteForAll(messageId); setOpen(false); }}
-            className="text-red-600 focus:text-red-600"
+            onClick={() => { setOpen(false); setDeleteDialog('forMe'); }}
+            className="text-red-500 focus:text-red-500"
           >
             <Trash2 className="h-4 w-4 mr-2" />
-            Apagar para todos
+            Apagar para mim
           </DropdownMenuItem>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+          {isOutgoing && (
+            <DropdownMenuItem 
+              onClick={() => { setOpen(false); setDeleteDialog('forAll'); }}
+              className="text-red-600 focus:text-red-600"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Apagar para todos
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={deleteDialog !== null} onOpenChange={(o) => !o && setDeleteDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteDialog === 'forAll' ? 'Apagar para todos?' : 'Apagar para você?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteDialog === 'forAll'
+                ? 'Esta mensagem será apagada para todos os participantes da conversa. Essa ação não pode ser desfeita.'
+                : 'A mensagem será removida apenas da sua visualização. Os outros participantes ainda poderão vê-la.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => {
+                if (deleteDialog === 'forAll') {
+                  onDeleteForAll(messageId);
+                } else {
+                  onDeleteForMe(messageId);
+                }
+                setDeleteDialog(null);
+              }}
+            >
+              Apagar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

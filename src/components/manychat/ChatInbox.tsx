@@ -177,6 +177,8 @@ const ManyChatInboxContent = () => {
   const [forwardModalOpen, setForwardModalOpen] = useState(false);
   const [forwardMessageContent, setForwardMessageContent] = useState('');
   const [sendContactModalOpen, setSendContactModalOpen] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
   
   // Tags hook
   const {
@@ -2233,6 +2235,52 @@ const ManyChatInboxContent = () => {
     toast({ title: '🗑️ Mensagem apagada para todos' });
   }, [toast]);
 
+  // Edit message
+  const handleStartEdit = useCallback((messageId: string) => {
+    const msg = messages.find(m => m.id === messageId);
+    if (!msg || msg.direcao !== 'saida') return;
+    setEditingMessageId(messageId);
+    setEditingText(msg.conteudo);
+  }, [messages]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingMessageId(null);
+    setEditingText('');
+  }, []);
+
+  const handleConfirmEdit = useCallback(async () => {
+    if (!editingMessageId || !editingText.trim()) return;
+    
+    const originalMsg = messages.find(m => m.id === editingMessageId);
+    if (!originalMsg || editingText.trim() === originalMsg.conteudo) {
+      handleCancelEdit();
+      return;
+    }
+
+    // Optimistic update
+    setMessages(prev => prev.map(m => 
+      m.id === editingMessageId 
+        ? { ...m, conteudo: editingText.trim(), metadata: { ...((m as any).metadata || {}), edited: true, edited_at: new Date().toISOString(), original_content: originalMsg.conteudo } }
+        : m
+    ));
+
+    // Persist to DB
+    await supabase.from('manychat_mensagens')
+      .update({ 
+        conteudo: editingText.trim(),
+        metadata: { 
+          ...((originalMsg as any).metadata || {}),
+          edited: true, 
+          edited_at: new Date().toISOString(),
+          original_content: originalMsg.conteudo 
+        }
+      } as any)
+      .eq('id', editingMessageId);
+
+    toast({ title: '✏️ Mensagem editada' });
+    handleCancelEdit();
+  }, [editingMessageId, editingText, messages, toast, handleCancelEdit]);
+
   // Forward message
   const handleOpenForward = useCallback((messageId: string) => {
     const msg = messages.find(m => m.id === messageId);
@@ -3022,14 +3070,17 @@ const ManyChatInboxContent = () => {
                             <MessageContextMenu
                               messageId={message.id}
                               messageContent={message.conteudo}
+                              messageType={(message as any).tipo || 'text'}
                               isOutgoing={isOutgoing}
                               isStarred={isStarred}
                               isDark={isDark}
+                              isEdited={!!(message as any).metadata?.edited}
                               onStar={handleStarMessage}
                               onUnstar={handleUnstarMessage}
                               onDeleteForMe={handleDeleteForMe}
                               onDeleteForAll={handleDeleteForAll}
                               onForward={handleOpenForward}
+                              onEdit={handleStartEdit}
                             />
                             
                             <span className={`absolute top-0 w-2 h-3 ${isOutgoing ? '-right-2' : '-left-2'}`}>
@@ -3040,10 +3091,48 @@ const ManyChatInboxContent = () => {
                               )}
                             </span>
                             
-                            {renderMessage(message)}
+                            {/* Inline edit mode */}
+                            {editingMessageId === message.id ? (
+                              <div className="flex flex-col gap-1.5 min-w-[200px]">
+                                <textarea
+                                  value={editingText}
+                                  onChange={(e) => setEditingText(e.target.value)}
+                                  className={`w-full rounded-md px-2 py-1.5 text-[14.2px] resize-none border-0 focus:ring-1 focus:ring-[#00A884] outline-none ${
+                                    isDark ? 'bg-[#2A3942] text-[#E9EDEF]' : 'bg-white text-[#111B21]'
+                                  }`}
+                                  rows={Math.min(editingText.split('\n').length + 1, 6)}
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Escape') handleCancelEdit();
+                                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleConfirmEdit(); }
+                                  }}
+                                />
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={handleCancelEdit}
+                                    className={`text-[11px] px-2 py-0.5 rounded ${isDark ? 'text-[#8696A0] hover:bg-white/10' : 'text-gray-500 hover:bg-black/5'}`}
+                                  >
+                                    Cancelar
+                                  </button>
+                                  <button
+                                    onClick={handleConfirmEdit}
+                                    className="text-[11px] px-2 py-0.5 rounded bg-[#00A884] text-white hover:bg-[#00A884]/90"
+                                  >
+                                    Salvar
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              renderMessage(message)
+                            )}
                             
                             <div className="flex items-center justify-end gap-1 mt-1">
                               {isStarred && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />}
+                              {(message as any).metadata?.edited && (
+                                <span className={`text-[11px] italic ${isOutgoing ? themeClasses.messageTime : themeClasses.secondaryText}`}>
+                                  editada
+                                </span>
+                              )}
                               <span className={`text-[11px] ${isOutgoing ? themeClasses.messageTime : themeClasses.secondaryText}`}>
                                 {formatMessageTime(message.created_at)}
                               </span>
