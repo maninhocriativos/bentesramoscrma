@@ -93,8 +93,9 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
     }
   }, [subscriberId]);
 
-  // Load initial messages when subscriber changes
+  // Clear messages immediately and load new ones when subscriber changes
   useEffect(() => {
+    setMessages([]);
     loadMessages();
   }, [subscriberId, loadMessages]);
 
