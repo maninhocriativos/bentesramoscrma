@@ -1284,6 +1284,7 @@ const ManyChatInboxContent = () => {
   };
 
   const loadMessages = async (subscriberId: string, loadAll = false, subscriberOverride?: Subscriber | null) => {
+    const requestId = ++loadMessagesRequestRef.current;
     setIsLoadingMessages(true);
     try {
       // Get subscriber for phone and lead_id - prefer override to avoid stale state
@@ -1371,6 +1372,12 @@ const ManyChatInboxContent = () => {
       // Rebuild dedup Set
       dedupKeysRef.current = new Set(uniqueMessages.map(m => getMessageDedupeKey(m)));
       uniqueMessages.forEach(m => dedupKeysRef.current.add(`db_${m.id}`));
+      
+      // Race condition guard: if another loadMessages was called since, discard this result
+      if (loadMessagesRequestRef.current !== requestId) {
+        console.log('[loadMessages] Resultado descartado - subscriber mudou durante fetch');
+        return;
+      }
       
       // Merge com mensagens realtime que chegaram durante o fetch (evita perder msgs)
       setMessages(prev => {
@@ -1484,6 +1491,7 @@ const ManyChatInboxContent = () => {
     setTyping(false);
     setSelectedFile(null);
     setPreviewUrl(null);
+    setReplyToMessage(null); // Clear reply context
     scrollToBottom();
 
     // Capturar valores do subscriber atual para uso no async
@@ -2309,6 +2317,53 @@ const ManyChatInboxContent = () => {
     handleCancelEdit();
   }, [editingMessageId, editingText, messages, toast, handleCancelEdit]);
 
+  // Reply to message
+  const handleReplyMessage = useCallback((messageId: string) => {
+    const msg = messages.find(m => m.id === messageId);
+    if (!msg) return;
+    setReplyToMessage(msg);
+  }, [messages]);
+
+  // Pin/Unpin message
+  const handlePinMessage = useCallback((messageId: string) => {
+    if (!selectedSubscriber) return;
+    setPinnedMessagesBySubscriber(prev => ({
+      ...prev,
+      [selectedSubscriber.subscriber_id]: messageId,
+    }));
+    toast({ title: '📌 Mensagem fixada' });
+  }, [selectedSubscriber, toast]);
+
+  const handleUnpinMessage = useCallback((messageId: string) => {
+    if (!selectedSubscriber) return;
+    setPinnedMessagesBySubscriber(prev => {
+      const next = { ...prev };
+      if (next[selectedSubscriber.subscriber_id] === messageId) {
+        delete next[selectedSubscriber.subscriber_id];
+      }
+      return next;
+    });
+    toast({ title: 'Mensagem desfixada' });
+  }, [selectedSubscriber, toast]);
+
+  // Select/deselect message
+  const handleSelectMessage = useCallback((messageId: string) => {
+    setSelectedMessageIds(prev => {
+      const next = new Set(prev);
+      if (next.has(messageId)) {
+        next.delete(messageId);
+      } else {
+        next.add(messageId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Report message
+  const handleReportMessage = useCallback((messageId: string) => {
+    toast({ title: '🚩 Mensagem denunciada', description: 'A denúncia foi registrada.' });
+  }, [toast]);
+
   // Forward message
   const handleOpenForward = useCallback((messageId: string) => {
     const msg = messages.find(m => m.id === messageId);
@@ -3101,13 +3156,20 @@ const ManyChatInboxContent = () => {
                               messageType={(message as any).tipo || 'text'}
                               isOutgoing={isOutgoing}
                               isStarred={isStarred}
+                              isPinned={selectedSubscriber ? pinnedMessagesBySubscriber[selectedSubscriber.subscriber_id] === message.id : false}
+                              isSelected={selectedMessageIds.has(message.id)}
                               isDark={isDark}
                               isEdited={!!(message as any).metadata?.edited}
                               onStar={handleStarMessage}
                               onUnstar={handleUnstarMessage}
+                              onPin={handlePinMessage}
+                              onUnpin={handleUnpinMessage}
+                              onSelect={handleSelectMessage}
+                              onReport={handleReportMessage}
                               onDeleteForMe={handleDeleteForMe}
                               onDeleteForAll={handleDeleteForAll}
                               onForward={handleOpenForward}
+                              onReply={handleReplyMessage}
                               onEdit={handleStartEdit}
                             />
                             
@@ -3230,6 +3292,23 @@ const ManyChatInboxContent = () => {
                     </Button>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Reply bar */}
+            {replyToMessage && (
+              <div className={`px-4 py-2 flex items-center gap-3 border-t ${isDark ? 'bg-[#1F2C34] border-[#313D45]' : 'bg-[#F0F2F5] border-[#E9EDEF]'}`}>
+                <div className={`flex-1 rounded-lg px-3 py-2 border-l-4 ${replyToMessage.direcao === 'saida' ? 'border-l-[#00A884]' : 'border-l-[#6B7B8D]'} ${isDark ? 'bg-[#111B21]' : 'bg-white'}`}>
+                  <p className={`text-xs font-medium ${replyToMessage.direcao === 'saida' ? 'text-[#00A884]' : (isDark ? 'text-[#E9EDEF]' : 'text-[#111B21]')}`}>
+                    {replyToMessage.direcao === 'saida' ? 'Você' : (selectedSubscriber?.nome || 'Contato')}
+                  </p>
+                  <p className={`text-[13px] truncate ${isDark ? 'text-[#8696A0]' : 'text-[#667781]'}`}>
+                    {replyToMessage.conteudo.substring(0, 100)}
+                  </p>
+                </div>
+                <button onClick={() => setReplyToMessage(null)} className={`p-1 rounded-full ${isDark ? 'hover:bg-white/10 text-[#8696A0]' : 'hover:bg-black/5 text-[#667781]'}`}>
+                  <X className="h-5 w-5" />
+                </button>
               </div>
             )}
 
