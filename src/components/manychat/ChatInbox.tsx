@@ -190,6 +190,12 @@ const ManyChatInboxContent = () => {
   
   // Cache de mensagens por subscriber (evita recarregar ao trocar de conversa)
   const messagesCacheRef = useRef<Map<string, Message[]>>(new Map());
+  const messageCacheTimestampRef = useRef<Map<string, number>>(new Map());
+  // Set-based dedup keys for O(1) lookup
+  const dedupKeysRef = useRef<Set<string>>(new Set());
+  // Debounce subscriber reorder
+  const pendingBumpsRef = useRef<Map<string, string>>(new Map()); // subscriberId -> ISO timestamp
+  const bumpTimerRef = useRef<NodeJS.Timeout | null>(null);
   // Rastrear mensagens não lidas por subscriber
   const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
   // Rastrear preview da última mensagem por subscriber_id
@@ -504,8 +510,8 @@ const ManyChatInboxContent = () => {
     messageTime: isDark ? 'text-[#8FBFB1]' : 'text-[#667781]',
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (instant = true) => {
+    messagesEndRef.current?.scrollIntoView({ behavior: instant ? 'instant' : 'smooth' });
   };
 
   // Chave de deduplicação ROBUSTA - múltiplas camadas para evitar duplicatas
@@ -810,13 +816,15 @@ const ManyChatInboxContent = () => {
             if (isCurrentChat) {
               console.log('[Realtime] Adicionando mensagem ao chat atual');
               const newMsgDedupeKey = getMessageDedupeKey(newMsg);
+              // O(1) dedup check using Set
+              if (dedupKeysRef.current.has(newMsgDedupeKey) || dedupKeysRef.current.has(`db_${newMsg.id}`)) return;
+              dedupKeysRef.current.add(newMsgDedupeKey);
+              dedupKeysRef.current.add(`db_${newMsg.id}`);
               setMessages(prev => {
-                // Deduplicate using both ID and dedup key
-                if (prev.some(m => m.id === newMsg.id || getMessageDedupeKey(m) === newMsgDedupeKey)) return prev;
                 const updated = [...prev, newMsg];
-                // Atualizar cache também
                 if (currentSubId) {
                   messagesCacheRef.current.set(currentSubId, updated);
+                  messageCacheTimestampRef.current.set(currentSubId, Date.now());
                 }
                 return updated;
               });
@@ -872,33 +880,39 @@ const ManyChatInboxContent = () => {
               }
             }
             
-            // Update subscriber order - move to top
-            setSubscribers(prev => {
-              // Find by subscriber_id, lead_id, or phone suffix
-              let idx = prev.findIndex(s => s.subscriber_id === newMsg.subscriber_id);
-              
-              if (idx === -1 && (newMsg as any).lead_id) {
-                idx = prev.findIndex(s => s.lead_id === (newMsg as any).lead_id);
-              }
-              
-              if (idx === -1 && newMsg.subscriber_id.startsWith('zapi_')) {
-                const phoneFromZapi = newMsg.subscriber_id.replace('zapi_', '');
-                const phoneSuffix = phoneFromZapi.slice(-9);
-                idx = prev.findIndex(s => {
-                  const subPhone = s.telefone?.replace(/\D/g, '') || '';
-                  return subPhone.endsWith(phoneSuffix) || s.subscriber_id.includes(phoneSuffix);
+            // Debounced subscriber reorder - batch updates every 500ms
+            pendingBumpsRef.current.set(newMsg.subscriber_id, new Date().toISOString());
+            if (!bumpTimerRef.current) {
+              bumpTimerRef.current = setTimeout(() => {
+                const bumps = new Map(pendingBumpsRef.current);
+                pendingBumpsRef.current.clear();
+                bumpTimerRef.current = null;
+                
+                setSubscribers(prev => {
+                  let updated = [...prev];
+                  for (const [bumpSubId, bumpTime] of bumps) {
+                    let idx = updated.findIndex(s => s.subscriber_id === bumpSubId);
+                    if (idx === -1) {
+                      // Try by phone suffix
+                      if (bumpSubId.startsWith('zapi_')) {
+                        const phoneSuffix = bumpSubId.replace('zapi_', '').slice(-9);
+                        idx = updated.findIndex(s => {
+                          const subPhone = s.telefone?.replace(/\D/g, '') || '';
+                          return subPhone.endsWith(phoneSuffix) || s.subscriber_id.includes(phoneSuffix);
+                        });
+                      }
+                    }
+                    if (idx === -1) {
+                      loadSubscribers();
+                      continue;
+                    }
+                    const [subscriber] = updated.splice(idx, 1);
+                    updated = [{ ...subscriber, ultima_interacao: bumpTime }, ...updated];
+                  }
+                  return updated;
                 });
-              }
-              
-              if (idx === -1) { 
-                console.log('[Realtime] Novo subscriber detectado, recarregando lista...');
-                loadSubscribers(); 
-                return prev; 
-              }
-              const updated = [...prev];
-              const [subscriber] = updated.splice(idx, 1);
-              return [{ ...subscriber, ultima_interacao: new Date().toISOString() }, ...updated];
-            });
+              }, 500);
+            }
           }
         )
         .subscribe((status) => {
@@ -992,15 +1006,29 @@ const ManyChatInboxContent = () => {
     prevSelectedSubIdRef.current = currentSubId;
 
     if (selectedSubscriber) {
-      // Verificar se já temos mensagens em cache para exibição instantânea
+      // Cache-first: show cached messages immediately if fresh (< 30s)
       const cachedMessages = messagesCacheRef.current.get(selectedSubscriber.subscriber_id);
+      const cacheAge = Date.now() - (messageCacheTimestampRef.current.get(selectedSubscriber.subscriber_id) || 0);
+      const isCacheFresh = cacheAge < 30000; // 30 seconds
+      
       if (cachedMessages && cachedMessages.length > 0) {
-        console.log('[Cache] Usando mensagens em cache para:', selectedSubscriber.subscriber_id);
+        console.log('[Cache] Usando mensagens em cache para:', selectedSubscriber.subscriber_id, isCacheFresh ? '(fresh)' : '(stale)');
         setMessages(cachedMessages);
+        // Rebuild dedup set from cache
+        dedupKeysRef.current = new Set(cachedMessages.map(m => getMessageDedupeKey(m)));
+        cachedMessages.forEach(m => dedupKeysRef.current.add(`db_${m.id}`));
         setIsLoadingMessages(false);
+        
+        if (isCacheFresh) {
+          // Cache is fresh - skip DB fetch entirely
+        } else {
+          // Cache is stale - refresh silently in background (no loading spinner)
+          loadMessages(selectedSubscriber.subscriber_id, false, selectedSubscriber);
+        }
+      } else {
+        // No cache - must load from DB
+        loadMessages(selectedSubscriber.subscriber_id, false, selectedSubscriber);
       }
-      // SEMPRE carregar do banco para garantir histórico completo
-      loadMessages(selectedSubscriber.subscriber_id, false, selectedSubscriber);
 
       // Limpar contador de não lidas ao abrir conversa e salvar lastRead
       setUnreadCounts(prev => {
@@ -1053,52 +1081,54 @@ const ManyChatInboxContent = () => {
         }
       }
       
-      // Detectar instância a partir do metadata da mensagem mais recente.
-      // Preferir `lead_id` (histórico unificado), pois `subscriber_id` pode variar (zapi_/sem 55 etc).
-      const subscriberIds = rawSubscribers.map(s => s.subscriber_id);
+      // Detectar instância: SKIP queries for subscribers that already have instance_name in DB
+      const subsWithoutInstance = rawSubscribers.filter(s => !s.instance_name);
       const instanceByLeadId = new Map<string, string>();
       const instanceBySubscriberId = new Map<string, string>();
 
-      // 1) Por lead_id
-      if (leadIds.length > 0) {
-        const { data: messagesByLead } = await supabase
-          .from('manychat_mensagens')
-          .select('lead_id, metadata, created_at')
-          .in('lead_id', leadIds)
-          .order('created_at', { ascending: false })
-          .limit(500);
+      if (subsWithoutInstance.length > 0) {
+        const missingLeadIds = [...new Set(subsWithoutInstance.map(s => s.lead_id).filter(Boolean))] as string[];
+        const missingSubIds = subsWithoutInstance.map(s => s.subscriber_id);
 
-        if (messagesByLead) {
-          for (const msg of messagesByLead as any[]) {
-            const lid = msg.lead_id as string | null;
-            if (!lid || instanceByLeadId.has(lid)) continue;
+        // 1) Por lead_id - only for subs missing instance_name
+        if (missingLeadIds.length > 0) {
+          const { data: messagesByLead } = await supabase
+            .from('manychat_mensagens')
+            .select('lead_id, metadata, created_at')
+            .in('lead_id', missingLeadIds)
+            .order('created_at', { ascending: false })
+            .limit(500);
 
-            // Usar connectedPhone diretamente - é mais confiável que instance_name
-            const connectedPhone = (msg.metadata as any)?.original?.connectedPhone;
-            if (connectedPhone) instanceByLeadId.set(lid, connectedPhone);
+          if (messagesByLead) {
+            for (const msg of messagesByLead as any[]) {
+              const lid = msg.lead_id as string | null;
+              if (!lid || instanceByLeadId.has(lid)) continue;
+              const connectedPhone = (msg.metadata as any)?.original?.connectedPhone;
+              if (connectedPhone) instanceByLeadId.set(lid, connectedPhone);
+            }
           }
         }
-      }
 
-      // 2) Fallback por subscriber_id
-      if (subscriberIds.length > 0) {
-        const { data: messagesBySubscriber } = await supabase
-          .from('manychat_mensagens')
-          .select('subscriber_id, metadata, created_at')
-          .in('subscriber_id', subscriberIds)
-          .order('created_at', { ascending: false })
-          .limit(500);
+        // 2) Fallback por subscriber_id - only for subs missing instance_name
+        if (missingSubIds.length > 0) {
+          const { data: messagesBySubscriber } = await supabase
+            .from('manychat_mensagens')
+            .select('subscriber_id, metadata, created_at')
+            .in('subscriber_id', missingSubIds)
+            .order('created_at', { ascending: false })
+            .limit(500);
 
-        if (messagesBySubscriber) {
-          for (const msg of messagesBySubscriber as any[]) {
-            const sid = msg.subscriber_id as string;
-            if (!sid || instanceBySubscriberId.has(sid)) continue;
-
-            // Usar connectedPhone diretamente - é mais confiável que instance_name
-            const connectedPhone = (msg.metadata as any)?.original?.connectedPhone;
-            if (connectedPhone) instanceBySubscriberId.set(sid, connectedPhone);
+          if (messagesBySubscriber) {
+            for (const msg of messagesBySubscriber as any[]) {
+              const sid = msg.subscriber_id as string;
+              if (!sid || instanceBySubscriberId.has(sid)) continue;
+              const connectedPhone = (msg.metadata as any)?.original?.connectedPhone;
+              if (connectedPhone) instanceBySubscriberId.set(sid, connectedPhone);
+            }
           }
         }
+        
+        console.log('[loadSubscribers] Instance lookup: skipped', rawSubscribers.length - subsWithoutInstance.length, 'subs (already have instance_name), queried for', subsWithoutInstance.length);
       }
       
       // Deduplicate subscribers by normalized phone or lead_id
@@ -1112,7 +1142,7 @@ const ManyChatInboxContent = () => {
           const subWithOrigem = {
           ...sub,
           lead_tipo_origem: sub.lead_id ? leadsMap.get(sub.lead_id) : undefined,
-            instance_name: (sub.lead_id ? instanceByLeadId.get(sub.lead_id) : undefined) || instanceBySubscriberId.get(sub.subscriber_id) || undefined
+            instance_name: sub.instance_name || (sub.lead_id ? instanceByLeadId.get(sub.lead_id) : undefined) || instanceBySubscriberId.get(sub.subscriber_id) || undefined
         };
         
         // Normalize phone for deduplication key
@@ -1280,6 +1310,10 @@ const ManyChatInboxContent = () => {
       
       // Salvar no cache para acesso instantâneo
       messagesCacheRef.current.set(subscriberId, uniqueMessages);
+      messageCacheTimestampRef.current.set(subscriberId, Date.now());
+      // Rebuild dedup Set
+      dedupKeysRef.current = new Set(uniqueMessages.map(m => getMessageDedupeKey(m)));
+      uniqueMessages.forEach(m => dedupKeysRef.current.add(`db_${m.id}`));
       
       // Merge com mensagens realtime que chegaram durante o fetch (evita perder msgs)
       setMessages(prev => {
@@ -1557,9 +1591,12 @@ const ManyChatInboxContent = () => {
       const fileExt = selectedFile.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `manychat/${selectedSubscriber.subscriber_id}/${fileName}`;
-      await supabase.storage.from('documentos').upload(filePath, selectedFile);
-
-      // Bucket "documentos" é privado: usar signed URL para permitir envio/exibição
+      
+      // Upload file
+      const { error: uploadErr } = await supabase.storage.from('documentos').upload(filePath, selectedFile);
+      if (uploadErr) throw uploadErr;
+      
+      // Sign URL (upload already done)
       const { data: signed, error: signError } = await supabase.storage
         .from('documentos')
         .createSignedUrl(filePath, 60 * 60 * 24 * 30); // 30 dias
