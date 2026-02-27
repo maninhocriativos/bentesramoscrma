@@ -2060,7 +2060,7 @@ const ManyChatInboxContent = () => {
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                       {/* Linha 1: Nome + Timestamp */}
-                      <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <ChannelIcon canal={subscriber.canal} size="sm" />
                           <span className={`font-medium text-[15px] truncate ${hasUnread ? 'text-white' : themeClasses.headerText}`}>
@@ -2072,22 +2072,17 @@ const ManyChatInboxContent = () => {
                         </span>
                       </div>
                       
-                      {/* Linha 2: Badges + Unread count */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                          {/* Instance badge */}
+                      {/* Linha 2: Last message preview + Unread badge */}
+                      <div className="flex items-center justify-between gap-2 mt-0.5">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          {/* Instance badge inline */}
                           {instanceInfo && <InstanceBadge instance={instanceInfo} size="sm" />}
-                          {/* Subscriber tags */}
-                          {subscriberTags.slice(0, 2).map((st) => (
+                          {/* Tags inline */}
+                          {subscriberTags.slice(0, 1).map((st) => (
                             st.tag && <TagBadge key={st.id} tag={st.tag} size="sm" />
                           ))}
-                          {subscriberTags.length > 2 && (
-                            <span className={`text-[10px] ${themeClasses.secondaryText}`}>
-                              +{subscriberTags.length - 2}
-                            </span>
-                          )}
                           {online && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-medium">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-medium shrink-0">
                               online
                             </span>
                           )}
