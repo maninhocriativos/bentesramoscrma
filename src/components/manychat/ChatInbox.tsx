@@ -809,8 +809,10 @@ const ManyChatInboxContent = () => {
             // Update messages if current chat
             if (isCurrentChat) {
               console.log('[Realtime] Adicionando mensagem ao chat atual');
+              const newMsgDedupeKey = getMessageDedupeKey(newMsg);
               setMessages(prev => {
-                if (prev.some(m => m.id === newMsg.id)) return prev;
+                // Deduplicate using both ID and dedup key
+                if (prev.some(m => m.id === newMsg.id || getMessageDedupeKey(m) === newMsgDedupeKey)) return prev;
                 const updated = [...prev, newMsg];
                 // Atualizar cache também
                 if (currentSubId) {
@@ -947,9 +949,15 @@ const ManyChatInboxContent = () => {
                 return updated;
               });
               
-              // Update selected subscriber if it's the current one
+              // Update selected subscriber - only auxiliary fields, preserve identity
               if (selectedSubscriberRef.current?.subscriber_id === updatedSub.subscriber_id) {
-                setSelectedSubscriber(prev => prev ? { ...prev, ...updatedSub } : null);
+                setSelectedSubscriber(prev => prev ? { 
+                  ...prev, 
+                  nome: updatedSub.nome || prev.nome, 
+                  atendimento_humano: updatedSub.atendimento_humano,
+                  atendimento_humano_desde: updatedSub.atendimento_humano_desde,
+                  lead_id: updatedSub.lead_id || prev.lead_id,
+                } : null);
               }
             }
           }
@@ -974,43 +982,43 @@ const ManyChatInboxContent = () => {
   }, [user?.id, playNotificationSound, notifyNewMessage, notifyAssignment]);
 
   // Update team presence and load messages when conversation identity changes
+  // ONLY subscriber_id drives conversation switching - lead_id/telefone changes do NOT trigger reload
+  const prevSelectedSubIdRef = useRef<string | null>(null);
   useEffect(() => {
-    const newConversationKey = getConversationHistoryKey(selectedSubscriber);
+    const currentSubId = selectedSubscriber?.subscriber_id || null;
+    
+    // Only reload when subscriber_id actually changes (user clicked a different contact)
+    if (currentSubId === prevSelectedSubIdRef.current) return;
+    prevSelectedSubIdRef.current = currentSubId;
 
-    // Reload when subscriber, lead link or phone changes
-    if (newConversationKey !== selectedConversationHistoryKeyRef.current) {
-      selectedConversationHistoryKeyRef.current = newConversationKey;
-
-      if (selectedSubscriber) {
-        // Verificar se já temos mensagens em cache para exibição instantânea
-        const cachedMessages = messagesCacheRef.current.get(selectedSubscriber.subscriber_id);
-        if (cachedMessages && cachedMessages.length > 0) {
-          // Usar cache instantaneamente para UX rápida
-          console.log('[Cache] Usando mensagens em cache para:', selectedSubscriber.subscriber_id);
-          setMessages(cachedMessages);
-          setIsLoadingMessages(false);
-        }
-        // SEMPRE carregar do banco para garantir histórico completo
-        loadMessages(selectedSubscriber.subscriber_id, false, selectedSubscriber);
-
-        // Limpar contador de não lidas ao abrir conversa e salvar lastRead
-        setUnreadCounts(prev => {
-          const newMap = new Map(prev);
-          const unreadKey = getConversationUnreadKey(selectedSubscriber);
-          newMap.delete(unreadKey);
-          newMap.delete(selectedSubscriber.subscriber_id); // compat legada
-          return newMap;
-        });
-        saveLastRead(selectedSubscriber);
-
-        setCurrentChat(selectedSubscriber.subscriber_id);
-        setShowMobileChat(true);
-      } else {
-        setMessages([]);
-        setCurrentChat(null);
+    if (selectedSubscriber) {
+      // Verificar se já temos mensagens em cache para exibição instantânea
+      const cachedMessages = messagesCacheRef.current.get(selectedSubscriber.subscriber_id);
+      if (cachedMessages && cachedMessages.length > 0) {
+        console.log('[Cache] Usando mensagens em cache para:', selectedSubscriber.subscriber_id);
+        setMessages(cachedMessages);
+        setIsLoadingMessages(false);
       }
+      // SEMPRE carregar do banco para garantir histórico completo
+      loadMessages(selectedSubscriber.subscriber_id, false, selectedSubscriber);
+
+      // Limpar contador de não lidas ao abrir conversa e salvar lastRead
+      setUnreadCounts(prev => {
+        const newMap = new Map(prev);
+        const unreadKey = getConversationUnreadKey(selectedSubscriber);
+        newMap.delete(unreadKey);
+        newMap.delete(selectedSubscriber.subscriber_id); // compat legada
+        return newMap;
+      });
+      saveLastRead(selectedSubscriber);
+
+      setCurrentChat(selectedSubscriber.subscriber_id);
+      setShowMobileChat(true);
+    } else {
+      setMessages([]);
+      setCurrentChat(null);
     }
-  }, [selectedSubscriber?.subscriber_id, selectedSubscriber?.lead_id, selectedSubscriber?.telefone, setCurrentChat]);
+  }, [selectedSubscriber?.subscriber_id, setCurrentChat]);
 
   // Polling fallback desativado - realtime é primário
   // Se realtime falhar, reconexão automática é feita no useEffect acima
@@ -1150,10 +1158,15 @@ const ManyChatInboxContent = () => {
         loadSubscriberTags(allSubscriberIds);
       }
 
-      // Se a conversa atual já está aberta, re-hidratar com os campos enriquecidos (ex: instance_name)
-      if (selectedSubscriber) {
-        const refreshedSelected = uniqueSubscribers.find(s => s.id === selectedSubscriber.id || s.subscriber_id === selectedSubscriber.subscriber_id);
-        if (refreshedSelected) setSelectedSubscriber(refreshedSelected);
+      // Se a conversa atual já está aberta, re-hidratar campos enriquecidos (ex: instance_name)
+      // MAS preservar a identidade (subscriber_id) para evitar troca involuntária de conversa
+      if (selectedSubscriberRef.current) {
+        const currentSubId = selectedSubscriberRef.current.subscriber_id;
+        const refreshedSelected = uniqueSubscribers.find(s => s.subscriber_id === currentSubId);
+        if (refreshedSelected) {
+          // Apenas atualizar campos auxiliares sem disparar re-render de identidade
+          setSelectedSubscriber(prev => prev ? { ...prev, instance_name: refreshedSelected.instance_name, lead_tipo_origem: refreshedSelected.lead_tipo_origem, nome: refreshedSelected.nome || prev.nome, lead_id: refreshedSelected.lead_id || prev.lead_id } : null);
+        }
       }
     } catch (error) {
       console.error('Erro ao carregar subscribers:', error);
@@ -1268,7 +1281,27 @@ const ManyChatInboxContent = () => {
       // Salvar no cache para acesso instantâneo
       messagesCacheRef.current.set(subscriberId, uniqueMessages);
       
-      setMessages(uniqueMessages);
+      // Merge com mensagens realtime que chegaram durante o fetch (evita perder msgs)
+      setMessages(prev => {
+        // Pegar mensagens temporárias (optimistic) que ainda não foram salvas
+        const tempMessages = prev.filter(m => m.id.startsWith('temp_'));
+        // Pegar mensagens realtime que podem ter chegado durante o fetch
+        const realtimeOnly = prev.filter(m => {
+          if (m.id.startsWith('temp_')) return false;
+          const key = getMessageDedupeKey(m);
+          return !messagesMap.has(key) && !uniqueMessages.some(um => um.id === m.id);
+        });
+        
+        if (tempMessages.length === 0 && realtimeOnly.length === 0) {
+          return uniqueMessages;
+        }
+        
+        const merged = [...uniqueMessages, ...realtimeOnly, ...tempMessages].sort(
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+        messagesCacheRef.current.set(subscriberId, merged);
+        return merged;
+      });
     } catch (error) {
       console.error('Erro ao carregar mensagens:', error);
     } finally {
