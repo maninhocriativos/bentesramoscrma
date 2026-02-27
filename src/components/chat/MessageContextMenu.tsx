@@ -81,8 +81,8 @@ export function MessageContextMenu({
         <DropdownMenuTrigger asChild>
           <button
             aria-label="Abrir opções da mensagem"
-            className={`absolute top-1 z-20 ${isOutgoing ? 'right-1' : 'left-1'} opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1.5 rounded-md ${
-              isDark ? 'hover:bg-white/10 text-white/60' : 'hover:bg-black/5 text-black/40'
+            className={`absolute top-1 z-20 ${isOutgoing ? 'right-1' : 'left-1'} opacity-90 transition-all p-1.5 rounded-md shadow-sm ${
+              isDark ? 'bg-black/25 hover:bg-black/40 text-white/90' : 'bg-white/75 hover:bg-white text-black/60'
             }`}
           >
             <ChevronDown className="h-4 w-4" />
