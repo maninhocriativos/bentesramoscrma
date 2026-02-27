@@ -1,168 +1,53 @@
 
 
-# Plano: Identificação Automática de Leads de Tráfego Pago
+## Plan: Optimize Chat Speed to WhatsApp-Level Performance
 
-## Contexto
-Quando um usuário clica em um anúncio "Click to WhatsApp" do Instagram/Facebook, o WhatsApp envia metadados especiais junto com a primeira mensagem (independente do que o cliente escrever). Esses metadados contêm:
-- `context.ad` ou `referral`: dados do anúncio (ad_id, campaign, source)
-- `ctwa_clid`: token de atribuição CTWA (Click to WhatsApp Attribution ID)
+### Analysis of Current Bottlenecks
 
-O Z-API captura esses dados e os envia no payload do webhook. Atualmente o sistema ignora esses campos.
+1. **File/Image sending is sequential**: upload → sign URL → send Z-API → save DB (each step waits for the previous)
+2. **Audio sending**: upload and sign are sequential before Z-API call
+3. **loadSubscribers is heavy**: on every mount/focus/poll, it fetches ALL subscribers, then ALL leads for tipo_origem, then 500+ messages for instance detection -- 4 DB round-trips
+4. **scrollToBottom uses smooth animation**: delays visual feedback on new messages
+5. **Message deduplication runs expensive checks** on every realtime event and every message render
+6. **Conversation switching reloads messages** even when cache exists and is fresh
+7. **Subscriber list re-renders** on every single realtime message (moves subscriber to top)
 
----
+### Implementation Steps
 
-## Solução: Detectar e Categorizar Automaticamente
+#### 1. Parallelize file/media upload pipeline
+- In `sendMessage` for media types: upload to storage AND prepare Z-API call metadata in parallel
+- Sign URL immediately after upload, then fire Z-API send and DB insert concurrently (don't await DB)
+- Same pattern for `uploadAndSendFile` -- currently fully sequential
 
-### 1. Campos de Rastreamento (Já existem no banco)
-Os campos necessários já existem na tabela `leads_juridicos`:
-- `tipo_origem`: 'trafego' | 'whatsapp_direto' | 'indefinido'
-- `fonte_trafego`: string livre (ex: 'facebook_ads', 'instagram_ads')
-- `canal_origem`: string livre (ex: 'whatsapp', 'instagram')
+#### 2. Make `scrollToBottom` instant for new messages
+- Change `behavior: 'smooth'` to `behavior: 'instant'` (or no behavior) when appending new messages
+- Keep smooth scroll only for user-initiated scroll actions
 
----
+#### 3. Lighten `loadSubscribers` -- cache instance metadata
+- Store instance_name in `manychat_subscribers` table directly (already has the column)
+- On loadSubscribers, skip the two extra queries (messages by lead_id and messages by subscriber_id for instance detection) when `instance_name` is already populated
+- Only query messages for subscribers missing `instance_name`
+- This eliminates ~1000 row fetches on every focus/poll
 
-### 2. Atualizar zapi-webhook para Detectar Tráfego
+#### 4. Optimize conversation switching with cache-first approach
+- When cache exists AND is less than 30 seconds old, show cache immediately and skip DB fetch
+- Track cache freshness with a timestamp map alongside `messagesCacheRef`
+- Still refresh in background silently (no loading spinner)
 
-Modificar `supabase/functions/zapi-webhook/index.ts` para:
+#### 5. Debounce subscriber list reordering from realtime
+- Currently every realtime message triggers `setSubscribers` to move a contact to top
+- Batch these updates with a 500ms debounce to avoid rapid re-renders when multiple messages arrive
 
-**A) Extrair metadados de anúncio no normalizeZapiEvent:**
+#### 6. Non-blocking DB persistence for ALL message types
+- Text messages: already fire-and-forget the interacao insert, but still `await` the main message insert. Make it non-blocking like audio
+- Apply the same `.then()` pattern used in `sendAudioFromPreview` to the main `sendMessage` function
 
-```text
-Campos do Z-API a verificar:
-- body.context.ad        → dados do anúncio Meta
-- body.referral          → formato alternativo
-- body.context.ctwa_clid → token de atribuição
-- body.ad                → alguns provedores usam esse formato
-```
+#### 7. Optimize deduplication with Set instead of Array.some()
+- Replace `prev.some(m => m.id === newMsg.id || getMessageDedupeKey(m) === key)` with a `Set<string>` of dedup keys maintained alongside messages
+- Reduces O(n) scan on every new message to O(1) lookup
 
-**B) Atualizar lógica de criação de lead:**
-
-```text
-SE existe context.ad OU referral OU ctwa_clid:
-  → tipo_origem = 'trafego'
-  → fonte_trafego = detectar_plataforma(ad.source)  // 'instagram_ads', 'facebook_ads'
-  → canal_origem = 'whatsapp'
-  → Salvar metadata do anúncio para analytics
-
-SENÃO:
-  → tipo_origem = 'whatsapp_direto'
-  → fonte_trafego = 'organico'
-  → canal_origem = 'whatsapp'
-```
-
----
-
-### 3. Atualizar Lead Existente se Metadados Chegarem Depois
-
-Às vezes o Z-API pode enviar o `context.ad` em uma mensagem subsequente (não na primeira). Por isso, também precisamos:
-
-```text
-SE lead já existe E tem tipo_origem='indefinido' E detectamos metadados de anúncio:
-  → Atualizar para tipo_origem='trafego'
-```
-
----
-
-### 4. Registrar Log de Atribuição
-
-Criar registro em `system_events` quando detectar tráfego pago:
-
-```text
-{
-  tipo: 'atribuicao',
-  fonte: 'meta_ads',
-  acao: 'lead_from_ctwa',
-  dados: {
-    ad_id: string,
-    campaign: string,
-    source: 'instagram' | 'facebook',
-    ctwa_clid: string
-  }
-}
-```
-
----
-
-## Arquivos a Modificar
-
-| Arquivo | Alteração |
-|---------|-----------|
-| `supabase/functions/zapi-webhook/index.ts` | Detectar `context.ad`, `referral`, `ctwa_clid` no normalizeZapiEvent e usar na categorização |
-| `supabase/functions/zapi-webhook/index.ts` | Atualizar `findOrCreateLead` para usar detecção de tráfego |
-| `supabase/functions/zapi-webhook/index.ts` | Atualizar lead existente se metadados chegarem depois |
-
----
-
-## Detalhes Técnicos
-
-### Estrutura esperada do payload Z-API com anúncio:
-
-```json
-{
-  "phone": "5592991234567",
-  "text": { "message": "Olá, quero saber mais" },
-  "context": {
-    "ad": {
-      "title": "Advogado Previdenciário",
-      "body": "Aposentadoria negada? Fale conosco",
-      "source": {
-        "id": "123456789",
-        "type": "ad",
-        "url": "https://fb.me/..."
-      },
-      "ctwa": "ARA...token"
-    }
-  }
-}
-```
-
-### Lógica de detecção:
-
-```typescript
-function detectTrafficSource(body: any): {
-  isTraffic: boolean;
-  source: string | null;
-  adData: any | null;
-} {
-  // Verificar múltiplos formatos possíveis
-  const adContext = body.context?.ad || body.referral || body.ad;
-  const ctwaClid = body.context?.ctwa_clid || body.ctwa_clid || adContext?.ctwa;
-  
-  if (adContext || ctwaClid) {
-    // Detectar plataforma
-    let source = 'meta_ads';
-    const adSource = adContext?.source?.type?.toLowerCase() || '';
-    const bodyStr = JSON.stringify(body).toLowerCase();
-    
-    if (bodyStr.includes('instagram')) source = 'instagram_ads';
-    else if (bodyStr.includes('facebook')) source = 'facebook_ads';
-    
-    return {
-      isTraffic: true,
-      source,
-      adData: { adContext, ctwaClid }
-    };
-  }
-  
-  return { isTraffic: false, source: null, adData: null };
-}
-```
-
----
-
-## Benefícios
-
-1. **Detecção automática** - Zero configuração manual para cada lead
-2. **Segmentação correta** - Leads de tráfego vão para aba "Tráfego" automaticamente
-3. **Isa focada** - Só processa leads vindos de campanhas
-4. **Analytics** - Dados de atribuição salvos para medir ROI das campanhas
-5. **Retroativo** - Leads indefinidos são atualizados se metadados chegarem depois
-
----
-
-## Próximos Passos (Após Implementação)
-
-1. **Testar com anúncio real** - Criar um anúncio de teste no Instagram
-2. **Verificar logs** - Checar se `context.ad` está sendo recebido
-3. **Validar categorização** - Confirmar que leads estão sendo marcados como 'trafego'
+### Files to Modify
+- `src/components/manychat/ChatInbox.tsx` -- all 7 optimizations above
+- No database migrations needed
+- No edge function changes needed
 
