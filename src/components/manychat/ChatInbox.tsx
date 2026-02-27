@@ -175,6 +175,8 @@ const ManyChatInboxContent = () => {
   const messagesCacheRef = useRef<Map<string, Message[]>>(new Map());
   // Rastrear mensagens não lidas por subscriber
   const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
+  // Rastrear preview da última mensagem por subscriber_id
+  const [lastMessagePreviews, setLastMessagePreviews] = useState<Map<string, string>>(new Map());
   const lastReadRef = useRef<Record<string, string>>({});
 
   // Load lastRead from localStorage on mount
@@ -277,14 +279,95 @@ const ManyChatInboxContent = () => {
     try { localStorage.setItem('chat_last_read', JSON.stringify(lastReadRef.current)); } catch {}
   }, []);
 
-  // Trigger unread computation when subscribers change
+  // Load last message previews for all subscribers
+  const loadMessagePreviews = useCallback(async (subs: typeof subscribers) => {
+    if (subs.length === 0) return;
+    
+    // Get the most recent message for each subscriber using lead_id or subscriber_id
+    const subscriberIds = subs.map(s => s.subscriber_id);
+    const leadIds = subs.map(s => s.lead_id).filter(Boolean) as string[];
+    
+    // Fetch last messages by lead_id (most reliable)
+    const previewMap = new Map<string, string>();
+    
+    if (leadIds.length > 0) {
+      // We need to get the most recent message per lead
+      const { data: messages } = await supabase
+        .from('manychat_mensagens')
+        .select('lead_id, subscriber_id, conteudo, tipo, direcao, created_at')
+        .in('lead_id', leadIds)
+        .order('created_at', { ascending: false })
+        .limit(500);
+      
+      if (messages) {
+        const seenLeads = new Set<string>();
+        for (const msg of messages as any[]) {
+          const leadId = msg.lead_id as string;
+          if (seenLeads.has(leadId)) continue;
+          seenLeads.add(leadId);
+          
+          // Find subscriber with this lead_id
+          const sub = subs.find(s => s.lead_id === leadId);
+          if (sub) {
+            const prefix = msg.direcao === 'saida' ? 'Você: ' : '';
+            let text = msg.conteudo || '';
+            if (msg.tipo === 'audio') text = '🎤 Áudio';
+            else if (msg.tipo === 'image') text = '📷 Imagem';
+            else if (msg.tipo === 'video') text = '🎥 Vídeo';
+            else if (msg.tipo === 'document') text = '📄 Documento';
+            else if (msg.tipo === 'sticker') text = '🏷️ Figurinha';
+            else if (msg.tipo === 'location') text = '📍 Localização';
+            previewMap.set(sub.subscriber_id, prefix + text);
+          }
+        }
+      }
+    }
+    
+    // Fallback: fetch by subscriber_id for those without lead_id
+    const missingIds = subscriberIds.filter(id => !previewMap.has(id));
+    if (missingIds.length > 0) {
+      const { data: messages } = await supabase
+        .from('manychat_mensagens')
+        .select('subscriber_id, conteudo, tipo, direcao, created_at')
+        .in('subscriber_id', missingIds)
+        .order('created_at', { ascending: false })
+        .limit(500);
+      
+      if (messages) {
+        const seen = new Set<string>();
+        for (const msg of messages as any[]) {
+          const sid = msg.subscriber_id as string;
+          if (seen.has(sid)) continue;
+          seen.add(sid);
+          
+          const sub = subs.find(s => s.subscriber_id === sid);
+          if (sub && !previewMap.has(sub.subscriber_id)) {
+            const prefix = msg.direcao === 'saida' ? 'Você: ' : '';
+            let text = msg.conteudo || '';
+            if (msg.tipo === 'audio') text = '🎤 Áudio';
+            else if (msg.tipo === 'image') text = '📷 Imagem';
+            else if (msg.tipo === 'video') text = '🎥 Vídeo';
+            else if (msg.tipo === 'document') text = '📄 Documento';
+            else if (msg.tipo === 'sticker') text = '🏷️ Figurinha';
+            else if (msg.tipo === 'location') text = '📍 Localização';
+            previewMap.set(sub.subscriber_id, prefix + text);
+          }
+        }
+      }
+    }
+    
+    setLastMessagePreviews(previewMap);
+  }, []);
+
+  // Trigger unread computation and message previews when subscribers load
   const subscribersLoadedRef = useRef(false);
   useEffect(() => {
     if (subscribers.length > 0 && !subscribersLoadedRef.current) {
       subscribersLoadedRef.current = true;
       computeInitialUnreads(subscribers);
+      loadMessagePreviews(subscribers);
     }
-  }, [subscribers, computeInitialUnreads]);
+  }, [subscribers, computeInitialUnreads, loadMessagePreviews]);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -678,6 +761,26 @@ const ManyChatInboxContent = () => {
                   return newMap;
                 });
               }
+            }
+            
+            // Update last message preview
+            {
+              const matchingSub = findMatchingSubscriber(newMsg.subscriber_id, (newMsg as any).lead_id);
+              const key = matchingSub?.subscriber_id || newMsg.subscriber_id;
+              const prefix = newMsg.direcao === 'saida' ? 'Você: ' : '';
+              let text = newMsg.conteudo || '';
+              const tipo = (newMsg as any).tipo;
+              if (tipo === 'audio') text = '🎤 Áudio';
+              else if (tipo === 'image') text = '📷 Imagem';
+              else if (tipo === 'video') text = '🎥 Vídeo';
+              else if (tipo === 'document') text = '📄 Documento';
+              else if (tipo === 'sticker') text = '🏷️ Figurinha';
+              else if (tipo === 'location') text = '📍 Localização';
+              setLastMessagePreviews(prev => {
+                const newMap = new Map(prev);
+                newMap.set(key, prefix + text);
+                return newMap;
+              });
             }
             
             // Play notification for ALL incoming messages
@@ -2017,6 +2120,7 @@ const ManyChatInboxContent = () => {
                 const isActive = selectedSubscriber?.id === subscriber.id;
                 const online = isOnline(subscriber.subscriber_id);
                 const hasUnread = unreadCounts.get(subscriber.subscriber_id);
+                const msgPreview = lastMessagePreviews.get(subscriber.subscriber_id);
                 const instanceInfo = getInstanceInfoFromConnectedPhone(subscriber.instance_name);
                 const subscriberTags = getSubscriberTags(subscriber.subscriber_id);
                 
@@ -2057,39 +2161,26 @@ const ManyChatInboxContent = () => {
                       )}
                     </div>
                     
-                    {/* Content */}
+                    {/* Content - WhatsApp style layout */}
                     <div className="flex-1 min-w-0">
-                      {/* Linha 1: Nome + Timestamp */}
+                      {/* Row 1: Name + Timestamp */}
                       <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <ChannelIcon canal={subscriber.canal} size="sm" />
-                          <span className={`font-medium text-[15px] truncate ${hasUnread ? 'text-white' : themeClasses.headerText}`}>
-                            {getDisplayName(subscriber)}
-                          </span>
-                        </div>
+                        <span className={`font-medium text-[15px] truncate ${hasUnread ? 'text-white font-semibold' : themeClasses.headerText}`}>
+                          {getDisplayName(subscriber)}
+                        </span>
                         <span className={`text-[11px] shrink-0 ${hasUnread ? 'text-[#25D366] font-semibold' : themeClasses.secondaryText}`}>
                           {subscriber.ultima_interacao && formatLastMessageTime(subscriber.ultima_interacao)}
                         </span>
                       </div>
                       
-                      {/* Linha 2: Last message preview + Unread badge */}
-                      <div className="flex items-center justify-between gap-2 mt-0.5">
-                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          {/* Instance badge inline */}
-                          {instanceInfo && <InstanceBadge instance={instanceInfo} size="sm" />}
-                          {/* Tags inline */}
-                          {subscriberTags.slice(0, 1).map((st) => (
-                            st.tag && <TagBadge key={st.id} tag={st.tag} size="sm" />
-                          ))}
-                          {online && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-medium shrink-0">
-                              online
-                            </span>
-                          )}
-                        </div>
+                      {/* Row 2: Message preview + Unread badge */}
+                      <div className="flex items-center justify-between gap-2 mt-1">
+                        <p className={`text-[13px] truncate flex-1 ${hasUnread ? 'text-[#D1D7DB] font-medium' : themeClasses.secondaryText}`}>
+                          {msgPreview || 'Nenhuma mensagem'}
+                        </p>
                         {/* Unread badge - WhatsApp style */}
                         {hasUnread ? (
-                          <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#25D366] text-white text-[12px] font-bold flex items-center justify-center shrink-0 shadow-sm">
+                          <span className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center shrink-0">
                             {hasUnread > 99 ? '99+' : hasUnread}
                           </span>
                         ) : null}
