@@ -2537,7 +2537,7 @@ const ManyChatInboxContent = () => {
                           <span className={`text-[15px] truncate leading-tight font-medium ${isUnreadVisual ? 'text-[#E9EDEF] font-semibold' : themeClasses.headerText}`}>
                             {getDisplayName(subscriber)}
                           </span>
-                          {instanceInfo && (
+                          {instanceInfo ? (
                             <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 leading-none ${
                               instanceInfo.color === 'red' 
                                 ? 'bg-red-500/15 text-red-400' 
@@ -2545,6 +2545,12 @@ const ManyChatInboxContent = () => {
                             }`}>
                               {formatPhone(subscriber.telefone) ? `${formatPhone(subscriber.telefone)} · ` : ''}{instanceInfo.label}
                             </span>
+                          ) : (
+                            formatPhone(subscriber.telefone) && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 leading-none ${themeClasses.secondaryText}`}>
+                                {formatPhone(subscriber.telefone)}
+                              </span>
+                            )
                           )}
                         </div>
 
