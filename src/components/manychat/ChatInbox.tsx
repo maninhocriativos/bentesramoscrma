@@ -208,10 +208,50 @@ const ManyChatInboxContent = () => {
     } catch { /* ignore */ }
   }, []);
 
+  const getPhoneDigits = (value?: string | null) => (value || '').replace(/\D/g, '');
+
+  const getSubscriberPhoneSuffix = (sub: Subscriber) => {
+    const fromPhone = getPhoneDigits(sub.telefone);
+    const rawId = sub.subscriber_id.startsWith('zapi_') ? sub.subscriber_id.replace('zapi_', '') : sub.subscriber_id;
+    const fromId = getPhoneDigits(rawId);
+    const candidate = fromPhone || fromId;
+    const normalized = candidate.startsWith('55') ? candidate.slice(2) : candidate;
+    return normalized.length >= 9 ? normalized.slice(-9) : '';
+  };
+
+  const getConversationUnreadKey = (sub: Subscriber) => {
+    if (sub.lead_id) return `lead:${sub.lead_id}`;
+    const suffix = getSubscriberPhoneSuffix(sub);
+    if (suffix) return `phone:${suffix}`;
+    return `sid:${sub.subscriber_id}`;
+  };
+
+  const getConversationUnreadKeyFromMessage = (msgSubId: string, msgLeadId?: string | null) => {
+    if (msgLeadId) return `lead:${msgLeadId}`;
+    const rawId = msgSubId.startsWith('zapi_') ? msgSubId.replace('zapi_', '') : msgSubId;
+    const digits = rawId.replace(/\D/g, '');
+    const normalized = digits.startsWith('55') ? digits.slice(2) : digits;
+    if (normalized.length >= 9) return `phone:${normalized.slice(-9)}`;
+    return `sid:${msgSubId}`;
+  };
+
+  const getLastReadForSubscriber = (sub: Subscriber, lastRead: Record<string, string>) => {
+    const unreadKey = getConversationUnreadKey(sub);
+    return lastRead[unreadKey] || lastRead[sub.subscriber_id] || '';
+  };
+
+  const hasUnreadHintForSubscriber = (sub: Subscriber) => {
+    const lr = getLastReadForSubscriber(sub, lastReadRef.current);
+    return !!(lr && sub.ultima_interacao && sub.ultima_interacao > lr);
+  };
+
   // Helper to save lastRead
-  const saveLastRead = useCallback((subscriberId: string) => {
+  const saveLastRead = useCallback((subscriber: Subscriber | null) => {
+    if (!subscriber) return;
     const now = new Date().toISOString();
-    lastReadRef.current[subscriberId] = now;
+    const unreadKey = getConversationUnreadKey(subscriber);
+    lastReadRef.current[unreadKey] = now;
+    lastReadRef.current[subscriber.subscriber_id] = now; // compat legada
     try {
       localStorage.setItem(LAST_READ_KEY, JSON.stringify(lastReadRef.current));
     } catch { /* ignore */ }
@@ -220,30 +260,39 @@ const ManyChatInboxContent = () => {
   // Calculate unread counts from DB after subscribers load
   const computeInitialUnreads = useCallback(async (subs: typeof subscribers) => {
     if (subs.length === 0) return;
-    const lastRead = lastReadRef.current;
-    
+    const lastRead = { ...lastReadRef.current };
+
     // Check all subscribers for unread messages
-    const toCheck: { subscriber_id: string; since: string }[] = [];
+    const toCheck: Array<{ subscriber: Subscriber; unreadKey: string; since: string }> = [];
     for (const sub of subs) {
-      const lr = lastRead[sub.subscriber_id];
+      const unreadKey = getConversationUnreadKey(sub);
+      const lr = getLastReadForSubscriber(sub, lastRead);
+
+      // Migração silenciosa para chave canônica
+      if (lr && !lastRead[unreadKey]) {
+        lastRead[unreadKey] = lr;
+      }
+
       if (!lr) {
         // First time seeing this subscriber - check unreads from last 7 days
         if (sub.ultima_interacao) {
           const diff = Date.now() - new Date(sub.ultima_interacao).getTime();
           if (diff < 7 * 86400000) { // 7 days
-            toCheck.push({ subscriber_id: sub.subscriber_id, since: new Date(Date.now() - 7 * 86400000).toISOString() });
+            toCheck.push({ subscriber: sub, unreadKey, since: new Date(Date.now() - 7 * 86400000).toISOString() });
           }
           // Don't auto-mark old subscribers as read - they simply won't have unreads
         }
         continue;
       }
+
       // If ultima_interacao is after lastRead, there might be unreads
       if (sub.ultima_interacao && sub.ultima_interacao > lr) {
-        toCheck.push({ subscriber_id: sub.subscriber_id, since: lr });
+        toCheck.push({ subscriber: sub, unreadKey, since: lr });
       }
     }
 
     if (toCheck.length === 0) {
+      lastReadRef.current = lastRead;
       try { localStorage.setItem(LAST_READ_KEY, JSON.stringify(lastReadRef.current)); } catch {}
       return;
     }
@@ -255,13 +304,13 @@ const ManyChatInboxContent = () => {
     const batchSize = 50;
     for (let i = 0; i < toCheck.length; i += batchSize) {
       const batch = toCheck.slice(i, i + batchSize);
-      const promises = batch.map(async ({ subscriber_id, since }) => {
+      const promises = batch.map(async ({ subscriber, unreadKey, since }) => {
+        const subscriber_id = subscriber.subscriber_id;
         const possibleIds = [subscriber_id];
         const phone = subscriber_id.replace('zapi_', '');
         if (phone !== subscriber_id) possibleIds.push(phone);
-        
-        const sub = subs.find(s => s.subscriber_id === subscriber_id);
-        const leadId = sub?.lead_id;
+
+        const leadId = subscriber.lead_id;
 
         try {
           let query = supabase
@@ -269,7 +318,7 @@ const ManyChatInboxContent = () => {
             .select('id', { count: 'exact', head: true })
             .eq('direcao', 'entrada')
             .gt('created_at', since);
-          
+
           if (leadId) {
             query = query.or(`subscriber_id.in.(${possibleIds.join(',')}),lead_id.eq.${leadId}`);
           } else {
@@ -282,7 +331,7 @@ const ManyChatInboxContent = () => {
             return;
           }
           if (count && count > 0) {
-            newUnreads.set(subscriber_id, count);
+            newUnreads.set(unreadKey, count);
           }
         } catch (err) {
           console.error('[Unreads] Exception querying for', subscriber_id, err);
@@ -297,12 +346,13 @@ const ManyChatInboxContent = () => {
       setUnreadCounts(prev => {
         const merged = new Map(prev);
         for (const [k, v] of newUnreads) {
-          if (!merged.has(k)) merged.set(k, v);
+          merged.set(k, Math.max(merged.get(k) || 0, v));
         }
         return merged;
       });
     }
-    
+
+    lastReadRef.current = lastRead;
     try { localStorage.setItem(LAST_READ_KEY, JSON.stringify(lastReadRef.current)); } catch {}
   }, []);
 
@@ -782,7 +832,9 @@ const ManyChatInboxContent = () => {
                   const newMap = new Map(prev);
                   // Find matching subscriber by subscriber_id, lead_id, or phone
                   const matchingSub = findMatchingSubscriber(newMsg.subscriber_id, (newMsg as any).lead_id);
-                  const key = matchingSub?.subscriber_id || msgSubId;
+                  const key = matchingSub
+                    ? getConversationUnreadKey(matchingSub)
+                    : getConversationUnreadKeyFromMessage(msgSubId, (newMsg as any).lead_id);
                   const current = newMap.get(key) || 0;
                   newMap.set(key, current + 1);
                   return newMap;
@@ -944,10 +996,12 @@ const ManyChatInboxContent = () => {
         // Limpar contador de não lidas ao abrir conversa e salvar lastRead
         setUnreadCounts(prev => {
           const newMap = new Map(prev);
-          newMap.delete(selectedSubscriber.subscriber_id);
+          const unreadKey = getConversationUnreadKey(selectedSubscriber);
+          newMap.delete(unreadKey);
+          newMap.delete(selectedSubscriber.subscriber_id); // compat legada
           return newMap;
         });
-        saveLastRead(selectedSubscriber.subscriber_id);
+        saveLastRead(selectedSubscriber);
 
         setCurrentChat(selectedSubscriber.subscriber_id);
         setShowMobileChat(true);
@@ -1813,43 +1867,48 @@ const ManyChatInboxContent = () => {
     );
   };
 
-  // Resolver de não lidas resiliente a variações de subscriber_id (zapi_, com/sem 55, deduplicação por lead)
+  // Resolver de não lidas resiliente a variações de subscriber_id (zapi_, com/sem 55, deduplicação por lead/telefone)
   const getUnreadCountForSubscriber = (sub: Subscriber): number => {
-    const direct = unreadCounts.get(sub.subscriber_id) || 0;
+    const unreadKey = getConversationUnreadKey(sub);
+    const direct = unreadCounts.get(unreadKey) || 0;
     if (direct > 0) return direct;
 
     const phone = sub.telefone?.replace(/\D/g, '') || '';
     const normalizedPhone = phone && !phone.startsWith('55') ? `55${phone}` : phone;
-    const aliases = [
+    const suffix = getSubscriberPhoneSuffix(sub);
+
+    const legacyAliases = [
+      sub.subscriber_id,
       phone,
       normalizedPhone,
       phone ? `zapi_${phone}` : '',
       normalizedPhone ? `zapi_${normalizedPhone}` : '',
     ].filter(Boolean);
 
-    for (const alias of aliases) {
+    for (const alias of legacyAliases) {
       const value = unreadCounts.get(alias) || 0;
       if (value > 0) return value;
     }
 
     if (sub.lead_id) {
-      const siblingByLead = subscribers.find(
-        s => s.lead_id === sub.lead_id && s.subscriber_id !== sub.subscriber_id
-      );
-      if (siblingByLead) {
-        const leadValue = unreadCounts.get(siblingByLead.subscriber_id) || 0;
-        if (leadValue > 0) return leadValue;
-      }
+      const leadValue = unreadCounts.get(`lead:${sub.lead_id}`) || 0;
+      if (leadValue > 0) return leadValue;
     }
 
-    if (normalizedPhone) {
-      const suffix = normalizedPhone.slice(-9);
+    if (suffix) {
+      const phoneValue = unreadCounts.get(`phone:${suffix}`) || 0;
+      if (phoneValue > 0) return phoneValue;
+
       for (const [key, value] of unreadCounts.entries()) {
-        if (value > 0 && key.includes(suffix)) return value;
+        if (value > 0 && (key.includes(suffix) || key === `phone:${suffix}`)) return value;
       }
     }
 
     return 0;
+  };
+
+  const hasUnreadForSubscriber = (sub: Subscriber) => {
+    return getUnreadCountForSubscriber(sub) > 0 || hasUnreadHintForSubscriber(sub);
   };
 
   // Filtros aplicados - busca melhorada
@@ -1867,7 +1926,7 @@ const ManyChatInboxContent = () => {
       );
     })
     .filter(sub => {
-      if (activeFilter === 'unread') return getUnreadCountForSubscriber(sub) > 0;
+      if (activeFilter === 'unread') return hasUnreadForSubscriber(sub);
       if (activeFilter === 'human') return sub.atendimento_humano;
       if (activeFilter === 'bot') return !sub.atendimento_humano;
       return true;
@@ -1889,11 +1948,16 @@ const ManyChatInboxContent = () => {
     .sort((a, b) => {
       const aUnread = getUnreadCountForSubscriber(a);
       const bUnread = getUnreadCountForSubscriber(b);
-      
+      const aHasUnread = aUnread > 0 || hasUnreadHintForSubscriber(a);
+      const bHasUnread = bUnread > 0 || hasUnreadHintForSubscriber(b);
+
       // Não lidas primeiro
-      if (aUnread > 0 && bUnread === 0) return -1;
-      if (bUnread > 0 && aUnread === 0) return 1;
-      
+      if (aHasUnread && !bHasUnread) return -1;
+      if (bHasUnread && !aHasUnread) return 1;
+
+      // Dentro das não lidas, maior contador primeiro
+      if (aUnread !== bUnread) return bUnread - aUnread;
+
       // Dentro do mesmo grupo, ordenar por última interação (mais recente primeiro)
       const aTime = new Date(a.ultima_interacao || 0).getTime();
       const bTime = new Date(b.ultima_interacao || 0).getTime();
@@ -2366,6 +2430,8 @@ const ManyChatInboxContent = () => {
                 const online = isOnline(subscriber.subscriber_id);
                 const unreadCount = getUnreadCountForSubscriber(subscriber);
                 const hasUnread = unreadCount > 0;
+                const hasUnreadHint = hasUnreadHintForSubscriber(subscriber);
+                const isUnreadVisual = hasUnread || hasUnreadHint;
                 const msgPreview = lastMessagePreviews.get(subscriber.subscriber_id);
                 const instanceInfo = getInstanceInfoFromConnectedPhone(subscriber.instance_name);
                 const subscriberTags = getSubscriberTags(subscriber.subscriber_id);
@@ -2405,11 +2471,11 @@ const ManyChatInboxContent = () => {
                     </div>
                     
                     {/* Content */}
-                    <div className="flex-1 min-w-0 flex items-start gap-2 pr-1">
-                      <div className="min-w-0 flex-1">
+                    <div className="flex-1 min-w-0 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 pr-1">
+                      <div className="min-w-0">
                         {/* Row 1: Name + Instance badge */}
                         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-                          <span className={`text-[15px] truncate leading-tight font-medium ${hasUnread ? 'text-[#E9EDEF] font-semibold' : themeClasses.headerText}`}>
+                          <span className={`text-[15px] truncate leading-tight font-medium ${isUnreadVisual ? 'text-[#E9EDEF] font-semibold' : themeClasses.headerText}`}>
                             {getDisplayName(subscriber)}
                           </span>
                           {instanceInfo && (
@@ -2428,18 +2494,18 @@ const ManyChatInboxContent = () => {
                           {msgPreview?.startsWith('Você:') && (
                             <CheckCheck className="h-3.5 w-3.5 shrink-0 text-[#53BDEB]" />
                           )}
-                          <p className={`text-[13px] truncate leading-tight ${hasUnread ? 'text-[#D1D7DB] font-medium' : themeClasses.secondaryText}`}>
+                          <p className={`text-[13px] truncate leading-tight ${isUnreadVisual ? 'text-[#D1D7DB] font-medium' : themeClasses.secondaryText}`}>
                             {msgPreview ? (msgPreview.startsWith('Você: ') ? msgPreview.slice(6) : msgPreview) : 'Nenhuma mensagem'}
                           </p>
                         </div>
                       </div>
 
-                      {/* Right column: time + badges (never truncates) */}
-                      <div className="min-w-[68px] shrink-0 flex flex-col items-end justify-between self-stretch gap-1">
-                        <span className={`text-[12px] leading-tight whitespace-nowrap ${hasUnread ? 'text-[#25D366] font-semibold' : themeClasses.secondaryText}`}>
+                      {/* Right column: time + badges (always visible) */}
+                      <div className="w-[76px] min-w-[76px] shrink-0 flex flex-col items-end justify-between gap-1">
+                        <span className={`text-[12px] leading-tight whitespace-nowrap text-right ${isUnreadVisual ? 'text-[#25D366] font-semibold' : themeClasses.secondaryText}`}>
                           {subscriber.ultima_interacao ? formatLastMessageTime(subscriber.ultima_interacao) : ''}
                         </span>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center justify-end gap-1.5 min-h-[20px] w-full">
                           {subscriberTags.length > 0 && subscriberTags[0].tag && (
                             <TagBadge tag={subscriberTags[0].tag} size="sm" />
                           )}
@@ -2447,6 +2513,8 @@ const ManyChatInboxContent = () => {
                             <span className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center shadow-sm">
                               {unreadCount > 99 ? '99+' : unreadCount}
                             </span>
+                          ) : hasUnreadHint ? (
+                            <span className="h-[9px] w-[9px] rounded-full bg-[#25D366]" />
                           ) : null}
                         </div>
                       </div>
