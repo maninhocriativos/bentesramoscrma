@@ -21,6 +21,10 @@ import { TagBadge } from '@/components/chat/TagBadge';
 import { TagSelector } from '@/components/chat/TagSelector';
 import { TagFilter } from '@/components/chat/TagFilter';
 import { WhatsAppAudioPlayer } from '@/components/chat/WhatsAppAudioPlayer';
+import { MessageContextMenu } from '@/components/chat/MessageContextMenu';
+import { ForwardMessageModal } from '@/components/chat/ForwardMessageModal';
+import { ConversationSearch } from '@/components/chat/ConversationSearch';
+import { SendContactModal } from '@/components/chat/SendContactModal';
 import { formatWhatsAppText as formatWhatsAppTextHelper } from '@/lib/whatsappTextFormatter';
 import { InstanceInfo, getInstanceFromPhone } from '@/lib/instanceUtils';
 
@@ -67,7 +71,9 @@ import {
   FileText,
   Square,
   LayoutGrid,
-  Megaphone
+  Megaphone,
+  Star,
+  Contact
 } from 'lucide-react';
 import CalWidget from './CalWidget';
 import { format, isToday, isYesterday } from 'date-fns';
@@ -162,6 +168,15 @@ const ManyChatInboxContent = () => {
   const [showContextPanel, setShowContextPanel] = useState(false);
   const [showTeamPanel, setShowTeamPanel] = useState(false);
   const [isLoadingFullHistory, setIsLoadingFullHistory] = useState(false);
+  
+  // New features state
+  const [starredMessageIds, setStarredMessageIds] = useState<Set<string>>(new Set());
+  const [deletedForMeIds, setDeletedForMeIds] = useState<Set<string>>(new Set());
+  const [showConversationSearch, setShowConversationSearch] = useState(false);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [forwardModalOpen, setForwardModalOpen] = useState(false);
+  const [forwardMessageContent, setForwardMessageContent] = useState('');
+  const [sendContactModalOpen, setSendContactModalOpen] = useState(false);
   
   // Tags hook
   const {
@@ -1835,6 +1850,171 @@ const ManyChatInboxContent = () => {
       return bTime - aTime;
     });
 
+  // === NEW FEATURES HANDLERS ===
+  
+  // Load starred & deleted messages for current conversation
+  const loadMessageFlags = useCallback(async (subscriberId: string) => {
+    if (!user?.id) return;
+    
+    // Load starred
+    const { data: starredData } = await supabase
+      .from('starred_messages' as any)
+      .select('message_id')
+      .eq('user_id', user.id);
+    
+    if (starredData) {
+      setStarredMessageIds(new Set(starredData.map((s: any) => s.message_id)));
+    }
+    
+    // Load deleted for me
+    const { data: deletedData } = await supabase
+      .from('deleted_messages' as any)
+      .select('message_id')
+      .eq('user_id', user.id);
+    
+    if (deletedData) {
+      setDeletedForMeIds(new Set(deletedData.map((d: any) => d.message_id)));
+    }
+  }, [user?.id]);
+
+  // Star message
+  const handleStarMessage = useCallback(async (messageId: string) => {
+    if (!user?.id) return;
+    await supabase.from('starred_messages' as any).insert({
+      user_id: user.id,
+      message_id: messageId,
+    } as any);
+    setStarredMessageIds(prev => new Set([...prev, messageId]));
+    toast({ title: '⭐ Mensagem favoritada!' });
+  }, [user?.id, toast]);
+
+  // Unstar message
+  const handleUnstarMessage = useCallback(async (messageId: string) => {
+    if (!user?.id) return;
+    await supabase.from('starred_messages' as any)
+      .delete()
+      .eq('user_id', user.id)
+      .eq('message_id', messageId);
+    setStarredMessageIds(prev => {
+      const next = new Set(prev);
+      next.delete(messageId);
+      return next;
+    });
+    toast({ title: 'Favorito removido' });
+  }, [user?.id, toast]);
+
+  // Delete message for me
+  const handleDeleteForMe = useCallback(async (messageId: string) => {
+    if (!user?.id) return;
+    await supabase.from('deleted_messages' as any).insert({
+      user_id: user.id,
+      message_id: messageId,
+    } as any);
+    setDeletedForMeIds(prev => new Set([...prev, messageId]));
+    toast({ title: '🗑️ Mensagem apagada para você' });
+  }, [user?.id, toast]);
+
+  // Delete message for all
+  const handleDeleteForAll = useCallback(async (messageId: string) => {
+    await supabase.from('manychat_mensagens')
+      .update({ deleted_for_all: true } as any)
+      .eq('id', messageId);
+    setMessages(prev => prev.map(m => 
+      m.id === messageId ? { ...m, conteudo: '🚫 Mensagem apagada', tipo: 'text', metadata: { deleted: true } } : m
+    ));
+    toast({ title: '🗑️ Mensagem apagada para todos' });
+  }, [toast]);
+
+  // Forward message
+  const handleOpenForward = useCallback((messageId: string) => {
+    const msg = messages.find(m => m.id === messageId);
+    if (!msg) return;
+    setForwardMessageContent(msg.conteudo);
+    setForwardModalOpen(true);
+  }, [messages]);
+
+  const handleForwardToSubscribers = useCallback(async (subscriberIds: string[]) => {
+    if (!selectedSubscriber) return;
+    
+    for (const targetSubId of subscriberIds) {
+      const targetSub = subscribers.find(s => s.subscriber_id === targetSubId);
+      if (!targetSub?.telefone) continue;
+      
+      const outboundInstanceId = resolveInstanceId(targetSub);
+      const forwarded = `⤵️ *Mensagem encaminhada*\n\n${forwardMessageContent}`;
+      
+      await supabase.functions.invoke('zapi-send', {
+        body: {
+          to_phone: targetSub.telefone,
+          message: forwarded,
+          type: 'text',
+          lead_id: targetSub.lead_id,
+          ...(outboundInstanceId && { instance_id: outboundInstanceId }),
+        },
+      });
+      
+      await supabase.from('manychat_mensagens' as any).insert({
+        subscriber_id: targetSubId,
+        subscriber_nome: targetSub.nome,
+        canal: 'whatsapp',
+        conteudo: forwarded,
+        tipo: 'text',
+        direcao: 'saida',
+        lead_id: targetSub.lead_id,
+        metadata: { sent_via: 'chat_forward' },
+      } as any);
+    }
+    
+    toast({ title: '↪️ Mensagem encaminhada!', description: `Enviada para ${subscriberIds.length} contato(s)` });
+  }, [selectedSubscriber, subscribers, forwardMessageContent, toast]);
+
+  // Send contact (vCard)
+  const handleSendContact = useCallback(async (contact: { nome: string; telefone?: string; subscriber_id: string }) => {
+    if (!selectedSubscriber?.telefone || !contact.telefone) return;
+    
+    const outboundInstanceId = resolveInstanceId(selectedSubscriber);
+    const contactMsg = `👤 *Contato compartilhado*\n📛 ${contact.nome}\n📱 ${contact.telefone}`;
+    
+    await supabase.functions.invoke('zapi-send', {
+      body: {
+        to_phone: selectedSubscriber.telefone,
+        message: contactMsg,
+        type: 'text',
+        lead_id: selectedSubscriber.lead_id,
+        ...(outboundInstanceId && { instance_id: outboundInstanceId }),
+      },
+    });
+    
+    await supabase.from('manychat_mensagens' as any).insert({
+      subscriber_id: selectedSubscriber.subscriber_id,
+      subscriber_nome: selectedSubscriber.nome,
+      canal: 'whatsapp',
+      conteudo: contactMsg,
+      tipo: 'text',
+      direcao: 'saida',
+      lead_id: selectedSubscriber.lead_id,
+      metadata: { sent_via: 'chat_contact_share', shared_contact: { name: contact.nome, phone: contact.telefone } },
+    } as any);
+    
+    toast({ title: '👤 Contato enviado!' });
+  }, [selectedSubscriber, toast]);
+
+  // Conversation search highlight handler
+  const handleSearchHighlight = useCallback((messageId: string | null, _matchIndex: number, _total: number) => {
+    setHighlightedMessageId(messageId);
+    if (messageId) {
+      const el = document.getElementById(`msg-${messageId}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, []);
+
+  // Load flags when conversation changes
+  useEffect(() => {
+    if (selectedSubscriber) {
+      loadMessageFlags(selectedSubscriber.subscriber_id);
+    }
+  }, [selectedSubscriber?.subscriber_id, loadMessageFlags]);
+
   const renderMessage = (message: Message) => {
     const content = message.conteudo || '';
     const type = (message.tipo || 'text').toLowerCase();
@@ -2436,10 +2616,38 @@ const ManyChatInboxContent = () => {
                         📋 Ver Lead no CRM
                       </DropdownMenuItem>
                     )}
+                    <DropdownMenuItem onClick={() => setShowConversationSearch(true)}>
+                      🔍 Buscar na conversa
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setSendContactModalOpen(true)}>
+                      👤 Enviar contato
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+              
+              {/* Search button in header */}
+              <div className="hidden md:flex items-center gap-1 ml-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowConversationSearch(!showConversationSearch)}
+                  className={`h-10 w-10 rounded-full ${showConversationSearch ? 'text-[#00A884] bg-[#00A884]/10' : `${themeClasses.iconColor} ${themeClasses.hoverBtn}`}`}
+                >
+                  <Search className="h-5 w-5" />
+                </Button>
+              </div>
             </div>
+
+            {/* Conversation Search Bar */}
+            <ConversationSearch
+              open={showConversationSearch}
+              onClose={() => setShowConversationSearch(false)}
+              messages={messages}
+              onHighlight={handleSearchHighlight}
+              isDark={isDark}
+              themeClasses={themeClasses}
+            />
 
             {/* Área de Mensagens */}
             <div 
@@ -2464,12 +2672,16 @@ const ManyChatInboxContent = () => {
                 </div>
               ) : (
                 <div className="space-y-1 max-w-[750px] mx-auto">
-                  {messages.map((message, index) => {
-                    const dateLabel = getDateLabel(messages, index);
+                  {messages
+                    .filter(m => !deletedForMeIds.has(m.id) && !(m as any).deleted_for_all)
+                    .map((message, index, filteredMsgs) => {
+                    const dateLabel = getDateLabel(filteredMsgs, index);
                     const isOutgoing = message.direcao === 'saida';
+                    const isStarred = starredMessageIds.has(message.id);
+                    const isHighlighted = highlightedMessageId === message.id;
                     
                     return (
-                      <div key={message.id}>
+                      <div key={message.id} id={`msg-${message.id}`}>
                         {dateLabel && (
                           <div className="flex justify-center my-4">
                             <span className={`px-4 py-1.5 rounded-lg ${isDark ? 'bg-[#1F2C34]' : 'bg-white'} text-[12px] ${themeClasses.secondaryText} shadow-sm font-medium`}>
@@ -2479,14 +2691,28 @@ const ManyChatInboxContent = () => {
                         )}
                         <div className={`flex ${isOutgoing ? 'justify-end pr-2' : 'justify-start pl-2'} mb-[3px]`}>
                           <div
-                            className={`relative max-w-[75%] md:max-w-[65%] rounded-xl px-2.5 md:px-3 pt-2 pb-2 shadow-md transition-all hover:shadow-lg select-text ${
+                            className={`group relative max-w-[75%] md:max-w-[65%] rounded-xl px-2.5 md:px-3 pt-2 pb-2 shadow-md transition-all hover:shadow-lg select-text ${
                               isOutgoing ? themeClasses.messageSent : themeClasses.messageReceived
-                            }`}
+                            } ${isHighlighted ? 'ring-2 ring-[#00A884] ring-offset-1' : ''}`}
                             style={{
                               borderTopLeftRadius: !isOutgoing ? '4px' : undefined,
                               borderTopRightRadius: isOutgoing ? '4px' : undefined,
                             }}
                           >
+                            {/* Context menu dropdown */}
+                            <MessageContextMenu
+                              messageId={message.id}
+                              messageContent={message.conteudo}
+                              isOutgoing={isOutgoing}
+                              isStarred={isStarred}
+                              isDark={isDark}
+                              onStar={handleStarMessage}
+                              onUnstar={handleUnstarMessage}
+                              onDeleteForMe={handleDeleteForMe}
+                              onDeleteForAll={handleDeleteForAll}
+                              onForward={handleOpenForward}
+                            />
+                            
                             <span className={`absolute top-0 w-2 h-3 ${isOutgoing ? '-right-2' : '-left-2'}`}>
                               {isOutgoing ? (
                                 <svg viewBox="0 0 8 13" className={isDark ? 'fill-[#005C4B]' : 'fill-[#D9FDD3]'}><path d="M5.188 0H0v11.193l6.467-8.625C7.526 1.156 6.958 0 5.188 0z"/></svg>
@@ -2498,6 +2724,7 @@ const ManyChatInboxContent = () => {
                             {renderMessage(message)}
                             
                             <div className="flex items-center justify-end gap-1 mt-1">
+                              {isStarred && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />}
                               <span className={`text-[11px] ${isOutgoing ? themeClasses.messageTime : themeClasses.secondaryText}`}>
                                 {formatMessageTime(message.created_at)}
                               </span>
@@ -2588,6 +2815,16 @@ const ManyChatInboxContent = () => {
                 <Paperclip className="h-5 w-5 md:h-6 md:w-6" />
               </Button>
 
+              {/* Send Contact button */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSendContactModalOpen(true)}
+                disabled={isSending}
+                className={`hidden md:flex h-10 w-10 rounded-full shrink-0 ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}
+              >
+                <Contact className="h-5 w-5" />
+              </Button>
               <div className="flex-1">
                 <Input
                   placeholder="Digite uma mensagem"
@@ -2707,6 +2944,22 @@ const ManyChatInboxContent = () => {
           isAssigning={!!selectedSubscriber}
         />
       )}
+      {/* Forward Message Modal */}
+      <ForwardMessageModal
+        open={forwardModalOpen}
+        onClose={() => setForwardModalOpen(false)}
+        subscribers={subscribers}
+        messageContent={forwardMessageContent}
+        onForward={handleForwardToSubscribers}
+      />
+
+      {/* Send Contact Modal */}
+      <SendContactModal
+        open={sendContactModalOpen}
+        onClose={() => setSendContactModalOpen(false)}
+        contacts={subscribers}
+        onSend={handleSendContact}
+      />
     </div>
   );
 };

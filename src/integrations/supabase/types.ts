@@ -405,6 +405,35 @@ export type Database = {
           },
         ]
       }
+      deleted_messages: {
+        Row: {
+          created_at: string
+          id: string
+          message_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deleted_messages_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "manychat_mensagens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       despesas: {
         Row: {
           cliente_id: string | null
@@ -1364,6 +1393,7 @@ export type Database = {
           canal: string | null
           conteudo: string
           created_at: string
+          deleted_for_all: boolean | null
           direcao: string
           id: string
           lead_id: string | null
@@ -1377,6 +1407,7 @@ export type Database = {
           canal?: string | null
           conteudo: string
           created_at?: string
+          deleted_for_all?: boolean | null
           direcao?: string
           id?: string
           lead_id?: string | null
@@ -1390,6 +1421,7 @@ export type Database = {
           canal?: string | null
           conteudo?: string
           created_at?: string
+          deleted_for_all?: boolean | null
           direcao?: string
           id?: string
           lead_id?: string | null
@@ -2444,6 +2476,35 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      starred_messages: {
+        Row: {
+          created_at: string
+          id: string
+          message_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "starred_messages_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "manychat_mensagens"
             referencedColumns: ["id"]
           },
         ]
