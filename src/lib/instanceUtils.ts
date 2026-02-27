@@ -5,24 +5,24 @@
 export interface InstanceInfo {
   name: string;
   label: string;
-  color: 'orange' | 'blue' | 'gray';
+  color: 'orange' | 'blue' | 'gray' | 'red';
 }
 
 // Known phone numbers mapped to instances
 const KNOWN_INSTANCES: Record<string, InstanceInfo> = {
   // Tráfego - Bentes Ramos-2 (92 98588-8190)
-  '559285888190': { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' },
-  '5592985888190': { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' },
-  '92985888190': { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' },
-  '9285888190': { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' },
-  '85888190': { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' },
+  '559285888190': { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'red' },
+  '5592985888190': { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'red' },
+  '92985888190': { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'red' },
+  '9285888190': { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'red' },
+  '85888190': { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'red' },
   
-  // Bentes Ramos Antigo (92 99160-4348)
-  '559291604348': { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' },
-  '5592991604348': { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' },
-  '92991604348': { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' },
-  '9291604348': { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' },
-  '91604348': { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' },
+  // Bentes Ramos (92 99160-4348)
+  '559291604348': { name: 'Bentes Ramos', label: 'Bentes Ramos', color: 'blue' },
+  '5592991604348': { name: 'Bentes Ramos', label: 'Bentes Ramos', color: 'blue' },
+  '92991604348': { name: 'Bentes Ramos', label: 'Bentes Ramos', color: 'blue' },
+  '9291604348': { name: 'Bentes Ramos', label: 'Bentes Ramos', color: 'blue' },
+  '91604348': { name: 'Bentes Ramos', label: 'Bentes Ramos', color: 'blue' },
 };
 
 /**
@@ -105,6 +105,8 @@ export function getInstanceFromSubscriber(subscriber?: {
  */
 export function getInstanceBadgeClasses(info: InstanceInfo): string {
   switch (info.color) {
+    case 'red':
+      return 'bg-red-500/10 text-red-600 border-red-500/20';
     case 'orange':
       return 'bg-orange-500/10 text-orange-600 border-orange-500/20';
     case 'blue':

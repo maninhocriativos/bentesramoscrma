@@ -106,12 +106,12 @@ function getInstanceInfoFromConnectedPhone(connectedPhone?: string): InstanceInf
   
   // Tráfego instance: 92 98588-8190 (stored as 559285888190)
   if (phone.includes('559285888190') || phone.includes('5592985888190') || phone.endsWith('85888190')) {
-    return { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'orange' };
+    return { name: 'Bentes Ramos-2', label: 'Tráfego', color: 'red' };
   }
   
-  // Bentes Ramos antigo: 92 99160-4348 (stored as 559291604348)
+  // Bentes Ramos: 92 99160-4348 (stored as 559291604348)
   if (phone.includes('559291604348') || phone.includes('5592991604348') || phone.endsWith('91604348')) {
-    return { name: 'Bentes Ramos', label: 'Bentes Ramos antigo', color: 'blue' };
+    return { name: 'Bentes Ramos', label: 'Bentes Ramos', color: 'blue' };
   }
   
   return null;
@@ -621,11 +621,11 @@ const ManyChatInboxContent = () => {
   useEffect(() => {
     loadSubscribers();
     
-    // Polling fallback every 30 seconds (reduced from 10s - realtime is primary)
+    // Polling fallback every 60 seconds (reduced - realtime is primary)
     const pollInterval = setInterval(() => {
       console.log('[ManyChatInbox] Polling - atualizando lista...');
       loadSubscribers();
-    }, 30000);
+    }, 60000);
 
     // Refetch on window focus (but not messages - only subscriber list)
     const handleFocus = () => {
@@ -977,7 +977,7 @@ const ManyChatInboxContent = () => {
           .select('lead_id, metadata, created_at')
           .in('lead_id', leadIds)
           .order('created_at', { ascending: false })
-          .limit(2000);
+          .limit(500);
 
         if (messagesByLead) {
           for (const msg of messagesByLead as any[]) {
@@ -998,7 +998,7 @@ const ManyChatInboxContent = () => {
           .select('subscriber_id, metadata, created_at')
           .in('subscriber_id', subscriberIds)
           .order('created_at', { ascending: false })
-          .limit(2000);
+          .limit(500);
 
         if (messagesBySubscriber) {
           for (const msg of messagesBySubscriber as any[]) {
@@ -2166,14 +2166,14 @@ const ManyChatInboxContent = () => {
                           <span className={`text-[16px] truncate leading-tight ${hasUnread ? 'text-[#E9EDEF] font-semibold' : themeClasses.headerText}`}>
                             {getDisplayName(subscriber)}
                           </span>
-                          {/* Instance badge small inline */}
+                          {/* Instance badge */}
                           {instanceInfo && (
-                            <span className={`text-[9px] px-1 py-px rounded font-medium shrink-0 ${
-                              instanceInfo.color === 'orange' 
-                                ? 'bg-orange-500/15 text-orange-400' 
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 leading-none ${
+                              instanceInfo.color === 'red' 
+                                ? 'bg-red-500/15 text-red-400' 
                                 : 'bg-blue-500/15 text-blue-400'
                             }`}>
-                              {instanceInfo.label === 'Tráfego' ? 'T' : 'BR'}
+                              {instanceInfo.label}
                             </span>
                           )}
                         </div>
