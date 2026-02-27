@@ -199,19 +199,18 @@ const ManyChatInboxContent = () => {
     if (subs.length === 0) return;
     const lastRead = lastReadRef.current;
     
-    // Only check subscribers that have a lastRead entry (others are "all read" by default first visit)
-    // OR subscribers whose ultima_interacao is after their lastRead
+    // Check all subscribers for unread messages
     const toCheck: { subscriber_id: string; since: string }[] = [];
     for (const sub of subs) {
       const lr = lastRead[sub.subscriber_id];
       if (!lr) {
-        // First time seeing this subscriber - mark as read now (don't flood with old unreads)
-        // But if it has a very recent interaction (last 2 min), show it
+        // First time seeing this subscriber - check unreads from the last 24h
         if (sub.ultima_interacao) {
           const diff = Date.now() - new Date(sub.ultima_interacao).getTime();
-          if (diff < 120000) { // 2 minutes
-            toCheck.push({ subscriber_id: sub.subscriber_id, since: new Date(Date.now() - 120000).toISOString() });
+          if (diff < 86400000) { // 24 hours
+            toCheck.push({ subscriber_id: sub.subscriber_id, since: new Date(Date.now() - 86400000).toISOString() });
           } else {
+            // Old subscriber - mark as read
             lastReadRef.current[sub.subscriber_id] = sub.ultima_interacao;
           }
         }
@@ -2093,14 +2092,12 @@ const ManyChatInboxContent = () => {
                             </span>
                           )}
                         </div>
-                        {/* Unread badge */}
+                        {/* Unread badge - WhatsApp style */}
                         {hasUnread ? (
-                          <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center shrink-0">
-                            {hasUnread}
+                          <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#25D366] text-white text-[12px] font-bold flex items-center justify-center shrink-0 shadow-sm">
+                            {hasUnread > 99 ? '99+' : hasUnread}
                           </span>
-                        ) : (
-                          <CheckCheck className="h-4 w-4 text-[#53BDEB] shrink-0" />
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   </div>
