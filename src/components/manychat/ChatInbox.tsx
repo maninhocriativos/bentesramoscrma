@@ -3173,7 +3173,7 @@ const ManyChatInboxContent = () => {
                               onEdit={handleStartEdit}
                             />
                             
-                            <span className={`absolute top-0 w-2 h-3 ${isOutgoing ? '-right-2' : '-left-2'}`}>
+                            <span className={`absolute top-0 w-2 h-3 pointer-events-none ${isOutgoing ? '-right-2' : '-left-2'}`}>
                               {isOutgoing ? (
                                 <svg viewBox="0 0 8 13" className={isDark ? 'fill-[#005C4B]' : 'fill-[#D9FDD3]'}><path d="M5.188 0H0v11.193l6.467-8.625C7.526 1.156 6.958 0 5.188 0z"/></svg>
                               ) : (
