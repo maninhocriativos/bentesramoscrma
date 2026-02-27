@@ -80,7 +80,7 @@ export function MessageContextMenu({
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
           <button
-            className={`absolute top-1 ${isOutgoing ? 'left-1' : 'right-1'} opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md ${
+            className={`absolute top-1 z-10 ${isOutgoing ? 'left-1' : 'right-1'} opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-md ${
               isDark ? 'hover:bg-white/10 text-white/60' : 'hover:bg-black/5 text-black/40'
             }`}
           >
