@@ -580,6 +580,35 @@ const ManyChatInboxContent = () => {
     selectedSubscriberRef.current = selectedSubscriber;
   }, [selectedSubscriber]);
 
+  // Ref para subscribers list (para acesso em callbacks realtime sem re-render)
+  const subscribersRef = useRef<Subscriber[]>([]);
+  useEffect(() => {
+    subscribersRef.current = subscribers;
+  }, [subscribers]);
+
+  // Helper to find matching subscriber by message subscriber_id or lead_id
+  const findMatchingSubscriber = (msgSubId: string, msgLeadId?: string): Subscriber | undefined => {
+    const subs = subscribersRef.current;
+    // Exact match
+    let match = subs.find(s => s.subscriber_id === msgSubId);
+    if (match) return match;
+    // By lead_id
+    if (msgLeadId) {
+      match = subs.find(s => s.lead_id === msgLeadId);
+      if (match) return match;
+    }
+    // By phone suffix
+    if (msgSubId.startsWith('zapi_')) {
+      const phone = msgSubId.replace('zapi_', '');
+      const suffix = phone.slice(-9);
+      match = subs.find(s => {
+        const subPhone = s.telefone?.replace(/\D/g, '') || '';
+        return subPhone.endsWith(suffix) || s.subscriber_id.includes(suffix);
+      });
+    }
+    return match;
+  };
+
   // Realtime subscriptions - stable, no dependency on selectedSubscriber
   useEffect(() => {
     console.log('[ManyChatInbox] Configurando canais realtime...');
@@ -609,9 +638,12 @@ const ManyChatInboxContent = () => {
             const normalizedPhone = currentPhone.startsWith('55') ? currentPhone : '55' + currentPhone;
             const currentZapiId = currentPhone ? `zapi_${normalizedPhone}` : null;
             
+            const currentLeadId = currentSub?.lead_id;
+            
             const isCurrentChat = currentSub && (
               newMsg.subscriber_id === currentSubId ||
               newMsg.subscriber_id === currentZapiId ||
+              (currentLeadId && (newMsg as any).lead_id === currentLeadId) ||
               (currentZapiId && currentSubId && newMsg.subscriber_id.includes(currentPhone.slice(-9)))
             );
             
@@ -635,11 +667,15 @@ const ManyChatInboxContent = () => {
               messagesCacheRef.current.delete(msgSubId);
               
               // Incrementar contador de não lidas (só para mensagens de entrada)
+              // Find the matching subscriber to use their subscriber_id as the key
               if (newMsg.direcao === 'entrada') {
                 setUnreadCounts(prev => {
                   const newMap = new Map(prev);
-                  const current = newMap.get(msgSubId) || 0;
-                  newMap.set(msgSubId, current + 1);
+                  // Find matching subscriber by subscriber_id, lead_id, or phone
+                  const matchingSub = findMatchingSubscriber(newMsg.subscriber_id, (newMsg as any).lead_id);
+                  const key = matchingSub?.subscriber_id || msgSubId;
+                  const current = newMap.get(key) || 0;
+                  newMap.set(key, current + 1);
                   return newMap;
                 });
               }
@@ -653,14 +689,22 @@ const ManyChatInboxContent = () => {
               }
             }
             
-            // Update subscriber order
+            // Update subscriber order - move to top
             setSubscribers(prev => {
+              // Find by subscriber_id, lead_id, or phone suffix
               let idx = prev.findIndex(s => s.subscriber_id === newMsg.subscriber_id);
+              
+              if (idx === -1 && (newMsg as any).lead_id) {
+                idx = prev.findIndex(s => s.lead_id === (newMsg as any).lead_id);
+              }
               
               if (idx === -1 && newMsg.subscriber_id.startsWith('zapi_')) {
                 const phoneFromZapi = newMsg.subscriber_id.replace('zapi_', '');
                 const phoneSuffix = phoneFromZapi.slice(-9);
-                idx = prev.findIndex(s => s.telefone?.includes(phoneSuffix));
+                idx = prev.findIndex(s => {
+                  const subPhone = s.telefone?.replace(/\D/g, '') || '';
+                  return subPhone.endsWith(phoneSuffix) || s.subscriber_id.includes(phoneSuffix);
+                });
               }
               
               if (idx === -1) { 
