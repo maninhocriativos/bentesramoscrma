@@ -196,10 +196,14 @@ const ManyChatInboxContent = () => {
   const [lastMessagePreviews, setLastMessagePreviews] = useState<Map<string, string>>(new Map());
   const lastReadRef = useRef<Record<string, string>>({});
 
-  // Load lastRead from localStorage on mount
+  // Load lastRead from localStorage on mount (v3 key to force reset stale data)
+  const LAST_READ_KEY = 'chat_last_read_v3';
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('chat_last_read');
+      // Clean up old keys
+      localStorage.removeItem('chat_last_read');
+      localStorage.removeItem('chat_last_read_v2');
+      const stored = localStorage.getItem(LAST_READ_KEY);
       if (stored) lastReadRef.current = JSON.parse(stored);
     } catch { /* ignore */ }
   }, []);
@@ -209,7 +213,7 @@ const ManyChatInboxContent = () => {
     const now = new Date().toISOString();
     lastReadRef.current[subscriberId] = now;
     try {
-      localStorage.setItem('chat_last_read', JSON.stringify(lastReadRef.current));
+      localStorage.setItem(LAST_READ_KEY, JSON.stringify(lastReadRef.current));
     } catch { /* ignore */ }
   }, []);
 
@@ -240,7 +244,7 @@ const ManyChatInboxContent = () => {
     }
 
     if (toCheck.length === 0) {
-      try { localStorage.setItem('chat_last_read', JSON.stringify(lastReadRef.current)); } catch {}
+      try { localStorage.setItem(LAST_READ_KEY, JSON.stringify(lastReadRef.current)); } catch {}
       return;
     }
 
@@ -299,7 +303,7 @@ const ManyChatInboxContent = () => {
       });
     }
     
-    try { localStorage.setItem('chat_last_read', JSON.stringify(lastReadRef.current)); } catch {}
+    try { localStorage.setItem(LAST_READ_KEY, JSON.stringify(lastReadRef.current)); } catch {}
   }, []);
 
   // Load last message previews for all subscribers
