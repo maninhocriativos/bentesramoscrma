@@ -2060,19 +2060,19 @@ const ManyChatInboxContent = () => {
           </div>
         </div>
 
-        {/* Filtros por Origem (Tráfego vs Direto) */}
+        {/* Filtros unificados */}
         <div className={`px-3 py-2 ${themeClasses.sidebar} border-b ${themeClasses.border}`}>
-          <div className="flex items-center gap-2 overflow-x-auto">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {(['all', 'trafego', 'whatsapp_direto'] as OrigemFilter[]).map((filter) => (
               <button
                 key={filter}
                 onClick={() => setOrigemFilter(filter)}
-                className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-all whitespace-nowrap ${
+                className={`px-3 py-1.5 rounded-full text-[12px] font-medium transition-all whitespace-nowrap ${
                   origemFilter === filter
                     ? filter === 'trafego' 
-                      ? 'bg-blue-500 text-white shadow-md'
+                      ? 'bg-red-500 text-white shadow-md'
                       : filter === 'whatsapp_direto'
-                      ? 'bg-gray-600 text-white shadow-md'
+                      ? 'bg-blue-500 text-white shadow-md'
                       : 'bg-[#00A884] text-white shadow-md'
                     : `${themeClasses.inputSearch} ${themeClasses.secondaryText} ${themeClasses.hoverBtn}`
                 }`}
@@ -2081,16 +2081,12 @@ const ManyChatInboxContent = () => {
               </button>
             ))}
           </div>
-        </div>
-
-        {/* Filtros por Atendimento + Tags */}
-        <div className={`px-3 py-2 ${themeClasses.sidebar} border-b ${themeClasses.border}`}>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 mt-1.5">
             {(['all', 'human', 'bot'] as ConversationFilter[]).map((filter) => (
               <button
                 key={filter}
                 onClick={() => setActiveFilter(filter)}
-                className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-all ${
+                className={`px-3 py-1.5 rounded-full text-[12px] font-medium transition-all ${
                   activeFilter === filter
                     ? 'bg-[#00A884] text-white shadow-md'
                     : `${themeClasses.inputSearch} ${themeClasses.secondaryText} ${themeClasses.hoverBtn}`
@@ -2160,15 +2156,14 @@ const ManyChatInboxContent = () => {
                     
                     {/* Content */}
                     <div className="flex-1 min-w-0">
-                      {/* Row 1: Name + Timestamp */}
+                      {/* Row 1: Name + Instance badge + Timestamp */}
                       <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className={`text-[16px] truncate leading-tight ${hasUnread ? 'text-[#E9EDEF] font-semibold' : themeClasses.headerText}`}>
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <span className={`text-[15px] truncate leading-tight font-medium ${hasUnread ? 'text-[#E9EDEF] font-semibold' : themeClasses.headerText}`}>
                             {getDisplayName(subscriber)}
                           </span>
-                          {/* Instance badge */}
                           {instanceInfo && (
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 leading-none ${
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 leading-none ${
                               instanceInfo.color === 'red' 
                                 ? 'bg-red-500/15 text-red-400' 
                                 : 'bg-blue-500/15 text-blue-400'
@@ -2177,24 +2172,27 @@ const ManyChatInboxContent = () => {
                             </span>
                           )}
                         </div>
-                        <span className={`text-[12px] shrink-0 leading-tight ${hasUnread ? 'text-[#25D366]' : themeClasses.secondaryText}`}>
+                        <span className={`text-[11px] shrink-0 leading-tight ${hasUnread ? 'text-[#25D366] font-medium' : themeClasses.secondaryText}`}>
                           {subscriber.ultima_interacao && formatLastMessageTime(subscriber.ultima_interacao)}
                         </span>
                       </div>
                       
                       {/* Row 2: Message preview + Unread badge */}
-                      <div className="flex items-center justify-between gap-2 mt-[2px]">
-                        <p className={`text-[13px] truncate flex-1 leading-tight ${hasUnread ? 'text-[#D1D7DB]' : themeClasses.secondaryText}`}>
-                          {msgPreview || 'Nenhuma mensagem'}
-                        </p>
+                      <div className="flex items-center justify-between gap-2 mt-[3px]">
+                        <div className="flex items-center gap-1 min-w-0 flex-1">
+                          {msgPreview?.startsWith('Você:') && (
+                            <CheckCheck className="h-3.5 w-3.5 shrink-0 text-[#53BDEB]" />
+                          )}
+                          <p className={`text-[13px] truncate leading-tight ${hasUnread ? 'text-[#D1D7DB] font-medium' : themeClasses.secondaryText}`}>
+                            {msgPreview ? (msgPreview.startsWith('Você: ') ? msgPreview.slice(6) : msgPreview) : 'Nenhuma mensagem'}
+                          </p>
+                        </div>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {/* Tags */}
                           {subscriberTags.length > 0 && subscriberTags[0].tag && (
                             <TagBadge tag={subscriberTags[0].tag} size="sm" />
                           )}
-                          {/* Unread badge */}
                           {hasUnread ? (
-                            <span className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center">
+                            <span className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center shadow-sm">
                               {hasUnread > 99 ? '99+' : hasUnread}
                             </span>
                           ) : null}
