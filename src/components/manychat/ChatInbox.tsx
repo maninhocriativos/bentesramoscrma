@@ -2255,10 +2255,11 @@ const ManyChatInboxContent = () => {
         </div>
       );
     }
-    // Texto com formatação WhatsApp (*negrito*, _itálico_, ~riscado~, ```mono```)
+    // Texto: preserva formatação original se enviado pela interface, senão aplica formatação WhatsApp
+    const sentFromInterface = metadata?.sent_via === 'chat_interface';
     return (
       <div className="whitespace-pre-wrap break-words text-[14.2px] leading-[19px] text-inherit select-text cursor-text">
-        {formatWhatsAppTextHelper(content)}
+        {sentFromInterface ? content : formatWhatsAppTextHelper(content)}
       </div>
     );
   };
