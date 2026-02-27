@@ -223,15 +223,13 @@ const ManyChatInboxContent = () => {
     for (const sub of subs) {
       const lr = lastRead[sub.subscriber_id];
       if (!lr) {
-        // First time seeing this subscriber - check unreads from the last 24h
+        // First time seeing this subscriber - check unreads from last 7 days
         if (sub.ultima_interacao) {
           const diff = Date.now() - new Date(sub.ultima_interacao).getTime();
-          if (diff < 86400000) { // 24 hours
-            toCheck.push({ subscriber_id: sub.subscriber_id, since: new Date(Date.now() - 86400000).toISOString() });
-          } else {
-            // Old subscriber - mark as read
-            lastReadRef.current[sub.subscriber_id] = sub.ultima_interacao;
+          if (diff < 7 * 86400000) { // 7 days
+            toCheck.push({ subscriber_id: sub.subscriber_id, since: new Date(Date.now() - 7 * 86400000).toISOString() });
           }
+          // Don't auto-mark old subscribers as read - they simply won't have unreads
         }
         continue;
       }
@@ -242,19 +240,18 @@ const ManyChatInboxContent = () => {
     }
 
     if (toCheck.length === 0) {
-      // Save any new entries
       try { localStorage.setItem('chat_last_read', JSON.stringify(lastReadRef.current)); } catch {}
       return;
     }
+
+    console.log('[Unreads] Checking', toCheck.length, 'subscribers for unread messages');
 
     // Query unread counts in batches
     const newUnreads = new Map<string, number>();
     const batchSize = 50;
     for (let i = 0; i < toCheck.length; i += batchSize) {
       const batch = toCheck.slice(i, i + batchSize);
-      // Use individual queries for accurate counts per subscriber
       const promises = batch.map(async ({ subscriber_id, since }) => {
-        // Build possible IDs for this subscriber
         const possibleIds = [subscriber_id];
         const phone = subscriber_id.replace('zapi_', '');
         if (phone !== subscriber_id) possibleIds.push(phone);
@@ -262,31 +259,40 @@ const ManyChatInboxContent = () => {
         const sub = subs.find(s => s.subscriber_id === subscriber_id);
         const leadId = sub?.lead_id;
 
-        let query = supabase
-          .from('manychat_mensagens')
-          .select('id', { count: 'exact', head: true })
-          .eq('direcao', 'entrada')
-          .gt('created_at', since);
-        
-        if (leadId) {
-          query = query.or(`subscriber_id.in.(${possibleIds.join(',')}),lead_id.eq.${leadId}`);
-        } else {
-          query = query.in('subscriber_id', possibleIds);
-        }
+        try {
+          let query = supabase
+            .from('manychat_mensagens')
+            .select('id', { count: 'exact', head: true })
+            .eq('direcao', 'entrada')
+            .gt('created_at', since);
+          
+          if (leadId) {
+            query = query.or(`subscriber_id.in.(${possibleIds.join(',')}),lead_id.eq.${leadId}`);
+          } else {
+            query = query.in('subscriber_id', possibleIds);
+          }
 
-        const { count } = await query;
-        if (count && count > 0) {
-          newUnreads.set(subscriber_id, count);
+          const { count, error } = await query;
+          if (error) {
+            console.error('[Unreads] Error querying for', subscriber_id, error);
+            return;
+          }
+          if (count && count > 0) {
+            newUnreads.set(subscriber_id, count);
+          }
+        } catch (err) {
+          console.error('[Unreads] Exception querying for', subscriber_id, err);
         }
       });
       await Promise.all(promises);
     }
 
+    console.log('[Unreads] Found', newUnreads.size, 'subscribers with unread messages');
+
     if (newUnreads.size > 0) {
       setUnreadCounts(prev => {
         const merged = new Map(prev);
         for (const [k, v] of newUnreads) {
-          // Only set if not already tracked (realtime might have set it)
           if (!merged.has(k)) merged.set(k, v);
         }
         return merged;
@@ -1818,6 +1824,7 @@ const ManyChatInboxContent = () => {
       );
     })
     .filter(sub => {
+      if (activeFilter === 'unread') return (unreadCounts.get(sub.subscriber_id) || 0) > 0;
       if (activeFilter === 'human') return sub.atendimento_humano;
       if (activeFilter === 'bot') return !sub.atendimento_humano;
       return true;
@@ -2681,7 +2688,7 @@ const ManyChatInboxContent = () => {
                     const isHighlighted = highlightedMessageId === message.id;
                     
                     return (
-                      <div key={message.id} id={`msg-${message.id}`}>
+                        <div key={message.id} id={`msg-${message.id}`} className={`transition-colors duration-700 rounded-lg ${isHighlighted ? (isDark ? 'bg-[#00A884]/10' : 'bg-[#00A884]/08') : ''}`}>
                         {dateLabel && (
                           <div className="flex justify-center my-4">
                             <span className={`px-4 py-1.5 rounded-lg ${isDark ? 'bg-[#1F2C34]' : 'bg-white'} text-[12px] ${themeClasses.secondaryText} shadow-sm font-medium`}>
@@ -2693,7 +2700,7 @@ const ManyChatInboxContent = () => {
                           <div
                             className={`group relative max-w-[75%] md:max-w-[65%] rounded-xl px-2.5 md:px-3 pt-2 pb-2 shadow-md transition-all hover:shadow-lg select-text ${
                               isOutgoing ? themeClasses.messageSent : themeClasses.messageReceived
-                            } ${isHighlighted ? 'ring-2 ring-[#00A884] ring-offset-1' : ''}`}
+                            } ${isHighlighted ? 'ring-2 ring-[#00A884]/60 shadow-[0_0_12px_rgba(0,168,132,0.25)]' : ''}`}
                             style={{
                               borderTopLeftRadius: !isOutgoing ? '4px' : undefined,
                               borderTopRightRadius: isOutgoing ? '4px' : undefined,
