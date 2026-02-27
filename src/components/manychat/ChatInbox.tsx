@@ -527,8 +527,13 @@ const ManyChatInboxContent = () => {
     findOrCreateSubscriberForLead();
   }, [pendingLeadId, subscribers, toast]);
 
-  // Track current subscriber ID to prevent unnecessary reloads
-  const selectedSubscriberIdRef = useRef<string | null>(null);
+  // Track current conversation identity (subscriber + lead + phone) to avoid stale history
+  const getConversationHistoryKey = (subscriber: Subscriber | null) => {
+    if (!subscriber) return null;
+    const phone = (subscriber.telefone || '').replace(/\D/g, '');
+    return `${subscriber.subscriber_id}|${subscriber.lead_id || ''}|${phone}`;
+  };
+  const selectedConversationHistoryKeyRef = useRef<string | null>(null);
 
   // Initial load only - no aggressive polling (realtime handles updates)
   useEffect(() => {
@@ -743,14 +748,14 @@ const ManyChatInboxContent = () => {
     };
   }, [user?.id, playNotificationSound, notifyNewMessage, notifyAssignment]);
 
-  // Update team presence and load messages when selecting a NEW chat
+  // Update team presence and load messages when conversation identity changes
   useEffect(() => {
-    const newSubscriberId = selectedSubscriber?.subscriber_id || null;
-    
-    // Only load if subscriber actually changed (not on every render)
-    if (newSubscriberId !== selectedSubscriberIdRef.current) {
-      selectedSubscriberIdRef.current = newSubscriberId;
-      
+    const newConversationKey = getConversationHistoryKey(selectedSubscriber);
+
+    // Reload when subscriber, lead link or phone changes
+    if (newConversationKey !== selectedConversationHistoryKeyRef.current) {
+      selectedConversationHistoryKeyRef.current = newConversationKey;
+
       if (selectedSubscriber) {
         // Verificar se já temos mensagens em cache para exibição instantânea
         const cachedMessages = messagesCacheRef.current.get(selectedSubscriber.subscriber_id);
@@ -762,7 +767,7 @@ const ManyChatInboxContent = () => {
         }
         // SEMPRE carregar do banco para garantir histórico completo
         loadMessages(selectedSubscriber.subscriber_id, false, selectedSubscriber);
-        
+
         // Limpar contador de não lidas ao abrir conversa e salvar lastRead
         setUnreadCounts(prev => {
           const newMap = new Map(prev);
@@ -770,7 +775,7 @@ const ManyChatInboxContent = () => {
           return newMap;
         });
         saveLastRead(selectedSubscriber.subscriber_id);
-        
+
         setCurrentChat(selectedSubscriber.subscriber_id);
         setShowMobileChat(true);
       } else {
@@ -778,7 +783,7 @@ const ManyChatInboxContent = () => {
         setCurrentChat(null);
       }
     }
-  }, [selectedSubscriber?.subscriber_id, setCurrentChat]);
+  }, [selectedSubscriber?.subscriber_id, selectedSubscriber?.lead_id, selectedSubscriber?.telefone, setCurrentChat]);
 
   // Polling fallback desativado - realtime é primário
   // Se realtime falhar, reconexão automática é feita no useEffect acima
@@ -1002,7 +1007,7 @@ const ManyChatInboxContent = () => {
       let query = supabase
         .from('manychat_mensagens' as any)
         .select('*')
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false });
 
       // Match subscriber_id OR lead_id (lead_id is most reliable for unified history)
       if (leadId) {
@@ -1975,7 +1980,14 @@ const ManyChatInboxContent = () => {
                 return (
                   <div
                     key={subscriber.id}
-                    onClick={() => setSelectedSubscriber(subscriber)}
+                    onClick={() => {
+                      const isSameConversation = selectedSubscriber?.subscriber_id === subscriber.subscriber_id;
+                      setSelectedSubscriber(subscriber);
+                      if (isSameConversation) {
+                        // Manual refresh when re-clicking the same conversation
+                        loadMessages(subscriber.subscriber_id, true, subscriber);
+                      }
+                    }}
                     className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-all border-b ${themeClasses.border} ${themeClasses.hover} ${
                       isActive ? themeClasses.active : ''
                     } ${online ? 'border-l-2 border-l-emerald-500' : ''}`}
