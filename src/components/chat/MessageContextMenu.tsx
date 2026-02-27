@@ -81,11 +81,13 @@ export function MessageContextMenu({
         <DropdownMenuTrigger asChild>
           <button
             aria-label="Abrir opções da mensagem"
-            className={`absolute top-1 z-20 ${isOutgoing ? 'right-1' : 'left-1'} opacity-90 transition-all p-1.5 rounded-md shadow-sm ${
-              isDark ? 'bg-black/25 hover:bg-black/40 text-white/90' : 'bg-white/75 hover:bg-white text-black/60'
-            }`}
+            className={`absolute -top-2 z-20 ${isOutgoing ? '-left-3' : '-right-3'} transition-all p-1 rounded-full shadow-md border ${
+              isDark 
+                ? 'bg-[#1F2C34] border-[#313D45] hover:bg-[#2A3942] text-[#AEBAC1]' 
+                : 'bg-white border-gray-200 hover:bg-gray-50 text-[#54656F]'
+            } opacity-0 group-hover:opacity-100`}
           >
-            <ChevronDown className="h-4 w-4" />
+            <ChevronDown className="h-3.5 w-3.5" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align={isOutgoing ? 'start' : 'end'} className="w-48">

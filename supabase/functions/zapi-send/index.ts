@@ -19,9 +19,17 @@ serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { to_phone, message, type = 'text', provider = 'zapi', lead_id, file_name, instance_id } = await req.json();
+    const { to_phone, message, type = 'text', provider = 'zapi', lead_id, file_name, instance_id, message_id } = await req.json();
 
-    if (!to_phone || !message) {
+    // For delete type, message_id is required instead of message
+    if (type === 'delete') {
+      if (!message_id) {
+        return new Response(JSON.stringify({ error: 'Missing message_id for delete' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    } else if (!to_phone || !message) {
       return new Response(JSON.stringify({ error: 'Missing to_phone or message' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -82,7 +90,7 @@ serve(async (req: Request) => {
     let success = false;
 
     if (provider === 'zapi') {
-      result = await sendViaZapi(config.config_json, to_phone, message, type, file_name);
+      result = await sendViaZapi(config.config_json, to_phone, message || '', type, file_name, message_id);
       success = result.success;
     } else if (provider === 'fiqon') {
       result = await sendViaFiqon(config.config_json, to_phone, message);
@@ -149,7 +157,8 @@ async function sendViaZapi(
   phone: string, 
   message: string, 
   type: string = 'text',
-  fileName?: string
+  fileName?: string,
+  messageId?: string
 ): Promise<{ success: boolean; data?: any; error?: string; messageId?: string }> {
   const instanceId = config.instance_id;
   const token = config.token;
@@ -220,6 +229,22 @@ async function sendViaZapi(
         };
         console.log(`[Z-API Send] Sending document: ${extractedFileName}`);
         break;
+
+      case 'delete':
+        endpoint = `${baseUrl}/messages/${messageId}`;
+        // Z-API uses DELETE method for message deletion
+        console.log(`[Z-API Send] Deleting message: ${messageId}`);
+        const deleteResponse = await fetch(endpoint, {
+          method: 'DELETE',
+          headers,
+        });
+        const deleteData = await deleteResponse.json();
+        console.log('[Z-API Send] Delete Response:', JSON.stringify(deleteData).substring(0, 300));
+        if (deleteResponse.ok && !deleteData.error) {
+          return { success: true, data: deleteData };
+        } else {
+          return { success: false, error: deleteData.error || deleteData.message || 'Z-API delete error', data: deleteData };
+        }
 
       default:
         // Texto simples

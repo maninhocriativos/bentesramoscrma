@@ -2260,16 +2260,41 @@ const ManyChatInboxContent = () => {
     toast({ title: '🗑️ Mensagem apagada para você' });
   }, [user?.id, toast]);
 
-  // Delete message for all
+  // Delete message for all (local + WhatsApp via Z-API)
   const handleDeleteForAll = useCallback(async (messageId: string) => {
+    const msg = messages.find(m => m.id === messageId);
+    
+    // Update local DB
     await supabase.from('manychat_mensagens')
       .update({ deleted_for_all: true } as any)
       .eq('id', messageId);
+    
+    // Optimistic UI update
     setMessages(prev => prev.map(m => 
       m.id === messageId ? { ...m, conteudo: '🚫 Mensagem apagada', tipo: 'text', metadata: { deleted: true } } : m
     ));
+    
+    // Delete on WhatsApp via Z-API if we have a provider message_id
+    const providerMessageId = (msg as any)?.metadata?.message_id;
+    if (providerMessageId && selectedSubscriber?.telefone) {
+      const outboundInstanceId = resolveInstanceId(selectedSubscriber);
+      supabase.functions.invoke('zapi-send', {
+        body: {
+          to_phone: selectedSubscriber.telefone,
+          type: 'delete',
+          message_id: providerMessageId,
+          instance_id: outboundInstanceId,
+        },
+      }).then(({ error }) => {
+        if (error) {
+          console.error('[DeleteForAll] Erro ao apagar no WhatsApp:', error);
+          toast({ title: '⚠️ Apagada localmente', description: 'Não foi possível apagar no WhatsApp', variant: 'destructive' });
+        }
+      });
+    }
+    
     toast({ title: '🗑️ Mensagem apagada para todos' });
-  }, [toast]);
+  }, [messages, selectedSubscriber, toast]);
 
   // Edit message
   const handleStartEdit = useCallback((messageId: string) => {
