@@ -51,23 +51,57 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const pageId = body.page_id || '61585487574008';
+    let pageId = body.page_id || null;
+
+    // Resolve page id dynamically from token (/me), and fallback when a stale page_id is provided
+    const resolvePageFromMe = async () => {
+      const meResult = await fetchWithToken(
+        `https://graph.facebook.com/v20.0/me?fields=id,name&access_token=${accessToken}`,
+        accessToken
+      );
+      return meResult.ok && meResult.data?.id ? meResult.data : null;
+    };
+
+    const mePage = await resolvePageFromMe();
+    if (!pageId && mePage?.id) {
+      pageId = mePage.id;
+      console.log(`[Meta Sync] Page resolved from /me: ${mePage.name} (${mePage.id})`);
+    }
+
+    if (!pageId) {
+      return new Response(JSON.stringify({
+        error: 'Não foi possível identificar a página da Meta a partir do token. Gere um Page Access Token válido e selecione a página correta.',
+        error_type: 'invalid_page_token',
+      }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
     // Step 1: Try to get Page Access Token from User token
     let effectiveToken = accessToken;
     let tokenType = 'direct';
-    
-    const pageResult = await fetchWithToken(
-      `https://graph.facebook.com/v20.0/${pageId}?fields=access_token,name&access_token=${accessToken}`,
+
+    let pageResult = await fetchWithToken(
+      `https://graph.facebook.com/v20.0/${pageId}?fields=id,name,access_token&access_token=${accessToken}`,
       accessToken
     );
-    
+
+    // If provided/stored page id is stale, fallback to /me page id
+    if (!pageResult.ok && mePage?.id && mePage.id !== pageId) {
+      console.log(`[Meta Sync] page_id ${pageId} inválido. Fallback para /me: ${mePage.id}`);
+      pageId = mePage.id;
+      pageResult = await fetchWithToken(
+        `https://graph.facebook.com/v20.0/${pageId}?fields=id,name,access_token&access_token=${accessToken}`,
+        accessToken
+      );
+    }
+
     if (pageResult.ok && pageResult.data?.access_token) {
       effectiveToken = pageResult.data.access_token;
       tokenType = 'page_from_user';
       console.log(`[Meta Sync] Got page token for: ${pageResult.data.name}`);
     } else {
-      console.log(`[Meta Sync] Using token directly. Page lookup result: ${pageResult.error}`);
+      console.log(`[Meta Sync] Using token directly for page ${pageId}. Page lookup result: ${pageResult.error}`);
     }
 
     // Step 2: Discover forms
