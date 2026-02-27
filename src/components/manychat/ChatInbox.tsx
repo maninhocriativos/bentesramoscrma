@@ -73,7 +73,8 @@ import {
   LayoutGrid,
   Megaphone,
   Star,
-  Contact
+  Contact,
+  Pin
 } from 'lucide-react';
 import CalWidget from './CalWidget';
 import { format, isToday, isYesterday } from 'date-fns';
@@ -179,6 +180,9 @@ const ManyChatInboxContent = () => {
   const [sendContactModalOpen, setSendContactModalOpen] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+  const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
+  const [pinnedMessagesBySubscriber, setPinnedMessagesBySubscriber] = useState<Record<string, string>>({});
+  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set());
   
   // Tags hook
   const {
@@ -197,6 +201,8 @@ const ManyChatInboxContent = () => {
   const dedupKeysRef = useRef<Set<string>>(new Set());
   // Guard anti-disparo duplo (Enter/click rápido)
   const outboundSendGuardRef = useRef<Map<string, number>>(new Map());
+  // Guard anti-race para carregamento de mensagens
+  const loadMessagesRequestRef = useRef(0);
   // Debounce subscriber reorder
   const pendingBumpsRef = useRef<Map<string, string>>(new Map()); // subscriberId -> ISO timestamp
   const bumpTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -206,8 +212,9 @@ const ManyChatInboxContent = () => {
   const [lastMessagePreviews, setLastMessagePreviews] = useState<Map<string, string>>(new Map());
   const lastReadRef = useRef<Record<string, string>>({});
 
-  // Load lastRead from localStorage on mount (v3 key to force reset stale data)
+  // Load preferences from localStorage on mount
   const LAST_READ_KEY = 'chat_last_read_v3';
+  const PINNED_MESSAGES_KEY = 'chat_pinned_messages_v1';
   useEffect(() => {
     try {
       // Clean up old keys
@@ -215,8 +222,23 @@ const ManyChatInboxContent = () => {
       localStorage.removeItem('chat_last_read_v2');
       const stored = localStorage.getItem(LAST_READ_KEY);
       if (stored) lastReadRef.current = JSON.parse(stored);
-    } catch { /* ignore */ }
+
+      const pinnedStored = localStorage.getItem(PINNED_MESSAGES_KEY);
+      if (pinnedStored) {
+        setPinnedMessagesBySubscriber(JSON.parse(pinnedStored));
+      }
+    } catch {
+      /* ignore */
+    }
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PINNED_MESSAGES_KEY, JSON.stringify(pinnedMessagesBySubscriber));
+    } catch {
+      /* ignore */
+    }
+  }, [pinnedMessagesBySubscriber]);
 
   const getPhoneDigits = (value?: string | null) => (value || '').replace(/\D/g, '');
 
@@ -458,6 +480,7 @@ const ManyChatInboxContent = () => {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const composerTextareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1038,6 +1061,8 @@ const ManyChatInboxContent = () => {
       // ALWAYS clear messages immediately to prevent cross-conversation leakage
       setMessages([]);
       dedupKeysRef.current = new Set();
+      setSelectedMessageIds(new Set());
+      setReplyToMessage(null);
       
       // Cache-first: show cached messages immediately if fresh (< 30s)
       const cachedMessages = messagesCacheRef.current.get(selectedSubscriber.subscriber_id);
