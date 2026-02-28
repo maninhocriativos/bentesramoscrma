@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Lead } from '@/types/leads';
 import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Treemap,
 } from 'recharts';
-import { ArrowRight, DollarSign, PieChart as PieChartIcon, Layers } from 'lucide-react';
+import { ArrowRight, DollarSign, PieChart as PieChartIcon, Layers, TrendingUp, MapPin } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface DashboardChartsProps {
   leads: Lead[];
@@ -15,19 +17,33 @@ const formatCurrency = (value: number): string => {
   }).format(value);
 };
 
-// Harmonized with Bentes Ramos palette - warm tones + stage tokens
+// Harmonized with Bentes Ramos palette
 const ORIGEM_COLORS: Record<string, string> = {
-  'Escritório': 'hsl(24, 16%, 37%)',      // stage-bentes
-  'Tráfego Pago': 'hsl(38, 30%, 70%)',    // gold
-  'Bentes Ramos': 'hsl(24, 21%, 21%)',    // primary
-  'Site': 'hsl(142, 76%, 36%)',           // success
-  'WhatsApp Z-API': 'hsl(24, 16%, 50%)',  // warm brown mid
-  'Facebook': 'hsl(38, 30%, 55%)',        // darker gold
-  'WhatsApp': 'hsl(24, 21%, 35%)',        // mid brown
-  'Instagram': 'hsl(0, 84%, 60%)',        // destructive (accent)
-  'Indicação': 'hsl(142, 50%, 50%)',      // success lighter
-  'Google': 'hsl(38, 40%, 60%)',          // gold variation
-  'Outro': 'hsl(24, 10%, 65%)',           // neutral warm
+  'Escritório': 'hsl(24, 16%, 37%)',
+  'Tráfego Pago': 'hsl(38, 30%, 70%)',
+  'Bentes Ramos': 'hsl(24, 21%, 21%)',
+  'Site': 'hsl(142, 76%, 36%)',
+  'WhatsApp Z-API': 'hsl(24, 16%, 50%)',
+  'Facebook': 'hsl(38, 30%, 55%)',
+  'WhatsApp': 'hsl(24, 21%, 35%)',
+  'Instagram': 'hsl(0, 84%, 60%)',
+  'Indicação': 'hsl(142, 50%, 50%)',
+  'Google': 'hsl(38, 40%, 60%)',
+  'Outro': 'hsl(24, 10%, 65%)',
+};
+
+const TIPO_ORIGEM_COLORS: Record<string, string> = {
+  'trafego': 'hsl(38, 30%, 70%)',
+  'whatsapp_direto': 'hsl(142, 76%, 36%)',
+  'indicacao': 'hsl(24, 16%, 37%)',
+  'indefinido': 'hsl(24, 10%, 65%)',
+};
+
+const TIPO_ORIGEM_LABELS: Record<string, string> = {
+  'trafego': 'Tráfego Pago',
+  'whatsapp_direto': 'WhatsApp Direto',
+  'indicacao': 'Indicação',
+  'indefinido': 'Outros',
 };
 
 const STATUS_CONFIG = [
@@ -53,7 +69,12 @@ const CustomTooltip = ({ active, payload }: any) => {
   return null;
 };
 
+type ValorView = 'status' | 'origem';
+
 export function DashboardCharts({ leads }: DashboardChartsProps) {
+  const [valorView, setValorView] = useState<ValorView>('status');
+
+  // === Origem dos Leads (pie) ===
   const origemCounts = leads.reduce((acc, lead) => {
     const origem = lead.origem || 'Outro';
     acc[origem] = (acc[origem] || 0) + 1;
@@ -65,6 +86,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
     name, value, total: totalLeads, color: ORIGEM_COLORS[name] || 'hsl(24, 10%, 65%)',
   }));
 
+  // === Funnel ===
   const statusCounts = leads.reduce((acc, lead) => {
     acc[lead.status] = (acc[lead.status] || 0) + 1;
     return acc;
@@ -82,71 +104,221 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
     return Math.round((currentCount / previousCount) * 100);
   };
 
+  // === Valor por Status (bar chart) ===
   const valorPorStatus = STATUS_CONFIG.map(config => {
-    const totalValor = leads.filter(lead => lead.status === config.status).reduce((sum, lead) => sum + (lead.valor_causa || 0), 0);
-    return { status: config.label, valor: totalValor, color: config.color };
+    const statusLeads = leads.filter(lead => lead.status === config.status);
+    const totalValor = statusLeads.reduce((sum, lead) => sum + (lead.valor_causa || 0), 0);
+    return { status: config.label, valor: totalValor, color: config.color, count: statusLeads.length };
   }).filter(item => item.valor > 0);
 
   const totalValorCausa = leads.reduce((sum, lead) => sum + (lead.valor_causa || 0), 0);
 
+  // === Valor por Origem (tipo_origem) ===
+  const valorPorOrigem = leads.reduce((acc, lead) => {
+    const tipoOrigem = (lead as any).tipo_origem || 'indefinido';
+    if (!acc[tipoOrigem]) acc[tipoOrigem] = { valor: 0, count: 0, leads: [] as Lead[] };
+    acc[tipoOrigem].valor += (lead.valor_causa || 0);
+    acc[tipoOrigem].count += 1;
+    acc[tipoOrigem].leads.push(lead);
+    return acc;
+  }, {} as Record<string, { valor: number; count: number; leads: Lead[] }>);
+
+  const origemValorData = Object.entries(valorPorOrigem)
+    .map(([key, data]) => ({
+      name: TIPO_ORIGEM_LABELS[key] || key,
+      valor: data.valor,
+      count: data.count,
+      color: TIPO_ORIGEM_COLORS[key] || 'hsl(24, 10%, 65%)',
+    }))
+    .filter(item => item.valor > 0)
+    .sort((a, b) => b.valor - a.valor);
+
+  // === Ganhos (cases won) ===
+  const ganhosLeads = leads.filter(l => l.status === 'Ganho' || l.status === 'Contrato Assinado');
+  const valorGanhos = ganhosLeads.reduce((sum, l) => sum + (l.valor_causa || 0), 0);
+
+  // === Top leads contributing value ===
+  const topLeadsByValor = [...leads]
+    .filter(l => (l.valor_causa || 0) > 0)
+    .sort((a, b) => (b.valor_causa || 0) - (a.valor_causa || 0))
+    .slice(0, 5);
+
   return (
     <div className="space-y-6">
-      {/* Valor por Status */}
+      {/* Valor por Status / Origem */}
       <Card className="rounded-2xl border-0 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)]">
         <div className="h-1 w-full bg-[hsl(var(--success))]" />
         <CardHeader className="px-5 pt-5 pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-[hsl(var(--success))]/10 flex items-center justify-center">
-                <DollarSign className="h-4 w-4 text-[hsl(var(--success))]" />
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[hsl(var(--success))]/10 flex items-center justify-center">
+                  <DollarSign className="h-4 w-4 text-[hsl(var(--success))]" />
+                </div>
+                Valor da Causa
+              </CardTitle>
+              {/* View toggle */}
+              <div className="flex bg-muted/50 rounded-lg p-0.5">
+                <button
+                  onClick={() => setValorView('status')}
+                  className={cn(
+                    'text-[10px] font-medium px-2.5 py-1 rounded-md transition-all',
+                    valorView === 'status' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  Por Status
+                </button>
+                <button
+                  onClick={() => setValorView('origem')}
+                  className={cn(
+                    'text-[10px] font-medium px-2.5 py-1 rounded-md transition-all',
+                    valorView === 'origem' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  Por Origem
+                </button>
               </div>
-              Valor da Causa por Status
-            </CardTitle>
-            <div className="text-right">
-              <span className="text-xl font-bold text-foreground">{formatCurrency(totalValorCausa)}</span>
-              <p className="text-[10px] text-muted-foreground">Total em pipeline</p>
+            </div>
+            <div className="flex items-center gap-4">
+              {/* Won cases highlight */}
+              <div className="text-right">
+                <div className="flex items-center gap-1 justify-end">
+                  <TrendingUp className="h-3 w-3 text-[hsl(var(--success))]" />
+                  <span className="text-xs text-muted-foreground">Ganhos</span>
+                </div>
+                <span className="text-lg font-bold text-[hsl(var(--success))]">{formatCurrency(valorGanhos)}</span>
+                <p className="text-[9px] text-muted-foreground">{ganhosLeads.length} caso{ganhosLeads.length !== 1 ? 's' : ''}</p>
+              </div>
+              <div className="w-px h-10 bg-border/50" />
+              <div className="text-right">
+                <span className="text-xl font-bold text-foreground">{formatCurrency(totalValorCausa)}</span>
+                <p className="text-[10px] text-muted-foreground">Total em pipeline</p>
+              </div>
             </div>
           </div>
         </CardHeader>
         <CardContent className="px-5 pb-5">
-          {valorPorStatus.length > 0 ? (
-            <div className="h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={valorPorStatus} layout="vertical" margin={{ left: 20, right: 30 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="hsl(var(--border))" opacity={0.5} />
-                  <XAxis type="number" tickFormatter={(value) => formatCurrency(value)} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="status" width={130} tick={{ fontSize: 11, fill: 'hsl(var(--foreground))' }} axisLine={false} tickLine={false} />
-                  <Tooltip formatter={(value: number) => [formatCurrency(value), 'Valor']} contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '12px', fontSize: '12px' }} cursor={{ fill: 'hsl(var(--muted) / 0.3)' }} />
-                  <Bar dataKey="valor" radius={[0, 8, 8, 0]}>
-                    {valorPorStatus.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+          {valorView === 'status' ? (
+            <>
+              {valorPorStatus.length > 0 ? (
+                <div className="h-[200px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={valorPorStatus} layout="vertical" margin={{ left: 20, right: 30 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="hsl(var(--border))" opacity={0.5} />
+                      <XAxis type="number" tickFormatter={(value) => formatCurrency(value)} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
+                      <YAxis type="category" dataKey="status" width={130} tick={{ fontSize: 11, fill: 'hsl(var(--foreground))' }} axisLine={false} tickLine={false} />
+                      <Tooltip 
+                        formatter={(value: number) => [formatCurrency(value), 'Valor']} 
+                        contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '12px', fontSize: '12px' }} 
+                        cursor={{ fill: 'hsl(var(--muted) / 0.3)' }} 
+                      />
+                      <Bar dataKey="valor" radius={[0, 8, 8, 0]}>
+                        {valorPorStatus.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
+                  Nenhum lead com valor da causa informado
+                </div>
+              )}
+              
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-5 pt-4 border-t border-border/30">
+                {STATUS_CONFIG.map((config) => {
+                  const valor = leads.filter(lead => lead.status === config.status).reduce((sum, lead) => sum + (lead.valor_causa || 0), 0);
+                  const count = statusCounts[config.status] || 0;
+                  return (
+                    <div key={config.status} className="p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors text-center">
+                      <div className="flex items-center justify-center gap-1.5 mb-1.5">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: config.color }} />
+                        <span className="text-[10px] text-muted-foreground truncate">{config.label}</span>
+                      </div>
+                      <p className="text-xs font-bold text-foreground">{formatCurrency(valor)}</p>
+                      <p className="text-[10px] text-muted-foreground">{count} lead{count !== 1 ? 's' : ''}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           ) : (
-            <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
-              Nenhum lead com valor da causa informado
+            <>
+              {origemValorData.length > 0 ? (
+                <div className="h-[200px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={origemValorData} layout="vertical" margin={{ left: 20, right: 30 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="hsl(var(--border))" opacity={0.5} />
+                      <XAxis type="number" tickFormatter={(value) => formatCurrency(value)} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
+                      <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: 'hsl(var(--foreground))' }} axisLine={false} tickLine={false} />
+                      <Tooltip 
+                        formatter={(value: number) => [formatCurrency(value), 'Valor']}
+                        labelFormatter={(label) => {
+                          const item = origemValorData.find(d => d.name === label);
+                          return `${label} (${item?.count || 0} leads)`;
+                        }}
+                        contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '12px', fontSize: '12px' }} 
+                        cursor={{ fill: 'hsl(var(--muted) / 0.3)' }} 
+                      />
+                      <Bar dataKey="valor" radius={[0, 8, 8, 0]}>
+                        {origemValorData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
+                  Nenhum lead com valor da causa informado
+                </div>
+              )}
+
+              {/* Origin breakdown cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-5 pt-4 border-t border-border/30">
+                {Object.entries(valorPorOrigem)
+                  .sort(([, a], [, b]) => b.valor - a.valor)
+                  .map(([key, data]) => (
+                  <div key={key} className="p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors text-center">
+                    <div className="flex items-center justify-center gap-1.5 mb-1.5">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: TIPO_ORIGEM_COLORS[key] || 'hsl(24, 10%, 65%)' }} />
+                      <span className="text-[10px] text-muted-foreground truncate">{TIPO_ORIGEM_LABELS[key] || key}</span>
+                    </div>
+                    <p className="text-xs font-bold text-foreground">{formatCurrency(data.valor)}</p>
+                    <p className="text-[10px] text-muted-foreground">{data.count} lead{data.count !== 1 ? 's' : ''}</p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Top 5 leads by value */}
+          {topLeadsByValor.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-border/30">
+              <div className="flex items-center gap-1.5 mb-2.5">
+                <MapPin className="h-3 w-3 text-muted-foreground" />
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Top 5 maiores valores</span>
+              </div>
+              <div className="space-y-1.5">
+                {topLeadsByValor.map((lead) => (
+                  <div key={lead.id} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-muted/20 hover:bg-muted/40 transition-colors">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div 
+                        className="w-1.5 h-1.5 rounded-full shrink-0" 
+                        style={{ backgroundColor: STATUS_CONFIG.find(s => s.status === lead.status)?.color || 'hsl(24, 10%, 55%)' }} 
+                      />
+                      <span className="text-xs text-foreground truncate">{lead.nome || 'Sem nome'}</span>
+                      <span className="text-[9px] text-muted-foreground shrink-0">
+                        {TIPO_ORIGEM_LABELS[(lead as any).tipo_origem] || (lead as any).tipo_origem || ''}
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold text-foreground shrink-0 ml-2">{formatCurrency(lead.valor_causa || 0)}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
-          
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-5 pt-4 border-t border-border/30">
-            {STATUS_CONFIG.map((config) => {
-              const valor = leads.filter(lead => lead.status === config.status).reduce((sum, lead) => sum + (lead.valor_causa || 0), 0);
-              const count = statusCounts[config.status] || 0;
-              return (
-                <div key={config.status} className="p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors text-center">
-                  <div className="flex items-center justify-center gap-1.5 mb-1.5">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: config.color }} />
-                    <span className="text-[10px] text-muted-foreground truncate">{config.label}</span>
-                  </div>
-                  <p className="text-xs font-bold text-foreground">{formatCurrency(valor)}</p>
-                  <p className="text-[10px] text-muted-foreground">{count} lead{count !== 1 ? 's' : ''}</p>
-                </div>
-              );
-            })}
-          </div>
         </CardContent>
       </Card>
 
