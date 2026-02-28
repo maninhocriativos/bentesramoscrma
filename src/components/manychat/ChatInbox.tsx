@@ -541,11 +541,17 @@ const ManyChatInboxContent = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: instant ? 'instant' : 'smooth' });
   };
 
+  // Extrator robusto de message_id do provedor (Z-API)
+  const getProviderMessageId = (msg: any): string | undefined => {
+    const mid = msg?.metadata?.message_id || msg?.metadata?.original?.messageId || msg?.metadata?.original?.id?.id || msg?.metadata?.original?.id;
+    return typeof mid === 'string' && mid.length > 5 ? mid : undefined;
+  };
+
   // Chave de deduplicação ROBUSTA - múltiplas camadas para evitar duplicatas
   const getMessageDedupeKey = (msg: any) => {
     // 1. Provider message_id do metadata (mais confiável)
-    const mid = msg?.metadata?.message_id || msg?.metadata?.original?.messageId || msg?.metadata?.original?.id?.id || msg?.metadata?.original?.id;
-    if (mid && typeof mid === 'string' && mid.length > 5) return `mid_${mid}`;
+    const mid = getProviderMessageId(msg);
+    if (mid) return `mid_${mid}`;
     
     // 2. Fallback: hash do conteúdo + direção + timestamp (primeiros 16 chars do ISO)
     const contentHash = (msg?.conteudo || '').substring(0, 100);
@@ -2275,25 +2281,28 @@ const ManyChatInboxContent = () => {
     ));
     
     // Delete on WhatsApp via Z-API if we have a provider message_id
-    const providerMessageId = (msg as any)?.metadata?.message_id;
+    const providerMessageId = getProviderMessageId(msg);
     if (providerMessageId && selectedSubscriber?.telefone) {
       const outboundInstanceId = resolveInstanceId(selectedSubscriber);
-      supabase.functions.invoke('zapi-send', {
+      const { data, error } = await supabase.functions.invoke('zapi-send', {
         body: {
           to_phone: selectedSubscriber.telefone,
           type: 'delete',
           message_id: providerMessageId,
           instance_id: outboundInstanceId,
         },
-      }).then(({ error }) => {
-        if (error) {
-          console.error('[DeleteForAll] Erro ao apagar no WhatsApp:', error);
-          toast({ title: '⚠️ Apagada localmente', description: 'Não foi possível apagar no WhatsApp', variant: 'destructive' });
-        }
       });
+
+      if (error || !data?.success) {
+        console.error('[DeleteForAll] Erro ao apagar no WhatsApp:', error || data?.error);
+        toast({ title: '⚠️ Apagada localmente', description: 'Não foi possível apagar no WhatsApp', variant: 'destructive' });
+      } else {
+        toast({ title: '🗑️ Mensagem apagada no WhatsApp' });
+      }
+      return;
     }
-    
-    toast({ title: '🗑️ Mensagem apagada para todos' });
+
+    toast({ title: '🗑️ Mensagem apagada localmente' });
   }, [messages, selectedSubscriber, toast]);
 
   // Edit message
@@ -2339,10 +2348,10 @@ const ManyChatInboxContent = () => {
       .eq('id', editingMessageId);
 
     // Edit on WhatsApp via Z-API if we have a provider message_id
-    const providerMessageId = (originalMsg as any)?.metadata?.message_id;
+    const providerMessageId = getProviderMessageId(originalMsg);
     if (providerMessageId && selectedSubscriber?.telefone) {
       const outboundInstanceId = resolveInstanceId(selectedSubscriber);
-      supabase.functions.invoke('zapi-send', {
+      const { data, error } = await supabase.functions.invoke('zapi-send', {
         body: {
           to_phone: selectedSubscriber.telefone,
           message: editingText.trim(),
@@ -2350,16 +2359,16 @@ const ManyChatInboxContent = () => {
           message_id: providerMessageId,
           instance_id: outboundInstanceId,
         },
-      }).then(({ data, error }) => {
-        if (error || !data?.success) {
-          console.error('[EditMessage] Erro ao editar no WhatsApp:', error || data?.error);
-          toast({ title: '⚠️ Editada localmente', description: 'Não foi possível editar no WhatsApp', variant: 'destructive' });
-        } else {
-          toast({ title: '✏️ Mensagem editada no WhatsApp' });
-        }
       });
+
+      if (error || !data?.success) {
+        console.error('[EditMessage] Erro ao editar no WhatsApp:', error || data?.error);
+        toast({ title: '⚠️ Editada localmente', description: 'Não foi possível editar no WhatsApp', variant: 'destructive' });
+      } else {
+        toast({ title: '✏️ Mensagem editada no WhatsApp' });
+      }
     } else {
-      toast({ title: '✏️ Mensagem editada' });
+      toast({ title: '✏️ Mensagem editada localmente' });
     }
     
     handleCancelEdit();
