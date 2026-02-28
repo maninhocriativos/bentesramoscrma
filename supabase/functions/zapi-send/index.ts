@@ -21,16 +21,25 @@ serve(async (req: Request) => {
   try {
     const { to_phone, message, type = 'text', provider = 'zapi', lead_id, file_name, instance_id, message_id } = await req.json();
 
-    // For delete type, message_id is required instead of message
-    if (type === 'delete') {
-      if (!message_id) {
-        return new Response(JSON.stringify({ error: 'Missing message_id for delete' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-    } else if (!to_phone || !message) {
-      return new Response(JSON.stringify({ error: 'Missing to_phone or message' }), {
+    // delete/edit exigem message_id
+    if ((type === 'delete' || type === 'edit') && !message_id) {
+      return new Response(JSON.stringify({ error: `Missing message_id for ${type}` }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // delete também precisa do telefone para query param da Z-API
+    if (!to_phone) {
+      return new Response(JSON.stringify({ error: 'Missing to_phone' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // tipos diferentes de delete precisam de message
+    if (type !== 'delete' && !message) {
+      return new Response(JSON.stringify({ error: 'Missing message' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
@@ -106,7 +115,7 @@ serve(async (req: Request) => {
     await supabase.from('integration_logs').insert({
       provider,
       direction: 'outbound',
-      endpoint: type === 'delete' ? 'delete-message' : 'send-message',
+      endpoint: type === 'delete' ? 'delete-message' : type === 'edit' ? 'edit-message' : 'send-message',
       payload_json: { to_phone, message: (message || '').substring(0, 100), type, message_id },
       response_json: result.data,
       status: success ? 'ok' : 'error',
@@ -185,6 +194,16 @@ async function sendViaZapi(
     let endpoint: string;
     let body: Record<string, any>;
 
+    const parseJsonSafe = async (response: Response) => {
+      const raw = await response.text();
+      if (!raw) return {};
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return { raw };
+      }
+    };
+
     // Escolher endpoint baseado no tipo de mídia
     switch (type) {
       case 'image':
@@ -218,10 +237,10 @@ async function sendViaZapi(
         if (!isPdf) {
           endpoint = `${baseUrl}/send-document/docx`;
         }
-        
+
         // Extrair nome do arquivo da URL se não fornecido
         const extractedFileName = fileName || message.split('/').pop()?.split('?')[0] || 'documento.pdf';
-        
+
         body = {
           phone: cleanPhone,
           document: message, // URL do documento
@@ -230,36 +249,66 @@ async function sendViaZapi(
         console.log(`[Z-API Send] Sending document: ${extractedFileName}`);
         break;
 
-      case 'delete':
-        endpoint = `${baseUrl}/messages/${messageId}`;
-        console.log(`[Z-API Send] Deleting message: ${messageId}`);
+      case 'delete': {
+        if (!messageId) {
+          return { success: false, error: 'Missing message_id for delete' };
+        }
+
+        const query = new URLSearchParams({
+          messageId,
+          phone: cleanPhone,
+          owner: 'true',
+        });
+        endpoint = `${baseUrl}/messages?${query.toString()}`;
+        console.log(`[Z-API Send] Deleting message: ${messageId}, phone: ${cleanPhone}`);
+
         const deleteResponse = await fetch(endpoint, {
           method: 'DELETE',
           headers,
         });
-        const deleteData = await deleteResponse.json();
+        const deleteData = await parseJsonSafe(deleteResponse);
         console.log('[Z-API Send] Delete Response:', JSON.stringify(deleteData).substring(0, 300));
+
         if (deleteResponse.ok && !deleteData.error) {
           return { success: true, data: deleteData };
-        } else {
-          return { success: false, error: deleteData.error || deleteData.message || 'Z-API delete error', data: deleteData };
+        }
+        return {
+          success: false,
+          error: deleteData.error || deleteData.message || 'Z-API delete error',
+          data: deleteData,
+        };
+      }
+
+      case 'edit': {
+        if (!messageId) {
+          return { success: false, error: 'Missing message_id for edit' };
         }
 
-      case 'edit':
-        endpoint = `${baseUrl}/messages/${messageId}`;
-        console.log(`[Z-API Send] Editing message: ${messageId}, new text: ${message.substring(0, 50)}`);
+        endpoint = `${baseUrl}/send-text`;
+        const editBody = {
+          phone: cleanPhone,
+          message,
+          editMessageId: messageId,
+        };
+
+        console.log(`[Z-API Send] Editing message: ${messageId}, phone: ${cleanPhone}`);
         const editResponse = await fetch(endpoint, {
-          method: 'PUT',
+          method: 'POST',
           headers,
-          body: JSON.stringify({ value: message }),
+          body: JSON.stringify(editBody),
         });
-        const editData = await editResponse.json();
+        const editData = await parseJsonSafe(editResponse);
         console.log('[Z-API Send] Edit Response:', JSON.stringify(editData).substring(0, 300));
+
         if (editResponse.ok && !editData.error) {
           return { success: true, data: editData };
-        } else {
-          return { success: false, error: editData.error || editData.message || 'Z-API edit error', data: editData };
         }
+        return {
+          success: false,
+          error: editData.error || editData.message || 'Z-API edit error',
+          data: editData,
+        };
+      }
 
       default:
         // Texto simples
@@ -278,7 +327,7 @@ async function sendViaZapi(
       body: JSON.stringify(body)
     });
 
-    const data = await response.json();
+    const data = await parseJsonSafe(response);
     console.log('[Z-API Send] Response:', JSON.stringify(data).substring(0, 300));
     
     if (response.ok && !data.error) {
