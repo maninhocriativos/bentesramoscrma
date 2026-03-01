@@ -2664,7 +2664,7 @@ const ManyChatInboxContent = () => {
       {/* Sidebar - Lista de Conversas */}
       <div className={`${showMobileChat ? 'hidden md:flex' : 'flex'} w-full md:w-[440px] lg:w-[500px] xl:w-[540px] flex-col ${themeClasses.sidebar} border-r ${themeClasses.border}`}>
         {/* Header */}
-        <div className={`h-[60px] px-4 flex items-center justify-between ${themeClasses.header}`}>
+        <div className={`h-[60px] px-4 flex items-center justify-between backdrop-blur-md ${isDark ? 'bg-gradient-to-r from-[#202C33] to-[#1A252C]' : 'bg-gradient-to-r from-[#F0F2F5] to-[#E8EBEE]'}`}>
           <div className="flex items-center gap-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -2734,7 +2734,7 @@ const ManyChatInboxContent = () => {
               placeholder="Pesquisar conversa..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className={`pl-12 h-[35px] ${themeClasses.inputSearch} border-0 rounded-lg text-[13px] focus-visible:ring-0`}
+              className={`pl-12 h-[35px] ${themeClasses.inputSearch} border-0 rounded-xl text-[13px] focus-visible:ring-0 transition-shadow duration-200 focus-visible:shadow-md`}
             />
           </div>
         </div>
@@ -2832,7 +2832,7 @@ const ManyChatInboxContent = () => {
                         loadMessages(subscriber.subscriber_id, true, subscriber);
                       }
                     }}
-                    className={`flex items-center gap-3 px-3 py-[10px] cursor-pointer transition-colors border-b ${themeClasses.border} ${themeClasses.hover} ${
+                    className={`flex items-center gap-3 px-3 py-[10px] cursor-pointer transition-all duration-200 border-b border-opacity-50 ${themeClasses.border} ${themeClasses.hover} hover:translate-x-0.5 ${
                       isActive ? themeClasses.active : ''
                     }`}
                   >
@@ -2852,7 +2852,7 @@ const ManyChatInboxContent = () => {
                       )}
                       {/* Online indicator */}
                       {online && (
-                        <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-[#111B21]" />
+                        <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-[#111B21] animate-pulse-subtle" />
                       )}
                     </div>
                     
@@ -2921,7 +2921,7 @@ const ManyChatInboxContent = () => {
         {selectedSubscriber ? (
           <>
             {/* Header do Chat */}
-            <div className={`h-[50px] md:min-h-[62px] px-1.5 md:px-4 flex items-center gap-1.5 md:gap-3 ${themeClasses.header} border-b ${themeClasses.border}`}>
+            <div className={`h-[50px] md:min-h-[62px] px-1.5 md:px-4 flex items-center gap-1.5 md:gap-3 backdrop-blur-md border-b ${themeClasses.border} ${isDark ? 'bg-gradient-to-r from-[#202C33] to-[#1A252C]' : 'bg-gradient-to-r from-[#F0F2F5] to-[#E8EBEE]'}`}>
               <Button
                 variant="ghost"
                 size="icon"
@@ -3201,7 +3201,7 @@ const ManyChatInboxContent = () => {
                         )}
                         <div className={`flex ${isOutgoing ? 'justify-end pr-2' : 'justify-start pl-2'} mb-[3px]`}>
                           <div
-                            className={`group relative max-w-[75%] md:max-w-[65%] rounded-xl px-2.5 md:px-3 pt-2 pb-2 shadow-md transition-all hover:shadow-lg select-text ${
+                            className={`group relative max-w-[75%] md:max-w-[65%] rounded-xl px-2.5 md:px-3 pt-2 pb-2 shadow-sm transition-all hover:shadow-md select-text animate-fade-in ${
                               isOutgoing ? themeClasses.messageSent : themeClasses.messageReceived
                             } ${isHighlighted ? 'ring-2 ring-[#00A884]/60 shadow-[0_0_12px_rgba(0,168,132,0.25)]' : ''}`}
                             style={{
@@ -3391,7 +3391,7 @@ const ManyChatInboxContent = () => {
             )}
 
             {/* Input de Mensagem */}
-            <div className={`min-h-[52px] md:h-[66px] px-2 md:px-4 py-1.5 md:py-2 flex items-center gap-1 md:gap-2 ${themeClasses.header}`}>
+            <div className={`min-h-[52px] md:h-[66px] px-2 md:px-4 py-1.5 md:py-2 flex items-center gap-1 md:gap-2 ${themeClasses.header} border-t ${isDark ? 'border-[#222D34]/50' : 'border-[#E9EDEF]/50'}`}>
               <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*,audio/*,video/*" className="hidden" />
               
               <Button variant="ghost" size="icon" className={`hidden md:flex h-10 w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}>
@@ -3466,19 +3466,19 @@ const ManyChatInboxContent = () => {
                     target.style.height = '44px';
                     target.style.height = Math.min(target.scrollHeight, 120) + 'px';
                   }}
-                  className={`w-full rounded-xl ${themeClasses.input} border-0 text-[15px] focus-visible:ring-0 focus-visible:outline-none shadow-sm py-[10px] px-3 overflow-y-auto`}
+                  className={`w-full rounded-2xl ${themeClasses.input} border-0 text-[15px] focus-visible:ring-0 focus-visible:outline-none shadow-sm py-[10px] px-4 overflow-y-auto transition-shadow duration-200 focus:shadow-md`}
                 />
               </div>
 
               {newMessage.trim() || (selectedFile && !selectedFile.type.startsWith('audio/')) ? (
                 <Button 
-                  onClick={selectedFile ? uploadAndSendFile : () => sendMessage()} 
-                  disabled={isSending}
-                  size="icon"
-                  className="h-11 w-11 rounded-full bg-[#00A884] hover:bg-[#008069] text-white shadow-lg transition-all hover:scale-105"
-                >
-                  <Send className="h-5 w-5" />
-                </Button>
+                    onClick={selectedFile ? uploadAndSendFile : () => sendMessage()} 
+                    disabled={isSending}
+                    size="icon"
+                    className={`h-11 w-11 rounded-full bg-[#00A884] hover:bg-[#008069] text-white shadow-lg transition-all hover:scale-105 ${isSending ? 'animate-pulse' : ''}`}
+                  >
+                    <Send className={`h-5 w-5 transition-transform duration-200 ${isSending ? 'rotate-45' : ''}`} />
+                  </Button>
               ) : selectedFile?.type.startsWith('audio/') ? null : isRecording ? (
                 <Button
                   size="icon"
@@ -3504,10 +3504,10 @@ const ManyChatInboxContent = () => {
           /* Tela vazia */
           <div className={`h-full flex flex-col items-center justify-center ${themeClasses.emptyState} border-b-[6px] border-[#00A884]`}>
             <div className="text-center max-w-md px-4">
-              <div className="w-32 h-32 mx-auto mb-6 rounded-full bg-gradient-to-br from-[#00A884] to-[#008069] flex items-center justify-center shadow-xl">
+              <div className="w-32 h-32 mx-auto mb-6 rounded-full bg-gradient-to-br from-[#00A884] to-[#008069] flex items-center justify-center shadow-xl animate-float">
                 <MessageCircle className="h-16 w-16 text-white" />
               </div>
-              <h2 className={`text-2xl font-semibold ${themeClasses.headerText} mb-3`}>
+              <h2 className={`text-2xl font-semibold mb-3 bg-gradient-to-r from-[#00A884] to-[#008069] bg-clip-text text-transparent`}>
                 Central de Mensagens
               </h2>
               <p className={`text-[14px] ${themeClasses.secondaryText} leading-6 mb-6`}>
