@@ -2740,9 +2740,9 @@ const ManyChatInboxContent = () => {
         </div>
 
         {/* Filtros unificados */}
-        <div className={`px-3 py-2 ${themeClasses.sidebar} border-b ${themeClasses.border} space-y-2`}>
-          {/* Linha 1: Origem */}
-          <div className="flex items-center gap-1.5">
+        <div className={`px-3 py-2 ${themeClasses.sidebar} border-b ${themeClasses.border}`}>
+          <div className="flex items-center gap-1 flex-wrap">
+            {/* Origem filters */}
             {([
               { key: 'all', label: 'Todos', icon: 'LayoutGrid', color: '#00A884' },
               { key: 'trafego', label: 'Tráfego', icon: 'Megaphone', color: '#ef4444' },
@@ -2752,23 +2752,24 @@ const ManyChatInboxContent = () => {
               const IconComp = icon === 'LayoutGrid' ? LayoutGrid : icon === 'Megaphone' ? Megaphone : MessageCircle;
               return (
                 <button
-                  key={key}
+                  key={`o-${key}`}
                   onClick={() => setOrigemFilter(key as OrigemFilter)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all whitespace-nowrap ${
                     isActive
                       ? 'text-white shadow-sm'
                       : `${themeClasses.inputSearch} ${themeClasses.secondaryText} hover:brightness-110`
                   }`}
                   style={isActive ? { backgroundColor: color } : undefined}
                 >
-                  <IconComp className="h-3.5 w-3.5" />
+                  <IconComp className="h-3 w-3" />
                   {label}
                 </button>
               );
             })}
-          </div>
-          {/* Linha 2: Tipo + Tag filter */}
-          <div className="flex items-center gap-1.5">
+
+            <div className="h-3.5 w-px bg-gray-500/20 mx-0.5" />
+
+            {/* Atendimento filters */}
             {([
               { key: 'all', label: 'Todos', icon: 'Users' },
               { key: 'human', label: 'Humano', icon: 'UserRound' },
@@ -2778,20 +2779,22 @@ const ManyChatInboxContent = () => {
               const IconComp = icon === 'Users' ? Users : icon === 'UserRound' ? UserRound : Bot;
               return (
                 <button
-                  key={key}
+                  key={`a-${key}`}
                   onClick={() => setActiveFilter(key as ConversationFilter)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all ${
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${
                     isActive
                       ? 'bg-[#00A884] text-white shadow-sm'
                       : `${themeClasses.inputSearch} ${themeClasses.secondaryText} hover:brightness-110`
                   }`}
                 >
-                  <IconComp className="h-3.5 w-3.5" />
+                  <IconComp className="h-3 w-3" />
                   {label}
                 </button>
               );
             })}
-            <div className="h-4 w-px bg-gray-500/30 mx-0.5" />
+
+            <div className="h-3.5 w-px bg-gray-500/20 mx-0.5" />
+
             <TagFilter
               availableTags={availableTags}
               selectedTagIds={selectedTagIds}
