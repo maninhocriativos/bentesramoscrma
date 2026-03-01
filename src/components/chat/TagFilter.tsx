@@ -52,24 +52,22 @@ export function TagFilter({ availableTags, selectedTagIds, onTagsChange }: TagFi
     <div className="flex items-center gap-2 flex-wrap">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button
-            variant={selectedTagIds.length > 0 ? 'default' : 'outline'}
-            size="sm"
+          <button
             className={cn(
-              "h-8 gap-1.5 font-medium",
+              "flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all whitespace-nowrap",
               selectedTagIds.length > 0 
-                ? "bg-primary text-primary-foreground hover:bg-primary/90" 
-                : "border-primary/30 text-primary hover:bg-primary/10 hover:border-primary"
+                ? "bg-[#00A884] text-white shadow-sm" 
+                : "bg-gray-500/10 text-gray-400 hover:brightness-110"
             )}
           >
-            <Filter className="h-3.5 w-3.5" />
-            <span>Filtrar por Tag</span>
+            <Filter className="h-3 w-3" />
+            Tags
             {selectedTagIds.length > 0 && (
-              <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs bg-white/20 text-inherit">
+              <span className="ml-0.5 bg-white/20 rounded-full px-1.5 text-[10px]">
                 {selectedTagIds.length}
-              </Badge>
+              </span>
             )}
-          </Button>
+          </button>
         </PopoverTrigger>
         <PopoverContent className="w-72 p-2" align="start">
           <div className="flex items-center justify-between mb-2">
