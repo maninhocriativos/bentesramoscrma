@@ -69,7 +69,7 @@ export function TagFilter({ availableTags, selectedTagIds, onTagsChange }: TagFi
             )}
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-72 p-2" align="start">
+        <PopoverContent className="w-72 p-2 backdrop-blur-xl bg-popover/95 border border-border/50 shadow-lg" align="start">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium">Filtrar por tags</span>
             {selectedTagIds.length > 0 && (
