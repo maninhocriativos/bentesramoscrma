@@ -2342,6 +2342,7 @@ export type Database = {
           notificacao_ativa: boolean | null
           numero_processo: string | null
           orgao_julgador: string | null
+          origem_cliente: string | null
           partes_json: Json | null
           sigilo: string | null
           sistema: string | null
@@ -2380,6 +2381,7 @@ export type Database = {
           notificacao_ativa?: boolean | null
           numero_processo?: string | null
           orgao_julgador?: string | null
+          origem_cliente?: string | null
           partes_json?: Json | null
           sigilo?: string | null
           sistema?: string | null
@@ -2418,6 +2420,7 @@ export type Database = {
           notificacao_ativa?: boolean | null
           numero_processo?: string | null
           orgao_julgador?: string | null
+          origem_cliente?: string | null
           partes_json?: Json | null
           sigilo?: string | null
           sistema?: string | null
