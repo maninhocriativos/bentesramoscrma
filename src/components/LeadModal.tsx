@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { MessageCircle, FileText, Trash2, Sparkles, Bot } from 'lucide-react';
 import { useInteracoes } from '@/hooks/useInteracoes';
 import {
@@ -40,6 +40,28 @@ interface LeadModalProps {
   canDelete?: boolean;
 }
 
+type LeadModalFormData = {
+  nome: string;
+  telefone: string;
+  email: string;
+  status: LeadStatus;
+  origem: LeadOrigem;
+  resumo_ia: string;
+  link_contrato: string;
+  valor_causa: string | number;
+  tipo_acao: string;
+  fonte_trafego: string;
+  contratos_adicionais: number;
+};
+
+interface LeadModalDraft {
+  formData: LeadModalFormData;
+  updatedAt: string;
+}
+
+const LEAD_DRAFT_STORAGE_PREFIX = 'lead_modal_draft_v1';
+const LEAD_DRAFT_MAX_AGE_MS = 1000 * 60 * 60 * 24;
+
 const STATUSES: LeadStatus[] = [
   'Lead Frio',
   'Bentes Ramos',
@@ -64,80 +86,151 @@ const FONTES_TRAFEGO = [
   { value: 'outro', label: 'Outro' },
 ];
 
+const createEmptyFormData = (): LeadModalFormData => ({
+  nome: '',
+  telefone: '',
+  email: '',
+  status: 'Lead Frio',
+  origem: 'Outro',
+  resumo_ia: '',
+  link_contrato: '',
+  valor_causa: '',
+  tipo_acao: '',
+  fonte_trafego: 'organico',
+  contratos_adicionais: 0,
+});
+
+const createFormDataFromLead = (lead: Lead | null): LeadModalFormData => {
+  if (!lead) return createEmptyFormData();
+
+  return {
+    nome: lead.nome || '',
+    telefone: lead.telefone || '',
+    email: lead.email || '',
+    status: lead.status || 'Lead Frio',
+    origem: (lead.origem as LeadOrigem) || 'Outro',
+    resumo_ia: lead.resumo_ia || '',
+    link_contrato: lead.link_contrato || '',
+    valor_causa: lead.valor_causa ?? '',
+    tipo_acao: lead.tipo_acao || '',
+    fonte_trafego: lead.fonte_trafego || 'organico',
+    contratos_adicionais: lead.contratos_adicionais || 0,
+  };
+};
+
 export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = true }: LeadModalProps) {
   const { createLead, updateLead, deleteLead } = useLeads();
   const { interacoes } = useInteracoes(lead?.id);
-  const [formData, setFormData] = useState({
-    nome: '',
-    telefone: '',
-    email: '',
-    status: 'Lead Frio' as LeadStatus,
-    origem: 'Outro' as LeadOrigem,
-    resumo_ia: '',
-    link_contrato: '',
-    valor_causa: '' as string | number,
-    tipo_acao: '',
-    fonte_trafego: 'organico',
-    contratos_adicionais: 0,
-  });
+  const [formData, setFormData] = useState<LeadModalFormData>(() => createFormDataFromLead(lead));
   const [saving, setSaving] = useState(false);
+  const [isDraftReady, setIsDraftReady] = useState(false);
+
+  const draftStorageKey = useMemo(() => {
+    const draftId = isNew ? '__new__' : lead?.id ?? '__new__';
+    return `${LEAD_DRAFT_STORAGE_PREFIX}:${draftId}`;
+  }, [isNew, lead?.id]);
+
+  const readDraft = useCallback((): LeadModalDraft | null => {
+    if (!draftStorageKey || typeof window === 'undefined') return null;
+
+    try {
+      const rawDraft = window.localStorage.getItem(draftStorageKey);
+      if (!rawDraft) return null;
+
+      const parsedDraft = JSON.parse(rawDraft) as LeadModalDraft;
+      const updatedAt = new Date(parsedDraft.updatedAt).getTime();
+
+      if (!updatedAt || Date.now() - updatedAt > LEAD_DRAFT_MAX_AGE_MS) {
+        window.localStorage.removeItem(draftStorageKey);
+        return null;
+      }
+
+      return parsedDraft;
+    } catch {
+      window.localStorage.removeItem(draftStorageKey);
+      return null;
+    }
+  }, [draftStorageKey]);
+
+  const clearDraft = useCallback(() => {
+    if (!draftStorageKey || typeof window === 'undefined') return;
+    window.localStorage.removeItem(draftStorageKey);
+  }, [draftStorageKey]);
 
   useEffect(() => {
-    if (lead) {
-      setFormData({
-        nome: lead.nome || '',
-        telefone: lead.telefone || '',
-        email: lead.email || '',
-        status: lead.status || 'Lead Frio',
-        origem: (lead.origem as LeadOrigem) || 'Outro',
-        resumo_ia: lead.resumo_ia || '',
-        link_contrato: lead.link_contrato || '',
-        valor_causa: lead.valor_causa ?? '',
-        tipo_acao: lead.tipo_acao || '',
-        fonte_trafego: lead.fonte_trafego || 'organico',
-        contratos_adicionais: lead.contratos_adicionais || 0,
-      });
-    } else {
-      setFormData({
-        nome: '',
-        telefone: '',
-        email: '',
-        status: 'Lead Frio',
-        origem: 'Outro',
-        resumo_ia: '',
-        link_contrato: '',
-        valor_causa: '',
-        tipo_acao: '',
-        fonte_trafego: 'organico',
-        contratos_adicionais: 0,
-      });
+    if (!isOpen) {
+      setIsDraftReady(false);
+      return;
     }
-  }, [lead, isOpen]);
+
+    const baseData = createFormDataFromLead(lead);
+    const draft = readDraft();
+
+    if (draft?.formData) {
+      setFormData({ ...baseData, ...draft.formData });
+    } else {
+      setFormData(baseData);
+    }
+
+    setIsDraftReady(true);
+  }, [lead, isOpen, readDraft]);
+
+  useEffect(() => {
+    if (!isOpen || !isDraftReady || !draftStorageKey || typeof window === 'undefined') return;
+
+    const hasAnyData = Boolean(
+      formData.nome.trim() ||
+        formData.telefone.trim() ||
+        formData.email.trim() ||
+        formData.resumo_ia.trim() ||
+        formData.link_contrato.trim() ||
+        String(formData.valor_causa).trim() ||
+        formData.tipo_acao.trim() ||
+        Number(formData.contratos_adicionais) > 0
+    );
+
+    if (!hasAnyData) {
+      window.localStorage.removeItem(draftStorageKey);
+      return;
+    }
+
+    const payload: LeadModalDraft = {
+      formData,
+      updatedAt: new Date().toISOString(),
+    };
+
+    window.localStorage.setItem(draftStorageKey, JSON.stringify(payload));
+  }, [formData, isOpen, isDraftReady, draftStorageKey]);
 
   const handleSave = async () => {
     if (!formData.nome.trim()) return;
-    
+
     setSaving(true);
-    
-    const dataToSave = {
-      ...formData,
-      valor_causa: formData.valor_causa ? Number(formData.valor_causa) : null,
-      contratos_adicionais: Number(formData.contratos_adicionais) || 0,
-    };
-    
-    if (isNew) {
-      await createLead(dataToSave);
-    } else if (lead) {
-      await updateLead(lead.id, dataToSave);
+
+    try {
+      const dataToSave = {
+        ...formData,
+        valor_causa: formData.valor_causa ? Number(formData.valor_causa) : null,
+        contratos_adicionais: Number(formData.contratos_adicionais) || 0,
+      };
+
+      if (isNew) {
+        await createLead(dataToSave);
+      } else if (lead) {
+        await updateLead(lead.id, dataToSave);
+      }
+
+      clearDraft();
+      onClose();
+    } finally {
+      setSaving(false);
     }
-    
-    setSaving(false);
-    onClose();
   };
 
   const handleDelete = async () => {
     if (lead) {
       await deleteLead(lead.id);
+      clearDraft();
       onClose();
     }
   };
