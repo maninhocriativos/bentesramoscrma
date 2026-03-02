@@ -61,6 +61,45 @@ const STATUSES: ProcessoStatus[] = [
 ];
 
 const CNJ_REGEX = /^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$/;
+const PROCESSO_DRAFT_STORAGE_PREFIX = 'processo_modal_draft_v1';
+const PROCESSO_DRAFT_MAX_AGE_MS = 1000 * 60 * 60 * 24;
+
+type ProcessoFormData = {
+  numero_processo: string;
+  titulo_acao: string;
+  status: ProcessoStatus;
+  advogado_responsavel: string;
+  cliente_id: string;
+  tribunal: string;
+  vara_comarca: string;
+  assunto: string;
+  valor_causa: string;
+  orgao_julgador: string;
+  grau: string;
+  origem_cliente: string;
+};
+
+interface ProcessoModalDraft {
+  formData: ProcessoFormData;
+  partes: ProcessoParte[];
+  movimentos: ProcessoMovimento[];
+  updatedAt: string;
+}
+
+const createEmptyFormData = (): ProcessoFormData => ({
+  numero_processo: '',
+  titulo_acao: '',
+  status: 'Em Andamento',
+  advogado_responsavel: '',
+  cliente_id: '',
+  tribunal: '',
+  vara_comarca: '',
+  assunto: '',
+  valor_causa: '',
+  orgao_julgador: '',
+  grau: '',
+  origem_cliente: '',
+});
 
 export function ProcessoModalExpanded({ 
   processo, 
@@ -71,20 +110,7 @@ export function ProcessoModalExpanded({
   leads 
 }: ProcessoModalExpandedProps) {
   const { createProcesso, updateProcesso, deleteProcesso, fetchProcessos } = useProcessos();
-  const [formData, setFormData] = useState({
-    numero_processo: '',
-    titulo_acao: '',
-    status: 'Em Andamento' as ProcessoStatus,
-    advogado_responsavel: '',
-    cliente_id: '',
-    tribunal: '',
-    vara_comarca: '',
-    assunto: '',
-    valor_causa: '',
-    orgao_julgador: '',
-    grau: '',
-    origem_cliente: '',
-  });
+  const [formData, setFormData] = useState<ProcessoFormData>(createEmptyFormData());
   const [saving, setSaving] = useState(false);
   const [fetchingData, setFetchingData] = useState(false);
   const [sendingNotification, setSendingNotification] = useState(false);
@@ -355,17 +381,60 @@ export function ProcessoModalExpanded({
     return () => clearTimeout(timeoutId);
   }, [formData.numero_processo, formData.tribunal, isNew]);
 
-  // Only reset form when the processo object identity changes (opening a different processo)
-  // or when switching between new/existing mode — NOT on every isOpen toggle
   const processoId = processo?.id ?? null;
   const [lastLoadedId, setLastLoadedId] = useState<string | null>(null);
   const [wasNew, setWasNew] = useState(isNew);
+
+  const draftStorageKey = useMemo(() => {
+    const entityKey = isNew ? '__new__' : processoId;
+    return entityKey ? `${PROCESSO_DRAFT_STORAGE_PREFIX}:${entityKey}` : null;
+  }, [isNew, processoId]);
+
+  const readDraft = useCallback((): ProcessoModalDraft | null => {
+    if (!draftStorageKey || typeof window === 'undefined') return null;
+
+    try {
+      const raw = window.localStorage.getItem(draftStorageKey);
+      if (!raw) return null;
+
+      const parsed = JSON.parse(raw) as ProcessoModalDraft;
+      if (!parsed?.formData) return null;
+
+      const updatedAt = new Date(parsed.updatedAt || 0).getTime();
+      if (!Number.isFinite(updatedAt) || Date.now() - updatedAt > PROCESSO_DRAFT_MAX_AGE_MS) {
+        window.localStorage.removeItem(draftStorageKey);
+        return null;
+      }
+
+      return parsed;
+    } catch {
+      return null;
+    }
+  }, [draftStorageKey]);
+
+  const clearDraft = useCallback(() => {
+    if (!draftStorageKey || typeof window === 'undefined') return;
+    window.localStorage.removeItem(draftStorageKey);
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (!isOpen || !draftStorageKey || typeof window === 'undefined') return;
+
+    const payload: ProcessoModalDraft = {
+      formData,
+      partes,
+      movimentos,
+      updatedAt: new Date().toISOString(),
+    };
+
+    window.localStorage.setItem(draftStorageKey, JSON.stringify(payload));
+  }, [formData, partes, movimentos, draftStorageKey, isOpen]);
 
   useEffect(() => {
     const currentKey = isNew ? '__new__' : processoId;
     const previousKey = wasNew ? '__new__' : lastLoadedId;
 
-    if (currentKey === previousKey && isOpen) return; // same processo, skip reset
+    if (currentKey === previousKey) return;
 
     if (processo) {
       setFormData({
@@ -385,61 +454,68 @@ export function ProcessoModalExpanded({
       setPartes(processo.partes_json || []);
       setMovimentos(processo.movimentos_json || []);
     } else {
-      setFormData({
-        numero_processo: '',
-        titulo_acao: '',
-        status: 'Em Andamento',
-        advogado_responsavel: '',
-        cliente_id: '',
-        tribunal: '',
-        vara_comarca: '',
-        assunto: '',
-        valor_causa: '',
-        orgao_julgador: '',
-        grau: '',
-        origem_cliente: '',
-      });
+      setFormData(createEmptyFormData());
       setPartes([]);
       setMovimentos([]);
     }
+
+    const draft = readDraft();
+    if (draft) {
+      setFormData((prev) => ({
+        ...prev,
+        ...draft.formData,
+        status: (draft.formData.status as ProcessoStatus) || prev.status,
+      }));
+      setPartes(Array.isArray(draft.partes) ? draft.partes : []);
+      setMovimentos(Array.isArray(draft.movimentos) ? draft.movimentos : []);
+    }
+
     setLastLoadedId(processoId);
     setWasNew(isNew);
-  }, [processoId, isNew, isOpen]);
+  }, [processo, processoId, isNew, lastLoadedId, wasNew, readDraft]);
 
   const handleSave = async () => {
     setSaving(true);
-    
-    const data = {
-      numero_processo: formData.numero_processo || null,
-      titulo_acao: formData.titulo_acao || null,
-      status: formData.status,
-      advogado_responsavel: formData.advogado_responsavel || null,
-      cliente_id: formData.cliente_id === '__none__' ? null : formData.cliente_id || null,
-      tribunal: formData.tribunal || null,
-      vara_comarca: formData.vara_comarca || null,
-      assunto: formData.assunto || null,
-      valor_causa: formData.valor_causa ? parseFloat(formData.valor_causa.replace(/\./g, '').replace(',', '.')) : null,
-      orgao_julgador: formData.orgao_julgador || null,
-      grau: formData.grau || null,
-      origem_cliente: formData.origem_cliente || null,
-      partes_json: partes.length > 0 ? partes : null,
-      movimentos_json: movimentos.length > 0 ? movimentos : null,
-      ultima_consulta_api_at: partes.length > 0 || movimentos.length > 0 ? new Date().toISOString() : null,
-    };
+    try {
+      const data = {
+        numero_processo: formData.numero_processo || null,
+        titulo_acao: formData.titulo_acao || null,
+        status: formData.status,
+        advogado_responsavel: formData.advogado_responsavel || null,
+        cliente_id: formData.cliente_id === '__none__' ? null : formData.cliente_id || null,
+        tribunal: formData.tribunal || null,
+        vara_comarca: formData.vara_comarca || null,
+        assunto: formData.assunto || null,
+        valor_causa: formData.valor_causa ? parseFloat(formData.valor_causa.replace(/\./g, '').replace(',', '.')) : null,
+        orgao_julgador: formData.orgao_julgador || null,
+        grau: formData.grau || null,
+        origem_cliente: formData.origem_cliente || null,
+        partes_json: partes.length > 0 ? partes : null,
+        movimentos_json: movimentos.length > 0 ? movimentos : null,
+        ultima_consulta_api_at: partes.length > 0 || movimentos.length > 0 ? new Date().toISOString() : null,
+      };
 
-    if (isNew) {
-      await createProcesso(data);
-    } else if (processo) {
-      await updateProcesso(processo.id, data);
+      const result = isNew
+        ? await createProcesso(data)
+        : processo
+          ? await updateProcesso(processo.id, data)
+          : { error: null };
+
+      if (!result?.error) {
+        clearDraft();
+        onClose();
+      }
+    } finally {
+      setSaving(false);
     }
-    
-    setSaving(false);
-    onClose();
   };
 
   const handleDelete = async () => {
-    if (processo) {
-      await deleteProcesso(processo.id);
+    if (!processo) return;
+
+    const result = await deleteProcesso(processo.id);
+    if (!result?.error) {
+      clearDraft();
       onClose();
     }
   };
