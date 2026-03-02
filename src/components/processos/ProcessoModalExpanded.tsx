@@ -355,7 +355,18 @@ export function ProcessoModalExpanded({
     return () => clearTimeout(timeoutId);
   }, [formData.numero_processo, formData.tribunal, isNew]);
 
+  // Only reset form when the processo object identity changes (opening a different processo)
+  // or when switching between new/existing mode — NOT on every isOpen toggle
+  const processoId = processo?.id ?? null;
+  const [lastLoadedId, setLastLoadedId] = useState<string | null>(null);
+  const [wasNew, setWasNew] = useState(isNew);
+
   useEffect(() => {
+    const currentKey = isNew ? '__new__' : processoId;
+    const previousKey = wasNew ? '__new__' : lastLoadedId;
+
+    if (currentKey === previousKey && isOpen) return; // same processo, skip reset
+
     if (processo) {
       setFormData({
         numero_processo: processo.numero_processo || '',
@@ -391,7 +402,9 @@ export function ProcessoModalExpanded({
       setPartes([]);
       setMovimentos([]);
     }
-  }, [processo, isOpen]);
+    setLastLoadedId(processoId);
+    setWasNew(isNew);
+  }, [processoId, isNew, isOpen]);
 
   const handleSave = async () => {
     setSaving(true);
