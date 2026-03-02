@@ -384,6 +384,7 @@ export function ProcessoModalExpanded({
   const processoId = processo?.id ?? null;
   const [lastLoadedId, setLastLoadedId] = useState<string | null>(null);
   const [wasNew, setWasNew] = useState(isNew);
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
   const draftStorageKey = useMemo(() => {
     const entityKey = isNew ? '__new__' : processoId;
@@ -418,7 +419,7 @@ export function ProcessoModalExpanded({
   }, [draftStorageKey]);
 
   useEffect(() => {
-    if (!isOpen || !draftStorageKey || typeof window === 'undefined') return;
+    if (!isOpen || !draftStorageKey || !draftHydrated || typeof window === 'undefined') return;
 
     const payload: ProcessoModalDraft = {
       formData,
@@ -428,13 +429,15 @@ export function ProcessoModalExpanded({
     };
 
     window.localStorage.setItem(draftStorageKey, JSON.stringify(payload));
-  }, [formData, partes, movimentos, draftStorageKey, isOpen]);
+  }, [formData, partes, movimentos, draftStorageKey, draftHydrated, isOpen]);
 
   useEffect(() => {
     const currentKey = isNew ? '__new__' : processoId;
     const previousKey = wasNew ? '__new__' : lastLoadedId;
 
     if (currentKey === previousKey) return;
+
+    setDraftHydrated(false);
 
     if (processo) {
       setFormData({
@@ -460,7 +463,25 @@ export function ProcessoModalExpanded({
     }
 
     const draft = readDraft();
-    if (draft) {
+    const draftHasMeaningfulContent = !!draft && (
+      (Array.isArray(draft.partes) && draft.partes.length > 0) ||
+      (Array.isArray(draft.movimentos) && draft.movimentos.length > 0) ||
+      [
+        draft.formData.numero_processo,
+        draft.formData.titulo_acao,
+        draft.formData.advogado_responsavel,
+        draft.formData.cliente_id,
+        draft.formData.tribunal,
+        draft.formData.vara_comarca,
+        draft.formData.assunto,
+        draft.formData.valor_causa,
+        draft.formData.orgao_julgador,
+        draft.formData.grau,
+        draft.formData.origem_cliente,
+      ].some((value) => typeof value === 'string' && value.trim().length > 0)
+    );
+
+    if (draft && draftHasMeaningfulContent) {
       setFormData((prev) => ({
         ...prev,
         ...draft.formData,
@@ -468,11 +489,14 @@ export function ProcessoModalExpanded({
       }));
       setPartes(Array.isArray(draft.partes) ? draft.partes : []);
       setMovimentos(Array.isArray(draft.movimentos) ? draft.movimentos : []);
+    } else if (draft && !draftHasMeaningfulContent) {
+      clearDraft();
     }
 
     setLastLoadedId(processoId);
     setWasNew(isNew);
-  }, [processo, processoId, isNew, lastLoadedId, wasNew, readDraft]);
+    setDraftHydrated(true);
+  }, [processo, processoId, isNew, lastLoadedId, wasNew, readDraft, clearDraft]);
 
   const handleSave = async () => {
     setSaving(true);
