@@ -46,18 +46,9 @@ export default function AgendaPage() {
   const [filter, setFilter] = useState<FilterType>('todos');
   const [showConfirmacoes, setShowConfirmacoes] = useState(false);
 
-  // Filter out past events (keep today and future)
-  const activeCompromissos = useMemo(() => {
-    const todayStart = startOfDay(new Date());
-    return compromissos.filter(c => {
-      const eventDate = parseLocalDate(c.data_inicio);
-      return eventDate >= todayStart || isToday(eventDate);
-    });
-  }, [compromissos]);
-
   const filteredCompromissos = filter === 'todos' 
-    ? activeCompromissos 
-    : activeCompromissos.filter(c => c.tipo === filter);
+    ? compromissos 
+    : compromissos.filter(c => c.tipo === filter);
 
   const handleDayClick = (date: Date) => {
     setSelectedDate(date);
