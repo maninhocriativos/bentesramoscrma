@@ -12,6 +12,7 @@ import {
   addMonths,
   subMonths,
   isFuture,
+  isPast,
   parseISO,
 } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
@@ -38,7 +39,10 @@ import {
   XCircle,
   Video,
   Building2,
-  Sparkles
+  Gavel,
+  Users,
+  Timer,
+  TrendingUp
 } from 'lucide-react';
 
 const getModalidadeIcon = (compromisso: Compromisso) => {
@@ -68,12 +72,20 @@ interface CalendarProps {
   onEventClick: (compromisso: Compromisso) => void;
 }
 
-const TIPO_COLORS: Record<string, { bg: string; text: string; dot: string; border: string }> = {
-  'Reunião': { bg: 'bg-blue-500/8', text: 'text-blue-700 dark:text-blue-400', dot: 'bg-blue-500', border: 'border-blue-500/20' },
-  'Audiência': { bg: 'bg-red-500/8', text: 'text-red-700 dark:text-red-400', dot: 'bg-red-500', border: 'border-red-500/20' },
-  'Prazo': { bg: 'bg-amber-500/8', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500', border: 'border-amber-500/20' },
-  'Tarefa': { bg: 'bg-emerald-500/8', text: 'text-emerald-700 dark:text-emerald-400', dot: 'bg-emerald-500', border: 'border-emerald-500/20' },
-  'Outro': { bg: 'bg-slate-500/8', text: 'text-slate-700 dark:text-slate-400', dot: 'bg-slate-500', border: 'border-slate-500/20' },
+const TIPO_COLORS: Record<string, { bg: string; text: string; dot: string; border: string; accent: string }> = {
+  'Reunião': { bg: 'bg-blue-50 dark:bg-blue-500/10', text: 'text-blue-700 dark:text-blue-400', dot: 'bg-blue-500', border: 'border-blue-200 dark:border-blue-500/20', accent: 'from-blue-500' },
+  'Audiência': { bg: 'bg-red-50 dark:bg-red-500/10', text: 'text-red-700 dark:text-red-400', dot: 'bg-red-500', border: 'border-red-200 dark:border-red-500/20', accent: 'from-red-500' },
+  'Prazo': { bg: 'bg-amber-50 dark:bg-amber-500/10', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500', border: 'border-amber-200 dark:border-amber-500/20', accent: 'from-amber-500' },
+  'Tarefa': { bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-700 dark:text-emerald-400', dot: 'bg-emerald-500', border: 'border-emerald-200 dark:border-emerald-500/20', accent: 'from-emerald-500' },
+  'Outro': { bg: 'bg-slate-50 dark:bg-slate-500/10', text: 'text-slate-700 dark:text-slate-400', dot: 'bg-slate-500', border: 'border-slate-200 dark:border-slate-500/20', accent: 'from-slate-500' },
+};
+
+const TIPO_ICONS: Record<string, typeof CalendarIcon> = {
+  'Reunião': Users,
+  'Audiência': Gavel,
+  'Prazo': Timer,
+  'Tarefa': CheckCircle2,
+  'Outro': CalendarIcon,
 };
 
 const CONFIRMACAO_ICONS: Record<ConfirmacaoStatus, { icon: typeof CheckCircle2; color: string }> = {
@@ -126,14 +138,11 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
       const { data, error } = await supabase.functions.invoke('calendar-sync', {
         body: { action: 'sync_advbox' }
       });
-      
       if (error) throw error;
-      
       toast({
         title: 'Sincronização concluída!',
         description: data.message || `${data.synced} eventos sincronizados`
       });
-      
       window.location.reload();
     } catch (error: any) {
       toast({
@@ -152,84 +161,85 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
   const totalEvents = compromissos.length;
   const futureEvents = compromissos.filter(c => isFuture(parseLocalDate(c.data_inicio))).length;
   const thisMonthEvents = getCompromissosForMonth().length;
+  const todayEvents = compromissos.filter(c => isToday(parseLocalDate(c.data_inicio))).length;
 
   const getColors = (tipo: string) => TIPO_COLORS[tipo] || TIPO_COLORS['Outro'];
 
   return (
     <div className="space-y-5">
-      {/* Premium KPI Strip */}
-      <div className="grid grid-cols-4 gap-3">
-        <div className="relative overflow-hidden bg-card rounded-2xl p-4 border border-border/60 shadow-soft group hover:shadow-enterprise transition-shadow">
-          <div className="absolute top-0 right-0 w-16 h-16 bg-primary/5 rounded-bl-[40px]" />
-          <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-widest">Total</p>
-          <p className="text-2xl md:text-3xl font-bold text-foreground mt-1">{totalEvents}</p>
-        </div>
-        <div className="relative overflow-hidden bg-card rounded-2xl p-4 border border-border/60 shadow-soft group hover:shadow-enterprise transition-shadow">
-          <div className="absolute top-0 right-0 w-16 h-16 bg-blue-500/5 rounded-bl-[40px]" />
-          <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-widest">Este mês</p>
-          <p className="text-2xl md:text-3xl font-bold text-foreground mt-1">{thisMonthEvents}</p>
-        </div>
-        <div className="relative overflow-hidden bg-card rounded-2xl p-4 border border-border/60 shadow-soft group hover:shadow-enterprise transition-shadow">
-          <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-bl-[40px]" />
-          <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-widest">Futuros</p>
-          <p className="text-2xl md:text-3xl font-bold text-foreground mt-1">{futureEvents}</p>
-        </div>
-        <button 
-          className="relative overflow-hidden bg-card rounded-2xl p-4 border border-border/60 shadow-soft hover:shadow-enterprise transition-all hover:border-accent/40 text-left"
-          onClick={handleSyncAdvbox}
-          disabled={syncing}
-        >
-          <div className="absolute top-0 right-0 w-16 h-16 bg-accent/5 rounded-bl-[40px]" />
-          <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-widest">Advbox</p>
-          <div className="flex items-center gap-1.5 mt-2">
-            <RefreshCw className={cn("h-4 w-4 text-accent-foreground/70", syncing && "animate-spin")} />
-            <span className="text-xs font-semibold text-foreground">Sync</span>
+      {/* Premium Hero KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Hoje', value: todayEvents, icon: CalendarIcon, gradient: 'from-primary/12 to-primary/4', iconColor: 'text-primary' },
+          { label: 'Este Mês', value: thisMonthEvents, icon: TrendingUp, gradient: 'from-blue-500/10 to-blue-500/3', iconColor: 'text-blue-600 dark:text-blue-400' },
+          { label: 'Futuros', value: futureEvents, icon: Clock, gradient: 'from-emerald-500/10 to-emerald-500/3', iconColor: 'text-emerald-600 dark:text-emerald-400' },
+          { label: 'Total', value: totalEvents, icon: List, gradient: 'from-accent/15 to-accent/5', iconColor: 'text-accent-foreground' },
+        ].map(({ label, value, icon: Icon, gradient, iconColor }) => (
+          <div key={label} className={cn(
+            "relative bg-card rounded-2xl p-4 border border-border/50 shadow-soft transition-all hover:shadow-enterprise group overflow-hidden"
+          )}>
+            <div className={cn("absolute inset-0 bg-gradient-to-br opacity-60", gradient)} />
+            <div className="relative">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-[0.15em]">{label}</p>
+                <Icon className={cn("h-4 w-4 opacity-50", iconColor)} />
+              </div>
+              <p className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">{value}</p>
+            </div>
           </div>
-        </button>
+        ))}
       </div>
 
-      {/* View Toggle + Month Nav */}
+      {/* Advbox Sync Bar */}
+      <button
+        onClick={handleSyncAdvbox}
+        disabled={syncing}
+        className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-muted/40 border border-border/40 hover:bg-muted/60 hover:border-border/60 transition-all text-xs text-muted-foreground group"
+      >
+        <span className="flex items-center gap-2">
+          <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} />
+          <span className="font-medium">Sincronizar com Advbox</span>
+        </span>
+        <span className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">Clique para sincronizar →</span>
+      </button>
+
+      {/* Controls Bar */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center bg-muted/50 rounded-xl p-0.5 border border-border/40">
-          <button
-            onClick={() => setViewMode('calendar')}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] text-xs font-medium transition-all",
-              viewMode === 'calendar'
-                ? "bg-card text-foreground shadow-soft"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <CalendarIcon className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Calendário</span>
-          </button>
-          <button
-            onClick={() => setViewMode('list')}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] text-xs font-medium transition-all",
-              viewMode === 'list'
-                ? "bg-card text-foreground shadow-soft"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <List className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Lista</span>
-          </button>
+        {/* View Toggle */}
+        <div className="flex items-center bg-muted/40 rounded-xl p-0.5 border border-border/30">
+          {[
+            { mode: 'calendar' as ViewMode, icon: CalendarIcon, label: 'Calendário' },
+            { mode: 'list' as ViewMode, icon: List, label: 'Lista' },
+          ].map(({ mode, icon: Icon, label }) => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={cn(
+                "flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-xs font-medium transition-all",
+                viewMode === mode
+                  ? "bg-card text-foreground shadow-soft border border-border/30"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{label}</span>
+            </button>
+          ))}
         </div>
         
-        {/* Month Navigation */}
-        <div className="flex items-center gap-1">
+        {/* Month Nav */}
+        <div className="flex items-center bg-card rounded-xl border border-border/40 shadow-soft">
           <button 
-            className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
+            className="w-9 h-9 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors rounded-l-xl hover:bg-muted/40"
             onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <span className="text-sm font-semibold min-w-[120px] text-center capitalize text-foreground">
+          <span className="text-sm font-bold min-w-[130px] text-center capitalize text-foreground px-2 border-x border-border/30">
             {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
           </span>
           <button 
-            className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
+            className="w-9 h-9 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors rounded-r-xl hover:bg-muted/40"
             onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
           >
             <ChevronRight className="h-4 w-4" />
@@ -238,11 +248,11 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
       </div>
 
       {viewMode === 'calendar' ? (
-        <div className="bg-card rounded-2xl shadow-enterprise border border-border/60 overflow-hidden">
-          {/* Week days header */}
-          <div className="grid grid-cols-7 border-b border-border/40">
+        <div className="bg-card rounded-2xl shadow-enterprise border border-border/50 overflow-hidden">
+          {/* Week header */}
+          <div className="grid grid-cols-7 bg-primary">
             {weekDays.map((weekDay, i) => (
-              <div key={weekDay} className="py-3 text-center text-[10px] md:text-[11px] font-bold text-muted-foreground uppercase tracking-[0.15em]">
+              <div key={weekDay} className="py-2.5 text-center text-[10px] md:text-[11px] font-bold text-primary-foreground/80 uppercase tracking-[0.2em]">
                 <span className="hidden md:inline">{weekDay}</span>
                 <span className="md:hidden">{weekDaysMobile[i]}</span>
               </div>
@@ -255,30 +265,43 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
               const dayCompromissos = getCompromissosForDay(day);
               const isCurrentMonth = isSameMonth(day, currentMonth);
               const isCurrentDay = isToday(day);
+              const dayIsPast = isPast(day) && !isCurrentDay;
 
               return (
                 <div
                   key={idx}
                   className={cn(
-                    "min-h-[72px] md:min-h-[110px] border-b border-r border-border/30 p-1.5 md:p-2 transition-all cursor-pointer group",
-                    !isCurrentMonth && "bg-muted/20 opacity-40",
-                    isCurrentMonth && "hover:bg-accent/5",
-                    isCurrentDay && "bg-primary/[0.03]"
+                    "min-h-[76px] md:min-h-[115px] border-b border-r border-border/20 p-1.5 md:p-2 transition-all cursor-pointer group relative",
+                    !isCurrentMonth && "opacity-30",
+                    isCurrentMonth && dayIsPast && "bg-muted/15",
+                    isCurrentMonth && !dayIsPast && "hover:bg-accent/5",
+                    isCurrentDay && "bg-primary/[0.04] ring-1 ring-inset ring-primary/10"
                   )}
                   onClick={() => onDayClick(day)}
                 >
+                  {/* Today indicator line */}
+                  {isCurrentDay && (
+                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-primary rounded-full" />
+                  )}
+
                   <div className="flex items-center justify-between mb-1">
                     <span 
                       className={cn(
                         "w-7 h-7 flex items-center justify-center text-xs font-semibold rounded-lg transition-all",
-                        isCurrentDay && "bg-primary text-primary-foreground shadow-soft font-bold",
-                        !isCurrentDay && isCurrentMonth && "text-foreground group-hover:bg-muted/60"
+                        isCurrentDay && "bg-primary text-primary-foreground shadow-sm font-bold",
+                        !isCurrentDay && isCurrentMonth && "text-foreground group-hover:bg-muted/50",
+                        !isCurrentMonth && "text-muted-foreground"
                       )}
                     >
                       {format(day, 'd')}
                     </span>
                     {dayCompromissos.length > 0 && !isCurrentDay && (
-                      <span className="w-5 h-5 rounded-md bg-muted/60 flex items-center justify-center text-[9px] font-bold text-muted-foreground">
+                      <span className="min-w-[18px] h-[18px] rounded-md bg-primary/10 flex items-center justify-center text-[9px] font-bold text-primary">
+                        {dayCompromissos.length}
+                      </span>
+                    )}
+                    {dayCompromissos.length > 0 && isCurrentDay && (
+                      <span className="min-w-[18px] h-[18px] rounded-md bg-primary flex items-center justify-center text-[9px] font-bold text-primary-foreground">
                         {dayCompromissos.length}
                       </span>
                     )}
@@ -286,15 +309,15 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                   
                   {/* Events */}
                   <div className="space-y-0.5">
-                    {dayCompromissos.slice(0, 2).map(compromisso => {
+                    {dayCompromissos.slice(0, 3).map(compromisso => {
                       const colors = getColors(compromisso.tipo);
                       
                       return (
                         <div
                           key={compromisso.id}
                           className={cn(
-                            "text-[8px] md:text-[10px] leading-tight px-1.5 py-0.5 md:py-1 rounded-md cursor-pointer transition-all hover:scale-[1.02] flex items-center gap-1 border",
-                            colors.bg, colors.text, colors.border
+                            "text-[8px] md:text-[10px] leading-tight px-1.5 py-0.5 md:py-[3px] rounded-[5px] cursor-pointer transition-all hover:brightness-95 flex items-center gap-1",
+                            colors.bg, colors.text
                           )}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -302,14 +325,14 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                           }}
                           title={compromisso.titulo}
                         >
-                          <div className={cn("w-1 h-1 rounded-full shrink-0", colors.dot)} />
-                          <span className="font-medium truncate">{compromisso.titulo}</span>
+                          <div className={cn("w-[3px] h-[3px] rounded-full shrink-0", colors.dot)} />
+                          <span className="font-semibold truncate">{compromisso.titulo}</span>
                         </div>
                       );
                     })}
-                    {dayCompromissos.length > 2 && (
-                      <div className="text-[9px] text-primary/70 font-semibold px-1.5">
-                        +{dayCompromissos.length - 2} mais
+                    {dayCompromissos.length > 3 && (
+                      <div className="text-[9px] text-primary font-bold px-1.5 opacity-70">
+                        +{dayCompromissos.length - 3}
                       </div>
                     )}
                   </div>
@@ -321,103 +344,108 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
           {/* Monthly List */}
-          <div className="xl:col-span-2 bg-card rounded-2xl border border-border/60 shadow-enterprise overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 bg-primary">
-              <div className="flex items-center gap-3">
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  className="h-8 w-8 text-primary-foreground/80 hover:bg-primary-foreground/10 rounded-xl"
+          <div className="xl:col-span-2 bg-card rounded-2xl border border-border/50 shadow-enterprise overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-3.5 bg-primary">
+              <div className="flex items-center gap-2">
+                <button 
+                  className="w-7 h-7 flex items-center justify-center text-primary-foreground/70 hover:bg-primary-foreground/10 rounded-lg transition-colors"
                   onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
                 >
                   <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <h3 className="font-bold text-lg text-primary-foreground capitalize tracking-tight">
+                </button>
+                <h3 className="font-bold text-base text-primary-foreground capitalize tracking-tight">
                   {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
                 </h3>
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  className="h-8 w-8 text-primary-foreground/80 hover:bg-primary-foreground/10 rounded-xl"
+                <button 
+                  className="w-7 h-7 flex items-center justify-center text-primary-foreground/70 hover:bg-primary-foreground/10 rounded-lg transition-colors"
                   onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
                 >
                   <ChevronRight className="h-4 w-4" />
-                </Button>
+                </button>
               </div>
-              <span className="bg-primary-foreground/15 text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full">
-                {thisMonthEvents} eventos
+              <span className="bg-primary-foreground/15 text-primary-foreground text-[11px] font-bold px-2.5 py-1 rounded-full tracking-wide">
+                {thisMonthEvents}
               </span>
             </div>
             <ScrollArea className="h-[500px] md:h-[550px]">
-              <div className="p-5 space-y-2.5">
+              <div className="p-4 space-y-2">
                 {getCompromissosForMonth().length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 text-center">
-                    <div className="w-20 h-20 rounded-2xl bg-muted/40 flex items-center justify-center mb-4">
-                      <CalendarIcon className="h-10 w-10 text-muted-foreground/30" />
+                  <div className="flex flex-col items-center justify-center py-24 text-center">
+                    <div className="w-20 h-20 rounded-2xl bg-muted/30 flex items-center justify-center mb-5">
+                      <CalendarIcon className="h-9 w-9 text-muted-foreground/25" />
                     </div>
-                    <p className="text-muted-foreground font-semibold">Nenhum evento neste mês</p>
-                    <p className="text-xs text-muted-foreground/60 mt-1">Clique em "Novo" para adicionar</p>
+                    <p className="text-foreground font-semibold text-sm">Nenhum evento neste mês</p>
+                    <p className="text-xs text-muted-foreground mt-1">Clique em "Novo" para adicionar um compromisso</p>
                   </div>
                 ) : (
                   getCompromissosForMonth().map(compromisso => {
                     const colors = getColors(compromisso.tipo);
+                    const TipoIcon = TIPO_ICONS[compromisso.tipo] || CalendarIcon;
                     const modalidade = getModalidadeIcon(compromisso);
                     const ModalidadeIcon = modalidade?.icon;
                     const confirmStatus = (compromisso.confirmacao_status || 'pendente') as ConfirmacaoStatus;
                     const confirmConfig = compromisso.lead_id ? CONFIRMACAO_ICONS[confirmStatus] : null;
                     const ConfirmIcon = confirmConfig?.icon;
+                    const eventIsPast = isPast(parseLocalDate(compromisso.data_inicio));
                     
                     return (
                       <div
                         key={compromisso.id}
-                        className="flex items-stretch gap-0 rounded-xl border border-border/50 bg-card overflow-hidden cursor-pointer transition-all hover:shadow-card-hover hover:border-accent/40 group"
+                        className={cn(
+                          "flex items-stretch rounded-xl border border-border/40 bg-card overflow-hidden cursor-pointer transition-all hover:shadow-card-hover hover:border-accent/30 group relative",
+                          eventIsPast && "opacity-60"
+                        )}
                         onClick={() => onEventClick(compromisso)}
                       >
+                        {/* Color accent bar */}
+                        <div className={cn("w-1 shrink-0 bg-gradient-to-b to-transparent", colors.accent)} />
+                        
                         {/* Date column */}
-                        <div className="flex flex-col items-center justify-center w-20 md:w-24 py-4 bg-muted/30 border-r border-border/40">
-                          <p className="text-3xl md:text-4xl font-bold text-foreground leading-none">
+                        <div className="flex flex-col items-center justify-center w-[70px] md:w-20 py-3 border-r border-border/20">
+                          <p className="text-2xl md:text-3xl font-bold text-foreground leading-none tracking-tight">
                             {format(parseLocalDate(compromisso.data_inicio), 'dd')}
                           </p>
-                          <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mt-1">
-                            {format(parseLocalDate(compromisso.data_inicio), 'EEEE', { locale: ptBR }).slice(0, 3)}
+                          <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-[0.15em] mt-0.5">
+                            {format(parseLocalDate(compromisso.data_inicio), 'EEE', { locale: ptBR })}
                           </p>
                         </div>
                         
                         {/* Content */}
-                        <div className="flex-1 p-4 min-w-0">
-                          <div className="flex items-start justify-between gap-3 mb-2">
-                            <h4 className="font-semibold text-sm md:text-base truncate group-hover:text-primary transition-colors">
+                        <div className="flex-1 py-3 px-4 min-w-0">
+                          <div className="flex items-start justify-between gap-2 mb-1.5">
+                            <h4 className="font-semibold text-sm truncate group-hover:text-primary transition-colors">
                               {compromisso.titulo}
                             </h4>
-                            <Badge variant="outline" className={cn("shrink-0 text-[10px] font-semibold rounded-md", colors.text, colors.bg, colors.border)}>
-                              {compromisso.tipo}
-                            </Badge>
+                            <div className={cn("flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-md text-[10px] font-bold", colors.bg, colors.text)}>
+                              <TipoIcon className="h-3 w-3" />
+                              <span>{compromisso.tipo}</span>
+                            </div>
                           </div>
                           
-                          <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1.5">
-                              <Clock className="h-3 w-3" />
-                              <span className="font-semibold">{format(parseLocalDate(compromisso.data_inicio), "HH:mm")}</span>
+                          <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3 opacity-60" />
+                              <span className="font-bold">{format(parseLocalDate(compromisso.data_inicio), "HH:mm")}</span>
                             </span>
                             
                             {ModalidadeIcon && (
-                              <span className={cn("flex items-center gap-1.5 font-medium", modalidade.color)}>
+                              <span className={cn("flex items-center gap-1 font-medium", modalidade.color)}>
                                 <ModalidadeIcon className="h-3 w-3" />
                                 <span>{modalidade.label}</span>
                               </span>
                             )}
                             
                             {ConfirmIcon && (
-                              <span className={cn("flex items-center gap-1.5", confirmConfig.color)}>
+                              <span className={cn("flex items-center gap-1", confirmConfig.color)}>
                                 <ConfirmIcon className="h-3 w-3" />
-                                <span className="capitalize">{confirmStatus}</span>
+                                <span className="capitalize font-medium">{confirmStatus}</span>
                               </span>
                             )}
                             
                             {compromisso.descricao && !modalidade && (
-                              <span className="flex items-center gap-1.5 truncate max-w-[200px]">
+                              <span className="flex items-center gap-1 truncate max-w-[180px] opacity-70">
                                 <MapPin className="h-3 w-3 shrink-0" />
-                                <span className="truncate">{compromisso.descricao.slice(0, 40)}</span>
+                                <span className="truncate">{compromisso.descricao.slice(0, 35)}</span>
                               </span>
                             )}
                           </div>
@@ -425,7 +453,7 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                         
                         {/* Arrow */}
                         <div className="flex items-center px-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                          <ArrowRight className="h-4 w-4 text-muted-foreground/50" />
                         </div>
                       </div>
                     );
@@ -436,20 +464,24 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
           </div>
 
           {/* Upcoming Events Sidebar */}
-          <div className="xl:col-span-1 bg-card rounded-2xl border border-border/60 shadow-enterprise overflow-hidden">
-            <div className="p-5 bg-primary">
-              <div className="flex items-center gap-2 mb-0.5">
-                <Sparkles className="h-4 w-4 text-primary-foreground/80" />
-                <h3 className="font-bold text-base text-primary-foreground">Próximos Eventos</h3>
+          <div className="xl:col-span-1 bg-card rounded-2xl border border-border/50 shadow-enterprise overflow-hidden">
+            <div className="px-5 py-4 bg-primary">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-primary-foreground/15 flex items-center justify-center">
+                  <CalendarIcon className="h-4 w-4 text-primary-foreground" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-primary-foreground">Próximos Eventos</h3>
+                  <p className="text-[10px] text-primary-foreground/50 font-medium">Agenda futura</p>
+                </div>
               </div>
-              <p className="text-xs text-primary-foreground/60">Sua agenda futura</p>
             </div>
             <ScrollArea className="h-[400px] md:h-[494px]">
-              <div className="p-4 space-y-2">
+              <div className="p-3 space-y-1.5">
                 {upcomingEvents.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 text-center">
-                    <div className="w-16 h-16 rounded-2xl bg-muted/40 flex items-center justify-center mb-3">
-                      <CalendarIcon className="h-8 w-8 text-muted-foreground/30" />
+                    <div className="w-14 h-14 rounded-2xl bg-muted/30 flex items-center justify-center mb-3">
+                      <CalendarIcon className="h-7 w-7 text-muted-foreground/25" />
                     </div>
                     <p className="text-sm text-muted-foreground font-medium">Nenhum evento futuro</p>
                   </div>
@@ -457,51 +489,46 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                   upcomingEvents.map(compromisso => {
                     const colors = getColors(compromisso.tipo);
                     const isTodays = isToday(parseLocalDate(compromisso.data_inicio));
-                    const modalidade = getModalidadeIcon(compromisso);
-                    const ModalidadeIcon = modalidade?.icon;
+                    const TipoIcon = TIPO_ICONS[compromisso.tipo] || CalendarIcon;
                     
                     return (
                       <div
                         key={compromisso.id}
                         className={cn(
-                          "flex gap-3 p-3 rounded-xl border border-border/50 cursor-pointer transition-all hover:shadow-soft-lg hover:border-accent/40 bg-card group",
-                          isTodays && "ring-1 ring-primary/30 bg-primary/[0.02]"
+                          "flex gap-3 p-3 rounded-xl border border-border/30 cursor-pointer transition-all hover:shadow-soft hover:border-accent/30 bg-card group relative overflow-hidden",
+                          isTodays && "border-primary/20 bg-primary/[0.02]"
                         )}
                         onClick={() => onEventClick(compromisso)}
                       >
+                        {/* Accent line */}
+                        <div className={cn("absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b to-transparent", colors.accent)} />
+                        
                         <div className={cn(
-                          "text-center shrink-0 w-12 py-2.5 rounded-xl font-bold",
+                          "text-center shrink-0 w-11 py-2 rounded-lg font-bold",
                           isTodays 
-                            ? "bg-primary text-primary-foreground shadow-soft" 
-                            : "bg-muted/40"
+                            ? "bg-primary text-primary-foreground" 
+                            : "bg-muted/30"
                         )}>
-                          <p className="text-xl leading-none">
+                          <p className="text-lg leading-none font-bold">
                             {format(parseLocalDate(compromisso.data_inicio), 'dd')}
                           </p>
-                          <p className="text-[9px] uppercase mt-1 opacity-60 font-bold tracking-wider">
+                          <p className="text-[8px] uppercase mt-0.5 opacity-60 font-bold tracking-wider">
                             {format(parseLocalDate(compromisso.data_inicio), 'MMM', { locale: ptBR })}
                           </p>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-sm line-clamp-2 group-hover:text-primary transition-colors leading-tight">
+                          <p className="font-semibold text-[13px] line-clamp-1 group-hover:text-primary transition-colors leading-tight">
                             {compromisso.titulo}
                           </p>
-                          <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mt-1.5 text-[11px] text-muted-foreground">
+                          <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted-foreground">
                             <span className="flex items-center gap-1">
-                              <Clock className="h-3 w-3 shrink-0" />
-                              <span className="font-semibold">{format(parseLocalDate(compromisso.data_inicio), "HH:mm")}</span>
+                              <Clock className="h-2.5 w-2.5" />
+                              <span className="font-bold">{format(parseLocalDate(compromisso.data_inicio), "HH:mm")}</span>
                             </span>
-                            {ModalidadeIcon ? (
-                              <span className={cn("flex items-center gap-1 font-medium", modalidade.color)}>
-                                <ModalidadeIcon className="h-3 w-3 shrink-0" />
-                                <span>{modalidade.label}</span>
-                              </span>
-                            ) : (
-                              <span className="flex items-center gap-1">
-                                <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", colors.dot)} />
-                                <span className={cn("font-medium", colors.text)}>{compromisso.tipo}</span>
-                              </span>
-                            )}
+                            <span className={cn("flex items-center gap-1 font-medium", colors.text)}>
+                              <TipoIcon className="h-2.5 w-2.5" />
+                              <span>{compromisso.tipo}</span>
+                            </span>
                           </div>
                         </div>
                       </div>
