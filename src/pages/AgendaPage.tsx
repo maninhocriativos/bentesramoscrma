@@ -1,6 +1,4 @@
-import { useState, useMemo } from 'react';
-import { isPast, parseISO, isToday, startOfDay } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
+import { useState } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { Calendar } from '@/components/agenda/Calendar';
 import { CompromissoModal } from '@/components/agenda/CompromissoModal';
@@ -16,24 +14,10 @@ import {
   Clock, 
   Users,
   Plus,
-  Filter,
   Phone
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-
-const TIMEZONE = 'America/Manaus';
-
-const parseLocalDate = (dateString: string): Date => {
-  const utcDate = parseISO(dateString);
-  return toZonedTime(utcDate, TIMEZONE);
-};
 
 type FilterType = 'todos' | 'Prazo' | 'Audiência' | 'Reunião';
 
@@ -73,23 +57,23 @@ export default function AgendaPage() {
     setIsModalOpen(true);
   };
 
-  const filters: { label: string; value: FilterType; icon: typeof CalendarDays; color: string }[] = [
-    { label: 'Todos', value: 'todos', icon: CalendarDays, color: 'bg-primary' },
-    { label: 'Prazos', value: 'Prazo', icon: Clock, color: 'bg-amber-500' },
-    { label: 'Audiências', value: 'Audiência', icon: Gavel, color: 'bg-red-500' },
-    { label: 'Reuniões', value: 'Reunião', icon: Users, color: 'bg-blue-500' },
+  const filters: { label: string; value: FilterType; icon: typeof CalendarDays; dot: string }[] = [
+    { label: 'Todos', value: 'todos', icon: CalendarDays, dot: 'bg-primary' },
+    { label: 'Prazos', value: 'Prazo', icon: Clock, dot: 'bg-amber-500' },
+    { label: 'Audiências', value: 'Audiência', icon: Gavel, dot: 'bg-red-500' },
+    { label: 'Reuniões', value: 'Reunião', icon: Users, dot: 'bg-blue-500' },
   ];
-
-  const currentFilter = filters.find(f => f.value === filter) || filters[0];
 
   return (
     <AppLayout>
-      {/* Header Section */}
-      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b">
-        <div className="flex items-center justify-between p-4 md:px-6">
+      {/* Premium Header */}
+      <div className="sticky top-0 z-20 bg-card/95 backdrop-blur-md border-b border-border/60">
+        <div className="flex items-center justify-between px-5 py-4 md:px-8">
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-foreground">Agenda</h1>
-            <p className="text-xs md:text-sm text-muted-foreground">
+            <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">
+              Agenda
+            </h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
               {filteredCompromissos.length} compromisso{filteredCompromissos.length !== 1 ? 's' : ''}
             </p>
           </div>
@@ -99,10 +83,10 @@ export default function AgendaPage() {
               variant={showConfirmacoes ? 'default' : 'outline'}
               size="sm"
               onClick={() => setShowConfirmacoes(!showConfirmacoes)}
-              className="gap-2"
+              className="gap-2 rounded-full"
             >
-              <Phone className="h-4 w-4" />
-              <span className="hidden sm:inline">Confirmações</span>
+              <Phone className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline text-xs">Confirmações</span>
             </Button>
             
             <GoogleCalendarConnect />
@@ -110,80 +94,51 @@ export default function AgendaPage() {
             <Button 
               onClick={handleNewCompromisso}
               size="sm"
-              className="gap-2"
+              className="gap-2 rounded-full shadow-enterprise"
             >
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Novo</span>
+              <Plus className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline text-xs">Novo</span>
             </Button>
           </div>
         </div>
 
-        {/* Filters - Desktop */}
-        <div className="hidden md:flex items-center gap-2 px-6 pb-4">
-          {filters.map(({ label, value, icon: Icon, color }) => (
-            <Button
+        {/* Premium Filter Pills */}
+        <div className="flex items-center gap-1.5 px-5 pb-3 md:px-8 overflow-x-auto scrollbar-stable">
+          {filters.map(({ label, value, dot }) => (
+            <button
               key={value}
-              variant={filter === value ? 'default' : 'outline'}
-              size="sm"
               onClick={() => setFilter(value)}
               className={cn(
-                "rounded-full gap-2 transition-all",
-                filter === value && "shadow-md"
+                "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap",
+                filter === value
+                  ? "bg-primary text-primary-foreground shadow-soft"
+                  : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
               <div className={cn(
-                "w-2 h-2 rounded-full",
-                filter === value ? "bg-primary-foreground" : color
+                "w-1.5 h-1.5 rounded-full",
+                filter === value ? "bg-primary-foreground" : dot
               )} />
               {label}
-            </Button>
+            </button>
           ))}
-        </div>
-
-        {/* Filters - Mobile Dropdown */}
-        <div className="md:hidden px-4 pb-4">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="w-full justify-between">
-                <div className="flex items-center gap-2">
-                  <div className={cn("w-2 h-2 rounded-full", currentFilter.color)} />
-                  <span>{currentFilter.label}</span>
-                </div>
-                <Filter className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-[200px] bg-popover">
-              {filters.map(({ label, value, icon: Icon, color }) => (
-                <DropdownMenuItem
-                  key={value}
-                  onClick={() => setFilter(value)}
-                  className={cn(
-                    "gap-2 cursor-pointer",
-                    filter === value && "bg-muted"
-                  )}
-                >
-                  <div className={cn("w-2 h-2 rounded-full", color)} />
-                  <span>{label}</span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
       
-      {/* Calendar Content */}
+      {/* Content */}
       <div className="flex-1 p-4 md:p-6 animate-fade-in overflow-auto">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Carregando agenda...</p>
+          <div className="flex flex-col items-center justify-center py-24 gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+            <p className="text-sm text-muted-foreground font-medium">Carregando agenda...</p>
           </div>
         ) : (
           <div className={cn(
             "grid gap-6",
             showConfirmacoes ? "grid-cols-1 lg:grid-cols-3" : "grid-cols-1"
           )}>
-            {/* Panel de Confirmações */}
             {showConfirmacoes && (
               <div className="lg:col-span-1 order-first lg:order-last">
                 <ConfirmacoesPendentes 
@@ -193,7 +148,6 @@ export default function AgendaPage() {
               </div>
             )}
             
-            {/* Calendário */}
             <div className={showConfirmacoes ? "lg:col-span-2" : ""}>
               <Calendar
                 compromissos={filteredCompromissos}
@@ -205,7 +159,6 @@ export default function AgendaPage() {
         )}
       </div>
 
-      {/* Modal para listar todos os eventos do dia */}
       <DayEventsModal
         isOpen={isDayEventsModalOpen}
         onClose={() => setIsDayEventsModalOpen(false)}
@@ -218,7 +171,6 @@ export default function AgendaPage() {
         }}
       />
 
-      {/* Modal para criar/editar evento */}
       <CompromissoModal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
