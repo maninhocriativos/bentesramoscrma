@@ -489,7 +489,7 @@ export function ProcessoModalExpanded({
 
           <div className="flex-1 min-h-0 overflow-auto">
             {/* Tab: Dados */}
-            <TabsContent value="dados" className="h-full mt-0">
+            <TabsContent value="dados" className="h-full mt-0 data-[state=inactive]:hidden" forceMount>
               <ScrollArea className="h-full pr-4">
                 <div className="space-y-6 py-4">
                   
@@ -715,7 +715,7 @@ export function ProcessoModalExpanded({
             </TabsContent>
 
             {/* Tab: Partes */}
-            <TabsContent value="partes" className="h-full mt-0">
+            <TabsContent value="partes" className="h-full mt-0 data-[state=inactive]:hidden" forceMount>
               <ScrollArea className="h-[400px] pr-2">
                 <div className="py-4 space-y-4">
                   {/* Formulário para adicionar parte manualmente */}
@@ -870,7 +870,7 @@ export function ProcessoModalExpanded({
             </TabsContent>
 
             {/* Tab: Movimentos */}
-            <TabsContent value="movimentos" className="h-full mt-0">
+            <TabsContent value="movimentos" className="h-full mt-0 data-[state=inactive]:hidden" forceMount>
               <ScrollArea className="h-[350px] pr-4">
                 <div className="py-4 space-y-2">
                   {movimentosEnriquecidos.length === 0 ? (
@@ -928,7 +928,7 @@ export function ProcessoModalExpanded({
             </TabsContent>
 
             {/* Tab: Notificações */}
-            <TabsContent value="notificacoes" className="h-full mt-0">
+            <TabsContent value="notificacoes" className="h-full mt-0 data-[state=inactive]:hidden" forceMount>
               <ScrollArea className="h-[350px] pr-4">
                 <div className="py-4 space-y-4">
                   {!isNew && processo ? (
