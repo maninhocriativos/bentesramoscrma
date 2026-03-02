@@ -366,7 +366,7 @@ export function ProcessoModalExpanded({
         tribunal: processo.tribunal || '',
         vara_comarca: processo.vara_comarca || '',
         assunto: processo.assunto || '',
-        valor_causa: processo.valor_causa?.toString() || '',
+        valor_causa: processo.valor_causa ? processo.valor_causa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '',
         orgao_julgador: processo.orgao_julgador || '',
         grau: processo.grau || '',
         origem_cliente: (processo as any).origem_cliente || '',
@@ -405,7 +405,7 @@ export function ProcessoModalExpanded({
       tribunal: formData.tribunal || null,
       vara_comarca: formData.vara_comarca || null,
       assunto: formData.assunto || null,
-      valor_causa: formData.valor_causa ? parseFloat(formData.valor_causa) : null,
+      valor_causa: formData.valor_causa ? parseFloat(formData.valor_causa.replace(/\./g, '').replace(',', '.')) : null,
       orgao_julgador: formData.orgao_julgador || null,
       grau: formData.grau || null,
       origem_cliente: formData.origem_cliente || null,
@@ -456,10 +456,10 @@ export function ProcessoModalExpanded({
             {/* Tab: Dados */}
             <TabsContent value="dados" className="h-full mt-0">
               <ScrollArea className="h-full pr-4">
-                <div className="space-y-4 py-4">
+                <div className="space-y-5 py-4">
                   {/* Número e Status */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
                       <Label htmlFor="numero_processo">Número do Processo</Label>
                       <div className="relative">
                         <Input
@@ -474,13 +474,13 @@ export function ProcessoModalExpanded({
                         )}
                       </div>
                       {isNew && (
-                        <p className="text-xs text-muted-foreground mt-1">
+                        <p className="text-xs text-muted-foreground">
                           Digite o número completo para carregar dados automaticamente
                         </p>
                       )}
                     </div>
 
-                    <div>
+                    <div className="space-y-1.5">
                       <Label htmlFor="status">Status</Label>
                       <Select
                         value={formData.status}
@@ -500,9 +500,11 @@ export function ProcessoModalExpanded({
                     </div>
                   </div>
 
+                  <Separator />
+
                   {/* Título e Assunto */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
                       <Label htmlFor="titulo_acao">Título / Classe da Ação</Label>
                       <Input
                         id="titulo_acao"
@@ -512,7 +514,7 @@ export function ProcessoModalExpanded({
                         placeholder="Ex: Ação de Indenização"
                       />
                     </div>
-                    <div>
+                    <div className="space-y-1.5">
                       <Label htmlFor="assunto">Assunto Principal</Label>
                       <Input
                         id="assunto"
@@ -525,8 +527,8 @@ export function ProcessoModalExpanded({
                   </div>
 
                   {/* Tribunal e Vara */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
                       <Label htmlFor="tribunal" className="flex items-center gap-1">
                         <Building2 className="h-3 w-3" /> Tribunal
                       </Label>
@@ -538,7 +540,7 @@ export function ProcessoModalExpanded({
                         placeholder="Ex: TRT11, TJAM"
                       />
                     </div>
-                    <div>
+                    <div className="space-y-1.5">
                       <Label htmlFor="vara_comarca" className="flex items-center gap-1">
                         <MapPin className="h-3 w-3" /> Vara / Comarca
                       </Label>
@@ -553,8 +555,8 @@ export function ProcessoModalExpanded({
                   </div>
 
                   {/* Órgão Julgador e Grau */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
                       <Label htmlFor="orgao_julgador" className="flex items-center gap-1">
                         <Gavel className="h-3 w-3" /> Órgão Julgador
                       </Label>
@@ -566,7 +568,7 @@ export function ProcessoModalExpanded({
                         placeholder="Ex: Juízo da 2ª Vara"
                       />
                     </div>
-                    <div>
+                    <div className="space-y-1.5">
                       <Label htmlFor="grau">Grau de Jurisdição</Label>
                       <Select
                         value={formData.grau || 'G1'}
@@ -586,37 +588,42 @@ export function ProcessoModalExpanded({
                     </div>
                   </div>
 
-                  {/* Valor da Causa */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
+                  <Separator />
+
+                  {/* Valor e Advogado */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
                       <Label htmlFor="valor_causa" className="flex items-center gap-1">
                         <DollarSign className="h-3 w-3" /> Valor da Causa (R$)
                       </Label>
                       <Input
                         id="valor_causa"
-                        type="number"
                         value={formData.valor_causa}
-                        onChange={(e) => setFormData({ ...formData, valor_causa: e.target.value })}
+                        onChange={(e) => {
+                          // Allow digits, comma and dot
+                          const val = e.target.value.replace(/[^0-9.,]/g, '');
+                          setFormData({ ...formData, valor_causa: val });
+                        }}
                         className="rounded-xl"
                         placeholder="0,00"
+                        inputMode="decimal"
                       />
                     </div>
-                    <div>
+                    <div className="space-y-1.5">
                       <Label htmlFor="advogado_responsavel">Advogado Responsável</Label>
-                      <Textarea
+                      <Input
                         id="advogado_responsavel"
                         value={formData.advogado_responsavel}
                         onChange={(e) => setFormData({ ...formData, advogado_responsavel: e.target.value })}
-                        className="rounded-xl min-h-[60px] resize-none"
+                        className="rounded-xl"
                         placeholder="Nome do advogado"
-                        rows={2}
                       />
                     </div>
                   </div>
 
                   {/* Cliente e Origem */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
                       <Label htmlFor="cliente_id">Cliente (Lead)</Label>
                       <Select
                         value={formData.cliente_id || '__none__'}
@@ -637,7 +644,7 @@ export function ProcessoModalExpanded({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div>
+                    <div className="space-y-1.5">
                       <Label htmlFor="origem_cliente" className="flex items-center gap-1">
                         <Tag className="h-3 w-3" /> Origem do Cliente
                       </Label>
@@ -658,8 +665,6 @@ export function ProcessoModalExpanded({
                       </Select>
                     </div>
                   </div>
-
-                  {/* Atualização via DataJud disponível no rodapé do modal */}
                 </div>
               </ScrollArea>
             </TabsContent>
