@@ -46,4 +46,5 @@ export interface Processo {
   movimentos_json: ProcessoMovimento[] | null;
   dados_datajud: any | null;
   ultima_consulta_api_at: string | null;
+  origem_cliente: string | null;
 }

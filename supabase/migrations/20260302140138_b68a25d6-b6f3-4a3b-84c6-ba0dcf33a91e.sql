@@ -1,0 +1,1 @@
+ALTER TABLE processos ADD COLUMN IF NOT EXISTS origem_cliente text DEFAULT NULL;

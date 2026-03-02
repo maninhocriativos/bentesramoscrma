@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Trash2, Loader2, Users, Briefcase, BadgeCheck, RefreshCw, MessageSquare, Building2, Scale, Calendar, DollarSign, Gavel, MapPin, ChevronRight } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Trash2, Loader2, Users, Briefcase, BadgeCheck, RefreshCw, MessageSquare, Building2, Scale, Calendar, DollarSign, Gavel, MapPin, ChevronRight, Plus, X, Tag } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -83,6 +83,7 @@ export function ProcessoModalExpanded({
     valor_causa: '',
     orgao_julgador: '',
     grau: '',
+    origem_cliente: '',
   });
   const [saving, setSaving] = useState(false);
   const [fetchingData, setFetchingData] = useState(false);
@@ -368,6 +369,7 @@ export function ProcessoModalExpanded({
         valor_causa: processo.valor_causa?.toString() || '',
         orgao_julgador: processo.orgao_julgador || '',
         grau: processo.grau || '',
+        origem_cliente: (processo as any).origem_cliente || '',
       });
       setPartes(processo.partes_json || []);
       setMovimentos(processo.movimentos_json || []);
@@ -384,6 +386,7 @@ export function ProcessoModalExpanded({
         valor_causa: '',
         orgao_julgador: '',
         grau: '',
+        origem_cliente: '',
       });
       setPartes([]);
       setMovimentos([]);
@@ -405,6 +408,7 @@ export function ProcessoModalExpanded({
       valor_causa: formData.valor_causa ? parseFloat(formData.valor_causa) : null,
       orgao_julgador: formData.orgao_julgador || null,
       grau: formData.grau || null,
+      origem_cliente: formData.origem_cliente || null,
       partes_json: partes.length > 0 ? partes : null,
       movimentos_json: movimentos.length > 0 ? movimentos : null,
       ultima_consulta_api_at: partes.length > 0 || movimentos.length > 0 ? new Date().toISOString() : null,
@@ -610,27 +614,49 @@ export function ProcessoModalExpanded({
                     </div>
                   </div>
 
-                  {/* Cliente */}
-                  <div>
-                    <Label htmlFor="cliente_id">Cliente (Lead)</Label>
-                    <Select
-                      value={formData.cliente_id || '__none__'}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, cliente_id: value === '__none__' ? '' : value })
-                      }
-                    >
-                      <SelectTrigger className="rounded-xl">
-                        <SelectValue placeholder="Selecione um cliente" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Nenhum</SelectItem>
-                        {clienteOptions.map((lead) => (
-                          <SelectItem key={lead.id} value={lead.id}>
-                            {lead.nome} {lead.telefone ? `(${lead.telefone})` : ''}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  {/* Cliente e Origem */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="cliente_id">Cliente (Lead)</Label>
+                      <Select
+                        value={formData.cliente_id || '__none__'}
+                        onValueChange={(value) =>
+                          setFormData({ ...formData, cliente_id: value === '__none__' ? '' : value })
+                        }
+                      >
+                        <SelectTrigger className="rounded-xl">
+                          <SelectValue placeholder="Selecione um cliente" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Nenhum</SelectItem>
+                          {clienteOptions.map((lead) => (
+                            <SelectItem key={lead.id} value={lead.id}>
+                              {lead.nome} {lead.telefone ? `(${lead.telefone})` : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="origem_cliente" className="flex items-center gap-1">
+                        <Tag className="h-3 w-3" /> Origem do Cliente
+                      </Label>
+                      <Select
+                        value={formData.origem_cliente || '__none__'}
+                        onValueChange={(value) =>
+                          setFormData({ ...formData, origem_cliente: value === '__none__' ? '' : value })
+                        }
+                      >
+                        <SelectTrigger className="rounded-xl">
+                          <SelectValue placeholder="Selecione a origem" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Não informado</SelectItem>
+                          <SelectItem value="Marketing">Marketing</SelectItem>
+                          <SelectItem value="Bentes e Ramos">Bentes e Ramos</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
 
                   {/* Atualização via DataJud disponível no rodapé do modal */}
@@ -641,14 +667,93 @@ export function ProcessoModalExpanded({
             {/* Tab: Partes */}
             <TabsContent value="partes" className="h-full mt-0">
               <ScrollArea className="h-[400px] pr-2">
-                <div className="py-4">
+                <div className="py-4 space-y-4">
+                  {/* Formulário para adicionar parte manualmente */}
+                  <Card className="border-dashed">
+                    <CardContent className="p-4 space-y-3">
+                      <p className="text-sm font-medium flex items-center gap-2">
+                        <Plus className="h-4 w-4" /> Adicionar Parte
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs">Nome *</Label>
+                          <Input
+                            id="nova_parte_nome"
+                            className="rounded-xl h-9 text-sm"
+                            placeholder="Nome da parte"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Tipo/Polo *</Label>
+                          <select
+                            id="nova_parte_tipo"
+                            className="flex h-9 w-full rounded-xl border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            <option value="">Selecione</option>
+                            <option value="Autor">Autor</option>
+                            <option value="Réu">Réu</option>
+                            <option value="Terceiro Interessado">Terceiro Interessado</option>
+                            <option value="Testemunha">Testemunha</option>
+                            <option value="Perito">Perito</option>
+                          </select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Documento (CPF/CNPJ)</Label>
+                          <Input
+                            id="nova_parte_doc"
+                            className="rounded-xl h-9 text-sm"
+                            placeholder="Opcional"
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="rounded-xl w-full"
+                            onClick={() => {
+                              const nomeInput = document.getElementById('nova_parte_nome') as HTMLInputElement;
+                              const tipoSelect = document.getElementById('nova_parte_tipo') as HTMLSelectElement;
+                              const docInput = document.getElementById('nova_parte_doc') as HTMLInputElement;
+                              
+                              const nome = nomeInput?.value?.trim();
+                              const tipo = tipoSelect?.value;
+                              const documento = docInput?.value?.trim();
+
+                              if (!nome || !tipo) {
+                                toast.error('Preencha o nome e o tipo da parte');
+                                return;
+                              }
+
+                              const novaParte: ProcessoParte = {
+                                nome,
+                                tipo,
+                                polo: tipo === 'Autor' ? 'AT' : tipo === 'Réu' ? 'PA' : 'TC',
+                                tipoPessoa: 'FISICA',
+                                documento: documento || undefined,
+                              };
+
+                              setPartes(prev => [...prev, novaParte]);
+                              nomeInput.value = '';
+                              tipoSelect.value = '';
+                              if (docInput) docInput.value = '';
+                              toast.success(`Parte "${nome}" adicionada`);
+                            }}
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Adicionar
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
                   {partes.length === 0 ? (
                     <Card>
                       <CardContent className="py-8 text-center">
                         <Users className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
-                        <p className="text-muted-foreground">Nenhuma parte carregada</p>
+                        <p className="text-muted-foreground">Nenhuma parte cadastrada</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Use o botão “Atualizar DataJud” para buscar partes no DataJud
+                          Adicione partes manualmente ou use "Buscar DataJud"
                         </p>
                       </CardContent>
                     </Card>
@@ -672,9 +777,19 @@ export function ProcessoModalExpanded({
                                     <p className="text-xs text-muted-foreground mt-0.5">Doc: {parte.documento}</p>
                                   )}
                                 </div>
-                                <Badge variant="outline" className={`${poloClasses} flex-shrink-0`}>
-                                  {parte.tipo}
-                                </Badge>
+                                <div className="flex items-center gap-1">
+                                  <Badge variant="outline" className={`${poloClasses} flex-shrink-0`}>
+                                    {parte.tipo}
+                                  </Badge>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                    onClick={() => setPartes(prev => prev.filter((_, idx) => idx !== i))}
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
                               </div>
                               {parte.advogados && parte.advogados.length > 0 && (
                                 <div className="mt-3 pl-3 border-l-2 border-primary/30">
