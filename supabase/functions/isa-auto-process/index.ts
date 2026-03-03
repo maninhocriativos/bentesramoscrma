@@ -245,11 +245,12 @@ const FAST_CONFIG = {
   stage_3: { delay_minutos: 900, titulo: "Follow-up FAST 3 - 15h" }
 };
 
-// Configuração SLOW (Lead Frio, Em Atendimento, Em Negociação, Aguardando Contrato)
+// Configuração SLOW — Cadência de Reativação (Fluxo Atendimento Direito Bancário)
+// 3 dias, 7 dias, 15 dias (30 dias é encerramento gentil, não automação)
 const SLOW_CONFIG = {
-  stage_1: { delay_minutos: 1440, titulo: "Follow-up SLOW 1 - 24h" },
-  stage_2: { delay_minutos: 2880, titulo: "Follow-up SLOW 2 - 48h" },
-  stage_3: { delay_minutos: 4320, titulo: "Follow-up SLOW 3 - 72h" }
+  stage_1: { delay_minutos: 4320, titulo: "Reativação 1 - 3 dias (check-in gentil)" },
+  stage_2: { delay_minutos: 10080, titulo: "Reativação 2 - 7 dias (reforço de valor)" },
+  stage_3: { delay_minutos: 21600, titulo: "Reativação 3 - 15 dias (última mensagem calorosa)" }
 };
 
 interface LeadContext {

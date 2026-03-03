@@ -12,15 +12,13 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const MENSAGEM_PRIMEIRO_CONTATO = (nome: string) => {
   const primeiro = nome?.split(' ')[0] || '';
-  return `Olá${primeiro ? ` ${primeiro}` : ''}! 👋 Aqui é a *Isa do Bentes & Ramos* 🏛️
+  return `Olá${primeiro ? `, ${primeiro}` : ''}! Tudo bem? 😊 Aqui é a *Isa do escritório Bentes & Ramos*.
 
-Estou entrando em contato porque vi que você preencheu nosso formulário para *análise de juros abusivos* em contratos bancários.
+Vi que você demonstrou interesse no nosso conteúdo sobre cobranças abusivas em contratos bancários. Fico muito feliz que tenha nos procurado!
 
-Que bom que deu esse primeiro passo! Muitas pessoas nem sabem que estão pagando juros muito acima do permitido por lei. 💡
+Antes de mais nada, quero te ouvir: *pode me contar um pouquinho sobre o que está acontecendo?*
 
-Vou te fazer algumas perguntas rápidas para entender melhor o seu caso e ver como podemos te ajudar, tá bom?
-
-Me conta: *qual banco é o seu contrato?* E se você sabe informar, *qual o valor aproximado do empréstimo ou financiamento?* 🏦`;
+Qual banco ou instituição é a questão? E há quanto tempo essa situação está te preocupando? 🏦`;
 };
 
 serve(async (req: Request) => {
