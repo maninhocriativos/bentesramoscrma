@@ -421,15 +421,16 @@ export function ProcessoModalExpanded({
   useEffect(() => {
     if (!isOpen || !draftStorageKey || !draftHydrated || typeof window === 'undefined') return;
 
+    // Only save formData to draft, NOT partes - DB is source of truth for partes
     const payload: ProcessoModalDraft = {
       formData,
-      partes,
-      movimentos,
+      partes: isNew ? partes : [], // Only save partes in draft for new processos
+      movimentos: isNew ? movimentos : [], // Same for movimentos
       updatedAt: new Date().toISOString(),
     };
 
     window.localStorage.setItem(draftStorageKey, JSON.stringify(payload));
-  }, [formData, partes, movimentos, draftStorageKey, draftHydrated, isOpen]);
+  }, [formData, partes, movimentos, draftStorageKey, draftHydrated, isOpen, isNew]);
 
   useEffect(() => {
     const currentKey = isNew ? '__new__' : processoId;
@@ -499,36 +500,70 @@ export function ProcessoModalExpanded({
   }, [processo, processoId, isNew, lastLoadedId, wasNew, readDraft, clearDraft]);
 
   // Fetch partes from processo_partes table when opening an existing processo
+  // This ALWAYS overrides draft data for partes - DB is the source of truth
   const [autoFetchDone, setAutoFetchDone] = useState(false);
+  const [partesLoadedFromDb, setPartesLoadedFromDb] = useState(false);
   useEffect(() => {
     setAutoFetchDone(false);
+    setPartesLoadedFromDb(false);
   }, [processoId]);
 
   useEffect(() => {
     if (!isNew && isOpen && processo?.id && draftHydrated && !autoFetchDone) {
       setAutoFetchDone(true);
-      // Always fetch partes from the dedicated table
+      // Always fetch partes from the dedicated table - DB is source of truth
       (async () => {
-        const { data: dbPartes, error } = await supabase
-          .from('processo_partes')
-          .select('*')
-          .eq('processo_id', processo.id);
-        
-        if (!error && dbPartes && dbPartes.length > 0) {
-          const mapped: ProcessoParte[] = dbPartes.map((p: any) => ({
-            nome: p.nome,
-            tipo: p.tipo,
-            polo: p.polo || '',
-            tipoPessoa: p.tipo_pessoa || '',
-            documento: p.documento || '',
-            celular: p.celular || '',
-            telefone_adicional: p.telefone_adicional || '',
-            advogados: Array.isArray(p.advogados) ? p.advogados : [],
-          }));
-          setPartes(mapped);
-        } else if (processo.partes_json && processo.partes_json.length > 0) {
-          // Fallback to partes_json if no dedicated table data
-          setPartes(processo.partes_json);
+        try {
+          const { data: dbPartes, error } = await supabase
+            .from('processo_partes')
+            .select('*')
+            .eq('processo_id', processo.id);
+          
+          if (error) {
+            console.error('Erro ao carregar partes do banco:', error);
+            toast.error('Erro ao carregar partes', { description: error.message });
+            // Still fall back to partes_json
+            if (processo.partes_json && processo.partes_json.length > 0) {
+              setPartes(processo.partes_json);
+            }
+          } else if (dbPartes && dbPartes.length > 0) {
+            const mapped: ProcessoParte[] = dbPartes.map((p: any) => ({
+              nome: p.nome,
+              tipo: p.tipo,
+              polo: p.polo || '',
+              tipoPessoa: p.tipo_pessoa || '',
+              documento: p.documento || '',
+              celular: p.celular || '',
+              telefone_adicional: p.telefone_adicional || '',
+              advogados: Array.isArray(p.advogados) ? p.advogados : [],
+            }));
+            setPartes(mapped);
+            setPartesLoadedFromDb(true);
+          } else if (processo.partes_json && processo.partes_json.length > 0) {
+            // Fallback to partes_json if no dedicated table data
+            setPartes(processo.partes_json);
+            // Auto-migrate: save partes_json to processo_partes table
+            const partesRows = processo.partes_json.map(p => ({
+              processo_id: processo.id,
+              nome: p.nome,
+              tipo: p.tipo,
+              polo: p.polo || null,
+              tipo_pessoa: p.tipoPessoa || null,
+              documento: p.documento || null,
+              celular: p.celular || null,
+              telefone_adicional: p.telefone_adicional || null,
+              advogados: p.advogados || null,
+            }));
+            const { error: migrateError } = await supabase.from('processo_partes').insert(partesRows);
+            if (migrateError) {
+              console.warn('Auto-migração de partes falhou:', migrateError);
+            } else {
+              console.log('✅ Auto-migradas', partesRows.length, 'partes de partes_json para processo_partes');
+              setPartesLoadedFromDb(true);
+            }
+          }
+        } catch (err) {
+          console.error('Erro inesperado ao carregar partes:', err);
         }
       })();
 
@@ -538,7 +573,6 @@ export function ProcessoModalExpanded({
         CNJ_REGEX.test(processo.numero_processo.trim()) &&
         (!processo.partes_json || processo.partes_json.length === 0) &&
         (!processo.movimentos_json || processo.movimentos_json.length === 0) &&
-        partes.length === 0 &&
         !fetchingData
       ) {
         console.log('🔄 Auto-fetching from API for processo:', processo.numero_processo);
@@ -568,39 +602,73 @@ export function ProcessoModalExpanded({
         ultima_consulta_api_at: partes.length > 0 || movimentos.length > 0 ? new Date().toISOString() : null,
       };
 
-      let processoId: string | null = null;
+      let savedProcessoId: string | null = null;
 
       if (isNew) {
         const result = await createProcesso(data);
-        if (result?.error) return;
-        processoId = (result?.data as any)?.id || null;
+        if (result?.error) {
+          toast.error('Erro ao criar processo', { description: 'Tente novamente.' });
+          return;
+        }
+        savedProcessoId = (result?.data as any)?.id || null;
       } else if (processo) {
         const result = await updateProcesso(processo.id, data);
-        if (result?.error) return;
-        processoId = processo.id;
+        if (result?.error) {
+          toast.error('Erro ao atualizar processo', { description: 'Tente novamente.' });
+          return;
+        }
+        savedProcessoId = processo.id;
       }
 
-      // Sync partes to processo_partes table
-      if (processoId && partes.length > 0) {
-        // Delete existing partes for this processo
-        await supabase.from('processo_partes').delete().eq('processo_id', processoId);
-        // Insert all current partes
-        const partesRows = partes.map(p => ({
-          processo_id: processoId!,
-          nome: p.nome,
-          tipo: p.tipo,
-          polo: p.polo || null,
-          tipo_pessoa: p.tipoPessoa || null,
-          documento: p.documento || null,
-          celular: p.celular || null,
-          telefone_adicional: p.telefone_adicional || null,
-          advogados: p.advogados || null,
-        }));
-        await supabase.from('processo_partes').insert(partesRows);
+      // Sync partes to processo_partes table with proper error handling
+      if (savedProcessoId) {
+        try {
+          // Delete existing partes for this processo
+          const { error: deleteError } = await supabase
+            .from('processo_partes')
+            .delete()
+            .eq('processo_id', savedProcessoId);
+          
+          if (deleteError) {
+            console.error('Erro ao limpar partes antigas:', deleteError);
+            toast.error('Aviso: erro ao sincronizar partes', { description: deleteError.message });
+          }
+
+          // Insert all current partes (even if 0 - the delete above cleans stale data)
+          if (partes.length > 0) {
+            const partesRows = partes.map(p => ({
+              processo_id: savedProcessoId!,
+              nome: p.nome,
+              tipo: p.tipo,
+              polo: p.polo || null,
+              tipo_pessoa: p.tipoPessoa || null,
+              documento: p.documento || null,
+              celular: p.celular || null,
+              telefone_adicional: p.telefone_adicional || null,
+              advogados: p.advogados || null,
+            }));
+            const { error: insertError } = await supabase
+              .from('processo_partes')
+              .insert(partesRows);
+            
+            if (insertError) {
+              console.error('Erro ao salvar partes:', insertError);
+              toast.error('Aviso: partes podem não ter sido salvas corretamente', { 
+                description: 'Os dados do processo foram salvos, mas houve um erro ao sincronizar as partes. Tente salvar novamente.' 
+              });
+            }
+          }
+        } catch (err) {
+          console.error('Erro inesperado ao sincronizar partes:', err);
+          toast.error('Erro ao sincronizar partes');
+        }
       }
 
       clearDraft();
       onClose();
+    } catch (err) {
+      console.error('Erro inesperado ao salvar:', err);
+      toast.error('Erro inesperado ao salvar o processo');
     } finally {
       setSaving(false);
     }
