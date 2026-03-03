@@ -13,6 +13,8 @@ export interface ProcessoParte {
   polo: string;
   tipoPessoa: string;
   documento?: string;
+  celular?: string;
+  telefone_adicional?: string;
   advogados?: Array<{
     nome: string;
     oab?: string;
