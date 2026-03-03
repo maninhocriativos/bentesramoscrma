@@ -9,7 +9,7 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY')!;
+// Z-API é usado via zapi-send Edge Function (não precisa de API key direta aqui)
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
@@ -434,7 +434,7 @@ async function determineAndUpdateLeadState(
     const { error } = await supabase.rpc('update_lead_state', {
       p_lead_id: leadId,
       p_to_state: newState,
-      p_changed_by: 'isa-reply-manychat',
+      p_changed_by: 'isa-reply-zapi',
       p_reason: reason,
     });
 
@@ -456,7 +456,7 @@ async function determineAndUpdateLeadState(
           lead_id: leadId,
           from_state: state,
           to_state: newState,
-          changed_by: 'isa-reply-manychat',
+          changed_by: 'isa-reply-zapi',
           reason: reason,
         });
     }
@@ -530,62 +530,36 @@ Responda de forma natural, curta (máximo 3-4 linhas) e sempre termine com uma p
 }
 
 // ============================================================
-// ENVIAR RESPOSTA VIA MANYCHAT
+// ENVIAR RESPOSTA VIA Z-API (zapi-send)
 // ============================================================
-async function sendToManyChat(
-  subscriberId: string,
-  message: string
+async function sendViaZapi(
+  telefone: string,
+  message: string,
+  leadId?: string | null,
+  instanceId?: string | null
 ): Promise<boolean> {
   try {
-    // Primeira tentativa - envio normal
-    let response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
+    const response = await fetch(`${supabaseUrl}/functions/v1/zapi-send`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseServiceKey}`,
       },
       body: JSON.stringify({
-        subscriber_id: parseInt(subscriberId),
-        data: {
-          version: 'v2',
-          content: {
-            messages: [{ type: 'text', text: message }]
-          }
-        }
+        to_phone: telefone,
+        message,
+        type: 'text',
+        provider: 'zapi',
+        lead_id: leadId,
+        instance_id: instanceId,
       }),
     });
 
-    let result = await response.json();
-    
-    // Se falhar por inatividade, tentar com message_tag
-    if (result.code === 3011 || result.status === 'error') {
-      console.log('[ISA-REPLY] Tentando com message_tag ACCOUNT_UPDATE...');
-      
-      response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          subscriber_id: parseInt(subscriberId),
-          message_tag: 'ACCOUNT_UPDATE',
-          data: {
-            version: 'v2',
-            content: {
-              messages: [{ type: 'text', text: message }]
-            }
-          }
-        }),
-      });
-
-      result = await response.json();
-    }
-
-    console.log('[ISA-REPLY] Resposta ManyChat:', result.status);
-    return result.status === 'success';
+    const result = await response.json();
+    console.log('[ISA-REPLY] Resposta Z-API:', result.success ? '✅' : '❌', JSON.stringify(result).substring(0, 200));
+    return result.success === true;
   } catch (error) {
-    console.error('[ISA-REPLY] Erro ao enviar para ManyChat:', error);
+    console.error('[ISA-REPLY] Erro ao enviar via Z-API:', error);
     return false;
   }
 }
@@ -604,7 +578,7 @@ serve(async (req: Request) => {
     const body = await req.json();
     console.log('[ISA-REPLY] 📨 Payload recebido:', JSON.stringify(body).substring(0, 300));
 
-    // Extrair dados do payload (compatível com ManyChat)
+    // Extrair dados do payload (compatível com Z-API webhook)
     const subscriberId = body.subscriber_id?.toString().replace(/^\[|\]$/g, '').trim();
     let mensagem = body.last_input_text || body.message || body.text || '';
     const nome = body.full_name || body.name || body.first_name || 'Cliente';
@@ -736,8 +710,29 @@ serve(async (req: Request) => {
       metadata: extractedData ? { extracted_data: extractedData } : null,
     });
 
-    // 📤 Enviar via ManyChat
-    const enviado = await sendToManyChat(subscriberId, respostaFinal);
+    // 📤 Enviar via Z-API
+    // Buscar telefone e instance do subscriber
+    const { data: subData } = await supabase
+      .from('manychat_subscribers')
+      .select('telefone, instance_name')
+      .eq('subscriber_id', subscriberId)
+      .maybeSingle();
+    
+    const phoneToSend = subData?.telefone || telefone;
+    
+    // Resolver instance_id a partir do instance_name (connectedPhone)
+    let instanceId: string | null = null;
+    if (subData?.instance_name) {
+      const { data: inst } = await supabase
+        .from('zapi_instances')
+        .select('instance_id')
+        .eq('is_active', true)
+        .or(`phone.ilike.%${subData.instance_name.slice(-8)}%,name.ilike.%${subData.instance_name}%`)
+        .maybeSingle();
+      instanceId = inst?.instance_id || null;
+    }
+    
+    const enviado = await sendViaZapi(phoneToSend, respostaFinal, leadId, instanceId);
 
     // 🔄 Atualizar estado do lead baseado na conversa
     let stateTransition: string | null = null;
@@ -756,7 +751,7 @@ serve(async (req: Request) => {
     // 📊 Registrar evento
     await supabase.from('system_events').insert({
       tipo: 'ia_resposta',
-      fonte: 'isa-reply-manychat',
+      fonte: 'isa-reply-zapi',
       acao: 'resposta_isa_enviada',
       lead_id: leadId,
       dados: {
