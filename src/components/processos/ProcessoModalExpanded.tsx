@@ -488,8 +488,11 @@ export function ProcessoModalExpanded({
         ...draft.formData,
         status: (draft.formData.status as ProcessoStatus) || prev.status,
       }));
-      setPartes(Array.isArray(draft.partes) ? draft.partes : []);
-      setMovimentos(Array.isArray(draft.movimentos) ? draft.movimentos : []);
+      // For existing processos, NEVER restore partes/movimentos from draft - DB is source of truth
+      if (isNew) {
+        setPartes(Array.isArray(draft.partes) ? draft.partes : []);
+        setMovimentos(Array.isArray(draft.movimentos) ? draft.movimentos : []);
+      }
     } else if (draft && !draftHasMeaningfulContent) {
       clearDraft();
     }
@@ -509,7 +512,7 @@ export function ProcessoModalExpanded({
   }, [processoId]);
 
   useEffect(() => {
-    if (!isNew && isOpen && processo?.id && draftHydrated && !autoFetchDone) {
+    if (!isNew && isOpen && processo?.id && !autoFetchDone) {
       setAutoFetchDone(true);
       // Always fetch partes from the dedicated table - DB is source of truth
       (async () => {
