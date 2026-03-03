@@ -634,7 +634,7 @@ export function ProcessoModalExpanded({
           
           if (deleteError) {
             console.error('Erro ao limpar partes antigas:', deleteError);
-            toast.error('Aviso: erro ao sincronizar partes', { description: deleteError.message });
+            // Don't block - still try to insert
           }
 
           // Insert all current partes (even if 0 - the delete above cleans stale data)
