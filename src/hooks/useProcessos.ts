@@ -116,6 +116,7 @@ export function useProcessos() {
     }
 
     toast({ title: 'Processo criado com sucesso!' });
+    await fetchProcessos();
     return { data: data as Processo };
   };
 
@@ -135,6 +136,8 @@ export function useProcessos() {
     }
 
     toast({ title: 'Processo atualizado!' });
+    // Refetch to ensure local state has latest data (including partes_json)
+    await fetchProcessos();
     return { error: null };
   };
 

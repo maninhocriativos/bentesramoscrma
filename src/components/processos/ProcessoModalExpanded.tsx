@@ -895,6 +895,22 @@ export function ProcessoModalExpanded({
                             placeholder="Opcional"
                           />
                         </div>
+                        <div>
+                          <Label className="text-xs">Celular</Label>
+                          <Input
+                            id="nova_parte_celular"
+                            className="rounded-xl h-9 text-sm"
+                            placeholder="(00) 00000-0000"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Telefone Adicional</Label>
+                          <Input
+                            id="nova_parte_telefone"
+                            className="rounded-xl h-9 text-sm"
+                            placeholder="(00) 0000-0000"
+                          />
+                        </div>
                         <div className="flex items-end">
                           <Button
                             type="button"
@@ -904,10 +920,14 @@ export function ProcessoModalExpanded({
                               const nomeInput = document.getElementById('nova_parte_nome') as HTMLInputElement;
                               const tipoSelect = document.getElementById('nova_parte_tipo') as HTMLSelectElement;
                               const docInput = document.getElementById('nova_parte_doc') as HTMLInputElement;
+                              const celularInput = document.getElementById('nova_parte_celular') as HTMLInputElement;
+                              const telefoneInput = document.getElementById('nova_parte_telefone') as HTMLInputElement;
                               
                               const nome = nomeInput?.value?.trim();
                               const tipo = tipoSelect?.value;
                               const documento = docInput?.value?.trim();
+                              const celular = celularInput?.value?.trim();
+                              const telefone_adicional = telefoneInput?.value?.trim();
 
                               if (!nome || !tipo) {
                                 toast.error('Preencha o nome e o tipo da parte');
@@ -920,13 +940,17 @@ export function ProcessoModalExpanded({
                                 polo: tipo === 'Autor' ? 'AT' : tipo === 'Réu' ? 'PA' : 'TC',
                                 tipoPessoa: 'FISICA',
                                 documento: documento || undefined,
+                                celular: celular || undefined,
+                                telefone_adicional: telefone_adicional || undefined,
                               };
 
                               setPartes(prev => [...prev, novaParte]);
                               nomeInput.value = '';
                               tipoSelect.value = '';
                               if (docInput) docInput.value = '';
-                              toast.success(`Parte "${nome}" adicionada`);
+                              if (celularInput) celularInput.value = '';
+                              if (telefoneInput) telefoneInput.value = '';
+                              toast.success(`Parte "${nome}" adicionada. Clique em "Salvar" para persistir.`);
                             }}
                           >
                             <Plus className="h-4 w-4 mr-1" />
@@ -965,6 +989,12 @@ export function ProcessoModalExpanded({
                                   <span className="font-medium text-sm break-words block">{parte.nome}</span>
                                   {parte.documento && (
                                     <p className="text-xs text-muted-foreground mt-0.5">Doc: {parte.documento}</p>
+                                  )}
+                                  {parte.celular && (
+                                    <p className="text-xs text-muted-foreground mt-0.5">📱 {parte.celular}</p>
+                                  )}
+                                  {parte.telefone_adicional && (
+                                    <p className="text-xs text-muted-foreground mt-0.5">📞 {parte.telefone_adicional}</p>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-1">
