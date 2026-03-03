@@ -498,6 +498,33 @@ export function ProcessoModalExpanded({
     setDraftHydrated(true);
   }, [processo, processoId, isNew, lastLoadedId, wasNew, readDraft, clearDraft]);
 
+  // Auto-fetch partes/movimentos when opening an existing processo with empty data
+  const [autoFetchDone, setAutoFetchDone] = useState(false);
+  useEffect(() => {
+    // Reset flag when processo changes
+    setAutoFetchDone(false);
+  }, [processoId]);
+
+  useEffect(() => {
+    if (
+      !isNew &&
+      isOpen &&
+      processo?.id &&
+      processo.numero_processo &&
+      CNJ_REGEX.test(processo.numero_processo.trim()) &&
+      (!processo.partes_json || processo.partes_json.length === 0) &&
+      (!processo.movimentos_json || processo.movimentos_json.length === 0) &&
+      draftHydrated &&
+      partes.length === 0 &&
+      !fetchingData &&
+      !autoFetchDone
+    ) {
+      setAutoFetchDone(true);
+      console.log('🔄 Auto-fetching partes/movimentos for processo:', processo.numero_processo);
+      handleRefreshStatus();
+    }
+  }, [processo?.id, isOpen, draftHydrated, partes.length, fetchingData, autoFetchDone, isNew]);
+
   const handleSave = async () => {
     setSaving(true);
     try {
