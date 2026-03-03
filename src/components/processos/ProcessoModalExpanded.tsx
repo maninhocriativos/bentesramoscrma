@@ -498,32 +498,54 @@ export function ProcessoModalExpanded({
     setDraftHydrated(true);
   }, [processo, processoId, isNew, lastLoadedId, wasNew, readDraft, clearDraft]);
 
-  // Auto-fetch partes/movimentos when opening an existing processo with empty data
+  // Fetch partes from processo_partes table when opening an existing processo
   const [autoFetchDone, setAutoFetchDone] = useState(false);
   useEffect(() => {
-    // Reset flag when processo changes
     setAutoFetchDone(false);
   }, [processoId]);
 
   useEffect(() => {
-    if (
-      !isNew &&
-      isOpen &&
-      processo?.id &&
-      processo.numero_processo &&
-      CNJ_REGEX.test(processo.numero_processo.trim()) &&
-      (!processo.partes_json || processo.partes_json.length === 0) &&
-      (!processo.movimentos_json || processo.movimentos_json.length === 0) &&
-      draftHydrated &&
-      partes.length === 0 &&
-      !fetchingData &&
-      !autoFetchDone
-    ) {
+    if (!isNew && isOpen && processo?.id && draftHydrated && !autoFetchDone) {
       setAutoFetchDone(true);
-      console.log('🔄 Auto-fetching partes/movimentos for processo:', processo.numero_processo);
-      handleRefreshStatus();
+      // Always fetch partes from the dedicated table
+      (async () => {
+        const { data: dbPartes, error } = await supabase
+          .from('processo_partes')
+          .select('*')
+          .eq('processo_id', processo.id);
+        
+        if (!error && dbPartes && dbPartes.length > 0) {
+          const mapped: ProcessoParte[] = dbPartes.map((p: any) => ({
+            nome: p.nome,
+            tipo: p.tipo,
+            polo: p.polo || '',
+            tipoPessoa: p.tipo_pessoa || '',
+            documento: p.documento || '',
+            celular: p.celular || '',
+            telefone_adicional: p.telefone_adicional || '',
+            advogados: Array.isArray(p.advogados) ? p.advogados : [],
+          }));
+          setPartes(mapped);
+        } else if (processo.partes_json && processo.partes_json.length > 0) {
+          // Fallback to partes_json if no dedicated table data
+          setPartes(processo.partes_json);
+        }
+      })();
+
+      // Auto-fetch from API if no partes and no movimentos at all
+      if (
+        processo.numero_processo &&
+        CNJ_REGEX.test(processo.numero_processo.trim()) &&
+        (!processo.partes_json || processo.partes_json.length === 0) &&
+        (!processo.movimentos_json || processo.movimentos_json.length === 0) &&
+        partes.length === 0 &&
+        !fetchingData
+      ) {
+        console.log('🔄 Auto-fetching from API for processo:', processo.numero_processo);
+        handleRefreshStatus();
+      }
     }
-  }, [processo?.id, isOpen, draftHydrated, partes.length, fetchingData, autoFetchDone, isNew]);
+  }, [processo?.id, isOpen, draftHydrated, autoFetchDone, isNew]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -546,16 +568,39 @@ export function ProcessoModalExpanded({
         ultima_consulta_api_at: partes.length > 0 || movimentos.length > 0 ? new Date().toISOString() : null,
       };
 
-      const result = isNew
-        ? await createProcesso(data)
-        : processo
-          ? await updateProcesso(processo.id, data)
-          : { error: null };
+      let processoId: string | null = null;
 
-      if (!result?.error) {
-        clearDraft();
-        onClose();
+      if (isNew) {
+        const result = await createProcesso(data);
+        if (result?.error) return;
+        processoId = (result?.data as any)?.id || null;
+      } else if (processo) {
+        const result = await updateProcesso(processo.id, data);
+        if (result?.error) return;
+        processoId = processo.id;
       }
+
+      // Sync partes to processo_partes table
+      if (processoId && partes.length > 0) {
+        // Delete existing partes for this processo
+        await supabase.from('processo_partes').delete().eq('processo_id', processoId);
+        // Insert all current partes
+        const partesRows = partes.map(p => ({
+          processo_id: processoId!,
+          nome: p.nome,
+          tipo: p.tipo,
+          polo: p.polo || null,
+          tipo_pessoa: p.tipoPessoa || null,
+          documento: p.documento || null,
+          celular: p.celular || null,
+          telefone_adicional: p.telefone_adicional || null,
+          advogados: p.advogados || null,
+        }));
+        await supabase.from('processo_partes').insert(partesRows);
+      }
+
+      clearDraft();
+      onClose();
     } finally {
       setSaving(false);
     }

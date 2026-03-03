@@ -2273,6 +2273,7 @@ export type Database = {
       processo_partes: {
         Row: {
           advogados: Json | null
+          celular: string | null
           created_at: string
           documento: string | null
           hash_unico: string | null
@@ -2280,11 +2281,13 @@ export type Database = {
           nome: string
           polo: string | null
           processo_id: string
+          telefone_adicional: string | null
           tipo: string
           tipo_pessoa: string | null
         }
         Insert: {
           advogados?: Json | null
+          celular?: string | null
           created_at?: string
           documento?: string | null
           hash_unico?: string | null
@@ -2292,11 +2295,13 @@ export type Database = {
           nome: string
           polo?: string | null
           processo_id: string
+          telefone_adicional?: string | null
           tipo: string
           tipo_pessoa?: string | null
         }
         Update: {
           advogados?: Json | null
+          celular?: string | null
           created_at?: string
           documento?: string | null
           hash_unico?: string | null
@@ -2304,6 +2309,7 @@ export type Database = {
           nome?: string
           polo?: string | null
           processo_id?: string
+          telefone_adicional?: string | null
           tipo?: string
           tipo_pessoa?: string | null
         }
