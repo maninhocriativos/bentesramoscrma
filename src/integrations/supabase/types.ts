@@ -1658,6 +1658,53 @@ export type Database = {
         }
         Relationships: []
       }
+      notificacoes_internas: {
+        Row: {
+          created_at: string
+          dados: Json | null
+          id: string
+          lead_id: string | null
+          lida: boolean
+          link: string | null
+          mensagem: string
+          tipo: string
+          titulo: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dados?: Json | null
+          id?: string
+          lead_id?: string | null
+          lida?: boolean
+          link?: string | null
+          mensagem: string
+          tipo?: string
+          titulo: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          dados?: Json | null
+          id?: string
+          lead_id?: string | null
+          lida?: boolean
+          link?: string | null
+          mensagem?: string
+          tipo?: string
+          titulo?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificacoes_internas_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notificacoes_prazos: {
         Row: {
           canal: string | null

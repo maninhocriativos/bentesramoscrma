@@ -5,6 +5,7 @@ import { usePerfil } from '@/hooks/usePerfil';
 import { useNavigate } from 'react-router-dom';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Badge } from '@/components/ui/badge';
+import { NotificacoesBell } from '@/components/NotificacoesBell';
 
 interface AppHeaderProps {
   title: string;
@@ -51,6 +52,7 @@ export function AppHeader({ title, onNewItem, newItemLabel = 'Novo' }: AppHeader
           
           {user && (
             <div className="flex items-center gap-1.5 md:gap-3">
+              <NotificacoesBell />
               <Badge className={`${cargoColors[cargo] || cargoColors['Secretaria']} rounded-lg text-[10px] md:text-xs px-1.5 md:px-2.5`}>
                 {cargo}
               </Badge>
