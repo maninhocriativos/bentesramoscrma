@@ -778,6 +778,50 @@ serve(async (req: Request) => {
         console.error('[ISA-REPLY] Erro ao enviar e-mail de handoff:', emailErr);
       }
 
+      // 🔔 Notificação interna no sistema para Amanda (e admins)
+      try {
+        const leadNomeNotif = subscriber?.nome || nome || 'Cliente';
+        
+        // Buscar todos os perfis com cargo Administrador ou Gerente para notificar
+        const { data: admins } = await supabase
+          .from('perfis')
+          .select('id, email')
+          .in('cargo', ['Administrador', 'Gerente']);
+
+        // Também buscar Amanda especificamente pelo email
+        const { data: amanda } = await supabase
+          .from('perfis')
+          .select('id')
+          .eq('email', 'amanda@bentesramos.com.br')
+          .maybeSingle();
+
+        const userIds = new Set<string>();
+        if (amanda?.id) userIds.add(amanda.id);
+        if (admins) admins.forEach((a: any) => userIds.add(a.id));
+
+        // Inserir notificação para cada usuário relevante
+        const notificacoes = Array.from(userIds).map(uid => ({
+          user_id: uid,
+          titulo: `🚨 ISA transferiu: ${leadNomeNotif}`,
+          mensagem: `A ISA não soube responder e transferiu o atendimento de ${leadNomeNotif}. Última mensagem: "${fullMessage.substring(0, 150)}"`,
+          tipo: 'handoff',
+          lead_id: leadId,
+          link: '/chat',
+          dados: {
+            subscriber_id: subscriberId,
+            mensagem_cliente: fullMessage.substring(0, 300),
+            resposta_isa: respostaFinal.substring(0, 300),
+          },
+        }));
+
+        if (notificacoes.length > 0) {
+          await supabase.from('notificacoes_internas').insert(notificacoes);
+          console.log(`[ISA-REPLY] 🔔 ${notificacoes.length} notificação(ões) interna(s) criada(s)`);
+        }
+      } catch (notifErr) {
+        console.error('[ISA-REPLY] Erro ao criar notificação interna:', notifErr);
+      }
+
       // Registrar evento de sistema
       await supabase.from('system_events').insert({
         tipo: 'handoff',
