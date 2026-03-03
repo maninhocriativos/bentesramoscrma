@@ -151,6 +151,18 @@ Cadência de reativação:
 - Horários: 09h às 17h (exceto 12h-14h)
 - Fuso: América/Manaus (UTC-4)
 
+## QUANDO TRANSFERIR PARA ATENDIMENTO HUMANO
+Você DEVE transferir para atendimento humano (Amanda) quando:
+1. **Não souber responder** uma pergunta do cliente
+2. **Tiver dúvidas** sobre a resposta correta
+3. **O caso for complexo** e fugir do seu escopo
+4. **O cliente pedir** para falar com uma pessoa
+5. **O assunto não for Bancário ou Aéreo** mas precisar de orientação
+6. **Questões sobre valores específicos** de honorários
+
+Quando precisar transferir, INCLUA a tag [TRANSFERIR_HUMANO] no início da sua resposta.
+Exemplo: "[TRANSFERIR_HUMANO] [Nome], essa é uma questão que precisa da atenção da nossa equipe jurídica. Vou te transferir para a Amanda, que vai poder te ajudar melhor. Um momento! 😊"
+
 ## STATUS BLOQUEADOS
 Se lead tiver status "Contrato Assinado" ou "Ganho":
 → NÃO envie automações
@@ -693,10 +705,93 @@ serve(async (req: Request) => {
       throw new Error('Resposta vazia da IA');
     }
 
+    // 🔄 Detectar pedido de transferência para humano
+    const needsHandoff = respostaIsa.includes('[TRANSFERIR_HUMANO]');
+    const respostaLimpa = respostaIsa.replace('[TRANSFERIR_HUMANO]', '').trim();
+
     // Truncar resposta para WhatsApp (máx 500 chars)
-    const respostaFinal = respostaIsa.length > 500 
-      ? respostaIsa.substring(0, 497) + '...' 
-      : respostaIsa;
+    const respostaFinal = respostaLimpa.length > 500 
+      ? respostaLimpa.substring(0, 497) + '...' 
+      : respostaLimpa;
+
+    // 🚨 Se precisa de handoff, ativar atendimento humano e notificar Amanda
+    if (needsHandoff && leadId) {
+      console.log('[ISA-REPLY] 🚨 HANDOFF detectado — transferindo para Amanda');
+
+      // Marcar subscriber como atendimento humano
+      await supabase
+        .from('manychat_subscribers')
+        .update({ 
+          atendimento_humano: true, 
+          atendimento_humano_desde: new Date().toISOString() 
+        })
+        .eq('subscriber_id', subscriberId);
+
+      // Desativar ISA no lead
+      await supabase
+        .from('leads_juridicos')
+        .update({ isa_ativa: false, owner_tipo: 'humano' })
+        .eq('id', leadId);
+
+      // Registrar interação de handoff
+      await supabase.from('interacoes').insert({
+        cliente_id: leadId,
+        tipo: 'WhatsApp',
+        resumo: 'ISA transferiu para atendimento humano (Amanda)',
+        detalhes: `Motivo: ISA não soube responder ou teve dúvidas.\nÚltima mensagem do cliente: ${fullMessage.substring(0, 300)}\nResposta da ISA antes do handoff: ${respostaFinal.substring(0, 300)}`,
+        direcao: 'Interna',
+      });
+
+      // Notificar Amanda por e-mail via Resend
+      try {
+        const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+        if (RESEND_API_KEY) {
+          const leadNome = subscriber?.nome || nome || 'Cliente';
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${RESEND_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: 'ISA <noreply@bentesramos.com.br>',
+              to: ['amanda@bentesramos.com.br'],
+              subject: `🚨 ISA transferiu atendimento: ${leadNome}`,
+              html: `
+                <h2>Transferência de Atendimento</h2>
+                <p><strong>Cliente:</strong> ${leadNome}</p>
+                <p><strong>Telefone:</strong> ${phoneToSend || telefone || 'N/A'}</p>
+                <p><strong>Motivo:</strong> ISA não soube responder ou teve dúvidas sobre a questão.</p>
+                <hr/>
+                <p><strong>Última mensagem do cliente:</strong></p>
+                <blockquote>${fullMessage.substring(0, 500)}</blockquote>
+                <p><strong>Resposta da ISA:</strong></p>
+                <blockquote>${respostaFinal.substring(0, 500)}</blockquote>
+                <hr/>
+                <p>Acesse o CRM para continuar o atendimento.</p>
+              `,
+            }),
+          });
+          console.log('[ISA-REPLY] 📧 E-mail de notificação enviado para Amanda');
+        }
+      } catch (emailErr) {
+        console.error('[ISA-REPLY] Erro ao enviar e-mail de handoff:', emailErr);
+      }
+
+      // Registrar evento de sistema
+      await supabase.from('system_events').insert({
+        tipo: 'handoff',
+        fonte: 'isa-reply-zapi',
+        acao: 'transferencia_humano',
+        lead_id: leadId,
+        dados: {
+          subscriber_id: subscriberId,
+          motivo: 'ISA não soube responder',
+          mensagem_cliente: fullMessage.substring(0, 300),
+        },
+        processado: true,
+      });
+    }
 
     // 💾 Salvar resposta no banco
     await supabase.from('manychat_mensagens').insert({
@@ -707,7 +802,7 @@ serve(async (req: Request) => {
       tipo: 'text',
       direcao: 'saida',
       lead_id: leadId,
-      metadata: extractedData ? { extracted_data: extractedData } : null,
+      metadata: extractedData ? { extracted_data: extractedData } : { handoff: needsHandoff },
     });
 
     // 📤 Enviar via Z-API
@@ -777,6 +872,7 @@ serve(async (req: Request) => {
       subscriber_id: subscriberId,
       media_processed: !!mediaContent,
       state_transition: stateTransition,
+      handoff: needsHandoff,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
