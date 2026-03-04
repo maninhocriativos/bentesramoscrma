@@ -879,6 +879,39 @@ export type Database = {
         }
         Relationships: []
       }
+      integrations_state: {
+        Row: {
+          created_at: string | null
+          id: string
+          last_row: number | null
+          last_sync_at: string | null
+          provider: string
+          sheet_name: string | null
+          spreadsheet_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          last_row?: number | null
+          last_sync_at?: string | null
+          provider: string
+          sheet_name?: string | null
+          spreadsheet_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          last_row?: number | null
+          last_sync_at?: string | null
+          provider?: string
+          sheet_name?: string | null
+          spreadsheet_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       interacoes: {
         Row: {
           cliente_id: string | null
@@ -1512,10 +1545,14 @@ export type Database = {
       meta_form_leads: {
         Row: {
           ad_id: string | null
+          ad_name: string | null
           adset_id: string | null
+          adset_name: string | null
           campaign_id: string | null
+          campaign_name: string | null
           created_at: string
           created_time: string | null
+          dedupe_key: string | null
           email: string | null
           form_fields: Json | null
           form_id: string | null
@@ -1525,16 +1562,21 @@ export type Database = {
           meta_lead_id: string
           nome: string | null
           raw: Json | null
+          source: string | null
           status: string
           telefone: string | null
           updated_at: string
         }
         Insert: {
           ad_id?: string | null
+          ad_name?: string | null
           adset_id?: string | null
+          adset_name?: string | null
           campaign_id?: string | null
+          campaign_name?: string | null
           created_at?: string
           created_time?: string | null
+          dedupe_key?: string | null
           email?: string | null
           form_fields?: Json | null
           form_id?: string | null
@@ -1544,16 +1586,21 @@ export type Database = {
           meta_lead_id: string
           nome?: string | null
           raw?: Json | null
+          source?: string | null
           status?: string
           telefone?: string | null
           updated_at?: string
         }
         Update: {
           ad_id?: string | null
+          ad_name?: string | null
           adset_id?: string | null
+          adset_name?: string | null
           campaign_id?: string | null
+          campaign_name?: string | null
           created_at?: string
           created_time?: string | null
+          dedupe_key?: string | null
           email?: string | null
           form_fields?: Json | null
           form_id?: string | null
@@ -1563,6 +1610,7 @@ export type Database = {
           meta_lead_id?: string
           nome?: string | null
           raw?: Json | null
+          source?: string | null
           status?: string
           telefone?: string | null
           updated_at?: string
