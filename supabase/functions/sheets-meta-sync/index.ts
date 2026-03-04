@@ -85,6 +85,8 @@ serve(async (req) => {
     let range = encodeURIComponent(`${sheetName}!A1:Z`);
     let url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?key=${GOOGLE_SHEETS_API_KEY}`;
     
+    console.log(`[Sheets Sync] spreadsheetId=${spreadsheetId}, sheetName=${sheetName}, apiKey=${GOOGLE_SHEETS_API_KEY?.substring(0, 8)}...`);
+    console.log(`[Sheets Sync] URL: ${url}`);
     console.log(`[Sheets Sync] Fetching from row ${lastRow + 1}...`);
     
     let res = await fetch(url);
