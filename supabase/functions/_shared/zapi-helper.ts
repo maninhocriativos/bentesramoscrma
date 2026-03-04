@@ -27,6 +27,7 @@ export interface ZapiSendResult {
 
 /**
  * Normaliza número de telefone para formato internacional brasileiro
+ * Sempre garante o 9º dígito para celulares (evita duplicatas 8-dig vs 9-dig)
  */
 export function normalizePhone(phone: string): string {
   // Remove caracteres não numéricos
@@ -35,6 +36,18 @@ export function normalizePhone(phone: string): string {
   // Adiciona código do Brasil se não tiver
   if (cleaned.length === 10 || cleaned.length === 11) {
     cleaned = '55' + cleaned;
+  }
+  
+  // Garantir 9º dígito para celulares brasileiros
+  // Formato esperado: 55 + DDD(2) + 9 + 8dígitos = 13 dígitos
+  // Se temos 12 dígitos (55 + DDD + 8dígitos), o celular está sem o 9
+  if (cleaned.length === 12 && cleaned.startsWith('55')) {
+    const ddd = cleaned.substring(2, 4);
+    const localNumber = cleaned.substring(4);
+    // Celulares começam com dígitos 6-9; fixos começam com 2-5
+    if (localNumber.length === 8 && /^[6-9]/.test(localNumber)) {
+      cleaned = `55${ddd}9${localNumber}`;
+    }
   }
   
   return cleaned;

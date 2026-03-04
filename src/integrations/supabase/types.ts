@@ -3114,6 +3114,7 @@ export type Database = {
         }[]
       }
       normalize_phone_number: { Args: { phone: string }; Returns: string }
+      normalize_subscriber_phone: { Args: { phone: string }; Returns: string }
       update_lead_state: {
         Args: {
           p_changed_by?: string
