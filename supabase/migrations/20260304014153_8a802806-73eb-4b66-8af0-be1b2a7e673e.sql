@@ -1,0 +1,1 @@
+ALTER TABLE meta_form_leads ADD CONSTRAINT meta_form_leads_dedupe_key_unique UNIQUE (dedupe_key);

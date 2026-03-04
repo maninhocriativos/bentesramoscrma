@@ -1,0 +1,1 @@
+UPDATE integrations_state SET spreadsheet_id = '1x3EQ2WAWlT1rhAjZhLQlEQYOlIQ9cT6dnx7Ydj9TC9A' WHERE provider = 'google_sheets_meta_leads';

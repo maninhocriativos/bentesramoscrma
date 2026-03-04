@@ -1,0 +1,1 @@
+UPDATE integrations_state SET last_row = 1 WHERE provider = 'google_sheets_meta_leads';
