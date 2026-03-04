@@ -866,8 +866,7 @@ const ManyChatInboxContent = () => {
             const isCurrentChat = currentSub && (
               newMsg.subscriber_id === currentSubId ||
               newMsg.subscriber_id === currentZapiId ||
-              (currentLeadId && (newMsg as any).lead_id === currentLeadId) ||
-              (currentZapiId && currentSubId && newMsg.subscriber_id.includes(currentPhone.slice(-9)))
+              (currentLeadId && (newMsg as any).lead_id === currentLeadId)
             );
             
             // Update messages if current chat
@@ -1385,13 +1384,29 @@ const ManyChatInboxContent = () => {
         return;
       }
       
+      // Extra safety: verify we're still on the same conversation
+      if (selectedSubscriberRef.current?.subscriber_id !== subscriberId) {
+        console.log('[loadMessages] Resultado descartado - conversa mudou:', subscriberId, '→', selectedSubscriberRef.current?.subscriber_id);
+        return;
+      }
+      
       // Merge com mensagens realtime que chegaram durante o fetch (evita perder msgs)
       setMessages(prev => {
-        // Pegar mensagens temporárias (optimistic) que ainda não foram salvas
-        const tempMessages = prev.filter(m => m.id.startsWith('temp_'));
+        // Pegar mensagens temporárias (optimistic) que PERTENCEM a esta conversa
+        const tempMessages = prev.filter(m => 
+          m.id.startsWith('temp_') && 
+          (!m.subscriber_id || m.subscriber_id === subscriberId)
+        );
         // Pegar mensagens realtime que podem ter chegado durante o fetch
+        // ONLY keep messages that belong to this subscriber (prevent cross-conversation leakage)
         const realtimeOnly = prev.filter(m => {
           if (m.id.startsWith('temp_')) return false;
+          // Verify the message belongs to this conversation
+          const msgSubId = m.subscriber_id || '';
+          const belongsToConversation = msgSubId === subscriberId || 
+            (leadId && (m as any).lead_id === leadId) ||
+            idsArray.includes(msgSubId);
+          if (!belongsToConversation) return false;
           const key = getMessageDedupeKey(m);
           return !messagesMap.has(key) && !uniqueMessages.some(um => um.id === m.id);
         });
