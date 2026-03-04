@@ -85,35 +85,54 @@ export function useMetaFormLeads() {
     setSyncing(true);
     setSyncError(null);
     try {
-      const { data, error } = await supabase.functions.invoke('meta-leads-sync');
-
-      if (error) throw error;
-
-      // Check for structured error responses
-      if (data?.error) {
-        setSyncError(data.error);
-        toast({
-          title: 'Erro na sincronização',
-          description: data.error,
-          variant: 'destructive',
-        });
-        return data;
-      }
+      // Run both syncs in parallel: Meta API + Google Sheets
+      const [metaResult, sheetsResult] = await Promise.allSettled([
+        supabase.functions.invoke('meta-leads-sync'),
+        supabase.functions.invoke('sheets-meta-sync'),
+      ]);
 
       const parts: string[] = [];
-      parts.push(`${data.total_processed || 0} processados, ${data.new_leads || 0} novos`);
-      
-      if (data.errors?.length) {
-        parts.push(`⚠️ ${data.errors.length} erro(s)`);
+      let hasError = false;
+
+      // Process Meta sync result
+      if (metaResult.status === 'fulfilled') {
+        const { data, error } = metaResult.value;
+        if (error || data?.error) {
+          hasError = true;
+          parts.push(`Meta: ${data?.error || error?.message || 'erro'}`);
+        } else {
+          parts.push(`Meta: ${data?.new_leads || 0} novos`);
+        }
+      } else {
+        hasError = true;
+        parts.push(`Meta: ${metaResult.reason?.message || 'erro'}`);
+      }
+
+      // Process Sheets sync result
+      if (sheetsResult.status === 'fulfilled') {
+        const { data, error } = sheetsResult.value;
+        if (error || data?.error) {
+          hasError = true;
+          parts.push(`Sheets: ${data?.error || error?.message || 'erro'}`);
+        } else {
+          parts.push(`Sheets: ${data?.new_leads || 0} novos`);
+        }
+      } else {
+        hasError = true;
+        parts.push(`Sheets: ${sheetsResult.reason?.message || 'erro'}`);
+      }
+
+      if (hasError) {
+        setSyncError(parts.join(' · '));
       }
 
       toast({
-        title: data.new_leads > 0 ? '✅ Sincronização concluída' : 'Sincronização concluída',
+        title: hasError ? '⚠️ Sincronização parcial' : '✅ Sincronização concluída',
         description: parts.join(' · '),
+        variant: hasError ? 'destructive' : 'default',
       });
 
       await fetchLeads();
-      return data;
     } catch (err: any) {
       console.error('[useMetaFormLeads] Sync error:', err);
       const msg = err.message || 'Falha na sincronização';
