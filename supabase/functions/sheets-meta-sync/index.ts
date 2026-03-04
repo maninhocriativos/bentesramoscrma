@@ -267,16 +267,8 @@ serve(async (req) => {
           }, { onConflict: 'subscriber_id', ignoreDuplicates: true });
         }
 
-        // Trigger Isa first contact (fire-and-forget)
-        if (leadId && telefone) {
-          supabase.functions.invoke('isa-first-contact-csv', {
-            body: { lead_id: leadId, nome, telefone, origem: 'META' },
-          }).then(() => {
-            console.log(`[Sheets Sync] Isa triggered for lead ${leadId}`);
-          }).catch((isaErr: unknown) => {
-            console.error('[Sheets Sync] Isa trigger error:', isaErr);
-          });
-        }
+        // NOTE: Isa first contact trigger REMOVED to prevent spam.
+        // Leads from Sheets should be contacted manually.
 
       } catch (rowErr) {
         console.error('[Sheets Sync] Row error:', rowErr);
