@@ -77,8 +77,8 @@ import {
   Pin
 } from 'lucide-react';
 import CalWidget from './CalWidget';
-import { format, isToday, isYesterday } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { subDays } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1985,30 +1985,60 @@ const ManyChatInboxContent = () => {
     }
   };
 
-  const formatMessageTime = (dateStr: string) => format(new Date(dateStr), "HH:mm");
+  const CHAT_TIMEZONE = 'America/Manaus';
+
+  const parseMessageDate = (dateStr: string) => {
+    const parsed = new Date(dateStr);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const getDateKeyInChatTimezone = (date: Date) =>
+    formatInTimeZone(date, CHAT_TIMEZONE, 'yyyy-MM-dd');
+
+  const isTodayInChatTimezone = (date: Date) =>
+    getDateKeyInChatTimezone(date) === getDateKeyInChatTimezone(new Date());
+
+  const isYesterdayInChatTimezone = (date: Date) =>
+    getDateKeyInChatTimezone(date) === getDateKeyInChatTimezone(subDays(new Date(), 1));
+
+  const formatMessageTime = (dateStr: string) => {
+    const date = parseMessageDate(dateStr);
+    if (!date) return '--:--';
+    return formatInTimeZone(date, CHAT_TIMEZONE, 'HH:mm');
+  };
 
   const formatLastMessageTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    if (isToday(date)) return format(date, "HH:mm");
-    if (isYesterday(date)) return "Ontem";
-    return format(date, "dd/MM/yyyy");
+    const date = parseMessageDate(dateStr);
+    if (!date) return '';
+    if (isTodayInChatTimezone(date)) return formatInTimeZone(date, CHAT_TIMEZONE, 'HH:mm');
+    if (isYesterdayInChatTimezone(date)) return 'Ontem';
+    return formatInTimeZone(date, CHAT_TIMEZONE, 'dd/MM/yyyy');
   };
 
   const getDateLabel = (msgs: Message[], index: number) => {
+    const currentDate = parseMessageDate(msgs[index]?.created_at);
+    if (!currentDate) return null;
+
+    const buildLabel = (date: Date) => {
+      if (isTodayInChatTimezone(date)) return 'HOJE';
+      if (isYesterdayInChatTimezone(date)) return 'ONTEM';
+      return formatInTimeZone(date, CHAT_TIMEZONE, 'dd/MM/yyyy');
+    };
+
     if (index === 0) {
-      const date = new Date(msgs[0].created_at);
-      if (isToday(date)) return 'HOJE';
-      if (isYesterday(date)) return 'ONTEM';
-      return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }).toUpperCase();
+      return buildLabel(currentDate);
     }
-    const currentDate = new Date(msgs[index].created_at).toDateString();
-    const prevDate = new Date(msgs[index - 1].created_at).toDateString();
-    if (currentDate !== prevDate) {
-      const date = new Date(msgs[index].created_at);
-      if (isToday(date)) return 'HOJE';
-      if (isYesterday(date)) return 'ONTEM';
-      return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }).toUpperCase();
+
+    const prevDate = parseMessageDate(msgs[index - 1]?.created_at);
+    if (!prevDate) return buildLabel(currentDate);
+
+    const currentKey = getDateKeyInChatTimezone(currentDate);
+    const previousKey = getDateKeyInChatTimezone(prevDate);
+
+    if (currentKey !== previousKey) {
+      return buildLabel(currentDate);
     }
+
     return null;
   };
 
@@ -3229,6 +3259,7 @@ const ManyChatInboxContent = () => {
                   <div ref={messagesTopRef} />
                   {messages
                     .filter(m => !deletedForMeIds.has(m.id) && !(m as any).deleted_for_all)
+                    .sort(compareMessagesByRecency)
                     .map((message, index, filteredMsgs) => {
                     const dateLabel = getDateLabel(filteredMsgs, index);
                     const isOutgoing = message.direcao === 'saida';
