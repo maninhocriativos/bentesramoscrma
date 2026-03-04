@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CheckCircle2, MessageSquare, CreditCard, FileSignature, Database } from 'lucide-react';
+import { BackupChatCard } from './BackupChatCard';
 
 export function SystemStatusTab() {
   const supabaseUrl = 'https://qgenaltkjtlvwfgykpxq.supabase.co';
@@ -112,6 +113,8 @@ export function SystemStatusTab() {
           </div>
         </CardContent>
       </Card>
+
+      <BackupChatCard />
     </div>
   );
 }

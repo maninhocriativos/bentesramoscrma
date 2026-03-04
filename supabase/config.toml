@@ -122,3 +122,6 @@ verify_jwt = false
 
 [functions.sheets-meta-sync]
 verify_jwt = false
+
+[functions.backup-chat-drive]
+verify_jwt = false
