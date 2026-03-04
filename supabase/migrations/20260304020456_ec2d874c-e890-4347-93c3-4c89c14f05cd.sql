@@ -1,0 +1,1 @@
+DELETE FROM manychat_mensagens WHERE direcao = 'saida' AND created_at >= '2026-03-04' AND subscriber_nome LIKE '%Isa%'
