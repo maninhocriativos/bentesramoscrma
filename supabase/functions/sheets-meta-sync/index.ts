@@ -81,13 +81,22 @@ serve(async (req) => {
     const lastRow = state?.last_row || 1;
     const stateId = state?.id;
 
-    // Fetch all data from sheet
-    const range = encodeURIComponent(`${sheetName}!A1:Z`);
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?key=${GOOGLE_SHEETS_API_KEY}`;
+    // Fetch all data from sheet - try with sheet name first, fallback to first sheet
+    let range = encodeURIComponent(`${sheetName}!A1:Z`);
+    let url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?key=${GOOGLE_SHEETS_API_KEY}`;
     
     console.log(`[Sheets Sync] Fetching from row ${lastRow + 1}...`);
     
-    const res = await fetch(url);
+    let res = await fetch(url);
+    
+    // If sheet name fails (404), try without sheet name (uses first sheet)
+    if (!res.ok && res.status === 404) {
+      console.log(`[Sheets Sync] Sheet "${sheetName}" not found, trying first sheet...`);
+      range = encodeURIComponent('A1:Z');
+      url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?key=${GOOGLE_SHEETS_API_KEY}`;
+      res = await fetch(url);
+    }
+    
     if (!res.ok) {
       const errText = await res.text();
       console.error('[Sheets Sync] API error:', errText);
