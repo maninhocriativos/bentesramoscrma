@@ -242,6 +242,58 @@ const ManyChatInboxContent = () => {
 
   const getPhoneDigits = (value?: string | null) => (value || '').replace(/\D/g, '');
 
+  const addBrazilPhoneVariants = (digits: string, out: Set<string>) => {
+    if (!/^\d+$/.test(digits)) return;
+
+    const withCountry = digits.startsWith('55')
+      ? digits
+      : (digits.length >= 10 ? `55${digits}` : digits);
+
+    if (!withCountry || withCountry.length < 10) return;
+
+    const local = withCountry.startsWith('55') ? withCountry.slice(2) : withCountry;
+
+    // As-is
+    out.add(withCountry);
+    out.add(local);
+
+    // BR mobile: support with and without 9th digit to unify legacy history
+    if (local.length === 11 && local[2] === '9') {
+      const withoutNine = `${local.slice(0, 2)}${local.slice(3)}`;
+      out.add(withoutNine);
+      out.add(`55${withoutNine}`);
+    }
+
+    if (local.length === 10 && /^[1-9]{2}[6-9]/.test(local)) {
+      const withNine = `${local.slice(0, 2)}9${local.slice(2)}`;
+      out.add(withNine);
+      out.add(`55${withNine}`);
+    }
+  };
+
+  const buildPossibleSubscriberIds = (subscriberId: string, phone?: string | null) => {
+    const ids = new Set<string>();
+    ids.add(subscriberId);
+
+    const rawId = subscriberId.startsWith('zapi_')
+      ? subscriberId.replace('zapi_', '')
+      : subscriberId;
+
+    if (/^\d+$/.test(rawId)) {
+      addBrazilPhoneVariants(rawId, ids);
+    }
+
+    const phoneDigits = getPhoneDigits(phone);
+    if (phoneDigits) {
+      addBrazilPhoneVariants(phoneDigits, ids);
+    }
+
+    const phoneLikeIds = Array.from(ids).filter((v) => /^\d{8,14}$/.test(v));
+    phoneLikeIds.forEach((v) => ids.add(`zapi_${v}`));
+
+    return Array.from(ids);
+  };
+
   const getSubscriberPhoneSuffix = (sub: Subscriber) => {
     const fromPhone = getPhoneDigits(sub.telefone);
     const rawId = sub.subscriber_id.startsWith('zapi_') ? sub.subscriber_id.replace('zapi_', '') : sub.subscriber_id;
@@ -338,9 +390,7 @@ const ManyChatInboxContent = () => {
       const batch = toCheck.slice(i, i + batchSize);
       const promises = batch.map(async ({ subscriber, unreadKey, since }) => {
         const subscriber_id = subscriber.subscriber_id;
-        const possibleIds = [subscriber_id];
-        const phone = subscriber_id.replace('zapi_', '');
-        if (phone !== subscriber_id) possibleIds.push(phone);
+        const possibleIds = buildPossibleSubscriberIds(subscriber_id, subscriber.telefone);
 
         const leadId = subscriber.lead_id;
 
@@ -433,12 +483,20 @@ const ManyChatInboxContent = () => {
     }
     
     // Fallback: fetch by subscriber_id for those without lead_id
-    const missingIds = subscriberIds.filter(id => !previewMap.has(id));
-    if (missingIds.length > 0) {
+    const missingSubs = subs.filter(s => !previewMap.has(s.subscriber_id));
+    if (missingSubs.length > 0) {
+      const variantToCanonical = new Map<string, string>();
+      missingSubs.forEach((sub) => {
+        const variants = buildPossibleSubscriberIds(sub.subscriber_id, sub.telefone);
+        variants.forEach((variant) => variantToCanonical.set(variant, sub.subscriber_id));
+      });
+
+      const fallbackIds = Array.from(variantToCanonical.keys());
+
       const { data: messages } = await supabase
         .from('manychat_mensagens')
         .select('subscriber_id, conteudo, tipo, direcao, created_at')
-        .in('subscriber_id', missingIds)
+        .in('subscriber_id', fallbackIds)
         .order('created_at', { ascending: false })
         .limit(500);
       
@@ -446,10 +504,11 @@ const ManyChatInboxContent = () => {
         const seen = new Set<string>();
         for (const msg of messages as any[]) {
           const sid = msg.subscriber_id as string;
-          if (seen.has(sid)) continue;
-          seen.add(sid);
+          const canonicalSid = variantToCanonical.get(sid) || sid;
+          if (seen.has(canonicalSid)) continue;
+          seen.add(canonicalSid);
           
-          const sub = subs.find(s => s.subscriber_id === sid);
+          const sub = subs.find(s => s.subscriber_id === canonicalSid);
           if (sub && !previewMap.has(sub.subscriber_id)) {
             const prefix = msg.direcao === 'saida' ? 'Você: ' : '';
             let text = msg.conteudo || '';
@@ -857,17 +916,15 @@ const ManyChatInboxContent = () => {
             // Check if message belongs to currently selected conversation using ref
             const currentSub = selectedSubscriberRef.current;
             const currentSubId = currentSub?.subscriber_id;
-            const currentPhone = currentSub?.telefone?.replace(/\D/g, '') || '';
-            const normalizedPhone = currentPhone.startsWith('55') ? currentPhone : '55' + currentPhone;
-            const currentZapiId = currentPhone ? `zapi_${normalizedPhone}` : null;
-            
             const currentLeadId = currentSub?.lead_id;
+            const currentConversationIds = currentSubId
+              ? new Set(buildPossibleSubscriberIds(currentSubId, currentSub?.telefone))
+              : null;
             
-            const isCurrentChat = currentSub && (
-              newMsg.subscriber_id === currentSubId ||
-              newMsg.subscriber_id === currentZapiId ||
+            const isCurrentChat = !!(currentSub && (
+              (currentConversationIds?.has(newMsg.subscriber_id) ?? false) ||
               (currentLeadId && (newMsg as any).lead_id === currentLeadId)
-            );
+            ));
             
             // Update messages if current chat
             if (isCurrentChat) {
@@ -1297,40 +1354,8 @@ const ManyChatInboxContent = () => {
       const phoneClean = currentSub?.telefone?.replace(/\D/g, '') || '';
       const leadId = currentSub?.lead_id;
       
-      // Build comprehensive list of possible subscriber_ids
-      const possibleIds = new Set<string>([subscriberId]);
-      
-      // If subscriber_id already is zapi_ format, also try the phone directly
-      if (subscriberId.startsWith('zapi_')) {
-        const phoneFromZapi = subscriberId.replace('zapi_', '');
-        possibleIds.add(phoneFromZapi);
-        // Try with/without country code
-        if (phoneFromZapi.startsWith('55') && phoneFromZapi.length > 10) {
-          possibleIds.add(`zapi_${phoneFromZapi.slice(2)}`);
-        } else if (!phoneFromZapi.startsWith('55')) {
-          possibleIds.add(`zapi_55${phoneFromZapi}`);
-        }
-      }
-      
-      // Add zapi_ format with phone variations
-      if (phoneClean && phoneClean.length >= 8) {
-        const normalizedPhone = phoneClean.startsWith('55') ? phoneClean : '55' + phoneClean;
-        possibleIds.add(`zapi_${normalizedPhone}`);
-        possibleIds.add(`zapi_${phoneClean}`);
-        possibleIds.add(phoneClean);
-        possibleIds.add(normalizedPhone);
-      }
-      // Also try phone suffix from subscriber_id (when it contains digits)
-      const subIdDigits = subscriberId.replace(/\D/g, '');
-      if (subIdDigits.length >= 8) {
-        const normalizedSubIdPhone = subIdDigits.startsWith('55') ? subIdDigits : '55' + subIdDigits;
-        possibleIds.add(`zapi_${normalizedSubIdPhone}`);
-        possibleIds.add(`zapi_${subIdDigits}`);
-        possibleIds.add(subIdDigits);
-        possibleIds.add(normalizedSubIdPhone);
-      }
-      
-      const idsArray = Array.from(possibleIds);
+      // Build comprehensive list of possible subscriber_ids (with/without 9th digit)
+      const idsArray = buildPossibleSubscriberIds(subscriberId, phoneClean);
       console.log('[loadMessages] Buscando mensagens para:', { subscriberId, possibleIds: idsArray, leadId, phoneClean });
       
       // Build OR filter for subscriber_id
