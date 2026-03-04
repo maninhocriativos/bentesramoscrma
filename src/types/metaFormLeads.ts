@@ -5,8 +5,11 @@ export interface MetaFormLead {
   meta_lead_id: string;
   form_id: string | null;
   ad_id: string | null;
+  ad_name: string | null;
   campaign_id: string | null;
+  campaign_name: string | null;
   adset_id: string | null;
+  adset_name: string | null;
   created_time: string | null;
   nome: string | null;
   telefone: string | null;
@@ -14,6 +17,8 @@ export interface MetaFormLead {
   form_fields: Record<string, any>;
   raw: Record<string, any>;
   status: MetaFormLeadStatus;
+  source: string | null;
+  dedupe_key: string | null;
   linked_lead_id: string | null;
   last_contact_at: string | null;
   created_at: string;

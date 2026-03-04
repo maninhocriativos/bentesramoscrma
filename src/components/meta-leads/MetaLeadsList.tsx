@@ -78,8 +78,12 @@ export function MetaLeadsList({ leads, selectedId, onSelect }: MetaLeadsListProp
                   )}
                 </div>
                 <div className="flex items-center justify-between text-xs text-muted-foreground mt-1 gap-2">
-                  <Badge variant="secondary" className="text-[10px] bg-purple-100 text-purple-700 border-purple-200 shrink-0 px-1.5 py-0">
-                    📋 META
+                  <Badge variant="secondary" className={`text-[10px] shrink-0 px-1.5 py-0 ${
+                    lead.source === 'google_sheets' 
+                      ? 'bg-emerald-100 text-emerald-700 border-emerald-200' 
+                      : 'bg-purple-100 text-purple-700 border-purple-200'
+                  }`}>
+                    {lead.source === 'google_sheets' ? '📊 Sheets' : '📋 META'}
                   </Badge>
                   <span className="flex items-center gap-1 whitespace-nowrap" title={format(new Date(lead.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}>
                     <Calendar className="h-3 w-3 shrink-0" />

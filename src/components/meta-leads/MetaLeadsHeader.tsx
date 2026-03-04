@@ -2,7 +2,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, RefreshCw, Filter, Download, CloudDownload, Loader2, AlertTriangle } from 'lucide-react';
+import { Search, RefreshCw, Filter, Download, Sheet, Loader2, AlertTriangle } from 'lucide-react';
 import { MetaFormLeadStatus, MetaFormLead } from '@/types/metaFormLeads';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -107,8 +107,8 @@ export function MetaLeadsHeader({
       {/* Title row */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-xl font-bold whitespace-nowrap">Leads da API (Meta)</h1>
-          <Badge variant="secondary" className="bg-purple-100 text-purple-700">
+          <h1 className="text-xl font-bold whitespace-nowrap">Leads Sheets / Meta</h1>
+          <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
             {totalLeads} leads
           </Badge>
         </div>
@@ -118,9 +118,9 @@ export function MetaLeadsHeader({
             Exportar CSV
           </Button>
           {onSync && (
-            <Button variant="default" size="sm" onClick={onSync} disabled={syncing}>
-              {syncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CloudDownload className="h-4 w-4 mr-2" />}
-              {syncing ? 'Sincronizando...' : 'Sincronizar Meta'}
+            <Button variant="default" size="sm" onClick={onSync} disabled={syncing} className="bg-emerald-600 hover:bg-emerald-700">
+              {syncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sheet className="h-4 w-4 mr-2" />}
+              {syncing ? 'Sincronizando...' : 'Sincronizar Sheets'}
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={onRefresh}>
