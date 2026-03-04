@@ -76,7 +76,7 @@ serve(async (req) => {
 
     if (stateErr) throw stateErr;
 
-    const spreadsheetId = state?.spreadsheet_id || '1x3EQ2WAWIT1rhAjZhLQIEQYOIIQ9cT6dnx7Vdj9TC9A';
+    const spreadsheetId = state?.spreadsheet_id || '1x3EQ2WAWlT1rhAjZhLQlEQYOlIQ9cT6dnx7Ydj9TC9A';
     const sheetName = state?.sheet_name || 'Página1';
     const lastRow = state?.last_row || 1;
     const stateId = state?.id;
@@ -266,16 +266,15 @@ serve(async (req) => {
           }, { onConflict: 'subscriber_id', ignoreDuplicates: true });
         }
 
-        // Trigger Isa first contact for new leads with phone
+        // Trigger Isa first contact (fire-and-forget, don't await to avoid timeout)
         if (leadId && telefone) {
-          try {
-            await supabase.functions.invoke('isa-first-contact-csv', {
-              body: { lead_id: leadId, nome, telefone, origem: 'META' },
-            });
+          supabase.functions.invoke('isa-first-contact-csv', {
+            body: { lead_id: leadId, nome, telefone, origem: 'META' },
+          }).then(() => {
             console.log(`[Sheets Sync] Isa triggered for lead ${leadId}`);
-          } catch (isaErr) {
+          }).catch((isaErr: unknown) => {
             console.error('[Sheets Sync] Isa trigger error:', isaErr);
-          }
+          });
         }
 
       } catch (rowErr) {
