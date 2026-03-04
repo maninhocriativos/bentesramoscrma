@@ -162,7 +162,34 @@ serve(async (req) => {
         const createdTime = parseSheetDate(createdTimeRaw);
         const dedupeKey = generateDedupeKey(email, telefone, createdTime, nome);
 
-        // Upsert into meta_form_leads
+        // Check if lead already exists in leads_juridicos (by phone or email)
+        let existingLeadId: string | null = null;
+
+        if (telefone) {
+          const { data: phoneMatch } = await supabase
+            .from('leads_juridicos')
+            .select('id')
+            .ilike('telefone', `%${telefone.slice(-9)}%`)
+            .maybeSingle();
+          if (phoneMatch) existingLeadId = phoneMatch.id;
+        }
+
+        if (!existingLeadId && email) {
+          const { data: emailMatch } = await supabase
+            .from('leads_juridicos')
+            .select('id')
+            .eq('email', email.toLowerCase())
+            .maybeSingle();
+          if (emailMatch) existingLeadId = emailMatch.id;
+        }
+
+        // Skip if lead already exists - no need to create meta_form_leads entry
+        if (existingLeadId) {
+          duplicates++;
+          continue;
+        }
+
+        // Upsert into meta_form_leads (only for truly new leads)
         const { data: inserted, error: insertErr } = await supabase
           .from('meta_form_leads')
           .upsert({
@@ -185,7 +212,6 @@ serve(async (req) => {
           .maybeSingle();
 
         if (insertErr) {
-          // Likely duplicate
           if (insertErr.code === '23505') {
             duplicates++;
           } else {
@@ -202,48 +228,23 @@ serve(async (req) => {
 
         newLeads++;
 
-        // Create/link lead in leads_juridicos
-        let leadId: string | null = null;
-
-        // Try phone match
-        if (telefone) {
-          const { data: phoneMatch } = await supabase
-            .from('leads_juridicos')
-            .select('id')
-            .ilike('telefone', `%${telefone.slice(-9)}%`)
-            .maybeSingle();
-          if (phoneMatch) leadId = phoneMatch.id;
-        }
-
-        // Try email match
-        if (!leadId && email) {
-          const { data: emailMatch } = await supabase
-            .from('leads_juridicos')
-            .select('id')
-            .eq('email', email.toLowerCase())
-            .maybeSingle();
-          if (emailMatch) leadId = emailMatch.id;
-        }
-
-        // Create new lead
-        if (!leadId) {
-          const { data: newLead } = await supabase
-            .from('leads_juridicos')
-            .insert({
-              nome: nome || 'Lead Google Sheets',
-              telefone,
-              email: email?.toLowerCase() || null,
-              status: 'Lead Frio',
-              lead_state: 'NEW',
-              origem: 'Facebook',
-              tipo_origem: 'trafego',
-              fonte_trafego: 'facebook_lead_ads',
-              canal_origem: 'facebook',
-            })
-            .select('id')
-            .single();
-          leadId = newLead?.id || null;
-        }
+        // Create new lead in leads_juridicos
+        const { data: newLead } = await supabase
+          .from('leads_juridicos')
+          .insert({
+            nome: nome || 'Lead Google Sheets',
+            telefone,
+            email: email?.toLowerCase() || null,
+            status: 'Lead Frio',
+            lead_state: 'NEW',
+            origem: 'Facebook',
+            tipo_origem: 'trafego',
+            fonte_trafego: 'facebook_lead_ads',
+            canal_origem: 'facebook',
+          })
+          .select('id')
+          .single();
+        const leadId = newLead?.id || null;
 
         // Link meta_form_leads to leads_juridicos
         if (leadId && inserted?.id) {
@@ -266,7 +267,7 @@ serve(async (req) => {
           }, { onConflict: 'subscriber_id', ignoreDuplicates: true });
         }
 
-        // Trigger Isa first contact (fire-and-forget, don't await to avoid timeout)
+        // Trigger Isa first contact (fire-and-forget)
         if (leadId && telefone) {
           supabase.functions.invoke('isa-first-contact-csv', {
             body: { lead_id: leadId, nome, telefone, origem: 'META' },
