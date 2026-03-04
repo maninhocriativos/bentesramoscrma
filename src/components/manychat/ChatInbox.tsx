@@ -537,7 +537,6 @@ const ManyChatInboxContent = () => {
     }
   }, [subscribers, computeInitialUnreads, loadMessagePreviews]);
   
-  const messagesTopRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -597,7 +596,7 @@ const ManyChatInboxContent = () => {
   };
 
   const scrollToBottom = (instant = true) => {
-    messagesTopRef.current?.scrollIntoView({ behavior: instant ? 'instant' : 'smooth', block: 'start' });
+    messagesEndRef.current?.scrollIntoView({ behavior: instant ? 'instant' : 'smooth' });
   };
 
   // Extrator robusto de message_id do provedor (Z-API)
@@ -651,11 +650,11 @@ const ManyChatInboxContent = () => {
     return Math.abs(ta - tb) <= 8000;
   };
 
-  const compareMessagesByRecency = (a: Message, b: Message) => {
+  const compareMessagesChronological = (a: Message, b: Message) => {
     const ta = new Date(a.created_at).getTime();
     const tb = new Date(b.created_at).getTime();
-    if (tb !== ta) return tb - ta;
-    return String(b.id).localeCompare(String(a.id));
+    if (ta !== tb) return ta - tb; // ascending: oldest first
+    return String(a.id).localeCompare(String(b.id));
   };
 
   const mergeMessageDedup = (current: Message[], incoming: Message) => {
@@ -664,7 +663,7 @@ const ManyChatInboxContent = () => {
       msg.id !== incoming.id &&
       getMessageDedupeKey(msg) !== incomingKey &&
       !isLikelyDuplicateOutbound(msg, incoming)
-    )), incoming].sort(compareMessagesByRecency);
+    )), incoming].sort(compareMessagesChronological);
   };
 
   useEffect(() => {
@@ -1139,7 +1138,7 @@ const ManyChatInboxContent = () => {
       const isCacheFresh = cacheAge < 30000; // 30 seconds
       
       if (cachedMessages && cachedMessages.length > 0) {
-        const sortedCache = [...cachedMessages].sort(compareMessagesByRecency);
+        const sortedCache = [...cachedMessages].sort(compareMessagesChronological);
         setMessages(sortedCache);
         // Rebuild dedup set from cache
         dedupKeysRef.current = new Set(sortedCache.map(m => getMessageDedupeKey(m)));
@@ -1398,7 +1397,7 @@ const ManyChatInboxContent = () => {
         }
       });
       
-      const uniqueMessages = Array.from(messagesMap.values()).sort(compareMessagesByRecency);
+      const uniqueMessages = Array.from(messagesMap.values()).sort(compareMessagesChronological);
       
       console.log('[loadMessages] Mensagens carregadas:', uniqueMessages.length, 'entrada:', uniqueMessages.filter(m => m.direcao === 'entrada').length, 'saída:', uniqueMessages.filter(m => m.direcao === 'saida').length);
       
@@ -1446,7 +1445,7 @@ const ManyChatInboxContent = () => {
           return uniqueMessages;
         }
         
-        const merged = [...uniqueMessages, ...realtimeOnly, ...tempMessages].sort(compareMessagesByRecency);
+        const merged = [...uniqueMessages, ...realtimeOnly, ...tempMessages].sort(compareMessagesChronological);
         messagesCacheRef.current.set(subscriberId, merged);
         return merged;
       });
@@ -1532,7 +1531,7 @@ const ManyChatInboxContent = () => {
     
     // Atualizar estado E cache ao mesmo tempo
     setMessages(prev => {
-      const updated = [optimisticMessage, ...prev];
+      const updated = [...prev, optimisticMessage];
       // Atualizar cache para que a mensagem persista ao trocar de conversa
       messagesCacheRef.current.set(currentSubId, updated);
       return updated;
@@ -1740,7 +1739,7 @@ const ManyChatInboxContent = () => {
     };
     
     setMessages(prev => {
-      const updated = [optimisticMessage, ...prev];
+      const updated = [...prev, optimisticMessage];
       messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
       return updated;
     });
@@ -1895,7 +1894,7 @@ const ManyChatInboxContent = () => {
     };
     
     setMessages(prev => {
-      const updated = [optimisticMessage, ...prev];
+      const updated = [...prev, optimisticMessage];
       messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
       return updated;
     });
@@ -3256,10 +3255,9 @@ const ManyChatInboxContent = () => {
                 </div>
               ) : (
                 <div className="space-y-1 max-w-[750px] mx-auto">
-                  <div ref={messagesTopRef} />
                   {messages
                     .filter(m => !deletedForMeIds.has(m.id) && !(m as any).deleted_for_all)
-                    .sort(compareMessagesByRecency)
+                    .sort(compareMessagesChronological)
                     .map((message, index, filteredMsgs) => {
                     const dateLabel = getDateLabel(filteredMsgs, index);
                     const isOutgoing = message.direcao === 'saida';
