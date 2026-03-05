@@ -852,7 +852,55 @@ serve(async (req: Request) => {
       });
     }
 
-    // 💾 Salvar resposta no banco
+    // 🏥 Encaminhamento para Dra. Kariny Bianca (Aposentadoria/Previdenciário)
+    if (needsAposentadoriaEncaminhamento) {
+      console.log('[ISA-REPLY] 🏥 Caso de aposentadoria detectado — encaminhando para Dra. Kariny Bianca');
+      
+      const leadNome = subscriber?.nome || nome || 'Cliente';
+      const leadTelefone = telefone || subData?.telefone || 'N/A';
+      
+      // Montar resumo para a Dra. Kariny
+      const mensagemKariny = `🔔 *Indicação do escritório Bentes & Ramos*\n\n` +
+        `Olá Dra. Kariny! Aqui é a Isa, assistente do escritório Bentes & Ramos Advocacia.\n\n` +
+        `Recebemos um cliente com demanda previdenciária e gostaríamos de encaminhá-lo para a senhora:\n\n` +
+        `👤 *Nome:* ${leadNome}\n` +
+        `📱 *Telefone:* ${leadTelefone}\n` +
+        (leadId ? `📋 *Resumo da conversa:*\n${fullMessage.substring(0, 400)}\n` : '') +
+        `\nFicamos à disposição para qualquer informação adicional! 🤝`;
+
+      // Enviar mensagem para Dra. Kariny via Z-API
+      const karinyPhone = '5592991126544';
+      await sendViaZapi(karinyPhone, mensagemKariny, null, null);
+      console.log('[ISA-REPLY] ✅ Mensagem enviada para Dra. Kariny Bianca');
+
+      // Registrar evento
+      await supabase.from('system_events').insert({
+        tipo: 'encaminhamento',
+        fonte: 'isa-reply-zapi',
+        acao: 'encaminhamento_aposentadoria',
+        lead_id: leadId,
+        dados: {
+          subscriber_id: subscriberId,
+          nome_cliente: leadNome,
+          telefone_cliente: leadTelefone,
+          encaminhado_para: 'Dra. Kariny Bianca - (92) 99112-6544',
+          mensagem_cliente: fullMessage.substring(0, 300),
+        },
+        processado: true,
+      });
+
+      // Registrar interação se lead existir
+      if (leadId) {
+        await supabase.from('interacoes').insert({
+          cliente_id: leadId,
+          tipo: 'WhatsApp',
+          resumo: 'Lead encaminhado para Dra. Kariny Bianca (Previdenciário)',
+          detalhes: `Cliente com demanda previdenciária encaminhado para Dra. Kariny Bianca (92) 99112-6544.\nMensagem do cliente: ${fullMessage.substring(0, 300)}`,
+          direcao: 'Interna',
+        });
+      }
+    }
+
     await supabase.from('manychat_mensagens').insert({
       subscriber_id: subscriberId,
       subscriber_nome: subscriber?.nome || nome,
