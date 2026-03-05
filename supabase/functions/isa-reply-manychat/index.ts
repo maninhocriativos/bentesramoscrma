@@ -717,7 +717,12 @@ serve(async (req: Request) => {
 
     // 🔄 Detectar pedido de transferência para humano
     const needsHandoff = respostaIsa.includes('[TRANSFERIR_HUMANO]');
-    const respostaLimpa = respostaIsa.replace('[TRANSFERIR_HUMANO]', '').trim();
+    // 🏥 Detectar encaminhamento para aposentadoria (Dra. Kariny)
+    const needsAposentadoriaEncaminhamento = respostaIsa.includes('[ENCAMINHAR_APOSENTADORIA]');
+    const respostaLimpa = respostaIsa
+      .replace('[TRANSFERIR_HUMANO]', '')
+      .replace('[ENCAMINHAR_APOSENTADORIA]', '')
+      .trim();
 
     // Truncar resposta para WhatsApp (máx 500 chars)
     const respostaFinal = respostaLimpa.length > 500 
