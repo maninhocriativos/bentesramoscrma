@@ -1382,7 +1382,7 @@ const ManyChatInboxContent = () => {
       }
 
       if (!loadAll) {
-        query = query.limit(500);
+        query = query.limit(1000);
       }
 
       const { data, error } = await query;

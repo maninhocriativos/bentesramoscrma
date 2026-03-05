@@ -70,7 +70,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
         .order('created_at', { ascending: true });
 
       if (!loadAll) {
-        query = query.limit(200);
+        query = query.limit(1000);
       }
 
       const { data, error } = await query;
