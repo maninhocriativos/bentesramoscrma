@@ -12,6 +12,7 @@ import { TeamStatusWidget } from '@/components/dashboard/TeamStatusWidget';
 import { useLeads } from '@/hooks/useLeads';
 import { useProcessos } from '@/hooks/useProcessos';
 import { useAlertas } from '@/hooks/useAlertas';
+import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, isAfter } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -24,6 +25,23 @@ export default function DashboardPage() {
 
   const handleRefreshLeads = useCallback(() => {
     fetchLeads();
+  }, [fetchLeads]);
+
+  // Auto-refresh leads when contract_reminders change (contract signed/updated)
+  useEffect(() => {
+    const channel = supabase
+      .channel('dashboard-contract-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'contract_reminders' },
+        (payload) => {
+          console.log('📋 Contract reminder change detected, refreshing leads...', payload.eventType);
+          fetchLeads();
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [fetchLeads]);
   
   const [filters, setFilters] = useState<DashboardFilters>({
