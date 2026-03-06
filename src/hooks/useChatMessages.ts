@@ -27,7 +27,13 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const lastMessageIdRef = useRef<string | null>(null);
+  const messagesRef = useRef<ChatMessage[]>([]);
   const { toast } = useToast();
+
+  // Keep ref in sync to avoid stale closures in polling
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   // Load messages for a subscriber (considering multiple possible IDs)
   const loadMessages = useCallback(async (loadAll = false) => {
