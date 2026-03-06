@@ -27,7 +27,13 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const lastMessageIdRef = useRef<string | null>(null);
+  const messagesRef = useRef<ChatMessage[]>([]);
   const { toast } = useToast();
+
+  // Keep ref in sync to avoid stale closures in polling
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   // Load messages for a subscriber (considering multiple possible IDs)
   const loadMessages = useCallback(async (loadAll = false) => {
@@ -152,7 +158,8 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
       if (!pollActive) return;
       try {
         const idsFilter = uniqueIds.map(id => `subscriber_id.eq.${id}`).join(',');
-        const lastMsg = messages[messages.length - 1];
+        const currentMessages = messagesRef.current;
+        const lastMsg = currentMessages[currentMessages.length - 1];
         const since = lastMsg?.created_at || new Date(Date.now() - 60000).toISOString();
         
         const { data } = await supabase
