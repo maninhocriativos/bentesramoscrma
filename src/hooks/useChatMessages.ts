@@ -158,7 +158,8 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
       if (!pollActive) return;
       try {
         const idsFilter = uniqueIds.map(id => `subscriber_id.eq.${id}`).join(',');
-        const lastMsg = messages[messages.length - 1];
+        const currentMessages = messagesRef.current;
+        const lastMsg = currentMessages[currentMessages.length - 1];
         const since = lastMsg?.created_at || new Date(Date.now() - 60000).toISOString();
         
         const { data } = await supabase
