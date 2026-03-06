@@ -264,11 +264,74 @@ serve(async (req) => {
             telefone_normalizado: telefone,
             lead_id: leadId,
             canal: 'whatsapp',
+            linha_whatsapp: 'trafego_isa',
           }, { onConflict: 'subscriber_id', ignoreDuplicates: true });
-        }
 
-        // NOTE: Isa first contact trigger REMOVED to prevent spam.
-        // Leads from Sheets should be contacted manually.
+          // Trigger Isa first contact for Sheets leads
+          try {
+            console.log(`[Sheets Sync] 🤖 Triggering Isa first contact for lead ${leadId}`);
+            const { data: isaResult, error: isaError } = await supabase.functions.invoke('isa-auto-process', {
+              body: {
+                lead_id: leadId,
+                mensagem: `Novo lead de tráfego (Google Sheets): ${nome || 'Sem nome'}. Telefone: ${telefone}`,
+                lead_state: 'NEW',
+                canal: 'zapi',
+                subscriber_id: subscriberId,
+                subscriber_nome: nome || 'Lead',
+                tipo_mensagem: 'text',
+                is_first_contact: true,
+              }
+            });
+
+            if (isaError) {
+              console.error('[Sheets Sync] Isa first contact error:', isaError);
+            } else if (isaResult?.response) {
+              // Send Isa response via Z-API (traffic instance)
+              const { data: trafficInstance } = await supabase
+                .from('zapi_instances')
+                .select('*')
+                .eq('is_active', true)
+                .ilike('phone_number', '%85888190%')
+                .maybeSingle();
+
+              if (trafficInstance) {
+                const zapiUrl = `https://api.z-api.io/instances/${trafficInstance.instance_id}/token/${trafficInstance.token}/send-text`;
+                const sendRes = await fetch(zapiUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Client-Token': trafficInstance.client_token || '' },
+                  body: JSON.stringify({ phone: telefone, message: isaResult.response }),
+                });
+                const sendData = await sendRes.json();
+
+                if (sendRes.ok) {
+                  // Save Isa message to chat history
+                  await supabase.from('manychat_mensagens').insert({
+                    subscriber_id: subscriberId,
+                    subscriber_nome: 'Isa',
+                    lead_id: leadId,
+                    conteudo: isaResult.response,
+                    direcao: 'saida',
+                    tipo: 'text',
+                    canal: 'whatsapp',
+                    metadata: {
+                      source: 'zapi',
+                      context: 'isa_first_contact_sheets',
+                      message_id: sendData?.messageId,
+                      sent_via: 'isa_auto',
+                    }
+                  });
+                  console.log(`[Sheets Sync] ✅ Isa first contact sent to ${telefone}`);
+                } else {
+                  console.error('[Sheets Sync] Z-API send failed:', sendData);
+                }
+              } else {
+                console.log('[Sheets Sync] No traffic Z-API instance found');
+              }
+            }
+          } catch (isaErr) {
+            console.error('[Sheets Sync] Error triggering Isa:', isaErr);
+          }
+        }
 
       } catch (rowErr) {
         console.error('[Sheets Sync] Row error:', rowErr);

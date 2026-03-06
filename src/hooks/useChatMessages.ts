@@ -99,39 +99,87 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
     loadMessages();
   }, [subscriberId, loadMessages]);
 
-  // Realtime subscription for messages
+  // Realtime subscription for messages + fallback polling
   useEffect(() => {
     if (!subscriberId) return;
 
-    
-    
-    const channel = supabase
-      .channel(`chat-messages-${subscriberId}-${Date.now()}`)
-      .on('postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'manychat_mensagens',
-          filter: `subscriber_id=eq.${subscriberId}`
-        },
-        (payload) => {
-          const newMsg = payload.new as ChatMessage;
-          
-          // Prevent duplicates
-          if (lastMessageIdRef.current === newMsg.id) return;
-          lastMessageIdRef.current = newMsg.id;
-          
-          setMessages(prev => {
-            if (prev.some(m => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
-          });
-          
-          onNewMessage?.(newMsg);
-        }
-      )
-      .subscribe();
+    // Build all possible subscriber IDs for broader realtime coverage
+    const possibleIds = [subscriberId];
+    const phoneMatch = subscriberId.match(/\d{10,13}/);
+    if (phoneMatch) {
+      const phone = phoneMatch[0];
+      const normalized = phone.startsWith('55') ? phone : '55' + phone;
+      possibleIds.push(`zapi_${normalized}`);
+      possibleIds.push(`zapi_${phone}`);
+    }
+    if (subscriberId.startsWith('zapi_')) {
+      const phone = subscriberId.replace('zapi_', '');
+      possibleIds.push(phone);
+      if (!phone.startsWith('55') && phone.length >= 10) {
+        possibleIds.push(`zapi_55${phone}`);
+      }
+    }
+    const uniqueIds = [...new Set(possibleIds)];
 
-    return () => { supabase.removeChannel(channel); };
+    // Subscribe to ALL possible subscriber IDs
+    const channels = uniqueIds.map((id, idx) => 
+      supabase
+        .channel(`chat-messages-${id}-${Date.now()}-${idx}`)
+        .on('postgres_changes', 
+          { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'manychat_mensagens',
+            filter: `subscriber_id=eq.${id}`
+          },
+          (payload) => {
+            const newMsg = payload.new as ChatMessage;
+            if (lastMessageIdRef.current === newMsg.id) return;
+            lastMessageIdRef.current = newMsg.id;
+            setMessages(prev => {
+              if (prev.some(m => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
+            onNewMessage?.(newMsg);
+          }
+        )
+        .subscribe()
+    );
+
+    // Fallback polling every 15s to catch missed messages
+    let pollActive = true;
+    const pollInterval = setInterval(async () => {
+      if (!pollActive) return;
+      try {
+        const idsFilter = uniqueIds.map(id => `subscriber_id.eq.${id}`).join(',');
+        const lastMsg = messages[messages.length - 1];
+        const since = lastMsg?.created_at || new Date(Date.now() - 60000).toISOString();
+        
+        const { data } = await supabase
+          .from('manychat_mensagens' as any)
+          .select('*')
+          .or(idsFilter)
+          .gt('created_at', since)
+          .order('created_at', { ascending: true });
+        
+        if (data && data.length > 0) {
+          setMessages(prev => {
+            const existingIds = new Set(prev.map(m => m.id));
+            const newMsgs = (data as ChatMessage[]).filter(m => !existingIds.has(m.id));
+            if (newMsgs.length === 0) return prev;
+            return [...prev, ...newMsgs];
+          });
+        }
+      } catch (e) {
+        // Silent fail for polling
+      }
+    }, 15000);
+
+    return () => { 
+      pollActive = false;
+      clearInterval(pollInterval);
+      channels.forEach(ch => supabase.removeChannel(ch)); 
+    };
   }, [subscriberId, onNewMessage]);
 
   // Send message via Z-API
