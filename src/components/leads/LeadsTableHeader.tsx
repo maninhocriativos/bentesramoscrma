@@ -66,7 +66,7 @@ export function LeadsTableHeader({
   etapas,
   countBentesRamos,
   countTrafego,
-  viewMode = 'list',
+  viewMode = 'cards',
   onViewModeChange,
 }: LeadsTableHeaderProps) {
   const { toast } = useToast();
