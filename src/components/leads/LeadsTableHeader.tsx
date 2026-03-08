@@ -41,8 +41,8 @@ interface LeadsTableHeaderProps {
   etapas: LeadStatus[];
   countBentesRamos: number;
   countTrafego: number;
-  viewMode?: 'list' | 'board';
-  onViewModeChange?: (mode: 'list' | 'board') => void;
+  viewMode?: 'cards' | 'list' | 'board';
+  onViewModeChange?: (mode: 'cards' | 'list' | 'board') => void;
 }
 
 const formatCurrencyCompact = (value: number): string => {
@@ -66,7 +66,7 @@ export function LeadsTableHeader({
   etapas,
   countBentesRamos,
   countTrafego,
-  viewMode = 'list',
+  viewMode = 'cards',
   onViewModeChange,
 }: LeadsTableHeaderProps) {
   const { toast } = useToast();
@@ -140,8 +140,20 @@ export function LeadsTableHeader({
               </div>
             </div>
 
-            {/* View Mode Toggle */}
+            {/* View Mode Toggle - 3 options */}
             <div className="hidden sm:flex items-center bg-muted/50 rounded-lg p-0.5 border border-border/40">
+              <button
+                onClick={() => onViewModeChange?.('cards')}
+                className={cn(
+                  "flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[11px] font-medium transition-all duration-200",
+                  viewMode === 'cards'
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                Cards
+              </button>
               <button
                 onClick={() => onViewModeChange?.('list')}
                 className={cn(
