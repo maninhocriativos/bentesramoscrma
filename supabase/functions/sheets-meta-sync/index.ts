@@ -241,6 +241,9 @@ serve(async (req) => {
             tipo_origem: 'trafego',
             fonte_trafego: 'facebook_lead_ads',
             canal_origem: 'facebook',
+            linha_whatsapp: 'trafego_isa',
+            empresa_tag: null,
+            isa_ativa: true,
           })
           .select('id')
           .single();
