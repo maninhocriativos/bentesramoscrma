@@ -33,24 +33,24 @@ interface LeadsTableRowProps {
 }
 
 const STATUS_COLORS: Record<string, { text: string; bg: string; dot: string }> = {
-  'Lead Frio': { text: 'text-stage-frio', bg: 'bg-stage-frio-bg', dot: 'bg-stage-frio' },
-  'Bentes Ramos': { text: 'text-stage-bentes', bg: 'bg-stage-bentes-bg', dot: 'bg-stage-bentes' },
-  'Em Atendimento': { text: 'text-stage-atendimento', bg: 'bg-stage-atendimento-bg', dot: 'bg-stage-atendimento' },
-  'Em Negociação': { text: 'text-stage-negociacao', bg: 'bg-stage-negociacao-bg', dot: 'bg-stage-negociacao' },
-  'Aguardando Contrato': { text: 'text-stage-aguardando', bg: 'bg-stage-aguardando-bg', dot: 'bg-stage-aguardando' },
-  'Contrato Assinado': { text: 'text-stage-assinado', bg: 'bg-stage-assinado-bg', dot: 'bg-stage-assinado' },
-  'Ganho': { text: 'text-stage-ganho', bg: 'bg-stage-ganho-bg', dot: 'bg-stage-ganho' },
-  'Perdido': { text: 'text-stage-perdido', bg: 'bg-stage-perdido-bg', dot: 'bg-stage-perdido' },
+  'Lead Frio': { text: 'text-stage-frio', bg: 'bg-stage-frio/8', dot: 'bg-stage-frio' },
+  'Bentes Ramos': { text: 'text-stage-bentes', bg: 'bg-stage-bentes/8', dot: 'bg-stage-bentes' },
+  'Em Atendimento': { text: 'text-stage-atendimento', bg: 'bg-stage-atendimento/8', dot: 'bg-stage-atendimento' },
+  'Em Negociação': { text: 'text-stage-negociacao', bg: 'bg-stage-negociacao/8', dot: 'bg-stage-negociacao' },
+  'Aguardando Contrato': { text: 'text-stage-aguardando', bg: 'bg-stage-aguardando/8', dot: 'bg-stage-aguardando' },
+  'Contrato Assinado': { text: 'text-stage-assinado', bg: 'bg-stage-assinado/8', dot: 'bg-stage-assinado' },
+  'Ganho': { text: 'text-stage-ganho', bg: 'bg-stage-ganho/8', dot: 'bg-stage-ganho' },
+  'Perdido': { text: 'text-stage-perdido', bg: 'bg-stage-perdido/8', dot: 'bg-stage-perdido' },
 };
 
 const ORIGEM_COLORS: Record<string, { text: string; bg: string }> = {
-  'Instagram': { text: 'text-origem-ads', bg: 'bg-origem-ads-bg' },
-  'Google': { text: 'text-origem-site', bg: 'bg-origem-site-bg' },
-  'Site': { text: 'text-origem-site', bg: 'bg-origem-site-bg' },
-  'Indicação': { text: 'text-origem-organico', bg: 'bg-origem-organico-bg' },
-  'WhatsApp Z-API': { text: 'text-stage-ganho', bg: 'bg-stage-ganho-bg' },
-  'Tráfego Pago': { text: 'text-origem-ads', bg: 'bg-origem-ads-bg' },
-  'Escritório': { text: 'text-linha-escritorio', bg: 'bg-linha-escritorio-bg' },
+  'Instagram': { text: 'text-origem-ads', bg: 'bg-origem-ads/8' },
+  'Google': { text: 'text-origem-site', bg: 'bg-origem-site/8' },
+  'Site': { text: 'text-origem-site', bg: 'bg-origem-site/8' },
+  'Indicação': { text: 'text-origem-organico', bg: 'bg-origem-organico/8' },
+  'WhatsApp Z-API': { text: 'text-stage-ganho', bg: 'bg-stage-ganho/8' },
+  'Tráfego Pago': { text: 'text-origem-ads', bg: 'bg-origem-ads/8' },
+  'Escritório': { text: 'text-linha-escritorio', bg: 'bg-linha-escritorio/8' },
 };
 
 const formatCurrency = (value: number | null): string => {
@@ -68,15 +68,14 @@ function getLeadLineInfo(lead: Lead): { isBentesRamos: boolean; isTraffic: boole
   return { isBentesRamos, isTraffic, isIsa };
 }
 
-// Avatar color based on lead name
 function getAvatarColor(name: string): string {
   const colors = [
-    'bg-stage-frio/15 text-stage-frio',
-    'bg-stage-atendimento/15 text-stage-atendimento',
-    'bg-stage-negociacao/15 text-stage-negociacao',
-    'bg-stage-aguardando/15 text-stage-aguardando',
-    'bg-stage-assinado/15 text-stage-assinado',
-    'bg-stage-ganho/15 text-stage-ganho',
+    'bg-stage-frio/12 text-stage-frio',
+    'bg-stage-atendimento/12 text-stage-atendimento',
+    'bg-stage-negociacao/12 text-stage-negociacao',
+    'bg-stage-aguardando/12 text-stage-aguardando',
+    'bg-stage-assinado/12 text-stage-assinado',
+    'bg-stage-ganho/12 text-stage-ganho',
   ];
   const index = (name || '').charCodeAt(0) % colors.length;
   return colors[index];
@@ -107,7 +106,7 @@ export function LeadsTableRow({ lead, onClick, onMoveStage, allStages, index = 0
     .toUpperCase();
 
   const statusColors = STATUS_COLORS[lead.status || ''] || { text: 'text-muted-foreground', bg: 'bg-muted', dot: 'bg-muted-foreground' };
-  const origemColors = ORIGEM_COLORS[lead.origem || ''] || { text: 'text-muted-foreground', bg: 'bg-muted' };
+  const origemColors = ORIGEM_COLORS[lead.origem || ''] || { text: 'text-muted-foreground', bg: 'bg-muted/50' };
   const lastContact = lead.last_contact_at || lead.updated_at || lead.created_at;
   const { isBentesRamos, isTraffic, isIsa } = getLeadLineInfo(lead);
   const avatarColor = getAvatarColor(lead.nome || '');
@@ -115,25 +114,24 @@ export function LeadsTableRow({ lead, onClick, onMoveStage, allStages, index = 0
   return (
     <TooltipProvider delayDuration={300}>
       <tr 
-        className="group hover:bg-muted/20 transition-all duration-150 cursor-pointer"
+        className="group hover:bg-muted/15 transition-colors duration-100 cursor-pointer"
         onClick={onClick}
-        style={{ animationDelay: `${index * 20}ms` }}
       >
         {/* Lead - Sticky */}
-        <td className="sticky left-0 z-10 bg-card group-hover:bg-muted/20 px-4 py-3.5 transition-colors">
-          <div className="flex items-center gap-3">
-            <Avatar className="h-9 w-9 shrink-0">
-              <AvatarFallback className={cn("text-xs font-semibold", avatarColor)}>
+        <td className="sticky left-0 z-10 bg-card group-hover:bg-muted/15 px-4 py-3 transition-colors">
+          <div className="flex items-center gap-2.5">
+            <Avatar className="h-8 w-8 shrink-0">
+              <AvatarFallback className={cn("text-[10px] font-semibold", avatarColor)}>
                 {initials}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <p className="font-medium text-foreground truncate max-w-[150px] leading-tight">
+              <p className="font-medium text-foreground truncate max-w-[160px] text-xs leading-tight">
                 {lead.nome || 'Sem nome'}
               </p>
-              {lead.email && (
-                <p className="text-[10px] text-muted-foreground truncate max-w-[150px] mt-0.5">
-                  {lead.email}
+              {lead.tipo_acao && (
+                <p className="text-[10px] text-muted-foreground truncate max-w-[160px] mt-0.5">
+                  {lead.tipo_acao}
                 </p>
               )}
             </div>
@@ -141,119 +139,113 @@ export function LeadsTableRow({ lead, onClick, onMoveStage, allStages, index = 0
         </td>
 
         {/* Linha WhatsApp */}
-        <td className="px-3 py-3.5">
+        <td className="px-3 py-3">
           <div className="flex items-center gap-1">
             {isTraffic && (
               <Badge 
                 variant="outline" 
-                className="text-[10px] font-medium gap-0.5 rounded-lg h-[22px] border-linha-trafego/20 bg-linha-trafego-bg text-linha-trafego"
+                className="text-[9px] font-medium gap-0.5 rounded-md h-5 border-linha-trafego/15 bg-linha-trafego/5 text-linha-trafego px-1.5"
               >
-                <Megaphone className="h-3 w-3" />
+                <Megaphone className="h-2.5 w-2.5" />
                 ADS
               </Badge>
             )}
             {isIsa && (
               <Badge 
                 variant="outline" 
-                className="text-[10px] font-medium gap-0.5 rounded-lg h-[22px] border-stage-atendimento/20 bg-stage-atendimento-bg text-stage-atendimento"
+                className="text-[9px] font-medium gap-0.5 rounded-md h-5 border-stage-atendimento/15 bg-stage-atendimento/5 text-stage-atendimento px-1.5"
               >
-                <Bot className="h-3 w-3" />
+                <Bot className="h-2.5 w-2.5" />
                 ISA
               </Badge>
             )}
             {isBentesRamos && (
               <Badge 
                 variant="outline" 
-                className="text-[10px] font-medium gap-0.5 rounded-lg h-[22px] border-linha-escritorio/20 bg-linha-escritorio-bg text-linha-escritorio"
+                className="text-[9px] font-medium gap-0.5 rounded-md h-5 border-linha-escritorio/15 bg-linha-escritorio/5 text-linha-escritorio px-1.5"
               >
-                <Building2 className="h-3 w-3" />
+                <Building2 className="h-2.5 w-2.5" />
                 BR
               </Badge>
             )}
             {!isIsa && !isBentesRamos && !isTraffic && lead.owner_tipo === 'humano' && (
               <Badge 
                 variant="outline" 
-                className="text-[10px] font-medium gap-0.5 rounded-lg h-[22px] border-origem-organico/20 bg-origem-organico-bg text-origem-organico"
+                className="text-[9px] font-medium gap-0.5 rounded-md h-5 border-origem-organico/15 bg-origem-organico/5 text-origem-organico px-1.5"
               >
-                <User className="h-3 w-3" />
+                <User className="h-2.5 w-2.5" />
               </Badge>
             )}
           </div>
         </td>
 
         {/* Telefone */}
-        <td className="px-3 py-3.5">
+        <td className="px-3 py-3">
           {lead.telefone ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <button 
                   onClick={handleCopyPhone}
-                  className="text-xs text-muted-foreground hover:text-foreground transition-colors text-left flex items-center gap-1.5 group/phone"
+                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors text-left flex items-center gap-1 group/phone"
                 >
-                  <span>{lead.telefone}</span>
-                  <Copy className="h-3 w-3 opacity-0 group-hover/phone:opacity-100 transition-opacity" />
+                  <span className="font-mono">{lead.telefone}</span>
+                  <Copy className="h-2.5 w-2.5 opacity-0 group-hover/phone:opacity-60 transition-opacity" />
                 </button>
               </TooltipTrigger>
               <TooltipContent>Copiar telefone</TooltipContent>
             </Tooltip>
           ) : (
-            <span className="text-xs text-muted-foreground/50">—</span>
+            <span className="text-[11px] text-muted-foreground/40">—</span>
           )}
         </td>
 
         {/* Origem */}
-        <td className="px-3 py-3.5">
+        <td className="px-3 py-3">
           {lead.origem ? (
-            <Badge 
-              variant="secondary" 
-              className={cn("text-[10px] font-medium rounded-lg h-[22px] border-0", origemColors.bg, origemColors.text)}
-            >
+            <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-md inline-flex", origemColors.bg, origemColors.text)}>
               {lead.origem}
-            </Badge>
+            </span>
           ) : (
-            <span className="text-xs text-muted-foreground/50">—</span>
+            <span className="text-[11px] text-muted-foreground/40">—</span>
           )}
         </td>
 
         {/* Etapa/Status */}
-        <td className="px-3 py-3.5">
-          <div className="flex items-center gap-2">
+        <td className="px-3 py-3">
+          <div className="flex items-center gap-1.5">
             <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusColors.dot)} />
-            <Badge 
-              variant="secondary" 
-              className={cn("text-[10px] font-medium rounded-lg h-[22px] border-0", statusColors.bg, statusColors.text)}
-            >
+            <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-md", statusColors.bg, statusColors.text)}>
               {lead.status || 'Lead Frio'}
-            </Badge>
+            </span>
           </div>
         </td>
 
         {/* Último contato */}
-        <td className="px-3 py-3.5">
-          <span className="text-xs text-muted-foreground">
+        <td className="px-3 py-3">
+          <span className="text-[11px] text-muted-foreground">
             {formatDistanceToNow(new Date(lastContact), { addSuffix: false, locale: ptBR })}
           </span>
         </td>
 
         {/* Valor */}
-        <td className="px-3 py-3.5">
-          <span className={cn("text-xs font-medium", lead.valor_causa ? 'text-stage-ganho' : 'text-muted-foreground/50')}>
+        <td className="px-3 py-3">
+          <span className={cn("text-[11px] font-medium", lead.valor_causa ? 'text-stage-ganho' : 'text-muted-foreground/40')}>
             {formatCurrency(lead.valor_causa)}
           </span>
         </td>
 
         {/* Ações - Sticky */}
-        <td className="sticky right-0 z-10 bg-card group-hover:bg-muted/20 px-3 py-3.5 transition-colors">
-          <div className="flex items-center justify-center gap-0.5">
+        <td className="sticky right-0 z-10 bg-card group-hover:bg-muted/15 px-3 py-3 transition-colors">
+          <div className="flex items-center justify-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 rounded-lg text-action-chat hover:bg-action-chat-bg"
+                  className="h-7 w-7 rounded-md text-action-chat hover:bg-action-chat/8"
                   onClick={handleWhatsApp}
                 >
-                  <MessageCircle className="h-4 w-4" />
+                  <MessageCircle className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Abrir chat</TooltipContent>
@@ -264,10 +256,10 @@ export function LeadsTableRow({ lead, onClick, onMoveStage, allStages, index = 0
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 rounded-lg text-action-view hover:bg-action-view-bg"
+                  className="h-7 w-7 rounded-md text-action-view hover:bg-action-view/8"
                   onClick={(e) => { e.stopPropagation(); onClick(); }}
                 >
-                  <Eye className="h-4 w-4" />
+                  <Eye className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Ver detalhes</TooltipContent>
@@ -278,19 +270,19 @@ export function LeadsTableRow({ lead, onClick, onMoveStage, allStages, index = 0
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 rounded-lg text-action-menu hover:bg-muted/50"
+                  className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted/50"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <MoreHorizontal className="h-4 w-4" />
+                  <MoreHorizontal className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48 rounded-xl" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenuContent align="end" className="w-48 rounded-lg" onClick={(e) => e.stopPropagation()}>
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="gap-2">
-                    <ArrowRight className="h-3.5 w-3.5" />
+                  <DropdownMenuSubTrigger className="gap-2 text-xs">
+                    <ArrowRight className="h-3 w-3" />
                     Mover para etapa
                   </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="rounded-xl">
+                  <DropdownMenuSubContent className="rounded-lg">
                     {allStages.map(stage => (
                       <DropdownMenuItem
                         key={stage.status}
@@ -305,11 +297,11 @@ export function LeadsTableRow({ lead, onClick, onMoveStage, allStages, index = 0
                 </DropdownMenuSub>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => onMoveStage(lead.id, 'Ganho')} className="text-xs gap-2">
-                  <CheckCircle className="h-3.5 w-3.5 text-stage-ganho" />
+                  <CheckCircle className="h-3 w-3 text-stage-ganho" />
                   Marcar como Ganho
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onMoveStage(lead.id, 'Perdido')} className="text-xs gap-2 text-destructive">
-                  <XCircle className="h-3.5 w-3.5" />
+                  <XCircle className="h-3 w-3" />
                   Marcar como Perdido
                 </DropdownMenuItem>
               </DropdownMenuContent>
