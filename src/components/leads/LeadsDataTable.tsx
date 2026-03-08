@@ -1,6 +1,6 @@
 import { Lead, LeadStatus } from '@/types/leads';
 import { LeadsTableRow } from './LeadsTableRow';
-import { cn } from '@/lib/utils';
+import { Users } from 'lucide-react';
 
 interface LeadsDataTableProps {
   leads: Lead[];
@@ -12,55 +12,61 @@ interface LeadsDataTableProps {
 export function LeadsDataTable({ leads, onLeadClick, onMoveStage, allStages }: LeadsDataTableProps) {
   if (leads.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center py-16">
-        <div className="text-center">
-          <p className="text-muted-foreground">Nenhum lead encontrado</p>
-          <p className="text-sm text-muted-foreground/70 mt-1">Tente ajustar os filtros</p>
+      <div className="flex-1 flex items-center justify-center py-20">
+        <div className="text-center space-y-3">
+          <div className="mx-auto w-12 h-12 rounded-2xl bg-muted/60 flex items-center justify-center">
+            <Users className="h-5 w-5 text-muted-foreground/60" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-foreground">Nenhum lead encontrado</p>
+            <p className="text-xs text-muted-foreground mt-1">Tente ajustar os filtros ou adicione um novo lead</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 overflow-hidden rounded-lg border bg-card">
+    <div className="flex-1 overflow-hidden rounded-2xl border bg-card shadow-soft">
       <div className="h-full overflow-auto">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
-            <tr className="border-b">
-              <th className="sticky left-0 z-20 bg-muted/80 backdrop-blur-sm text-left px-4 py-3 font-medium text-muted-foreground w-[180px] min-w-[180px]">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-muted/50 backdrop-blur-sm border-b">
+              <th className="sticky left-0 z-20 bg-muted/50 backdrop-blur-sm text-left px-4 py-3 font-medium text-xs text-muted-foreground uppercase tracking-wider w-[200px] min-w-[200px]">
                 Lead
               </th>
-              <th className="text-left px-3 py-3 font-medium text-muted-foreground w-[80px]">
+              <th className="text-left px-3 py-3 font-medium text-xs text-muted-foreground uppercase tracking-wider w-[100px]">
                 Linha
               </th>
-              <th className="text-left px-3 py-3 font-medium text-muted-foreground w-[130px]">
-                WhatsApp
+              <th className="text-left px-3 py-3 font-medium text-xs text-muted-foreground uppercase tracking-wider w-[140px]">
+                Telefone
               </th>
-              <th className="text-left px-3 py-3 font-medium text-muted-foreground w-[100px]">
+              <th className="text-left px-3 py-3 font-medium text-xs text-muted-foreground uppercase tracking-wider w-[100px]">
                 Origem
               </th>
-              <th className="text-left px-3 py-3 font-medium text-muted-foreground w-[120px]">
-                Status
+              <th className="text-left px-3 py-3 font-medium text-xs text-muted-foreground uppercase tracking-wider w-[130px]">
+                Etapa
               </th>
-              <th className="text-left px-3 py-3 font-medium text-muted-foreground w-[110px]">
-                Último contato
+              <th className="text-left px-3 py-3 font-medium text-xs text-muted-foreground uppercase tracking-wider w-[110px]">
+                Contato
               </th>
-              <th className="text-left px-3 py-3 font-medium text-muted-foreground w-[100px]">
+              <th className="text-left px-3 py-3 font-medium text-xs text-muted-foreground uppercase tracking-wider w-[100px]">
                 Valor
               </th>
-              <th className="sticky right-0 z-20 bg-muted/80 backdrop-blur-sm text-center px-3 py-3 font-medium text-muted-foreground w-[100px]">
+              <th className="sticky right-0 z-20 bg-muted/50 backdrop-blur-sm text-center px-3 py-3 font-medium text-xs text-muted-foreground uppercase tracking-wider w-[120px]">
                 Ações
               </th>
             </tr>
           </thead>
-          <tbody>
-            {leads.map((lead) => (
+          <tbody className="divide-y divide-border/40">
+            {leads.map((lead, index) => (
               <LeadsTableRow
                 key={lead.id}
                 lead={lead}
                 onClick={() => onLeadClick(lead)}
                 onMoveStage={onMoveStage}
                 allStages={allStages}
+                index={index}
               />
             ))}
           </tbody>

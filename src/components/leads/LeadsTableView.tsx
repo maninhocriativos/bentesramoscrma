@@ -50,7 +50,6 @@ export function LeadsTableView() {
     const counts: Record<string, number> = {};
     PIPELINE_STAGES.forEach(stage => { counts[stage.status] = 0; });
     
-    // Apply linha filter first for accurate counts
     let baseLeads = [...leads];
     if (filterLinha !== 'all') {
       baseLeads = baseLeads.filter(lead => {
@@ -76,7 +75,6 @@ export function LeadsTableView() {
     return counts;
   }, [leads, filterLinha]);
 
-  // Create stages with counts for pills
   const stagesWithCounts = useMemo(() => {
     return PIPELINE_STAGES.map(stage => ({
       ...stage,
@@ -88,7 +86,6 @@ export function LeadsTableView() {
   const filteredLeads = useMemo(() => {
     let result = [...leads];
 
-    // Filter by linha_whatsapp
     if (filterLinha !== 'all') {
       result = result.filter(lead => {
         if (filterLinha === 'bentes_ramos_antigo') {
@@ -104,12 +101,10 @@ export function LeadsTableView() {
       });
     }
 
-    // Filter by active stage (from pills)
     if (activeStage !== 'all') {
       result = result.filter(lead => lead.status === activeStage);
     }
 
-    // Filter by search
     if (search.trim()) {
       const searchLower = search.toLowerCase();
       result = result.filter(lead =>
@@ -119,12 +114,10 @@ export function LeadsTableView() {
       );
     }
 
-    // Filter by origem
     if (filterOrigem !== 'all') {
       result = result.filter(lead => lead.origem === filterOrigem);
     }
 
-    // Filter by etapa (from dropdown - combine with activeStage)
     if (filterEtapa !== 'all') {
       result = result.filter(lead => lead.status === filterEtapa);
     }
@@ -154,7 +147,9 @@ export function LeadsTableView() {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          </div>
           <p className="text-sm text-muted-foreground">Carregando leads...</p>
         </div>
       </div>
@@ -185,7 +180,7 @@ export function LeadsTableView() {
       />
 
       {/* Pipeline Stage Pills */}
-      <div className="px-4 lg:px-6 py-3 border-b bg-background">
+      <div className="px-4 lg:px-6 py-3 border-b bg-card/50">
         <PipelineStagePills
           stages={stagesWithCounts}
           activeStage={activeStage}
@@ -193,7 +188,7 @@ export function LeadsTableView() {
         />
       </div>
 
-      {/* Table Content - Fixed height with internal scroll */}
+      {/* Table Content */}
       <div className="flex-1 overflow-hidden px-4 lg:px-6 py-4">
         <LeadsDataTable
           leads={filteredLeads}
