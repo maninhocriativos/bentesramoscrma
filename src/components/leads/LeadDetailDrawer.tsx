@@ -1,12 +1,12 @@
 import { Lead } from '@/types/leads';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   X, User, Phone, Mail, Briefcase, DollarSign, Calendar,
   MessageCircle, Clock, Tag, Sparkles,
   MessageSquare, Zap, ZapOff, Plus, 
   Loader2, ExternalLink, History, Link2, Pencil, Check,
-  FileSignature, Minus
+  FileSignature, Minus, Megaphone, Globe, Building2, Hash
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
