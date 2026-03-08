@@ -76,8 +76,7 @@ export function LeadsTableRow({ lead, onClick, onMoveStage, allStages }: LeadsTa
     e.stopPropagation();
     if (lead.telefone) {
       navigator.clipboard.writeText(lead.telefone).then(() => {
-        const { toast } = await import('sonner');
-        toast.success('Telefone copiado!');
+        import('sonner').then(({ toast }) => toast.success('Telefone copiado!'));
       }).catch(() => {});
     }
   };
