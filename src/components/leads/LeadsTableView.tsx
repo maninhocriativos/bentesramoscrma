@@ -181,7 +181,12 @@ export function LeadsTableView() {
       )}
 
       {/* Lead Detail Modal */}
-      <LeadDetailModal lead={selectedLead} isOpen={modalOpen} onClose={() => setModalOpen(false)} />
+      <LeadDetailModal
+        lead={selectedLead}
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onLeadUpdated={(updated) => setSelectedLead(updated)}
+      />
     </div>
   );
 }
