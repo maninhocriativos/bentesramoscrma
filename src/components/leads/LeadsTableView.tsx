@@ -1,15 +1,15 @@
 import { useState, useMemo } from 'react';
 import { Lead, LeadStatus } from '@/types/leads';
 import { LeadsTableHeader } from './LeadsTableHeader';
+import { LeadCardGrid } from './LeadCardGrid';
 import { LeadsDataTable } from './LeadsDataTable';
 import { PipelineStagePills } from './PipelineStagePills';
-import { LeadDetailDrawer } from './LeadDetailDrawer';
+import { LeadDetailModal } from './LeadDetailModal';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
 import { useLeads } from '@/hooks/useLeads';
-import { Loader2, LayoutGrid, List } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useLeadsProcessoCounts } from '@/hooks/useLeadProcessos';
+import { Loader2 } from 'lucide-react';
 
-// Pipeline stages in fixed order
 const PIPELINE_STAGES: { status: LeadStatus; label: string }[] = [
   { status: 'Lead Frio', label: 'Lead Frio' },
   { status: 'Bentes Ramos', label: 'Bentes Ramos' },
@@ -21,7 +21,7 @@ const PIPELINE_STAGES: { status: LeadStatus; label: string }[] = [
   { status: 'Perdido', label: 'Perdido' },
 ];
 
-type ViewMode = 'list' | 'board';
+type ViewMode = 'cards' | 'list' | 'board';
 
 export function LeadsTableView() {
   const { leads, loading, updateLeadStatus } = useLeads();
@@ -33,134 +33,93 @@ export function LeadsTableView() {
   const [filterLinha, setFilterLinha] = useState('all');
   const [activeStage, setActiveStage] = useState('all');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('cards');
 
-  // Count leads by linha_whatsapp
   const { countBentesRamos, countTrafego } = useMemo(() => {
-    let bentes = 0;
-    let trafego = 0;
+    let bentes = 0, trafego = 0;
     leads.forEach(lead => {
-      if (lead.linha_whatsapp === 'bentes_ramos_antigo' || lead.empresa_tag === 'BENTES_RAMOS') {
-        bentes++;
-      } else if (lead.linha_whatsapp === 'trafego_isa' || lead.tipo_origem === 'trafego') {
-        trafego++;
-      }
+      if (lead.linha_whatsapp === 'bentes_ramos_antigo' || lead.empresa_tag === 'BENTES_RAMOS') bentes++;
+      else if (lead.linha_whatsapp === 'trafego_isa' || lead.tipo_origem === 'trafego') trafego++;
     });
     return { countBentesRamos: bentes, countTrafego: trafego };
   }, [leads]);
 
-  // Count leads by stage (before other filters)
   const stageCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     PIPELINE_STAGES.forEach(stage => { counts[stage.status] = 0; });
-    
     let baseLeads = [...leads];
     if (filterLinha !== 'all') {
       baseLeads = baseLeads.filter(lead => {
-        if (filterLinha === 'bentes_ramos_antigo') {
-          return lead.linha_whatsapp === 'bentes_ramos_antigo' || 
-                 lead.empresa_tag === 'BENTES_RAMOS' ||
-                 lead.tipo_origem === 'whatsapp_direto';
-        }
-        if (filterLinha === 'trafego_isa') {
-          return lead.linha_whatsapp === 'trafego_isa' || 
-                 lead.tipo_origem === 'trafego';
-        }
+        if (filterLinha === 'bentes_ramos_antigo') return lead.linha_whatsapp === 'bentes_ramos_antigo' || lead.empresa_tag === 'BENTES_RAMOS' || lead.tipo_origem === 'whatsapp_direto';
+        if (filterLinha === 'trafego_isa') return lead.linha_whatsapp === 'trafego_isa' || lead.tipo_origem === 'trafego';
         return true;
       });
     }
-    
     baseLeads.forEach(lead => {
       const status = lead.status || 'Lead Frio';
-      if (counts[status] !== undefined) {
-        counts[status]++;
-      }
+      if (counts[status] !== undefined) counts[status]++;
     });
     return counts;
   }, [leads, filterLinha]);
 
-  const stagesWithCounts = useMemo(() => {
-    return PIPELINE_STAGES.map(stage => ({
-      ...stage,
-      count: stageCounts[stage.status] || 0,
-    }));
-  }, [stageCounts]);
+  const stagesWithCounts = useMemo(() =>
+    PIPELINE_STAGES.map(stage => ({ ...stage, count: stageCounts[stage.status] || 0 })),
+  [stageCounts]);
 
-  // Filter leads
   const filteredLeads = useMemo(() => {
     let result = [...leads];
-
     if (filterLinha !== 'all') {
       result = result.filter(lead => {
-        if (filterLinha === 'bentes_ramos_antigo') {
-          return lead.linha_whatsapp === 'bentes_ramos_antigo' || 
-                 lead.empresa_tag === 'BENTES_RAMOS' ||
-                 lead.tipo_origem === 'whatsapp_direto';
-        }
-        if (filterLinha === 'trafego_isa') {
-          return lead.linha_whatsapp === 'trafego_isa' || 
-                 lead.tipo_origem === 'trafego';
-        }
+        if (filterLinha === 'bentes_ramos_antigo') return lead.linha_whatsapp === 'bentes_ramos_antigo' || lead.empresa_tag === 'BENTES_RAMOS' || lead.tipo_origem === 'whatsapp_direto';
+        if (filterLinha === 'trafego_isa') return lead.linha_whatsapp === 'trafego_isa' || lead.tipo_origem === 'trafego';
         return true;
       });
     }
-
-    if (activeStage !== 'all') {
-      result = result.filter(lead => lead.status === activeStage);
-    }
-
+    if (activeStage !== 'all') result = result.filter(lead => lead.status === activeStage);
     if (search.trim()) {
-      const searchLower = search.toLowerCase();
+      const s = search.toLowerCase();
       result = result.filter(lead =>
-        (lead.nome?.toLowerCase() || '').includes(searchLower) ||
-        (lead.email?.toLowerCase() || '').includes(searchLower) ||
+        (lead.nome?.toLowerCase() || '').includes(s) ||
+        (lead.email?.toLowerCase() || '').includes(s) ||
         (lead.telefone || '').includes(search)
       );
     }
-
-    if (filterOrigem !== 'all') {
-      result = result.filter(lead => lead.origem === filterOrigem);
-    }
-
-    if (filterEtapa !== 'all') {
-      result = result.filter(lead => lead.status === filterEtapa);
-    }
-
+    if (filterOrigem !== 'all') result = result.filter(lead => lead.origem === filterOrigem);
+    if (filterEtapa !== 'all') result = result.filter(lead => lead.status === filterEtapa);
     return result;
   }, [leads, search, filterOrigem, filterEtapa, filterLinha, activeStage]);
 
-  // Get unique origins for filter
   const origens = useMemo(() => {
     const set = new Set<string>();
-    leads.forEach(lead => {
-      if (lead.origem) set.add(lead.origem);
-    });
+    leads.forEach(lead => { if (lead.origem) set.add(lead.origem); });
     return Array.from(set).sort();
   }, [leads]);
 
-  // Calculate total pipeline value
-  const totalValue = useMemo(() => {
-    return filteredLeads.reduce((sum, l) => sum + (l.valor_causa || 0), 0);
-  }, [filteredLeads]);
+  const totalValue = useMemo(() => filteredLeads.reduce((sum, l) => sum + (l.valor_causa || 0), 0), [filteredLeads]);
+
+  // Batch fetch processo counts for cards
+  const leadIds = useMemo(() => filteredLeads.map(l => l.id), [filteredLeads]);
+  const { data: processoCounts } = useLeadsProcessoCounts(leadIds);
 
   const handleLeadClick = (lead: Lead) => {
     setSelectedLead(lead);
-    setDrawerOpen(true);
+    setModalOpen(true);
   };
 
   const handleMoveStage = async (leadId: string, newStatus: LeadStatus) => {
     await updateLeadStatus(leadId, newStatus);
   };
 
+  // Map viewMode for header (cards and list both show in header as list/board)
+  const headerViewMode = viewMode === 'board' ? 'board' : viewMode === 'list' ? 'list' : 'cards';
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">
-          <div className="relative">
-            <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            </div>
+          <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
           <div className="text-center">
             <p className="text-sm font-medium text-foreground">Carregando pipeline</p>
@@ -173,7 +132,6 @@ export function LeadsTableView() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <LeadsTableHeader
         totalLeads={filteredLeads.length}
         totalValue={totalValue}
@@ -193,44 +151,37 @@ export function LeadsTableView() {
         etapas={PIPELINE_STAGES.map(s => s.status)}
         countBentesRamos={countBentesRamos}
         countTrafego={countTrafego}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
+        viewMode={headerViewMode as any}
+        onViewModeChange={(mode) => setViewMode(mode as ViewMode)}
       />
 
-      {/* Pipeline Stage Pills + View Toggle */}
       <div className="px-4 lg:px-6 py-2.5 border-b bg-card">
-        <PipelineStagePills
-          stages={stagesWithCounts}
-          activeStage={activeStage}
-          onStageChange={setActiveStage}
-        />
+        <PipelineStagePills stages={stagesWithCounts} activeStage={activeStage} onStageChange={setActiveStage} />
       </div>
 
-      {/* Content - List or Board */}
-      {viewMode === 'list' ? (
-        <div className="flex-1 overflow-hidden px-4 lg:px-6 py-4">
-          <LeadsDataTable
+      {/* Content */}
+      {viewMode === 'cards' ? (
+        <div className="flex-1 overflow-auto px-4 lg:px-6 py-4">
+          <LeadCardGrid
             leads={filteredLeads}
             onLeadClick={handleLeadClick}
             onMoveStage={handleMoveStage}
             allStages={PIPELINE_STAGES}
+            processoCounts={processoCounts || {}}
           />
+        </div>
+      ) : viewMode === 'list' ? (
+        <div className="flex-1 overflow-hidden px-4 lg:px-6 py-4">
+          <LeadsDataTable leads={filteredLeads} onLeadClick={handleLeadClick} onMoveStage={handleMoveStage} allStages={PIPELINE_STAGES} />
         </div>
       ) : (
         <div className="flex-1 overflow-auto px-4 lg:px-6 py-4">
-          <KanbanBoard
-            leads={filteredLeads}
-            onLeadClick={handleLeadClick}
-          />
+          <KanbanBoard leads={filteredLeads} onLeadClick={handleLeadClick} />
         </div>
       )}
 
-      {/* Lead Detail Drawer */}
-      <LeadDetailDrawer
-        lead={selectedLead}
-        isOpen={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-      />
+      {/* Lead Detail Modal */}
+      <LeadDetailModal lead={selectedLead} isOpen={modalOpen} onClose={() => setModalOpen(false)} />
     </div>
   );
 }
