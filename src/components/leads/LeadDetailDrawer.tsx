@@ -1,12 +1,12 @@
 import { Lead } from '@/types/leads';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   X, User, Phone, Mail, Briefcase, DollarSign, Calendar,
   MessageCircle, Clock, Tag, Sparkles,
   MessageSquare, Zap, ZapOff, Plus, 
   Loader2, ExternalLink, History, Link2, Pencil, Check,
-  FileSignature, Minus
+  FileSignature, Minus, Megaphone, Globe, Building2, Hash
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -472,6 +472,67 @@ export function LeadDetailDrawer({ lead, isOpen, onClose }: LeadDetailDrawerProp
 
                   <Separator />
 
+                  {/* Origem / Source */}
+                  <div className="space-y-2.5">
+                    <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Origem</h3>
+                    
+                    {/* Tipo de Origem */}
+                    <div className="flex items-center gap-2.5 text-sm">
+                      <Megaphone className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="text-muted-foreground text-xs">Tipo:</span>
+                      <Badge variant="secondary" className={cn("text-[10px]",
+                        lead.tipo_origem === 'trafego' ? 'bg-amber-100 text-amber-700' : 
+                        lead.tipo_origem === 'whatsapp_direto' ? 'bg-emerald-100 text-emerald-700' : 
+                        'bg-muted text-muted-foreground'
+                      )}>
+                        {lead.tipo_origem === 'trafego' ? '📣 Tráfego Pago' : 
+                         lead.tipo_origem === 'whatsapp_direto' ? '💬 WhatsApp Direto' : 
+                         '❓ Indefinido'}
+                      </Badge>
+                    </div>
+
+                    {/* Canal / Origem */}
+                    {lead.origem && (
+                      <div className="flex items-center gap-2.5 text-sm">
+                        <Globe className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-muted-foreground text-xs">Canal:</span>
+                        <Badge variant="outline" className="text-[10px]">{lead.origem}</Badge>
+                      </div>
+                    )}
+
+                    {/* Fonte de Tráfego */}
+                    {lead.fonte_trafego && (
+                      <div className="flex items-center gap-2.5 text-sm">
+                        <Tag className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-muted-foreground text-xs">Fonte:</span>
+                        <span className="text-xs">{lead.fonte_trafego}</span>
+                      </div>
+                    )}
+
+                    {/* Empresa / Linha */}
+                    {lead.empresa_tag && (
+                      <div className="flex items-center gap-2.5 text-sm">
+                        <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-muted-foreground text-xs">Empresa:</span>
+                        <Badge variant="secondary" className="text-[10px]">{lead.empresa_tag}</Badge>
+                      </div>
+                    )}
+
+                    {lead.linha_whatsapp && lead.linha_whatsapp !== 'indefinido' && (
+                      <div className="flex items-center gap-2.5 text-sm">
+                        <MessageSquare className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-muted-foreground text-xs">Linha:</span>
+                        <span className="text-xs">
+                          {lead.linha_whatsapp === 'trafego_isa' ? 'Tráfego (ISA)' : 
+                           lead.linha_whatsapp === 'bentes_ramos_antigo' ? 'Bentes Ramos' : 
+                           lead.linha_whatsapp}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <Separator />
+
                   {/* Case Info */}
                   <div className="space-y-2">
                     <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Caso</h3>
@@ -483,12 +544,47 @@ export function LeadDetailDrawer({ lead, isOpen, onClose }: LeadDetailDrawerProp
                     )}
                     <div className="flex items-center gap-2.5 text-sm">
                       <DollarSign className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="font-medium text-emerald-600">{formatCurrency(lead.valor_causa)}</span>
+                      <span className="font-medium text-[hsl(var(--success))]">{formatCurrency(lead.valor_causa)}</span>
                     </div>
-                    {lead.origem && (
+                  </div>
+
+                  <Separator />
+
+                  {/* Contracts Summary */}
+                  <div className="space-y-2.5">
+                    <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                      <FileSignature className="w-3 h-3" />
+                      Contratos
+                    </h3>
+                    {(() => {
+                      const isConv = ['CONTRACT_SIGNED', 'DOCS_PENDING', 'READY_FOR_LAWYER'].includes(lead.lead_state || '');
+                      const extras = lead.contratos_adicionais || 0;
+                      const total = (isConv ? 1 : 0) + extras;
+                      return (
+                        <div className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30 border">
+                          <div className="text-center flex-1">
+                            <p className="text-lg font-bold text-foreground">{total}</p>
+                            <p className="text-[9px] text-muted-foreground">Total</p>
+                          </div>
+                          <div className="w-px h-8 bg-border/50" />
+                          <div className="text-center flex-1">
+                            <p className={cn("text-lg font-bold", isConv ? "text-[hsl(var(--success))]" : "text-muted-foreground")}>{isConv ? 1 : 0}</p>
+                            <p className="text-[9px] text-muted-foreground">Principal</p>
+                          </div>
+                          <div className="w-px h-8 bg-border/50" />
+                          <div className="text-center flex-1">
+                            <p className="text-lg font-bold text-foreground">{extras}</p>
+                            <p className="text-[9px] text-muted-foreground">Adicionais</p>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {lead.contract_signed_at && (
                       <div className="flex items-center gap-2.5 text-sm">
-                        <Tag className="w-3.5 h-3.5 text-muted-foreground" />
-                        <Badge variant="secondary" className="text-xs">{lead.origem}</Badge>
+                        <Check className="w-3.5 h-3.5 text-[hsl(var(--success))]" />
+                        <span className="text-xs text-muted-foreground">
+                          Assinado em {format(new Date(lead.contract_signed_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                        </span>
                       </div>
                     )}
                   </div>
