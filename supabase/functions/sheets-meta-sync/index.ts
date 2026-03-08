@@ -271,6 +271,8 @@ serve(async (req) => {
           }, { onConflict: 'subscriber_id', ignoreDuplicates: true });
 
           // Trigger Isa first contact for Sheets leads
+          // NOTE: isa-auto-process handles BOTH the AI response AND sending via Z-API
+          // We do NOT send separately here to avoid double-sends
           try {
             console.log(`[Sheets Sync] 🤖 Triggering Isa first contact for lead ${leadId}`);
             const { data: isaResult, error: isaError } = await supabase.functions.invoke('isa-auto-process', {
@@ -288,48 +290,8 @@ serve(async (req) => {
 
             if (isaError) {
               console.error('[Sheets Sync] Isa first contact error:', isaError);
-            } else if (isaResult?.response) {
-              // Send Isa response via Z-API (traffic instance)
-              const { data: trafficInstance } = await supabase
-                .from('zapi_instances')
-                .select('*')
-                .eq('is_active', true)
-                .ilike('phone_number', '%85888190%')
-                .maybeSingle();
-
-              if (trafficInstance) {
-                const zapiUrl = `https://api.z-api.io/instances/${trafficInstance.instance_id}/token/${trafficInstance.token}/send-text`;
-                const sendRes = await fetch(zapiUrl, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Client-Token': trafficInstance.client_token || '' },
-                  body: JSON.stringify({ phone: telefone, message: isaResult.response }),
-                });
-                const sendData = await sendRes.json();
-
-                if (sendRes.ok) {
-                  // Save Isa message to chat history
-                  await supabase.from('manychat_mensagens').insert({
-                    subscriber_id: subscriberId,
-                    subscriber_nome: 'Isa',
-                    lead_id: leadId,
-                    conteudo: isaResult.response,
-                    direcao: 'saida',
-                    tipo: 'text',
-                    canal: 'whatsapp',
-                    metadata: {
-                      source: 'zapi',
-                      context: 'isa_first_contact_sheets',
-                      message_id: sendData?.messageId,
-                      sent_via: 'isa_auto',
-                    }
-                  });
-                  console.log(`[Sheets Sync] ✅ Isa first contact sent to ${telefone}`);
-                } else {
-                  console.error('[Sheets Sync] Z-API send failed:', sendData);
-                }
-              } else {
-                console.log('[Sheets Sync] No traffic Z-API instance found');
-              }
+            } else {
+              console.log(`[Sheets Sync] ✅ Isa processed lead ${leadId}:`, isaResult?.resposta_enviada ? 'response sent' : 'no response');
             }
           } catch (isaErr) {
             console.error('[Sheets Sync] Error triggering Isa:', isaErr);

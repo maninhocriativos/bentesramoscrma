@@ -22,20 +22,50 @@ export interface UseChatMessagesOptions {
   onNewMessage?: (message: ChatMessage) => void;
 }
 
+// Build all possible subscriber ID variants for a given ID
+function buildPossibleIds(subscriberId: string): string[] {
+  const ids = new Set<string>([subscriberId]);
+  
+  const phoneMatch = subscriberId.match(/\d{10,13}/);
+  if (phoneMatch) {
+    const phone = phoneMatch[0];
+    const normalized = phone.startsWith('55') ? phone : '55' + phone;
+    ids.add(`zapi_${normalized}`);
+    ids.add(`zapi_${phone}`);
+    // Add 9th digit variant
+    if (normalized.length === 12) {
+      const with9 = normalized.slice(0, 4) + '9' + normalized.slice(4);
+      ids.add(`zapi_${with9}`);
+    }
+  }
+  
+  if (subscriberId.startsWith('zapi_')) {
+    const phone = subscriberId.replace('zapi_', '');
+    ids.add(phone);
+    if (!phone.startsWith('55') && phone.length >= 10) {
+      ids.add(`zapi_55${phone}`);
+    }
+  }
+
+  return [...ids];
+}
+
 export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const lastMessageIdRef = useRef<string | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const activeSubscriberRef = useRef<string | null>(null);
+  const onNewMessageRef = useRef(onNewMessage);
   const { toast } = useToast();
 
-  // Keep ref in sync to avoid stale closures in polling
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
+  // Keep refs in sync
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
+  useEffect(() => { activeSubscriberRef.current = subscriberId; }, [subscriberId]);
 
-  // Load messages for a subscriber (considering multiple possible IDs)
+  // Load messages for a subscriber
   const loadMessages = useCallback(async (loadAll = false) => {
     if (!subscriberId) {
       setMessages([]);
@@ -44,29 +74,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
 
     setIsLoading(true);
     try {
-      // Build possible subscriber IDs
-      const possibleIds = [subscriberId];
-      
-      // If subscriberId looks like a phone, also try zapi_ format
-      const phoneMatch = subscriberId.match(/\d{10,13}/);
-      if (phoneMatch) {
-        const phone = phoneMatch[0];
-        const normalized = phone.startsWith('55') ? phone : '55' + phone;
-        possibleIds.push(`zapi_${normalized}`);
-        possibleIds.push(`zapi_${phone}`);
-      }
-      
-      // If it's already zapi_ format, extract phone and add variations
-      if (subscriberId.startsWith('zapi_')) {
-        const phone = subscriberId.replace('zapi_', '');
-        possibleIds.push(phone);
-        if (!phone.startsWith('55') && phone.length >= 10) {
-          possibleIds.push(`zapi_55${phone}`);
-        }
-      }
-
-      
-
+      const possibleIds = buildPossibleIds(subscriberId);
       const idsFilter = possibleIds.map(id => `subscriber_id.eq.${id}`).join(',');
       
       let query = supabase
@@ -80,16 +88,18 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
       }
 
       const { data, error } = await query;
-
       if (error) throw error;
       
-      // Deduplicar por ID
-      const uniqueMessages = (data as ChatMessage[])?.reduce((acc, msg) => {
-        if (!acc.find(m => m.id === msg.id)) {
-          acc.push(msg);
-        }
-        return acc;
-      }, [] as ChatMessage[]) || [];
+      // Verify this is still the active subscriber (guard against race conditions)
+      if (activeSubscriberRef.current !== subscriberId) return;
+      
+      // Deduplicate by ID
+      const seen = new Set<string>();
+      const uniqueMessages = ((data as ChatMessage[]) || []).filter(msg => {
+        if (seen.has(msg.id)) return false;
+        seen.add(msg.id);
+        return true;
+      });
       
       setMessages(uniqueMessages);
     } catch (error) {
@@ -99,65 +109,57 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
     }
   }, [subscriberId]);
 
-  // Clear messages immediately and load new ones when subscriber changes
+  // Clear and reload on subscriber change
   useEffect(() => {
     setMessages([]);
     loadMessages();
   }, [subscriberId, loadMessages]);
 
-  // Realtime subscription for messages + fallback polling
+  // Single realtime channel + fallback polling with auto-reconnect
   useEffect(() => {
     if (!subscriberId) return;
 
-    // Build all possible subscriber IDs for broader realtime coverage
-    const possibleIds = [subscriberId];
-    const phoneMatch = subscriberId.match(/\d{10,13}/);
-    if (phoneMatch) {
-      const phone = phoneMatch[0];
-      const normalized = phone.startsWith('55') ? phone : '55' + phone;
-      possibleIds.push(`zapi_${normalized}`);
-      possibleIds.push(`zapi_${phone}`);
-    }
-    if (subscriberId.startsWith('zapi_')) {
-      const phone = subscriberId.replace('zapi_', '');
-      possibleIds.push(phone);
-      if (!phone.startsWith('55') && phone.length >= 10) {
-        possibleIds.push(`zapi_55${phone}`);
-      }
-    }
-    const uniqueIds = [...new Set(possibleIds)];
+    const possibleIds = buildPossibleIds(subscriberId);
+    const channelName = `chat-msgs-${subscriberId.replace(/[^a-zA-Z0-9_]/g, '_')}`;
 
-    // Subscribe to ALL possible subscriber IDs
-    const channels = uniqueIds.map((id, idx) => 
-      supabase
-        .channel(`chat-messages-${id}-${Date.now()}-${idx}`)
-        .on('postgres_changes', 
-          { 
-            event: 'INSERT', 
-            schema: 'public', 
-            table: 'manychat_mensagens',
-            filter: `subscriber_id=eq.${id}`
-          },
-          (payload) => {
-            const newMsg = payload.new as ChatMessage;
-            if (lastMessageIdRef.current === newMsg.id) return;
-            lastMessageIdRef.current = newMsg.id;
-            setMessages(prev => {
-              if (prev.some(m => m.id === newMsg.id)) return prev;
-              return [...prev, newMsg];
-            });
-            onNewMessage?.(newMsg);
-          }
-        )
-        .subscribe()
-    );
+    // Use a SINGLE channel listening to the table (no filter) and filter client-side
+    // This avoids creating N channels per subscriber variant which hits Supabase limits
+    const channel = supabase
+      .channel(channelName)
+      .on('postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'manychat_mensagens' },
+        (payload) => {
+          const newMsg = payload.new as ChatMessage;
+          // Client-side filter: only accept messages for this subscriber
+          if (!newMsg.subscriber_id || !possibleIds.includes(newMsg.subscriber_id)) return;
+          // Guard: verify still active subscriber
+          if (activeSubscriberRef.current !== subscriberId) return;
+          
+          if (lastMessageIdRef.current === newMsg.id) return;
+          lastMessageIdRef.current = newMsg.id;
+          
+          setMessages(prev => {
+            if (prev.some(m => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+          onNewMessageRef.current?.(newMsg);
+        }
+      )
+      .subscribe((status, err) => {
+        console.log(`[useChatMessages] Realtime ${channelName}: ${status}`, err || '');
+        
+        // Auto-reconnect on error/timeout
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('[useChatMessages] Channel error, will reconnect via polling');
+        }
+      });
 
-    // Fallback polling every 15s to catch missed messages
+    // Fallback polling every 15s
     let pollActive = true;
     const pollInterval = setInterval(async () => {
-      if (!pollActive) return;
+      if (!pollActive || activeSubscriberRef.current !== subscriberId) return;
       try {
-        const idsFilter = uniqueIds.map(id => `subscriber_id.eq.${id}`).join(',');
+        const idsFilter = possibleIds.map(id => `subscriber_id.eq.${id}`).join(',');
         const currentMessages = messagesRef.current;
         const lastMsg = currentMessages[currentMessages.length - 1];
         const since = lastMsg?.created_at || new Date(Date.now() - 60000).toISOString();
@@ -169,7 +171,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
           .gt('created_at', since)
           .order('created_at', { ascending: true });
         
-        if (data && data.length > 0) {
+        if (data && data.length > 0 && activeSubscriberRef.current === subscriberId) {
           setMessages(prev => {
             const existingIds = new Set(prev.map(m => m.id));
             const newMsgs = (data as ChatMessage[]).filter(m => !existingIds.has(m.id));
@@ -185,9 +187,9 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
     return () => { 
       pollActive = false;
       clearInterval(pollInterval);
-      channels.forEach(ch => supabase.removeChannel(ch)); 
+      supabase.removeChannel(channel); 
     };
-  }, [subscriberId, onNewMessage]);
+  }, [subscriberId]);
 
   // Send message via Z-API
   const sendMessage = useCallback(async (
@@ -220,7 +222,6 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
     setIsSending(true);
 
     try {
-      // Send via Z-API
       const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-send', {
         body: {
           to_phone: options.phone,
@@ -229,8 +230,6 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
           lead_id: options.leadId,
         },
       });
-
-      console.log('[useChatMessages] Z-API response:', zapiResult, zapiError);
 
       if (zapiError) {
         throw new Error(zapiError.message || 'Erro ao enviar via Z-API');
@@ -290,7 +289,6 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
       };
     } catch (error: any) {
       console.error('[useChatMessages] Erro ao enviar:', error);
-      // Remove optimistic message on error
       setMessages(prev => prev.filter(m => m.id !== tempId));
       return { success: false, error: error.message };
     } finally {
@@ -298,7 +296,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
     }
   }, [subscriberId]);
 
-  // Add message locally (for optimistic updates from other sources)
+  // Add message locally
   const addMessage = useCallback((message: ChatMessage) => {
     setMessages(prev => {
       if (prev.some(m => m.id === message.id)) return prev;

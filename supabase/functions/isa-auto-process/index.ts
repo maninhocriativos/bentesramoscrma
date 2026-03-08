@@ -1805,12 +1805,13 @@ async function verificarDisponibilidadeHorario(supabase: any, dataHora: Date): P
 }
 
 // Enviar resposta via Z-API (retorna messageId para evitar duplicação)
+// IMPORTANTE: Roteia para instância CORRETA baseado na linha_whatsapp do subscriber
 async function enviarRespostaZapi(supabaseClient: any, subscriberId: string, mensagem: string): Promise<{ success: boolean; messageId?: string }> {
   try {
-    // Buscar telefone do subscriber
+    // Buscar telefone e linha_whatsapp do subscriber
     const { data: subscriber } = await supabaseClient
       .from('manychat_subscribers')
-      .select('telefone')
+      .select('telefone, linha_whatsapp, lead_id')
       .eq('subscriber_id', subscriberId)
       .maybeSingle();
 
@@ -1819,42 +1820,79 @@ async function enviarRespostaZapi(supabaseClient: any, subscriberId: string, men
       return { success: false };
     }
 
-    // Buscar configuração do Z-API - PRIORIZAR zapi_instances (nova tabela)
-    const { data: zapiInstance } = await supabaseClient
-      .from('zapi_instances')
-      .select('instance_id, token, client_token, name')
-      .eq('is_active', true)
-      .eq('is_default', true)
-      .maybeSingle();
+    // Determinar qual instância usar baseado na linha do subscriber
+    const isTrafficLine = subscriber.linha_whatsapp === 'trafego_isa';
+    
+    // Se não encontrar no subscriber, verificar no lead
+    let useTrafficInstance = isTrafficLine;
+    if (!useTrafficInstance && subscriber.lead_id) {
+      const { data: lead } = await supabaseClient
+        .from('leads_juridicos')
+        .select('linha_whatsapp, tipo_origem, fonte_trafego')
+        .eq('id', subscriber.lead_id)
+        .maybeSingle();
+      
+      useTrafficInstance = lead?.linha_whatsapp === 'trafego_isa' || 
+                           lead?.tipo_origem === 'trafego' ||
+                           lead?.fonte_trafego?.includes('facebook');
+    }
 
     let instanceId: string | undefined;
     let token: string | undefined;
     let clientToken: string | undefined;
     let instanceName = 'default';
 
-    if (zapiInstance) {
-      instanceId = zapiInstance.instance_id;
-      token = zapiInstance.token;
-      clientToken = zapiInstance.client_token;
-      instanceName = zapiInstance.name || 'default';
-      console.log(`[Isa Z-API] Usando instância: ${instanceName} (${instanceId?.substring(0, 8)}...)`);
-    } else {
-      // Fallback para config legado
-      const { data: legacyConfig } = await supabaseClient
-        .from('integrations_config')
-        .select('config_json, is_active')
-        .eq('provider', 'zapi')
-        .single();
-
-      if (!legacyConfig?.is_active) {
-        console.log('⚠️ Z-API não está ativo');
-        return { success: false };
+    if (useTrafficInstance) {
+      // Buscar instância de TRÁFEGO (pelo número 85888190)
+      const { data: trafficInstance } = await supabaseClient
+        .from('zapi_instances')
+        .select('instance_id, token, client_token, name')
+        .eq('is_active', true)
+        .ilike('phone_number', '%85888190%')
+        .maybeSingle();
+      
+      if (trafficInstance) {
+        instanceId = trafficInstance.instance_id;
+        token = trafficInstance.token;
+        clientToken = trafficInstance.client_token;
+        instanceName = trafficInstance.name || 'traffic';
+        console.log(`[Isa Z-API] 🚀 Usando instância de TRÁFEGO: ${instanceName}`);
       }
+    }
 
-      instanceId = legacyConfig.config_json?.instance_id;
-      token = legacyConfig.config_json?.token;
-      clientToken = legacyConfig.config_json?.client_token;
-      console.log('[Isa Z-API] Usando config legado');
+    // Fallback: instância padrão
+    if (!instanceId) {
+      const { data: zapiInstance } = await supabaseClient
+        .from('zapi_instances')
+        .select('instance_id, token, client_token, name')
+        .eq('is_active', true)
+        .eq('is_default', true)
+        .maybeSingle();
+
+      if (zapiInstance) {
+        instanceId = zapiInstance.instance_id;
+        token = zapiInstance.token;
+        clientToken = zapiInstance.client_token;
+        instanceName = zapiInstance.name || 'default';
+        console.log(`[Isa Z-API] Usando instância padrão: ${instanceName}`);
+      } else {
+        // Fallback para config legado
+        const { data: legacyConfig } = await supabaseClient
+          .from('integrations_config')
+          .select('config_json, is_active')
+          .eq('provider', 'zapi')
+          .single();
+
+        if (!legacyConfig?.is_active) {
+          console.log('⚠️ Z-API não está ativo');
+          return { success: false };
+        }
+
+        instanceId = legacyConfig.config_json?.instance_id;
+        token = legacyConfig.config_json?.token;
+        clientToken = legacyConfig.config_json?.client_token;
+        console.log('[Isa Z-API] Usando config legado');
+      }
     }
 
     if (!instanceId || !token) {
@@ -1874,7 +1912,7 @@ async function enviarRespostaZapi(supabaseClient: any, subscriberId: string, men
       headers['Client-Token'] = clientToken;
     }
 
-    console.log(`[Isa Z-API] Enviando para ${cleanPhone}, clientToken: ${clientToken ? 'presente' : 'ausente'}`);
+    console.log(`[Isa Z-API] Enviando para ${cleanPhone} via ${instanceName}, clientToken: ${clientToken ? 'presente' : 'ausente'}`);
 
     // Enviar via Z-API
     const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, {
