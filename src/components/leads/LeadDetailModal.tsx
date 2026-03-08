@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Lead, LeadStatus, LeadOrigem } from '@/types/leads';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -29,7 +29,6 @@ import { useLeadContracts } from '@/hooks/useLeadContracts';
 import { useLeadProcessos } from '@/hooks/useLeadProcessos';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { useLeads } from '@/hooks/useLeads';
 import { LeadHistoryTimeline } from './LeadHistoryTimeline';
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
@@ -39,6 +38,7 @@ interface LeadDetailModalProps {
   lead: Lead | null;
   isOpen: boolean;
   onClose: () => void;
+  onLeadUpdated?: (updatedLead: Lead) => void;
 }
 
 const STATUS_CONFIG: Record<string, { dot: string; bg: string; text: string }> = {
@@ -79,12 +79,12 @@ function ResumoTab({ lead }: { lead: Lead }) {
   const whatsappLink = lead.telefone ? `https://wa.me/${lead.telefone.replace(/\D/g, '')}` : null;
 
   return (
-    <ScrollArea className="h-[65vh]">
+    <ScrollArea className="h-[62vh]">
       <div className="p-5 space-y-5">
         {/* Quick Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {whatsappLink && (
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs rounded-lg border-[hsl(var(--success))]/30 text-[hsl(var(--success))] hover:bg-[hsl(var(--success))]/5" asChild>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs rounded-lg border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950" asChild>
               <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
                 <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
               </a>
@@ -117,17 +117,17 @@ function ResumoTab({ lead }: { lead: Lead }) {
             )}
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <div className="text-center p-2 rounded-lg bg-card border">
+            <div className="text-center p-2.5 rounded-lg bg-card border">
               <p className="text-lg font-bold text-foreground">{processoCount}</p>
               <p className="text-[9px] text-muted-foreground">Processos</p>
             </div>
-            <div className="text-center p-2 rounded-lg bg-card border">
-              <p className={cn("text-lg font-bold", hasContract ? "text-[hsl(var(--success))]" : "text-muted-foreground")}>
+            <div className="text-center p-2.5 rounded-lg bg-card border">
+              <p className={cn("text-lg font-bold", hasContract ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
                 {Math.max(signedCount, hasContract ? 1 : 0)}
               </p>
               <p className="text-[9px] text-muted-foreground">Contratos</p>
             </div>
-            <div className="text-center p-2 rounded-lg bg-card border">
+            <div className="text-center p-2.5 rounded-lg bg-card border">
               <p className="text-lg font-bold text-foreground">
                 {lead.valor_causa ? formatCurrency(lead.valor_causa).replace('R$', '').trim() : '—'}
               </p>
@@ -144,7 +144,7 @@ function ResumoTab({ lead }: { lead: Lead }) {
               <Phone className="w-3.5 h-3.5 text-muted-foreground" />
               <span>{lead.telefone}</span>
               <button onClick={() => { navigator.clipboard.writeText(lead.telefone || ''); toast.success('Copiado'); }}>
-                <Copy className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+                <Copy className="w-3 h-3 text-muted-foreground hover:text-foreground transition-colors" />
               </button>
             </div>
           )}
@@ -161,7 +161,7 @@ function ResumoTab({ lead }: { lead: Lead }) {
           <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Origem</h4>
           <div className="flex flex-wrap gap-1.5">
             {lead.origem && <Badge variant="secondary" className="text-[10px]">{lead.origem}</Badge>}
-            {lead.tipo_origem === 'trafego' && <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-700">📣 Tráfego</Badge>}
+            {lead.tipo_origem === 'trafego' && <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">📣 Tráfego</Badge>}
             {lead.empresa_tag && <Badge variant="secondary" className="text-[10px]">{lead.empresa_tag}</Badge>}
             {lead.fonte_trafego && <Badge variant="outline" className="text-[10px]">{lead.fonte_trafego}</Badge>}
           </div>
@@ -179,7 +179,7 @@ function ResumoTab({ lead }: { lead: Lead }) {
             )}
             <div className="flex items-center gap-2.5 text-sm">
               <DollarSign className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="font-medium text-[hsl(var(--success))]">{formatCurrency(lead.valor_causa)}</span>
+              <span className="font-medium text-emerald-600 dark:text-emerald-400">{formatCurrency(lead.valor_causa)}</span>
             </div>
           </div>
         )}
@@ -214,9 +214,9 @@ function ResumoTab({ lead }: { lead: Lead }) {
 }
 
 // ============== INFO/EDIT TAB ==============
-function InfoEditTab({ lead }: { lead: Lead }) {
-  const { updateLead } = useLeads();
+function InfoEditTab({ lead, onSaved }: { lead: Lead; onSaved: (updated: Lead) => void }) {
   const [saving, setSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
   const [form, setForm] = useState({
     nome: lead.nome || '',
     telefone: lead.telefone || '',
@@ -231,7 +231,7 @@ function InfoEditTab({ lead }: { lead: Lead }) {
   });
 
   useEffect(() => {
-    setForm({
+    const newForm = {
       nome: lead.nome || '',
       telefone: lead.telefone || '',
       email: lead.email || '',
@@ -242,38 +242,72 @@ function InfoEditTab({ lead }: { lead: Lead }) {
       resumo_ia: lead.resumo_ia || '',
       link_contrato: lead.link_contrato || '',
       fonte_trafego: lead.fonte_trafego || '',
-    });
-  }, [lead.id]);
+    };
+    setForm(newForm);
+    setHasChanges(false);
+  }, [lead.id, lead.updated_at]);
+
+  const updateField = (key: string, value: string) => {
+    setForm(prev => ({ ...prev, [key]: value }));
+    setHasChanges(true);
+  };
 
   const handleSave = async () => {
+    if (!form.nome.trim()) {
+      toast.error('O nome é obrigatório');
+      return;
+    }
     setSaving(true);
-    await updateLead(lead.id, {
-      ...form,
+    const updates: Record<string, any> = {
+      nome: form.nome.trim(),
+      telefone: form.telefone.trim() || null,
+      email: form.email.trim() || null,
+      status: form.status,
+      origem: form.origem,
+      tipo_acao: form.tipo_acao.trim() || null,
       valor_causa: form.valor_causa ? Number(form.valor_causa) : null,
-    } as any);
+      resumo_ia: form.resumo_ia.trim() || null,
+      link_contrato: form.link_contrato.trim() || null,
+      fonte_trafego: form.fonte_trafego.trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from('leads_juridicos')
+      .update(updates)
+      .eq('id', lead.id)
+      .select()
+      .single();
+
     setSaving(false);
-    toast.success('Lead atualizado');
+    if (error) {
+      toast.error('Erro ao salvar: ' + error.message);
+      return;
+    }
+    setHasChanges(false);
+    toast.success('Lead salvo com sucesso');
+    if (data) onSaved(data as Lead);
   };
 
   return (
-    <ScrollArea className="h-[65vh]">
+    <ScrollArea className="h-[62vh]">
       <div className="p-5 space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <Label className="text-xs">Nome *</Label>
-            <Input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} className="h-9 text-sm rounded-lg mt-1" />
+            <Label className="text-xs font-medium">Nome *</Label>
+            <Input value={form.nome} onChange={e => updateField('nome', e.target.value)} className="h-9 text-sm rounded-lg mt-1" />
           </div>
           <div>
-            <Label className="text-xs">Telefone</Label>
-            <Input value={form.telefone} onChange={e => setForm({ ...form, telefone: e.target.value })} className="h-9 text-sm rounded-lg mt-1" />
+            <Label className="text-xs font-medium">Telefone</Label>
+            <Input value={form.telefone} onChange={e => updateField('telefone', e.target.value)} className="h-9 text-sm rounded-lg mt-1" />
           </div>
           <div>
-            <Label className="text-xs">Email</Label>
-            <Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="h-9 text-sm rounded-lg mt-1" />
+            <Label className="text-xs font-medium">Email</Label>
+            <Input value={form.email} onChange={e => updateField('email', e.target.value)} className="h-9 text-sm rounded-lg mt-1" />
           </div>
           <div>
-            <Label className="text-xs">Status</Label>
-            <Select value={form.status} onValueChange={v => setForm({ ...form, status: v as LeadStatus })}>
+            <Label className="text-xs font-medium">Status</Label>
+            <Select value={form.status} onValueChange={v => { setForm(prev => ({ ...prev, status: v as LeadStatus })); setHasChanges(true); }}>
               <SelectTrigger className="h-9 text-sm rounded-lg mt-1"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
@@ -281,8 +315,8 @@ function InfoEditTab({ lead }: { lead: Lead }) {
             </Select>
           </div>
           <div>
-            <Label className="text-xs">Origem</Label>
-            <Select value={form.origem} onValueChange={v => setForm({ ...form, origem: v as LeadOrigem })}>
+            <Label className="text-xs font-medium">Origem</Label>
+            <Select value={form.origem} onValueChange={v => { setForm(prev => ({ ...prev, origem: v as LeadOrigem })); setHasChanges(true); }}>
               <SelectTrigger className="h-9 text-sm rounded-lg mt-1"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {ORIGENS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
@@ -290,31 +324,26 @@ function InfoEditTab({ lead }: { lead: Lead }) {
             </Select>
           </div>
           <div>
-            <Label className="text-xs">Tipo de Ação</Label>
-            <Input value={form.tipo_acao} onChange={e => setForm({ ...form, tipo_acao: e.target.value })} className="h-9 text-sm rounded-lg mt-1" placeholder="Ex: Trabalhista" />
+            <Label className="text-xs font-medium">Tipo de Ação</Label>
+            <Input value={form.tipo_acao} onChange={e => updateField('tipo_acao', e.target.value)} className="h-9 text-sm rounded-lg mt-1" placeholder="Ex: Trabalhista" />
           </div>
           <div>
-            <Label className="text-xs">Valor da Causa</Label>
-            <Input type="number" value={form.valor_causa} onChange={e => setForm({ ...form, valor_causa: e.target.value })} className="h-9 text-sm rounded-lg mt-1" />
+            <Label className="text-xs font-medium">Valor da Causa (R$)</Label>
+            <Input type="number" value={form.valor_causa} onChange={e => updateField('valor_causa', e.target.value)} className="h-9 text-sm rounded-lg mt-1" />
           </div>
           <div>
-            <Label className="text-xs">Fonte de Tráfego</Label>
-            <Input value={form.fonte_trafego} onChange={e => setForm({ ...form, fonte_trafego: e.target.value })} className="h-9 text-sm rounded-lg mt-1" />
+            <Label className="text-xs font-medium">Fonte de Tráfego</Label>
+            <Input value={form.fonte_trafego} onChange={e => updateField('fonte_trafego', e.target.value)} className="h-9 text-sm rounded-lg mt-1" />
           </div>
           <div className="col-span-2">
-            <Label className="text-xs">Link do Contrato</Label>
-            <Input value={form.link_contrato} onChange={e => setForm({ ...form, link_contrato: e.target.value })} className="h-9 text-sm rounded-lg mt-1" placeholder="https://..." />
+            <Label className="text-xs font-medium">Link do Contrato</Label>
+            <Input value={form.link_contrato} onChange={e => updateField('link_contrato', e.target.value)} className="h-9 text-sm rounded-lg mt-1" placeholder="https://..." />
           </div>
           <div className="col-span-2">
-            <Label className="text-xs">Resumo / Anotações</Label>
-            <Textarea value={form.resumo_ia} onChange={e => setForm({ ...form, resumo_ia: e.target.value })} className="min-h-[80px] text-sm rounded-lg mt-1" />
+            <Label className="text-xs font-medium">Resumo / Anotações</Label>
+            <Textarea value={form.resumo_ia} onChange={e => updateField('resumo_ia', e.target.value)} className="min-h-[80px] text-sm rounded-lg mt-1" />
           </div>
         </div>
-
-        <Button onClick={handleSave} disabled={saving || !form.nome.trim()} className="w-full h-10 gap-2 rounded-lg">
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Salvar Alterações
-        </Button>
       </div>
     </ScrollArea>
   );
@@ -328,15 +357,14 @@ function ProcessosTab({ lead }: { lead: Lead }) {
   const autoLinked = processosData?.autoLinked || 0;
 
   return (
-    <ScrollArea className="h-[65vh]">
+    <ScrollArea className="h-[62vh]">
       <div className="p-5 space-y-4">
-        {/* Header with count */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Scale className="w-4 h-4 text-primary" />
             <span className="text-sm font-semibold">{processos.length} Processo{processos.length !== 1 ? 's' : ''}</span>
             {autoLinked > 0 && (
-              <Badge variant="secondary" className="text-[9px] bg-amber-100 text-amber-700">
+              <Badge variant="secondary" className="text-[9px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
                 {autoLinked} auto-vinculado{autoLinked > 1 ? 's' : ''}
               </Badge>
             )}
@@ -427,32 +455,30 @@ function ContratosTab({ lead }: { lead: Lead }) {
   const totalContratos = Math.max(signed.length, hasPrincipal ? 1 : 0) + contratosAdicionais;
 
   return (
-    <ScrollArea className="h-[65vh]">
+    <ScrollArea className="h-[62vh]">
       <div className="p-5 space-y-5">
-        {/* Summary */}
         <div className="grid grid-cols-3 gap-3">
           <div className="text-center p-3 rounded-xl bg-muted/30 border">
             <p className="text-2xl font-bold">{totalContratos}</p>
             <p className="text-[9px] text-muted-foreground">Total</p>
           </div>
-          <div className="text-center p-3 rounded-xl bg-stage-ganho-bg border border-stage-ganho/10">
-            <p className="text-2xl font-bold text-[hsl(var(--success))]">{Math.max(signed.length, hasPrincipal ? 1 : 0)}</p>
+          <div className="text-center p-3 rounded-xl bg-emerald-50 border border-emerald-200/30 dark:bg-emerald-950/20 dark:border-emerald-800/30">
+            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{Math.max(signed.length, hasPrincipal ? 1 : 0)}</p>
             <p className="text-[9px] text-muted-foreground">Assinados</p>
           </div>
-          <div className="text-center p-3 rounded-xl bg-amber-50 border border-amber-200/30">
-            <p className="text-2xl font-bold text-amber-600">{pending.length}</p>
+          <div className="text-center p-3 rounded-xl bg-amber-50 border border-amber-200/30 dark:bg-amber-950/20 dark:border-amber-800/30">
+            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{pending.length}</p>
             <p className="text-[9px] text-muted-foreground">Pendentes</p>
           </div>
         </div>
 
         {lead.contract_signed_at && (
-          <div className="flex items-center gap-2 text-xs text-[hsl(var(--success))] bg-stage-ganho-bg p-2.5 rounded-lg">
+          <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 p-2.5 rounded-lg">
             <Check className="w-3.5 h-3.5" />
             Assinado em {format(new Date(lead.contract_signed_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
           </div>
         )}
 
-        {/* Contract list */}
         {reminders.length > 0 && (
           <div className="space-y-2">
             <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Documentos</h4>
@@ -463,7 +489,9 @@ function ContratosTab({ lead }: { lead: Lead }) {
                   {c.signer_name && <p className="text-[10px] text-muted-foreground mt-0.5">{c.signer_name}</p>}
                 </div>
                 <Badge variant="secondary" className={cn("text-[9px] shrink-0",
-                  c.signed_at || c.status === 'signed' ? 'bg-stage-ganho-bg text-stage-ganho' : 'bg-amber-100 text-amber-700'
+                  c.signed_at || c.status === 'signed'
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                    : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                 )}>
                   {c.signed_at || c.status === 'signed' ? 'Assinado' : 'Pendente'}
                 </Badge>
@@ -474,7 +502,6 @@ function ContratosTab({ lead }: { lead: Lead }) {
 
         <Separator />
 
-        {/* Manual adjustment */}
         <div className="space-y-3">
           <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Contratos Adicionais</h4>
           <div className="flex items-center justify-center gap-4">
@@ -488,7 +515,6 @@ function ContratosTab({ lead }: { lead: Lead }) {
           </div>
         </div>
 
-        {/* Contract Link */}
         <div className="space-y-2">
           <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
             <Link2 className="w-3 h-3" /> Link do Contrato
@@ -507,16 +533,94 @@ function ContratosTab({ lead }: { lead: Lead }) {
 }
 
 // ============== MAIN MODAL ==============
-export function LeadDetailModal({ lead, isOpen, onClose }: LeadDetailModalProps) {
+export function LeadDetailModal({ lead: initialLead, isOpen, onClose, onLeadUpdated }: LeadDetailModalProps) {
   const [activeTab, setActiveTab] = useState('resumo');
+  const [localLead, setLocalLead] = useState<Lead | null>(initialLead);
+  const [saving, setSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
   const navigate = useNavigate();
+
+  // Form state for edit tab — lifted here so save button in footer works
+  const [form, setForm] = useState({
+    nome: '', telefone: '', email: '', status: 'Lead Frio' as LeadStatus,
+    origem: 'Outro' as LeadOrigem, tipo_acao: '', valor_causa: '',
+    resumo_ia: '', link_contrato: '', fonte_trafego: '',
+  });
+
+  // Sync local lead when prop changes
+  useEffect(() => {
+    if (initialLead) {
+      setLocalLead(initialLead);
+      setForm({
+        nome: initialLead.nome || '',
+        telefone: initialLead.telefone || '',
+        email: initialLead.email || '',
+        status: initialLead.status as LeadStatus || 'Lead Frio',
+        origem: (initialLead.origem as LeadOrigem) || 'Outro',
+        tipo_acao: initialLead.tipo_acao || '',
+        valor_causa: initialLead.valor_causa?.toString() || '',
+        resumo_ia: initialLead.resumo_ia || '',
+        link_contrato: initialLead.link_contrato || '',
+        fonte_trafego: initialLead.fonte_trafego || '',
+      });
+      setHasChanges(false);
+    }
+  }, [initialLead?.id, initialLead?.updated_at]);
 
   useEffect(() => {
     if (isOpen) setActiveTab('resumo');
-  }, [lead?.id, isOpen]);
+  }, [initialLead?.id, isOpen]);
 
-  if (!lead) return null;
+  const handleSave = useCallback(async () => {
+    if (!localLead) return;
+    if (!form.nome.trim()) {
+      toast.error('O nome é obrigatório');
+      return;
+    }
+    setSaving(true);
+    const updates: Record<string, any> = {
+      nome: form.nome.trim(),
+      telefone: form.telefone.trim() || null,
+      email: form.email.trim() || null,
+      status: form.status,
+      origem: form.origem,
+      tipo_acao: form.tipo_acao.trim() || null,
+      valor_causa: form.valor_causa ? Number(form.valor_causa) : null,
+      resumo_ia: form.resumo_ia.trim() || null,
+      link_contrato: form.link_contrato.trim() || null,
+      fonte_trafego: form.fonte_trafego.trim() || null,
+      updated_at: new Date().toISOString(),
+    };
 
+    const { data, error } = await supabase
+      .from('leads_juridicos')
+      .update(updates)
+      .eq('id', localLead.id)
+      .select()
+      .single();
+
+    setSaving(false);
+    if (error) {
+      toast.error('Erro ao salvar: ' + error.message);
+      return;
+    }
+    setHasChanges(false);
+    toast.success('Lead salvo com sucesso');
+    if (data) {
+      const updated = data as Lead;
+      setLocalLead(updated);
+      onLeadUpdated?.(updated);
+    }
+  }, [localLead, form, onLeadUpdated]);
+
+  const updateFormField = (key: string, value: string) => {
+    setForm(prev => ({ ...prev, [key]: value }));
+    setHasChanges(true);
+  };
+
+  if (!localLead) return null;
+
+  const lead = localLead;
   const config = STATUS_CONFIG[lead.status || 'Lead Frio'] || STATUS_CONFIG['Lead Frio'];
   const initials = (lead.nome || '??').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
@@ -526,7 +630,7 @@ export function LeadDetailModal({ lead, isOpen, onClose }: LeadDetailModalProps)
         {/* Premium Header */}
         <div className="relative bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(24,21%,28%)] px-6 py-5">
           <div className="flex items-center gap-4">
-            <Avatar className="h-12 w-12 ring-2 ring-white/20 shadow-lg">
+            <Avatar className="h-13 w-13 ring-2 ring-white/20 shadow-lg">
               <AvatarFallback className="bg-white/15 text-white text-sm font-bold backdrop-blur-sm">
                 {initials}
               </AvatarFallback>
@@ -577,9 +681,66 @@ export function LeadDetailModal({ lead, isOpen, onClose }: LeadDetailModalProps)
           <TabsContent value="resumo" className="mt-0 flex-1">
             <ResumoTab lead={lead} />
           </TabsContent>
+
           <TabsContent value="info" className="mt-0 flex-1">
-            <InfoEditTab lead={lead} />
+            <ScrollArea className="h-[62vh]">
+              <div className="p-5 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <Label className="text-xs font-medium">Nome *</Label>
+                    <Input value={form.nome} onChange={e => updateFormField('nome', e.target.value)} className="h-9 text-sm rounded-lg mt-1" />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium">Telefone</Label>
+                    <Input value={form.telefone} onChange={e => updateFormField('telefone', e.target.value)} className="h-9 text-sm rounded-lg mt-1" />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium">Email</Label>
+                    <Input value={form.email} onChange={e => updateFormField('email', e.target.value)} className="h-9 text-sm rounded-lg mt-1" />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium">Status</Label>
+                    <Select value={form.status} onValueChange={v => { setForm(prev => ({ ...prev, status: v as LeadStatus })); setHasChanges(true); }}>
+                      <SelectTrigger className="h-9 text-sm rounded-lg mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium">Origem</Label>
+                    <Select value={form.origem} onValueChange={v => { setForm(prev => ({ ...prev, origem: v as LeadOrigem })); setHasChanges(true); }}>
+                      <SelectTrigger className="h-9 text-sm rounded-lg mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {ORIGENS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium">Tipo de Ação</Label>
+                    <Input value={form.tipo_acao} onChange={e => updateFormField('tipo_acao', e.target.value)} className="h-9 text-sm rounded-lg mt-1" placeholder="Ex: Trabalhista" />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium">Valor da Causa (R$)</Label>
+                    <Input type="number" value={form.valor_causa} onChange={e => updateFormField('valor_causa', e.target.value)} className="h-9 text-sm rounded-lg mt-1" />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium">Fonte de Tráfego</Label>
+                    <Input value={form.fonte_trafego} onChange={e => updateFormField('fonte_trafego', e.target.value)} className="h-9 text-sm rounded-lg mt-1" />
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-xs font-medium">Link do Contrato</Label>
+                    <Input value={form.link_contrato} onChange={e => updateFormField('link_contrato', e.target.value)} className="h-9 text-sm rounded-lg mt-1" placeholder="https://..." />
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-xs font-medium">Resumo / Anotações</Label>
+                    <Textarea value={form.resumo_ia} onChange={e => updateFormField('resumo_ia', e.target.value)} className="min-h-[80px] text-sm rounded-lg mt-1" />
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
           </TabsContent>
+
           <TabsContent value="processos" className="mt-0 flex-1">
             <ProcessosTab lead={lead} />
           </TabsContent>
@@ -593,14 +754,27 @@ export function LeadDetailModal({ lead, isOpen, onClose }: LeadDetailModalProps)
           </TabsContent>
         </Tabs>
 
-        {/* Footer */}
+        {/* Footer with Save */}
         <div className="flex items-center justify-between px-5 py-3 border-t bg-muted/20">
           <span className="text-[10px] text-muted-foreground">
             ID: {lead.id.slice(0, 8)}
           </span>
-          <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs rounded-lg" onClick={() => navigate(`/leads/${lead.id}`)}>
-            <ExternalLink className="h-3 w-3" /> Ficha Completa
-          </Button>
+          <div className="flex items-center gap-2">
+            {(activeTab === 'info' && hasChanges) && (
+              <Button
+                onClick={handleSave}
+                disabled={saving || !form.nome.trim()}
+                size="sm"
+                className="h-8 gap-1.5 text-xs rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                Salvar
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs rounded-lg" onClick={() => navigate(`/leads/${lead.id}`)}>
+              <ExternalLink className="h-3 w-3" /> Ficha Completa
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
