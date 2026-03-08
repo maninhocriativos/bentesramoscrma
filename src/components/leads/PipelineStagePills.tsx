@@ -10,12 +10,6 @@ import {
   Trophy,
   XCircle,
 } from 'lucide-react';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 
 interface PipelineStage {
   status: LeadStatus;
@@ -29,54 +23,62 @@ interface PipelineStagePillsProps {
   onStageChange: (stage: string) => void;
 }
 
-const STAGE_CONFIG: Record<string, { icon: React.ElementType; color: string; activeBg: string; activeBorder: string }> = {
+const STAGE_CONFIG: Record<string, { icon: React.ElementType; color: string; activeBg: string; activeBorder: string; dotColor: string }> = {
   'Lead Frio': { 
     icon: Snowflake, 
     color: 'text-stage-frio',
-    activeBg: 'bg-stage-frio/10',
-    activeBorder: 'border-stage-frio/40',
+    activeBg: 'bg-stage-frio/8',
+    activeBorder: 'border-stage-frio/30',
+    dotColor: 'bg-stage-frio',
   },
   'Bentes Ramos': { 
     icon: Building2, 
     color: 'text-stage-bentes',
-    activeBg: 'bg-stage-bentes/10',
-    activeBorder: 'border-stage-bentes/40',
+    activeBg: 'bg-stage-bentes/8',
+    activeBorder: 'border-stage-bentes/30',
+    dotColor: 'bg-stage-bentes',
   },
   'Em Atendimento': { 
     icon: Flame, 
     color: 'text-stage-atendimento',
-    activeBg: 'bg-stage-atendimento/10',
-    activeBorder: 'border-stage-atendimento/40',
+    activeBg: 'bg-stage-atendimento/8',
+    activeBorder: 'border-stage-atendimento/30',
+    dotColor: 'bg-stage-atendimento',
   },
   'Em Negociação': { 
     icon: Handshake, 
     color: 'text-stage-negociacao',
-    activeBg: 'bg-stage-negociacao/10',
-    activeBorder: 'border-stage-negociacao/40',
+    activeBg: 'bg-stage-negociacao/8',
+    activeBorder: 'border-stage-negociacao/30',
+    dotColor: 'bg-stage-negociacao',
   },
   'Aguardando Contrato': { 
     icon: Clock, 
     color: 'text-stage-aguardando',
-    activeBg: 'bg-stage-aguardando/10',
-    activeBorder: 'border-stage-aguardando/40',
+    activeBg: 'bg-stage-aguardando/8',
+    activeBorder: 'border-stage-aguardando/30',
+    dotColor: 'bg-stage-aguardando',
   },
   'Contrato Assinado': { 
     icon: FileSignature, 
     color: 'text-stage-assinado',
-    activeBg: 'bg-stage-assinado/10',
-    activeBorder: 'border-stage-assinado/40',
+    activeBg: 'bg-stage-assinado/8',
+    activeBorder: 'border-stage-assinado/30',
+    dotColor: 'bg-stage-assinado',
   },
   'Ganho': { 
     icon: Trophy, 
     color: 'text-stage-ganho',
-    activeBg: 'bg-stage-ganho/10',
-    activeBorder: 'border-stage-ganho/40',
+    activeBg: 'bg-stage-ganho/8',
+    activeBorder: 'border-stage-ganho/30',
+    dotColor: 'bg-stage-ganho',
   },
   'Perdido': { 
     icon: XCircle, 
     color: 'text-stage-perdido',
-    activeBg: 'bg-stage-perdido/10',
-    activeBorder: 'border-stage-perdido/40',
+    activeBg: 'bg-stage-perdido/8',
+    activeBorder: 'border-stage-perdido/30',
+    dotColor: 'bg-stage-perdido',
   },
 };
 
@@ -84,68 +86,63 @@ export function PipelineStagePills({ stages, activeStage, onStageChange }: Pipel
   const totalCount = stages.reduce((sum, s) => sum + s.count, 0);
 
   return (
-    <TooltipProvider delayDuration={200}>
-      <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-0.5">
-        {/* All Button */}
-        <button
-          onClick={() => onStageChange('all')}
-          className={cn(
-            "flex items-center gap-2 h-9 px-4 rounded-xl text-xs font-medium transition-all duration-200 whitespace-nowrap border shrink-0",
-            activeStage === 'all'
-              ? "bg-primary text-primary-foreground border-primary shadow-soft"
-              : "bg-card text-muted-foreground border-border/60 hover:border-primary/30 hover:text-foreground"
-          )}
-        >
-          <span>Todos</span>
-          <span className={cn(
-            "text-[10px] font-bold px-1.5 py-0.5 rounded-md min-w-[20px] text-center",
-            activeStage === 'all' ? "bg-primary-foreground/20" : "bg-muted"
-          )}>
-            {totalCount}
-          </span>
-        </button>
+    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+      {/* All Button */}
+      <button
+        onClick={() => onStageChange('all')}
+        className={cn(
+          "flex items-center gap-1.5 h-8 px-3 rounded-lg text-[11px] font-medium transition-all duration-200 whitespace-nowrap border shrink-0",
+          activeStage === 'all'
+            ? "bg-primary text-primary-foreground border-primary"
+            : "bg-transparent text-muted-foreground border-border/50 hover:border-primary/20 hover:text-foreground"
+        )}
+      >
+        Todos
+        <span className={cn(
+          "text-[10px] font-bold px-1.5 py-px rounded min-w-[18px] text-center",
+          activeStage === 'all' ? "bg-primary-foreground/20" : "bg-muted"
+        )}>
+          {totalCount}
+        </span>
+      </button>
 
-        {/* Divider */}
-        <div className="w-px h-6 bg-border/60 shrink-0" />
+      {/* Connector line */}
+      <div className="w-4 h-px bg-border/60 shrink-0" />
 
-        {/* Stage Pills */}
-        {stages.map((stage) => {
-          const config = STAGE_CONFIG[stage.status] || {
-            icon: Flame, color: 'text-muted-foreground',
-            activeBg: 'bg-muted', activeBorder: 'border-border',
-          };
-          const Icon = config.icon;
-          const isActive = activeStage === stage.status;
+      {/* Stage Pills */}
+      {stages.map((stage, index) => {
+        const config = STAGE_CONFIG[stage.status] || {
+          icon: Flame, color: 'text-muted-foreground',
+          activeBg: 'bg-muted', activeBorder: 'border-border',
+          dotColor: 'bg-muted-foreground',
+        };
+        const isActive = activeStage === stage.status;
+        const isLast = index === stages.length - 1;
 
-          return (
-            <Tooltip key={stage.status}>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={() => onStageChange(stage.status)}
-                  className={cn(
-                    "flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-medium transition-all duration-200 whitespace-nowrap border shrink-0",
-                    isActive
-                      ? cn(config.activeBg, config.activeBorder, config.color, "shadow-soft")
-                      : "bg-card text-muted-foreground border-border/60 hover:border-primary/20 hover:text-foreground"
-                  )}
-                >
-                  <Icon className={cn("h-3.5 w-3.5", isActive ? config.color : 'text-muted-foreground/70')} />
-                  <span className="hidden sm:inline">{stage.label}</span>
-                  <span className={cn(
-                    "text-[10px] font-bold px-1.5 py-0.5 rounded-md min-w-[18px] text-center",
-                    isActive ? "bg-current/10" : "bg-muted/80"
-                  )}>
-                    {stage.count}
-                  </span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">
-                {stage.label} — {stage.count} lead{stage.count !== 1 ? 's' : ''}
-              </TooltipContent>
-            </Tooltip>
-          );
-        })}
-      </div>
-    </TooltipProvider>
+        return (
+          <div key={stage.status} className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={() => onStageChange(stage.status)}
+              className={cn(
+                "flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[11px] font-medium transition-all duration-200 whitespace-nowrap border",
+                isActive
+                  ? cn(config.activeBg, config.activeBorder, config.color)
+                  : "bg-transparent text-muted-foreground border-border/40 hover:border-border hover:text-foreground"
+              )}
+            >
+              <div className={cn("w-2 h-2 rounded-full shrink-0", isActive ? config.dotColor : "bg-muted-foreground/30")} />
+              <span className="hidden sm:inline">{stage.label}</span>
+              <span className={cn(
+                "text-[10px] font-bold min-w-[16px] text-center",
+                isActive ? config.color : "text-muted-foreground/60"
+              )}>
+                {stage.count}
+              </span>
+            </button>
+            {!isLast && <div className="w-2 h-px bg-border/40 shrink-0 hidden sm:block" />}
+          </div>
+        );
+      })}
+    </div>
   );
 }
