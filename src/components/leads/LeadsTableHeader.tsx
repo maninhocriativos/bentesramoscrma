@@ -41,8 +41,8 @@ interface LeadsTableHeaderProps {
   etapas: LeadStatus[];
   countBentesRamos: number;
   countTrafego: number;
-  viewMode?: 'list' | 'board';
-  onViewModeChange?: (mode: 'list' | 'board') => void;
+  viewMode?: 'cards' | 'list' | 'board';
+  onViewModeChange?: (mode: 'cards' | 'list' | 'board') => void;
 }
 
 const formatCurrencyCompact = (value: number): string => {
