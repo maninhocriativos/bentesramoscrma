@@ -245,6 +245,7 @@ export function LeadDetailDrawer({ lead, isOpen, onClose }: LeadDetailDrawerProp
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [hasConversation, setHasConversation] = useState(false);
   const [checkingConversation, setCheckingConversation] = useState(false);
+  const { data: contractReminders } = useLeadContracts(lead?.id);
 
   useEffect(() => {
     if (lead?.id && isOpen) {
