@@ -78,16 +78,33 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
     for (let i = 5; i >= 0; i--) {
       const monthStart = subMonths(startOfMonth(now), i);
       const monthEnd = i === 0 ? now : subMonths(startOfMonth(now), i - 1);
+      
+      // Leads de tráfego criados neste mês
       const monthLeads = trafficLeads.filter(lead => {
         const date = new Date(lead.created_at);
         return isAfter(date, monthStart) && isBefore(date, monthEnd);
       });
       const total = monthLeads.length;
-      const converted = monthLeads.reduce((sum, l) => {
-        const base = isConverted(l) ? 1 : 0;
-        return sum + base + (l.contratos_adicionais || 0);
+      
+      // Contratos assinados neste mês (baseado em contract_signed_at, não created_at)
+      const monthContracts = trafficLeads.filter(lead => {
+        if (!isConverted(lead)) return false;
+        const signedAt = lead.contract_signed_at;
+        if (signedAt) {
+          const signedDate = new Date(signedAt);
+          return isAfter(signedDate, monthStart) && isBefore(signedDate, monthEnd);
+        }
+        // Fallback: se não tem contract_signed_at mas é convertido, usar created_at
+        const date = new Date(lead.created_at);
+        return isAfter(date, monthStart) && isBefore(date, monthEnd);
+      });
+      
+      const converted = monthContracts.reduce((sum, l) => {
+        return sum + 1 + (l.contratos_adicionais || 0);
       }, 0);
-      const valor = monthLeads.filter(isConverted).reduce((sum, l) => sum + (l.valor_causa || 0), 0);
+      
+      const valor = monthContracts.reduce((sum, l) => sum + (l.valor_causa || 0), 0);
+      
       months.push({
         month: format(monthStart, 'MMM/yy', { locale: ptBR }),
         leads_trafego: total,
