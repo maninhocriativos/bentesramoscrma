@@ -559,36 +559,68 @@ export function LeadDetailDrawer({ lead, isOpen, onClose }: LeadDetailDrawerProp
                       Contratos
                     </h3>
                     {(() => {
-                      const isConv = ['CONTRACT_SIGNED', 'DOCS_PENDING', 'READY_FOR_LAWYER'].includes(lead.lead_state || '');
+                      const reminders = contractReminders || [];
+                      const signedReminders = reminders.filter(c => c.status === 'signed' || c.signed_at);
+                      const pendingReminders = reminders.filter(c => c.status === 'pending' && !c.signed_at);
+                      
+                      // Check principal contract from multiple sources
+                      const hasSignedStatus = lead.status === 'Contrato Assinado' || lead.status === 'Ganho';
+                      const hasSignedState = ['CONTRACT_SIGNED', 'DOCS_PENDING', 'READY_FOR_LAWYER'].includes(lead.lead_state || '');
+                      const hasSignedContract = !!lead.contract_signed_at;
+                      const hasPrincipal = hasSignedStatus || hasSignedState || hasSignedContract || signedReminders.length > 0;
+                      
                       const extras = lead.contratos_adicionais || 0;
-                      const total = (isConv ? 1 : 0) + extras;
+                      const totalFromReminders = Math.max(signedReminders.length, hasPrincipal ? 1 : 0) + extras;
+                      const total = Math.max(totalFromReminders, reminders.length);
+                      
                       return (
-                        <div className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30 border">
-                          <div className="text-center flex-1">
-                            <p className="text-lg font-bold text-foreground">{total}</p>
-                            <p className="text-[9px] text-muted-foreground">Total</p>
+                        <>
+                          <div className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30 border">
+                            <div className="text-center flex-1">
+                              <p className="text-lg font-bold text-foreground">{total}</p>
+                              <p className="text-[9px] text-muted-foreground">Total</p>
+                            </div>
+                            <div className="w-px h-8 bg-border/50" />
+                            <div className="text-center flex-1">
+                              <p className={cn("text-lg font-bold", signedReminders.length > 0 || hasPrincipal ? "text-[hsl(var(--success))]" : "text-muted-foreground")}>
+                                {Math.max(signedReminders.length, hasPrincipal ? 1 : 0)}
+                              </p>
+                              <p className="text-[9px] text-muted-foreground">Assinados</p>
+                            </div>
+                            <div className="w-px h-8 bg-border/50" />
+                            <div className="text-center flex-1">
+                              <p className={cn("text-lg font-bold", pendingReminders.length > 0 ? "text-amber-600" : "text-muted-foreground")}>
+                                {pendingReminders.length}
+                              </p>
+                              <p className="text-[9px] text-muted-foreground">Pendentes</p>
+                            </div>
                           </div>
-                          <div className="w-px h-8 bg-border/50" />
-                          <div className="text-center flex-1">
-                            <p className={cn("text-lg font-bold", isConv ? "text-[hsl(var(--success))]" : "text-muted-foreground")}>{isConv ? 1 : 0}</p>
-                            <p className="text-[9px] text-muted-foreground">Principal</p>
-                          </div>
-                          <div className="w-px h-8 bg-border/50" />
-                          <div className="text-center flex-1">
-                            <p className="text-lg font-bold text-foreground">{extras}</p>
-                            <p className="text-[9px] text-muted-foreground">Adicionais</p>
-                          </div>
-                        </div>
+                          {lead.contract_signed_at && (
+                            <div className="flex items-center gap-2.5 text-sm">
+                              <Check className="w-3.5 h-3.5 text-[hsl(var(--success))]" />
+                              <span className="text-xs text-muted-foreground">
+                                Assinado em {format(new Date(lead.contract_signed_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                              </span>
+                            </div>
+                          )}
+                          {reminders.length > 0 && (
+                            <div className="space-y-1.5 mt-1">
+                              {reminders.slice(0, 3).map(c => (
+                                <div key={c.id} className="flex items-center justify-between text-xs p-1.5 rounded bg-muted/20">
+                                  <span className="truncate max-w-[180px]">{c.document_name || c.document_key}</span>
+                                  <Badge variant="secondary" className={cn("text-[9px] h-4", c.signed_at || c.status === 'signed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700')}>
+                                    {c.signed_at || c.status === 'signed' ? 'Assinado' : 'Pendente'}
+                                  </Badge>
+                                </div>
+                              ))}
+                              {reminders.length > 3 && (
+                                <p className="text-[10px] text-muted-foreground text-center">+{reminders.length - 3} contratos</p>
+                              )}
+                            </div>
+                          )}
+                        </>
                       );
                     })()}
-                    {lead.contract_signed_at && (
-                      <div className="flex items-center gap-2.5 text-sm">
-                        <Check className="w-3.5 h-3.5 text-[hsl(var(--success))]" />
-                        <span className="text-xs text-muted-foreground">
-                          Assinado em {format(new Date(lead.contract_signed_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                        </span>
-                      </div>
-                    )}
                   </div>
 
                   <Separator />
