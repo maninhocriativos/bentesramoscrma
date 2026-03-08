@@ -75,8 +75,9 @@ export function LeadsTableRow({ lead, onClick, onMoveStage, allStages }: LeadsTa
   const handleCall = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (lead.telefone) {
-      const phone = lead.telefone.replace(/\D/g, '');
-      window.location.href = `tel:+55${phone}`;
+      navigator.clipboard.writeText(lead.telefone).then(() => {
+        import('sonner').then(({ toast }) => toast.success('Telefone copiado!'));
+      }).catch(() => {});
     }
   };
 
