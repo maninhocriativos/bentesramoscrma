@@ -4,8 +4,10 @@ import { LeadsTableHeader } from './LeadsTableHeader';
 import { LeadsDataTable } from './LeadsDataTable';
 import { PipelineStagePills } from './PipelineStagePills';
 import { LeadDetailDrawer } from './LeadDetailDrawer';
+import { KanbanBoard } from '@/components/kanban/KanbanBoard';
 import { useLeads } from '@/hooks/useLeads';
-import { Loader2 } from 'lucide-react';
+import { Loader2, LayoutGrid, List } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // Pipeline stages in fixed order
 const PIPELINE_STAGES: { status: LeadStatus; label: string }[] = [
@@ -19,6 +21,8 @@ const PIPELINE_STAGES: { status: LeadStatus; label: string }[] = [
   { status: 'Perdido', label: 'Perdido' },
 ];
 
+type ViewMode = 'list' | 'board';
+
 export function LeadsTableView() {
   const { leads, loading, updateLeadStatus } = useLeads();
   const [search, setSearch] = useState('');
@@ -30,6 +34,7 @@ export function LeadsTableView() {
   const [activeStage, setActiveStage] = useState('all');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   // Count leads by linha_whatsapp
   const { countBentesRamos, countTrafego } = useMemo(() => {
@@ -134,6 +139,11 @@ export function LeadsTableView() {
     return Array.from(set).sort();
   }, [leads]);
 
+  // Calculate total pipeline value
+  const totalValue = useMemo(() => {
+    return filteredLeads.reduce((sum, l) => sum + (l.valor_causa || 0), 0);
+  }, [filteredLeads]);
+
   const handleLeadClick = (lead: Lead) => {
     setSelectedLead(lead);
     setDrawerOpen(true);
@@ -146,11 +156,16 @@ export function LeadsTableView() {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
           </div>
-          <p className="text-sm text-muted-foreground">Carregando leads...</p>
+          <div className="text-center">
+            <p className="text-sm font-medium text-foreground">Carregando pipeline</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Sincronizando dados em tempo real...</p>
+          </div>
         </div>
       </div>
     );
@@ -161,6 +176,7 @@ export function LeadsTableView() {
       {/* Header */}
       <LeadsTableHeader
         totalLeads={filteredLeads.length}
+        totalValue={totalValue}
         search={search}
         onSearchChange={setSearch}
         filterOrigem={filterOrigem}
@@ -177,10 +193,12 @@ export function LeadsTableView() {
         etapas={PIPELINE_STAGES.map(s => s.status)}
         countBentesRamos={countBentesRamos}
         countTrafego={countTrafego}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
       />
 
-      {/* Pipeline Stage Pills */}
-      <div className="px-4 lg:px-6 py-3 border-b bg-card/50">
+      {/* Pipeline Stage Pills + View Toggle */}
+      <div className="px-4 lg:px-6 py-2.5 border-b bg-card">
         <PipelineStagePills
           stages={stagesWithCounts}
           activeStage={activeStage}
@@ -188,15 +206,24 @@ export function LeadsTableView() {
         />
       </div>
 
-      {/* Table Content */}
-      <div className="flex-1 overflow-hidden px-4 lg:px-6 py-4">
-        <LeadsDataTable
-          leads={filteredLeads}
-          onLeadClick={handleLeadClick}
-          onMoveStage={handleMoveStage}
-          allStages={PIPELINE_STAGES}
-        />
-      </div>
+      {/* Content - List or Board */}
+      {viewMode === 'list' ? (
+        <div className="flex-1 overflow-hidden px-4 lg:px-6 py-4">
+          <LeadsDataTable
+            leads={filteredLeads}
+            onLeadClick={handleLeadClick}
+            onMoveStage={handleMoveStage}
+            allStages={PIPELINE_STAGES}
+          />
+        </div>
+      ) : (
+        <div className="flex-1 overflow-auto px-4 lg:px-6 py-4">
+          <KanbanBoard
+            leads={filteredLeads}
+            onLeadClick={handleLeadClick}
+          />
+        </div>
+      )}
 
       {/* Lead Detail Drawer */}
       <LeadDetailDrawer
