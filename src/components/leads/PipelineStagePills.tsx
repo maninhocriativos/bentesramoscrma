@@ -29,47 +29,54 @@ interface PipelineStagePillsProps {
   onStageChange: (stage: string) => void;
 }
 
-// Mapeamento usando tokens do design system
-const STAGE_CONFIG: Record<string, { icon: React.ElementType; colorClass: string; bgClass: string }> = {
+const STAGE_CONFIG: Record<string, { icon: React.ElementType; color: string; activeBg: string; activeBorder: string }> = {
   'Lead Frio': { 
     icon: Snowflake, 
-    colorClass: 'text-stage-frio', 
-    bgClass: 'bg-stage-frio-bg' 
+    color: 'text-stage-frio',
+    activeBg: 'bg-stage-frio/10',
+    activeBorder: 'border-stage-frio/40',
   },
   'Bentes Ramos': { 
     icon: Building2, 
-    colorClass: 'text-stage-bentes', 
-    bgClass: 'bg-stage-bentes-bg' 
+    color: 'text-stage-bentes',
+    activeBg: 'bg-stage-bentes/10',
+    activeBorder: 'border-stage-bentes/40',
   },
   'Em Atendimento': { 
     icon: Flame, 
-    colorClass: 'text-stage-atendimento', 
-    bgClass: 'bg-stage-atendimento-bg' 
+    color: 'text-stage-atendimento',
+    activeBg: 'bg-stage-atendimento/10',
+    activeBorder: 'border-stage-atendimento/40',
   },
   'Em Negociação': { 
     icon: Handshake, 
-    colorClass: 'text-stage-negociacao', 
-    bgClass: 'bg-stage-negociacao-bg' 
+    color: 'text-stage-negociacao',
+    activeBg: 'bg-stage-negociacao/10',
+    activeBorder: 'border-stage-negociacao/40',
   },
   'Aguardando Contrato': { 
     icon: Clock, 
-    colorClass: 'text-stage-aguardando', 
-    bgClass: 'bg-stage-aguardando-bg' 
+    color: 'text-stage-aguardando',
+    activeBg: 'bg-stage-aguardando/10',
+    activeBorder: 'border-stage-aguardando/40',
   },
   'Contrato Assinado': { 
     icon: FileSignature, 
-    colorClass: 'text-stage-assinado', 
-    bgClass: 'bg-stage-assinado-bg' 
+    color: 'text-stage-assinado',
+    activeBg: 'bg-stage-assinado/10',
+    activeBorder: 'border-stage-assinado/40',
   },
   'Ganho': { 
     icon: Trophy, 
-    colorClass: 'text-stage-ganho', 
-    bgClass: 'bg-stage-ganho-bg' 
+    color: 'text-stage-ganho',
+    activeBg: 'bg-stage-ganho/10',
+    activeBorder: 'border-stage-ganho/40',
   },
   'Perdido': { 
     icon: XCircle, 
-    colorClass: 'text-stage-perdido', 
-    bgClass: 'bg-stage-perdido-bg' 
+    color: 'text-stage-perdido',
+    activeBg: 'bg-stage-perdido/10',
+    activeBorder: 'border-stage-perdido/40',
   },
 };
 
@@ -78,42 +85,34 @@ export function PipelineStagePills({ stages, activeStage, onStageChange }: Pipel
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {/* All Stages Pill */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={() => onStageChange('all')}
-              className={cn(
-                "flex items-center gap-1.5 h-[22px] px-2.5 rounded-full text-xs font-medium transition-all",
-                activeStage === 'all'
-                  ? "bg-stage-all text-white shadow-sm"
-                  : "bg-stage-all-bg text-stage-all hover:opacity-80"
-              )}
-            >
-              <span>Todos</span>
-              <span className={cn(
-                "text-[10px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center font-semibold",
-                activeStage === 'all' ? "bg-white/20" : "bg-black/5"
-              )}>
-                {totalCount}
-              </span>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">
-            Todas as etapas
-          </TooltipContent>
-        </Tooltip>
+      <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-0.5">
+        {/* All Button */}
+        <button
+          onClick={() => onStageChange('all')}
+          className={cn(
+            "flex items-center gap-2 h-9 px-4 rounded-xl text-xs font-medium transition-all duration-200 whitespace-nowrap border shrink-0",
+            activeStage === 'all'
+              ? "bg-primary text-primary-foreground border-primary shadow-soft"
+              : "bg-card text-muted-foreground border-border/60 hover:border-primary/30 hover:text-foreground"
+          )}
+        >
+          <span>Todos</span>
+          <span className={cn(
+            "text-[10px] font-bold px-1.5 py-0.5 rounded-md min-w-[20px] text-center",
+            activeStage === 'all' ? "bg-primary-foreground/20" : "bg-muted"
+          )}>
+            {totalCount}
+          </span>
+        </button>
 
-        {/* Separator */}
-        <div className="w-px h-5 bg-border mx-0.5" />
+        {/* Divider */}
+        <div className="w-px h-6 bg-border/60 shrink-0" />
 
-        {/* Stage Compact Pills */}
+        {/* Stage Pills */}
         {stages.map((stage) => {
-          const config = STAGE_CONFIG[stage.status] || { 
-            icon: Flame, 
-            colorClass: 'text-muted-foreground', 
-            bgClass: 'bg-muted' 
+          const config = STAGE_CONFIG[stage.status] || {
+            icon: Flame, color: 'text-muted-foreground',
+            activeBg: 'bg-muted', activeBorder: 'border-border',
           };
           const Icon = config.icon;
           const isActive = activeStage === stage.status;
@@ -124,33 +123,24 @@ export function PipelineStagePills({ stages, activeStage, onStageChange }: Pipel
                 <button
                   onClick={() => onStageChange(stage.status)}
                   className={cn(
-                    "flex items-center gap-1.5 h-[22px] px-2 rounded-full text-xs font-medium transition-all",
+                    "flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-medium transition-all duration-200 whitespace-nowrap border shrink-0",
                     isActive
-                      ? cn(config.colorClass, "bg-current text-white shadow-sm", 
-                          // Override para usar a cor como background quando ativo
-                          stage.status === 'Lead Frio' && "bg-stage-frio",
-                          stage.status === 'Bentes Ramos' && "bg-stage-bentes",
-                          stage.status === 'Em Atendimento' && "bg-stage-atendimento",
-                          stage.status === 'Em Negociação' && "bg-stage-negociacao",
-                          stage.status === 'Aguardando Contrato' && "bg-stage-aguardando",
-                          stage.status === 'Contrato Assinado' && "bg-stage-assinado",
-                          stage.status === 'Ganho' && "bg-stage-ganho",
-                          stage.status === 'Perdido' && "bg-stage-perdido"
-                        )
-                      : cn(config.bgClass, config.colorClass, "hover:opacity-80")
+                      ? cn(config.activeBg, config.activeBorder, config.color, "shadow-soft")
+                      : "bg-card text-muted-foreground border-border/60 hover:border-primary/20 hover:text-foreground"
                   )}
                 >
-                  <Icon className="h-3.5 w-3.5" />
+                  <Icon className={cn("h-3.5 w-3.5", isActive ? config.color : 'text-muted-foreground/70')} />
+                  <span className="hidden sm:inline">{stage.label}</span>
                   <span className={cn(
-                    "text-[10px] px-1 py-0.5 rounded-full min-w-[16px] text-center font-semibold",
-                    isActive ? "bg-white/20" : "bg-black/5"
+                    "text-[10px] font-bold px-1.5 py-0.5 rounded-md min-w-[18px] text-center",
+                    isActive ? "bg-current/10" : "bg-muted/80"
                   )}>
                     {stage.count}
                   </span>
                 </button>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs">
-                {stage.label} ({stage.count})
+                {stage.label} — {stage.count} lead{stage.count !== 1 ? 's' : ''}
               </TooltipContent>
             </Tooltip>
           );
