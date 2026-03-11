@@ -205,7 +205,7 @@ const ManyChatInboxContent = () => {
   const loadMessagesRequestRef = useRef(0);
   // Debounce subscriber reorder
   const pendingBumpsRef = useRef<Map<string, string>>(new Map()); // subscriberId -> ISO timestamp
-  const bumpTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const bumpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Rastrear mensagens não lidas por subscriber
   const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
   // Rastrear preview da última mensagem por subscriber_id
