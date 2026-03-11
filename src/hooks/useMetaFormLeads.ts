@@ -90,51 +90,49 @@ export function useMetaFormLeads() {
     setSyncing(true);
     setSyncError(null);
     try {
-      // Run both syncs in parallel: Meta API + Google Sheets
-      const [metaResult, sheetsResult] = await Promise.allSettled([
-        supabase.functions.invoke('meta-leads-sync'),
-        supabase.functions.invoke('sheets-meta-sync'),
-      ]);
-
       const parts: string[] = [];
       let hasError = false;
 
-      // Process Meta sync result
-      if (metaResult.status === 'fulfilled') {
-        const { data, error } = metaResult.value;
+      // Sync Meta API (optional - may fail if token is invalid)
+      try {
+        const { data, error } = await supabase.functions.invoke('meta-leads-sync');
         if (error || data?.error) {
           hasError = true;
-          parts.push(`Meta: ${data?.error || error?.message || 'erro'}`);
+          const msg = data?.error || error?.message || 'erro';
+          // Only show meta error if it's not a token issue (expected)
+          if (data?.error_type !== 'invalid_page_token' && data?.error_type !== 'missing_token') {
+            parts.push(`Meta: ${msg}`);
+          }
         } else {
           parts.push(`Meta: ${data?.new_leads || 0} novos`);
         }
-      } else {
-        hasError = true;
-        parts.push(`Meta: ${metaResult.reason?.message || 'erro'}`);
+      } catch (e: any) {
+        // Meta sync is optional, don't block on it
+        console.warn('[syncFromMeta] Meta sync failed:', e?.message);
       }
 
-      // Process Sheets sync result
-      if (sheetsResult.status === 'fulfilled') {
-        const { data, error } = sheetsResult.value;
+      // Sync Google Sheets (primary)
+      try {
+        const { data, error } = await supabase.functions.invoke('sheets-meta-sync');
         if (error || data?.error) {
           hasError = true;
           parts.push(`Sheets: ${data?.error || error?.message || 'erro'}`);
         } else {
           parts.push(`Sheets: ${data?.new_leads || 0} novos`);
         }
-      } else {
+      } catch (e: any) {
         hasError = true;
-        parts.push(`Sheets: ${sheetsResult.reason?.message || 'erro'}`);
+        parts.push(`Sheets: ${e?.message || 'erro'}`);
       }
 
-      if (hasError) {
+      if (hasError && parts.length > 0) {
         setSyncError(parts.join(' · '));
       }
 
       toast({
-        title: hasError ? '⚠️ Sincronização parcial' : '✅ Sincronização concluída',
-        description: parts.join(' · '),
-        variant: hasError ? 'destructive' : 'default',
+        title: hasError && parts.length > 0 ? '⚠️ Sincronização parcial' : '✅ Sincronização concluída',
+        description: parts.length > 0 ? parts.join(' · ') : 'Nenhuma atualização',
+        variant: hasError && parts.length > 0 ? 'destructive' : 'default',
       });
 
       await fetchLeads();
