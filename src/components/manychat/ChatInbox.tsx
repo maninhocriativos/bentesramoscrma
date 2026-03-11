@@ -902,7 +902,7 @@ const ManyChatInboxContent = () => {
     console.log('[ManyChatInbox] Configurando canais realtime...');
     
     let isSubscribed = true;
-    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
     
     const setupMessagesChannel = () => {
       const channel = supabase
