@@ -90,50 +90,18 @@ export function useMetaFormLeads() {
     setSyncing(true);
     setSyncError(null);
     try {
-      const parts: string[] = [];
-      let hasError = false;
-
-      // Sync Meta API (optional - may fail if token is invalid)
-      try {
-        const { data, error } = await supabase.functions.invoke('meta-leads-sync');
-        if (error || data?.error) {
-          hasError = true;
-          const msg = data?.error || error?.message || 'erro';
-          // Only show meta error if it's not a token issue (expected)
-          if (data?.error_type !== 'invalid_page_token' && data?.error_type !== 'missing_token') {
-            parts.push(`Meta: ${msg}`);
-          }
-        } else {
-          parts.push(`Meta: ${data?.new_leads || 0} novos`);
-        }
-      } catch (e: any) {
-        // Meta sync is optional, don't block on it
-        console.warn('[syncFromMeta] Meta sync failed:', e?.message);
+      const { data, error } = await supabase.functions.invoke('sheets-meta-sync');
+      
+      if (error || data?.error) {
+        const msg = data?.error || error?.message || 'Erro na sincronização';
+        setSyncError(msg);
+        toast({ title: '⚠️ Erro na sincronização', description: msg, variant: 'destructive' });
+      } else {
+        toast({
+          title: '✅ Sincronização concluída',
+          description: `Sheets: ${data?.new_leads || 0} novos leads`,
+        });
       }
-
-      // Sync Google Sheets (primary)
-      try {
-        const { data, error } = await supabase.functions.invoke('sheets-meta-sync');
-        if (error || data?.error) {
-          hasError = true;
-          parts.push(`Sheets: ${data?.error || error?.message || 'erro'}`);
-        } else {
-          parts.push(`Sheets: ${data?.new_leads || 0} novos`);
-        }
-      } catch (e: any) {
-        hasError = true;
-        parts.push(`Sheets: ${e?.message || 'erro'}`);
-      }
-
-      if (hasError && parts.length > 0) {
-        setSyncError(parts.join(' · '));
-      }
-
-      toast({
-        title: hasError && parts.length > 0 ? '⚠️ Sincronização parcial' : '✅ Sincronização concluída',
-        description: parts.length > 0 ? parts.join(' · ') : 'Nenhuma atualização',
-        variant: hasError && parts.length > 0 ? 'destructive' : 'default',
-      });
 
       await fetchLeads();
     } catch (err: any) {
