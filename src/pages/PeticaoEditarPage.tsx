@@ -47,7 +47,7 @@ export default function PeticaoEditarPage() {
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
-  const autoSaveTimeout = useRef<NodeJS.Timeout>();
+  const autoSaveTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   // Carregar ou criar petição
   useEffect(() => {

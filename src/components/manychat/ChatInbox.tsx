@@ -205,7 +205,7 @@ const ManyChatInboxContent = () => {
   const loadMessagesRequestRef = useRef(0);
   // Debounce subscriber reorder
   const pendingBumpsRef = useRef<Map<string, string>>(new Map()); // subscriberId -> ISO timestamp
-  const bumpTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const bumpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Rastrear mensagens não lidas por subscriber
   const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
   // Rastrear preview da última mensagem por subscriber_id
@@ -541,7 +541,7 @@ const ManyChatInboxContent = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMessageIdRef = useRef<string | null>(null);
 
   const { isOnline, isTyping, setTyping } = useChatPresence(
@@ -902,7 +902,7 @@ const ManyChatInboxContent = () => {
     console.log('[ManyChatInbox] Configurando canais realtime...');
     
     let isSubscribed = true;
-    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
     
     const setupMessagesChannel = () => {
       const channel = supabase
