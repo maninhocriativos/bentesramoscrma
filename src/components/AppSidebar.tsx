@@ -1,7 +1,7 @@
 import { 
   LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, 
   DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare, 
-  Sparkles, Webhook, Zap, BookOpen, FormInput, History, FileEdit
+  Sparkles, Webhook, Zap, BookOpen, FormInput, History, FileEdit, Gavel
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import {
