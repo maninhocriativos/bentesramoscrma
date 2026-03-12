@@ -3,7 +3,8 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -26,7 +27,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { oab_numero, oab_uf, advogado_id, pagina = 1 } = body;
+    const { oab_numero, oab_uf, advogado_id } = body;
 
     if (!oab_numero || !oab_uf) {
       return new Response(
@@ -35,11 +36,14 @@ serve(async (req) => {
       );
     }
 
-    console.log(`🔍 [Intimações] Buscando processos para OAB/${oab_uf} ${oab_numero}`);
+    console.log(`🔍 [Intimações] Buscando publicações no Diário para OAB/${oab_uf} ${oab_numero}`);
 
-    // Step 1: Get all processes for this OAB via Escavador
-    const processosResp = await fetch(
-      `https://api.escavador.com/api/v2/processos/oab/${oab_numero}?estado=${oab_uf}&pagina=${pagina}`,
+    // Strategy: Use Escavador V1 busca endpoint to search Diários Oficiais
+    // This is more credit-efficient than fetching movimentações per process
+    const searchTerm = `OAB ${oab_uf} ${oab_numero}`;
+
+    const buscaResp = await fetch(
+      `https://api.escavador.com/api/v1/busca?q=${encodeURIComponent(searchTerm)}&qo=d&limit=50&page=1`,
       {
         headers: {
           Authorization: `Bearer ${ESCAVADOR_API_KEY}`,
@@ -49,117 +53,98 @@ serve(async (req) => {
       }
     );
 
-    if (processosResp.status === 402) {
+    if (buscaResp.status === 402) {
       return new Response(
         JSON.stringify({ success: false, error: "Créditos Escavador insuficientes" }),
         { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (!processosResp.ok) {
-      const errorText = await processosResp.text();
-      console.error(`❌ Escavador error: ${processosResp.status} - ${errorText.slice(0, 200)}`);
-      return new Response(
-        JSON.stringify({ success: false, error: `Escavador: HTTP ${processosResp.status}` }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (!buscaResp.ok) {
+      const errorText = await buscaResp.text();
+      console.error(`❌ Escavador busca error: ${buscaResp.status} - ${errorText.slice(0, 300)}`);
+      
+      // Fallback: try V2 processos por OAB (less efficient but more reliable)
+      return await fallbackProcessosOAB(oab_numero, oab_uf, advogado_id);
     }
 
-    const processosData = await processosResp.json();
-    const processos = processosData?.items || processosData?.data || [];
-    const totalPages = processosData?.last_page || processosData?.paginas || 1;
+    const buscaData = await buscaResp.json();
+    const resultados = buscaData?.items?.data || buscaData?.items || buscaData?.data || [];
 
-    console.log(`📋 ${processos.length} processos encontrados (página ${pagina}/${totalPages})`);
+    console.log(`📋 ${resultados.length} resultados encontrados na busca de diários`);
 
-    // Step 2: For each processo, get movimentações and filter for intimações
     const intimacoes: any[] = [];
 
-    for (const proc of processos) {
-      const cnj = proc.numero_cnj || proc.numero_processo;
-      if (!cnj) continue;
+    for (const item of resultados) {
+      // Each item is a diário publication entry
+      const conteudo = item.conteudo || item.texto || item.content || "";
+      const titulo = item.titulo || item.title || "";
+      const dataPublicacao = item.data_publicacao || item.data || item.created_at || null;
+      const fonte = item.fonte?.nome || item.diario?.nome || item.source || "";
+      const tribunal = item.fonte?.sigla || item.tribunal || "";
+      
+      // Extract CNJ number from content if present
+      const cnjMatch = conteudo.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
+      const processoCnj = cnjMatch ? cnjMatch[1] : "";
 
-      try {
-        // Get movimentações for this process
-        const movResp = await fetch(
-          `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?pagina=1`,
-          {
-            headers: {
-              Authorization: `Bearer ${ESCAVADOR_API_KEY}`,
-              "X-Requested-With": "XMLHttpRequest",
-            },
-          }
-        );
-
-        if (movResp.ok) {
-          const movData = await movResp.json();
-          const movimentos = movData?.items || movData?.data || [];
-
-          // Filter for intimações
-          for (const mov of movimentos) {
-            const nome = (mov.classificacao_predita?.nome || mov.titulo || mov.conteudo || "").toLowerCase();
-            const conteudo = (mov.conteudo || mov.complemento || mov.descricao_complementar || "").toLowerCase();
-
-            const isIntimacao =
-              nome.includes("intimação") ||
-              nome.includes("intimacao") ||
-              nome.includes("citação") ||
-              nome.includes("citacao") ||
-              nome.includes("notificação judicial") ||
-              nome.includes("notificacao judicial") ||
-              conteudo.includes("intimação") ||
-              conteudo.includes("intimacao") ||
-              conteudo.includes("intimar") ||
-              conteudo.includes("citar");
-
-            if (isIntimacao) {
-              const fonteTribunal = proc.fontes?.find((f: any) => f.tipo === "TRIBUNAL") || proc.fontes?.[0] || {};
-
-              intimacoes.push({
-                processo_cnj: cnj,
-                processo_titulo: fonteTribunal?.capa?.classe || proc.titulo_classe || proc.classe || "Processo",
-                tribunal: fonteTribunal?.tribunal?.sigla || fonteTribunal?.sigla || "",
-                tipo_intimacao: mov.classificacao_predita?.nome || mov.titulo || "Intimação",
-                conteudo: mov.conteudo || mov.complemento || mov.descricao_complementar || "",
-                data_intimacao: mov.data || mov.data_hora || null,
-                oab_numero,
-                oab_uf,
-                advogado_id: advogado_id || null,
-                raw_json: mov,
-              });
-            }
-          }
-        }
-
-        // Rate limiting
-        await new Promise((r) => setTimeout(r, 800));
-      } catch (e) {
-        console.error(`⚠️ Erro ao buscar movimentações de ${cnj}:`, e);
+      // Classify the type of publication
+      const conteudoLower = conteudo.toLowerCase();
+      const tituloLower = titulo.toLowerCase();
+      let tipoIntimacao = "Publicação";
+      
+      if (conteudoLower.includes("intimação") || conteudoLower.includes("intimacao") || tituloLower.includes("intimação")) {
+        tipoIntimacao = "Intimação";
+      } else if (conteudoLower.includes("citação") || conteudoLower.includes("citacao")) {
+        tipoIntimacao = "Citação";
+      } else if (conteudoLower.includes("notificação") || conteudoLower.includes("notificacao")) {
+        tipoIntimacao = "Notificação";
+      } else if (conteudoLower.includes("despacho")) {
+        tipoIntimacao = "Despacho";
+      } else if (conteudoLower.includes("sentença") || conteudoLower.includes("sentenca")) {
+        tipoIntimacao = "Sentença";
+      } else if (conteudoLower.includes("decisão") || conteudoLower.includes("decisao")) {
+        tipoIntimacao = "Decisão";
+      } else if (conteudoLower.includes("edital")) {
+        tipoIntimacao = "Edital";
       }
+
+      intimacoes.push({
+        processo_cnj: processoCnj,
+        processo_titulo: titulo || fonte || "Publicação em Diário Oficial",
+        tribunal: tribunal,
+        tipo_intimacao: tipoIntimacao,
+        conteudo: conteudo.slice(0, 5000), // Limit content size
+        data_intimacao: dataPublicacao,
+        data_disponibilizacao: dataPublicacao,
+        oab_numero,
+        oab_uf,
+        advogado_id: advogado_id || null,
+        fonte: "escavador_diario",
+        raw_json: item,
+      });
     }
 
-    console.log(`📌 ${intimacoes.length} intimações encontradas`);
+    console.log(`📌 ${intimacoes.length} publicações processadas`);
 
-    // Step 3: Save to database (upsert by process + date + tipo)
+    // Save to database
+    let savedCount = 0;
     if (intimacoes.length > 0 && advogado_id) {
       for (const int of intimacoes) {
-        await supabase.from("intimacoes").upsert(
-          {
-            ...int,
-            fonte: "escavador",
-          },
-          { onConflict: "id" }
-        );
+        const { error } = await supabase.from("intimacoes").insert(int);
+        if (!error) savedCount++;
+        else if (error.code !== "23505") { // Ignore duplicate key errors
+          console.warn(`⚠️ Erro ao salvar intimação:`, error.message);
+        }
       }
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        intimacoes,
         total: intimacoes.length,
-        pagina,
-        totalPages,
-        processosAnalisados: processos.length,
+        saved: savedCount,
+        processosAnalisados: resultados.length,
+        fonte: "diario_oficial",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -172,3 +157,92 @@ serve(async (req) => {
     );
   }
 });
+
+// Fallback: V2 processos por OAB (fetches process list only, no movimentações per process)
+async function fallbackProcessosOAB(oab_numero: string, oab_uf: string, advogado_id: string | null) {
+  console.log("🔄 Fallback: buscando processos via V2 OAB endpoint");
+
+  const processosResp = await fetch(
+    `https://api.escavador.com/api/v2/processos/oab/${oab_numero}?estado=${oab_uf}&pagina=1`,
+    {
+      headers: {
+        Authorization: `Bearer ${ESCAVADOR_API_KEY}`,
+        "X-Requested-With": "XMLHttpRequest",
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  if (!processosResp.ok) {
+    const errText = await processosResp.text();
+    console.error(`❌ Fallback error: ${processosResp.status} - ${errText.slice(0, 200)}`);
+    return new Response(
+      JSON.stringify({ success: false, error: `Escavador: HTTP ${processosResp.status}` }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const processosData = await processosResp.json();
+  const processos = processosData?.items || processosData?.data || [];
+
+  console.log(`📋 Fallback: ${processos.length} processos encontrados`);
+
+  const intimacoes: any[] = [];
+
+  // Only extract basic info from the process list - no extra API calls per process
+  for (const proc of processos) {
+    const cnj = proc.numero_cnj || proc.numero_processo;
+    if (!cnj) continue;
+
+    const fonteTribunal = proc.fontes?.find((f: any) => f.tipo === "TRIBUNAL") || proc.fontes?.[0] || {};
+    const ultimaMovimentacao = fonteTribunal?.capa?.ultima_movimentacao || null;
+
+    if (ultimaMovimentacao) {
+      const titulo = ultimaMovimentacao.nome || ultimaMovimentacao.titulo || "";
+      const tituloLower = titulo.toLowerCase();
+
+      const isIntimacao =
+        tituloLower.includes("intimação") || tituloLower.includes("intimacao") ||
+        tituloLower.includes("citação") || tituloLower.includes("citacao") ||
+        tituloLower.includes("notificação") || tituloLower.includes("despacho") ||
+        tituloLower.includes("sentença") || tituloLower.includes("decisão") ||
+        tituloLower.includes("publicação") || tituloLower.includes("publicacao");
+
+      if (isIntimacao) {
+        intimacoes.push({
+          processo_cnj: cnj,
+          processo_titulo: fonteTribunal?.capa?.classe || proc.titulo_classe || "Processo",
+          tribunal: fonteTribunal?.tribunal?.sigla || "",
+          tipo_intimacao: titulo,
+          conteudo: ultimaMovimentacao.descricao || ultimaMovimentacao.conteudo || "",
+          data_intimacao: ultimaMovimentacao.data || null,
+          oab_numero: oab_numero,
+          oab_uf: oab_uf,
+          advogado_id: advogado_id,
+          fonte: "escavador_v2",
+          raw_json: ultimaMovimentacao,
+        });
+      }
+    }
+  }
+
+  // Save
+  let savedCount = 0;
+  if (intimacoes.length > 0 && advogado_id) {
+    for (const int of intimacoes) {
+      const { error } = await supabase.from("intimacoes").insert(int);
+      if (!error) savedCount++;
+    }
+  }
+
+  return new Response(
+    JSON.stringify({
+      success: true,
+      total: intimacoes.length,
+      saved: savedCount,
+      processosAnalisados: processos.length,
+      fonte: "processos_v2",
+    }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}

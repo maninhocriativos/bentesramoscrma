@@ -40,6 +40,7 @@ interface Intimacao {
 
 export default function IntimacoesPage() {
   const { perfil } = usePerfil();
+  const { settings: officeSettings } = useOfficeSettings();
   const { user } = useAuth();
   const [intimacoes, setIntimacoes] = useState<Intimacao[]>([]);
   const [loading, setLoading] = useState(false);
@@ -48,9 +49,9 @@ export default function IntimacoesPage() {
   const [filterLida, setFilterLida] = useState<'all' | 'unread' | 'read'>('all');
   const [selectedIntimacao, setSelectedIntimacao] = useState<Intimacao | null>(null);
 
-  // OAB from perfil
-  const oabNumero = (perfil as any)?.oab_numero || '';
-  const oabUf = (perfil as any)?.oab_uf || 'AM';
+  // OAB: prioriza office_settings, fallback para perfil
+  const oabNumero = officeSettings?.oab_number || (perfil as any)?.oab_numero || '';
+  const oabUf = officeSettings?.oab_state || (perfil as any)?.oab_uf || 'AM';
 
   useEffect(() => {
     if (user) {
