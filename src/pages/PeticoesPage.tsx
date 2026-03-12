@@ -406,66 +406,90 @@ export default function PeticoesPage() {
               </Card>
             </TabsContent>
 
-            {/* Nova petição - seleção de tipo */}
+            {/* Nova petição - seleção de tipo ou template */}
             <TabsContent value="nova" className="space-y-6">
-              <div className="text-center mb-8">
-                <h2 className="text-2xl font-bold mb-2">Escolha o tipo de ação</h2>
-                <p className="text-muted-foreground">
-                  Selecione o tipo de petição para começar a preencher os dados
-                </p>
-              </div>
+              {selectedTypeForTemplate ? (
+                <div className="space-y-4">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setSelectedTypeForTemplate(null)}
+                    className="gap-2"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Voltar aos tipos
+                  </Button>
+                  <TemplatePicker
+                    typeSlug={selectedTypeForTemplate.slug}
+                    typeTitle={selectedTypeForTemplate.title}
+                    onSelectTemplate={handleTemplateSelected}
+                    onSkip={handleSkipTemplate}
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="text-center mb-8">
+                    <h2 className="text-2xl font-bold mb-2">Escolha o tipo de ação</h2>
+                    <p className="text-muted-foreground">
+                      Selecione o tipo de petição para começar a preencher os dados
+                    </p>
+                  </div>
 
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {petitionTypes.map((type) => {
-                  const colors = TYPE_COLORS[type.slug] || TYPE_COLORS.cobranca_pacote_bancario;
-                  return (
-                    <Card
-                      key={type.slug}
-                      className={cn(
-                        "group cursor-pointer overflow-hidden transition-all duration-300",
-                        "hover:shadow-xl hover:scale-[1.02] hover:-translate-y-1",
-                        "border-2 hover:border-primary/50"
-                      )}
-                      onClick={() => handleCreatePetition(type.slug)}
-                    >
-                      <CardContent className="p-0">
-                        {/* Header com gradiente */}
-                        <div className={cn(
-                          "relative h-24 bg-gradient-to-br text-white",
-                          colors.gradient,
-                          "flex items-center justify-center"
-                        )}>
-                          <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                          <div className="relative flex items-center gap-4">
-                            <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm shadow-lg">
-                              {ICON_MAP[type.icon]}
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {petitionTypes.map((type) => {
+                      const colors = TYPE_COLORS[type.slug] || TYPE_COLORS.cobranca_pacote_bancario;
+                      const templateCount = getTemplatesByType(type.slug).length;
+                      return (
+                        <Card
+                          key={type.slug}
+                          className={cn(
+                            "group cursor-pointer overflow-hidden transition-all duration-300",
+                            "hover:shadow-xl hover:scale-[1.02] hover:-translate-y-1",
+                            "border-2 hover:border-primary/50"
+                          )}
+                          onClick={() => handleCreatePetition(type.slug)}
+                        >
+                          <CardContent className="p-0">
+                            <div className={cn(
+                              "relative h-24 bg-gradient-to-br text-white",
+                              colors.gradient,
+                              "flex items-center justify-center"
+                            )}>
+                              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              <div className="relative flex items-center gap-4">
+                                <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm shadow-lg">
+                                  {ICON_MAP[type.icon]}
+                                </div>
+                              </div>
+                              <div className="absolute -top-8 -right-8 w-24 h-24 bg-white/10 rounded-full" />
+                              <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-white/10 rounded-full" />
+                              {templateCount > 0 && (
+                                <div className="absolute top-3 right-3 bg-white/20 backdrop-blur-sm rounded-full px-2.5 py-0.5 text-xs font-semibold">
+                                  {templateCount} {templateCount === 1 ? 'modelo' : 'modelos'}
+                                </div>
+                              )}
                             </div>
-                          </div>
-                          {/* Decorative circles */}
-                          <div className="absolute -top-8 -right-8 w-24 h-24 bg-white/10 rounded-full" />
-                          <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-white/10 rounded-full" />
-                        </div>
-                        
-                        {/* Content */}
-                        <div className="p-5">
-                          <h3 className="font-bold text-lg mb-2 group-hover:text-primary transition-colors">
-                            {type.title}
-                          </h3>
-                          <p className="text-sm text-muted-foreground line-clamp-2">
-                            {type.description}
-                          </p>
-                          
-                          {/* Action hint */}
-                          <div className="mt-4 flex items-center gap-2 text-sm text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                            <span>Iniciar</span>
-                            <ArrowLeft className="h-4 w-4 rotate-180" />
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
+                            
+                            <div className="p-5">
+                              <h3 className="font-bold text-lg mb-2 group-hover:text-primary transition-colors">
+                                {type.title}
+                              </h3>
+                              <p className="text-sm text-muted-foreground line-clamp-2">
+                                {type.description}
+                              </p>
+                              
+                              <div className="mt-4 flex items-center gap-2 text-sm text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                                <span>{templateCount > 0 ? 'Ver modelos' : 'Iniciar'}</span>
+                                <ArrowLeft className="h-4 w-4 rotate-180" />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </TabsContent>
           </Tabs>
         </div>
