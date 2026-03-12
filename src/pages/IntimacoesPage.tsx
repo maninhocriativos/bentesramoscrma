@@ -7,12 +7,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import {
   Loader2, Gavel, Search, RefreshCw, Bell, CheckCircle2,
-  Clock, AlertTriangle, Eye, ExternalLink, Filter
+  Clock, AlertTriangle, Eye, FileText, Filter, CalendarDays
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import {
   Dialog,
@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog';
 import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { generateIntimacaoReport } from '@/lib/intimacaoReportGenerator';
 
 interface Intimacao {
   id: string;
@@ -31,6 +32,8 @@ interface Intimacao {
   tipo_intimacao: string;
   conteudo: string;
   data_intimacao: string | null;
+  data_disponibilizacao: string | null;
+  data_publicacao: string | null;
   oab_numero: string;
   oab_uf: string;
   lida: boolean;
@@ -49,14 +52,11 @@ export default function IntimacoesPage() {
   const [filterLida, setFilterLida] = useState<'all' | 'unread' | 'read'>('all');
   const [selectedIntimacao, setSelectedIntimacao] = useState<Intimacao | null>(null);
 
-  // OAB: prioriza office_settings, fallback para perfil
   const oabNumero = officeSettings?.oab_number || (perfil as any)?.oab_numero || '';
   const oabUf = officeSettings?.oab_state || (perfil as any)?.oab_uf || 'AM';
 
   useEffect(() => {
-    if (user) {
-      fetchIntimacoes();
-    }
+    if (user) fetchIntimacoes();
   }, [user]);
 
   const fetchIntimacoes = async () => {
@@ -80,19 +80,12 @@ export default function IntimacoesPage() {
       toast.error('Configure seu número da OAB no perfil para buscar intimações');
       return;
     }
-
     setSyncing(true);
     try {
       const { data, error } = await supabase.functions.invoke('intimacoes-oab', {
-        body: {
-          oab_numero: oabNumero,
-          oab_uf: oabUf,
-          advogado_id: user?.id,
-        },
+        body: { oab_numero: oabNumero, oab_uf: oabUf, advogado_id: user?.id },
       });
-
       if (error) throw error;
-
       if (data?.success) {
         toast.success(`${data.total} intimações encontradas`, {
           description: `${data.processosAnalisados} processos analisados`,
@@ -102,9 +95,7 @@ export default function IntimacoesPage() {
         toast.error(data?.error || 'Erro ao buscar intimações');
       }
     } catch (err: any) {
-      toast.error('Erro ao sincronizar intimações', {
-        description: err.message,
-      });
+      toast.error('Erro ao sincronizar intimações', { description: err.message });
     } finally {
       setSyncing(false);
     }
@@ -115,7 +106,6 @@ export default function IntimacoesPage() {
       .from('intimacoes')
       .update({ lida: true, lida_em: new Date().toISOString() })
       .eq('id', id);
-
     setIntimacoes((prev) =>
       prev.map((i) => (i.id === id ? { ...i, lida: true, lida_em: new Date().toISOString() } : i))
     );
@@ -126,10 +116,27 @@ export default function IntimacoesPage() {
     try {
       const date = parseISO(dateStr);
       if (!isValid(date)) return dateStr;
+      return format(date, "dd/MM/yyyy", { locale: ptBR });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatDateLong = (dateStr: string | null) => {
+    if (!dateStr) return '—';
+    try {
+      const date = parseISO(dateStr);
+      if (!isValid(date)) return dateStr;
       return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
     } catch {
       return dateStr;
     }
+  };
+
+  const handleGenerateReport = (intimacao: Intimacao, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    generateIntimacaoReport(intimacao);
+    toast.success('Relatório gerado com sucesso');
   };
 
   const filtered = intimacoes.filter((i) => {
@@ -139,12 +146,10 @@ export default function IntimacoesPage() {
       i.processo_titulo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       i.conteudo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       i.tipo_intimacao?.toLowerCase().includes(searchTerm.toLowerCase());
-
     const matchesFilter =
       filterLida === 'all' ||
       (filterLida === 'unread' && !i.lida) ||
       (filterLida === 'read' && i.lida);
-
     return matchesSearch && matchesFilter;
   });
 
@@ -167,7 +172,6 @@ export default function IntimacoesPage() {
               )}
             </div>
           </div>
-
           <div className="flex items-center gap-2 shrink-0">
             {oabNumero && (
               <Badge variant="outline" className="hidden md:inline-flex text-xs">
@@ -195,9 +199,7 @@ export default function IntimacoesPage() {
             <CardContent className="flex items-center gap-3 p-4">
               <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
               <div>
-                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                  Configure sua OAB
-                </p>
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Configure sua OAB</p>
                 <p className="text-xs text-amber-600 dark:text-amber-400">
                   Acesse Configurações → seu perfil e adicione seu número da OAB para buscar intimações automaticamente.
                 </p>
@@ -227,9 +229,7 @@ export default function IntimacoesPage() {
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
               <span className="text-xs text-muted-foreground">Lidas</span>
             </div>
-            <p className="text-2xl font-bold mt-1 text-emerald-600">
-              {intimacoes.length - unreadCount}
-            </p>
+            <p className="text-2xl font-bold mt-1 text-emerald-600">{intimacoes.length - unreadCount}</p>
           </Card>
           <Card className="p-3">
             <div className="flex items-center gap-2">
@@ -317,19 +317,44 @@ export default function IntimacoesPage() {
                       </div>
                       <p className="text-xs text-muted-foreground mb-1">
                         <span className="font-medium">{intimacao.processo_cnj}</span>
-                        {' — '}
-                        {intimacao.processo_titulo}
+                        {intimacao.processo_titulo && ` — ${intimacao.processo_titulo}`}
                       </p>
-                      <p className="text-xs text-muted-foreground line-clamp-2">
+                      <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
                         {intimacao.conteudo || 'Sem conteúdo detalhado'}
                       </p>
+
+                      {/* Datas inline no card */}
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                        {intimacao.data_disponibilizacao && (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <CalendarDays className="h-3 w-3" />
+                            Disponibilização: <span className="font-medium text-foreground">{formatDate(intimacao.data_disponibilizacao)}</span>
+                          </span>
+                        )}
+                        {intimacao.data_publicacao && (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <CalendarDays className="h-3 w-3" />
+                            Publicação: <span className="font-medium text-foreground">{formatDate(intimacao.data_publicacao)}</span>
+                          </span>
+                        )}
+                        {intimacao.data_intimacao && (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <CalendarDays className="h-3 w-3" />
+                            Intimação: <span className="font-medium text-foreground">{formatDate(intimacao.data_intimacao)}</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-xs text-muted-foreground">
-                        {formatDate(intimacao.data_intimacao)}
-                      </p>
-                      <Button variant="ghost" size="sm" className="h-7 mt-1">
-                        <Eye className="h-3.5 w-3.5" />
+
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7"
+                        onClick={(e) => handleGenerateReport(intimacao, e)}
+                        title="Gerar relatório PDF"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </div>
@@ -359,15 +384,23 @@ export default function IntimacoesPage() {
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground">Ação</label>
-                  <p className="text-sm font-medium">{selectedIntimacao.processo_titulo}</p>
+                  <p className="text-sm font-medium">{selectedIntimacao.processo_titulo || '—'}</p>
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground">Tribunal</label>
                   <p className="text-sm font-medium">{selectedIntimacao.tribunal || '—'}</p>
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground">Data</label>
-                  <p className="text-sm font-medium">{formatDate(selectedIntimacao.data_intimacao)}</p>
+                  <label className="text-xs text-muted-foreground">Data da Intimação</label>
+                  <p className="text-sm font-medium">{formatDateLong(selectedIntimacao.data_intimacao)}</p>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Data da Disponibilização</label>
+                  <p className="text-sm font-medium">{formatDateLong(selectedIntimacao.data_disponibilizacao)}</p>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Data da Publicação</label>
+                  <p className="text-sm font-medium">{formatDateLong(selectedIntimacao.data_publicacao)}</p>
                 </div>
               </div>
 
@@ -389,6 +422,15 @@ export default function IntimacoesPage() {
                     Marcar como lida
                   </Button>
                 )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={() => handleGenerateReport(selectedIntimacao)}
+                >
+                  <FileText className="h-4 w-4 mr-1.5" />
+                  Gerar Relatório PDF
+                </Button>
               </div>
             </div>
           )}

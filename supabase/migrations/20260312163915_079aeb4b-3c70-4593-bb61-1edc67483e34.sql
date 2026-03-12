@@ -1,0 +1,1 @@
+ALTER TABLE public.intimacoes ADD COLUMN IF NOT EXISTS data_publicacao timestamptz;
