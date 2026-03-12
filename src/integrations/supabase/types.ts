@@ -966,6 +966,66 @@ export type Database = {
           },
         ]
       }
+      intimacoes: {
+        Row: {
+          advogado_id: string | null
+          conteudo: string | null
+          created_at: string | null
+          data_disponibilizacao: string | null
+          data_intimacao: string | null
+          fonte: string | null
+          id: string
+          lida: boolean | null
+          lida_em: string | null
+          oab_numero: string
+          oab_uf: string
+          processo_cnj: string | null
+          processo_titulo: string | null
+          raw_json: Json | null
+          tipo_intimacao: string | null
+          tribunal: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          advogado_id?: string | null
+          conteudo?: string | null
+          created_at?: string | null
+          data_disponibilizacao?: string | null
+          data_intimacao?: string | null
+          fonte?: string | null
+          id?: string
+          lida?: boolean | null
+          lida_em?: string | null
+          oab_numero: string
+          oab_uf?: string
+          processo_cnj?: string | null
+          processo_titulo?: string | null
+          raw_json?: Json | null
+          tipo_intimacao?: string | null
+          tribunal?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          advogado_id?: string | null
+          conteudo?: string | null
+          created_at?: string | null
+          data_disponibilizacao?: string | null
+          data_intimacao?: string | null
+          fonte?: string | null
+          id?: string
+          lida?: boolean | null
+          lida_em?: string | null
+          oab_numero?: string
+          oab_uf?: string
+          processo_cnj?: string | null
+          processo_titulo?: string | null
+          raw_json?: Json | null
+          tipo_intimacao?: string | null
+          tribunal?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       lead_classifications: {
         Row: {
           case_type: string
@@ -1976,6 +2036,8 @@ export type Database = {
           email: string | null
           id: string
           nome: string | null
+          oab_numero: string | null
+          oab_uf: string | null
           sobrenome: string | null
           telefone: string | null
         }
@@ -1985,6 +2047,8 @@ export type Database = {
           email?: string | null
           id: string
           nome?: string | null
+          oab_numero?: string | null
+          oab_uf?: string | null
           sobrenome?: string | null
           telefone?: string | null
         }
@@ -1994,6 +2058,8 @@ export type Database = {
           email?: string | null
           id?: string
           nome?: string | null
+          oab_numero?: string | null
+          oab_uf?: string | null
           sobrenome?: string | null
           telefone?: string | null
         }
@@ -2439,6 +2505,7 @@ export type Database = {
           grau: string | null
           grau_formato: string | null
           id: string
+          last_sync_error: string | null
           movimentos_json: Json | null
           notificacao_ativa: boolean | null
           numero_processo: string | null
@@ -2449,6 +2516,8 @@ export type Database = {
           sistema: string | null
           status: string | null
           status_detalhado: string | null
+          sync_error_count: number | null
+          sync_priority: string | null
           titulo_acao: string | null
           tribunal: string | null
           ultima_atualizacao: string | null
@@ -2478,6 +2547,7 @@ export type Database = {
           grau?: string | null
           grau_formato?: string | null
           id?: string
+          last_sync_error?: string | null
           movimentos_json?: Json | null
           notificacao_ativa?: boolean | null
           numero_processo?: string | null
@@ -2488,6 +2558,8 @@ export type Database = {
           sistema?: string | null
           status?: string | null
           status_detalhado?: string | null
+          sync_error_count?: number | null
+          sync_priority?: string | null
           titulo_acao?: string | null
           tribunal?: string | null
           ultima_atualizacao?: string | null
@@ -2517,6 +2589,7 @@ export type Database = {
           grau?: string | null
           grau_formato?: string | null
           id?: string
+          last_sync_error?: string | null
           movimentos_json?: Json | null
           notificacao_ativa?: boolean | null
           numero_processo?: string | null
@@ -2527,6 +2600,8 @@ export type Database = {
           sistema?: string | null
           status?: string | null
           status_detalhado?: string | null
+          sync_error_count?: number | null
+          sync_priority?: string | null
           titulo_acao?: string | null
           tribunal?: string | null
           ultima_atualizacao?: string | null
