@@ -145,7 +145,32 @@ export default function PeticoesPage() {
   }, [petitions, searchTerm, statusFilter]);
 
   const handleCreatePetition = (typeSlug: string) => {
-    navigate(`/peticoes/nova?type=${typeSlug}`);
+    // Check if there are templates for this type
+    const templates = getTemplatesByType(typeSlug);
+    const selectedType = petitionTypes.find(t => t.slug === typeSlug);
+    
+    if (templates.length > 0 && selectedType) {
+      setSelectedTypeForTemplate(selectedType);
+    } else {
+      navigate(`/peticoes/nova?type=${typeSlug}`);
+    }
+  };
+
+  const handleTemplateSelected = async (template: PetitionTemplate, html: string) => {
+    // Create petition and navigate to editor with template HTML stored in sessionStorage
+    const newId = await createPetition(template.typeSlug);
+    if (newId) {
+      sessionStorage.setItem(`petition-template-${newId}`, html);
+      sessionStorage.setItem(`petition-template-title-${newId}`, template.acaoTitulo);
+      navigate(`/peticoes/${newId}/editar?fromTemplate=true`);
+    }
+  };
+
+  const handleSkipTemplate = () => {
+    if (selectedTypeForTemplate) {
+      navigate(`/peticoes/nova?type=${selectedTypeForTemplate.slug}`);
+      setSelectedTypeForTemplate(null);
+    }
   };
 
   const handleOpenPetition = (id: string, status: string) => {
