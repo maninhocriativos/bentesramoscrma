@@ -115,7 +115,7 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 
 export default function PeticoesPage() {
   const navigate = useNavigate();
-  const { petitions, petitionTypes, loading, duplicatePetition, archivePetition, deletePetition } = usePeticoes();
+  const { petitions, petitionTypes, loading, createPetition, duplicatePetition, archivePetition, deletePetition } = usePeticoes();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('lista');
