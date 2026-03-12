@@ -11,6 +11,8 @@ export interface Perfil {
   sobrenome: string | null;
   telefone: string | null;
   cargo: string | null;
+  oab_numero: string | null;
+  oab_uf: string | null;
 }
 
 interface PerfilContextValue {

@@ -67,11 +67,16 @@ export function OnboardingModal() {
     setErrors({});
     setSaving(true);
     
-    const { error } = await updatePerfil({
+    const updateData: any = {
       nome: result.data.nome,
       sobrenome: result.data.sobrenome,
       telefone: result.data.telefone,
-    });
+    };
+    if (oabNumero.trim()) {
+      updateData.oab_numero = oabNumero.trim();
+      updateData.oab_uf = oabUf;
+    }
+    const { error } = await updatePerfil(updateData);
     
     if (error) {
       toast({
