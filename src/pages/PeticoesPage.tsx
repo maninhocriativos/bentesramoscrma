@@ -75,6 +75,31 @@ const TYPE_COLORS: Record<string, { gradient: string; bg: string; border: string
     bg: 'bg-pink-50 dark:bg-pink-950/30',
     border: 'border-pink-200 dark:border-pink-800'
   },
+  seguro_nao_contratado: {
+    gradient: 'from-orange-600 via-amber-500 to-yellow-600',
+    bg: 'bg-orange-50 dark:bg-orange-950/30',
+    border: 'border-orange-200 dark:border-orange-800'
+  },
+  tarifa_bancaria: {
+    gradient: 'from-cyan-600 via-sky-500 to-blue-600',
+    bg: 'bg-cyan-50 dark:bg-cyan-950/30',
+    border: 'border-cyan-200 dark:border-cyan-800'
+  },
+  cancelamento_voo: {
+    gradient: 'from-sky-600 via-indigo-500 to-violet-600',
+    bg: 'bg-sky-50 dark:bg-sky-950/30',
+    border: 'border-sky-200 dark:border-sky-800'
+  },
+  emprestimo_fraudulento: {
+    gradient: 'from-red-600 via-rose-500 to-pink-600',
+    bg: 'bg-red-50 dark:bg-red-950/30',
+    border: 'border-red-200 dark:border-red-800'
+  },
+  renovacao_emprestimo: {
+    gradient: 'from-fuchsia-600 via-purple-500 to-indigo-600',
+    bg: 'bg-fuchsia-50 dark:bg-fuchsia-950/30',
+    border: 'border-fuchsia-200 dark:border-fuchsia-800'
+  },
 };
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
