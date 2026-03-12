@@ -1,7 +1,7 @@
 import { 
   LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, 
   DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare, 
-  Sparkles, Webhook, Zap, BookOpen, FormInput, History, FileEdit
+  Sparkles, Webhook, Zap, BookOpen, FormInput, History, FileEdit, Gavel
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import {
@@ -44,6 +44,7 @@ const menuSections: MenuSection[] = [
       { title: 'CRM de Leads', url: '/leads', icon: Users, visibility: 'leads-only' },
       { title: 'Leads API (Meta)', url: '/meta-leads', icon: FormInput, visibility: 'leads-only' },
       { title: 'Processos', url: '/processos', icon: Scale, visibility: 'processos-only' },
+      { title: 'Intimações', url: '/intimacoes', icon: Gavel, visibility: 'processos-only' },
     ],
   },
   {
