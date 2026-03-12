@@ -63,14 +63,35 @@ export default function PeticaoEditarPage() {
           setPayload(data.payload || {});
           setCurrentStep(data.step_current || 1);
           
-          // Check if there's a template HTML in sessionStorage
           const fromTemplate = searchParams.get('fromTemplate');
           if (fromTemplate) {
+            // 1) Try sessionStorage first (fresh template selection)
             const storedHtml = sessionStorage.getItem(`petition-template-${id}`);
             if (storedHtml) {
               setTemplateHtml(storedHtml);
+              // Persist to petition_documents so it survives page reloads
+              const { supabase } = await import('@/integrations/supabase/client');
+              await supabase.from('petition_documents').upsert({
+                petition_id: id,
+                version: 1,
+                html_content: storedHtml,
+                generated_by: 'template_editor',
+              }, { onConflict: 'petition_id,version' });
               sessionStorage.removeItem(`petition-template-${id}`);
               sessionStorage.removeItem(`petition-template-title-${id}`);
+            } else {
+              // 2) Fallback: load from petition_documents (page reload)
+              const { supabase } = await import('@/integrations/supabase/client');
+              const { data: docData } = await supabase
+                .from('petition_documents')
+                .select('html_content')
+                .eq('petition_id', id)
+                .order('version', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (docData?.html_content) {
+                setTemplateHtml(docData.html_content);
+              }
             }
           }
         } else {
