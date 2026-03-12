@@ -29,6 +29,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { usePeticoes } from '@/hooks/usePeticoes';
 import { STATUS_LABELS, type PetitionType } from '@/types/peticoes';
+import { TemplatePicker } from '@/components/peticoes/TemplatePicker';
+import { getTemplatesByType, type PetitionTemplate } from '@/lib/petitionTemplates';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
