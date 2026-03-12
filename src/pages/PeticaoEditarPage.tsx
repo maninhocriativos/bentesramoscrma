@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Save, Check, Loader2, Sparkles, User, MapPin, Building2, Calculator } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Save, Check, Loader2, Sparkles, User, MapPin, Building2, Calculator, Eye } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
