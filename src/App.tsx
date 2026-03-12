@@ -99,6 +99,7 @@ const App = () => (
                 <Route path="/modelos" element={<ModelosPage />} />
                 <Route path="/peticoes/modelo-editor" element={<PeticaoModeloEditorPage />} />
                 <Route path="/historico-acessos" element={<HistoricoAcessosPage />} />
+                <Route path="/intimacoes" element={<IntimacoesPage />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />

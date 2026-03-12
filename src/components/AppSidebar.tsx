@@ -44,6 +44,7 @@ const menuSections: MenuSection[] = [
       { title: 'CRM de Leads', url: '/leads', icon: Users, visibility: 'leads-only' },
       { title: 'Leads API (Meta)', url: '/meta-leads', icon: FormInput, visibility: 'leads-only' },
       { title: 'Processos', url: '/processos', icon: Scale, visibility: 'processos-only' },
+      { title: 'Intimações', url: '/intimacoes', icon: Gavel, visibility: 'processos-only' },
     ],
   },
   {
