@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
   DialogContent,
@@ -11,10 +10,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  FileText, Loader2, ArrowRight, FileType, Sparkles,
-  Users, Shield, Plane, CreditCard, ShoppingCart, Ban, TrendingUp, Package, AlertTriangle,
-} from 'lucide-react';
+import { FileText, Loader2, ArrowRight, Sparkles } from 'lucide-react';
 import { getTemplatesByType, type PetitionTemplate } from '@/lib/petitionTemplates';
 import { cn } from '@/lib/utils';
 import mammoth from 'mammoth';
@@ -37,6 +33,23 @@ const TAG_COLORS: Record<string, string> = {
   'Aéreo': 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
 };
 
+const FIRM_HEADER = `
+<div style="text-align:center; margin-bottom:30px;">
+  <img src="/images/logo-bentes-ramos-header.jpg" alt="Bentes Ramos Advocacia" style="max-width:280px; height:auto; margin:0 auto; display:block;" />
+</div>
+`;
+
+const FIRM_FOOTER = `
+<div style="border-top: 1px solid #b8860b; margin-top:40px; padding-top:12px; font-size:9pt; color:#333; line-height:1.4;">
+  <p style="margin:0; text-align:center;">
+    <strong style="color:#8B6914;">BENTES RAMOS ADVOCACIA E CONSULTORIA JURÍDICA</strong><br/>
+    📍 Rua Salvador, 120, Sala 708 – Vieiralves Business Center – Adrianópolis, Manaus/AM – CEP 69057-040<br/>
+    📞 (92) 3343-6173 &nbsp;|&nbsp; 📱 (92) 98223-7330 / (92) 99160-4348<br/>
+    ✉️ juridico@bentesramos.adv.br &nbsp;|&nbsp; 🌐 www.bentesramos.com.br
+  </p>
+</div>
+`;
+
 export function TemplatePicker({ typeSlug, typeTitle, onSelectTemplate, onSkip }: TemplatePickerProps) {
   const templates = getTemplatesByType(typeSlug);
   const [loading, setLoading] = useState<string | null>(null);
@@ -49,38 +62,47 @@ export function TemplatePicker({ typeSlug, typeTitle, onSelectTemplate, onSkip }
       const arrayBuffer = await response.arrayBuffer();
 
       let html = '';
-      if (template.fileType === 'docx') {
+      
+      // Convert with image support - embed images as base64
+      const mammothOptions = {
+        arrayBuffer,
+      };
+
+      try {
         const result = await mammoth.convertToHtml(
           { arrayBuffer },
           {
             styleMap: [
-              "p[style-name='Heading 1'] => h1.petition-h1:fresh",
-              "p[style-name='Heading 2'] => h2.petition-h2:fresh",
-              "p[style-name='Heading 3'] => h3.petition-h3:fresh",
+              "p[style-name='Heading 1'] => h1:fresh",
+              "p[style-name='Heading 2'] => h2:fresh",
+              "p[style-name='Heading 3'] => h3:fresh",
               "b => strong",
               "i => em",
               "u => u",
             ],
+            convertImage: mammoth.images.imgElement(function(image) {
+              return image.read("base64").then(function(imageBuffer) {
+                return {
+                  src: "data:" + image.contentType + ";base64," + imageBuffer,
+                  style: "max-width:100%; height:auto;",
+                };
+              });
+            }),
           }
         );
         html = result.value;
-      } else {
-        // For .doc files, mammoth may still work for some formats
-        try {
-          const result = await mammoth.convertToHtml({ arrayBuffer });
-          html = result.value;
-        } catch {
-          // Fallback: show a message that the file needs to be converted
-          html = `<div style="text-align:center; padding:40px;">
-            <h2>Modelo carregado: ${template.title}</h2>
-            <p>Este modelo está no formato .doc (Word 97-2003).</p>
-            <p>O conteúdo foi carregado mas pode precisar de ajustes de formatação.</p>
-            <p><strong>Tipo de Ação:</strong> ${template.acaoTitulo}</p>
-          </div>`;
-        }
+      } catch {
+        // Fallback for .doc
+        html = `<p style="text-align:center; padding:40px; color:#666;">
+          <strong>${template.title}</strong><br/>
+          Modelo carregado no formato .doc — edite o conteúdo abaixo.
+        </p>`;
       }
 
-      onSelectTemplate(template, html);
+      // Wrap with firm branding
+      const fullHtml = FIRM_HEADER + html + FIRM_FOOTER;
+
+      onSelectTemplate(template, fullHtml);
     } catch (error) {
       console.error('Erro ao carregar template:', error);
     } finally {
@@ -103,7 +125,7 @@ export function TemplatePicker({ typeSlug, typeTitle, onSelectTemplate, onSkip }
           Escolha um modelo para "{typeTitle}"
         </h3>
         <p className="text-muted-foreground text-sm max-w-lg mx-auto">
-          Selecione um modelo pré-configurado para iniciar sua petição com toda a estrutura jurídica pronta. 
+          Selecione um modelo pré-configurado para iniciar sua petição com toda a estrutura jurídica pronta.
           Você poderá editar todos os dados depois.
         </p>
       </div>
@@ -221,8 +243,8 @@ export function TemplatePicker({ typeSlug, typeTitle, onSelectTemplate, onSkip }
                 <div>
                   <p className="text-sm font-medium">O modelo será carregado no editor</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Você poderá substituir todos os dados do cliente, banco e valores diretamente no texto. 
-                    A formatação jurídica original será preservada.
+                    O logotipo do escritório, cabeçalho e rodapé serão inseridos automaticamente.
+                    Você poderá editar todos os dados diretamente no texto.
                   </p>
                 </div>
               </div>
@@ -261,7 +283,7 @@ export function TemplatePicker({ typeSlug, typeTitle, onSelectTemplate, onSkip }
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
             <div className="text-center">
               <p className="font-semibold">Carregando modelo...</p>
-              <p className="text-sm text-muted-foreground">Convertendo documento e preservando formatação</p>
+              <p className="text-sm text-muted-foreground">Convertendo documento e preservando formatação e imagens</p>
             </div>
           </div>
         </div>
