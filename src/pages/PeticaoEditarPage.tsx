@@ -46,6 +46,7 @@ export default function PeticaoEditarPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [templateHtml, setTemplateHtml] = useState<string | null>(null);
 
   const autoSaveTimeout = useRef<ReturnType<typeof setTimeout>>();
 
