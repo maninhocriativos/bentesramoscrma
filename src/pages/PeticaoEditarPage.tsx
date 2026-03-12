@@ -164,6 +164,63 @@ export default function PeticaoEditarPage() {
     );
   }
 
+  // If template HTML is loaded, show the HTML editor
+  if (templateHtml) {
+    return (
+      <AppLayout>
+        <AppHeader title={`Modelo - ${petition?.petition_types?.title || ''}`} />
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="flex items-center gap-3 p-4 border-b bg-muted/30">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/peticoes')} className="gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              Voltar
+            </Button>
+            <div className="flex-1">
+              <p className="text-sm font-medium">Editando modelo de petição</p>
+              <p className="text-xs text-muted-foreground">Edite os dados do cliente e personalize o modelo abaixo</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => { setTemplateHtml(null); }} className="gap-2">
+              <Eye className="h-4 w-4" />
+              Ir para Wizard
+            </Button>
+          </div>
+          <div className="flex-1 min-h-0">
+            <HtmlPreviewEditor
+              initialHtml={templateHtml}
+              onSave={async (html) => {
+                if (!petition?.id) return;
+                setSaving(true);
+                try {
+                  const { error } = await (await import('@/integrations/supabase/client')).supabase
+                    .from('petition_documents')
+                    .insert({
+                      petition_id: petition.id,
+                      version: 1,
+                      html_content: html,
+                      generated_by: 'template_editor',
+                    });
+                  if (!error) {
+                    await (await import('@/integrations/supabase/client')).supabase
+                      .from('petitions')
+                      .update({ status: 'em_revisao' })
+                      .eq('id', petition.id);
+                    toast({ title: '✅ Petição salva!', description: 'Modelo salvo e enviado para revisão.' });
+                    navigate(`/peticoes/${petition.id}/revisao`);
+                  }
+                } catch (e) {
+                  toast({ title: 'Erro ao salvar', variant: 'destructive' });
+                } finally {
+                  setSaving(false);
+                }
+              }}
+              saving={saving}
+            />
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout>
       <AppHeader title={`Nova Petição - ${petition?.petition_types?.title || ''}`} />
