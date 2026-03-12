@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Save, Check, Loader2, Sparkles, User, MapPin, Building2, Calculator } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Save, Check, Loader2, Sparkles, User, MapPin, Building2, Calculator, Eye } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
+import { HtmlPreviewEditor } from '@/components/peticoes/HtmlPreviewEditor';
 import { 
   Select,
   SelectContent,
@@ -46,6 +47,7 @@ export default function PeticaoEditarPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [templateHtml, setTemplateHtml] = useState<string | null>(null);
 
   const autoSaveTimeout = useRef<ReturnType<typeof setTimeout>>();
 
@@ -60,6 +62,17 @@ export default function PeticaoEditarPage() {
           setPetition(data);
           setPayload(data.payload || {});
           setCurrentStep(data.step_current || 1);
+          
+          // Check if there's a template HTML in sessionStorage
+          const fromTemplate = searchParams.get('fromTemplate');
+          if (fromTemplate) {
+            const storedHtml = sessionStorage.getItem(`petition-template-${id}`);
+            if (storedHtml) {
+              setTemplateHtml(storedHtml);
+              sessionStorage.removeItem(`petition-template-${id}`);
+              sessionStorage.removeItem(`petition-template-title-${id}`);
+            }
+          }
         } else {
           toast({ title: 'Erro', description: 'Petição não encontrada', variant: 'destructive' });
           navigate('/peticoes');
@@ -146,6 +159,63 @@ export default function PeticaoEditarPage() {
               <Sparkles className="h-6 w-6 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
             </div>
             <p className="text-muted-foreground">Carregando petição...</p>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  // If template HTML is loaded, show the HTML editor
+  if (templateHtml) {
+    return (
+      <AppLayout>
+        <AppHeader title={`Modelo - ${petition?.petition_types?.title || ''}`} />
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="flex items-center gap-3 p-4 border-b bg-muted/30">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/peticoes')} className="gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              Voltar
+            </Button>
+            <div className="flex-1">
+              <p className="text-sm font-medium">Editando modelo de petição</p>
+              <p className="text-xs text-muted-foreground">Edite os dados do cliente e personalize o modelo abaixo</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => { setTemplateHtml(null); }} className="gap-2">
+              <Eye className="h-4 w-4" />
+              Ir para Wizard
+            </Button>
+          </div>
+          <div className="flex-1 min-h-0">
+            <HtmlPreviewEditor
+              initialHtml={templateHtml}
+              onSave={async (html) => {
+                if (!petition?.id) return;
+                setSaving(true);
+                try {
+                  const { error } = await (await import('@/integrations/supabase/client')).supabase
+                    .from('petition_documents')
+                    .insert({
+                      petition_id: petition.id,
+                      version: 1,
+                      html_content: html,
+                      generated_by: 'template_editor',
+                    });
+                  if (!error) {
+                    await (await import('@/integrations/supabase/client')).supabase
+                      .from('petitions')
+                      .update({ status: 'em_revisao' })
+                      .eq('id', petition.id);
+                    toast({ title: '✅ Petição salva!', description: 'Modelo salvo e enviado para revisão.' });
+                    navigate(`/peticoes/${petition.id}/revisao`);
+                  }
+                } catch (e) {
+                  toast({ title: 'Erro ao salvar', variant: 'destructive' });
+                } finally {
+                  setSaving(false);
+                }
+              }}
+              saving={saving}
+            />
           </div>
         </div>
       </AppLayout>

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Package, TrendingUp, CreditCard, AlertTriangle, Ban, ShoppingCart,
   Plus, Search, MoreHorizontal, Eye, Copy, FileText, Archive, ArrowLeft, Trash2,
-  Sparkles, FileCheck2, Clock, CheckCircle2, XCircle, BarChart3
+  Sparkles, FileCheck2, Clock, CheckCircle2, XCircle, BarChart3, Plane
 } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
@@ -29,6 +29,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { usePeticoes } from '@/hooks/usePeticoes';
 import { STATUS_LABELS, type PetitionType } from '@/types/peticoes';
+import { TemplatePicker } from '@/components/peticoes/TemplatePicker';
+import { getTemplatesByType, type PetitionTemplate } from '@/lib/petitionTemplates';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -41,6 +43,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Ban: <Ban className="h-5 w-5" />,
   FileText: <FileText className="h-5 w-5" />,
   ShoppingCart: <ShoppingCart className="h-5 w-5" />,
+  Plane: <Plane className="h-5 w-5" />,
 };
 
 const TYPE_COLORS: Record<string, { gradient: string; bg: string; border: string }> = {
@@ -74,6 +77,31 @@ const TYPE_COLORS: Record<string, { gradient: string; bg: string; border: string
     bg: 'bg-pink-50 dark:bg-pink-950/30',
     border: 'border-pink-200 dark:border-pink-800'
   },
+  seguro_nao_contratado: {
+    gradient: 'from-orange-600 via-amber-500 to-yellow-600',
+    bg: 'bg-orange-50 dark:bg-orange-950/30',
+    border: 'border-orange-200 dark:border-orange-800'
+  },
+  tarifa_bancaria: {
+    gradient: 'from-cyan-600 via-sky-500 to-blue-600',
+    bg: 'bg-cyan-50 dark:bg-cyan-950/30',
+    border: 'border-cyan-200 dark:border-cyan-800'
+  },
+  cancelamento_voo: {
+    gradient: 'from-sky-600 via-indigo-500 to-violet-600',
+    bg: 'bg-sky-50 dark:bg-sky-950/30',
+    border: 'border-sky-200 dark:border-sky-800'
+  },
+  emprestimo_fraudulento: {
+    gradient: 'from-red-600 via-rose-500 to-pink-600',
+    bg: 'bg-red-50 dark:bg-red-950/30',
+    border: 'border-red-200 dark:border-red-800'
+  },
+  renovacao_emprestimo: {
+    gradient: 'from-fuchsia-600 via-purple-500 to-indigo-600',
+    bg: 'bg-fuchsia-50 dark:bg-fuchsia-950/30',
+    border: 'border-fuchsia-200 dark:border-fuchsia-800'
+  },
 };
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
@@ -87,10 +115,11 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 
 export default function PeticoesPage() {
   const navigate = useNavigate();
-  const { petitions, petitionTypes, loading, duplicatePetition, archivePetition, deletePetition } = usePeticoes();
+  const { petitions, petitionTypes, loading, createPetition, duplicatePetition, archivePetition, deletePetition } = usePeticoes();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('lista');
+  const [selectedTypeForTemplate, setSelectedTypeForTemplate] = useState<PetitionType | null>(null);
 
   // Stats
   const stats = useMemo(() => {
@@ -116,7 +145,32 @@ export default function PeticoesPage() {
   }, [petitions, searchTerm, statusFilter]);
 
   const handleCreatePetition = (typeSlug: string) => {
-    navigate(`/peticoes/nova?type=${typeSlug}`);
+    // Check if there are templates for this type
+    const templates = getTemplatesByType(typeSlug);
+    const selectedType = petitionTypes.find(t => t.slug === typeSlug);
+    
+    if (templates.length > 0 && selectedType) {
+      setSelectedTypeForTemplate(selectedType);
+    } else {
+      navigate(`/peticoes/nova?type=${typeSlug}`);
+    }
+  };
+
+  const handleTemplateSelected = async (template: PetitionTemplate, html: string) => {
+    // Create petition and navigate to editor with template HTML stored in sessionStorage
+    const newId = await createPetition(template.typeSlug);
+    if (newId) {
+      sessionStorage.setItem(`petition-template-${newId}`, html);
+      sessionStorage.setItem(`petition-template-title-${newId}`, template.acaoTitulo);
+      navigate(`/peticoes/${newId}/editar?fromTemplate=true`);
+    }
+  };
+
+  const handleSkipTemplate = () => {
+    if (selectedTypeForTemplate) {
+      navigate(`/peticoes/nova?type=${selectedTypeForTemplate.slug}`);
+      setSelectedTypeForTemplate(null);
+    }
   };
 
   const handleOpenPetition = (id: string, status: string) => {
@@ -352,66 +406,90 @@ export default function PeticoesPage() {
               </Card>
             </TabsContent>
 
-            {/* Nova petição - seleção de tipo */}
+            {/* Nova petição - seleção de tipo ou template */}
             <TabsContent value="nova" className="space-y-6">
-              <div className="text-center mb-8">
-                <h2 className="text-2xl font-bold mb-2">Escolha o tipo de ação</h2>
-                <p className="text-muted-foreground">
-                  Selecione o tipo de petição para começar a preencher os dados
-                </p>
-              </div>
+              {selectedTypeForTemplate ? (
+                <div className="space-y-4">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setSelectedTypeForTemplate(null)}
+                    className="gap-2"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Voltar aos tipos
+                  </Button>
+                  <TemplatePicker
+                    typeSlug={selectedTypeForTemplate.slug}
+                    typeTitle={selectedTypeForTemplate.title}
+                    onSelectTemplate={handleTemplateSelected}
+                    onSkip={handleSkipTemplate}
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="text-center mb-8">
+                    <h2 className="text-2xl font-bold mb-2">Escolha o tipo de ação</h2>
+                    <p className="text-muted-foreground">
+                      Selecione o tipo de petição para começar a preencher os dados
+                    </p>
+                  </div>
 
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {petitionTypes.map((type) => {
-                  const colors = TYPE_COLORS[type.slug] || TYPE_COLORS.cobranca_pacote_bancario;
-                  return (
-                    <Card
-                      key={type.slug}
-                      className={cn(
-                        "group cursor-pointer overflow-hidden transition-all duration-300",
-                        "hover:shadow-xl hover:scale-[1.02] hover:-translate-y-1",
-                        "border-2 hover:border-primary/50"
-                      )}
-                      onClick={() => handleCreatePetition(type.slug)}
-                    >
-                      <CardContent className="p-0">
-                        {/* Header com gradiente */}
-                        <div className={cn(
-                          "relative h-24 bg-gradient-to-br text-white",
-                          colors.gradient,
-                          "flex items-center justify-center"
-                        )}>
-                          <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                          <div className="relative flex items-center gap-4">
-                            <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm shadow-lg">
-                              {ICON_MAP[type.icon]}
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {petitionTypes.map((type) => {
+                      const colors = TYPE_COLORS[type.slug] || TYPE_COLORS.cobranca_pacote_bancario;
+                      const templateCount = getTemplatesByType(type.slug).length;
+                      return (
+                        <Card
+                          key={type.slug}
+                          className={cn(
+                            "group cursor-pointer overflow-hidden transition-all duration-300",
+                            "hover:shadow-xl hover:scale-[1.02] hover:-translate-y-1",
+                            "border-2 hover:border-primary/50"
+                          )}
+                          onClick={() => handleCreatePetition(type.slug)}
+                        >
+                          <CardContent className="p-0">
+                            <div className={cn(
+                              "relative h-24 bg-gradient-to-br text-white",
+                              colors.gradient,
+                              "flex items-center justify-center"
+                            )}>
+                              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              <div className="relative flex items-center gap-4">
+                                <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm shadow-lg">
+                                  {ICON_MAP[type.icon]}
+                                </div>
+                              </div>
+                              <div className="absolute -top-8 -right-8 w-24 h-24 bg-white/10 rounded-full" />
+                              <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-white/10 rounded-full" />
+                              {templateCount > 0 && (
+                                <div className="absolute top-3 right-3 bg-white/20 backdrop-blur-sm rounded-full px-2.5 py-0.5 text-xs font-semibold">
+                                  {templateCount} {templateCount === 1 ? 'modelo' : 'modelos'}
+                                </div>
+                              )}
                             </div>
-                          </div>
-                          {/* Decorative circles */}
-                          <div className="absolute -top-8 -right-8 w-24 h-24 bg-white/10 rounded-full" />
-                          <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-white/10 rounded-full" />
-                        </div>
-                        
-                        {/* Content */}
-                        <div className="p-5">
-                          <h3 className="font-bold text-lg mb-2 group-hover:text-primary transition-colors">
-                            {type.title}
-                          </h3>
-                          <p className="text-sm text-muted-foreground line-clamp-2">
-                            {type.description}
-                          </p>
-                          
-                          {/* Action hint */}
-                          <div className="mt-4 flex items-center gap-2 text-sm text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                            <span>Iniciar</span>
-                            <ArrowLeft className="h-4 w-4 rotate-180" />
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
+                            
+                            <div className="p-5">
+                              <h3 className="font-bold text-lg mb-2 group-hover:text-primary transition-colors">
+                                {type.title}
+                              </h3>
+                              <p className="text-sm text-muted-foreground line-clamp-2">
+                                {type.description}
+                              </p>
+                              
+                              <div className="mt-4 flex items-center gap-2 text-sm text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                                <span>{templateCount > 0 ? 'Ver modelos' : 'Iniciar'}</span>
+                                <ArrowLeft className="h-4 w-4 rotate-180" />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </TabsContent>
           </Tabs>
         </div>
