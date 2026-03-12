@@ -61,6 +61,17 @@ export default function PeticaoEditarPage() {
           setPetition(data);
           setPayload(data.payload || {});
           setCurrentStep(data.step_current || 1);
+          
+          // Check if there's a template HTML in sessionStorage
+          const fromTemplate = searchParams.get('fromTemplate');
+          if (fromTemplate) {
+            const storedHtml = sessionStorage.getItem(`petition-template-${id}`);
+            if (storedHtml) {
+              setTemplateHtml(storedHtml);
+              sessionStorage.removeItem(`petition-template-${id}`);
+              sessionStorage.removeItem(`petition-template-title-${id}`);
+            }
+          }
         } else {
           toast({ title: 'Erro', description: 'Petição não encontrada', variant: 'destructive' });
           navigate('/peticoes');
