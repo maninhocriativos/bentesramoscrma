@@ -165,6 +165,33 @@ export function OnboardingModal() {
             )}
           </div>
 
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="oab_numero">Nº OAB (opcional)</Label>
+              <Input
+                id="oab_numero"
+                value={oabNumero}
+                onChange={(e) => setOabNumero(e.target.value.replace(/\D/g, ''))}
+                placeholder="12345"
+                className="rounded-xl"
+                maxLength={10}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="oab_uf">UF</Label>
+              <select
+                id="oab_uf"
+                value={oabUf}
+                onChange={(e) => setOabUf(e.target.value)}
+                className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+              >
+                {['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map(uf => (
+                  <option key={uf} value={uf}>{uf}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <Button 
             type="submit" 
             className="w-full rounded-xl"
