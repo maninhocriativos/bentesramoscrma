@@ -548,3 +548,99 @@
   .stagger-children > *:nth-child(7) { animation-delay: 300ms; }
   .stagger-children > *:nth-child(8) { animation-delay: 350ms; }
 }
+
+/* Petition Editor - A4 Document Styles */
+.petition-editor {
+  min-height: 100%;
+}
+
+.petition-editor p {
+  margin-bottom: 12px;
+  text-align: justify;
+  text-indent: 0;
+}
+
+.petition-editor h1 {
+  font-size: 14pt;
+  font-weight: bold;
+  text-align: center;
+  margin: 24px 0 16px;
+  text-transform: uppercase;
+  border-bottom: 2px solid #8B6914;
+  padding-bottom: 8px;
+}
+
+.petition-editor h2 {
+  font-size: 13pt;
+  font-weight: bold;
+  margin: 20px 0 12px;
+  color: #3F362D;
+}
+
+.petition-editor h3 {
+  font-size: 12pt;
+  font-weight: bold;
+  margin: 16px 0 10px;
+}
+
+.petition-editor strong {
+  font-weight: bold;
+}
+
+.petition-editor em {
+  font-style: italic;
+}
+
+.petition-editor u {
+  text-decoration: underline;
+}
+
+.petition-editor ul, .petition-editor ol {
+  margin-left: 30px;
+  margin-bottom: 12px;
+}
+
+.petition-editor ul {
+  list-style-type: disc;
+}
+
+.petition-editor ol {
+  list-style-type: decimal;
+}
+
+.petition-editor li {
+  margin-bottom: 6px;
+}
+
+.petition-editor table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+
+.petition-editor th, .petition-editor td {
+  border: 1px solid #ccc;
+  padding: 8px;
+  text-align: left;
+}
+
+.petition-editor th {
+  background-color: #f5f0e8;
+  font-weight: bold;
+}
+
+.petition-editor img {
+  max-width: 100%;
+  height: auto;
+}
+
+.petition-editor a {
+  color: #8B6914;
+  text-decoration: underline;
+}
+
+.petition-editor hr {
+  border: none;
+  border-top: 1px solid #C9B89B;
+  margin: 20px 0;
+}
