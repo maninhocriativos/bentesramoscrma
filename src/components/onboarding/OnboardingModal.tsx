@@ -41,6 +41,8 @@ export function OnboardingModal() {
   const [nome, setNome] = useState('');
   const [sobrenome, setSobrenome] = useState('');
   const [telefone, setTelefone] = useState('');
+  const [oabNumero, setOabNumero] = useState('');
+  const [oabUf, setOabUf] = useState('AM');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
