@@ -41,6 +41,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Ban: <Ban className="h-5 w-5" />,
   FileText: <FileText className="h-5 w-5" />,
   ShoppingCart: <ShoppingCart className="h-5 w-5" />,
+  Plane: <Plane className="h-5 w-5" />,
 };
 
 const TYPE_COLORS: Record<string, { gradient: string; bg: string; border: string }> = {
