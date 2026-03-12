@@ -119,6 +119,7 @@ export default function PeticoesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('lista');
+  const [selectedTypeForTemplate, setSelectedTypeForTemplate] = useState<PetitionType | null>(null);
 
   // Stats
   const stats = useMemo(() => {
