@@ -973,6 +973,7 @@ export type Database = {
           created_at: string | null
           data_disponibilizacao: string | null
           data_intimacao: string | null
+          data_publicacao: string | null
           fonte: string | null
           id: string
           lida: boolean | null
@@ -992,6 +993,7 @@ export type Database = {
           created_at?: string | null
           data_disponibilizacao?: string | null
           data_intimacao?: string | null
+          data_publicacao?: string | null
           fonte?: string | null
           id?: string
           lida?: boolean | null
@@ -1011,6 +1013,7 @@ export type Database = {
           created_at?: string | null
           data_disponibilizacao?: string | null
           data_intimacao?: string | null
+          data_publicacao?: string | null
           fonte?: string | null
           id?: string
           lida?: boolean | null
