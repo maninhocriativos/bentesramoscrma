@@ -23,6 +23,7 @@ export function useIntimacoes() {
     const { data, error } = await supabase
       .from('intimacoes')
       .select('id, processo_cnj, processo_titulo, conteudo, data_intimacao, data_publicacao, data_disponibilizacao, tribunal, tipo_intimacao, lida, oab_numero')
+      .gte('data_intimacao', '2026-01-01T00:00:00Z')
       .order('data_intimacao', { ascending: false });
 
     if (!error && data) {
