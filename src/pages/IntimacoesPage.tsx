@@ -23,6 +23,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { Textarea } from '@/components/ui/textarea';
 
 import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
