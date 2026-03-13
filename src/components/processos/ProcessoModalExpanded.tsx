@@ -972,168 +972,89 @@ export function ProcessoModalExpanded({
 
             {/* Tab: Partes */}
             <TabsContent value="partes" className="h-full mt-0 data-[state=inactive]:hidden" forceMount>
-              <ScrollArea className="h-[400px] pr-2">
+              <ScrollArea className="h-[calc(92vh-220px)] pr-2">
                 <div className="py-4 space-y-4">
-                  {/* Formulário para adicionar parte manualmente */}
-                  <Card className="border-dashed">
-                    <CardContent className="p-4 space-y-3">
-                      <p className="text-sm font-medium flex items-center gap-2">
-                        <Plus className="h-4 w-4" /> Adicionar Parte
-                      </p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label className="text-xs">Nome *</Label>
-                          <Input
-                            id="nova_parte_nome"
-                            className="rounded-xl h-9 text-sm"
-                            placeholder="Nome da parte"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Tipo/Polo *</Label>
-                          <select
-                            id="nova_parte_tipo"
-                            className="flex h-9 w-full rounded-xl border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          >
-                            <option value="">Selecione</option>
-                            <option value="Autor">Autor</option>
-                            <option value="Réu">Réu</option>
-                            <option value="Terceiro Interessado">Terceiro Interessado</option>
-                            <option value="Testemunha">Testemunha</option>
-                            <option value="Perito">Perito</option>
-                          </select>
-                        </div>
-                        <div>
-                          <Label className="text-xs">Documento (CPF/CNPJ)</Label>
-                          <Input
-                            id="nova_parte_doc"
-                            className="rounded-xl h-9 text-sm"
-                            placeholder="Opcional"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Celular</Label>
-                          <Input
-                            id="nova_parte_celular"
-                            className="rounded-xl h-9 text-sm"
-                            placeholder="(00) 00000-0000"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Telefone Adicional</Label>
-                          <Input
-                            id="nova_parte_telefone"
-                            className="rounded-xl h-9 text-sm"
-                            placeholder="(00) 0000-0000"
-                          />
-                        </div>
-                        <div className="flex items-end">
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="rounded-xl w-full"
-                            onClick={() => {
-                              const nomeInput = document.getElementById('nova_parte_nome') as HTMLInputElement;
-                              const tipoSelect = document.getElementById('nova_parte_tipo') as HTMLSelectElement;
-                              const docInput = document.getElementById('nova_parte_doc') as HTMLInputElement;
-                              const celularInput = document.getElementById('nova_parte_celular') as HTMLInputElement;
-                              const telefoneInput = document.getElementById('nova_parte_telefone') as HTMLInputElement;
-                              
-                              const nome = nomeInput?.value?.trim();
-                              const tipo = tipoSelect?.value;
-                              const documento = docInput?.value?.trim();
-                              const celular = celularInput?.value?.trim();
-                              const telefone_adicional = telefoneInput?.value?.trim();
-
-                              if (!nome || !tipo) {
-                                toast.error('Preencha o nome e o tipo da parte');
-                                return;
-                              }
-
-                              const novaParte: ProcessoParte = {
-                                nome,
-                                tipo,
-                                polo: tipo === 'Autor' ? 'AT' : tipo === 'Réu' ? 'PA' : 'TC',
-                                tipoPessoa: 'FISICA',
-                                documento: documento || undefined,
-                                celular: celular || undefined,
-                                telefone_adicional: telefone_adicional || undefined,
-                              };
-
-                              setPartes(prev => [...prev, novaParte]);
-                              nomeInput.value = '';
-                              tipoSelect.value = '';
-                              if (docInput) docInput.value = '';
-                              if (celularInput) celularInput.value = '';
-                              if (telefoneInput) telefoneInput.value = '';
-                              toast.success(`Parte "${nome}" adicionada. Clique em "Salvar" para persistir.`);
-                            }}
-                          >
-                            <Plus className="h-4 w-4 mr-1" />
-                            Adicionar
-                          </Button>
-                        </div>
+                  {/* Header com contagem */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center">
+                        <Users className="h-3.5 w-3.5 text-primary" />
                       </div>
-                    </CardContent>
-                  </Card>
+                      <h3 className="text-sm font-semibold text-foreground">Partes do Processo</h3>
+                      {partes.length > 0 && (
+                        <Badge variant="outline" className="rounded-lg text-xs">{partes.length}</Badge>
+                      )}
+                    </div>
+                  </div>
 
+                  {/* Lista de partes (ACIMA) */}
                   {partes.length === 0 ? (
-                    <Card>
-                      <CardContent className="py-8 text-center">
-                        <Users className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
-                        <p className="text-muted-foreground">Nenhuma parte cadastrada</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Adicione partes manualmente ou use "Buscar DataJud"
-                        </p>
-                      </CardContent>
-                    </Card>
+                    <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 py-10 text-center">
+                      <Users className="h-10 w-10 mx-auto text-muted-foreground/40 mb-2" />
+                      <p className="text-sm text-muted-foreground">Nenhuma parte cadastrada</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Adicione partes abaixo ou use "Buscar DataJud"
+                      </p>
+                    </div>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       {partes.map((parte, i) => {
                         const tipoLower = (parte.tipo || '').toLowerCase();
-                        const poloClasses = tipoLower.includes('autor')
-                          ? 'bg-success/15 text-success border-success/30'
-                          : tipoLower.includes('réu') || tipoLower.includes('reu')
+                        const isAutor = tipoLower.includes('autor');
+                        const isReu = tipoLower.includes('réu') || tipoLower.includes('reu');
+                        const borderColor = isAutor
+                          ? 'border-l-emerald-500'
+                          : isReu
+                            ? 'border-l-red-500'
+                            : 'border-l-muted-foreground/30';
+                        const badgeClasses = isAutor
+                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
+                          : isReu
                             ? 'bg-destructive/15 text-destructive border-destructive/30'
-                            : 'bg-secondary/25 text-secondary-foreground border-secondary/30';
+                            : 'bg-muted text-muted-foreground border-border';
 
                         return (
-                          <Card key={i} className="overflow-hidden">
-                            <CardContent className="p-4">
-                              <div className="flex flex-wrap justify-between items-start gap-2">
-                                <div className="flex-1 min-w-0">
-                                  <span className="font-medium text-sm break-words block">{parte.nome}</span>
+                          <div
+                            key={i}
+                            className={`group relative rounded-xl border border-border/50 bg-card p-3.5 pl-4 border-l-[3px] ${borderColor} transition-all hover:shadow-sm`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <span className="font-medium text-sm block truncate">{parte.nome}</span>
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
                                   {parte.documento && (
-                                    <p className="text-xs text-muted-foreground mt-0.5">Doc: {parte.documento}</p>
+                                    <span className="text-xs text-muted-foreground">Doc: {parte.documento}</span>
                                   )}
                                   {parte.celular && (
-                                    <p className="text-xs text-muted-foreground mt-0.5">📱 {parte.celular}</p>
+                                    <span className="text-xs text-muted-foreground">📱 {parte.celular}</span>
                                   )}
                                   {parte.telefone_adicional && (
-                                    <p className="text-xs text-muted-foreground mt-0.5">📞 {parte.telefone_adicional}</p>
+                                    <span className="text-xs text-muted-foreground">📞 {parte.telefone_adicional}</span>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-1">
-                                  <Badge variant="outline" className={`${poloClasses} flex-shrink-0`}>
-                                    {parte.tipo}
-                                  </Badge>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                                    onClick={() => setPartes(prev => prev.filter((_, idx) => idx !== i))}
-                                  >
-                                    <X className="h-3.5 w-3.5" />
-                                  </Button>
-                                </div>
                               </div>
-                              {parte.advogados && parte.advogados.length > 0 && (
-                                <div className="mt-3 pl-3 border-l-2 border-primary/30">
-                                  <p className="text-xs text-muted-foreground mb-1 inline-flex items-center gap-1">
-                                    <Briefcase className="h-3 w-3" /> Advogado(s)
-                                  </p>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <Badge variant="outline" className={`rounded-lg text-xs ${badgeClasses}`}>
+                                  {parte.tipo}
+                                </Badge>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 text-muted-foreground/50 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => setPartes(prev => prev.filter((_, idx) => idx !== i))}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+                            {parte.advogados && parte.advogados.length > 0 && (
+                              <div className="mt-2.5 pt-2.5 border-t border-border/30">
+                                <p className="text-[11px] text-muted-foreground mb-1.5 uppercase tracking-wider font-medium flex items-center gap-1">
+                                  <Briefcase className="h-3 w-3" /> Advogado(s)
+                                </p>
+                                <div className="space-y-1">
                                   {parte.advogados.map((adv, j) => (
-                                    <div key={j} className="flex flex-wrap items-center justify-between gap-1 mt-1">
+                                    <div key={j} className="flex items-center justify-between gap-2">
                                       <p className="text-xs font-medium break-words min-w-0 flex-1">{adv.nome}</p>
                                       {adv.oab && (
                                         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
@@ -1144,13 +1065,117 @@ export function ProcessoModalExpanded({
                                     </div>
                                   ))}
                                 </div>
-                              )}
-                            </CardContent>
-                          </Card>
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
                   )}
+
+                  {/* Separador visual */}
+                  <Separator className="my-2" />
+
+                  {/* Formulário para adicionar parte (ABAIXO) */}
+                  <div className="rounded-xl border border-dashed border-primary/30 bg-primary/[0.02] p-4 space-y-3">
+                    <p className="text-sm font-medium flex items-center gap-2 text-foreground">
+                      <Plus className="h-4 w-4 text-primary" /> Adicionar Parte
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Nome *</Label>
+                        <Input
+                          id="nova_parte_nome"
+                          className="rounded-xl h-9 text-sm bg-card"
+                          placeholder="Nome da parte"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Tipo/Polo *</Label>
+                        <select
+                          id="nova_parte_tipo"
+                          className="flex h-9 w-full rounded-xl border border-input bg-card px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <option value="">Selecione</option>
+                          <option value="Autor">Autor</option>
+                          <option value="Réu">Réu</option>
+                          <option value="Terceiro Interessado">Terceiro Interessado</option>
+                          <option value="Testemunha">Testemunha</option>
+                          <option value="Perito">Perito</option>
+                          <option value="Advogado">Advogado</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Documento (CPF/CNPJ)</Label>
+                        <Input
+                          id="nova_parte_doc"
+                          className="rounded-xl h-9 text-sm bg-card"
+                          placeholder="Opcional"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Celular</Label>
+                        <Input
+                          id="nova_parte_celular"
+                          className="rounded-xl h-9 text-sm bg-card"
+                          placeholder="(00) 00000-0000"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Telefone Adicional</Label>
+                        <Input
+                          id="nova_parte_telefone"
+                          className="rounded-xl h-9 text-sm bg-card"
+                          placeholder="(00) 0000-0000"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <Button
+                          type="button"
+                          className="rounded-xl w-full h-9"
+                          onClick={() => {
+                            const nomeInput = document.getElementById('nova_parte_nome') as HTMLInputElement;
+                            const tipoSelect = document.getElementById('nova_parte_tipo') as HTMLSelectElement;
+                            const docInput = document.getElementById('nova_parte_doc') as HTMLInputElement;
+                            const celularInput = document.getElementById('nova_parte_celular') as HTMLInputElement;
+                            const telefoneInput = document.getElementById('nova_parte_telefone') as HTMLInputElement;
+                            
+                            const nome = nomeInput?.value?.trim();
+                            const tipo = tipoSelect?.value;
+                            const documento = docInput?.value?.trim();
+                            const celular = celularInput?.value?.trim();
+                            const telefone_adicional = telefoneInput?.value?.trim();
+
+                            if (!nome || !tipo) {
+                              toast.error('Preencha o nome e o tipo da parte');
+                              return;
+                            }
+
+                            const novaParte: ProcessoParte = {
+                              nome,
+                              tipo,
+                              polo: tipo === 'Autor' ? 'AT' : tipo === 'Réu' ? 'PA' : 'TC',
+                              tipoPessoa: 'FISICA',
+                              documento: documento || undefined,
+                              celular: celular || undefined,
+                              telefone_adicional: telefone_adicional || undefined,
+                            };
+
+                            setPartes(prev => [...prev, novaParte]);
+                            nomeInput.value = '';
+                            tipoSelect.value = '';
+                            if (docInput) docInput.value = '';
+                            if (celularInput) celularInput.value = '';
+                            if (telefoneInput) telefoneInput.value = '';
+                            toast.success(`Parte "${nome}" adicionada. Clique em "Salvar" para persistir.`);
+                          }}
+                        >
+                          <Plus className="h-4 w-4 mr-1.5" />
+                          Adicionar
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </ScrollArea>
             </TabsContent>
