@@ -692,7 +692,7 @@ export function ProcessoModalExpanded({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl rounded-2xl max-h-[95vh] overflow-hidden flex flex-col min-h-0 p-0">
+      <DialogContent className="max-w-4xl rounded-2xl max-h-[92vh] overflow-hidden flex flex-col min-h-0 p-0">
         <DialogHeader className="sr-only">
           <DialogTitle>{isNew ? 'Novo Processo' : 'Detalhes do Processo'}</DialogTitle>
         </DialogHeader>
