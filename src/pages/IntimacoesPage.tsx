@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/collapsible';
 import { Textarea } from '@/components/ui/textarea';
 
-import { format, parseISO, isValid } from 'date-fns';
+import { format, parseISO, isValid, addDays, addBusinessDays, isWeekend } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { generateIntimacaoReport } from '@/lib/intimacaoReportGenerator';
 
