@@ -66,8 +66,7 @@ export default function IntimacoesPage() {
     const { data, error } = await supabase
       .from('intimacoes')
       .select('*')
-      .order('data_intimacao', { ascending: false })
-      .limit(200);
+      .order('data_intimacao', { ascending: false });
 
     if (error) {
       console.error('Erro ao buscar intimações:', error);
