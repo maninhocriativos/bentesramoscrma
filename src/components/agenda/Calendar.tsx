@@ -42,7 +42,9 @@ import {
   Gavel,
   Users,
   Timer,
-  TrendingUp
+  TrendingUp,
+  Scale,
+  Circle
 } from 'lucide-react';
 
 const getModalidadeIcon = (compromisso: Compromisso) => {
@@ -61,15 +63,24 @@ const getModalidadeIcon = (compromisso: Compromisso) => {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { Compromisso, ConfirmacaoStatus } from '@/types/compromissos';
+import { IntimacaoEvent } from '@/hooks/useIntimacoes';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 interface CalendarProps {
   compromissos: Compromisso[];
+  intimacoes?: IntimacaoEvent[];
   onDayClick: (date: Date) => void;
   onEventClick: (compromisso: Compromisso) => void;
+  onStatusChange?: (id: string, newStatus: ConfirmacaoStatus) => void;
 }
 
 const TIPO_COLORS: Record<string, { bg: string; text: string; dot: string; border: string; accent: string }> = {
@@ -78,6 +89,7 @@ const TIPO_COLORS: Record<string, { bg: string; text: string; dot: string; borde
   'Prazo': { bg: 'bg-amber-50 dark:bg-amber-500/10', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500', border: 'border-amber-200 dark:border-amber-500/20', accent: 'from-amber-500' },
   'Tarefa': { bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-700 dark:text-emerald-400', dot: 'bg-emerald-500', border: 'border-emerald-200 dark:border-emerald-500/20', accent: 'from-emerald-500' },
   'Outro': { bg: 'bg-slate-50 dark:bg-slate-500/10', text: 'text-slate-700 dark:text-slate-400', dot: 'bg-slate-500', border: 'border-slate-200 dark:border-slate-500/20', accent: 'from-slate-500' },
+  'Intimação': { bg: 'bg-purple-50 dark:bg-purple-500/10', text: 'text-purple-700 dark:text-purple-400', dot: 'bg-purple-500', border: 'border-purple-200 dark:border-purple-500/20', accent: 'from-purple-500' },
 };
 
 const TIPO_ICONS: Record<string, typeof CalendarIcon> = {
@@ -86,18 +98,39 @@ const TIPO_ICONS: Record<string, typeof CalendarIcon> = {
   'Prazo': Timer,
   'Tarefa': CheckCircle2,
   'Outro': CalendarIcon,
+  'Intimação': Scale,
 };
 
-const CONFIRMACAO_ICONS: Record<ConfirmacaoStatus, { icon: typeof CheckCircle2; color: string }> = {
-  pendente: { icon: Clock, color: 'text-amber-500' },
-  confirmado: { icon: CheckCircle2, color: 'text-emerald-500' },
-  remarcado: { icon: AlertCircle, color: 'text-blue-500' },
-  cancelado: { icon: XCircle, color: 'text-red-500' },
+// Status-based colors for confirmacao_status
+const STATUS_COLORS: Record<ConfirmacaoStatus, { bg: string; text: string; dot: string; border: string }> = {
+  pendente: { bg: 'bg-amber-50 dark:bg-amber-500/10', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500', border: 'border-amber-300 dark:border-amber-500/30' },
+  confirmado: { bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-700 dark:text-emerald-400', dot: 'bg-emerald-500', border: 'border-emerald-300 dark:border-emerald-500/30' },
+  remarcado: { bg: 'bg-blue-50 dark:bg-blue-500/10', text: 'text-blue-700 dark:text-blue-400', dot: 'bg-blue-500', border: 'border-blue-300 dark:border-blue-500/30' },
+  cancelado: { bg: 'bg-red-50 dark:bg-red-500/10', text: 'text-red-700 dark:text-red-400', dot: 'bg-red-500', border: 'border-red-300 dark:border-red-500/30' },
+};
+
+const CONFIRMACAO_ICONS: Record<ConfirmacaoStatus, { icon: typeof CheckCircle2; color: string; label: string }> = {
+  pendente: { icon: Clock, color: 'text-amber-500', label: 'Pendente' },
+  confirmado: { icon: CheckCircle2, color: 'text-emerald-500', label: 'Confirmado' },
+  remarcado: { icon: AlertCircle, color: 'text-blue-500', label: 'Remarcado' },
+  cancelado: { icon: XCircle, color: 'text-red-500', label: 'Cancelado' },
 };
 
 type ViewMode = 'calendar' | 'list';
 
-export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarProps) {
+// Helper to get the event color based on confirmacao_status
+function getEventColors(compromisso: Compromisso) {
+  const status = (compromisso.confirmacao_status || 'pendente') as ConfirmacaoStatus;
+  return STATUS_COLORS[status];
+}
+
+// Helper to get the dot color for calendar cells
+function getEventDotColor(compromisso: Compromisso) {
+  const status = (compromisso.confirmacao_status || 'pendente') as ConfirmacaoStatus;
+  return STATUS_COLORS[status].dot;
+}
+
+export function Calendar({ compromissos, intimacoes = [], onDayClick, onEventClick, onStatusChange }: CalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('calendar');
   const [syncing, setSyncing] = useState(false);
@@ -121,10 +154,28 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
     );
   };
 
+  const getIntimacoesPorDia = (date: Date) => {
+    return intimacoes.filter(i => {
+      const d = i.data_intimacao || i.data_publicacao || i.data_disponibilizacao;
+      return d && isSameDay(parseLocalDate(d), date);
+    });
+  };
+
   const getCompromissosForMonth = () => {
     return compromissos.filter(c => 
       isSameMonth(parseLocalDate(c.data_inicio), currentMonth)
     ).sort((a, b) => parseLocalDate(a.data_inicio).getTime() - parseLocalDate(b.data_inicio).getTime());
+  };
+
+  const getIntimacoesPorMes = () => {
+    return intimacoes.filter(i => {
+      const d = i.data_intimacao || i.data_publicacao || i.data_disponibilizacao;
+      return d && isSameMonth(parseLocalDate(d), currentMonth);
+    }).sort((a, b) => {
+      const da = a.data_intimacao || a.data_publicacao || a.data_disponibilizacao || '';
+      const db = b.data_intimacao || b.data_publicacao || b.data_disponibilizacao || '';
+      return parseLocalDate(da).getTime() - parseLocalDate(db).getTime();
+    });
   };
 
   const upcomingEvents = compromissos
@@ -165,6 +216,47 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
 
   const getColors = (tipo: string) => TIPO_COLORS[tipo] || TIPO_COLORS['Outro'];
 
+  const StatusDropdown = ({ compromisso }: { compromisso: Compromisso }) => {
+    const status = (compromisso.confirmacao_status || 'pendente') as ConfirmacaoStatus;
+    const config = CONFIRMACAO_ICONS[status];
+    const StatusIcon = config.icon;
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button 
+            className={cn(
+              "flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all hover:brightness-95",
+              STATUS_COLORS[status].bg,
+              STATUS_COLORS[status].text,
+              STATUS_COLORS[status].border
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <StatusIcon className="h-3 w-3" />
+            <span>{config.label}</span>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44 rounded-xl" onClick={(e) => e.stopPropagation()}>
+          {(Object.entries(CONFIRMACAO_ICONS) as [ConfirmacaoStatus, typeof config][]).map(([key, val]) => {
+            const Icon = val.icon;
+            return (
+              <DropdownMenuItem
+                key={key}
+                onClick={() => onStatusChange?.(compromisso.id, key)}
+                className={cn("gap-2 text-xs", key === status && "bg-muted")}
+              >
+                <Icon className={cn("h-3.5 w-3.5", val.color)} />
+                <span>{val.label}</span>
+                {key === status && <CheckCircle2 className="h-3 w-3 ml-auto text-primary" />}
+              </DropdownMenuItem>
+            );
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
+
   return (
     <div className="space-y-5">
       {/* Premium Hero KPIs */}
@@ -173,7 +265,7 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
           { label: 'Hoje', value: todayEvents, icon: CalendarIcon, gradient: 'from-primary/12 to-primary/4', iconColor: 'text-primary' },
           { label: 'Este Mês', value: thisMonthEvents, icon: TrendingUp, gradient: 'from-blue-500/10 to-blue-500/3', iconColor: 'text-blue-600 dark:text-blue-400' },
           { label: 'Futuros', value: futureEvents, icon: Clock, gradient: 'from-emerald-500/10 to-emerald-500/3', iconColor: 'text-emerald-600 dark:text-emerald-400' },
-          { label: 'Total', value: totalEvents, icon: List, gradient: 'from-accent/15 to-accent/5', iconColor: 'text-accent-foreground' },
+          { label: 'Intimações', value: intimacoes.length, icon: Scale, gradient: 'from-purple-500/10 to-purple-500/3', iconColor: 'text-purple-600 dark:text-purple-400' },
         ].map(({ label, value, icon: Icon, gradient, iconColor }) => (
           <div key={label} className={cn(
             "relative bg-card rounded-2xl p-4 border border-border/50 shadow-soft transition-all hover:shadow-enterprise group overflow-hidden"
@@ -202,6 +294,24 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
         </span>
         <span className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">Clique para sincronizar →</span>
       </button>
+
+      {/* Status Legend */}
+      <div className="flex items-center gap-3 px-1 flex-wrap">
+        <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Status:</span>
+        {(Object.entries(CONFIRMACAO_ICONS) as [ConfirmacaoStatus, { icon: typeof CheckCircle2; color: string; label: string }][]).map(([key, val]) => {
+          const Icon = val.icon;
+          return (
+            <span key={key} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+              <Icon className={cn("h-3 w-3", val.color)} />
+              <span>{val.label}</span>
+            </span>
+          );
+        })}
+        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          <Scale className="h-3 w-3 text-purple-500" />
+          <span>Intimação</span>
+        </span>
+      </div>
 
       {/* Controls Bar */}
       <div className="flex items-center justify-between">
@@ -263,6 +373,8 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
           <div className="grid grid-cols-7">
             {days.map((day, idx) => {
               const dayCompromissos = getCompromissosForDay(day);
+              const dayIntimacoes = getIntimacoesPorDia(day);
+              const allEventsCount = dayCompromissos.length + dayIntimacoes.length;
               const isCurrentMonth = isSameMonth(day, currentMonth);
               const isCurrentDay = isToday(day);
               const dayIsPast = isPast(day) && !isCurrentDay;
@@ -295,29 +407,29 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                     >
                       {format(day, 'd')}
                     </span>
-                    {dayCompromissos.length > 0 && !isCurrentDay && (
+                    {allEventsCount > 0 && !isCurrentDay && (
                       <span className="min-w-[18px] h-[18px] rounded-md bg-primary/10 flex items-center justify-center text-[9px] font-bold text-primary">
-                        {dayCompromissos.length}
+                        {allEventsCount}
                       </span>
                     )}
-                    {dayCompromissos.length > 0 && isCurrentDay && (
+                    {allEventsCount > 0 && isCurrentDay && (
                       <span className="min-w-[18px] h-[18px] rounded-md bg-primary flex items-center justify-center text-[9px] font-bold text-primary-foreground">
-                        {dayCompromissos.length}
+                        {allEventsCount}
                       </span>
                     )}
                   </div>
                   
                   {/* Events */}
                   <div className="space-y-0.5">
-                    {dayCompromissos.slice(0, 3).map(compromisso => {
-                      const colors = getColors(compromisso.tipo);
+                    {dayCompromissos.slice(0, 2).map(compromisso => {
+                      const statusColors = getEventColors(compromisso);
                       
                       return (
                         <div
                           key={compromisso.id}
                           className={cn(
-                            "text-[8px] md:text-[10px] leading-tight px-1.5 py-0.5 md:py-[3px] rounded-[5px] cursor-pointer transition-all hover:brightness-95 flex items-center gap-1",
-                            colors.bg, colors.text
+                            "text-[8px] md:text-[10px] leading-tight px-1.5 py-0.5 md:py-[3px] rounded-[5px] cursor-pointer transition-all hover:brightness-95 flex items-center gap-1 border",
+                            statusColors.bg, statusColors.text, statusColors.border
                           )}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -325,14 +437,24 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                           }}
                           title={compromisso.titulo}
                         >
-                          <div className={cn("w-[3px] h-[3px] rounded-full shrink-0", colors.dot)} />
+                          <div className={cn("w-[3px] h-[3px] rounded-full shrink-0", statusColors.dot)} />
                           <span className="font-semibold truncate">{compromisso.titulo}</span>
                         </div>
                       );
                     })}
-                    {dayCompromissos.length > 3 && (
+                    {dayIntimacoes.slice(0, 1).map(intimacao => (
+                      <div
+                        key={intimacao.id}
+                        className="text-[8px] md:text-[10px] leading-tight px-1.5 py-0.5 md:py-[3px] rounded-[5px] cursor-pointer transition-all hover:brightness-95 flex items-center gap-1 bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20"
+                        title={intimacao.processo_cnj || 'Intimação'}
+                      >
+                        <Scale className="h-[8px] w-[8px] shrink-0" />
+                        <span className="font-semibold truncate">{intimacao.processo_cnj || 'Intimação'}</span>
+                      </div>
+                    ))}
+                    {allEventsCount > 3 && (
                       <div className="text-[9px] text-primary font-bold px-1.5 opacity-70">
-                        +{dayCompromissos.length - 3}
+                        +{allEventsCount - 3}
                       </div>
                     )}
                   </div>
@@ -364,12 +486,12 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                 </button>
               </div>
               <span className="bg-primary-foreground/15 text-primary-foreground text-[11px] font-bold px-2.5 py-1 rounded-full tracking-wide">
-                {thisMonthEvents}
+                {thisMonthEvents + getIntimacoesPorMes().length}
               </span>
             </div>
             <ScrollArea className="h-[500px] md:h-[550px]">
               <div className="p-4 space-y-2">
-                {getCompromissosForMonth().length === 0 ? (
+                {getCompromissosForMonth().length === 0 && getIntimacoesPorMes().length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-24 text-center">
                     <div className="w-20 h-20 rounded-2xl bg-muted/30 flex items-center justify-center mb-5">
                       <CalendarIcon className="h-9 w-9 text-muted-foreground/25" />
@@ -378,86 +500,132 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                     <p className="text-xs text-muted-foreground mt-1">Clique em "Novo" para adicionar um compromisso</p>
                   </div>
                 ) : (
-                  getCompromissosForMonth().map(compromisso => {
-                    const colors = getColors(compromisso.tipo);
-                    const TipoIcon = TIPO_ICONS[compromisso.tipo] || CalendarIcon;
-                    const modalidade = getModalidadeIcon(compromisso);
-                    const ModalidadeIcon = modalidade?.icon;
-                    const confirmStatus = (compromisso.confirmacao_status || 'pendente') as ConfirmacaoStatus;
-                    const confirmConfig = compromisso.lead_id ? CONFIRMACAO_ICONS[confirmStatus] : null;
-                    const ConfirmIcon = confirmConfig?.icon;
-                    const eventIsPast = isPast(parseLocalDate(compromisso.data_inicio));
-                    
-                    return (
-                      <div
-                        key={compromisso.id}
-                        className={cn(
-                          "flex items-stretch rounded-xl border border-border/40 bg-card overflow-hidden cursor-pointer transition-all hover:shadow-card-hover hover:border-accent/30 group relative",
-                          eventIsPast && "opacity-60"
-                        )}
-                        onClick={() => onEventClick(compromisso)}
-                      >
-                        {/* Color accent bar */}
-                        <div className={cn("w-1 shrink-0 bg-gradient-to-b to-transparent", colors.accent)} />
-                        
-                        {/* Date column */}
-                        <div className="flex flex-col items-center justify-center w-[70px] md:w-20 py-3 border-r border-border/20">
-                          <p className="text-2xl md:text-3xl font-bold text-foreground leading-none tracking-tight">
-                            {format(parseLocalDate(compromisso.data_inicio), 'dd')}
-                          </p>
-                          <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-[0.15em] mt-0.5">
-                            {format(parseLocalDate(compromisso.data_inicio), 'EEE', { locale: ptBR })}
-                          </p>
-                        </div>
-                        
-                        {/* Content */}
-                        <div className="flex-1 py-3 px-4 min-w-0">
-                          <div className="flex items-start justify-between gap-2 mb-1.5">
-                            <h4 className="font-semibold text-sm truncate group-hover:text-primary transition-colors">
-                              {compromisso.titulo}
-                            </h4>
-                            <div className={cn("flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-md text-[10px] font-bold", colors.bg, colors.text)}>
-                              <TipoIcon className="h-3 w-3" />
-                              <span>{compromisso.tipo}</span>
+                  <>
+                    {getCompromissosForMonth().map(compromisso => {
+                      const colors = getColors(compromisso.tipo);
+                      const statusColors = getEventColors(compromisso);
+                      const TipoIcon = TIPO_ICONS[compromisso.tipo] || CalendarIcon;
+                      const modalidade = getModalidadeIcon(compromisso);
+                      const ModalidadeIcon = modalidade?.icon;
+                      const eventIsPast = isPast(parseLocalDate(compromisso.data_inicio));
+                      
+                      return (
+                        <div
+                          key={compromisso.id}
+                          className={cn(
+                            "flex items-stretch rounded-xl border overflow-hidden cursor-pointer transition-all hover:shadow-card-hover hover:border-accent/30 group relative",
+                            statusColors.border,
+                            statusColors.bg,
+                            eventIsPast && "opacity-60"
+                          )}
+                          onClick={() => onEventClick(compromisso)}
+                        >
+                          {/* Color accent bar based on status */}
+                          <div className={cn("w-1.5 shrink-0", statusColors.dot)} />
+                          
+                          {/* Date column */}
+                          <div className="flex flex-col items-center justify-center w-[70px] md:w-20 py-3 border-r border-border/20">
+                            <p className="text-2xl md:text-3xl font-bold text-foreground leading-none tracking-tight">
+                              {format(parseLocalDate(compromisso.data_inicio), 'dd')}
+                            </p>
+                            <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-[0.15em] mt-0.5">
+                              {format(parseLocalDate(compromisso.data_inicio), 'EEE', { locale: ptBR })}
+                            </p>
+                          </div>
+                          
+                          {/* Content */}
+                          <div className="flex-1 py-3 px-4 min-w-0">
+                            <div className="flex items-start justify-between gap-2 mb-1.5">
+                              <h4 className="font-semibold text-sm truncate group-hover:text-primary transition-colors">
+                                {compromisso.titulo}
+                              </h4>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <div className={cn("flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold", colors.bg, colors.text)}>
+                                  <TipoIcon className="h-3 w-3" />
+                                  <span>{compromisso.tipo}</span>
+                                </div>
+                                <StatusDropdown compromisso={compromisso} />
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3 w-3 opacity-60" />
+                                <span className="font-bold">{format(parseLocalDate(compromisso.data_inicio), "HH:mm")}</span>
+                              </span>
+                              
+                              {ModalidadeIcon && (
+                                <span className={cn("flex items-center gap-1 font-medium", modalidade.color)}>
+                                  <ModalidadeIcon className="h-3 w-3" />
+                                  <span>{modalidade.label}</span>
+                                </span>
+                              )}
+                              
+                              {compromisso.descricao && !modalidade && (
+                                <span className="flex items-center gap-1 truncate max-w-[180px] opacity-70">
+                                  <MapPin className="h-3 w-3 shrink-0" />
+                                  <span className="truncate">{compromisso.descricao.slice(0, 35)}</span>
+                                </span>
+                              )}
                             </div>
                           </div>
                           
-                          <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <Clock className="h-3 w-3 opacity-60" />
-                              <span className="font-bold">{format(parseLocalDate(compromisso.data_inicio), "HH:mm")}</span>
-                            </span>
-                            
-                            {ModalidadeIcon && (
-                              <span className={cn("flex items-center gap-1 font-medium", modalidade.color)}>
-                                <ModalidadeIcon className="h-3 w-3" />
-                                <span>{modalidade.label}</span>
-                              </span>
-                            )}
-                            
-                            {ConfirmIcon && (
-                              <span className={cn("flex items-center gap-1", confirmConfig.color)}>
-                                <ConfirmIcon className="h-3 w-3" />
-                                <span className="capitalize font-medium">{confirmStatus}</span>
-                              </span>
-                            )}
-                            
-                            {compromisso.descricao && !modalidade && (
-                              <span className="flex items-center gap-1 truncate max-w-[180px] opacity-70">
-                                <MapPin className="h-3 w-3 shrink-0" />
-                                <span className="truncate">{compromisso.descricao.slice(0, 35)}</span>
+                          {/* Arrow */}
+                          <div className="flex items-center px-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <ArrowRight className="h-4 w-4 text-muted-foreground/50" />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    
+                    {/* Intimações do mês */}
+                    {getIntimacoesPorMes().map(intimacao => {
+                      const dateStr = intimacao.data_intimacao || intimacao.data_publicacao || intimacao.data_disponibilizacao;
+                      if (!dateStr) return null;
+                      const date = parseLocalDate(dateStr);
+                      
+                      return (
+                        <div
+                          key={intimacao.id}
+                          className="flex items-stretch rounded-xl border border-purple-200 dark:border-purple-500/20 bg-purple-50 dark:bg-purple-500/10 overflow-hidden group relative"
+                        >
+                          {/* Purple accent bar */}
+                          <div className="w-1.5 shrink-0 bg-purple-500" />
+                          
+                          {/* Date column */}
+                          <div className="flex flex-col items-center justify-center w-[70px] md:w-20 py-3 border-r border-purple-200/30">
+                            <p className="text-2xl md:text-3xl font-bold text-foreground leading-none tracking-tight">
+                              {format(date, 'dd')}
+                            </p>
+                            <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-[0.15em] mt-0.5">
+                              {format(date, 'EEE', { locale: ptBR })}
+                            </p>
+                          </div>
+                          
+                          {/* Content */}
+                          <div className="flex-1 py-3 px-4 min-w-0">
+                            <div className="flex items-start justify-between gap-2 mb-1.5">
+                              <h4 className="font-semibold text-sm truncate text-purple-800 dark:text-purple-300">
+                                {intimacao.processo_cnj || 'Intimação'}
+                              </h4>
+                              <div className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-400">
+                                <Scale className="h-3 w-3" />
+                                <span>Intimação</span>
+                              </div>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground line-clamp-2">
+                              {intimacao.processo_titulo || intimacao.conteudo?.slice(0, 80) || 'Sem detalhes'}
+                            </p>
+                            {intimacao.tribunal && (
+                              <span className="text-[10px] text-purple-600 dark:text-purple-400 font-medium mt-1 inline-block">
+                                {intimacao.tribunal}
                               </span>
                             )}
                           </div>
                         </div>
-                        
-                        {/* Arrow */}
-                        <div className="flex items-center px-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <ArrowRight className="h-4 w-4 text-muted-foreground/50" />
-                        </div>
-                      </div>
-                    );
-                  })
+                      );
+                    })}
+                  </>
                 )}
               </div>
             </ScrollArea>
@@ -487,21 +655,23 @@ export function Calendar({ compromissos, onDayClick, onEventClick }: CalendarPro
                   </div>
                 ) : (
                   upcomingEvents.map(compromisso => {
-                    const colors = getColors(compromisso.tipo);
+                    const statusColors = getEventColors(compromisso);
                     const isTodays = isToday(parseLocalDate(compromisso.data_inicio));
                     const TipoIcon = TIPO_ICONS[compromisso.tipo] || CalendarIcon;
+                    const colors = getColors(compromisso.tipo);
                     
                     return (
                       <div
                         key={compromisso.id}
                         className={cn(
-                          "flex gap-3 p-3 rounded-xl border border-border/30 cursor-pointer transition-all hover:shadow-soft hover:border-accent/30 bg-card group relative overflow-hidden",
+                          "flex gap-3 p-3 rounded-xl border cursor-pointer transition-all hover:shadow-soft hover:border-accent/30 bg-card group relative overflow-hidden",
+                          statusColors.border,
                           isTodays && "border-primary/20 bg-primary/[0.02]"
                         )}
                         onClick={() => onEventClick(compromisso)}
                       >
-                        {/* Accent line */}
-                        <div className={cn("absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b to-transparent", colors.accent)} />
+                        {/* Accent line based on status */}
+                        <div className={cn("absolute left-0 top-0 bottom-0 w-[3px]", statusColors.dot)} />
                         
                         <div className={cn(
                           "text-center shrink-0 w-11 py-2 rounded-lg font-bold",

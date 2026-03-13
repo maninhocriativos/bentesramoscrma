@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { Calendar } from '@/components/agenda/Calendar';
 import { CompromissoModal } from '@/components/agenda/CompromissoModal';
@@ -6,7 +6,8 @@ import { DayEventsModal } from '@/components/agenda/DayEventsModal';
 import { GoogleCalendarConnect } from '@/components/agenda/GoogleCalendarConnect';
 import { ConfirmacoesPendentes } from '@/components/agenda/ConfirmacoesPendentes';
 import { useCompromissos } from '@/hooks/useCompromissos';
-import { Compromisso } from '@/types/compromissos';
+import { useIntimacoes, type IntimacaoEvent } from '@/hooks/useIntimacoes';
+import { Compromisso, ConfirmacaoStatus } from '@/types/compromissos';
 import { 
   Loader2, 
   CalendarDays, 
@@ -14,15 +15,17 @@ import {
   Clock, 
   Users,
   Plus,
-  Phone
+  Phone,
+  Scale
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-type FilterType = 'todos' | 'Prazo' | 'Audiência' | 'Reunião';
+type FilterType = 'todos' | 'Prazo' | 'Audiência' | 'Reunião' | 'Intimação';
 
 export default function AgendaPage() {
-  const { compromissos, loading } = useCompromissos();
+  const { compromissos, loading, updateCompromisso } = useCompromissos();
+  const { intimacoes, loading: loadingIntimacoes } = useIntimacoes();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedCompromisso, setSelectedCompromisso] = useState<Compromisso | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -32,7 +35,13 @@ export default function AgendaPage() {
 
   const filteredCompromissos = filter === 'todos' 
     ? compromissos 
+    : filter === 'Intimação'
+    ? []
     : compromissos.filter(c => c.tipo === filter);
+
+  const filteredIntimacoes = filter === 'todos' || filter === 'Intimação'
+    ? intimacoes
+    : [];
 
   const handleDayClick = (date: Date) => {
     setSelectedDate(date);
@@ -57,11 +66,16 @@ export default function AgendaPage() {
     setIsModalOpen(true);
   };
 
+  const handleStatusChange = async (id: string, newStatus: ConfirmacaoStatus) => {
+    await updateCompromisso(id, { confirmacao_status: newStatus });
+  };
+
   const filters: { label: string; value: FilterType; icon: typeof CalendarDays; dot: string }[] = [
     { label: 'Todos', value: 'todos', icon: CalendarDays, dot: 'bg-primary' },
     { label: 'Prazos', value: 'Prazo', icon: Clock, dot: 'bg-amber-500' },
     { label: 'Audiências', value: 'Audiência', icon: Gavel, dot: 'bg-red-500' },
     { label: 'Reuniões', value: 'Reunião', icon: Users, dot: 'bg-blue-500' },
+    { label: 'Intimações', value: 'Intimação', icon: Scale, dot: 'bg-purple-500' },
   ];
 
   return (
@@ -75,6 +89,7 @@ export default function AgendaPage() {
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
               {filteredCompromissos.length} compromisso{filteredCompromissos.length !== 1 ? 's' : ''}
+              {filteredIntimacoes.length > 0 && ` · ${filteredIntimacoes.length} intimaç${filteredIntimacoes.length !== 1 ? 'ões' : 'ão'}`}
             </p>
           </div>
           
@@ -127,7 +142,7 @@ export default function AgendaPage() {
       
       {/* Content */}
       <div className="flex-1 p-4 md:p-6 animate-fade-in overflow-auto">
-        {loading ? (
+        {loading || loadingIntimacoes ? (
           <div className="flex flex-col items-center justify-center py-24 gap-4">
             <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -151,8 +166,10 @@ export default function AgendaPage() {
             <div className={showConfirmacoes ? "lg:col-span-2" : ""}>
               <Calendar
                 compromissos={filteredCompromissos}
+                intimacoes={filteredIntimacoes}
                 onDayClick={handleDayClick}
                 onEventClick={handleEventClick}
+                onStatusChange={handleStatusChange}
               />
             </div>
           </div>
@@ -164,11 +181,13 @@ export default function AgendaPage() {
         onClose={() => setIsDayEventsModalOpen(false)}
         date={selectedDate}
         compromissos={filteredCompromissos}
+        intimacoes={filteredIntimacoes}
         onEventClick={handleEventClick}
         onNewEvent={() => {
           setIsDayEventsModalOpen(false);
           setIsModalOpen(true);
         }}
+        onStatusChange={handleStatusChange}
       />
 
       <CompromissoModal
