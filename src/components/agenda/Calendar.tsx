@@ -218,13 +218,18 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
 
         {/* Right: view toggles */}
         <div className="inline-flex items-center border border-border/70 rounded-md overflow-hidden bg-card">
-          {['Mês', 'Semana', 'Dia'].map((label, i) => (
+          {([
+            { label: 'Mês', value: 'mes' as ViewMode },
+            { label: 'Semana', value: 'semana' as ViewMode },
+            { label: 'Dia', value: 'dia' as ViewMode },
+          ]).map(({ label, value }, i) => (
             <button
-              key={label}
+              key={value}
+              onClick={() => onViewModeChange?.(value)}
               className={cn(
                 "px-3 py-1.5 text-xs font-medium transition-all",
                 i < 2 && "border-r border-border/70",
-                label === 'Mês'
+                viewMode === value
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
               )}
