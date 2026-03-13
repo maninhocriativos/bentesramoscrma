@@ -523,35 +523,3 @@ export default function IntimacoesPage() {
   );
 }
 
-function InfoField({ label, value, icon, badge, badgeClass }: {
-  label: string;
-  value: string | null;
-  icon?: React.ReactNode;
-  badge?: boolean;
-  badgeClass?: string;
-}) {
-  return (
-    <div className="space-y-1">
-      <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-        {icon && <span className="text-secondary">{icon}</span>}
-        {label}
-      </label>
-      {badge ? (
-        <span className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-full ${badgeClass}`}>
-          {value || '—'}
-        </span>
-      ) : (
-        <p className="text-sm font-medium text-foreground">{value || '—'}</p>
-      )}
-    </div>
-  );
-}
-
-function DateCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="p-3 rounded-xl bg-card border border-border/50 space-y-1">
-      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
-      <p className="text-sm font-medium text-foreground">{value}</p>
-    </div>
-  );
-}
