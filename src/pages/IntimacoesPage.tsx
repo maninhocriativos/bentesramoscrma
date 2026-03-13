@@ -8,8 +8,10 @@ import { toast } from 'sonner';
 import {
   Loader2, Gavel, Search, RefreshCw, Bell, CheckCircle2,
   Clock, AlertTriangle, Eye, FileText, Filter, CalendarDays,
-  Scale, BookOpen, ChevronRight
+  Scale, BookOpen, ChevronRight, ChevronDown, ChevronUp,
+  MessageSquare, ClipboardList, Pencil, Copy, ExternalLink,
 } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -21,8 +23,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { Textarea } from '@/components/ui/textarea';
 
-import { format, parseISO, isValid } from 'date-fns';
+import { format, parseISO, isValid, addDays, addBusinessDays, isWeekend } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { generateIntimacaoReport } from '@/lib/intimacaoReportGenerator';
 
@@ -132,6 +140,62 @@ export default function IntimacoesPage() {
     } catch {
       return dateStr;
     }
+  };
+
+  // Calculate procedural deadlines based on intimação type
+  const calcularPrazos = (intimacao: Intimacao) => {
+    const baseDate = intimacao.data_publicacao || intimacao.data_intimacao || intimacao.data_disponibilizacao;
+    if (!baseDate) return { dataBase: null, dataConclusao: null, dataFatal: null };
+
+    const base = parseISO(baseDate);
+    if (!isValid(base)) return { dataBase: base, dataConclusao: null, dataFatal: null };
+
+    const tipo = (intimacao.tipo_intimacao || '').toLowerCase();
+
+    // Determine deadline days based on type (Brazilian procedural law)
+    let prazoUteis = 15; // default
+    let prazoFatal = 20;
+
+    if (tipo.includes('contestação') || tipo.includes('contestacao')) {
+      prazoUteis = 15; prazoFatal = 20;
+    } else if (tipo.includes('réplica') || tipo.includes('replica')) {
+      prazoUteis = 15; prazoFatal = 20;
+    } else if (tipo.includes('recurso') || tipo.includes('apelação') || tipo.includes('apelacao')) {
+      prazoUteis = 15; prazoFatal = 20;
+    } else if (tipo.includes('embargos')) {
+      prazoUteis = 5; prazoFatal = 10;
+    } else if (tipo.includes('agravo')) {
+      prazoUteis = 15; prazoFatal = 20;
+    } else if (tipo.includes('manifestação') || tipo.includes('manifestacao')) {
+      prazoUteis = 5; prazoFatal = 10;
+    } else if (tipo.includes('contrarrazões') || tipo.includes('contrarrazoes')) {
+      prazoUteis = 15; prazoFatal = 20;
+    } else if (tipo.includes('alegações') || tipo.includes('alegacoes')) {
+      prazoUteis = 15; prazoFatal = 20;
+    } else if (tipo.includes('ciência') || tipo.includes('ciencia')) {
+      prazoUteis = 5; prazoFatal = 15;
+    } else if (tipo.includes('sentença') || tipo.includes('sentenca')) {
+      prazoUteis = 15; prazoFatal = 20;
+    } else if (tipo.includes('emenda')) {
+      prazoUteis = 15; prazoFatal = 20;
+    } else if (tipo.includes('pagamento')) {
+      prazoUteis = 15; prazoFatal = 15;
+    } else if (tipo.includes('sessão') || tipo.includes('sessao') || tipo.includes('julgamento')) {
+      prazoUteis = 0; prazoFatal = 0;
+    }
+
+    // Add 1 day for start of counting (day after publication)
+    const inicioContagem = addDays(base, 1);
+    // Skip weekends for start
+    let startDate = inicioContagem;
+    while (isWeekend(startDate)) {
+      startDate = addDays(startDate, 1);
+    }
+
+    const dataConclusao = prazoUteis > 0 ? addBusinessDays(startDate, prazoUteis) : null;
+    const dataFatal = prazoFatal > 0 ? addBusinessDays(startDate, prazoFatal) : null;
+
+    return { dataBase: base, dataConclusao, dataFatal };
   };
 
   const handleGenerateReport = (intimacao: Intimacao, e?: React.MouseEvent) => {
@@ -387,138 +451,267 @@ export default function IntimacoesPage() {
         )}
       </div>
 
-      {/* Detail Modal - Premium Redesign */}
+      {/* Detail Modal - Projuris Style */}
       <Dialog open={!!selectedIntimacao} onOpenChange={() => setSelectedIntimacao(null)}>
-        <DialogContent className="max-w-[680px] max-h-[90vh] overflow-hidden flex flex-col p-0 rounded-2xl border-0 shadow-2xl">
-          {/* Hero Header */}
-          <div className="relative bg-gradient-to-br from-primary/10 via-secondary/8 to-accent/5 px-7 pt-7 pb-5 overflow-hidden">
-            {/* Decorative circles */}
-            <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-primary/5 blur-2xl" />
-            <div className="absolute -bottom-8 -left-8 h-24 w-24 rounded-full bg-secondary/8 blur-xl" />
-            
-            <DialogHeader className="relative z-10">
-              <div className="flex items-start gap-4">
-                <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0 shadow-sm border border-primary/10">
-                  <Scale className="h-6 w-6 text-primary" />
-                </div>
-                <div className="min-w-0 flex-1 space-y-1.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <DialogTitle className="text-xl font-bold text-foreground leading-tight">
-                      {selectedIntimacao?.tipo_intimacao || 'Publicação'}
-                    </DialogTitle>
-                    <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${selectedIntimacao ? getTipoBadgeColor(selectedIntimacao.tipo_intimacao) : ''}`}>
-                      {selectedIntimacao?.tipo_intimacao}
-                    </span>
-                  </div>
-                  {selectedIntimacao?.processo_cnj ? (
-                    <p className="text-sm font-mono font-semibold text-primary/80 tracking-wide">
-                      {selectedIntimacao.processo_cnj}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">Número CNJ não identificado</p>
-                  )}
-                  {selectedIntimacao?.tribunal && (
-                    <div className="flex items-center gap-1.5 pt-0.5">
-                      <div className="h-1.5 w-1.5 rounded-full bg-secondary" />
-                      <span className="text-xs font-medium text-muted-foreground">{selectedIntimacao.tribunal}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </DialogHeader>
-          </div>
-
-          {selectedIntimacao && (
-            <div className="flex-1 overflow-y-auto">
-              {/* Process Info Strip */}
-              <div className="px-7 py-4 bg-muted/30 border-y border-border/40">
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-0.5">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.1em] flex items-center gap-1.5">
-                      <Gavel className="h-3 w-3 text-primary/60" />
-                      Processo (CNJ)
-                    </span>
-                    <p className="text-sm font-semibold text-foreground font-mono">
-                      {selectedIntimacao.processo_cnj || '—'}
-                    </p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.1em] flex items-center gap-1.5">
-                      <BookOpen className="h-3 w-3 text-primary/60" />
-                      Ação / Classe
-                    </span>
-                    <p className="text-sm font-medium text-foreground">
-                      {selectedIntimacao.processo_titulo || '—'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="px-7 py-5 space-y-6">
-                {/* Dates Section */}
-                <div>
-                  <h3 className="text-[11px] font-bold text-primary uppercase tracking-[0.12em] mb-3 flex items-center gap-2">
-                    <CalendarDays className="h-3.5 w-3.5" />
-                    Datas Importantes
-                  </h3>
-                  <div className="grid grid-cols-3 gap-3">
-                    {[
-                      { label: 'Disponibilização', value: selectedIntimacao.data_disponibilizacao, color: 'from-blue-500/10 to-blue-500/5 border-blue-200/50 dark:border-blue-800/50' },
-                      { label: 'Publicação', value: selectedIntimacao.data_publicacao, color: 'from-emerald-500/10 to-emerald-500/5 border-emerald-200/50 dark:border-emerald-800/50' },
-                      { label: 'Intimação', value: selectedIntimacao.data_intimacao, color: 'from-amber-500/10 to-amber-500/5 border-amber-200/50 dark:border-amber-800/50' },
-                    ].map((date) => (
-                      <div key={date.label} className={`p-3 rounded-xl bg-gradient-to-b ${date.color} border space-y-1.5`}>
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{date.label}</p>
-                        <p className="text-[13px] font-semibold text-foreground leading-snug">
-                          {formatDateLong(date.value)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Content Section */}
-                <div>
-                  <h3 className="text-[11px] font-bold text-primary uppercase tracking-[0.12em] mb-3 flex items-center gap-2">
-                    <FileText className="h-3.5 w-3.5" />
-                    Conteúdo da Publicação
-                  </h3>
-                  <div className="p-4 bg-gradient-to-b from-muted/40 to-muted/20 rounded-xl text-[13px] whitespace-pre-wrap leading-relaxed border border-border/40 max-h-64 overflow-y-auto font-[system-ui] selection:bg-primary/20">
-                    {selectedIntimacao.conteudo || 'Sem conteúdo detalhado disponível.'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer Actions */}
-              <div className="sticky bottom-0 px-7 py-4 bg-card/95 backdrop-blur-sm border-t border-border/40 flex items-center gap-3">
-                {!selectedIntimacao.lida && (
-                  <Button
-                    onClick={() => {
-                      handleMarkRead(selectedIntimacao.id);
-                      setSelectedIntimacao({ ...selectedIntimacao, lida: true });
-                    }}
-                    size="sm"
-                    variant="outline"
-                    className="rounded-xl h-9 border-border/60"
-                  >
-                    <CheckCircle2 className="h-4 w-4 mr-1.5 text-emerald-500" />
-                    Marcar como lida
-                  </Button>
-                )}
-                <Button
-                  size="sm"
-                  className="rounded-xl h-9 bg-gradient-to-r from-primary to-primary/90 shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-shadow"
-                  onClick={() => handleGenerateReport(selectedIntimacao)}
-                >
-                  <FileText className="h-4 w-4 mr-1.5" />
-                  Gerar Relatório PDF
-                </Button>
-              </div>
-            </div>
-          )}
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0 gap-0">
+          {selectedIntimacao && <IntimacaoDetailModal
+            intimacao={selectedIntimacao}
+            formatDate={formatDate}
+            formatDateLong={formatDateLong}
+            calcularPrazos={calcularPrazos}
+            getTipoBadgeColor={getTipoBadgeColor}
+            onMarkRead={() => {
+              handleMarkRead(selectedIntimacao.id);
+              setSelectedIntimacao({ ...selectedIntimacao, lida: true });
+            }}
+            onGenerateReport={() => handleGenerateReport(selectedIntimacao)}
+            onClose={() => setSelectedIntimacao(null)}
+          />}
         </DialogContent>
       </Dialog>
     </AppLayout>
   );
 }
 
+// ── Projuris-style Intimação Detail Modal ──
+function IntimacaoDetailModal({
+  intimacao,
+  formatDate,
+  formatDateLong,
+  calcularPrazos,
+  getTipoBadgeColor,
+  onMarkRead,
+  onGenerateReport,
+  onClose,
+}: {
+  intimacao: Intimacao;
+  formatDate: (d: string | null) => string | null;
+  formatDateLong: (d: string | null) => string;
+  calcularPrazos: (i: Intimacao) => { dataBase: Date | null; dataConclusao: Date | null; dataFatal: Date | null };
+  getTipoBadgeColor: (t: string) => string;
+  onMarkRead: () => void;
+  onGenerateReport: () => void;
+  onClose: () => void;
+}) {
+  const [showFullContent, setShowFullContent] = useState(false);
+  const [comentario, setComentario] = useState('');
+
+  const prazos = calcularPrazos(intimacao);
+  const fmtPrazo = (d: Date | null) => d ? format(d, 'dd/MM/yyyy') : '—';
+
+  // Extract description parts
+  const conteudo = intimacao.conteudo || '';
+  const isLong = conteudo.length > 400;
+  const displayContent = showFullContent ? conteudo : conteudo.slice(0, 400);
+
+  return (
+    <>
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border/60">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-lg font-bold text-foreground">
+              {intimacao.tipo_intimacao || 'Publicação'}
+            </h2>
+            <Badge className={`text-xs px-3 py-1 rounded-md font-medium ${
+              intimacao.lida 
+                ? 'bg-emerald-500 text-white' 
+                : 'bg-amber-500 text-white'
+            }`}>
+              {intimacao.lida ? 'Lida' : 'Não lida'}
+            </Badge>
+          </div>
+          {intimacao.processo_cnj && (
+            <p className="text-sm font-mono text-primary/80 mt-0.5">{intimacao.processo_cnj}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Action bar */}
+      <div className="flex items-center gap-2 px-6 py-3 border-b border-border/40 bg-muted/20">
+        {!intimacao.lida && (
+          <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white" onClick={onMarkRead}>
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Marcar como lida
+          </Button>
+        )}
+        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={onGenerateReport}>
+          <FileText className="h-3.5 w-3.5" />
+          Relatório PDF
+        </Button>
+        {intimacao.processo_cnj && (
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"
+            onClick={() => { navigator.clipboard.writeText(intimacao.processo_cnj); toast.success('CNJ copiado!'); }}>
+            <Copy className="h-3.5 w-3.5" />
+            Copiar CNJ
+          </Button>
+        )}
+      </div>
+
+      <div className="px-6 py-5 space-y-5">
+        {/* Processo vinculado card */}
+        <div className="border border-border/60 rounded-lg p-4 bg-muted/10 space-y-2">
+          <p className="text-xs font-bold text-foreground">Processo vinculado</p>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-primary font-semibold font-mono">
+              {intimacao.processo_cnj || 'Não identificado'}
+            </span>
+            {intimacao.processo_cnj && <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />}
+          </div>
+          {intimacao.processo_titulo && (
+            <>
+              <p className="text-xs font-bold text-foreground mt-2">Assunto</p>
+              <p className="text-sm text-muted-foreground">{intimacao.processo_titulo}</p>
+            </>
+          )}
+          {intimacao.tribunal && (
+            <>
+              <p className="text-xs font-bold text-foreground mt-2">Tribunal</p>
+              <p className="text-sm text-muted-foreground">{intimacao.tribunal}</p>
+            </>
+          )}
+        </div>
+
+        {/* Detalhes da Tarefa */}
+        <div>
+          <h3 className="text-base font-bold text-foreground mb-4">Detalhes da Intimação</h3>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-bold text-foreground">Tipo da Intimação</p>
+                <p className="text-sm text-muted-foreground">{intimacao.tipo_intimacao || 'Não informado'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-foreground">Fonte</p>
+                <p className="text-sm text-muted-foreground">Escavador / Diário Oficial</p>
+              </div>
+            </div>
+
+            {/* Dates - Projuris style with 3 columns */}
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <p className="text-xs font-bold text-foreground">Data base</p>
+                <p className="text-sm text-muted-foreground">{fmtPrazo(prazos.dataBase)}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-foreground">Data de conclusão prevista</p>
+                <p className="text-sm text-muted-foreground">{fmtPrazo(prazos.dataConclusao)}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-foreground">Data Fatal</p>
+                <p className="text-sm font-semibold text-destructive">{fmtPrazo(prazos.dataFatal)}</p>
+              </div>
+            </div>
+
+            {/* Original dates from Escavador */}
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <p className="text-xs font-bold text-foreground">Disponibilização</p>
+                <p className="text-sm text-muted-foreground">{formatDate(intimacao.data_disponibilizacao) || '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-foreground">Publicação</p>
+                <p className="text-sm text-muted-foreground">{formatDate(intimacao.data_publicacao) || '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-foreground">Intimação</p>
+                <p className="text-sm text-muted-foreground">{formatDate(intimacao.data_intimacao) || '—'}</p>
+              </div>
+            </div>
+
+            {/* Descrição */}
+            <div>
+              <p className="text-xs font-bold text-foreground">Descrição</p>
+              <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap leading-relaxed">
+                {displayContent}
+                {isLong && !showFullContent && '...'}
+              </p>
+              {isLong && (
+                <button
+                  onClick={() => setShowFullContent(!showFullContent)}
+                  className="text-xs text-primary font-semibold mt-1 hover:underline"
+                >
+                  {showFullContent ? 'Recolher' : 'Expandir'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Collapsible Sections */}
+        <CollapsibleSection icon={Clock} title="Auditoria">
+          <div className="text-sm text-muted-foreground space-y-1">
+            <p>Recebido em: {formatDateLong(intimacao.created_at)}</p>
+            {intimacao.lida_em && <p>Lida em: {formatDateLong(intimacao.lida_em)}</p>}
+            <p>OAB: {intimacao.oab_numero}/{intimacao.oab_uf}</p>
+          </div>
+        </CollapsibleSection>
+
+        <CollapsibleSection icon={FileText} title="Documentos"
+          actions={<Button size="sm" className="h-7 text-xs bg-emerald-500 hover:bg-emerald-600 text-white rounded-md">Adicionar</Button>}
+        >
+          <p className="text-sm text-muted-foreground">Nenhum documento anexado.</p>
+        </CollapsibleSection>
+
+        <CollapsibleSection icon={ClipboardList} title="Tarefas relacionadas"
+          actions={<Button size="sm" className="h-7 text-xs bg-emerald-500 hover:bg-emerald-600 text-white rounded-md">Adicionar</Button>}
+        >
+          <p className="text-sm text-muted-foreground">Nenhuma tarefa relacionada.</p>
+        </CollapsibleSection>
+
+        <CollapsibleSection icon={MessageSquare} title="Comentários" defaultOpen>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground text-right">{2000 - comentario.length} caracteres restantes</p>
+            <Textarea
+              placeholder="Utilize o @ antes de um nome para citar outros usuários do sistema."
+              value={comentario}
+              onChange={e => setComentario(e.target.value)}
+              className="resize-none"
+              rows={3}
+              maxLength={2000}
+            />
+          </div>
+        </CollapsibleSection>
+      </div>
+    </>
+  );
+}
+
+// ── Collapsible Section Component ──
+function CollapsibleSection({
+  icon: Icon,
+  title,
+  defaultOpen = false,
+  actions,
+  children,
+}: {
+  icon: React.ElementType;
+  title: string;
+  defaultOpen?: boolean;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <div className="border border-border/60 rounded-lg bg-card">
+        <CollapsibleTrigger asChild>
+          <button className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors rounded-lg">
+            <div className="flex items-center gap-2 font-semibold text-sm text-foreground">
+              <Icon className="h-4 w-4 text-muted-foreground" />
+              {title}
+            </div>
+            <div className="flex items-center gap-2">
+              {actions && <div onClick={e => e.stopPropagation()}>{actions}</div>}
+              {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+            </div>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="px-4 pb-4 pt-1">{children}</div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  );
+}
