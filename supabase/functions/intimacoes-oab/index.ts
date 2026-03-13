@@ -115,6 +115,10 @@ serve(async (req) => {
       const processos = processosData?.items || processosData?.data || [];
 
       console.log(`📋 ${processos.length} processos encontrados via OAB`);
+      if (processos.length > 0) {
+        console.log(`🔍 V2 first processo keys: ${JSON.stringify(Object.keys(processos[0]))}`);
+        console.log(`🔍 V2 first processo sample: ${JSON.stringify(processos[0]).slice(0, 600)}`);
+      }
 
       for (const proc of processos) {
         const cnj = proc.numero_cnj || proc.numero_processo;
@@ -122,7 +126,7 @@ serve(async (req) => {
 
         // Extract tribunal from fontes
         const fonteTribunal = proc.fontes?.find((f: any) => f.tipo === "TRIBUNAL") || proc.fontes?.[0];
-        const tribunalSigla = fonteTribunal?.tribunal?.sigla || fonteTribunal?.nome || "";
+        const tribunalSigla = fonteTribunal?.sigla || fonteTribunal?.tribunal?.sigla || fonteTribunal?.nome || "";
         const classeProcesso = fonteTribunal?.capa?.classe || proc.titulo_classe || "";
 
         // Fetch movimentações for each processo to get real intimações
