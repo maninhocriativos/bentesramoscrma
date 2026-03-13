@@ -90,7 +90,7 @@ export default function IntimacoesPage() {
       if (error) throw error;
       if (data?.success) {
         toast.success(`${data.total} intimações encontradas`, {
-          description: `${data.saved} novas salvas · Fonte: ${data.fonte}`,
+          description: `${data.saved} novas · ${data.updated || 0} atualizadas · Fonte: ${data.fonte}`,
         });
         await fetchIntimacoes();
       } else {

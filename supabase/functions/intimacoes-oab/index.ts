@@ -230,21 +230,19 @@ serve(async (req) => {
 
     console.log(`📌 ${intimacoes.length} publicações processadas`);
 
-    // Deduplicate before saving (check existing by processo_cnj + data_intimacao + conteudo hash)
+    // Upsert: insert new or update existing with missing data
     let savedCount = 0;
+    let updatedCount = 0;
     for (const int of intimacoes) {
       // Check for existing
       let query = supabase
         .from("intimacoes")
-        .select("id")
+        .select("id, tribunal, data_disponibilizacao, data_publicacao, data_intimacao")
         .eq("oab_numero", oab_numero)
         .eq("oab_uf", oab_uf);
 
       if (int.processo_cnj) {
         query = query.eq("processo_cnj", int.processo_cnj);
-      }
-      if (int.data_intimacao) {
-        query = query.eq("data_intimacao", int.data_intimacao);
       }
       if (int.tipo_intimacao) {
         query = query.eq("tipo_intimacao", int.tipo_intimacao);
@@ -252,18 +250,38 @@ serve(async (req) => {
 
       const { data: existing } = await query.limit(1);
 
-      if (existing && existing.length > 0) continue;
+      if (existing && existing.length > 0) {
+        // Update existing record if it has missing fields
+        const rec = existing[0];
+        const updates: Record<string, any> = {};
+
+        if (!rec.tribunal && int.tribunal) updates.tribunal = int.tribunal;
+        if (!rec.data_disponibilizacao && int.data_disponibilizacao) updates.data_disponibilizacao = int.data_disponibilizacao;
+        if (!rec.data_publicacao && int.data_publicacao) updates.data_publicacao = int.data_publicacao;
+        if (!rec.data_intimacao && int.data_intimacao) updates.data_intimacao = int.data_intimacao;
+
+        if (Object.keys(updates).length > 0) {
+          updates.updated_at = new Date().toISOString();
+          const { error } = await supabase.from("intimacoes").update(updates).eq("id", rec.id);
+          if (!error) updatedCount++;
+          else console.warn(`⚠️ Erro ao atualizar:`, error.message);
+        }
+        continue;
+      }
 
       const { error } = await supabase.from("intimacoes").insert(int);
       if (!error) savedCount++;
       else console.warn(`⚠️ Erro ao salvar:`, error.message);
     }
 
+    console.log(`✅ ${savedCount} novas, ${updatedCount} atualizadas`);
+
     return new Response(
       JSON.stringify({
         success: true,
         total: intimacoes.length,
         saved: savedCount,
+        updated: updatedCount,
         processosAnalisados: intimacoes.length,
         fonte,
       }),
