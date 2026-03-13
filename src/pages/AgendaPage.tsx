@@ -7,7 +7,7 @@ import { GoogleCalendarConnect } from '@/components/agenda/GoogleCalendarConnect
 import { ConfirmacoesPendentes } from '@/components/agenda/ConfirmacoesPendentes';
 import { useCompromissos } from '@/hooks/useCompromissos';
 import { useIntimacoes, type IntimacaoEvent } from '@/hooks/useIntimacoes';
-import { Compromisso } from '@/types/compromissos';
+import { Compromisso, ConfirmacaoStatus } from '@/types/compromissos';
 import { 
   Loader2, 
   CalendarDays, 
