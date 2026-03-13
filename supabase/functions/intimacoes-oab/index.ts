@@ -239,7 +239,12 @@ serve(async (req) => {
 
       if (buscaResp.ok) {
         const buscaData = await buscaResp.json();
+        console.log(`🔍 V1 raw keys: ${JSON.stringify(Object.keys(buscaData))}`);
         const resultados = buscaData?.items?.data || buscaData?.items || buscaData?.data || [];
+        if (resultados.length > 0) {
+          console.log(`🔍 V1 first item keys: ${JSON.stringify(Object.keys(resultados[0]))}`);
+          console.log(`🔍 V1 first item sample: ${JSON.stringify(resultados[0]).slice(0, 500)}`);
+        }
 
         for (const item of resultados) {
           const conteudo = item.conteudo || item.texto || item.content || "";
