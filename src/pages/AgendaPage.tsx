@@ -66,7 +66,7 @@ export default function AgendaPage() {
     setIsModalOpen(true);
   };
 
-  const handleStatusChange = async (id: string, newStatus: string) => {
+  const handleStatusChange = async (id: string, newStatus: ConfirmacaoStatus) => {
     await updateCompromisso(id, { confirmacao_status: newStatus });
   };
 
