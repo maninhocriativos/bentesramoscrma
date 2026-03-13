@@ -85,9 +85,9 @@ serve(async (req) => {
     const intimacoes: any[] = [];
     let fonte = "escavador_v2";
 
-    // First: try V2 monitoramento endpoint
+    // First: try V2 advogado/processos endpoint
     const processosResp = await fetch(
-      `https://api.escavador.com/api/v2/processos/oab/${oab_numero}/${oab_uf}?pagina=1`,
+      `https://api.escavador.com/api/v2/advogado/processos?oab_numero=${oab_numero}&oab_estado=${oab_uf}`,
       {
         headers: {
           Authorization: `Bearer ${ESCAVADOR_API_KEY}`,
