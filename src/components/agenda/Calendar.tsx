@@ -114,7 +114,7 @@ interface CalendarEvent {
   hasCheckmark?: boolean;
 }
 
-export function Calendar({ compromissos, intimacoes = [], onDayClick, onEventClick }: CalendarProps) {
+export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', viewMode = 'mes', onViewModeChange, onDayClick, onEventClick }: CalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
   const monthStart = startOfMonth(currentMonth);
