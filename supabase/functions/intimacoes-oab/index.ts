@@ -227,8 +227,9 @@ serve(async (req) => {
       fonte = "escavador_v1";
       const searchTerm = `OAB ${oab_uf} ${oab_numero}`;
 
+      // Try V1 busca em diários with date filter
       const buscaResp = await fetch(
-        `https://api.escavador.com/api/v1/busca?q=${encodeURIComponent(searchTerm)}&qo=d&limit=50&page=1`,
+        `https://api.escavador.com/api/v1/busca?q=${encodeURIComponent(searchTerm)}&qo=d&limit=50&page=1&data_inicio=2026-01-01`,
         {
           headers: {
             Authorization: `Bearer ${ESCAVADOR_API_KEY}`,
@@ -239,16 +240,13 @@ serve(async (req) => {
 
       if (buscaResp.ok) {
         const buscaData = await buscaResp.json();
-        console.log(`🔍 V1 raw keys: ${JSON.stringify(Object.keys(buscaData))}`);
         const resultados = buscaData?.items?.data || buscaData?.items || buscaData?.data || [];
-        if (resultados.length > 0) {
-          console.log(`🔍 V1 first item keys: ${JSON.stringify(Object.keys(resultados[0]))}`);
-          console.log(`🔍 V1 first item sample: ${JSON.stringify(resultados[0]).slice(0, 500)}`);
-        }
+        console.log(`📋 V1: ${resultados.length} resultados encontrados`);
 
         for (const item of resultados) {
-          const conteudo = item.conteudo || item.texto || item.content || "";
-          const titulo = item.titulo || item.title || "";
+          // V1 diário structure: texto, diario_data, diario_nome, diario_sigla
+          const conteudo = item.texto || item.conteudo || item.content || "";
+          const titulo = item.diario_nome || item.titulo || item.title || "";
           const cnjMatch = conteudo.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
 
           const conteudoLower = conteudo.toLowerCase();
@@ -256,33 +254,30 @@ serve(async (req) => {
           if (conteudoLower.includes("intimação") || conteudoLower.includes("intimacao")) tipoIntimacao = "Intimação";
           else if (conteudoLower.includes("citação")) tipoIntimacao = "Citação";
           else if (conteudoLower.includes("despacho")) tipoIntimacao = "Despacho";
-          else if (conteudoLower.includes("sentença")) tipoIntimacao = "Sentença";
+          else if (conteudoLower.includes("sentença") || conteudoLower.includes("sentenca")) tipoIntimacao = "Sentença";
+          else if (conteudoLower.includes("decisão") || conteudoLower.includes("decisao")) tipoIntimacao = "Decisão";
+          else if (conteudoLower.includes("notificação") || conteudoLower.includes("notificacao")) tipoIntimacao = "Notificação";
 
-          // Log first few dates for debugging
-          if (resultados.indexOf(item) < 3) {
-            console.log(`📅 V1 item date: data_publicacao=${item.data_publicacao}, data=${item.data}, titulo=${(item.titulo || "").slice(0,80)}`);
-          }
-
+          // Use diario_data as the primary date
+          const diarioData = item.diario_data || item.data_publicacao || item.data || "";
+          
           // Filter: only 2026+
-          const checkDate = item.data_publicacao || item.data || "";
-          if (checkDate && checkDate < "2026-01-01") continue;
+          if (diarioData && diarioData < "2026-01-01") continue;
 
-          const rawDate = item.data_publicacao || item.data || null;
-          const rawDisp = item.data_disponibilizacao || null;
-
-          let dispDate = rawDisp || rawDate || null;
-          let pubDate = item.data_publicacao || (dispDate ? nextBusinessDay(dispDate) : null);
-          let intDate = pubDate ? nextBusinessDay(pubDate) : rawDate;
+          // Calculate CPC dates from diario_data (disponibilização)
+          let dataDisponibilizacao = diarioData || null;
+          let dataPublicacao = dataDisponibilizacao ? nextBusinessDay(dataDisponibilizacao) : null;
+          let dataIntimacao = dataPublicacao ? nextBusinessDay(dataPublicacao) : diarioData || null;
 
           intimacoes.push({
             processo_cnj: cnjMatch ? cnjMatch[1] : "",
             processo_titulo: titulo || "Publicação em Diário Oficial",
-            tribunal: item.fonte?.sigla || item.tribunal || item.fonte?.nome || "",
+            tribunal: item.diario_sigla || item.fonte?.sigla || item.tribunal || "",
             tipo_intimacao: tipoIntimacao,
             conteudo: conteudo.slice(0, 5000),
-            data_intimacao: intDate,
-            data_disponibilizacao: dispDate,
-            data_publicacao: pubDate,
+            data_intimacao: dataIntimacao,
+            data_disponibilizacao: dataDisponibilizacao,
+            data_publicacao: dataPublicacao,
             oab_numero,
             oab_uf,
             advogado_id,
