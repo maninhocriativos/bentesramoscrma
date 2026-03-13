@@ -102,6 +102,21 @@ const TYPE_COLORS: Record<string, { gradient: string; bg: string; border: string
     bg: 'bg-fuchsia-50 dark:bg-fuchsia-950/30',
     border: 'border-fuchsia-200 dark:border-fuchsia-800'
   },
+  servidor_publico_promocao: {
+    gradient: 'from-teal-600 via-emerald-500 to-green-600',
+    bg: 'bg-teal-50 dark:bg-teal-950/30',
+    border: 'border-teal-200 dark:border-teal-800'
+  },
+  diferenca_salarial: {
+    gradient: 'from-lime-600 via-green-500 to-emerald-600',
+    bg: 'bg-lime-50 dark:bg-lime-950/30',
+    border: 'border-lime-200 dark:border-lime-800'
+  },
+  revisao_contrato_emprestimo: {
+    gradient: 'from-slate-600 via-gray-500 to-zinc-600',
+    bg: 'bg-slate-50 dark:bg-slate-950/30',
+    border: 'border-slate-200 dark:border-slate-800'
+  },
 };
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {

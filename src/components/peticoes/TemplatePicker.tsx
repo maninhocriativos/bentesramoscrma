@@ -31,6 +31,17 @@ const TAG_COLORS: Record<string, string> = {
   'Tramitação Preferencial': 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
   'Juizado Especial': 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
   'Aéreo': 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+  'Financiamento': 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+  'Veículo': 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
+  'CEF': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  'Justiça Federal': 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+  'Avianca': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  'Fazenda Pública': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  'Diferença Salarial': 'bg-lime-100 text-lime-700 dark:bg-lime-900/30 dark:text-lime-400',
+  'Professor': 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
+  'SES': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  'Crefisa': 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
+  'Cláusulas Abusivas': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 };
 
 const FIRM_HEADER = `
