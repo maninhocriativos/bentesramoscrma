@@ -143,7 +143,7 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
         title: c.titulo,
         time: isAudiencia ? format(parseLocalDate(c.data_inicio), 'HH:mm') : undefined,
         type: 'compromisso',
-        className: getCompromissoBarStyle(c),
+        className: getCompromissoBarStyle(c, colorMode),
         original: c,
       });
     });
