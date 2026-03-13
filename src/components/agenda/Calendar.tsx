@@ -19,6 +19,7 @@ import {
   ChevronLeft, 
   ChevronRight, 
   FileText,
+  CalendarDays,
   CheckCircle2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -27,11 +28,7 @@ import { Compromisso, ConfirmacaoStatus } from '@/types/compromissos';
 import { IntimacaoEvent } from '@/hooks/useIntimacoes';
 
 const TIMEZONE = 'America/Manaus';
-
-const parseLocalDate = (dateString: string): Date => {
-  const utcDate = parseISO(dateString);
-  return toZonedTime(utcDate, TIMEZONE);
-};
+const parseLocalDate = (dateString: string): Date => toZonedTime(parseISO(dateString), TIMEZONE);
 
 type ColorMode = 'tipo' | 'situacao';
 type ViewMode = 'mes' | 'semana' | 'dia';
@@ -47,46 +44,48 @@ interface CalendarProps {
   onStatusChange?: (id: string, newStatus: ConfirmacaoStatus) => void;
 }
 
-// ── Colors matching ADVBOX/Astrea reference ──
+// ── Inline color styles matching ADVBOX reference exactly ──
+const BAR_COLORS = {
+  green:   { background: '#22c55e', color: '#fff' },
+  orange:  { background: '#f97316', color: '#fff' },
+  pink:    { background: '#ec4899', color: '#fff' },
+  amber:   { background: '#f59e0b', color: '#78350f' },
+  red:     { background: '#ef4444', color: '#fff' },
+  blue:    { background: '#3b82f6', color: '#fff' },
+  gray:    { background: '#cbd5e1', color: '#334155' },
+  outline: { background: '#fffbeb', color: '#92400e', border: '1px solid #f59e0b' },
+} as const;
 
-// By TIPO (default mode)
-function getBarByTipo(c: Compromisso): string {
-  const tipo = c.tipo || 'Outro';
-  switch (tipo) {
-    case 'Audiência': return 'cal-bar-pink';   // pink/hot
-    case 'Reunião':   return 'cal-bar-orange'; // orange (Atendimento Presencial)
-    case 'Prazo':     return 'cal-bar-amber';  // amber outline
-    case 'Tarefa':    return 'cal-bar-green';  // green
-    default:          return 'cal-bar-gray';   // gray
+type BarKey = keyof typeof BAR_COLORS;
+
+function getBarByTipo(c: Compromisso): BarKey {
+  switch (c.tipo) {
+    case 'Audiência': return 'pink';
+    case 'Reunião':   return 'orange';
+    case 'Prazo':     return 'amber';
+    case 'Tarefa':    return 'green';
+    default:          return 'gray';
   }
 }
 
-// By SITUAÇÃO/STATUS
-function getBarBySituacao(c: Compromisso): string {
-  const st = c.confirmacao_status || 'pendente';
-  switch (st) {
-    case 'confirmado': return 'cal-bar-green';
-    case 'cancelado':  return 'cal-bar-red';
-    case 'remarcado':  return 'cal-bar-blue';
-    default:           return 'cal-bar-amber'; // pendente
+function getBarBySituacao(c: Compromisso): BarKey {
+  switch (c.confirmacao_status || 'pendente') {
+    case 'confirmado': return 'green';
+    case 'cancelado':  return 'red';
+    case 'remarcado':  return 'blue';
+    default:           return 'amber';
   }
 }
 
-function getBarClass(c: Compromisso, mode: ColorMode): string {
-  return mode === 'situacao' ? getBarBySituacao(c) : getBarByTipo(c);
-}
-
-// Intimação bar style
-function getIntimacaoBar(titulo: string): { css: string; outline: boolean } {
+function getIntimacaoBarKey(titulo: string): { key: BarKey; isOutline: boolean } {
   const t = titulo.toLowerCase();
-  
   if (t.includes('alvará') || t.includes('alvara'))
-    return { css: 'cal-bar-green', outline: false };
-  
+    return { key: 'green', isOutline: false };
   if (t.includes('sessão de julgamento') || t.includes('sessao de julgamento'))
-    return { css: 'cal-bar-pink', outline: false };
-  
-  // Outline (document) bars - white bg with amber border
+    return { key: 'pink', isOutline: false };
+  if (t.includes('ciência da sentença') || t.includes('ciencia da sentenca'))
+    return { key: 'orange', isOutline: false };
+  // Document type = outline
   if (
     t.includes('manifestação') || t.includes('contestação') || t.includes('contrarrazões') ||
     t.includes('réplica') || t.includes('emenda') || t.includes('recurso') ||
@@ -94,12 +93,8 @@ function getIntimacaoBar(titulo: string): { css: string; outline: boolean } {
     t.includes('agravo') || t.includes('sine die') || t.includes('pagamento') ||
     t.includes('manifestacao') || t.includes('contestacao') || t.includes('contrarrazoes') ||
     t.includes('replica') || t.includes('alegacoes') || t.includes('apelacao')
-  ) {
-    return { css: 'cal-bar-outline', outline: true };
-  }
-  
-  // Default: orange filled (like Ciência da Sentença, Alerta, etc.)
-  return { css: 'cal-bar-orange', outline: false };
+  ) return { key: 'outline', isOutline: true };
+  return { key: 'orange', isOutline: false };
 }
 
 interface CalendarEvent {
@@ -107,12 +102,16 @@ interface CalendarEvent {
   title: string;
   time?: string;
   type: 'compromisso' | 'intimacao';
-  barCss: string;
+  barKey: BarKey;
   count?: number;
   isOutline?: boolean;
   original?: Compromisso;
   hasCheckmark?: boolean;
 }
+
+// Grid border color
+const BORDER = '#d4a574';
+const HEADER_BG = '#fdf4e8';
 
 export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', viewMode = 'mes', onViewModeChange, onDayClick, onEventClick }: CalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -123,57 +122,43 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
   const endDate = endOfWeek(monthEnd, { locale: ptBR });
 
   const days: Date[] = [];
-  let day = startDate;
-  while (day <= endDate) {
-    days.push(day);
-    day = addDays(day, 1);
-  }
+  let d = startDate;
+  while (d <= endDate) { days.push(d); d = addDays(d, 1); }
 
   const weekDays = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
   const getEventsForDay = (date: Date): CalendarEvent[] => {
     const events: CalendarEvent[] = [];
-
-    // Compromissos
     const dayComps = compromissos.filter(c => isSameDay(parseLocalDate(c.data_inicio), date));
     dayComps.forEach(c => {
-      const isAudiencia = c.tipo === 'Audiência';
       events.push({
         id: c.id,
         title: c.titulo,
-        time: isAudiencia ? format(parseLocalDate(c.data_inicio), 'HH:mm') : undefined,
+        time: c.tipo === 'Audiência' ? format(parseLocalDate(c.data_inicio), 'HH:mm') : undefined,
         type: 'compromisso',
-        barCss: getBarClass(c, colorMode),
+        barKey: colorMode === 'situacao' ? getBarBySituacao(c) : getBarByTipo(c),
         original: c,
       });
     });
-
-    // Intimações - group by tipo_intimacao
-    const dayIntimacoes = intimacoes.filter(i => {
-      const d = i.data_intimacao || i.data_publicacao || i.data_disponibilizacao;
-      return d && isSameDay(parseLocalDate(d), date);
+    // Intimações grouped
+    const dayInt = intimacoes.filter(i => {
+      const dt = i.data_intimacao || i.data_publicacao || i.data_disponibilizacao;
+      return dt && isSameDay(parseLocalDate(dt), date);
     });
-
-    const intimacaoGroups: Record<string, IntimacaoEvent[]> = {};
-    dayIntimacoes.forEach(i => {
-      const key = i.tipo_intimacao || i.processo_titulo || 'Intimação';
-      if (!intimacaoGroups[key]) intimacaoGroups[key] = [];
-      intimacaoGroups[key].push(i);
+    const groups: Record<string, IntimacaoEvent[]> = {};
+    dayInt.forEach(i => {
+      const k = i.tipo_intimacao || i.processo_titulo || 'Intimação';
+      if (!groups[k]) groups[k] = [];
+      groups[k].push(i);
     });
-
-    Object.entries(intimacaoGroups).forEach(([tipo, items]) => {
-      const style = getIntimacaoBar(tipo);
+    Object.entries(groups).forEach(([tipo, items]) => {
+      const { key, isOutline } = getIntimacaoBarKey(tipo);
       events.push({
-        id: items[0].id,
-        title: tipo,
-        type: 'intimacao',
-        barCss: style.css,
-        isOutline: style.outline,
-        count: items.length,
+        id: items[0].id, title: tipo, type: 'intimacao',
+        barKey: key, isOutline, count: items.length,
         hasCheckmark: items.some(i => i.lida),
       });
     });
-
     return events;
   };
 
@@ -182,46 +167,20 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
 
   return (
     <div className="space-y-3">
-      {/* ── CSS for calendar bar colors ── */}
-      <style>{`
-        .cal-bar-orange { background: #f97316; color: #fff; }
-        .cal-bar-pink   { background: #ec4899; color: #fff; }
-        .cal-bar-green  { background: #22c55e; color: #fff; }
-        .cal-bar-amber  { background: #f59e0b; color: #78350f; }
-        .cal-bar-red    { background: #ef4444; color: #fff; }
-        .cal-bar-blue   { background: #3b82f6; color: #fff; }
-        .cal-bar-gray   { background: #cbd5e1; color: #334155; }
-        .cal-bar-outline { background: #fffbeb; color: #92400e; border: 1px solid #f59e0b; }
-        .dark .cal-bar-outline { background: rgba(245,158,11,0.1); color: #fbbf24; border-color: rgba(245,158,11,0.4); }
-        .cal-grid-border { border-color: #e2c9a0; }
-        .dark .cal-grid-border { border-color: rgba(226,201,160,0.2); }
-        .cal-header-bg { background: #fef7ed; }
-        .dark .cal-header-bg { background: rgba(254,247,237,0.05); }
-      `}</style>
-
-      {/* Navigation Bar */}
+      {/* Navigation */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="inline-flex items-center border cal-grid-border rounded-md overflow-hidden bg-card">
-            <button
-              className="px-2 py-1.5 hover:bg-muted/50 transition-colors border-r cal-grid-border"
-              onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-            >
+          <div className="inline-flex items-center rounded-md overflow-hidden bg-card" style={{ border: `1px solid ${BORDER}` }}>
+            <button className="px-2.5 py-1.5 hover:bg-muted/50 transition-colors" style={{ borderRight: `1px solid ${BORDER}` }}
+              onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
               <ChevronLeft className="h-4 w-4 text-muted-foreground" />
             </button>
-            <button
-              className="px-2 py-1.5 hover:bg-muted/50 transition-colors"
-              onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-            >
+            <button className="px-2.5 py-1.5 hover:bg-muted/50 transition-colors"
+              onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={goToToday}
-            className="text-xs font-bold px-4 h-8 rounded-md"
-          >
+          <Button variant="default" size="sm" onClick={goToToday} className="text-xs font-bold px-4 h-8 rounded-md">
             Hoje
           </Button>
         </div>
@@ -230,23 +189,17 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
           {format(currentMonth, "MMMM 'de' yyyy", { locale: ptBR })}
         </h2>
 
-        <div className="inline-flex items-center border cal-grid-border rounded-md overflow-hidden bg-card">
+        <div className="inline-flex items-center rounded-md overflow-hidden bg-card" style={{ border: `1px solid ${BORDER}` }}>
           {([
             { label: 'Mês', value: 'mes' as ViewMode },
             { label: 'Semana', value: 'semana' as ViewMode },
             { label: 'Dia', value: 'dia' as ViewMode },
           ]).map(({ label, value }, i) => (
-            <button
-              key={value}
-              onClick={() => onViewModeChange?.(value)}
-              className={cn(
-                "px-3 py-1.5 text-xs font-medium transition-all",
-                i < 2 && "border-r cal-grid-border",
-                viewMode === value
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+            <button key={value} onClick={() => onViewModeChange?.(value)}
+              className={cn("px-3 py-1.5 text-xs font-medium transition-all",
+                viewMode === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/40"
               )}
-            >
+              style={i < 2 ? { borderRight: `1px solid ${BORDER}` } : undefined}>
               {label}
             </button>
           ))}
@@ -254,114 +207,108 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
       </div>
 
       {/* Calendar Grid */}
-      <div className="bg-card rounded-lg border cal-grid-border overflow-hidden">
-        {/* Week Day Headers */}
-        <div className="grid grid-cols-7 cal-header-bg border-b cal-grid-border">
+      <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${BORDER}` }}>
+        {/* Week Header */}
+        <div className="grid grid-cols-7" style={{ background: HEADER_BG, borderBottom: `1px solid ${BORDER}` }}>
           {weekDays.map((wd, i) => (
-            <div
-              key={wd}
-              className={cn(
-                "py-2.5 text-center text-[11px] font-semibold text-muted-foreground italic tracking-wide",
-                i < 6 && "border-r cal-grid-border"
-              )}
-            >
+            <div key={wd} className="py-2 text-center text-[11px] font-semibold text-muted-foreground italic tracking-wide"
+              style={i < 6 ? { borderRight: `1px solid ${BORDER}` } : undefined}>
               {wd}
             </div>
           ))}
         </div>
 
-        {/* Day Cells */}
+        {/* Rows */}
         {Array.from({ length: rows }).map((_, rowIdx) => (
           <div key={rowIdx} className="grid grid-cols-7">
             {days.slice(rowIdx * 7, rowIdx * 7 + 7).map((day, colIdx) => {
-              const isCurrentMonth = isSameMonth(day, currentMonth);
-              const isCurrentDay = isToday(day);
+              const isCurMonth = isSameMonth(day, currentMonth);
+              const isCurDay = isToday(day);
               const events = getEventsForDay(day);
-              const maxVisible = 5;
-              const visibleEvents = events.slice(0, maxVisible);
-              const remaining = events.length - maxVisible;
-              const globalIdx = rowIdx * 7 + colIdx;
+              const maxVis = 5;
+              const visible = events.slice(0, maxVis);
+              const extra = events.length - maxVis;
 
               return (
                 <div
-                  key={globalIdx}
-                  className={cn(
-                    "min-h-[105px] md:min-h-[128px] border-b cal-grid-border p-[3px] md:p-1 cursor-pointer transition-colors relative",
-                    colIdx < 6 && "border-r cal-grid-border",
-                    !isCurrentMonth && "bg-muted/8",
-                    isCurrentMonth && "hover:bg-amber-50/30 dark:hover:bg-amber-500/5",
-                    isCurrentDay && "bg-emerald-50/40 dark:bg-emerald-500/5"
+                  key={colIdx}
+                  className={cn("min-h-[108px] md:min-h-[130px] cursor-pointer transition-colors relative bg-card",
+                    !isCurMonth && "opacity-30",
+                    isCurMonth && !isCurDay && "hover:bg-amber-50/40 dark:hover:bg-amber-500/5",
+                    isCurDay && "bg-emerald-50/50 dark:bg-emerald-500/5"
                   )}
+                  style={{
+                    borderBottom: `1px solid ${BORDER}`,
+                    ...(colIdx < 6 ? { borderRight: `1px solid ${BORDER}` } : {}),
+                    padding: '3px 4px',
+                  }}
                   onClick={() => onDayClick(day)}
                 >
-                  {/* Today green accent */}
-                  {isCurrentDay && (
-                    <div className="absolute top-0 left-0 right-0 h-[3px] bg-emerald-500" />
-                  )}
+                  {/* Today green top bar */}
+                  {isCurDay && <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: '#22c55e' }} />}
 
-                  {/* Day Number - top right */}
-                  <div className="flex justify-end mb-0.5 pr-0.5">
-                    <span
-                      className={cn(
-                        "text-[13px] font-semibold leading-none",
-                        isCurrentDay && "bg-emerald-500 text-white min-w-[22px] h-[22px] rounded-full flex items-center justify-center text-[11px] font-bold",
-                        !isCurrentDay && isCurrentMonth && "text-foreground/70",
-                        !isCurrentMonth && "text-muted-foreground/30"
-                      )}
-                    >
-                      {format(day, 'd')}
-                    </span>
+                  {/* Day number top-right */}
+                  <div className="flex justify-end mb-[2px]">
+                    {isCurDay ? (
+                      <span className="flex items-center justify-center text-[11px] font-bold rounded-full"
+                        style={{ background: '#22c55e', color: '#fff', width: 22, height: 22 }}>
+                        {format(day, 'd')}
+                      </span>
+                    ) : (
+                      <span className={cn("text-[13px] font-semibold", isCurMonth ? "text-foreground/70" : "text-muted-foreground/30")}>
+                        {format(day, 'd')}
+                      </span>
+                    )}
                   </div>
 
-                  {/* Events */}
-                  <div className="space-y-[1px]">
-                    {visibleEvents.map((event) => (
-                      <div
-                        key={event.id}
-                        className={cn(
-                          "flex items-center gap-[3px] px-1 py-[1.5px] rounded-[3px] text-[10px] md:text-[11px] leading-tight cursor-pointer transition-all hover:brightness-[0.88] overflow-hidden whitespace-nowrap",
-                          event.barCss
-                        )}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (event.original) onEventClick(event.original);
-                          else onDayClick(day);
-                        }}
-                        title={event.title}
-                      >
-                        {/* Count badge for intimações */}
-                        {event.count && event.count > 1 && (
-                          <span className={cn(
-                            "font-bold text-[9px] shrink-0 min-w-[13px] h-[13px] rounded-full flex items-center justify-center",
-                            event.isOutline 
-                              ? "bg-amber-500 text-white" 
-                              : "bg-white/25"
-                          )}>
-                            {event.count}
-                          </span>
-                        )}
-                        
-                        {/* Time for audiências */}
-                        {event.time && (
-                          <span className="font-bold text-[9px] shrink-0">{event.time}</span>
-                        )}
-                        
-                        {/* Folder icon for outline intimações */}
-                        {event.isOutline && (
-                          <FileText className="h-[10px] w-[10px] shrink-0 opacity-60" />
-                        )}
-                        
-                        {/* Checkmark for read intimações */}
-                        {event.hasCheckmark && (
-                          <CheckCircle2 className="h-[10px] w-[10px] shrink-0 text-emerald-500" />
-                        )}
-                        
-                        <span className="truncate font-medium">{event.title}</span>
-                      </div>
-                    ))}
-                    {remaining > 0 && (
-                      <div className="text-[9px] font-bold px-1 cursor-pointer hover:underline" style={{ color: '#ea580c' }}>
-                        +{remaining} mais
+                  {/* Event bars */}
+                  <div className="space-y-[2px]">
+                    {visible.map((ev) => {
+                      const colors = BAR_COLORS[ev.barKey];
+                      return (
+                        <div
+                          key={ev.id}
+                          className="flex items-center gap-1 rounded-[3px] cursor-pointer overflow-hidden whitespace-nowrap"
+                          style={{
+                            background: colors.background,
+                            color: colors.color,
+                            border: 'border' in colors ? (colors as any).border : 'none',
+                            padding: '2px 5px',
+                            fontSize: 11,
+                            lineHeight: '16px',
+                            fontWeight: 500,
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (ev.original) onEventClick(ev.original);
+                            else onDayClick(day);
+                          }}
+                          title={ev.title}
+                        >
+                          {/* Count number (inline, bold) */}
+                          {ev.count && ev.count > 0 && (
+                            <span style={{ fontWeight: 700, fontSize: 10, opacity: ev.isOutline ? 1 : 0.85 }}>
+                              {ev.count}
+                            </span>
+                          )}
+
+                          {/* Time for audiências/sessões */}
+                          {ev.time && (
+                            <span style={{ fontWeight: 700, fontSize: 10 }}>{ev.time}</span>
+                          )}
+
+                          {/* Icons */}
+                          {ev.isOutline && <FileText style={{ width: 10, height: 10, opacity: 0.6, flexShrink: 0 }} />}
+                          {ev.time && <CalendarDays style={{ width: 10, height: 10, opacity: 0.7, flexShrink: 0 }} />}
+                          {ev.hasCheckmark && <CheckCircle2 style={{ width: 10, height: 10, color: '#22c55e', flexShrink: 0 }} />}
+
+                          <span className="truncate">{ev.title}</span>
+                        </div>
+                      );
+                    })}
+                    {extra > 0 && (
+                      <div className="cursor-pointer hover:underline" style={{ fontSize: 9, fontWeight: 700, color: '#ea580c', paddingLeft: 4 }}>
+                        +{extra} mais
                       </div>
                     )}
                   </div>
