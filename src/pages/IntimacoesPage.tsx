@@ -21,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
+
 import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { generateIntimacaoReport } from '@/lib/intimacaoReportGenerator';
@@ -388,73 +388,110 @@ export default function IntimacoesPage() {
         )}
       </div>
 
-      {/* Detail Modal - Premium */}
+      {/* Detail Modal - Premium Redesign */}
       <Dialog open={!!selectedIntimacao} onOpenChange={() => setSelectedIntimacao(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col p-0">
-          {/* Modal Header with gradient */}
-          <div className="bg-gradient-to-br from-primary/5 via-secondary/5 to-transparent px-6 pt-6 pb-4">
-            <DialogHeader>
-              <div className="flex items-start gap-3">
-                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <Scale className="h-5 w-5 text-primary" />
+        <DialogContent className="max-w-[680px] max-h-[90vh] overflow-hidden flex flex-col p-0 rounded-2xl border-0 shadow-2xl">
+          {/* Hero Header */}
+          <div className="relative bg-gradient-to-br from-primary/10 via-secondary/8 to-accent/5 px-7 pt-7 pb-5 overflow-hidden">
+            {/* Decorative circles */}
+            <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-primary/5 blur-2xl" />
+            <div className="absolute -bottom-8 -left-8 h-24 w-24 rounded-full bg-secondary/8 blur-xl" />
+            
+            <DialogHeader className="relative z-10">
+              <div className="flex items-start gap-4">
+                <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0 shadow-sm border border-primary/10">
+                  <Scale className="h-6 w-6 text-primary" />
                 </div>
-                <div className="min-w-0">
-                  <DialogTitle className="text-lg font-semibold text-foreground leading-tight">
-                    {selectedIntimacao?.tipo_intimacao}
-                  </DialogTitle>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    {selectedIntimacao?.processo_cnj || 'Sem número CNJ'}
-                  </p>
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <DialogTitle className="text-xl font-bold text-foreground leading-tight">
+                      {selectedIntimacao?.tipo_intimacao || 'Publicação'}
+                    </DialogTitle>
+                    <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${selectedIntimacao ? getTipoBadgeColor(selectedIntimacao.tipo_intimacao) : ''}`}>
+                      {selectedIntimacao?.tipo_intimacao}
+                    </span>
+                  </div>
+                  {selectedIntimacao?.processo_cnj ? (
+                    <p className="text-sm font-mono font-semibold text-primary/80 tracking-wide">
+                      {selectedIntimacao.processo_cnj}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">Número CNJ não identificado</p>
+                  )}
+                  {selectedIntimacao?.tribunal && (
+                    <div className="flex items-center gap-1.5 pt-0.5">
+                      <div className="h-1.5 w-1.5 rounded-full bg-secondary" />
+                      <span className="text-xs font-medium text-muted-foreground">{selectedIntimacao.tribunal}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </DialogHeader>
           </div>
 
           {selectedIntimacao && (
-            <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-5">
-              {/* Info Grid */}
-              <div className="grid grid-cols-2 gap-4">
-                <InfoField label="Processo (CNJ)" value={selectedIntimacao.processo_cnj} icon={<Gavel className="h-3.5 w-3.5" />} />
-                <InfoField label="Ação / Classe" value={selectedIntimacao.processo_titulo} icon={<BookOpen className="h-3.5 w-3.5" />} />
-                <InfoField label="Tribunal" value={selectedIntimacao.tribunal} icon={<Scale className="h-3.5 w-3.5" />} />
-                <InfoField
-                  label="Tipo"
-                  value={selectedIntimacao.tipo_intimacao}
-                  badge
-                  badgeClass={getTipoBadgeColor(selectedIntimacao.tipo_intimacao)}
-                />
-              </div>
-
-              <Separator />
-
-              {/* Dates Section */}
-              <div>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <CalendarDays className="h-3.5 w-3.5" />
-                  Datas
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <DateCard label="Disponibilização" value={formatDateLong(selectedIntimacao.data_disponibilizacao)} />
-                  <DateCard label="Publicação" value={formatDateLong(selectedIntimacao.data_publicacao)} />
-                  <DateCard label="Intimação" value={formatDateLong(selectedIntimacao.data_intimacao)} />
+            <div className="flex-1 overflow-y-auto">
+              {/* Process Info Strip */}
+              <div className="px-7 py-4 bg-muted/30 border-y border-border/40">
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.1em] flex items-center gap-1.5">
+                      <Gavel className="h-3 w-3 text-primary/60" />
+                      Processo (CNJ)
+                    </span>
+                    <p className="text-sm font-semibold text-foreground font-mono">
+                      {selectedIntimacao.processo_cnj || '—'}
+                    </p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.1em] flex items-center gap-1.5">
+                      <BookOpen className="h-3 w-3 text-primary/60" />
+                      Ação / Classe
+                    </span>
+                    <p className="text-sm font-medium text-foreground">
+                      {selectedIntimacao.processo_titulo || '—'}
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <Separator />
+              <div className="px-7 py-5 space-y-6">
+                {/* Dates Section */}
+                <div>
+                  <h3 className="text-[11px] font-bold text-primary uppercase tracking-[0.12em] mb-3 flex items-center gap-2">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    Datas Importantes
+                  </h3>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: 'Disponibilização', value: selectedIntimacao.data_disponibilizacao, color: 'from-blue-500/10 to-blue-500/5 border-blue-200/50 dark:border-blue-800/50' },
+                      { label: 'Publicação', value: selectedIntimacao.data_publicacao, color: 'from-emerald-500/10 to-emerald-500/5 border-emerald-200/50 dark:border-emerald-800/50' },
+                      { label: 'Intimação', value: selectedIntimacao.data_intimacao, color: 'from-amber-500/10 to-amber-500/5 border-amber-200/50 dark:border-amber-800/50' },
+                    ].map((date) => (
+                      <div key={date.label} className={`p-3 rounded-xl bg-gradient-to-b ${date.color} border space-y-1.5`}>
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{date.label}</p>
+                        <p className="text-[13px] font-semibold text-foreground leading-snug">
+                          {formatDateLong(date.value)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
-              {/* Content */}
-              <div>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <FileText className="h-3.5 w-3.5" />
-                  Conteúdo da Publicação
-                </h3>
-                <div className="p-4 bg-muted/30 rounded-xl text-sm whitespace-pre-wrap leading-relaxed border border-border/50 max-h-60 overflow-y-auto">
-                  {selectedIntimacao.conteudo || 'Sem conteúdo detalhado disponível.'}
+                {/* Content Section */}
+                <div>
+                  <h3 className="text-[11px] font-bold text-primary uppercase tracking-[0.12em] mb-3 flex items-center gap-2">
+                    <FileText className="h-3.5 w-3.5" />
+                    Conteúdo da Publicação
+                  </h3>
+                  <div className="p-4 bg-gradient-to-b from-muted/40 to-muted/20 rounded-xl text-[13px] whitespace-pre-wrap leading-relaxed border border-border/40 max-h-64 overflow-y-auto font-[system-ui] selection:bg-primary/20">
+                    {selectedIntimacao.conteudo || 'Sem conteúdo detalhado disponível.'}
+                  </div>
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex gap-2 pt-2">
+              {/* Footer Actions */}
+              <div className="sticky bottom-0 px-7 py-4 bg-card/95 backdrop-blur-sm border-t border-border/40 flex items-center gap-3">
                 {!selectedIntimacao.lida && (
                   <Button
                     onClick={() => {
@@ -463,15 +500,15 @@ export default function IntimacoesPage() {
                     }}
                     size="sm"
                     variant="outline"
-                    className="rounded-xl"
+                    className="rounded-xl h-9 border-border/60"
                   >
-                    <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                    <CheckCircle2 className="h-4 w-4 mr-1.5 text-emerald-500" />
                     Marcar como lida
                   </Button>
                 )}
                 <Button
                   size="sm"
-                  className="rounded-xl"
+                  className="rounded-xl h-9 bg-gradient-to-r from-primary to-primary/90 shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-shadow"
                   onClick={() => handleGenerateReport(selectedIntimacao)}
                 >
                   <FileText className="h-4 w-4 mr-1.5" />
@@ -486,35 +523,3 @@ export default function IntimacoesPage() {
   );
 }
 
-function InfoField({ label, value, icon, badge, badgeClass }: {
-  label: string;
-  value: string | null;
-  icon?: React.ReactNode;
-  badge?: boolean;
-  badgeClass?: string;
-}) {
-  return (
-    <div className="space-y-1">
-      <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-        {icon && <span className="text-secondary">{icon}</span>}
-        {label}
-      </label>
-      {badge ? (
-        <span className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-full ${badgeClass}`}>
-          {value || '—'}
-        </span>
-      ) : (
-        <p className="text-sm font-medium text-foreground">{value || '—'}</p>
-      )}
-    </div>
-  );
-}
-
-function DateCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="p-3 rounded-xl bg-card border border-border/50 space-y-1">
-      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
-      <p className="text-sm font-medium text-foreground">{value}</p>
-    </div>
-  );
-}

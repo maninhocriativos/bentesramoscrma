@@ -209,8 +209,10 @@ serve(async (req) => {
           else if (conteudoLower.includes("despacho")) tipoIntimacao = "Despacho";
           else if (conteudoLower.includes("sentença")) tipoIntimacao = "Sentença";
 
+          // Try to extract CNJ from content
+          const cnjFromContent = conteudo.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
           intimacoes.push({
-            processo_cnj: cnjMatch ? cnjMatch[1] : "",
+            processo_cnj: cnjMatch ? cnjMatch[1] : (cnjFromContent ? cnjFromContent[1] : ""),
             processo_titulo: titulo || "Publicação em Diário Oficial",
             tribunal: item.fonte?.sigla || item.tribunal || item.fonte?.nome || "",
             tipo_intimacao: tipoIntimacao,
