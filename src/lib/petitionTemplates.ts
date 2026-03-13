@@ -91,6 +91,26 @@ export const PETITION_TEMPLATES: PetitionTemplate[] = [
     tags: ['Servidor Público', 'Seguro Vinculado'],
     acaoTitulo: 'Ação de Indenização por Danos Morais c/c Pedido de Repetição de Indébito',
   },
+  {
+    id: 'venda-casada-financiamento-veiculo',
+    title: 'Venda Casada – Financiamento de Veículo',
+    description: 'Ação de Indenização por Danos Morais c/c Repetição de Indébito - Seguro vinculado a financiamento de veículo',
+    typeSlug: 'vendas_casadas',
+    filePath: '/templates/venda-casada-financiamento-veiculo.docx',
+    fileType: 'docx',
+    tags: ['Financiamento', 'Veículo', 'Seguro Vinculado'],
+    acaoTitulo: 'Ação de Indenização por Danos Morais c/c Pedido de Repetição de Indébito',
+  },
+  {
+    id: 'venda-casada-cef-idoso',
+    title: 'Venda Casada – CEF (Idoso)',
+    description: 'Ação de Indenização por Danos Morais c/c Repetição de Indébito - Venda casada Caixa Econômica Federal com pedido de tramitação preferencial (idoso)',
+    typeSlug: 'vendas_casadas',
+    filePath: '/templates/venda-casada-cef-idoso.docx',
+    fileType: 'docx',
+    tags: ['CEF', 'Idoso', 'Tramitação Preferencial', 'Justiça Federal'],
+    acaoTitulo: 'Ação de Indenização por Danos Morais c/c Pedido de Repetição de Indébito',
+  },
 
   // === Seguro Não Contratado ===
   {
@@ -119,13 +139,69 @@ export const PETITION_TEMPLATES: PetitionTemplate[] = [
   // === Cancelamento de Voo ===
   {
     id: 'cancelamento-voo',
-    title: 'Cancelamento de Voo',
+    title: 'Cancelamento de Voo – Geral',
     description: 'Ação de Reparação por Danos Morais - Cancelamento/atraso de voo (Juizado Especial)',
     typeSlug: 'cancelamento_voo',
     filePath: '/templates/cancelamento-voo.docx',
     fileType: 'docx',
     tags: ['Aéreo', 'Juizado Especial', 'Danos Morais'],
     acaoTitulo: 'Ação de Reparação por Danos Morais',
+  },
+  {
+    id: 'cancelamento-voo-avianca',
+    title: 'Cancelamento de Voo – Avianca',
+    description: 'Ação de Indenização por Danos Morais - Cancelamento de voo Avianca (Juizado Especial Cível)',
+    typeSlug: 'cancelamento_voo',
+    filePath: '/templates/cancelamento-voo-avianca.docx',
+    fileType: 'docx',
+    tags: ['Aéreo', 'Avianca', 'Juizado Especial', 'Policial Militar'],
+    acaoTitulo: 'Ação de Indenização por Danos Morais',
+  },
+
+  // === Promoção de Servidor Público ===
+  {
+    id: 'promocao-policial-militar',
+    title: 'Promoção – Policial Militar',
+    description: 'Ação de Obrigação de Fazer c/c Cobrança de Diferença Salarial Retroativa - Promoção de Policial Militar (Turma 2005)',
+    typeSlug: 'servidor_publico_promocao',
+    filePath: '/templates/promocao-policial-militar.docx',
+    fileType: 'docx',
+    tags: ['Policial Militar', 'Fazenda Pública', 'Diferença Salarial'],
+    acaoTitulo: 'Ação de Obrigação de Fazer c/c Cobrança de Diferença Salarial Retroativa',
+  },
+  {
+    id: 'promocao-servidor-ses-idoso',
+    title: 'Promoção – Servidor SES (Idoso)',
+    description: 'Ação de Obrigação de Fazer c/c Cobrança de Diferença Salarial Retroativa - Servidor SES com tramitação preferencial (idoso)',
+    typeSlug: 'servidor_publico_promocao',
+    filePath: '/templates/promocao-servidor-ses-idoso.docx',
+    fileType: 'docx',
+    tags: ['Servidor Público', 'SES', 'Idoso', 'Tramitação Preferencial'],
+    acaoTitulo: 'Ação de Obrigação de Fazer c/c Cobrança de Diferença Salarial Retroativa',
+  },
+
+  // === Diferença Salarial Retroativa ===
+  {
+    id: 'diferenca-salarial-professor',
+    title: 'Diferença Salarial – Professor',
+    description: 'Ação de Cobrança de Salário Retroativo - Diferença salarial retroativa de professor estadual',
+    typeSlug: 'diferenca_salarial',
+    filePath: '/templates/diferenca-salarial-professor.docx',
+    fileType: 'docx',
+    tags: ['Professor', 'Fazenda Pública', 'Juizado Especial'],
+    acaoTitulo: 'Ação de Cobrança – Salário Retroativo',
+  },
+
+  // === Revisão de Contrato de Empréstimo ===
+  {
+    id: 'revisao-contrato-emprestimo-crefisa',
+    title: 'Revisão de Contrato – Crefisa',
+    description: 'Ação de Revisão de Contrato de Empréstimo c/c Nulidade de Cláusulas Abusivas c/c Repetição de Indébito c/c Indenização por Danos Morais',
+    typeSlug: 'revisao_contrato_emprestimo',
+    filePath: '/templates/revisao-contrato-emprestimo-crefisa.doc',
+    fileType: 'doc',
+    tags: ['Crefisa', 'Cláusulas Abusivas', 'Repetição de Indébito'],
+    acaoTitulo: 'Ação de Revisão de Contrato de Empréstimo c/c Pedido de Nulidade de Cláusulas Contratuais Abusivas c/c Repetição do Indébito c/c Indenização por Danos Morais',
   },
 ];
 
