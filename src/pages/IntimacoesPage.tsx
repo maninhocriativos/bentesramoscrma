@@ -477,6 +477,7 @@ export default function IntimacoesPage() {
             })}
           </div>
         )}
+      </div>
 
       {/* Detail Modal - Projuris Style */}
       <Dialog open={!!selectedIntimacao} onOpenChange={() => setSelectedIntimacao(null)}>
