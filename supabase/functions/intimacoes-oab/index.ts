@@ -96,11 +96,18 @@ serve(async (req) => {
       }
     );
 
+    console.log(`📡 Escavador V2 status: ${processosResp.status}`);
+
     if (processosResp.status === 402) {
       return new Response(
         JSON.stringify({ success: false, error: "Créditos Escavador insuficientes" }),
         { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    if (!processosResp.ok) {
+      const errText = await processosResp.text().catch(() => "");
+      console.warn(`⚠️ V2 falhou (${processosResp.status}): ${errText.slice(0, 500)}`);
     }
 
     if (processosResp.ok) {
