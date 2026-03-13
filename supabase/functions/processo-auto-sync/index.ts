@@ -22,7 +22,7 @@ interface SyncResult {
 
 // Priority-based sync intervals (in hours)
 const SYNC_INTERVALS: Record<string, number> = {
-  "Em Andamento": 24,    // Daily
+  "Em Andamento": 168,   // Weekly (7 days)
   "Suspenso": 168,       // Weekly (7 days)
   "Arquivado": 720,      // Monthly (30 days)
   "Ganho": 720,          // Monthly
