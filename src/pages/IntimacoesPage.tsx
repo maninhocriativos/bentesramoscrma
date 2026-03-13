@@ -8,8 +8,10 @@ import { toast } from 'sonner';
 import {
   Loader2, Gavel, Search, RefreshCw, Bell, CheckCircle2,
   Clock, AlertTriangle, Eye, FileText, Filter, CalendarDays,
-  Scale, BookOpen, ChevronRight
+  Scale, BookOpen, ChevronRight, ChevronDown, ChevronUp,
+  MessageSquare, ClipboardList, Pencil, Copy, ExternalLink,
 } from 'lucide-react';
+import { addDays, addBusinessDays, isWeekend } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
