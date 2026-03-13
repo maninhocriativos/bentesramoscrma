@@ -253,6 +253,11 @@ serve(async (req) => {
           else if (conteudoLower.includes("despacho")) tipoIntimacao = "Despacho";
           else if (conteudoLower.includes("sentença")) tipoIntimacao = "Sentença";
 
+          // Log first few dates for debugging
+          if (resultados.indexOf(item) < 3) {
+            console.log(`📅 V1 item date: data_publicacao=${item.data_publicacao}, data=${item.data}, titulo=${(item.titulo || "").slice(0,80)}`);
+          }
+
           // Filter: only 2026+
           const checkDate = item.data_publicacao || item.data || "";
           if (checkDate && checkDate < "2026-01-01") continue;
