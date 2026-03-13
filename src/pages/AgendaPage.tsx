@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { Calendar } from '@/components/agenda/Calendar';
+import { AgendaKPIs } from '@/components/agenda/AgendaKPIs';
 import { CompromissoModal } from '@/components/agenda/CompromissoModal';
 import { DayEventsModal } from '@/components/agenda/DayEventsModal';
 import { GoogleCalendarConnect } from '@/components/agenda/GoogleCalendarConnect';
