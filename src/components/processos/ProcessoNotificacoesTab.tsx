@@ -113,6 +113,8 @@ function buildPreviewMessage(d: ProcessoNotificacoesTabProps["previewData"]) {
       const traducao = traduzirMovimento(mov.nome || "");
       movimentosTexto += `• ${traducao}${dataFormatada ? ` (${dataFormatada})` : ""}\n`;
     }
+  } else {
+    movimentosTexto = "\nℹ️ *Não houve novas movimentações* nesta semana. Isso é normal — alguns processos podem levar semanas ou meses sem movimentação. Fique tranquilo(a), estamos acompanhando de perto!\n";
   }
 
   const nomeCliente = (d.nomeCliente || "").split(" ")[0] || "";

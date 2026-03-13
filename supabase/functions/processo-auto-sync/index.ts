@@ -22,7 +22,7 @@ interface SyncResult {
 
 // Priority-based sync intervals (in hours)
 const SYNC_INTERVALS: Record<string, number> = {
-  "Em Andamento": 24,    // Daily
+  "Em Andamento": 168,   // Weekly (7 days)
   "Suspenso": 168,       // Weekly (7 days)
   "Arquivado": 720,      // Monthly (30 days)
   "Ganho": 720,          // Monthly
@@ -240,8 +240,8 @@ serve(async (req) => {
           const newMovCount = (proc.movimentos || []).length;
           const movimentacoesNovas = Math.max(0, newMovCount - oldMovCount);
 
-          // If there are new movimentações and client has WhatsApp, notify via ISA
-          if (movimentacoesNovas > 0 && processo.cliente_id && processo.notificacao_ativa) {
+          // Always notify client with active notifications - even if no new movements
+          if (processo.cliente_id && processo.notificacao_ativa) {
             try {
               await fetch(`${SUPABASE_URL}/functions/v1/processo-status-notify`, {
                 method: "POST",
@@ -251,10 +251,10 @@ serve(async (req) => {
                 },
                 body: JSON.stringify({
                   processoId: processo.id,
-                  tipo: "movimento",
+                  tipo: movimentacoesNovas > 0 ? "movimento" : "status_update",
                 }),
               });
-              console.log(`📱 Notificação enviada para cliente do processo ${processo.numero_processo}`);
+              console.log(`📱 Notificação semanal enviada para cliente do processo ${processo.numero_processo} (${movimentacoesNovas} novas movs)`);
             } catch (notifyErr) {
               console.error(`⚠️ Falha ao notificar:`, notifyErr);
             }
