@@ -371,6 +371,7 @@ serve(async (req) => {
         total: intimacoes.length,
         saved: savedCount,
         updated: updatedCount,
+        corrected_legacy: correctedLegacyCount,
         processosAnalisados: intimacoes.length,
         fonte,
       }),
