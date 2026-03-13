@@ -50,20 +50,27 @@ interface CalendarProps {
 // ── Color helpers matching reference images ──
 
 // Compromisso bar colors by tipo
-function getCompromissoBarStyle(c: Compromisso): string {
+function getCompromissoBarStyleByTipo(c: Compromisso): string {
   if (c.tipo === 'Audiência') return 'bg-[#f472b6] text-white'; // pink
   if (c.tipo === 'Reunião') return 'bg-[#60a5fa] text-white'; // blue
-  
-  // Status overrides
+  if (c.tipo === 'Tarefa') return 'bg-[#34d399] text-white'; // green
+  if (c.tipo === 'Prazo') return 'bg-[#fbbf24] text-[#78350f]'; // amber
+  return 'bg-[#e2e8f0] text-[#334155]';
+}
+
+// Compromisso bar colors by situação/status
+function getCompromissoBarStyleBySituacao(c: Compromisso): string {
   const st = c.confirmacao_status || 'pendente';
   if (st === 'confirmado') return 'bg-[#34d399] text-white'; // green
   if (st === 'cancelado') return 'bg-[#f87171] text-white'; // red
   if (st === 'remarcado') return 'bg-[#60a5fa] text-white'; // blue
-  
-  // Default by tipo
-  if (c.tipo === 'Tarefa') return 'bg-[#34d399] text-white';
-  if (c.tipo === 'Prazo') return 'bg-[#fbbf24] text-[#78350f]';
-  return 'bg-[#e2e8f0] text-[#334155]';
+  return 'bg-[#fbbf24] text-[#78350f]'; // pendente = amber
+}
+
+function getCompromissoBarStyle(c: Compromisso, colorMode: ColorMode): string {
+  return colorMode === 'situacao' 
+    ? getCompromissoBarStyleBySituacao(c) 
+    : getCompromissoBarStyleByTipo(c);
 }
 
 // Intimações: determine style based on content
