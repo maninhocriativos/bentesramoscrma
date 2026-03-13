@@ -158,6 +158,10 @@ serve(async (req) => {
 
                 if (!isRelevant) continue;
 
+                // Filter: only 2026+
+                const movDate = mov.data || mov.data_publicacao || mov.data_disponibilizacao || "";
+                if (movDate && movDate < "2026-01-01") continue;
+
                 // Classify type
                 let tipoIntimacao = "Publicação";
                 if (combined.includes("intimação") || combined.includes("intimacao")) tipoIntimacao = "Intimação";
