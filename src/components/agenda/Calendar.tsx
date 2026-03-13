@@ -287,56 +287,109 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
     );
   };
 
-  // ── WEEK VIEW ──
+  // ── WEEK VIEW (column-based, like Google Calendar) ──
   const renderWeekView = () => {
     const ws = startOfWeek(currentDate, { locale: ptBR });
     const weekDates = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
 
     return (
       <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${BORDER}` }}>
-        {/* Header with day names and dates */}
-        <div className="grid grid-cols-[60px_repeat(7,1fr)]" style={{ background: HEADER_BG, borderBottom: `1px solid ${BORDER}` }}>
-          <div className="py-2 text-center text-[10px] text-muted-foreground" style={{ borderRight: `1px solid ${BORDER}` }}>Hora</div>
+        {/* Sticky header */}
+        <div className="grid grid-cols-7" style={{ background: HEADER_BG, borderBottom: `1px solid ${BORDER}` }}>
           {weekDates.map((d, i) => {
             const isCurDay = isToday(d);
             return (
-              <div key={i} className={cn("py-2 text-center", isCurDay && "bg-emerald-50/50 dark:bg-emerald-500/5")}
-                style={i < 6 ? { borderRight: `1px solid ${BORDER}` } : undefined}>
-                <div className="text-[10px] font-semibold text-muted-foreground italic">{weekDays[d.getDay()]}</div>
-                <div className={cn("text-sm font-bold mt-0.5", isCurDay ? "text-emerald-600" : "text-foreground/70")}>
-                  {format(d, 'd')}
+              <div key={i}
+                className={cn("py-3 text-center cursor-pointer transition-colors",
+                  isCurDay && "bg-emerald-50/60 dark:bg-emerald-500/5"
+                )}
+                style={i < 6 ? { borderRight: `1px solid ${BORDER}` } : undefined}
+                onClick={() => onDayClick(d)}
+              >
+                <div className="text-[10px] font-semibold text-muted-foreground italic uppercase tracking-wide">
+                  {weekDays[d.getDay()]}
                 </div>
+                {isCurDay ? (
+                  <span className="inline-flex items-center justify-center text-sm font-bold rounded-full mt-1"
+                    style={{ background: '#22c55e', color: '#fff', width: 28, height: 28 }}>
+                    {format(d, 'd')}
+                  </span>
+                ) : (
+                  <div className="text-lg font-bold mt-0.5 text-foreground/70">
+                    {format(d, 'd')}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
-        {/* Time slots */}
-        <div className="max-h-[600px] overflow-y-auto">
-          {HOURS.map(hour => (
-            <div key={hour} className="grid grid-cols-[60px_repeat(7,1fr)]" style={{ borderBottom: `1px solid ${BORDER}` }}>
-              <div className="py-2 px-1 text-[10px] text-muted-foreground text-right pr-2 font-medium"
-                style={{ borderRight: `1px solid ${BORDER}` }}>
-                {String(hour).padStart(2, '0')}:00
-              </div>
-              {weekDates.map((d, i) => {
-                const isCurDay = isToday(d);
-                const hourEvents = getEventsForHour(d, hour);
-                return (
-                  <div key={i}
-                    className={cn("min-h-[48px] p-[2px] cursor-pointer hover:bg-amber-50/30 dark:hover:bg-amber-500/5 transition-colors",
-                      isCurDay && "bg-emerald-50/30 dark:bg-emerald-500/3"
-                    )}
-                    style={i < 6 ? { borderRight: `1px solid ${BORDER}` } : undefined}
-                    onClick={() => onDayClick(d)}
-                  >
-                    <div className="space-y-[1px]">
-                      {hourEvents.map(ev => renderEventBar(ev, d, true))}
+
+        {/* Day columns with all events */}
+        <div className="grid grid-cols-7">
+          {weekDates.map((d, i) => {
+            const isCurDay = isToday(d);
+            const events = getEventsForDay(d);
+            const maxVis = 8;
+            const visible = events.slice(0, maxVis);
+            const extra = events.length - maxVis;
+
+            return (
+              <div key={i}
+                className={cn(
+                  "min-h-[320px] p-1.5 cursor-pointer transition-colors bg-card",
+                  isCurDay && "bg-emerald-50/30 dark:bg-emerald-500/3",
+                  !isCurDay && "hover:bg-amber-50/20 dark:hover:bg-amber-500/3",
+                )}
+                style={i < 6 ? { borderRight: `1px solid ${BORDER}` } : undefined}
+                onClick={() => onDayClick(d)}
+              >
+                <div className="space-y-[3px]">
+                  {visible.map(ev => {
+                    const colors = BAR_COLORS[ev.barKey];
+                    return (
+                      <div key={ev.id}
+                        className="flex items-start gap-1 rounded-md cursor-pointer overflow-hidden"
+                        style={{
+                          background: colors.background,
+                          color: colors.color,
+                          border: 'border' in colors ? (colors as any).border : 'none',
+                          padding: '4px 6px',
+                          fontSize: 11,
+                          lineHeight: '15px',
+                          fontWeight: 500,
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (ev.original) onEventClick(ev.original);
+                          else onDayClick(d);
+                        }}
+                        title={ev.title}
+                      >
+                        <div className="flex flex-col min-w-0 flex-1">
+                          {ev.time && (
+                            <span style={{ fontWeight: 700, fontSize: 10, opacity: 0.9 }}>{ev.time}</span>
+                          )}
+                          <span className="truncate">{ev.title}</span>
+                        </div>
+                        {ev.count && ev.count > 1 && (
+                          <span className="shrink-0 rounded-full text-[9px] font-bold px-1.5 py-0.5"
+                            style={{ background: 'rgba(255,255,255,0.25)' }}>
+                            {ev.count}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {extra > 0 && (
+                    <div className="cursor-pointer hover:underline text-center pt-1"
+                      style={{ fontSize: 10, fontWeight: 700, color: '#ea580c' }}>
+                      +{extra} mais
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );

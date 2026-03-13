@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { format, isToday, isBefore, isAfter, startOfDay } from 'date-fns';
+import { format, isToday, isBefore, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toZonedTime } from 'date-fns-tz';
 import { Compromisso } from '@/types/compromissos';
@@ -75,10 +75,57 @@ export function AgendaKPIs({ compromissos, intimacoes }: AgendaKPIsProps) {
   const dayNum = format(now, 'd');
   const monthName = format(now, 'MMMM', { locale: ptBR });
 
+  const kpis = [
+    {
+      title: 'Tarefas',
+      total: stats.tarefas.total,
+      color: '#f97316',
+      lines: [
+        { value: stats.tarefas.atrasadas, label: 'atrasadas', variant: 'danger' as const },
+        { value: stats.tarefas.hoje, label: 'hoje', variant: 'success' as const },
+        { value: stats.tarefas.futuras, label: 'futuras', variant: 'default' as const },
+      ],
+    },
+    {
+      title: 'Intimações',
+      total: stats.intimacoes.total,
+      color: '#f97316',
+      lines: [
+        { value: stats.intimacoes.pendentes, label: 'pendentes', variant: 'danger' as const },
+      ],
+    },
+    {
+      title: 'Audiências',
+      total: stats.audiencias.total,
+      color: '#f97316',
+      lines: [
+        { value: stats.audiencias.atrasadas, label: 'atrasadas', variant: 'danger' as const },
+        { value: stats.audiencias.hoje, label: 'hoje', variant: 'success' as const },
+        { value: stats.audiencias.futuras, label: 'futuras', variant: 'default' as const },
+      ],
+    },
+    {
+      title: 'Compromissos',
+      total: stats.compromissos.total,
+      color: '#f97316',
+      lines: [
+        { value: stats.compromissos.atrasadas, label: 'atrasados', variant: 'danger' as const },
+        { value: stats.compromissos.hoje, label: 'hoje', variant: 'success' as const },
+        { value: stats.compromissos.futuras, label: 'futuros', variant: 'default' as const },
+      ],
+    },
+  ];
+
+  const variantClass = (v: 'danger' | 'success' | 'default') => {
+    if (v === 'danger') return 'text-destructive font-semibold';
+    if (v === 'success') return 'font-semibold text-emerald-600';
+    return 'font-semibold';
+  };
+
   return (
-    <div className="grid grid-cols-5 border border-border/60 rounded-lg overflow-hidden bg-card">
+    <div className="flex border border-border/60 rounded-lg overflow-hidden bg-card shadow-sm">
       {/* Date cell */}
-      <div className="flex flex-col items-center justify-center py-3 px-2 border-r border-border/40">
+      <div className="flex flex-col items-center justify-center py-3 px-5 border-r border-border/40 min-w-[100px]">
         <span className="text-[10px] font-bold uppercase tracking-wider bg-primary text-primary-foreground px-3 py-0.5 rounded-sm">
           {monthName}
         </span>
@@ -86,67 +133,20 @@ export function AgendaKPIs({ compromissos, intimacoes }: AgendaKPIsProps) {
         <span className="text-[11px] text-muted-foreground capitalize">{dayName}</span>
       </div>
 
-      {/* Tarefas */}
-      <div className="flex items-center gap-3 py-3 px-4 border-r border-border/40">
-        <CircularProgress value={stats.tarefas.total} max={Math.max(stats.tarefas.total, 1)} color="#f97316" />
-        <div>
-          <p className="text-sm font-bold text-foreground">Tarefas</p>
-          <p className="text-[11px] text-muted-foreground leading-tight">
-            <span className="text-destructive font-semibold">{stats.tarefas.atrasadas}</span> atrasadas
-          </p>
-          <p className="text-[11px] text-muted-foreground leading-tight">
-            <span className="font-semibold text-emerald-600">{stats.tarefas.hoje}</span> hoje
-          </p>
-          <p className="text-[11px] text-muted-foreground leading-tight">
-            <span className="font-semibold">{stats.tarefas.futuras}</span> futuras
-          </p>
+      {/* KPI cells */}
+      {kpis.map((kpi, idx) => (
+        <div key={kpi.title} className={`flex items-center gap-3 py-3 px-4 flex-1 ${idx < kpis.length - 1 ? 'border-r border-border/40' : ''}`}>
+          <CircularProgress value={kpi.total} max={Math.max(kpi.total, 1)} color={kpi.color} />
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-foreground">{kpi.title}</p>
+            {kpi.lines.map((line, li) => (
+              <p key={li} className="text-[11px] text-muted-foreground leading-tight">
+                <span className={variantClass(line.variant)}>{line.value}</span> {line.label}
+              </p>
+            ))}
+          </div>
         </div>
-      </div>
-
-      {/* Intimações */}
-      <div className="flex items-center gap-3 py-3 px-4 border-r border-border/40">
-        <CircularProgress value={stats.intimacoes.total} max={Math.max(stats.intimacoes.total, 1)} color="#f97316" />
-        <div>
-          <p className="text-sm font-bold text-foreground">Intimações</p>
-          <p className="text-[11px] text-muted-foreground leading-tight">
-            <span className="text-destructive font-semibold">{stats.intimacoes.pendentes}</span> pendentes
-          </p>
-        </div>
-      </div>
-
-      {/* Audiências */}
-      <div className="flex items-center gap-3 py-3 px-4 border-r border-border/40">
-        <CircularProgress value={stats.audiencias.total} max={Math.max(stats.audiencias.total, 1)} color="#f97316" />
-        <div>
-          <p className="text-sm font-bold text-foreground">Audiências</p>
-          <p className="text-[11px] text-muted-foreground leading-tight">
-            <span className="text-destructive font-semibold">{stats.audiencias.atrasadas}</span> atrasadas
-          </p>
-          <p className="text-[11px] text-muted-foreground leading-tight">
-            <span className="font-semibold text-emerald-600">{stats.audiencias.hoje}</span> hoje
-          </p>
-          <p className="text-[11px] text-muted-foreground leading-tight">
-            <span className="font-semibold">{stats.audiencias.futuras}</span> futuras
-          </p>
-        </div>
-      </div>
-
-      {/* Compromissos */}
-      <div className="flex items-center gap-3 py-3 px-4">
-        <CircularProgress value={stats.compromissos.total} max={Math.max(stats.compromissos.total, 1)} color="#f97316" />
-        <div>
-          <p className="text-sm font-bold text-foreground">Compromissos</p>
-          <p className="text-[11px] text-muted-foreground leading-tight">
-            <span className="text-destructive font-semibold">{stats.compromissos.atrasadas}</span> atrasados
-          </p>
-          <p className="text-[11px] text-muted-foreground leading-tight">
-            <span className="font-semibold text-emerald-600">{stats.compromissos.hoje}</span> hoje
-          </p>
-          <p className="text-[11px] text-muted-foreground leading-tight">
-            <span className="font-semibold">{stats.compromissos.futuras}</span> futuros
-          </p>
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
