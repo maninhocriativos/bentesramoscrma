@@ -234,17 +234,22 @@ serve(async (req) => {
           else if (conteudoLower.includes("despacho")) tipoIntimacao = "Despacho";
           else if (conteudoLower.includes("sentença")) tipoIntimacao = "Sentença";
 
-          // Try to extract CNJ from content
-          const cnjFromContent = conteudo.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
+          const rawDate = item.data_publicacao || item.data || null;
+          const rawDisp = item.data_disponibilizacao || null;
+
+          let dispDate = rawDisp || rawDate || null;
+          let pubDate = item.data_publicacao || (dispDate ? nextBusinessDay(dispDate) : null);
+          let intDate = pubDate ? nextBusinessDay(pubDate) : rawDate;
+
           intimacoes.push({
             processo_cnj: cnjMatch ? cnjMatch[1] : (cnjFromContent ? cnjFromContent[1] : ""),
             processo_titulo: titulo || "Publicação em Diário Oficial",
             tribunal: item.fonte?.sigla || item.tribunal || item.fonte?.nome || "",
             tipo_intimacao: tipoIntimacao,
             conteudo: conteudo.slice(0, 5000),
-            data_intimacao: item.data_publicacao || item.data || null,
-            data_disponibilizacao: item.data_disponibilizacao || item.data || null,
-            data_publicacao: item.data_publicacao || null,
+            data_intimacao: intDate,
+            data_disponibilizacao: dispDate,
+            data_publicacao: pubDate,
             oab_numero,
             oab_uf,
             advogado_id,
