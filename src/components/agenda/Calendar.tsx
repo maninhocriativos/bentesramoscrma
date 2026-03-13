@@ -47,59 +47,59 @@ interface CalendarProps {
   onStatusChange?: (id: string, newStatus: ConfirmacaoStatus) => void;
 }
 
-// ── Color helpers matching reference images ──
+// ── Colors matching ADVBOX/Astrea reference ──
 
-// Compromisso bar colors by tipo
-function getCompromissoBarStyleByTipo(c: Compromisso): string {
-  if (c.tipo === 'Audiência') return 'bg-[#f472b6] text-white'; // pink
-  if (c.tipo === 'Reunião') return 'bg-[#60a5fa] text-white'; // blue
-  if (c.tipo === 'Tarefa') return 'bg-[#34d399] text-white'; // green
-  if (c.tipo === 'Prazo') return 'bg-[#fbbf24] text-[#78350f]'; // amber
-  return 'bg-[#e2e8f0] text-[#334155]';
+// By TIPO (default mode)
+function getBarByTipo(c: Compromisso): string {
+  const tipo = c.tipo || 'Outro';
+  switch (tipo) {
+    case 'Audiência': return 'cal-bar-pink';   // pink/hot
+    case 'Reunião':   return 'cal-bar-orange'; // orange (Atendimento Presencial)
+    case 'Prazo':     return 'cal-bar-amber';  // amber outline
+    case 'Tarefa':    return 'cal-bar-green';  // green
+    default:          return 'cal-bar-gray';   // gray
+  }
 }
 
-// Compromisso bar colors by situação/status
-function getCompromissoBarStyleBySituacao(c: Compromisso): string {
+// By SITUAÇÃO/STATUS
+function getBarBySituacao(c: Compromisso): string {
   const st = c.confirmacao_status || 'pendente';
-  if (st === 'confirmado') return 'bg-[#34d399] text-white'; // green
-  if (st === 'cancelado') return 'bg-[#f87171] text-white'; // red
-  if (st === 'remarcado') return 'bg-[#60a5fa] text-white'; // blue
-  return 'bg-[#fbbf24] text-[#78350f]'; // pendente = amber
+  switch (st) {
+    case 'confirmado': return 'cal-bar-green';
+    case 'cancelado':  return 'cal-bar-red';
+    case 'remarcado':  return 'cal-bar-blue';
+    default:           return 'cal-bar-amber'; // pendente
+  }
 }
 
-function getCompromissoBarStyle(c: Compromisso, colorMode: ColorMode): string {
-  return colorMode === 'situacao' 
-    ? getCompromissoBarStyleBySituacao(c) 
-    : getCompromissoBarStyleByTipo(c);
+function getBarClass(c: Compromisso, mode: ColorMode): string {
+  return mode === 'situacao' ? getBarBySituacao(c) : getBarByTipo(c);
 }
 
-// Intimações: determine style based on content
-function getIntimacaoBarStyle(tipo: string): { filled: boolean; className: string } {
-  const t = tipo.toLowerCase();
+// Intimação bar style
+function getIntimacaoBar(titulo: string): { css: string; outline: boolean } {
+  const t = titulo.toLowerCase();
   
-  // Green filled bars
-  if (t.includes('alvará') || t.includes('alvara')) {
-    return { filled: true, className: 'bg-[#34d399] text-white' };
-  }
-  // Pink filled bars  
-  if (t.includes('sessão de julgamento') || t.includes('sessao de julgamento') || t.includes('audiência') || t.includes('audiencia')) {
-    return { filled: true, className: 'bg-[#f472b6] text-white' };
-  }
-  // Orange filled bars (main intimações)
-  if (t.includes('ciência da sentença') || t.includes('ciencia da sentenca')) {
-    return { filled: true, className: 'bg-[#fb923c] text-white' };
-  }
-  // White/outline bars (document type intimações)
+  if (t.includes('alvará') || t.includes('alvara'))
+    return { css: 'cal-bar-green', outline: false };
+  
+  if (t.includes('sessão de julgamento') || t.includes('sessao de julgamento'))
+    return { css: 'cal-bar-pink', outline: false };
+  
+  // Outline (document) bars - white bg with amber border
   if (
     t.includes('manifestação') || t.includes('contestação') || t.includes('contrarrazões') ||
-    t.includes('réplica') || t.includes('emenda') || t.includes('manifestacao') ||
-    t.includes('contestacao') || t.includes('contrarrazoes') || t.includes('replica')
+    t.includes('réplica') || t.includes('emenda') || t.includes('recurso') ||
+    t.includes('embargos') || t.includes('alegações') || t.includes('apelação') ||
+    t.includes('agravo') || t.includes('sine die') || t.includes('pagamento') ||
+    t.includes('manifestacao') || t.includes('contestacao') || t.includes('contrarrazoes') ||
+    t.includes('replica') || t.includes('alegacoes') || t.includes('apelacao')
   ) {
-    return { filled: false, className: 'bg-white dark:bg-card border border-[#fbbf24]/60 text-[#92400e] dark:text-amber-400' };
+    return { css: 'cal-bar-outline', outline: true };
   }
   
-  // Default: orange filled
-  return { filled: true, className: 'bg-[#fb923c] text-white' };
+  // Default: orange filled (like Ciência da Sentença, Alerta, etc.)
+  return { css: 'cal-bar-orange', outline: false };
 }
 
 interface CalendarEvent {
@@ -107,7 +107,7 @@ interface CalendarEvent {
   title: string;
   time?: string;
   type: 'compromisso' | 'intimacao';
-  className: string;
+  barCss: string;
   count?: number;
   isOutline?: boolean;
   original?: Compromisso;
@@ -143,7 +143,7 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
         title: c.titulo,
         time: isAudiencia ? format(parseLocalDate(c.data_inicio), 'HH:mm') : undefined,
         type: 'compromisso',
-        className: getCompromissoBarStyle(c, colorMode),
+        barCss: getBarClass(c, colorMode),
         original: c,
       });
     });
@@ -154,7 +154,6 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
       return d && isSameDay(parseLocalDate(d), date);
     });
 
-    // Group intimações by tipo
     const intimacaoGroups: Record<string, IntimacaoEvent[]> = {};
     dayIntimacoes.forEach(i => {
       const key = i.tipo_intimacao || i.processo_titulo || 'Intimação';
@@ -163,13 +162,13 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
     });
 
     Object.entries(intimacaoGroups).forEach(([tipo, items]) => {
-      const style = getIntimacaoBarStyle(tipo);
+      const style = getIntimacaoBar(tipo);
       events.push({
         id: items[0].id,
         title: tipo,
         type: 'intimacao',
-        className: style.className,
-        isOutline: !style.filled,
+        barCss: style.css,
+        isOutline: style.outline,
         count: items.length,
         hasCheckmark: items.some(i => i.lida),
       });
@@ -183,13 +182,29 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
 
   return (
     <div className="space-y-3">
-      {/* Navigation Bar - matching reference exactly */}
+      {/* ── CSS for calendar bar colors ── */}
+      <style>{`
+        .cal-bar-orange { background: #f97316; color: #fff; }
+        .cal-bar-pink   { background: #ec4899; color: #fff; }
+        .cal-bar-green  { background: #22c55e; color: #fff; }
+        .cal-bar-amber  { background: #f59e0b; color: #78350f; }
+        .cal-bar-red    { background: #ef4444; color: #fff; }
+        .cal-bar-blue   { background: #3b82f6; color: #fff; }
+        .cal-bar-gray   { background: #cbd5e1; color: #334155; }
+        .cal-bar-outline { background: #fffbeb; color: #92400e; border: 1px solid #f59e0b; }
+        .dark .cal-bar-outline { background: rgba(245,158,11,0.1); color: #fbbf24; border-color: rgba(245,158,11,0.4); }
+        .cal-grid-border { border-color: #e2c9a0; }
+        .dark .cal-grid-border { border-color: rgba(226,201,160,0.2); }
+        .cal-header-bg { background: #fef7ed; }
+        .dark .cal-header-bg { background: rgba(254,247,237,0.05); }
+      `}</style>
+
+      {/* Navigation Bar */}
       <div className="flex items-center justify-between">
-        {/* Left: nav arrows + Hoje */}
         <div className="flex items-center gap-2">
-          <div className="inline-flex items-center border border-border/70 rounded-md overflow-hidden bg-card">
+          <div className="inline-flex items-center border cal-grid-border rounded-md overflow-hidden bg-card">
             <button
-              className="px-2 py-1.5 hover:bg-muted/50 transition-colors border-r border-border/70"
+              className="px-2 py-1.5 hover:bg-muted/50 transition-colors border-r cal-grid-border"
               onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
             >
               <ChevronLeft className="h-4 w-4 text-muted-foreground" />
@@ -211,13 +226,11 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
           </Button>
         </div>
 
-        {/* Center: Month title */}
         <h2 className="text-lg md:text-xl font-semibold text-foreground capitalize tracking-tight">
           {format(currentMonth, "MMMM 'de' yyyy", { locale: ptBR })}
         </h2>
 
-        {/* Right: view toggles */}
-        <div className="inline-flex items-center border border-border/70 rounded-md overflow-hidden bg-card">
+        <div className="inline-flex items-center border cal-grid-border rounded-md overflow-hidden bg-card">
           {([
             { label: 'Mês', value: 'mes' as ViewMode },
             { label: 'Semana', value: 'semana' as ViewMode },
@@ -228,7 +241,7 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
               onClick={() => onViewModeChange?.(value)}
               className={cn(
                 "px-3 py-1.5 text-xs font-medium transition-all",
-                i < 2 && "border-r border-border/70",
+                i < 2 && "border-r cal-grid-border",
                 viewMode === value
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
@@ -241,15 +254,15 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
       </div>
 
       {/* Calendar Grid */}
-      <div className="bg-card rounded-lg border border-border/70 overflow-hidden">
+      <div className="bg-card rounded-lg border cal-grid-border overflow-hidden">
         {/* Week Day Headers */}
-        <div className="grid grid-cols-7 bg-muted/30 border-b border-border/70">
+        <div className="grid grid-cols-7 cal-header-bg border-b cal-grid-border">
           {weekDays.map((wd, i) => (
             <div
               key={wd}
               className={cn(
-                "py-2 text-center text-[11px] font-semibold text-muted-foreground italic tracking-wide",
-                i < 6 && "border-r border-border/40"
+                "py-2.5 text-center text-[11px] font-semibold text-muted-foreground italic tracking-wide",
+                i < 6 && "border-r cal-grid-border"
               )}
             >
               {wd}
@@ -273,17 +286,17 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
                 <div
                   key={globalIdx}
                   className={cn(
-                    "min-h-[100px] md:min-h-[125px] border-b border-border/40 p-[3px] md:p-1 cursor-pointer transition-colors relative",
-                    colIdx < 6 && "border-r border-border/40",
-                    !isCurrentMonth && "bg-muted/10",
-                    isCurrentMonth && "hover:bg-amber-50/20 dark:hover:bg-amber-500/5",
-                    isCurrentDay && "bg-emerald-50/50 dark:bg-emerald-500/5"
+                    "min-h-[105px] md:min-h-[128px] border-b cal-grid-border p-[3px] md:p-1 cursor-pointer transition-colors relative",
+                    colIdx < 6 && "border-r cal-grid-border",
+                    !isCurrentMonth && "bg-muted/8",
+                    isCurrentMonth && "hover:bg-amber-50/30 dark:hover:bg-amber-500/5",
+                    isCurrentDay && "bg-emerald-50/40 dark:bg-emerald-500/5"
                   )}
                   onClick={() => onDayClick(day)}
                 >
-                  {/* Today green bar at top */}
+                  {/* Today green accent */}
                   {isCurrentDay && (
-                    <div className="absolute top-0 left-0 right-0 h-[3px] bg-emerald-500 rounded-b-sm" />
+                    <div className="absolute top-0 left-0 right-0 h-[3px] bg-emerald-500" />
                   )}
 
                   {/* Day Number - top right */}
@@ -292,8 +305,8 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
                       className={cn(
                         "text-[13px] font-semibold leading-none",
                         isCurrentDay && "bg-emerald-500 text-white min-w-[22px] h-[22px] rounded-full flex items-center justify-center text-[11px] font-bold",
-                        !isCurrentDay && isCurrentMonth && "text-foreground/80",
-                        !isCurrentMonth && "text-muted-foreground/40"
+                        !isCurrentDay && isCurrentMonth && "text-foreground/70",
+                        !isCurrentMonth && "text-muted-foreground/30"
                       )}
                     >
                       {format(day, 'd')}
@@ -306,8 +319,8 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
                       <div
                         key={event.id}
                         className={cn(
-                          "flex items-center gap-[3px] px-1 py-[1.5px] rounded-[3px] text-[10px] md:text-[11px] leading-tight cursor-pointer transition-all hover:brightness-[0.92] overflow-hidden",
-                          event.className
+                          "flex items-center gap-[3px] px-1 py-[1.5px] rounded-[3px] text-[10px] md:text-[11px] leading-tight cursor-pointer transition-all hover:brightness-[0.88] overflow-hidden whitespace-nowrap",
+                          event.barCss
                         )}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -316,13 +329,13 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
                         }}
                         title={event.title}
                       >
-                        {/* Count badge */}
-                        {event.count && event.count > 0 && (
+                        {/* Count badge for intimações */}
+                        {event.count && event.count > 1 && (
                           <span className={cn(
-                            "font-bold text-[9px] shrink-0 min-w-[12px] h-[12px] rounded-full flex items-center justify-center",
+                            "font-bold text-[9px] shrink-0 min-w-[13px] h-[13px] rounded-full flex items-center justify-center",
                             event.isOutline 
                               ? "bg-amber-500 text-white" 
-                              : "bg-white/30 text-inherit"
+                              : "bg-white/25"
                           )}>
                             {event.count}
                           </span>
@@ -338,7 +351,7 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
                           <FileText className="h-[10px] w-[10px] shrink-0 opacity-60" />
                         )}
                         
-                        {/* Checkmark for read */}
+                        {/* Checkmark for read intimações */}
                         {event.hasCheckmark && (
                           <CheckCircle2 className="h-[10px] w-[10px] shrink-0 text-emerald-500" />
                         )}
@@ -347,7 +360,7 @@ export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', vi
                       </div>
                     ))}
                     {remaining > 0 && (
-                      <div className="text-[9px] text-amber-600 dark:text-amber-400 font-bold px-1 cursor-pointer hover:underline">
+                      <div className="text-[9px] font-bold px-1 cursor-pointer hover:underline" style={{ color: '#ea580c' }}>
                         +{remaining} mais
                       </div>
                     )}
