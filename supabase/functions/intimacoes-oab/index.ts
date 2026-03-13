@@ -63,6 +63,16 @@ serve(async (req) => {
 
     console.log(`🔍 [Intimações] Buscando para OAB/${oab_uf} ${oab_numero}`);
 
+    // Helper: next business day (skip weekends)
+    function nextBusinessDay(dateStr: string): string {
+      const d = new Date(dateStr + 'T12:00:00Z');
+      d.setDate(d.getDate() + 1);
+      while (d.getDay() === 0 || d.getDay() === 6) {
+        d.setDate(d.getDate() + 1);
+      }
+      return d.toISOString().split('T')[0];
+    }
+
     // Strategy 1: Use Escavador V2 monitoramento de diários
     const intimacoes: any[] = [];
     let fonte = "escavador_v2";
@@ -150,10 +160,25 @@ serve(async (req) => {
                 else if (combined.includes("decisão") || combined.includes("decisao")) tipoIntimacao = "Decisão";
                 else if (combined.includes("edital")) tipoIntimacao = "Edital";
 
-                // Extract dates properly
-                const dataIntimacao = mov.data || null;
-                const dataDisponibilizacao = mov.data_disponibilizacao || mov.data || null;
-                const dataPublicacao = mov.data_publicacao || null;
+                // Extract dates properly - apply Brazilian procedural rules
+                // Disponibilização → Publicação (1º dia útil seguinte) → Intimação (1º dia útil após publicação)
+                const rawDate = mov.data || null;
+                const rawDisponibilizacao = mov.data_disponibilizacao || null;
+                const rawPublicacao = mov.data_publicacao || null;
+
+                let dataDisponibilizacao = rawDisponibilizacao || rawDate || null;
+                let dataPublicacao = rawPublicacao;
+                let dataIntimacao: string | null = null;
+
+                // If we only have one date, calculate the others per CPC rules
+                if (dataDisponibilizacao && !dataPublicacao) {
+                  dataPublicacao = nextBusinessDay(dataDisponibilizacao);
+                }
+                if (dataPublicacao) {
+                  dataIntimacao = nextBusinessDay(dataPublicacao);
+                } else if (rawDate) {
+                  dataIntimacao = rawDate;
+                }
 
                 intimacoes.push({
                   processo_cnj: cnj,
@@ -209,17 +234,22 @@ serve(async (req) => {
           else if (conteudoLower.includes("despacho")) tipoIntimacao = "Despacho";
           else if (conteudoLower.includes("sentença")) tipoIntimacao = "Sentença";
 
-          // Try to extract CNJ from content
-          const cnjFromContent = conteudo.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
+          const rawDate = item.data_publicacao || item.data || null;
+          const rawDisp = item.data_disponibilizacao || null;
+
+          let dispDate = rawDisp || rawDate || null;
+          let pubDate = item.data_publicacao || (dispDate ? nextBusinessDay(dispDate) : null);
+          let intDate = pubDate ? nextBusinessDay(pubDate) : rawDate;
+
           intimacoes.push({
             processo_cnj: cnjMatch ? cnjMatch[1] : (cnjFromContent ? cnjFromContent[1] : ""),
             processo_titulo: titulo || "Publicação em Diário Oficial",
             tribunal: item.fonte?.sigla || item.tribunal || item.fonte?.nome || "",
             tipo_intimacao: tipoIntimacao,
             conteudo: conteudo.slice(0, 5000),
-            data_intimacao: item.data_publicacao || item.data || null,
-            data_disponibilizacao: item.data_disponibilizacao || item.data || null,
-            data_publicacao: item.data_publicacao || null,
+            data_intimacao: intDate,
+            data_disponibilizacao: dispDate,
+            data_publicacao: pubDate,
             oab_numero,
             oab_uf,
             advogado_id,
