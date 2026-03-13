@@ -48,17 +48,14 @@ function traduzirMovimento(nome: string): string {
   if (n.includes("remessa")) return "O processo foi encaminhado para outra instância";
   if (n.includes("baixa") || n.includes("arquivamento")) return "O processo foi arquivado";
   if (n.includes("suspensão") || n.includes("suspensao")) return "O processo foi suspenso temporariamente";
-  // Fallback genérico
   return `Houve uma movimentação: ${nome}`;
 }
 
 function formatarData(dateStr: string): string {
   try {
     if (!dateStr || dateStr === "null" || dateStr === "undefined") return "";
-    // Handle ISO dates, BR dates, and timestamps
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) {
-      // Try BR format DD/MM/YYYY
       const match = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
       if (match) {
         const d2 = new Date(`${match[3]}-${match[2]}-${match[1]}`);
@@ -72,6 +69,119 @@ function formatarData(dateStr: string): string {
   } catch {
     return "";
   }
+}
+
+// Resolve the correct Z-API instance based on client's linha_whatsapp
+async function resolveInstance(supabase: any, cliente: any) {
+  const linhaWhatsapp = cliente.linha_whatsapp || "indefinido";
+  const tipoOrigem = cliente.tipo_origem || "indefinido";
+
+  // Determine which instance to use
+  // Tráfego clients → Tráfego instance (non-default)
+  // Bentes Ramos / organic clients → Bentes Ramos instance (default)
+  const isTrafego = linhaWhatsapp === "trafego" || tipoOrigem === "trafego" || tipoOrigem === "trafego_isa";
+
+  console.log(`📱 Roteamento: linha_whatsapp=${linhaWhatsapp}, tipo_origem=${tipoOrigem}, isTrafego=${isTrafego}`);
+
+  // Try zapi_instances table first
+  const { data: instances } = await supabase
+    .from("zapi_instances")
+    .select("*")
+    .eq("is_active", true)
+    .order("is_default", { ascending: false });
+
+  if (instances && instances.length > 0) {
+    let target;
+    if (isTrafego) {
+      // Find non-default (tráfego) instance
+      target = instances.find((i: any) => !i.is_default) || instances[0];
+    } else {
+      // Find default (Bentes Ramos) instance
+      target = instances.find((i: any) => i.is_default) || instances[0];
+    }
+
+    console.log(`✅ Instância selecionada: ${target.name || target.instance_id} (default=${target.is_default})`);
+
+    return {
+      instanceId: target.instance_id,
+      token: target.token,
+      clientToken: target.client_token || "",
+      instanceName: target.name || (target.is_default ? "Bentes Ramos" : "Tráfego"),
+    };
+  }
+
+  // Fallback to integrations_config
+  const { data: zapiConfig } = await supabase
+    .from("integrations_config")
+    .select("config_json")
+    .eq("provider", "zapi")
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (zapiConfig?.config_json) {
+    const config = zapiConfig.config_json as any;
+    const allInstances = config.instances || [];
+    let inst;
+    if (isTrafego) {
+      inst = allInstances.find((i: any) => !i.isDefault) || allInstances[0];
+    } else {
+      inst = allInstances.find((i: any) => i.isDefault) || allInstances[0];
+    }
+    if (inst) {
+      return {
+        instanceId: inst.instanceId,
+        token: inst.token,
+        clientToken: inst.clientToken || "",
+        instanceName: inst.name || "Z-API",
+      };
+    }
+  }
+
+  return null;
+}
+
+function buildMessage(processo: any, cliente: any): string {
+  const nomeCliente = (cliente.nome || "").split(" ")[0] || "";
+  const saudacao = nomeCliente ? `Olá, ${nomeCliente}!` : "Olá!";
+  const numProcesso = processo.numero_processo || "N/A";
+  const statusTraduzido = traduzirStatus(processo.status || "Em Andamento");
+  const tribunal = processo.tribunal || "";
+
+  const movimentos = (processo.movimentos_json || []).slice(0, 3);
+  let movimentosTexto = "";
+
+  if (movimentos.length > 0) {
+    movimentosTexto = "\n─────────────────\n\n📌 *Movimentações recentes:*\n\n";
+    for (const mov of movimentos) {
+      const dataFormatada = mov.dataHora ? formatarData(mov.dataHora) : "";
+      const traducao = traduzirMovimento(mov.nome || "");
+      if (dataFormatada) {
+        movimentosTexto += `  ▸ ${traducao}\n     _${dataFormatada}_\n\n`;
+      } else {
+        movimentosTexto += `  ▸ ${traducao}\n\n`;
+      }
+    }
+  } else {
+    movimentosTexto =
+      "\n─────────────────\n\n" +
+      "ℹ️ Até o momento, não houve novas movimentações nesta semana.\n" +
+      "Isso é algo normal no andamento processual, já que alguns processos podem permanecer por semanas sem atualizações.\n\n" +
+      "Mas fique tranquilo(a): estamos acompanhando tudo de perto e, assim que houver qualquer novidade, você será informado(a).\n\n";
+  }
+
+  return (
+    `${saudacao} Aqui é a *Isa*, assistente virtual do escritório *Bentes Ramos Advogados*. 👋\n\n` +
+    `Passando para te atualizar sobre o andamento do seu processo:\n\n` +
+    `📋 *Processo:* ${numProcesso}\n` +
+    `⚖️ *Tipo:* ${processo.titulo_acao || "N/A"}\n` +
+    `📊 *Status:* ${statusTraduzido}\n` +
+    (tribunal ? `🏛️ *Tribunal:* ${tribunal}\n` : "") +
+    movimentosTexto +
+    `─────────────────\n\n` +
+    `Se tiver qualquer dúvida, é só me chamar por aqui mesmo! 😊\n\n` +
+    `_Bentes Ramos Advogados_\n` +
+    `_Cuidando do seu direito._`
+  );
 }
 
 serve(async (req) => {
@@ -119,44 +229,8 @@ serve(async (req) => {
       );
     }
 
-    // Buscar instância Z-API ativa e padrão
-    const { data: zapiInstance } = await supabase
-      .from("zapi_instances")
-      .select("*")
-      .eq("is_active", true)
-      .eq("is_default", true)
-      .maybeSingle();
-
-    // Fallback para integrations_config
-    let instance: { instanceId: string; token: string; clientToken: string } | null = null;
-
-    if (zapiInstance) {
-      instance = {
-        instanceId: zapiInstance.instance_id,
-        token: zapiInstance.token,
-        clientToken: zapiInstance.client_token || "",
-      };
-    } else {
-      const { data: zapiConfig } = await supabase
-        .from("integrations_config")
-        .select("config_json")
-        .eq("provider", "zapi")
-        .eq("is_active", true)
-        .maybeSingle();
-
-      if (zapiConfig?.config_json) {
-        const config = zapiConfig.config_json as any;
-        const instances = config.instances || [];
-        const inst = instances.find((i: any) => i.isDefault) || instances[0];
-        if (inst) {
-          instance = {
-            instanceId: inst.instanceId,
-            token: inst.token,
-            clientToken: inst.clientToken || "",
-          };
-        }
-      }
-    }
+    // Resolve the correct Z-API instance based on client origin
+    const instance = await resolveInstance(supabase, cliente);
 
     if (!instance) {
       return new Response(
@@ -172,48 +246,7 @@ serve(async (req) => {
     }
 
     // Montar mensagem
-    let textoMensagem = mensagem;
-    if (!textoMensagem) {
-      const numProcesso = processo.numero_processo || "N/A";
-      const statusTraduzido = traduzirStatus(processo.status || "Em Andamento");
-      const tribunal = processo.tribunal || "";
-      const ultimaAtualizacao = processo.data_ultima_atualizacao 
-        ? formatarData(processo.data_ultima_atualizacao)
-        : "";
-
-      const movimentos = (processo.movimentos_json || []).slice(0, 3);
-      let movimentosTexto = "";
-      if (movimentos.length > 0) {
-        movimentosTexto = "\n─────────────────\n\n📌 *Movimentações recentes:*\n\n";
-        for (const mov of movimentos) {
-          const dataFormatada = mov.dataHora ? formatarData(mov.dataHora) : "";
-          const traducao = traduzirMovimento(mov.nome || "");
-          if (dataFormatada) {
-            movimentosTexto += `  ▸ ${traducao}\n     _${dataFormatada}_\n\n`;
-          } else {
-            movimentosTexto += `  ▸ ${traducao}\n\n`;
-          }
-        }
-      } else {
-        movimentosTexto = "\n─────────────────\n\nℹ️ Não houve novas movimentações nesta semana.\nIsso é normal — alguns processos podem levar semanas sem movimentação. Fique tranquilo(a), estamos acompanhando de perto.\n\n";
-      }
-
-      const nomeCliente = (cliente.nome || "").split(" ")[0] || "";
-      const saudacao = nomeCliente ? `Olá, ${nomeCliente}!` : "Olá!";
-
-      textoMensagem = `${saudacao} Aqui é a *Isa*, do escritório *Bentes & Ramos Advogados*. 👋\n\n` +
-        `Passando para te atualizar sobre o andamento do seu processo:\n\n` +
-        `📋 *Processo:* ${numProcesso}\n` +
-        `⚖️ *Tipo:* ${processo.titulo_acao || "N/A"}\n` +
-        `📊 *Status:* ${statusTraduzido}\n` +
-        (tribunal ? `🏛️ *Tribunal:* ${tribunal}\n` : "") +
-        (ultimaAtualizacao ? `📅 *Atualizado em:* ${ultimaAtualizacao}\n` : "") +
-        movimentosTexto +
-        `─────────────────\n\n` +
-        `Se tiver qualquer dúvida, estou à disposição! 😊\n\n` +
-        `_Bentes & Ramos Advogados_\n` +
-        `_Cuidando do seu direito._`;
-    }
+    const textoMensagem = mensagem || buildMessage(processo, cliente);
 
     // Enviar via Z-API
     const zapiUrl = `https://api.z-api.io/instances/${instance.instanceId}/token/${instance.token}/send-text`;
@@ -231,7 +264,7 @@ serve(async (req) => {
     });
 
     const zapiResult = await zapiResponse.json();
-    console.log("Z-API response:", zapiResult);
+    console.log(`Z-API response (via ${instance.instanceName}):`, zapiResult);
 
     if (!zapiResponse.ok) {
       throw new Error(`Z-API error: ${JSON.stringify(zapiResult)}`);
@@ -257,6 +290,7 @@ serve(async (req) => {
         processo_id: processoId,
         tipo_notificacao: tipo,
         message_id: zapiResult.messageId,
+        instance_name: instance.instanceName,
       },
     });
 
@@ -265,7 +299,8 @@ serve(async (req) => {
         success: true, 
         messageId: zapiResult.messageId,
         telefone,
-        processo: processo.numero_processo 
+        processo: processo.numero_processo,
+        instance: instance.instanceName,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
