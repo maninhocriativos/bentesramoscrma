@@ -142,6 +142,62 @@ export default function IntimacoesPage() {
     }
   };
 
+  // Calculate procedural deadlines based on intimação type
+  const calcularPrazos = (intimacao: Intimacao) => {
+    const baseDate = intimacao.data_publicacao || intimacao.data_intimacao || intimacao.data_disponibilizacao;
+    if (!baseDate) return { dataBase: null, dataConclusao: null, dataFatal: null };
+
+    const base = parseISO(baseDate);
+    if (!isValid(base)) return { dataBase: base, dataConclusao: null, dataFatal: null };
+
+    const tipo = (intimacao.tipo_intimacao || '').toLowerCase();
+
+    // Determine deadline days based on type (Brazilian procedural law)
+    let prazoUteis = 15; // default
+    let prazoFatal = 20;
+
+    if (tipo.includes('contestação') || tipo.includes('contestacao')) {
+      prazoUteis = 15; prazoFatal = 20;
+    } else if (tipo.includes('réplica') || tipo.includes('replica')) {
+      prazoUteis = 15; prazoFatal = 20;
+    } else if (tipo.includes('recurso') || tipo.includes('apelação') || tipo.includes('apelacao')) {
+      prazoUteis = 15; prazoFatal = 20;
+    } else if (tipo.includes('embargos')) {
+      prazoUteis = 5; prazoFatal = 10;
+    } else if (tipo.includes('agravo')) {
+      prazoUteis = 15; prazoFatal = 20;
+    } else if (tipo.includes('manifestação') || tipo.includes('manifestacao')) {
+      prazoUteis = 5; prazoFatal = 10;
+    } else if (tipo.includes('contrarrazões') || tipo.includes('contrarrazoes')) {
+      prazoUteis = 15; prazoFatal = 20;
+    } else if (tipo.includes('alegações') || tipo.includes('alegacoes')) {
+      prazoUteis = 15; prazoFatal = 20;
+    } else if (tipo.includes('ciência') || tipo.includes('ciencia')) {
+      prazoUteis = 5; prazoFatal = 15;
+    } else if (tipo.includes('sentença') || tipo.includes('sentenca')) {
+      prazoUteis = 15; prazoFatal = 20;
+    } else if (tipo.includes('emenda')) {
+      prazoUteis = 15; prazoFatal = 20;
+    } else if (tipo.includes('pagamento')) {
+      prazoUteis = 15; prazoFatal = 15;
+    } else if (tipo.includes('sessão') || tipo.includes('sessao') || tipo.includes('julgamento')) {
+      prazoUteis = 0; prazoFatal = 0;
+    }
+
+    // Add 1 day for start of counting (day after publication)
+    const inicioContagem = addDays(base, 1);
+    // Skip weekends for start
+    let startDate = inicioContagem;
+    while (isWeekend(startDate)) {
+      startDate = addDays(startDate, 1);
+    }
+
+    const dataConclusao = prazoUteis > 0 ? addBusinessDays(startDate, prazoUteis) : null;
+    const dataFatal = prazoFatal > 0 ? addBusinessDays(startDate, prazoFatal) : null;
+
+    return { dataBase: base, dataConclusao, dataFatal };
+  };
+
   const handleGenerateReport = (intimacao: Intimacao, e?: React.MouseEvent) => {
     e?.stopPropagation();
     generateIntimacaoReport(intimacao);
