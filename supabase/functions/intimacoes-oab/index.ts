@@ -129,10 +129,10 @@ serve(async (req) => {
         const tribunalSigla = fonteTribunal?.sigla || fonteTribunal?.tribunal?.sigla || fonteTribunal?.nome || "";
         const classeProcesso = fonteTribunal?.capa?.classe || proc.titulo_classe || "";
 
-        // Fetch movimentações for each processo to get real intimações
+        // Fetch movimentações for each processo using V2 endpoint
         try {
           const movResp = await fetch(
-            `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}?movimentacoes=true`,
+            `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?limit=50`,
             {
               headers: {
                 Authorization: `Bearer ${ESCAVADOR_API_KEY}`,
@@ -143,83 +143,84 @@ serve(async (req) => {
 
           if (movResp.ok) {
             const movData = await movResp.json();
-            const fontes = movData?.fontes || [];
+            // V2 movimentações response: { items: [{ id, data, tipo, conteudo, fonte: { sigla, nome, ... } }] }
+            const movimentacoes = movData?.items || [];
 
-            for (const f of fontes) {
-              const tribunal = f.tribunal?.sigla || f.nome || tribunalSigla;
-              const movimentacoes = f.movimentacoes || [];
-
-              for (const mov of movimentacoes) {
-                const titulo = mov.titulo || mov.nome || "";
-                const conteudo = mov.conteudo || mov.descricao || "";
-                const tituloLower = titulo.toLowerCase();
-                const conteudoLower = conteudo.toLowerCase();
-                const combined = tituloLower + " " + conteudoLower;
-
-                // Filter only relevant publications
-                const isRelevant =
-                  combined.includes("intimação") || combined.includes("intimacao") ||
-                  combined.includes("citação") || combined.includes("citacao") ||
-                  combined.includes("notificação") || combined.includes("notificacao") ||
-                  combined.includes("despacho") || combined.includes("sentença") ||
-                  combined.includes("sentenca") || combined.includes("decisão") ||
-                  combined.includes("decisao") || combined.includes("publicação") ||
-                  combined.includes("publicacao") || combined.includes("edital") ||
-                  combined.includes("diário") || combined.includes("diario");
-
-                if (!isRelevant) continue;
-
-                // Filter: only 2026+
-                const movDate = mov.data || mov.data_publicacao || mov.data_disponibilizacao || "";
-                if (movDate && movDate < "2026-01-01") continue;
-
-                // Classify type
-                let tipoIntimacao = "Publicação";
-                if (combined.includes("intimação") || combined.includes("intimacao")) tipoIntimacao = "Intimação";
-                else if (combined.includes("citação") || combined.includes("citacao")) tipoIntimacao = "Citação";
-                else if (combined.includes("notificação") || combined.includes("notificacao")) tipoIntimacao = "Notificação";
-                else if (combined.includes("despacho")) tipoIntimacao = "Despacho";
-                else if (combined.includes("sentença") || combined.includes("sentenca")) tipoIntimacao = "Sentença";
-                else if (combined.includes("decisão") || combined.includes("decisao")) tipoIntimacao = "Decisão";
-                else if (combined.includes("edital")) tipoIntimacao = "Edital";
-
-                // Extract dates properly - apply Brazilian procedural rules
-                // Disponibilização → Publicação (1º dia útil seguinte) → Intimação (1º dia útil após publicação)
-                const rawDate = mov.data || null;
-                const rawDisponibilizacao = mov.data_disponibilizacao || null;
-                const rawPublicacao = mov.data_publicacao || null;
-
-                let dataDisponibilizacao = rawDisponibilizacao || rawDate || null;
-                let dataPublicacao = rawPublicacao;
-                let dataIntimacao: string | null = null;
-
-                // If we only have one date, calculate the others per CPC rules
-                if (dataDisponibilizacao && !dataPublicacao) {
-                  dataPublicacao = nextBusinessDay(dataDisponibilizacao);
-                }
-                if (dataPublicacao) {
-                  dataIntimacao = nextBusinessDay(dataPublicacao);
-                } else if (rawDate) {
-                  dataIntimacao = rawDate;
-                }
-
-                intimacoes.push({
-                  processo_cnj: cnj,
-                  processo_titulo: classeProcesso || titulo,
-                  tribunal: tribunal,
-                  tipo_intimacao: tipoIntimacao,
-                  conteudo: (conteudo || titulo).slice(0, 5000),
-                  data_intimacao: dataIntimacao,
-                  data_disponibilizacao: dataDisponibilizacao,
-                  data_publicacao: dataPublicacao,
-                  oab_numero,
-                  oab_uf,
-                  advogado_id,
-                  fonte: "escavador_v2",
-                  raw_json: mov,
-                });
+            if (processos.indexOf(proc) === 0) {
+              console.log(`🔍 Movimentações para ${cnj}: ${movimentacoes.length} encontradas`);
+              if (movimentacoes.length > 0) {
+                console.log(`🔍 Primeira mov: ${JSON.stringify(movimentacoes[0]).slice(0, 400)}`);
               }
             }
+
+            for (const mov of movimentacoes) {
+              const conteudo = mov.conteudo || "";
+              const tipo = mov.tipo || "";
+              const conteudoLower = conteudo.toLowerCase();
+              const tipoLower = tipo.toLowerCase();
+              const combined = conteudoLower + " " + tipoLower;
+
+              // Accept all movimentações (they're already from the right processo)
+              // but filter for relevance
+              const isRelevant =
+                combined.includes("intimação") || combined.includes("intimacao") ||
+                combined.includes("citação") || combined.includes("citacao") ||
+                combined.includes("notificação") || combined.includes("notificacao") ||
+                combined.includes("despacho") || combined.includes("sentença") ||
+                combined.includes("sentenca") || combined.includes("decisão") ||
+                combined.includes("decisao") || combined.includes("publicação") ||
+                combined.includes("publicacao") || combined.includes("edital") ||
+                combined.includes("diário") || combined.includes("diario") ||
+                combined.includes("distribuição") || combined.includes("distribuicao") ||
+                combined.includes("juntada") || combined.includes("conclus") ||
+                combined.includes("certidão") || combined.includes("certidao") ||
+                combined.includes("expedid") || combined.includes("audiência") ||
+                combined.includes("audiencia");
+
+              // For 2026 filter, accept ALL movimentações (not just "intimações")
+              // since any movement is relevant for tracking
+              const movDate = mov.data || "";
+              if (movDate && movDate < "2026-01-01") continue;
+
+              // Classify type
+              let tipoIntimacao = "Movimentação";
+              if (combined.includes("intimação") || combined.includes("intimacao")) tipoIntimacao = "Intimação";
+              else if (combined.includes("citação") || combined.includes("citacao")) tipoIntimacao = "Citação";
+              else if (combined.includes("notificação") || combined.includes("notificacao")) tipoIntimacao = "Notificação";
+              else if (combined.includes("despacho")) tipoIntimacao = "Despacho";
+              else if (combined.includes("sentença") || combined.includes("sentenca")) tipoIntimacao = "Sentença";
+              else if (combined.includes("decisão") || combined.includes("decisao")) tipoIntimacao = "Decisão";
+              else if (combined.includes("edital")) tipoIntimacao = "Edital";
+              else if (combined.includes("publicação") || combined.includes("publicacao")) tipoIntimacao = "Publicação";
+              else if (combined.includes("audiência") || combined.includes("audiencia")) tipoIntimacao = "Audiência";
+
+              // V2 movimentações have: data (single date), conteudo, fonte.sigla
+              const rawDate = mov.data || null;
+              const tribunal = mov.fonte?.sigla || mov.fonte?.nome || tribunalSigla;
+
+              // Calculate CPC dates from the movement date
+              let dataDisponibilizacao = rawDate;
+              let dataPublicacao = rawDate ? nextBusinessDay(rawDate) : null;
+              let dataIntimacao = dataPublicacao ? nextBusinessDay(dataPublicacao) : rawDate;
+
+              intimacoes.push({
+                processo_cnj: cnj,
+                processo_titulo: classeProcesso || `${proc.titulo_polo_ativo} X ${proc.titulo_polo_passivo}`,
+                tribunal: tribunal,
+                tipo_intimacao: tipoIntimacao,
+                conteudo: conteudo.slice(0, 5000),
+                data_intimacao: dataIntimacao,
+                data_disponibilizacao: dataDisponibilizacao,
+                data_publicacao: dataPublicacao,
+                oab_numero,
+                oab_uf,
+                advogado_id,
+                fonte: "escavador_v2",
+                raw_json: mov,
+              });
+            }
+          } else {
+            console.warn(`⚠️ Movimentações falhou para ${cnj}: ${movResp.status}`);
           }
         } catch (e) {
           console.warn(`⚠️ Erro ao buscar movimentações para ${cnj}:`, e);
