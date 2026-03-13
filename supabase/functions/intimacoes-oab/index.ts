@@ -65,12 +65,20 @@ serve(async (req) => {
 
     // Helper: next business day (skip weekends)
     function nextBusinessDay(dateStr: string): string {
-      const d = new Date(dateStr + 'T12:00:00Z');
+      const baseInput = dateStr.includes("T") ? dateStr : `${dateStr}T12:00:00Z`;
+      let d = new Date(baseInput);
+
+      if (Number.isNaN(d.getTime())) {
+        const onlyDate = dateStr.split("T")[0];
+        d = new Date(`${onlyDate}T12:00:00Z`);
+      }
+
       d.setDate(d.getDate() + 1);
       while (d.getDay() === 0 || d.getDay() === 6) {
         d.setDate(d.getDate() + 1);
       }
-      return d.toISOString().split('T')[0];
+
+      return d.toISOString().split("T")[0];
     }
 
     // Strategy 1: Use Escavador V2 monitoramento de diários
@@ -318,7 +326,44 @@ serve(async (req) => {
       else console.warn(`⚠️ Erro ao salvar:`, error.message);
     }
 
-    console.log(`✅ ${savedCount} novas, ${updatedCount} atualizadas`);
+    // Backfill fix: correct existing rows where all 3 dates were previously saved as identical
+    let correctedLegacyCount = 0;
+    const { data: legacyRows } = await supabase
+      .from("intimacoes")
+      .select("id, data_disponibilizacao, data_publicacao, data_intimacao")
+      .eq("oab_numero", oab_numero)
+      .eq("oab_uf", oab_uf)
+      .not("data_disponibilizacao", "is", null)
+      .not("data_publicacao", "is", null)
+      .not("data_intimacao", "is", null)
+      .limit(500);
+
+    if (legacyRows?.length) {
+      for (const row of legacyRows) {
+        const disp = String(row.data_disponibilizacao).slice(0, 10);
+        const pub = String(row.data_publicacao).slice(0, 10);
+        const intm = String(row.data_intimacao).slice(0, 10);
+
+        if (disp === pub && pub === intm) {
+          const correctedPub = nextBusinessDay(disp);
+          const correctedInt = nextBusinessDay(correctedPub);
+
+          const { error } = await supabase
+            .from("intimacoes")
+            .update({
+              data_disponibilizacao: disp,
+              data_publicacao: correctedPub,
+              data_intimacao: correctedInt,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", row.id);
+
+          if (!error) correctedLegacyCount++;
+        }
+      }
+    }
+
+    console.log(`✅ ${savedCount} novas, ${updatedCount} atualizadas, ${correctedLegacyCount} corrigidas (legado)`);
 
     return new Response(
       JSON.stringify({
@@ -326,6 +371,7 @@ serve(async (req) => {
         total: intimacoes.length,
         saved: savedCount,
         updated: updatedCount,
+        corrected_legacy: correctedLegacyCount,
         processosAnalisados: intimacoes.length,
         fonte,
       }),
