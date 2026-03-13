@@ -495,6 +495,31 @@ function IntimacaoDetailModal({
 }) {
   const [showFullContent, setShowFullContent] = useState(false);
   const [comentario, setComentario] = useState('');
+  const [processoSearch, setProcessoSearch] = useState('');
+  const [processoResults, setProcessoResults] = useState<Array<{ id: string; numero_processo: string | null; titulo_acao: string | null }>>([]);
+  const [searchingProcesso, setSearchingProcesso] = useState(false);
+  const [linkedProcesso, setLinkedProcesso] = useState<{ id: string; numero: string; titulo: string } | null>(null);
+  const [showProcessoDropdown, setShowProcessoDropdown] = useState(false);
+
+  const searchProcessos = async (term: string) => {
+    setProcessoSearch(term);
+    if (term.length < 2) { setProcessoResults([]); setShowProcessoDropdown(false); return; }
+    setSearchingProcesso(true);
+    const { data } = await supabase
+      .from('processos')
+      .select('id, numero_processo, titulo_acao')
+      .or(`numero_processo.ilike.%${term}%,titulo_acao.ilike.%${term}%`)
+      .limit(8);
+    setProcessoResults((data as any[]) || []);
+    setShowProcessoDropdown(true);
+    setSearchingProcesso(false);
+  };
+
+  const selectProcesso = (p: { id: string; numero_processo: string | null; titulo_acao: string | null }) => {
+    setLinkedProcesso({ id: p.id, numero: p.numero_processo || '', titulo: p.titulo_acao || '' });
+    setProcessoSearch(p.numero_processo || p.titulo_acao || '');
+    setShowProcessoDropdown(false);
+  };
 
   const prazos = calcularPrazos(intimacao);
   const fmtPrazo = (d: Date | null) => d ? format(d, 'dd/MM/yyyy') : '—';
