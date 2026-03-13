@@ -283,14 +283,26 @@ serve(async (req) => {
       const { data: existing } = await query.limit(1);
 
       if (existing && existing.length > 0) {
-        // Update existing record if it has missing fields
         const rec = existing[0];
         const updates: Record<string, any> = {};
 
         if (!rec.tribunal && int.tribunal) updates.tribunal = int.tribunal;
-        if (!rec.data_disponibilizacao && int.data_disponibilizacao) updates.data_disponibilizacao = int.data_disponibilizacao;
-        if (!rec.data_publicacao && int.data_publicacao) updates.data_publicacao = int.data_publicacao;
-        if (!rec.data_intimacao && int.data_intimacao) updates.data_intimacao = int.data_intimacao;
+
+        // Fix dates: update if missing OR if all 3 dates are identical (old broken logic)
+        const allSame = rec.data_disponibilizacao && rec.data_publicacao && rec.data_intimacao &&
+          rec.data_disponibilizacao.slice(0, 10) === rec.data_publicacao.slice(0, 10) &&
+          rec.data_publicacao.slice(0, 10) === rec.data_intimacao.slice(0, 10);
+
+        if (allSame && int.data_disponibilizacao && int.data_publicacao && int.data_intimacao) {
+          // Overwrite with correctly calculated dates
+          updates.data_disponibilizacao = int.data_disponibilizacao;
+          updates.data_publicacao = int.data_publicacao;
+          updates.data_intimacao = int.data_intimacao;
+        } else {
+          if (!rec.data_disponibilizacao && int.data_disponibilizacao) updates.data_disponibilizacao = int.data_disponibilizacao;
+          if (!rec.data_publicacao && int.data_publicacao) updates.data_publicacao = int.data_publicacao;
+          if (!rec.data_intimacao && int.data_intimacao) updates.data_intimacao = int.data_intimacao;
+        }
 
         if (Object.keys(updates).length > 0) {
           updates.updated_at = new Date().toISOString();
