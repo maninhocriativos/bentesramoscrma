@@ -102,10 +102,6 @@ function buildPreviewMessage(d: ProcessoNotificacoesTabProps["previewData"]) {
   const statusTraduzido = traduzirStatus(d.status || "Em Andamento");
   const tribunal = d.tribunal || "";
 
-  const ultimaAtualizacao = d.ultimaAtualizacao
-    ? formatarDataLonga(d.ultimaAtualizacao)
-    : "";
-
   const movimentos = (d.movimentos || []).slice(0, 3);
   let movimentosTexto = "";
   if (movimentos.length > 0) {
@@ -120,24 +116,27 @@ function buildPreviewMessage(d: ProcessoNotificacoesTabProps["previewData"]) {
       }
     }
   } else {
-    movimentosTexto = "\n─────────────────\n\nℹ️ Não houve novas movimentações nesta semana.\nIsso é normal — alguns processos podem levar semanas sem movimentação. Fique tranquilo(a), estamos acompanhando de perto.\n\n";
+    movimentosTexto =
+      "\n─────────────────\n\n" +
+      "ℹ️ Até o momento, não houve novas movimentações nesta semana.\n" +
+      "Isso é algo normal no andamento processual, já que alguns processos podem permanecer por semanas sem atualizações.\n\n" +
+      "Mas fique tranquilo(a): estamos acompanhando tudo de perto e, assim que houver qualquer novidade, você será informado(a).\n\n";
   }
 
   const nomeCliente = (d.nomeCliente || "").split(" ")[0] || "";
   const saudacao = nomeCliente ? `Olá, ${nomeCliente}!` : "Olá!";
 
   return (
-    `${saudacao} Aqui é a *Isa*, do escritório *Bentes & Ramos Advogados*. 👋\n\n` +
+    `${saudacao} Aqui é a *Isa*, assistente virtual do escritório *Bentes Ramos Advogados*. 👋\n\n` +
     `Passando para te atualizar sobre o andamento do seu processo:\n\n` +
     `📋 *Processo:* ${numProcesso}\n` +
     `⚖️ *Tipo:* ${d.acao || "N/A"}\n` +
     `📊 *Status:* ${statusTraduzido}\n` +
     (tribunal ? `🏛️ *Tribunal:* ${tribunal}\n` : "") +
-    (ultimaAtualizacao ? `📅 *Atualizado em:* ${ultimaAtualizacao}\n` : "") +
     movimentosTexto +
     `─────────────────\n\n` +
-    `Se tiver qualquer dúvida, estou à disposição! 😊\n\n` +
-    `_Bentes & Ramos Advogados_\n` +
+    `Se tiver qualquer dúvida, é só me chamar por aqui mesmo! 😊\n\n` +
+    `_Bentes Ramos Advogados_\n` +
     `_Cuidando do seu direito._`
   );
 }
