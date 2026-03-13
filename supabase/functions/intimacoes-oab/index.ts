@@ -158,6 +158,10 @@ serve(async (req) => {
 
                 if (!isRelevant) continue;
 
+                // Filter: only 2026+
+                const movDate = mov.data || mov.data_publicacao || mov.data_disponibilizacao || "";
+                if (movDate && movDate < "2026-01-01") continue;
+
                 // Classify type
                 let tipoIntimacao = "Publicação";
                 if (combined.includes("intimação") || combined.includes("intimacao")) tipoIntimacao = "Intimação";
@@ -241,6 +245,10 @@ serve(async (req) => {
           else if (conteudoLower.includes("citação")) tipoIntimacao = "Citação";
           else if (conteudoLower.includes("despacho")) tipoIntimacao = "Despacho";
           else if (conteudoLower.includes("sentença")) tipoIntimacao = "Sentença";
+
+          // Filter: only 2026+
+          const checkDate = item.data_publicacao || item.data || "";
+          if (checkDate && checkDate < "2026-01-01") continue;
 
           const rawDate = item.data_publicacao || item.data || null;
           const rawDisp = item.data_disponibilizacao || null;
