@@ -155,13 +155,6 @@ serve(async (req) => {
             // V2 movimentações response: { items: [{ id, data, tipo, conteudo, fonte: { sigla, nome, ... } }] }
             const movimentacoes = movData?.items || [];
 
-            if (processos.indexOf(proc) === 0) {
-              console.log(`🔍 Movimentações para ${cnj}: ${movimentacoes.length} encontradas`);
-              if (movimentacoes.length > 0) {
-                console.log(`🔍 Primeira mov: ${JSON.stringify(movimentacoes[0]).slice(0, 400)}`);
-              }
-            }
-
             for (const mov of movimentacoes) {
               const conteudo = mov.conteudo || "";
               const tipo = mov.tipo || "";
