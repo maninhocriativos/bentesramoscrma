@@ -235,16 +235,21 @@ export default function AgendaPage() {
             <p className="text-sm text-muted-foreground font-medium">Carregando agenda...</p>
           </div>
         ) : (
-          <Calendar
-            compromissos={filteredCompromissos}
-            intimacoes={filteredIntimacoes}
-            colorMode={colorMode}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            onDayClick={handleDayClick}
-            onEventClick={handleEventClick}
-            onStatusChange={handleStatusChange}
-          />
+          <>
+            <AgendaKPIs compromissos={filteredCompromissos} intimacoes={filteredIntimacoes} />
+            <div className="mt-4">
+              <Calendar
+                compromissos={filteredCompromissos}
+                intimacoes={filteredIntimacoes}
+                colorMode={colorMode}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
+                onDayClick={handleDayClick}
+                onEventClick={handleEventClick}
+                onStatusChange={handleStatusChange}
+              />
+            </div>
+          </>
         )}
       </div>
 
