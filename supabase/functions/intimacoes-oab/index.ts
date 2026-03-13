@@ -160,10 +160,25 @@ serve(async (req) => {
                 else if (combined.includes("decisão") || combined.includes("decisao")) tipoIntimacao = "Decisão";
                 else if (combined.includes("edital")) tipoIntimacao = "Edital";
 
-                // Extract dates properly
-                const dataIntimacao = mov.data || null;
-                const dataDisponibilizacao = mov.data_disponibilizacao || mov.data || null;
-                const dataPublicacao = mov.data_publicacao || null;
+                // Extract dates properly - apply Brazilian procedural rules
+                // Disponibilização → Publicação (1º dia útil seguinte) → Intimação (1º dia útil após publicação)
+                const rawDate = mov.data || null;
+                const rawDisponibilizacao = mov.data_disponibilizacao || null;
+                const rawPublicacao = mov.data_publicacao || null;
+
+                let dataDisponibilizacao = rawDisponibilizacao || rawDate || null;
+                let dataPublicacao = rawPublicacao;
+                let dataIntimacao: string | null = null;
+
+                // If we only have one date, calculate the others per CPC rules
+                if (dataDisponibilizacao && !dataPublicacao) {
+                  dataPublicacao = nextBusinessDay(dataDisponibilizacao);
+                }
+                if (dataPublicacao) {
+                  dataIntimacao = nextBusinessDay(dataPublicacao);
+                } else if (rawDate) {
+                  dataIntimacao = rawDate;
+                }
 
                 intimacoes.push({
                   processo_cnj: cnj,
