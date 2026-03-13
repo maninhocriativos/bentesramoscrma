@@ -54,13 +54,23 @@ function traduzirMovimento(nome: string): string {
 
 function formatarData(dateStr: string): string {
   try {
-    return new Date(dateStr).toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    });
+    if (!dateStr || dateStr === "null" || dateStr === "undefined") return "";
+    // Handle ISO dates, BR dates, and timestamps
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) {
+      // Try BR format DD/MM/YYYY
+      const match = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      if (match) {
+        const d2 = new Date(`${match[3]}-${match[2]}-${match[1]}`);
+        if (!isNaN(d2.getTime())) {
+          return d2.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+        }
+      }
+      return "";
+    }
+    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
   } catch {
-    return dateStr;
+    return "";
   }
 }
 
