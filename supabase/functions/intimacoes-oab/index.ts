@@ -113,12 +113,21 @@ serve(async (req) => {
     if (processosResp.ok) {
       const processosData = await processosResp.json();
       const processos = processosData?.items || processosData?.data || [];
+      // Handle pagination: fetch next pages
+      let nextUrl = processosData?.links?.next;
+      while (nextUrl) {
+        const nextResp = await fetch(nextUrl, {
+          headers: { Authorization: `Bearer ${ESCAVADOR_API_KEY}`, "X-Requested-With": "XMLHttpRequest" },
+        });
+        if (!nextResp.ok) break;
+        const nextData = await nextResp.json();
+        const moreProcessos = nextData?.items || nextData?.data || [];
+        if (moreProcessos.length === 0) break;
+        processos.push(...moreProcessos);
+        nextUrl = nextData?.links?.next;
+      }
 
       console.log(`📋 ${processos.length} processos encontrados via OAB`);
-      if (processos.length > 0) {
-        console.log(`🔍 V2 first processo keys: ${JSON.stringify(Object.keys(processos[0]))}`);
-        console.log(`🔍 V2 first processo sample: ${JSON.stringify(processos[0]).slice(0, 600)}`);
-      }
 
       for (const proc of processos) {
         const cnj = proc.numero_cnj || proc.numero_processo;
