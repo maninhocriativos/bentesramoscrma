@@ -33,9 +33,15 @@ const parseLocalDate = (dateString: string): Date => {
   return toZonedTime(utcDate, TIMEZONE);
 };
 
+type ColorMode = 'tipo' | 'situacao';
+type ViewMode = 'mes' | 'semana' | 'dia';
+
 interface CalendarProps {
   compromissos: Compromisso[];
   intimacoes?: IntimacaoEvent[];
+  colorMode?: ColorMode;
+  viewMode?: ViewMode;
+  onViewModeChange?: (mode: ViewMode) => void;
   onDayClick: (date: Date) => void;
   onEventClick: (compromisso: Compromisso) => void;
   onStatusChange?: (id: string, newStatus: ConfirmacaoStatus) => void;
