@@ -33,9 +33,15 @@ const parseLocalDate = (dateString: string): Date => {
   return toZonedTime(utcDate, TIMEZONE);
 };
 
+type ColorMode = 'tipo' | 'situacao';
+type ViewMode = 'mes' | 'semana' | 'dia';
+
 interface CalendarProps {
   compromissos: Compromisso[];
   intimacoes?: IntimacaoEvent[];
+  colorMode?: ColorMode;
+  viewMode?: ViewMode;
+  onViewModeChange?: (mode: ViewMode) => void;
   onDayClick: (date: Date) => void;
   onEventClick: (compromisso: Compromisso) => void;
   onStatusChange?: (id: string, newStatus: ConfirmacaoStatus) => void;
@@ -44,20 +50,27 @@ interface CalendarProps {
 // ── Color helpers matching reference images ──
 
 // Compromisso bar colors by tipo
-function getCompromissoBarStyle(c: Compromisso): string {
+function getCompromissoBarStyleByTipo(c: Compromisso): string {
   if (c.tipo === 'Audiência') return 'bg-[#f472b6] text-white'; // pink
   if (c.tipo === 'Reunião') return 'bg-[#60a5fa] text-white'; // blue
-  
-  // Status overrides
+  if (c.tipo === 'Tarefa') return 'bg-[#34d399] text-white'; // green
+  if (c.tipo === 'Prazo') return 'bg-[#fbbf24] text-[#78350f]'; // amber
+  return 'bg-[#e2e8f0] text-[#334155]';
+}
+
+// Compromisso bar colors by situação/status
+function getCompromissoBarStyleBySituacao(c: Compromisso): string {
   const st = c.confirmacao_status || 'pendente';
   if (st === 'confirmado') return 'bg-[#34d399] text-white'; // green
   if (st === 'cancelado') return 'bg-[#f87171] text-white'; // red
   if (st === 'remarcado') return 'bg-[#60a5fa] text-white'; // blue
-  
-  // Default by tipo
-  if (c.tipo === 'Tarefa') return 'bg-[#34d399] text-white';
-  if (c.tipo === 'Prazo') return 'bg-[#fbbf24] text-[#78350f]';
-  return 'bg-[#e2e8f0] text-[#334155]';
+  return 'bg-[#fbbf24] text-[#78350f]'; // pendente = amber
+}
+
+function getCompromissoBarStyle(c: Compromisso, colorMode: ColorMode): string {
+  return colorMode === 'situacao' 
+    ? getCompromissoBarStyleBySituacao(c) 
+    : getCompromissoBarStyleByTipo(c);
 }
 
 // Intimações: determine style based on content
@@ -101,7 +114,7 @@ interface CalendarEvent {
   hasCheckmark?: boolean;
 }
 
-export function Calendar({ compromissos, intimacoes = [], onDayClick, onEventClick }: CalendarProps) {
+export function Calendar({ compromissos, intimacoes = [], colorMode = 'tipo', viewMode = 'mes', onViewModeChange, onDayClick, onEventClick }: CalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
   const monthStart = startOfMonth(currentMonth);
@@ -130,7 +143,7 @@ export function Calendar({ compromissos, intimacoes = [], onDayClick, onEventCli
         title: c.titulo,
         time: isAudiencia ? format(parseLocalDate(c.data_inicio), 'HH:mm') : undefined,
         type: 'compromisso',
-        className: getCompromissoBarStyle(c),
+        className: getCompromissoBarStyle(c, colorMode),
         original: c,
       });
     });
@@ -205,13 +218,18 @@ export function Calendar({ compromissos, intimacoes = [], onDayClick, onEventCli
 
         {/* Right: view toggles */}
         <div className="inline-flex items-center border border-border/70 rounded-md overflow-hidden bg-card">
-          {['Mês', 'Semana', 'Dia'].map((label, i) => (
+          {([
+            { label: 'Mês', value: 'mes' as ViewMode },
+            { label: 'Semana', value: 'semana' as ViewMode },
+            { label: 'Dia', value: 'dia' as ViewMode },
+          ]).map(({ label, value }, i) => (
             <button
-              key={label}
+              key={value}
+              onClick={() => onViewModeChange?.(value)}
               className={cn(
                 "px-3 py-1.5 text-xs font-medium transition-all",
                 i < 2 && "border-r border-border/70",
-                label === 'Mês'
+                viewMode === value
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
               )}
