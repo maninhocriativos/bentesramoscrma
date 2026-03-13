@@ -242,7 +242,7 @@ serve(async (req) => {
           let intDate = pubDate ? nextBusinessDay(pubDate) : rawDate;
 
           intimacoes.push({
-            processo_cnj: cnjMatch ? cnjMatch[1] : (cnjFromContent ? cnjFromContent[1] : ""),
+            processo_cnj: cnjMatch ? cnjMatch[1] : "",
             processo_titulo: titulo || "Publicação em Diário Oficial",
             tribunal: item.fonte?.sigla || item.tribunal || item.fonte?.nome || "",
             tipo_intimacao: tipoIntimacao,
