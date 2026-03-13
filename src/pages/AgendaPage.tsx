@@ -10,15 +10,12 @@ import { useIntimacoes } from '@/hooks/useIntimacoes';
 import { Compromisso, ConfirmacaoStatus } from '@/types/compromissos';
 import { 
   Loader2, 
-  CalendarDays, 
   Plus,
   Filter,
   Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-
-type FilterType = 'todos' | 'Prazo' | 'Audiência' | 'Reunião' | 'Intimação';
 
 export default function AgendaPage() {
   const { compromissos, loading, updateCompromisso } = useCompromissos();
@@ -27,18 +24,7 @@ export default function AgendaPage() {
   const [selectedCompromisso, setSelectedCompromisso] = useState<Compromisso | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDayEventsModalOpen, setIsDayEventsModalOpen] = useState(false);
-  const [filter, setFilter] = useState<FilterType>('todos');
-  const [showConfirmacoes, setShowConfirmacoes] = useState(false);
-
-  const filteredCompromissos = filter === 'todos' 
-    ? compromissos 
-    : filter === 'Intimação'
-    ? []
-    : compromissos.filter(c => c.tipo === filter);
-
-  const filteredIntimacoes = filter === 'todos' || filter === 'Intimação'
-    ? intimacoes
-    : [];
+  const [activeFilterTab, setActiveFilterTab] = useState<'tipo' | 'situacao'>('tipo');
 
   const handleDayClick = (date: Date) => {
     setSelectedDate(date);
@@ -69,39 +55,41 @@ export default function AgendaPage() {
 
   return (
     <AppLayout>
-      {/* Header */}
+      {/* Header matching reference */}
       <div className="sticky top-0 z-20 bg-card/95 backdrop-blur-md border-b border-border/60">
-        <div className="flex items-center justify-between px-5 py-4 md:px-8">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">
-              Agenda
-            </h1>
-          </div>
+        <div className="flex items-center justify-between px-5 py-3 md:px-8">
+          <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">
+            Agenda
+          </h1>
           
           <div className="flex items-center gap-2">
-            {/* Filter buttons matching reference */}
-            <div className="hidden md:flex items-center gap-1 border border-border rounded-lg overflow-hidden">
-              {['Tipo', 'Situação'].map((label) => (
+            {/* Tipo / Situação toggle - matching reference */}
+            <div className="hidden md:inline-flex items-center border border-border/70 rounded-md overflow-hidden bg-card">
+              {(['tipo', 'situacao'] as const).map((tab, i) => (
                 <button
-                  key={label}
+                  key={tab}
+                  onClick={() => setActiveFilterTab(tab)}
                   className={cn(
-                    "px-3 py-1.5 text-xs font-medium transition-all border-r border-border last:border-r-0",
-                    label === 'Tipo'
+                    "px-3 py-1.5 text-xs font-medium transition-all",
+                    i === 0 && "border-r border-border/70",
+                    activeFilterTab === tab
                       ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted/60"
+                      : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                   )}
                 >
-                  {label}
+                  {tab === 'tipo' ? 'Tipo' : 'Situação'}
                 </button>
               ))}
             </div>
             
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs rounded-lg">
+            {/* Filtros button */}
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 rounded-md">
               <Filter className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Filtros</span>
+              Filtros
             </Button>
             
-            <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg">
+            {/* Settings gear */}
+            <Button variant="outline" size="icon" className="h-8 w-8 rounded-md">
               <Settings className="h-3.5 w-3.5" />
             </Button>
 
@@ -110,10 +98,10 @@ export default function AgendaPage() {
             <Button 
               onClick={handleNewCompromisso}
               size="sm"
-              className="gap-2 rounded-lg shadow-sm"
+              className="gap-1.5 text-xs h-8 rounded-md"
             >
               <Plus className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline text-xs">Novo</span>
+              <span className="hidden sm:inline">Novo</span>
             </Button>
           </div>
         </div>
@@ -130,8 +118,8 @@ export default function AgendaPage() {
           </div>
         ) : (
           <Calendar
-            compromissos={filteredCompromissos}
-            intimacoes={filteredIntimacoes}
+            compromissos={compromissos}
+            intimacoes={intimacoes}
             onDayClick={handleDayClick}
             onEventClick={handleEventClick}
             onStatusChange={handleStatusChange}
@@ -143,8 +131,8 @@ export default function AgendaPage() {
         isOpen={isDayEventsModalOpen}
         onClose={() => setIsDayEventsModalOpen(false)}
         date={selectedDate}
-        compromissos={filteredCompromissos}
-        intimacoes={filteredIntimacoes}
+        compromissos={compromissos}
+        intimacoes={intimacoes}
         onEventClick={handleEventClick}
         onNewEvent={() => {
           setIsDayEventsModalOpen(false);
