@@ -281,6 +281,7 @@ serve(async (req) => {
         success: true,
         total: intimacoes.length,
         saved: savedCount,
+        updated: updatedCount,
         processosAnalisados: intimacoes.length,
         fonte,
       }),
