@@ -246,6 +246,10 @@ serve(async (req) => {
           else if (conteudoLower.includes("despacho")) tipoIntimacao = "Despacho";
           else if (conteudoLower.includes("sentença")) tipoIntimacao = "Sentença";
 
+          // Filter: only 2026+
+          const checkDate = item.data_publicacao || item.data || "";
+          if (checkDate && checkDate < "2026-01-01") continue;
+
           const rawDate = item.data_publicacao || item.data || null;
           const rawDisp = item.data_disponibilizacao || null;
 
