@@ -1157,7 +1157,7 @@ export function ProcessoModalExpanded({
 
             {/* Tab: Movimentos */}
             <TabsContent value="movimentos" className="h-full mt-0 data-[state=inactive]:hidden" forceMount>
-              <ScrollArea className="h-[350px] pr-4">
+              <ScrollArea className="h-[calc(92vh-220px)] pr-4">
                 <div className="py-4 space-y-2">
                   {movimentosEnriquecidos.length === 0 ? (
                     <Card>
