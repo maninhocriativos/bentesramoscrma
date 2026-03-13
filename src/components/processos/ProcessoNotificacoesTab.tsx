@@ -103,42 +103,42 @@ function buildPreviewMessage(d: ProcessoNotificacoesTabProps["previewData"]) {
   const tribunal = d.tribunal || "";
 
   const ultimaAtualizacao = d.ultimaAtualizacao
-    ? (() => {
-        try {
-          return formatarDataLonga(d.ultimaAtualizacao);
-        } catch {
-          return d.ultimaAtualizacao;
-        }
-      })()
-    : "não disponível";
+    ? formatarDataLonga(d.ultimaAtualizacao)
+    : "";
 
   const movimentos = (d.movimentos || []).slice(0, 3);
   let movimentosTexto = "";
   if (movimentos.length > 0) {
-    movimentosTexto = "\n📌 *Últimas movimentações:*\n";
+    movimentosTexto = "\n─────────────────\n\n📌 *Movimentações recentes:*\n\n";
     for (const mov of movimentos) {
       const dataFormatada = mov.dataHora ? formatarDataLonga(mov.dataHora) : "";
       const traducao = traduzirMovimento(mov.nome || "");
-      movimentosTexto += `• ${traducao}${dataFormatada ? ` (${dataFormatada})` : ""}\n`;
+      if (dataFormatada) {
+        movimentosTexto += `  ▸ ${traducao}\n     _${dataFormatada}_\n\n`;
+      } else {
+        movimentosTexto += `  ▸ ${traducao}\n\n`;
+      }
     }
   } else {
-    movimentosTexto = "\nℹ️ *Não houve novas movimentações* nesta semana. Isso é normal — alguns processos podem levar semanas ou meses sem movimentação. Fique tranquilo(a), estamos acompanhando de perto!\n";
+    movimentosTexto = "\n─────────────────\n\nℹ️ Não houve novas movimentações nesta semana.\nIsso é normal — alguns processos podem levar semanas sem movimentação. Fique tranquilo(a), estamos acompanhando de perto.\n\n";
   }
 
   const nomeCliente = (d.nomeCliente || "").split(" ")[0] || "";
-  const saudacao = nomeCliente ? `Olá ${nomeCliente}, aqui` : "Olá, aqui";
+  const saudacao = nomeCliente ? `Olá, ${nomeCliente}!` : "Olá!";
 
   return (
-    `${saudacao} é a Isa do Bentes & Ramos! 👋\n\n` +
-    `Segue a atualização semanal do seu processo:\n\n` +
+    `${saudacao} Aqui é a *Isa*, do escritório *Bentes & Ramos Advogados*. 👋\n\n` +
+    `Passando para te atualizar sobre o andamento do seu processo:\n\n` +
     `📋 *Processo:* ${numProcesso}\n` +
-    `⚖️ *Ação:* ${d.acao || "N/A"}\n` +
-    `📊 *Situação atual:* ${statusTraduzido}\n` +
+    `⚖️ *Tipo:* ${d.acao || "N/A"}\n` +
+    `📊 *Status:* ${statusTraduzido}\n` +
     (tribunal ? `🏛️ *Tribunal:* ${tribunal}\n` : "") +
-    `📅 *Última atualização:* ${ultimaAtualizacao}\n` +
+    (ultimaAtualizacao ? `📅 *Atualizado em:* ${ultimaAtualizacao}\n` : "") +
     movimentosTexto +
-    `\nQualquer dúvida, pode nos chamar por aqui mesmo! 🙂\n\n` +
-    `*Bentes & Ramos Advogados*`
+    `─────────────────\n\n` +
+    `Se tiver qualquer dúvida, estou à disposição! 😊\n\n` +
+    `_Bentes & Ramos Advogados_\n` +
+    `_Cuidando do seu direito._`
   );
 }
 
