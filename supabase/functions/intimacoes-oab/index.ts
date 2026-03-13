@@ -65,12 +65,20 @@ serve(async (req) => {
 
     // Helper: next business day (skip weekends)
     function nextBusinessDay(dateStr: string): string {
-      const d = new Date(dateStr + 'T12:00:00Z');
+      const baseInput = dateStr.includes("T") ? dateStr : `${dateStr}T12:00:00Z`;
+      let d = new Date(baseInput);
+
+      if (Number.isNaN(d.getTime())) {
+        const onlyDate = dateStr.split("T")[0];
+        d = new Date(`${onlyDate}T12:00:00Z`);
+      }
+
       d.setDate(d.getDate() + 1);
       while (d.getDay() === 0 || d.getDay() === 6) {
         d.setDate(d.getDate() + 1);
       }
-      return d.toISOString().split('T')[0];
+
+      return d.toISOString().split("T")[0];
     }
 
     // Strategy 1: Use Escavador V2 monitoramento de diários
