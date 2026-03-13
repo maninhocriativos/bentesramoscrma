@@ -495,6 +495,31 @@ function IntimacaoDetailModal({
 }) {
   const [showFullContent, setShowFullContent] = useState(false);
   const [comentario, setComentario] = useState('');
+  const [processoSearch, setProcessoSearch] = useState('');
+  const [processoResults, setProcessoResults] = useState<Array<{ id: string; numero_processo: string | null; titulo_acao: string | null }>>([]);
+  const [searchingProcesso, setSearchingProcesso] = useState(false);
+  const [linkedProcesso, setLinkedProcesso] = useState<{ id: string; numero: string; titulo: string } | null>(null);
+  const [showProcessoDropdown, setShowProcessoDropdown] = useState(false);
+
+  const searchProcessos = async (term: string) => {
+    setProcessoSearch(term);
+    if (term.length < 2) { setProcessoResults([]); setShowProcessoDropdown(false); return; }
+    setSearchingProcesso(true);
+    const { data } = await supabase
+      .from('processos')
+      .select('id, numero_processo, titulo_acao')
+      .or(`numero_processo.ilike.%${term}%,titulo_acao.ilike.%${term}%`)
+      .limit(8);
+    setProcessoResults((data as any[]) || []);
+    setShowProcessoDropdown(true);
+    setSearchingProcesso(false);
+  };
+
+  const selectProcesso = (p: { id: string; numero_processo: string | null; titulo_acao: string | null }) => {
+    setLinkedProcesso({ id: p.id, numero: p.numero_processo || '', titulo: p.titulo_acao || '' });
+    setProcessoSearch(p.numero_processo || p.titulo_acao || '');
+    setShowProcessoDropdown(false);
+  };
 
   const prazos = calcularPrazos(intimacao);
   const fmtPrazo = (d: Date | null) => d ? format(d, 'dd/MM/yyyy') : '—';
@@ -549,19 +574,72 @@ function IntimacaoDetailModal({
       </div>
 
       <div className="px-6 py-5 space-y-5">
+        {/* Vincular a processo existente */}
+        <div className="border-2 border-primary/30 rounded-lg p-4 bg-primary/[0.03] space-y-3">
+          <p className="text-xs font-bold text-foreground">Vincular intimação a um processo existente</p>
+          <div className="relative flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Pesquise por nº processo, título ou envolvidos"
+                value={processoSearch}
+                onChange={(e) => searchProcessos(e.target.value)}
+                className="pl-10 text-sm"
+              />
+              {showProcessoDropdown && processoResults.length > 0 && (
+                <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {processoResults.map((p) => (
+                    <button
+                      key={p.id}
+                      className="w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors border-b border-border/30 last:border-0"
+                      onClick={() => selectProcesso(p)}
+                    >
+                      <p className="text-sm font-mono font-semibold text-primary">{p.numero_processo || 'Sem número'}</p>
+                      {p.titulo_acao && <p className="text-xs text-muted-foreground">{p.titulo_acao}</p>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-10 px-4 font-medium"
+              disabled={!linkedProcesso}
+              onClick={() => {
+                if (linkedProcesso) {
+                  toast.success('Processo vinculado com sucesso!');
+                }
+              }}
+            >
+              Vincular
+            </Button>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+              <Scale className="h-3.5 w-3.5" />
+              Cadastrar processo
+            </Button>
+            <Button size="sm" className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Gavel className="h-3.5 w-3.5" />
+              Cadastrar processo com IA
+            </Button>
+          </div>
+        </div>
+
         {/* Processo vinculado card */}
         <div className="border border-border/60 rounded-lg p-4 bg-muted/10 space-y-2">
           <p className="text-xs font-bold text-foreground">Processo vinculado</p>
           <div className="flex items-center gap-2">
             <span className="text-sm text-primary font-semibold font-mono">
-              {intimacao.processo_cnj || 'Não identificado'}
+              {linkedProcesso?.numero || intimacao.processo_cnj || 'Não identificado'}
             </span>
-            {intimacao.processo_cnj && <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />}
+            {(linkedProcesso || intimacao.processo_cnj) && <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />}
           </div>
-          {intimacao.processo_titulo && (
+          {(linkedProcesso?.titulo || intimacao.processo_titulo) && (
             <>
               <p className="text-xs font-bold text-foreground mt-2">Assunto</p>
-              <p className="text-sm text-muted-foreground">{intimacao.processo_titulo}</p>
+              <p className="text-sm text-muted-foreground">{linkedProcesso?.titulo || intimacao.processo_titulo}</p>
             </>
           )}
           {intimacao.tribunal && (
