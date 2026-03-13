@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { Calendar } from '@/components/agenda/Calendar';
 import { CompromissoModal } from '@/components/agenda/CompromissoModal';
@@ -6,17 +6,14 @@ import { DayEventsModal } from '@/components/agenda/DayEventsModal';
 import { GoogleCalendarConnect } from '@/components/agenda/GoogleCalendarConnect';
 import { ConfirmacoesPendentes } from '@/components/agenda/ConfirmacoesPendentes';
 import { useCompromissos } from '@/hooks/useCompromissos';
-import { useIntimacoes, type IntimacaoEvent } from '@/hooks/useIntimacoes';
+import { useIntimacoes } from '@/hooks/useIntimacoes';
 import { Compromisso, ConfirmacaoStatus } from '@/types/compromissos';
 import { 
   Loader2, 
   CalendarDays, 
-  Gavel, 
-  Clock, 
-  Users,
   Plus,
-  Phone,
-  Scale
+  Filter,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -70,73 +67,55 @@ export default function AgendaPage() {
     await updateCompromisso(id, { confirmacao_status: newStatus });
   };
 
-  const filters: { label: string; value: FilterType; icon: typeof CalendarDays; dot: string }[] = [
-    { label: 'Todos', value: 'todos', icon: CalendarDays, dot: 'bg-primary' },
-    { label: 'Prazos', value: 'Prazo', icon: Clock, dot: 'bg-amber-500' },
-    { label: 'Audiências', value: 'Audiência', icon: Gavel, dot: 'bg-red-500' },
-    { label: 'Reuniões', value: 'Reunião', icon: Users, dot: 'bg-blue-500' },
-    { label: 'Intimações', value: 'Intimação', icon: Scale, dot: 'bg-purple-500' },
-  ];
-
   return (
     <AppLayout>
-      {/* Premium Header */}
+      {/* Header */}
       <div className="sticky top-0 z-20 bg-card/95 backdrop-blur-md border-b border-border/60">
         <div className="flex items-center justify-between px-5 py-4 md:px-8">
           <div>
             <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">
               Agenda
             </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {filteredCompromissos.length} compromisso{filteredCompromissos.length !== 1 ? 's' : ''}
-              {filteredIntimacoes.length > 0 && ` · ${filteredIntimacoes.length} intimaç${filteredIntimacoes.length !== 1 ? 'ões' : 'ão'}`}
-            </p>
           </div>
           
           <div className="flex items-center gap-2">
-            <Button
-              variant={showConfirmacoes ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setShowConfirmacoes(!showConfirmacoes)}
-              className="gap-2 rounded-full"
-            >
-              <Phone className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline text-xs">Confirmações</span>
+            {/* Filter buttons matching reference */}
+            <div className="hidden md:flex items-center gap-1 border border-border rounded-lg overflow-hidden">
+              {['Tipo', 'Situação'].map((label) => (
+                <button
+                  key={label}
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-medium transition-all border-r border-border last:border-r-0",
+                    label === 'Tipo'
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted/60"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs rounded-lg">
+              <Filter className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Filtros</span>
             </Button>
             
+            <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg">
+              <Settings className="h-3.5 w-3.5" />
+            </Button>
+
             <GoogleCalendarConnect />
             
             <Button 
               onClick={handleNewCompromisso}
               size="sm"
-              className="gap-2 rounded-full shadow-enterprise"
+              className="gap-2 rounded-lg shadow-sm"
             >
               <Plus className="h-3.5 w-3.5" />
               <span className="hidden sm:inline text-xs">Novo</span>
             </Button>
           </div>
-        </div>
-
-        {/* Premium Filter Pills */}
-        <div className="flex items-center gap-1.5 px-5 pb-3 md:px-8 overflow-x-auto scrollbar-stable">
-          {filters.map(({ label, value, dot }) => (
-            <button
-              key={value}
-              onClick={() => setFilter(value)}
-              className={cn(
-                "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap",
-                filter === value
-                  ? "bg-primary text-primary-foreground shadow-soft"
-                  : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
-            >
-              <div className={cn(
-                "w-1.5 h-1.5 rounded-full",
-                filter === value ? "bg-primary-foreground" : dot
-              )} />
-              {label}
-            </button>
-          ))}
         </div>
       </div>
       
@@ -150,29 +129,13 @@ export default function AgendaPage() {
             <p className="text-sm text-muted-foreground font-medium">Carregando agenda...</p>
           </div>
         ) : (
-          <div className={cn(
-            "grid gap-6",
-            showConfirmacoes ? "grid-cols-1 lg:grid-cols-3" : "grid-cols-1"
-          )}>
-            {showConfirmacoes && (
-              <div className="lg:col-span-1 order-first lg:order-last">
-                <ConfirmacoesPendentes 
-                  compromissos={compromissos} 
-                  onEventClick={handleEventClick} 
-                />
-              </div>
-            )}
-            
-            <div className={showConfirmacoes ? "lg:col-span-2" : ""}>
-              <Calendar
-                compromissos={filteredCompromissos}
-                intimacoes={filteredIntimacoes}
-                onDayClick={handleDayClick}
-                onEventClick={handleEventClick}
-                onStatusChange={handleStatusChange}
-              />
-            </div>
-          </div>
+          <Calendar
+            compromissos={filteredCompromissos}
+            intimacoes={filteredIntimacoes}
+            onDayClick={handleDayClick}
+            onEventClick={handleEventClick}
+            onStatusChange={handleStatusChange}
+          />
         )}
       </div>
 
