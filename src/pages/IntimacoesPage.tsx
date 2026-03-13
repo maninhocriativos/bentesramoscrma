@@ -232,224 +232,251 @@ export default function IntimacoesPage() {
 
   return (
     <AppLayout>
-      {/* Header */}
-      <header className="sticky top-0 z-40 w-full bg-card/80 backdrop-blur-md border-b border-border">
-        <div className="flex h-14 md:h-16 items-center justify-between px-3 md:px-6 gap-2">
-          <div className="flex items-center gap-2 md:gap-4 min-w-0">
+      {/* Premium Header with gradient */}
+      <header className="sticky top-0 z-40 w-full border-b border-border bg-gradient-to-r from-card via-card to-secondary/5 backdrop-blur-md">
+        <div className="flex h-16 md:h-[72px] items-center justify-between px-4 md:px-8 gap-3">
+          <div className="flex items-center gap-3 md:gap-4 min-w-0">
             <SidebarTrigger className="md:hidden shrink-0" />
-            <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Scale className="h-4 w-4 text-primary" />
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-md">
+                <Scale className="h-5 w-5 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-base md:text-lg font-semibold text-foreground leading-tight">Intimações</h1>
-                <p className="text-[10px] text-muted-foreground hidden md:block">Monitoramento de publicações oficiais</p>
+                <div className="flex items-center gap-2.5">
+                  <h1 className="text-lg md:text-xl font-bold text-foreground tracking-tight">Intimações</h1>
+                  {unreadCount > 0 && (
+                    <span className="flex items-center justify-center h-6 min-w-6 px-1.5 rounded-full bg-destructive text-destructive-foreground text-xs font-bold animate-pulse">
+                      {unreadCount}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground hidden md:block">Monitoramento de publicações em Diários Oficiais</p>
               </div>
-              {unreadCount > 0 && (
-                <Badge variant="destructive" className="rounded-full text-xs h-5 min-w-5 flex items-center justify-center">
-                  {unreadCount}
-                </Badge>
-              )}
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0">
             {oabNumero && (
-              <Badge variant="outline" className="hidden md:inline-flex text-xs font-medium border-secondary/50">
-                OAB/{oabUf} {oabNumero}
-              </Badge>
+              <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/15 border border-secondary/30">
+                <Gavel className="h-3.5 w-3.5 text-secondary" />
+                <span className="text-xs font-semibold text-foreground">OAB/{oabUf} {oabNumero}</span>
+              </div>
             )}
             <Button
-              variant="default"
-              size="sm"
               onClick={handleSync}
               disabled={syncing || !oabNumero}
-              className="rounded-xl h-8 md:h-9 text-xs md:text-sm shadow-sm"
+              className="rounded-xl h-9 md:h-10 text-xs md:text-sm shadow-sm gap-2"
             >
-              <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
               <span className="hidden md:inline">Sincronizar</span>
             </Button>
           </div>
         </div>
       </header>
 
-      <div className="flex-1 p-4 md:p-6 space-y-5 animate-fade-in">
+      <div className="flex-1 p-4 md:p-8 space-y-6 animate-fade-in">
         {/* OAB Config Warning */}
         {!oabNumero && (
-          <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
-            <CardContent className="flex items-center gap-3 p-4">
-              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Configure sua OAB</p>
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Acesse Configurações → Escritório e adicione seu número da OAB para buscar intimações automaticamente.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200/60 dark:bg-amber-950/20 dark:border-amber-800">
+            <div className="h-10 w-10 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center shrink-0">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">Configure sua OAB</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Acesse Configurações → Escritório para habilitar a busca automática.
+              </p>
+            </div>
+          </div>
         )}
 
-        {/* KPI Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* Premium KPI Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { icon: BookOpen, label: 'Total', value: intimacoes.length, color: 'text-primary' },
-            { icon: AlertTriangle, label: 'Não lidas', value: unreadCount, color: 'text-destructive' },
-            { icon: CheckCircle2, label: 'Lidas', value: intimacoes.length - unreadCount, color: 'text-emerald-600' },
+            { icon: BookOpen, label: 'Total de Publicações', value: intimacoes.length, color: 'text-primary', bg: 'bg-primary/8', ring: 'ring-primary/10' },
+            { icon: AlertTriangle, label: 'Pendentes de Leitura', value: unreadCount, color: 'text-destructive', bg: 'bg-destructive/8', ring: 'ring-destructive/10' },
+            { icon: CheckCircle2, label: 'Já Analisadas', value: intimacoes.length - unreadCount, color: 'text-emerald-600', bg: 'bg-emerald-500/8', ring: 'ring-emerald-500/10' },
             {
-              icon: Clock, label: 'Últimos 7 dias', color: 'text-blue-600',
+              icon: Clock, label: 'Últimos 7 Dias', color: 'text-blue-600', bg: 'bg-blue-500/8', ring: 'ring-blue-500/10',
               value: intimacoes.filter((i) => {
                 if (!i.data_intimacao) return false;
                 return Date.now() - new Date(i.data_intimacao).getTime() < 7 * 24 * 60 * 60 * 1000;
               }).length
             },
           ].map((kpi, idx) => (
-            <Card key={idx} className="p-3.5 hover:shadow-md transition-shadow">
-              <div className="flex items-center gap-2 mb-1.5">
-                <kpi.icon className={`h-4 w-4 ${kpi.color}`} />
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{kpi.label}</span>
+            <Card key={idx} className={`relative overflow-hidden p-4 hover:shadow-lg transition-all duration-300 ring-1 ${kpi.ring}`}>
+              <div className={`absolute top-0 right-0 w-20 h-20 ${kpi.bg} rounded-bl-[40px] -mr-2 -mt-2`} />
+              <div className="relative">
+                <div className={`h-9 w-9 rounded-xl ${kpi.bg} flex items-center justify-center mb-3`}>
+                  <kpi.icon className={`h-4.5 w-4.5 ${kpi.color}`} />
+                </div>
+                <p className={`text-3xl font-bold ${kpi.color} tracking-tight`}>{kpi.value}</p>
+                <p className="text-[11px] font-medium text-muted-foreground mt-1 uppercase tracking-wider">{kpi.label}</p>
               </div>
-              <p className={`text-2xl font-bold ${kpi.color}`}>{kpi.value}</p>
             </Card>
           ))}
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
-          <div className="relative flex-1 w-full md:max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por CNJ, título, conteúdo..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 rounded-xl shadow-soft border-0 bg-card"
-            />
+        {/* Search & Filters Bar */}
+        <Card className="p-3 shadow-sm">
+          <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por CNJ, título, tribunal, conteúdo..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 h-10 rounded-xl border-border/50 bg-muted/30 focus:bg-card transition-colors"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1 bg-muted/40 rounded-xl p-1">
+                {(['all', 'unread', 'read'] as const).map((f) => (
+                  <Button
+                    key={f}
+                    variant={filterLida === f ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setFilterLida(f)}
+                    className={`rounded-lg text-xs h-8 px-4 font-medium ${filterLida === f ? 'shadow-sm' : 'hover:bg-card'}`}
+                  >
+                    {f === 'all' ? `Todas (${intimacoes.length})` : f === 'unread' ? `Não lidas (${unreadCount})` : `Lidas (${intimacoes.length - unreadCount})`}
+                  </Button>
+                ))}
+              </div>
+            </div>
           </div>
-          <div className="flex gap-1.5 bg-muted/50 rounded-xl p-1">
-            {(['all', 'unread', 'read'] as const).map((f) => (
-              <Button
-                key={f}
-                variant={filterLida === f ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setFilterLida(f)}
-                className={`rounded-lg text-xs h-7 px-3 ${filterLida === f ? '' : 'hover:bg-card'}`}
-              >
-                {f === 'all' ? 'Todas' : f === 'unread' ? 'Não lidas' : 'Lidas'}
-              </Button>
-            ))}
-          </div>
-        </div>
+        </Card>
 
-        {/* Sync info */}
-        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-          <Clock className="h-3 w-3" />
-          Sincronização automática: 08h e 14h diariamente
-        </p>
+        {/* Sync info strip */}
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+            <Clock className="h-3 w-3" />
+            Sincronização automática: 08h e 14h · Fonte: Escavador / Diários Oficiais
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            {filtered.length} de {intimacoes.length} publicações
+          </p>
+        </div>
 
         {/* List */}
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="flex flex-col items-center justify-center py-24 gap-3">
+            <Loader2 className="h-10 w-10 animate-spin text-secondary" />
+            <p className="text-sm text-muted-foreground">Carregando publicações...</p>
           </div>
         ) : filtered.length === 0 ? (
-          <Card className="p-12 text-center border-dashed">
-            <Scale className="h-12 w-12 text-muted-foreground/20 mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground font-medium">
-              {intimacoes.length === 0
-                ? 'Nenhuma intimação encontrada. Clique em "Sincronizar" para buscar.'
-                : 'Nenhuma intimação corresponde ao filtro.'}
+          <Card className="p-16 text-center border-dashed border-2 border-border/50">
+            <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center mx-auto mb-4">
+              <Scale className="h-8 w-8 text-muted-foreground/30" />
+            </div>
+            <p className="text-sm font-medium text-foreground mb-1">
+              {intimacoes.length === 0 ? 'Nenhuma intimação encontrada' : 'Nenhum resultado para o filtro'}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {intimacoes.length === 0 ? 'Clique em "Sincronizar" para buscar publicações.' : 'Tente alterar os termos da busca.'}
             </p>
           </Card>
         ) : (
-          <div className="space-y-2">
-            {filtered.map((intimacao) => (
-              <Card
-                key={intimacao.id}
-                className={`group transition-all hover:shadow-lg cursor-pointer overflow-hidden ${
-                  !intimacao.lida
-                    ? 'border-l-[3px] border-l-destructive bg-gradient-to-r from-destructive/[0.03] to-transparent'
-                    : 'hover:border-secondary/50'
-                }`}
-                onClick={() => {
-                  setSelectedIntimacao(intimacao);
-                  if (!intimacao.lida) handleMarkRead(intimacao.id);
-                }}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1 space-y-2">
-                      {/* Top row: tipo + tribunal */}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {!intimacao.lida && (
-                          <span className="h-2 w-2 rounded-full bg-destructive shrink-0 animate-pulse" />
-                        )}
-                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${getTipoBadgeColor(intimacao.tipo_intimacao)}`}>
-                          {intimacao.tipo_intimacao}
-                        </span>
-                        {intimacao.tribunal && (
-                          <Badge variant="outline" className="text-[10px] h-5 font-medium">
-                            {intimacao.tribunal}
-                          </Badge>
-                        )}
-                      </div>
+          <div className="space-y-2.5">
+            {filtered.map((intimacao) => {
+              const prazos = calcularPrazos(intimacao);
+              const fmtPrazo = (d: Date | null) => d ? format(d, 'dd/MM/yyyy') : null;
+              const dataFatalStr = fmtPrazo(prazos.dataFatal);
 
-                      {/* CNJ + title */}
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">
-                          {intimacao.processo_cnj || 'Sem CNJ'}
-                        </p>
-                        {intimacao.processo_titulo && (
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                            {intimacao.processo_titulo}
+              return (
+                <Card
+                  key={intimacao.id}
+                  className={`group transition-all duration-200 hover:shadow-xl cursor-pointer overflow-hidden ${
+                    !intimacao.lida
+                      ? 'border-l-4 border-l-destructive bg-gradient-to-r from-destructive/[0.02] to-transparent ring-1 ring-destructive/10'
+                      : 'hover:ring-1 hover:ring-secondary/30'
+                  }`}
+                  onClick={() => {
+                    setSelectedIntimacao(intimacao);
+                    if (!intimacao.lida) handleMarkRead(intimacao.id);
+                  }}
+                >
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1 space-y-2.5">
+                        {/* Top row: badges */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {!intimacao.lida && (
+                            <span className="h-2.5 w-2.5 rounded-full bg-destructive shrink-0 animate-pulse shadow-sm shadow-destructive/30" />
+                          )}
+                          <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-md ${getTipoBadgeColor(intimacao.tipo_intimacao)}`}>
+                            {intimacao.tipo_intimacao}
+                          </span>
+                          {intimacao.tribunal && (
+                            <Badge variant="outline" className="text-[10px] h-5 font-semibold border-secondary/40 bg-secondary/5">
+                              {intimacao.tribunal}
+                            </Badge>
+                          )}
+                          {dataFatalStr && (
+                            <Badge variant="outline" className="text-[10px] h-5 font-semibold border-destructive/30 bg-destructive/5 text-destructive">
+                              <Clock className="h-3 w-3 mr-1" />
+                              Fatal: {dataFatalStr}
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* CNJ + title */}
+                        <div>
+                          <p className="text-sm font-bold text-foreground tracking-tight">
+                            {intimacao.processo_cnj || 'Sem CNJ'}
                           </p>
-                        )}
+                          {intimacao.processo_titulo && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{intimacao.processo_titulo}</p>
+                          )}
+                        </div>
+
+                        {/* Content preview */}
+                        <p className="text-xs text-muted-foreground/80 leading-relaxed line-clamp-3">
+                          {intimacao.conteudo || 'Sem conteúdo detalhado'}
+                        </p>
+
+                        {/* Dates row - premium pills */}
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                          {intimacao.data_disponibilizacao && (
+                            <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-lg">
+                              <CalendarDays className="h-3 w-3 text-secondary" />
+                              Disponibilização: <span className="font-bold text-foreground">{formatDate(intimacao.data_disponibilizacao)}</span>
+                            </span>
+                          )}
+                          {intimacao.data_publicacao && (
+                            <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-lg">
+                              <CalendarDays className="h-3 w-3 text-secondary" />
+                              Publicação: <span className="font-bold text-foreground">{formatDate(intimacao.data_publicacao)}</span>
+                            </span>
+                          )}
+                          {intimacao.data_intimacao && (
+                            <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-lg">
+                              <CalendarDays className="h-3 w-3 text-secondary" />
+                              Intimação: <span className="font-bold text-foreground">{formatDate(intimacao.data_intimacao)}</span>
+                            </span>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Content preview */}
-                      <p className="text-xs text-muted-foreground/80 leading-relaxed whitespace-pre-wrap">
-                        {intimacao.conteudo || 'Sem conteúdo detalhado'}
-                      </p>
-
-                      {/* Dates row */}
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
-                        {intimacao.data_disponibilizacao && (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                            <CalendarDays className="h-3 w-3 text-secondary" />
-                            Disponibilização: <span className="font-semibold text-foreground">{formatDate(intimacao.data_disponibilizacao)}</span>
-                          </span>
-                        )}
-                        {intimacao.data_publicacao && (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                            <CalendarDays className="h-3 w-3 text-secondary" />
-                            Publicação: <span className="font-semibold text-foreground">{formatDate(intimacao.data_publicacao)}</span>
-                          </span>
-                        )}
-                        {intimacao.data_intimacao && (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                            <CalendarDays className="h-3 w-3 text-secondary" />
-                            Intimação: <span className="font-semibold text-foreground">{formatDate(intimacao.data_intimacao)}</span>
-                          </span>
-                        )}
+                      {/* Actions */}
+                      <div className="flex flex-col items-center gap-2 shrink-0 pt-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 rounded-xl opacity-0 group-hover:opacity-100 transition-all hover:bg-secondary/15"
+                          onClick={(e) => handleGenerateReport(intimacao, e)}
+                          title="Gerar relatório PDF"
+                        >
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-secondary transition-colors" />
                       </div>
                     </div>
-
-                    <div className="flex flex-col items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-lg"
-                        onClick={(e) => handleGenerateReport(intimacao, e)}
-                        title="Gerar relatório PDF"
-                      >
-                        <FileText className="h-4 w-4" />
-                      </Button>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground/50" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
-      </div>
 
       {/* Detail Modal - Projuris Style */}
       <Dialog open={!!selectedIntimacao} onOpenChange={() => setSelectedIntimacao(null)}>
