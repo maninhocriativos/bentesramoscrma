@@ -340,7 +340,7 @@ export default function IntimacoesPage() {
                       </div>
 
                       {/* Content preview */}
-                      <p className="text-xs text-muted-foreground/80 line-clamp-2 leading-relaxed">
+                      <p className="text-xs text-muted-foreground/80 leading-relaxed whitespace-pre-wrap">
                         {intimacao.conteudo || 'Sem conteúdo detalhado'}
                       </p>
 
