@@ -192,6 +192,49 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
         })}
       </div>
       
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="px-4 py-3 border-t border-border flex items-center justify-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="text-xs"
+          >
+            Anterior
+          </Button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1)
+            .filter(page => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 2)
+            .map((page, idx, arr) => {
+              const prev = arr[idx - 1];
+              const showEllipsis = prev && page - prev > 1;
+              return (
+                <span key={page} className="flex items-center">
+                  {showEllipsis && <span className="px-1 text-xs text-muted-foreground">…</span>}
+                  <Button
+                    variant={page === currentPage ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setCurrentPage(page)}
+                    className="h-8 w-8 p-0 text-xs"
+                  >
+                    {page}
+                  </Button>
+                </span>
+              );
+            })}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="text-xs"
+          >
+            Próxima
+          </Button>
+        </div>
+      )}
+
       {/* Footer */}
       <div className="px-4 py-2.5 bg-muted/30 border-t border-border flex items-center justify-between">
         <span className="text-xs text-muted-foreground">
