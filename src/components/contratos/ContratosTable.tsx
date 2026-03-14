@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import {
   FileSignature, Clock, CheckCircle2, XCircle, AlertCircle,
   ExternalLink, FileText, MessageSquare,
-  Loader2, AlertTriangle, Search
+  Loader2, AlertTriangle, Search, Megaphone
 } from 'lucide-react';
 import { ContratoComStatus } from '@/pages/ContratosPage';
 import { cn } from '@/lib/utils';
