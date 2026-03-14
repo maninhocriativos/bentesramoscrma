@@ -38,6 +38,7 @@ export function LeadsTableView() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const { countBentesRamos, countTrafego } = useMemo(() => {
     let bentes = 0, trafego = 0;
