@@ -142,9 +142,17 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                           </Badge>
                         </td>
                         <td className="px-4 py-2.5">
-                          <span className="font-medium text-foreground block break-words leading-snug" title={contrato.leadNome}>
-                            {contrato.leadNome}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-foreground break-words leading-snug" title={contrato.leadNome}>
+                              {contrato.leadNome}
+                            </span>
+                            {contrato.tipoOrigem === 'trafego' && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 shrink-0">
+                                <Megaphone className="h-2.5 w-2.5" />
+                                Tráfego
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-2.5">
                           {contrato.signatarioNome ? (
