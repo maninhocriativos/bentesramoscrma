@@ -137,7 +137,7 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((contrato, idx) => {
+                  {paginatedContratos.map((contrato, idx) => {
                     const config = statusConfig[contrato.status] || statusConfig['Aguardando Assinatura'];
                     return (
                       <tr
