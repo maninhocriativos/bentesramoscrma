@@ -44,6 +44,42 @@ export type Database = {
         }
         Relationships: []
       }
+      action_types: {
+        Row: {
+          ativo: boolean | null
+          cor: string | null
+          created_at: string | null
+          descricao: string | null
+          icone: string | null
+          id: string
+          nome: string
+          slug: string
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          cor?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          icone?: string | null
+          id?: string
+          nome: string
+          slug: string
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          cor?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          icone?: string | null
+          id?: string
+          nome?: string
+          slug?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       ai_prompts: {
         Row: {
           content: string
@@ -1716,22 +1752,7 @@ export type Database = {
           model_id?: string | null
           petition_type_slug?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "model_chunks_model_id_fkey"
-            columns: ["model_id"]
-            isOneToOne: false
-            referencedRelation: "petition_models"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "model_chunks_petition_type_slug_fkey"
-            columns: ["petition_type_slug"]
-            isOneToOne: false
-            referencedRelation: "petition_types"
-            referencedColumns: ["slug"]
-          },
-        ]
+        Relationships: []
       }
       modelos_contratos: {
         Row: {
@@ -2068,243 +2089,203 @@ export type Database = {
         }
         Relationships: []
       }
-      petition_audit_log: {
+      petition_models_v2: {
         Row: {
-          action: string
-          actor: string | null
-          created_at: string
-          id: string
-          meta: Json | null
-          petition_id: string | null
-        }
-        Insert: {
-          action: string
-          actor?: string | null
-          created_at?: string
-          id?: string
-          meta?: Json | null
-          petition_id?: string | null
-        }
-        Update: {
-          action?: string
-          actor?: string | null
-          created_at?: string
-          id?: string
-          meta?: Json | null
-          petition_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "petition_audit_log_petition_id_fkey"
-            columns: ["petition_id"]
-            isOneToOne: false
-            referencedRelation: "petitions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      petition_documents: {
-        Row: {
-          created_at: string
-          docx_url: string | null
-          generated_by: string | null
-          html_content: string | null
-          id: string
-          notes: string | null
-          pdf_url: string | null
-          petition_id: string
-          version: number | null
-        }
-        Insert: {
-          created_at?: string
-          docx_url?: string | null
-          generated_by?: string | null
-          html_content?: string | null
-          id?: string
-          notes?: string | null
-          pdf_url?: string | null
-          petition_id: string
-          version?: number | null
-        }
-        Update: {
-          created_at?: string
-          docx_url?: string | null
-          generated_by?: string | null
-          html_content?: string | null
-          id?: string
-          notes?: string | null
-          pdf_url?: string | null
-          petition_id?: string
-          version?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "petition_documents_petition_id_fkey"
-            columns: ["petition_id"]
-            isOneToOne: false
-            referencedRelation: "petitions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      petition_models: {
-        Row: {
-          created_at: string
+          action_type_id: string
+          created_at: string | null
           created_by: string | null
-          extracted_sections: Json | null
-          extracted_text: string | null
-          file_type: string | null
-          file_url: string
+          descricao: string | null
+          field_schema_json: Json | null
           id: string
           is_active: boolean | null
           is_default: boolean | null
-          petition_type_slug: string | null
-          tags: string | null
-          title: string
-          updated_at: string
-          variables_map: Json | null
+          nome: string
+          preview_image_url: string | null
+          prompt_base: string | null
+          requires_bank_data: boolean | null
+          requires_contract_data: boolean | null
+          requires_financial_data: boolean | null
+          requires_special_requests: boolean | null
+          slug: string
+          tags: string[] | null
+          template_file_url: string | null
+          updated_at: string | null
           version: string | null
         }
         Insert: {
-          created_at?: string
+          action_type_id: string
+          created_at?: string | null
           created_by?: string | null
-          extracted_sections?: Json | null
-          extracted_text?: string | null
-          file_type?: string | null
-          file_url: string
+          descricao?: string | null
+          field_schema_json?: Json | null
           id?: string
           is_active?: boolean | null
           is_default?: boolean | null
-          petition_type_slug?: string | null
-          tags?: string | null
-          title: string
-          updated_at?: string
-          variables_map?: Json | null
+          nome: string
+          preview_image_url?: string | null
+          prompt_base?: string | null
+          requires_bank_data?: boolean | null
+          requires_contract_data?: boolean | null
+          requires_financial_data?: boolean | null
+          requires_special_requests?: boolean | null
+          slug: string
+          tags?: string[] | null
+          template_file_url?: string | null
+          updated_at?: string | null
           version?: string | null
         }
         Update: {
-          created_at?: string
+          action_type_id?: string
+          created_at?: string | null
           created_by?: string | null
-          extracted_sections?: Json | null
-          extracted_text?: string | null
-          file_type?: string | null
-          file_url?: string
+          descricao?: string | null
+          field_schema_json?: Json | null
           id?: string
           is_active?: boolean | null
           is_default?: boolean | null
-          petition_type_slug?: string | null
-          tags?: string | null
-          title?: string
-          updated_at?: string
-          variables_map?: Json | null
+          nome?: string
+          preview_image_url?: string | null
+          prompt_base?: string | null
+          requires_bank_data?: boolean | null
+          requires_contract_data?: boolean | null
+          requires_financial_data?: boolean | null
+          requires_special_requests?: boolean | null
+          slug?: string
+          tags?: string[] | null
+          template_file_url?: string | null
+          updated_at?: string | null
           version?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "petition_models_petition_type_slug_fkey"
-            columns: ["petition_type_slug"]
+            foreignKeyName: "petition_models_v2_action_type_id_fkey"
+            columns: ["action_type_id"]
             isOneToOne: false
-            referencedRelation: "petition_types"
-            referencedColumns: ["slug"]
+            referencedRelation: "action_types"
+            referencedColumns: ["id"]
           },
         ]
       }
-      petition_types: {
+      petition_versions: {
         Row: {
-          created_at: string
-          description: string | null
-          enabled: boolean | null
-          icon: string | null
-          slug: string
-          title: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          description?: string | null
-          enabled?: boolean | null
-          icon?: string | null
-          slug: string
-          title: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          description?: string | null
-          enabled?: boolean | null
-          icon?: string | null
-          slug?: string
-          title?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      petitions: {
-        Row: {
-          client_cpf: string | null
-          client_name: string | null
-          created_at: string
+          created_at: string | null
           created_by: string | null
+          form_data_json: Json | null
+          generated_docx_url: string | null
+          generated_pdf_url: string | null
           id: string
-          lead_id: string | null
-          model_id: string | null
-          payload: Json | null
-          petition_type_slug: string | null
-          status: string | null
-          step_current: number | null
-          summary_isa: string | null
-          updated_at: string
-          updated_by: string | null
-          validation_isa: Json | null
+          notes: string | null
+          petition_id: string
+          version_number: number
         }
         Insert: {
-          client_cpf?: string | null
-          client_name?: string | null
-          created_at?: string
+          created_at?: string | null
           created_by?: string | null
+          form_data_json?: Json | null
+          generated_docx_url?: string | null
+          generated_pdf_url?: string | null
           id?: string
-          lead_id?: string | null
-          model_id?: string | null
-          payload?: Json | null
-          petition_type_slug?: string | null
-          status?: string | null
-          step_current?: number | null
-          summary_isa?: string | null
-          updated_at?: string
-          updated_by?: string | null
-          validation_isa?: Json | null
+          notes?: string | null
+          petition_id: string
+          version_number?: number
         }
         Update: {
-          client_cpf?: string | null
-          client_name?: string | null
-          created_at?: string
+          created_at?: string | null
           created_by?: string | null
+          form_data_json?: Json | null
+          generated_docx_url?: string | null
+          generated_pdf_url?: string | null
           id?: string
-          lead_id?: string | null
-          model_id?: string | null
-          payload?: Json | null
-          petition_type_slug?: string | null
-          status?: string | null
-          step_current?: number | null
-          summary_isa?: string | null
-          updated_at?: string
-          updated_by?: string | null
-          validation_isa?: Json | null
+          notes?: string | null
+          petition_id?: string
+          version_number?: number
         }
         Relationships: [
           {
-            foreignKeyName: "petitions_lead_id_fkey"
-            columns: ["lead_id"]
+            foreignKeyName: "petition_versions_petition_id_fkey"
+            columns: ["petition_id"]
+            isOneToOne: false
+            referencedRelation: "petitions_v2"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      petitions_v2: {
+        Row: {
+          action_type_id: string | null
+          cliente_id: string | null
+          created_at: string | null
+          created_by: string | null
+          current_step: number | null
+          form_data_json: Json | null
+          generated_docx_url: string | null
+          generated_pdf_url: string | null
+          generated_text_json: Json | null
+          id: string
+          include_hipossuficiencia: boolean | null
+          include_honorarios: boolean | null
+          include_procuracao: boolean | null
+          model_id: string | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          action_type_id?: string | null
+          cliente_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          current_step?: number | null
+          form_data_json?: Json | null
+          generated_docx_url?: string | null
+          generated_pdf_url?: string | null
+          generated_text_json?: Json | null
+          id?: string
+          include_hipossuficiencia?: boolean | null
+          include_honorarios?: boolean | null
+          include_procuracao?: boolean | null
+          model_id?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          action_type_id?: string | null
+          cliente_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          current_step?: number | null
+          form_data_json?: Json | null
+          generated_docx_url?: string | null
+          generated_pdf_url?: string | null
+          generated_text_json?: Json | null
+          id?: string
+          include_hipossuficiencia?: boolean | null
+          include_honorarios?: boolean | null
+          include_procuracao?: boolean | null
+          model_id?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "petitions_v2_action_type_id_fkey"
+            columns: ["action_type_id"]
+            isOneToOne: false
+            referencedRelation: "action_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "petitions_v2_cliente_id_fkey"
+            columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "leads_juridicos"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "petitions_petition_type_slug_fkey"
-            columns: ["petition_type_slug"]
+            foreignKeyName: "petitions_v2_model_id_fkey"
+            columns: ["model_id"]
             isOneToOne: false
-            referencedRelation: "petition_types"
-            referencedColumns: ["slug"]
+            referencedRelation: "petition_models_v2"
+            referencedColumns: ["id"]
           },
         ]
       }
