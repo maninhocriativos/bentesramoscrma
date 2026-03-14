@@ -131,3 +131,6 @@ verify_jwt = false
 
 [functions.backup-chat-drive]
 verify_jwt = false
+
+[functions.petition-rewrite]
+verify_jwt = false
