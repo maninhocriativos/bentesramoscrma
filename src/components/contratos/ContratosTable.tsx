@@ -232,7 +232,15 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                       {config.label}
                     </Badge>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium break-words">{contrato.leadNome}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-sm font-medium break-words">{contrato.leadNome}</p>
+                        {contrato.tipoOrigem === 'trafego' && (
+                          <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400">
+                            <Megaphone className="h-2 w-2" />
+                            Tráfego
+                          </span>
+                        )}
+                      </div>
                       {contrato.signatarioNome && (
                         <p className="text-[11px] text-muted-foreground">{contrato.signatarioNome}</p>
                       )}
