@@ -94,6 +94,15 @@ export function LeadsTableView() {
     return result;
   }, [leads, search, filterOrigem, filterEtapa, filterLinha, activeStage]);
 
+  // Reset page when filters change
+  const resetPage = () => setCurrentPage(1);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / LEADS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedLeads = viewMode === 'board'
+    ? filteredLeads // Board shows all (kanban needs all leads)
+    : filteredLeads.slice((safePage - 1) * LEADS_PER_PAGE, safePage * LEADS_PER_PAGE);
+
   const origens = useMemo(() => {
     const set = new Set<string>();
     leads.forEach(lead => { if (lead.origem) set.add(lead.origem); });
@@ -103,7 +112,7 @@ export function LeadsTableView() {
   const totalValue = useMemo(() => filteredLeads.reduce((sum, l) => sum + (l.valor_causa || 0), 0), [filteredLeads]);
 
   // Batch fetch processo counts for cards
-  const leadIds = useMemo(() => filteredLeads.map(l => l.id), [filteredLeads]);
+  const leadIds = useMemo(() => paginatedLeads.map(l => l.id), [paginatedLeads]);
   const { data: processoCounts } = useLeadsProcessoCounts(leadIds);
 
   const handleLeadClick = (lead: Lead) => {
