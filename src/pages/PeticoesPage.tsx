@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Package, TrendingUp, CreditCard, AlertTriangle, Ban, ShoppingCart,
   Plus, Search, MoreHorizontal, Eye, Copy, FileText, Archive, ArrowLeft, Trash2,
-  Sparkles, FileCheck2, Clock, CheckCircle2, XCircle, BarChart3, Plane
+  Sparkles, FileCheck2, Clock, CheckCircle2, XCircle, BarChart3, Plane, Wand2
 } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
