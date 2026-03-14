@@ -1,12 +1,20 @@
-import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 
-// Redirect to revisao page - this page is no longer needed separately
 export default function PeticaoSaidaPage() {
   const navigate = useNavigate();
-  // Redirect to peticoes
-  navigate('/peticoes', { replace: true });
+  const { id } = useParams();
+
+  useEffect(() => {
+    if (id) {
+      navigate(`/peticoes/${id}/revisao`, { replace: true });
+    } else {
+      navigate('/peticoes', { replace: true });
+    }
+  }, [id, navigate]);
+
   return (
     <AppLayout>
       <AppHeader title="Redirecionando..." />
