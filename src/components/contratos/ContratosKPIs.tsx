@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Clock, XCircle, CheckCircle2, FileSignature, RefreshCw, Loader2, Send, TrendingUp } from 'lucide-react';
+import { Clock, XCircle, CheckCircle2, FileSignature, RefreshCw, Loader2, Send, TrendingUp, Megaphone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ContratosKPIsProps {
@@ -9,6 +9,7 @@ interface ContratosKPIsProps {
     finalizados: number;
     cancelados: number;
     total: number;
+    trafegoFinalizados?: number;
   };
   onRefresh: () => void;
   onSendContract: () => void;
@@ -43,6 +44,15 @@ export function ContratosKPIs({ data, onRefresh, onSendContract, refreshing = fa
           <span className="text-sm font-medium text-foreground">{taxaSucesso}%</span>
           <span className="text-xs text-muted-foreground">Sucesso</span>
         </div>
+        {(data.trafegoFinalizados ?? 0) > 0 && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 dark:bg-blue-950/30 dark:border-blue-800">
+            <Megaphone className="h-4 w-4 text-blue-600" />
+            <span className="text-sm font-medium text-blue-700 dark:text-blue-400">
+              {data.trafegoFinalizados}
+            </span>
+            <span className="text-xs text-blue-600/70 dark:text-blue-400/70">Tráfego</span>
+          </div>
+        )}
       </div>
 
       {/* Actions */}

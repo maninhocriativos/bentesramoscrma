@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import {
   FileSignature, Clock, CheckCircle2, XCircle, AlertCircle,
   ExternalLink, FileText, MessageSquare,
-  Loader2, AlertTriangle, Search
+  Loader2, AlertTriangle, Search, Megaphone
 } from 'lucide-react';
 import { ContratoComStatus } from '@/pages/ContratosPage';
 import { cn } from '@/lib/utils';
@@ -142,9 +142,17 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                           </Badge>
                         </td>
                         <td className="px-4 py-2.5">
-                          <span className="font-medium text-foreground block break-words leading-snug" title={contrato.leadNome}>
-                            {contrato.leadNome}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-foreground break-words leading-snug" title={contrato.leadNome}>
+                              {contrato.leadNome}
+                            </span>
+                            {contrato.tipoOrigem === 'trafego' && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 shrink-0">
+                                <Megaphone className="h-2.5 w-2.5" />
+                                Tráfego
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-2.5">
                           {contrato.signatarioNome ? (
@@ -224,7 +232,15 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                       {config.label}
                     </Badge>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium break-words">{contrato.leadNome}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-sm font-medium break-words">{contrato.leadNome}</p>
+                        {contrato.tipoOrigem === 'trafego' && (
+                          <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400">
+                            <Megaphone className="h-2 w-2" />
+                            Tráfego
+                          </span>
+                        )}
+                      </div>
                       {contrato.signatarioNome && (
                         <p className="text-[11px] text-muted-foreground">{contrato.signatarioNome}</p>
                       )}

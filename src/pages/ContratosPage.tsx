@@ -36,6 +36,7 @@ export interface ContratoComStatus {
   status: string;
   lastUpdate: string | null;
   key?: string;
+  tipoOrigem?: string | null;
 }
 
 // Map Clicksign status to our status
@@ -87,11 +88,12 @@ export default function ContratosPage() {
       const docKeys: string[] = documents.map((d: any) => d?.key).filter(Boolean);
       const linksByDocKey = new Map<string, string>();
       const signerByDocKey = new Map<string, string>();
+      const leadIdByDocKey = new Map<string, string>();
 
       if (docKeys.length > 0) {
         const { data: reminders, error: remindersError } = await supabase
           .from('contract_reminders')
-          .select('document_key, contract_link, signer_name, document_name')
+          .select('document_key, contract_link, signer_name, document_name, lead_id')
           .in('document_key', docKeys);
 
         if (remindersError) {
@@ -105,27 +107,43 @@ export default function ContratosPage() {
               if (r.signer_name && !signerByDocKey.has(r.document_key)) {
                 signerByDocKey.set(r.document_key, r.signer_name);
               }
+              if (r.lead_id && !leadIdByDocKey.has(r.document_key)) {
+                leadIdByDocKey.set(r.document_key, r.lead_id);
+              }
             }
           }
+        }
+      }
+
+      // Fetch tipo_origem for linked leads
+      const leadIds = [...new Set(leadIdByDocKey.values())].filter(Boolean);
+      const tipoOrigemByLeadId = new Map<string, string>();
+      if (leadIds.length > 0) {
+        const { data: leadsData } = await supabase
+          .from('leads_juridicos')
+          .select('id, tipo_origem')
+          .in('id', leadIds);
+        for (const l of leadsData || []) {
+          if (l.tipo_origem) tipoOrigemByLeadId.set(l.id, l.tipo_origem);
         }
       }
 
       const mappedContracts: ContratoComStatus[] = documents.map((doc: any) => {
         const key: string | undefined = doc?.key;
         const linkContrato = (key && linksByDocKey.get(key)) || (key ? `https://app.clicksign.com/sign/${key}` : 'https://app.clicksign.com');
-        // Get signer from DB first, fallback to API signers array
         const dbSignerName = key ? signerByDocKey.get(key) : null;
         const apiSigners = doc.signers || [];
         const apiSignerNames = apiSigners.map((s: any) => s.name).filter(Boolean);
         const signatarioNome = dbSignerName || (apiSignerNames.length > 0 ? apiSignerNames.join(', ') : null);
-        // Extract category from filename pattern "Documento - Nome.pdf" or path
         const pathParts = (doc.path || '').split('/').filter(Boolean);
         const categoria = pathParts.length > 1 ? pathParts[0] : null;
-        // Try to extract email from API or leave null
         const leadEmail = doc.signers?.[0]?.email || null;
+        const leadId = key ? leadIdByDocKey.get(key) : undefined;
+        const tipoOrigem = leadId ? tipoOrigemByLeadId.get(leadId) || null : null;
         return {
           id: key,
           key,
+          leadId,
           leadNome: doc.filename?.replace(/\.[^/.]+$/, '') || 'Documento',
           leadEmail,
           signatarioNome,
@@ -133,6 +151,7 @@ export default function ContratosPage() {
           linkContrato,
           status: mapClicksignStatus(doc),
           lastUpdate: doc.updated_at || doc.created_at,
+          tipoOrigem,
         };
       });
 
@@ -180,12 +199,15 @@ export default function ContratosPage() {
     }
   });
 
+  const trafegoFinalizados = contratos.filter(c => c.tipoOrigem === 'trafego' && ['Assinado', 'Finalizado'].includes(c.status)).length;
+
   const kpiData = {
     emProcesso: contratos.filter(c => ['Aguardando Assinatura', 'Assinatura Parcial', 'Documento Enviado'].includes(c.status)).length,
     recusados: contratos.filter(c => c.status === 'Recusado').length,
     finalizados: contratos.filter(c => ['Assinado', 'Finalizado'].includes(c.status)).length,
     cancelados: contratos.filter(c => ['Cancelado', 'Prazo Expirado'].includes(c.status)).length,
     total: contratos.length,
+    trafegoFinalizados,
   };
 
   const getTabCount = (tabId: string) => {
