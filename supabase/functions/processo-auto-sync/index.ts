@@ -340,15 +340,22 @@ serve(async (req) => {
 });
 
 function mapStatus(apiStatus: string): string {
+  if (!apiStatus) return "Em Andamento";
+  const s = apiStatus.toLowerCase().trim();
+  
+  // Escavador status_predito values
+  if (s === "ativo" || s === "em andamento") return "Em Andamento";
+  if (s === "inativo" || s === "baixado" || s === "arquivado" || s === "transitado em julgado") return "Arquivado";
+  if (s === "suspenso") return "Suspenso";
+  
+  // Additional mappings
   const statusMap: Record<string, string> = {
-    "Em Andamento": "Em Andamento",
-    Arquivado: "Arquivado",
-    Suspenso: "Suspenso",
-    "Transitado em Julgado": "Arquivado",
-    "Com Sentença": "Em Andamento",
-    "Em Grau Recursal": "Em Andamento",
+    "com sentença": "Em Andamento",
+    "em grau recursal": "Em Andamento",
+    "ganho": "Ganho",
+    "perdido": "Perdido",
   };
-  return statusMap[apiStatus] || "Em Andamento";
+  return statusMap[s] || "Em Andamento";
 }
 
 function parseDataBR(dataBR: string): string {
