@@ -232,7 +232,7 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
 
             {/* Mobile Cards */}
             <div className="md:hidden divide-y divide-border">
-              {filtered.map((contrato) => {
+              {paginatedContratos.map((contrato) => {
                 const config = statusConfig[contrato.status] || statusConfig['Aguardando Assinatura'];
                 return (
                   <div
