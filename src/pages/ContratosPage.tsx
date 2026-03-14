@@ -88,11 +88,12 @@ export default function ContratosPage() {
       const docKeys: string[] = documents.map((d: any) => d?.key).filter(Boolean);
       const linksByDocKey = new Map<string, string>();
       const signerByDocKey = new Map<string, string>();
+      const leadIdByDocKey = new Map<string, string>();
 
       if (docKeys.length > 0) {
         const { data: reminders, error: remindersError } = await supabase
           .from('contract_reminders')
-          .select('document_key, contract_link, signer_name, document_name')
+          .select('document_key, contract_link, signer_name, document_name, lead_id')
           .in('document_key', docKeys);
 
         if (remindersError) {
@@ -106,8 +107,24 @@ export default function ContratosPage() {
               if (r.signer_name && !signerByDocKey.has(r.document_key)) {
                 signerByDocKey.set(r.document_key, r.signer_name);
               }
+              if (r.lead_id && !leadIdByDocKey.has(r.document_key)) {
+                leadIdByDocKey.set(r.document_key, r.lead_id);
+              }
             }
           }
+        }
+      }
+
+      // Fetch tipo_origem for linked leads
+      const leadIds = [...new Set(leadIdByDocKey.values())].filter(Boolean);
+      const tipoOrigemByLeadId = new Map<string, string>();
+      if (leadIds.length > 0) {
+        const { data: leadsData } = await supabase
+          .from('leads_juridicos')
+          .select('id, tipo_origem')
+          .in('id', leadIds);
+        for (const l of leadsData || []) {
+          if (l.tipo_origem) tipoOrigemByLeadId.set(l.id, l.tipo_origem);
         }
       }
 
