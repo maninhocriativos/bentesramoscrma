@@ -199,12 +199,15 @@ export default function ContratosPage() {
     }
   });
 
+  const trafegoFinalizados = contratos.filter(c => c.tipoOrigem === 'trafego' && ['Assinado', 'Finalizado'].includes(c.status)).length;
+
   const kpiData = {
     emProcesso: contratos.filter(c => ['Aguardando Assinatura', 'Assinatura Parcial', 'Documento Enviado'].includes(c.status)).length,
     recusados: contratos.filter(c => c.status === 'Recusado').length,
     finalizados: contratos.filter(c => ['Assinado', 'Finalizado'].includes(c.status)).length,
     cancelados: contratos.filter(c => ['Cancelado', 'Prazo Expirado'].includes(c.status)).length,
     total: contratos.length,
+    trafegoFinalizados,
   };
 
   const getTabCount = (tabId: string) => {
