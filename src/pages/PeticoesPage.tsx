@@ -559,6 +559,12 @@ export default function PeticoesPage() {
           </Tabs>
         </div>
       </ScrollArea>
+
+      <PetitionGeneratorModal
+        open={generatorOpen}
+        onOpenChange={setGeneratorOpen}
+        templates={DOCX_TEMPLATES}
+      />
     </AppLayout>
   );
 }
