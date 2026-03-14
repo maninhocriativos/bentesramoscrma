@@ -31,6 +31,14 @@ const statusConfig: Record<string, { bg: string; text: string; dot: string }> = 
 };
 
 export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosTableProps) {
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const totalPages = Math.ceil(processos.length / ITEMS_PER_PAGE);
+  const paginatedProcessos = processos.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
   const getClienteName = (clienteId: string | null) => {
     if (!clienteId) return null;
     const lead = leads.find(l => l.id === clienteId);
