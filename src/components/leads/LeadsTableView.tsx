@@ -9,6 +9,9 @@ import { KanbanBoard } from '@/components/kanban/KanbanBoard';
 import { useLeads } from '@/hooks/useLeads';
 import { useLeadsProcessoCounts } from '@/hooks/useLeadProcessos';
 import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+const LEADS_PER_PAGE = 30;
 
 const PIPELINE_STAGES: { status: LeadStatus; label: string }[] = [
   { status: 'Lead Frio', label: 'Lead Frio' },
