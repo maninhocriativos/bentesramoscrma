@@ -34,6 +34,28 @@ import { getTemplatesByType, type PetitionTemplate } from '@/lib/petitionTemplat
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { PetitionGeneratorModal } from '@/components/peticoes/PetitionGeneratorModal';
+
+// Available DOCX templates from public/templates
+const DOCX_TEMPLATES = [
+  { name: 'Cancelamento de Voo', path: '/templates/cancelamento-voo.docx' },
+  { name: 'Cancelamento de Voo (Avianca)', path: '/templates/cancelamento-voo-avianca.docx' },
+  { name: 'Diferença Salarial Professor', path: '/templates/diferenca-salarial-professor.docx' },
+  { name: 'Empréstimo Fraudulento INSS', path: '/templates/emprestimo-fraudulento-inss.docx' },
+  { name: 'Idoso INSS RMC', path: '/templates/idoso-inss-rmc.docx' },
+  { name: 'Promoção Policial Militar', path: '/templates/promocao-policial-militar.docx' },
+  { name: 'Promoção Servidor SES Idoso', path: '/templates/promocao-servidor-ses-idoso.docx' },
+  { name: 'Renovação Empréstimo Fraudulento', path: '/templates/renovacao-emprestimo-fraudulento-inss.docx' },
+  { name: 'Revisão Contrato Crefisa', path: '/templates/revisao-contrato-emprestimo-crefisa.doc' },
+  { name: 'Seguro Não Contratado', path: '/templates/seguro-nao-contratado.doc' },
+  { name: 'Servidor Aposentado Idoso', path: '/templates/servidor-aposentado-idoso-emprestimo.docx' },
+  { name: 'Servidor Público Empréstimo', path: '/templates/servidor-publico-emprestimo-nao-reconhecido.docx' },
+  { name: 'Tarifa Bancária', path: '/templates/tarifa-bancaria.doc' },
+  { name: 'Venda Casada CEF Idoso', path: '/templates/venda-casada-cef-idoso.docx' },
+  { name: 'Venda Casada Financiamento Veículo', path: '/templates/venda-casada-financiamento-veiculo.docx' },
+  { name: 'Venda Casada INSS', path: '/templates/venda-casada-inss.doc' },
+  { name: 'Venda Casada', path: '/templates/venda-casada.doc' },
+];
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   Package: <Package className="h-5 w-5" />,
