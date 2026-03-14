@@ -71,7 +71,7 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
             </TableRow>
           </TableHeader>
           <TableBody>
-            {processos.map((processo, index) => {
+            {paginatedProcessos.map((processo, index) => {
               const style = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
               const clienteName = getClienteName(processo.cliente_id);
               const movCount = processo.movimentos_json?.length || 0;
