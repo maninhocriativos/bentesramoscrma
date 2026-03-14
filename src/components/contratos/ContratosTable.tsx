@@ -31,11 +31,14 @@ const statusConfig: Record<string, { label: string; color: string; bgColor: stri
   'Recusado': { label: 'Recusado', color: 'text-red-700', bgColor: 'bg-red-50', icon: <XCircle className="h-3 w-3" /> },
 };
 
+const ITEMS_PER_PAGE = 30;
+
 export function ContratosTable({ contratos }: ContratosTableProps) {
   const { toast } = useToast();
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selectedContrato, setSelectedContrato] = useState<ContratoComStatus | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const sendContractReminder = async (contrato: ContratoComStatus, type: 'soft' | 'urgent') => {
     setSendingReminder(contrato.id);
