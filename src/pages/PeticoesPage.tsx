@@ -246,13 +246,23 @@ export default function PeticoesPage() {
                   </div>
                 </div>
                 
-                <Button 
-                  onClick={() => setActiveTab('nova')} 
-                  className="gap-2 rounded-xl bg-primary hover:bg-primary/90 shadow-md h-11 px-6 shrink-0"
-                >
-                  <Plus className="h-4 w-4" />
-                  Nova Petição
-                </Button>
+                <div className="flex items-center gap-3 shrink-0">
+                  <Button 
+                    onClick={() => setGeneratorOpen(true)} 
+                    className="gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-md h-11 px-5"
+                  >
+                    <Wand2 className="h-4 w-4" />
+                    Gerar com IA
+                  </Button>
+                  <Button 
+                    onClick={() => setActiveTab('nova')} 
+                    variant="outline"
+                    className="gap-2 rounded-xl shadow-sm h-11 px-5 border-border/60"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Nova Petição
+                  </Button>
+                </div>
               </div>
               
               {/* KPI Strip */}
