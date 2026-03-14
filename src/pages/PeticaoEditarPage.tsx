@@ -180,28 +180,50 @@ export default function PeticaoEditarPage() {
       if (!response.ok) throw new Error('Erro ao baixar template');
       const arrayBuffer = await response.arrayBuffer();
       const zip = new PizZip(arrayBuffer);
-      const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, delimiters: { start: '{{', end: '}}' } });
+      const doc = new Docxtemplater(zip, {
+        paragraphLoop: true,
+        linebreaks: true,
+        delimiters: { start: '{{', end: '}}' },
+        nullGetter() { return ''; },
+      });
 
       const pedidoTexts = formData.valores.pedidos_selecionados.map(p => PEDIDOS.find(x => x.value === p)?.label || p);
 
-      doc.render({
-        cliente_nome: formData.cliente.nome_completo, nome: formData.cliente.nome_completo,
-        cpf: formData.cliente.cpf, cliente_cpf: formData.cliente.cpf,
-        rg: formData.cliente.rg, cliente_rg: formData.cliente.rg,
-        estado_civil: formData.cliente.estado_civil, profissao: formData.cliente.profissao,
-        nacionalidade: formData.cliente.nacionalidade, email: formData.cliente.email,
-        telefone: formData.cliente.telefone,
-        endereco: `${formData.endereco.rua}, ${formData.endereco.numero}${formData.endereco.complemento ? ', ' + formData.endereco.complemento : ''}, ${formData.endereco.bairro}`,
-        endereco_cep: formData.endereco.cep, cep: formData.endereco.cep,
-        endereco_rua: formData.endereco.rua, endereco_numero: formData.endereco.numero,
-        endereco_bairro: formData.endereco.bairro, endereco_cidade: formData.endereco.cidade,
-        cidade: formData.endereco.cidade, endereco_uf: formData.endereco.uf, uf: formData.endereco.uf,
-        banco_nome: formData.banco.banco_nome, tipo_produto: formData.banco.tipo_produto,
-        agencia: formData.banco.agencia, conta: formData.banco.conta,
-        data_inicio_contrato: formData.banco.data_inicio, data_fim_contrato: formData.banco.data_fim,
-        valor_cobrado_indevidamente: formData.valores.valor_cobrado, valor_total_causa: formData.valores.valor_total,
-        periodo_inicio: formData.valores.periodo_inicio, periodo_fim: formData.valores.periodo_fim,
-        observacoes_adicionais: formData.valores.observacoes, fatos_juridicos: fatosJuridicos,
+      const templateData: Record<string, string> = {
+        cliente_nome: formData.cliente.nome_completo || '',
+        nome: formData.cliente.nome_completo || '',
+        cpf: formData.cliente.cpf || '',
+        cliente_cpf: formData.cliente.cpf || '',
+        rg: formData.cliente.rg || '',
+        cliente_rg: formData.cliente.rg || '',
+        estado_civil: formData.cliente.estado_civil || '',
+        profissao: formData.cliente.profissao || '',
+        nacionalidade: formData.cliente.nacionalidade || '',
+        email: formData.cliente.email || '',
+        telefone: formData.cliente.telefone || '',
+        endereco: `${formData.endereco.rua || ''}, ${formData.endereco.numero || ''}${formData.endereco.complemento ? ', ' + formData.endereco.complemento : ''}, ${formData.endereco.bairro || ''}`,
+        endereco_cep: formData.endereco.cep || '',
+        cep: formData.endereco.cep || '',
+        endereco_rua: formData.endereco.rua || '',
+        endereco_numero: formData.endereco.numero || '',
+        endereco_complemento: formData.endereco.complemento || '',
+        endereco_bairro: formData.endereco.bairro || '',
+        endereco_cidade: formData.endereco.cidade || '',
+        cidade: formData.endereco.cidade || '',
+        endereco_uf: formData.endereco.uf || '',
+        uf: formData.endereco.uf || '',
+        banco_nome: formData.banco.banco_nome || '',
+        tipo_produto: formData.banco.tipo_produto || '',
+        agencia: formData.banco.agencia || '',
+        conta: formData.banco.conta || '',
+        data_inicio_contrato: formData.banco.data_inicio || '',
+        data_fim_contrato: formData.banco.data_fim || '',
+        valor_cobrado_indevidamente: formData.valores.valor_cobrado || '',
+        valor_total_causa: formData.valores.valor_total || '',
+        periodo_inicio: formData.valores.periodo_inicio || '',
+        periodo_fim: formData.valores.periodo_fim || '',
+        observacoes_adicionais: formData.valores.observacoes || '',
+        fatos_juridicos: fatosJuridicos || '',
         pedido_danos_morais: pedidoTexts.includes('Danos Morais') ? 'Sim' : '',
         pedido_repeticao_indebito: pedidoTexts.includes('Repetição de Indébito') ? 'Sim' : '',
         pedido_tutela_urgencia: pedidoTexts.includes('Tutela de Urgência') ? 'Sim' : '',
@@ -211,7 +233,20 @@ export default function PeticaoEditarPage() {
         pedido_cancelamento_contrato: pedidoTexts.includes('Cancelamento de Contrato') ? 'Sim' : '',
         pedido_exclusao_cadastros: pedidoTexts.includes('Exclusão de Cadastros Restritivos') ? 'Sim' : '',
         data_atual: new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }),
-      });
+      };
+
+      console.log('Template data:', templateData);
+
+      try {
+        doc.render(templateData);
+      } catch (renderErr: unknown) {
+        console.error('Docxtemplater render error:', renderErr);
+        if (renderErr && typeof renderErr === 'object' && 'properties' in renderErr) {
+          const props = (renderErr as { properties: { errors: Array<{ properties: { explanation: string } }> } }).properties;
+          console.error('Template errors:', JSON.stringify(props.errors?.map(e => e.properties?.explanation)));
+        }
+        throw new Error('Erro ao processar template. Verifique se os placeholders do modelo estão no formato {{tag}}.');
+      }
 
       const blob = doc.getZip().generate({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
       const fileName = `peticao-${petitionId}-${Date.now()}.docx`;
