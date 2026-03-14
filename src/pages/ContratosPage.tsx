@@ -131,19 +131,19 @@ export default function ContratosPage() {
       const mappedContracts: ContratoComStatus[] = documents.map((doc: any) => {
         const key: string | undefined = doc?.key;
         const linkContrato = (key && linksByDocKey.get(key)) || (key ? `https://app.clicksign.com/sign/${key}` : 'https://app.clicksign.com');
-        // Get signer from DB first, fallback to API signers array
         const dbSignerName = key ? signerByDocKey.get(key) : null;
         const apiSigners = doc.signers || [];
         const apiSignerNames = apiSigners.map((s: any) => s.name).filter(Boolean);
         const signatarioNome = dbSignerName || (apiSignerNames.length > 0 ? apiSignerNames.join(', ') : null);
-        // Extract category from filename pattern "Documento - Nome.pdf" or path
         const pathParts = (doc.path || '').split('/').filter(Boolean);
         const categoria = pathParts.length > 1 ? pathParts[0] : null;
-        // Try to extract email from API or leave null
         const leadEmail = doc.signers?.[0]?.email || null;
+        const leadId = key ? leadIdByDocKey.get(key) : undefined;
+        const tipoOrigem = leadId ? tipoOrigemByLeadId.get(leadId) || null : null;
         return {
           id: key,
           key,
+          leadId,
           leadNome: doc.filename?.replace(/\.[^/.]+$/, '') || 'Documento',
           leadEmail,
           signatarioNome,
@@ -151,6 +151,7 @@ export default function ContratosPage() {
           linkContrato,
           status: mapClicksignStatus(doc),
           lastUpdate: doc.updated_at || doc.created_at,
+          tipoOrigem,
         };
       });
 
