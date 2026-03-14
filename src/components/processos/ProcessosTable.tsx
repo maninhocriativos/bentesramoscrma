@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Table,
   TableBody,
@@ -12,13 +13,15 @@ import { Lead } from '@/types/leads';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Scale, ChevronRight, Building2, Gavel, FileText } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+const ITEMS_PER_PAGE = 30;
 
 interface ProcessosTableProps {
   processos: Processo[];
   onProcessoClick: (processo: Processo) => void;
   leads: Lead[];
 }
-
 const statusConfig: Record<string, { bg: string; text: string; dot: string }> = {
   'Em Andamento': { bg: 'bg-blue-50 dark:bg-blue-950/30', text: 'text-blue-700 dark:text-blue-400', dot: 'bg-blue-500' },
   'Suspenso': { bg: 'bg-amber-50 dark:bg-amber-950/30', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500' },
