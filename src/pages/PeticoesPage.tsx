@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Package, TrendingUp, CreditCard, AlertTriangle, Ban, ShoppingCart,
   Plus, Search, MoreHorizontal, Eye, Copy, FileText, Archive, ArrowLeft, Trash2,
-  Sparkles, FileCheck2, Clock, CheckCircle2, XCircle, BarChart3, Plane
+  Sparkles, FileCheck2, Clock, CheckCircle2, XCircle, BarChart3, Plane, Wand2
 } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
@@ -34,6 +34,28 @@ import { getTemplatesByType, type PetitionTemplate } from '@/lib/petitionTemplat
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { PetitionGeneratorModal } from '@/components/peticoes/PetitionGeneratorModal';
+
+// Available DOCX templates from public/templates
+const DOCX_TEMPLATES = [
+  { name: 'Cancelamento de Voo', path: '/templates/cancelamento-voo.docx' },
+  { name: 'Cancelamento de Voo (Avianca)', path: '/templates/cancelamento-voo-avianca.docx' },
+  { name: 'Diferença Salarial Professor', path: '/templates/diferenca-salarial-professor.docx' },
+  { name: 'Empréstimo Fraudulento INSS', path: '/templates/emprestimo-fraudulento-inss.docx' },
+  { name: 'Idoso INSS RMC', path: '/templates/idoso-inss-rmc.docx' },
+  { name: 'Promoção Policial Militar', path: '/templates/promocao-policial-militar.docx' },
+  { name: 'Promoção Servidor SES Idoso', path: '/templates/promocao-servidor-ses-idoso.docx' },
+  { name: 'Renovação Empréstimo Fraudulento', path: '/templates/renovacao-emprestimo-fraudulento-inss.docx' },
+  { name: 'Revisão Contrato Crefisa', path: '/templates/revisao-contrato-emprestimo-crefisa.doc' },
+  { name: 'Seguro Não Contratado', path: '/templates/seguro-nao-contratado.doc' },
+  { name: 'Servidor Aposentado Idoso', path: '/templates/servidor-aposentado-idoso-emprestimo.docx' },
+  { name: 'Servidor Público Empréstimo', path: '/templates/servidor-publico-emprestimo-nao-reconhecido.docx' },
+  { name: 'Tarifa Bancária', path: '/templates/tarifa-bancaria.doc' },
+  { name: 'Venda Casada CEF Idoso', path: '/templates/venda-casada-cef-idoso.docx' },
+  { name: 'Venda Casada Financiamento Veículo', path: '/templates/venda-casada-financiamento-veiculo.docx' },
+  { name: 'Venda Casada INSS', path: '/templates/venda-casada-inss.doc' },
+  { name: 'Venda Casada', path: '/templates/venda-casada.doc' },
+];
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   Package: <Package className="h-5 w-5" />,
@@ -135,6 +157,7 @@ export default function PeticoesPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('lista');
   const [selectedTypeForTemplate, setSelectedTypeForTemplate] = useState<PetitionType | null>(null);
+  const [generatorOpen, setGeneratorOpen] = useState(false);
 
   // Stats
   const stats = useMemo(() => {
@@ -223,13 +246,23 @@ export default function PeticoesPage() {
                   </div>
                 </div>
                 
-                <Button 
-                  onClick={() => setActiveTab('nova')} 
-                  className="gap-2 rounded-xl bg-primary hover:bg-primary/90 shadow-md h-11 px-6 shrink-0"
-                >
-                  <Plus className="h-4 w-4" />
-                  Nova Petição
-                </Button>
+                <div className="flex items-center gap-3 shrink-0">
+                  <Button 
+                    onClick={() => setGeneratorOpen(true)} 
+                    className="gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-md h-11 px-5"
+                  >
+                    <Wand2 className="h-4 w-4" />
+                    Gerar com IA
+                  </Button>
+                  <Button 
+                    onClick={() => setActiveTab('nova')} 
+                    variant="outline"
+                    className="gap-2 rounded-xl shadow-sm h-11 px-5 border-border/60"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Nova Petição
+                  </Button>
+                </div>
               </div>
               
               {/* KPI Strip */}
@@ -526,6 +559,12 @@ export default function PeticoesPage() {
           </Tabs>
         </div>
       </ScrollArea>
+
+      <PetitionGeneratorModal
+        open={generatorOpen}
+        onOpenChange={setGeneratorOpen}
+        templates={DOCX_TEMPLATES}
+      />
     </AppLayout>
   );
 }
