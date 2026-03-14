@@ -36,6 +36,7 @@ export interface ContratoComStatus {
   status: string;
   lastUpdate: string | null;
   key?: string;
+  tipoOrigem?: string | null;
 }
 
 // Map Clicksign status to our status
