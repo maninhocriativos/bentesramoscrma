@@ -86,6 +86,16 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
     );
   });
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedContratos = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+
+  // Reset page when search changes
+  const handleSearchChange = (val: string) => {
+    setSearch(val);
+    setCurrentPage(1);
+  };
+
   return (
     <>
       <div className="rounded-lg border border-border bg-card overflow-hidden">
