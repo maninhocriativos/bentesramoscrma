@@ -59,10 +59,9 @@ serve(async (req) => {
 
     if (processoId) {
       query = query.eq("id", processoId);
-    } else if (!forceAll) {
-      // Only get processes that need sync based on their status priority
-      query = query.eq("notificacao_ativa", true);
     }
+    // Sync ALL processes (not just those with notifications active)
+    // Notifications are only sent to those with notificacao_ativa = true
 
     const { data: allProcessos, error: fetchError } = await query
       .order("status", { ascending: true }) // Em Andamento first
