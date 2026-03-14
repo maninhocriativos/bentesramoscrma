@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Table,
   TableBody,
@@ -12,13 +13,15 @@ import { Lead } from '@/types/leads';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Scale, ChevronRight, Building2, Gavel, FileText } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+const ITEMS_PER_PAGE = 30;
 
 interface ProcessosTableProps {
   processos: Processo[];
   onProcessoClick: (processo: Processo) => void;
   leads: Lead[];
 }
-
 const statusConfig: Record<string, { bg: string; text: string; dot: string }> = {
   'Em Andamento': { bg: 'bg-blue-50 dark:bg-blue-950/30', text: 'text-blue-700 dark:text-blue-400', dot: 'bg-blue-500' },
   'Suspenso': { bg: 'bg-amber-50 dark:bg-amber-950/30', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500' },
@@ -28,6 +31,14 @@ const statusConfig: Record<string, { bg: string; text: string; dot: string }> = 
 };
 
 export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosTableProps) {
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const totalPages = Math.ceil(processos.length / ITEMS_PER_PAGE);
+  const paginatedProcessos = processos.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
   const getClienteName = (clienteId: string | null) => {
     if (!clienteId) return null;
     const lead = leads.find(l => l.id === clienteId);
@@ -60,7 +71,7 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
             </TableRow>
           </TableHeader>
           <TableBody>
-            {processos.map((processo, index) => {
+            {paginatedProcessos.map((processo, index) => {
               const style = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
               const clienteName = getClienteName(processo.cliente_id);
               const movCount = processo.movimentos_json?.length || 0;
@@ -144,7 +155,7 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
 
       {/* Mobile Cards */}
       <div className="md:hidden divide-y divide-border">
-        {processos.map((processo) => {
+        {paginatedProcessos.map((processo) => {
           const style = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
           const clienteName = getClienteName(processo.cliente_id);
           
@@ -181,6 +192,49 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
         })}
       </div>
       
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="px-4 py-3 border-t border-border flex items-center justify-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="text-xs"
+          >
+            Anterior
+          </Button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1)
+            .filter(page => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 2)
+            .map((page, idx, arr) => {
+              const prev = arr[idx - 1];
+              const showEllipsis = prev && page - prev > 1;
+              return (
+                <span key={page} className="flex items-center">
+                  {showEllipsis && <span className="px-1 text-xs text-muted-foreground">…</span>}
+                  <Button
+                    variant={page === currentPage ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setCurrentPage(page)}
+                    className="h-8 w-8 p-0 text-xs"
+                  >
+                    {page}
+                  </Button>
+                </span>
+              );
+            })}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="text-xs"
+          >
+            Próxima
+          </Button>
+        </div>
+      )}
+
       {/* Footer */}
       <div className="px-4 py-2.5 bg-muted/30 border-t border-border flex items-center justify-between">
         <span className="text-xs text-muted-foreground">
