@@ -105,7 +105,7 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
           <Input
             placeholder="Busca rápida..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="border-0 bg-transparent shadow-none focus-visible:ring-0 h-8 px-0 text-sm"
           />
           <span className="text-xs text-muted-foreground whitespace-nowrap">{filtered.length} de {contratos.length}</span>
