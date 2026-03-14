@@ -155,7 +155,7 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
 
       {/* Mobile Cards */}
       <div className="md:hidden divide-y divide-border">
-        {processos.map((processo) => {
+        {paginatedProcessos.map((processo) => {
           const style = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
           const clienteName = getClienteName(processo.cliente_id);
           
