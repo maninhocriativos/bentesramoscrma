@@ -149,9 +149,9 @@ export function LeadsTableView() {
         totalLeads={filteredLeads.length}
         totalValue={totalValue}
         search={search}
-        onSearchChange={setSearch}
+        onSearchChange={(v) => { setSearch(v); resetPage(); }}
         filterOrigem={filterOrigem}
-        onFilterOrigemChange={setFilterOrigem}
+        onFilterOrigemChange={(v) => { setFilterOrigem(v); resetPage(); }}
         filterResponsavel={filterResponsavel}
         onFilterResponsavelChange={setFilterResponsavel}
         filterEtapa={filterEtapa}
