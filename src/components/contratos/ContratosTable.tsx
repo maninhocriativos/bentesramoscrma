@@ -31,11 +31,14 @@ const statusConfig: Record<string, { label: string; color: string; bgColor: stri
   'Recusado': { label: 'Recusado', color: 'text-red-700', bgColor: 'bg-red-50', icon: <XCircle className="h-3 w-3" /> },
 };
 
+const ITEMS_PER_PAGE = 30;
+
 export function ContratosTable({ contratos }: ContratosTableProps) {
   const { toast } = useToast();
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selectedContrato, setSelectedContrato] = useState<ContratoComStatus | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const sendContractReminder = async (contrato: ContratoComStatus, type: 'soft' | 'urgent') => {
     setSendingReminder(contrato.id);
@@ -83,6 +86,16 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
     );
   });
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedContratos = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+
+  // Reset page when search changes
+  const handleSearchChange = (val: string) => {
+    setSearch(val);
+    setCurrentPage(1);
+  };
+
   return (
     <>
       <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -92,7 +105,7 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
           <Input
             placeholder="Busca rápida..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="border-0 bg-transparent shadow-none focus-visible:ring-0 h-8 px-0 text-sm"
           />
           <span className="text-xs text-muted-foreground whitespace-nowrap">{filtered.length} de {contratos.length}</span>
@@ -124,7 +137,7 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((contrato, idx) => {
+                  {paginatedContratos.map((contrato, idx) => {
                     const config = statusConfig[contrato.status] || statusConfig['Aguardando Assinatura'];
                     return (
                       <tr
@@ -219,7 +232,7 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
 
             {/* Mobile Cards */}
             <div className="md:hidden divide-y divide-border">
-              {filtered.map((contrato) => {
+              {paginatedContratos.map((contrato) => {
                 const config = statusConfig[contrato.status] || statusConfig['Aguardando Assinatura'];
                 return (
                   <div
@@ -279,6 +292,57 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
               })}
             </div>
           </>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/20">
+            <span className="text-xs text-muted-foreground">
+              Mostrando {((safePage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(safePage * ITEMS_PER_PAGE, filtered.length)} de {filtered.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                disabled={safePage <= 1}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              >
+                Anterior
+              </Button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                .reduce<(number | 'ellipsis')[]>((acc, p, i, arr) => {
+                  if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('ellipsis');
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((p, i) =>
+                  p === 'ellipsis' ? (
+                    <span key={`e${i}`} className="px-1 text-xs text-muted-foreground">…</span>
+                  ) : (
+                    <Button
+                      key={p}
+                      variant={p === safePage ? 'default' : 'ghost'}
+                      size="sm"
+                      className="h-7 w-7 p-0 text-xs"
+                      onClick={() => setCurrentPage(p)}
+                    >
+                      {p}
+                    </Button>
+                  )
+                )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                disabled={safePage >= totalPages}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              >
+                Próxima
+              </Button>
+            </div>
+          </div>
         )}
       </div>
 

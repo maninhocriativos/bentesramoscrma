@@ -9,6 +9,9 @@ import { KanbanBoard } from '@/components/kanban/KanbanBoard';
 import { useLeads } from '@/hooks/useLeads';
 import { useLeadsProcessoCounts } from '@/hooks/useLeadProcessos';
 import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+const LEADS_PER_PAGE = 30;
 
 const PIPELINE_STAGES: { status: LeadStatus; label: string }[] = [
   { status: 'Lead Frio', label: 'Lead Frio' },
@@ -35,6 +38,7 @@ export function LeadsTableView() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const { countBentesRamos, countTrafego } = useMemo(() => {
     let bentes = 0, trafego = 0;
@@ -90,6 +94,15 @@ export function LeadsTableView() {
     return result;
   }, [leads, search, filterOrigem, filterEtapa, filterLinha, activeStage]);
 
+  // Reset page when filters change
+  const resetPage = () => setCurrentPage(1);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / LEADS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedLeads = viewMode === 'board'
+    ? filteredLeads // Board shows all (kanban needs all leads)
+    : filteredLeads.slice((safePage - 1) * LEADS_PER_PAGE, safePage * LEADS_PER_PAGE);
+
   const origens = useMemo(() => {
     const set = new Set<string>();
     leads.forEach(lead => { if (lead.origem) set.add(lead.origem); });
@@ -99,7 +112,7 @@ export function LeadsTableView() {
   const totalValue = useMemo(() => filteredLeads.reduce((sum, l) => sum + (l.valor_causa || 0), 0), [filteredLeads]);
 
   // Batch fetch processo counts for cards
-  const leadIds = useMemo(() => filteredLeads.map(l => l.id), [filteredLeads]);
+  const leadIds = useMemo(() => paginatedLeads.map(l => l.id), [paginatedLeads]);
   const { data: processoCounts } = useLeadsProcessoCounts(leadIds);
 
   const handleLeadClick = (lead: Lead) => {
@@ -136,9 +149,9 @@ export function LeadsTableView() {
         totalLeads={filteredLeads.length}
         totalValue={totalValue}
         search={search}
-        onSearchChange={setSearch}
+        onSearchChange={(v) => { setSearch(v); resetPage(); }}
         filterOrigem={filterOrigem}
-        onFilterOrigemChange={setFilterOrigem}
+        onFilterOrigemChange={(v) => { setFilterOrigem(v); resetPage(); }}
         filterResponsavel={filterResponsavel}
         onFilterResponsavelChange={setFilterResponsavel}
         filterEtapa={filterEtapa}
@@ -163,7 +176,7 @@ export function LeadsTableView() {
       {viewMode === 'cards' ? (
         <div className="flex-1 overflow-auto px-4 lg:px-6 py-4">
           <LeadCardGrid
-            leads={filteredLeads}
+            leads={paginatedLeads}
             onLeadClick={handleLeadClick}
             onMoveStage={handleMoveStage}
             allStages={PIPELINE_STAGES}
@@ -172,11 +185,62 @@ export function LeadsTableView() {
         </div>
       ) : viewMode === 'list' ? (
         <div className="flex-1 overflow-hidden px-4 lg:px-6 py-4">
-          <LeadsDataTable leads={filteredLeads} onLeadClick={handleLeadClick} onMoveStage={handleMoveStage} allStages={PIPELINE_STAGES} />
+          <LeadsDataTable leads={paginatedLeads} onLeadClick={handleLeadClick} onMoveStage={handleMoveStage} allStages={PIPELINE_STAGES} />
         </div>
       ) : (
         <div className="flex-1 overflow-auto px-4 lg:px-6 py-4">
           <KanbanBoard leads={filteredLeads} onLeadClick={handleLeadClick} />
+        </div>
+      )}
+
+      {/* Pagination */}
+      {viewMode !== 'board' && totalPages > 1 && (
+        <div className="flex items-center justify-between px-4 lg:px-6 py-3 border-t border-border bg-card">
+          <span className="text-xs text-muted-foreground">
+            Mostrando {((safePage - 1) * LEADS_PER_PAGE) + 1}–{Math.min(safePage * LEADS_PER_PAGE, filteredLeads.length)} de {filteredLeads.length}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              disabled={safePage <= 1}
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            >
+              Anterior
+            </Button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+              .reduce<(number | 'ellipsis')[]>((acc, p, i, arr) => {
+                if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('ellipsis');
+                acc.push(p);
+                return acc;
+              }, [])
+              .map((p, i) =>
+                p === 'ellipsis' ? (
+                  <span key={`e${i}`} className="px-1 text-xs text-muted-foreground">…</span>
+                ) : (
+                  <Button
+                    key={p}
+                    variant={p === safePage ? 'default' : 'ghost'}
+                    size="sm"
+                    className="h-7 w-7 p-0 text-xs"
+                    onClick={() => setCurrentPage(p)}
+                  >
+                    {p}
+                  </Button>
+                )
+              )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              disabled={safePage >= totalPages}
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            >
+              Próxima
+            </Button>
+          </div>
         </div>
       )}
 
