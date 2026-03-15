@@ -139,6 +139,178 @@ ${context ? `Contexto do caso: ${context}` : ''}`
 }
 
 // ============================================================
+// EXTRAÇÃO E ANÁLISE DE PDF
+// ============================================================
+async function extractAndAnalyzePDF(pdfUrl: string, context?: string): Promise<string> {
+  console.log('[ISA-MULTIMODAL] 📄 Extraindo texto de PDF:', pdfUrl);
+  
+  try {
+    // Baixar o PDF
+    const pdfResponse = await fetch(pdfUrl);
+    if (!pdfResponse.ok) throw new Error('Falha ao baixar PDF');
+    
+    const pdfBuffer = await pdfResponse.arrayBuffer();
+    const pdfBytes = new Uint8Array(pdfBuffer);
+    
+    // Extrair texto bruto do PDF (parser simples para PDFs com texto embutido)
+    let extractedText = '';
+    const textDecoder = new TextDecoder('latin1');
+    const rawText = textDecoder.decode(pdfBytes);
+    
+    // Método 1: Extrair streams de texto do PDF
+    const textMatches = rawText.matchAll(/\(([^)]+)\)/g);
+    const textParts: string[] = [];
+    for (const match of textMatches) {
+      const part = match[1];
+      // Filtrar lixo binário - manter apenas strings com caracteres legíveis
+      if (part.length > 2 && /[a-zA-ZÀ-ÿ0-9]{2,}/.test(part)) {
+        textParts.push(part);
+      }
+    }
+    
+    // Método 2: Buscar texto entre BT/ET (text objects)
+    const btEtMatches = rawText.matchAll(/BT\s([\s\S]*?)ET/g);
+    for (const match of btEtMatches) {
+      const block = match[1];
+      const tjMatches = block.matchAll(/\(([^)]+)\)\s*Tj/g);
+      for (const tj of tjMatches) {
+        if (tj[1].length > 1) textParts.push(tj[1]);
+      }
+    }
+    
+    extractedText = textParts.join(' ').substring(0, 8000);
+    
+    console.log('[ISA-MULTIMODAL] Texto extraído do PDF:', extractedText.substring(0, 200));
+    
+    // Se não extraiu texto suficiente, provavelmente é um PDF escaneado
+    // Nesse caso, converter primeira página para imagem via Vision
+    if (extractedText.trim().length < 50) {
+      console.log('[ISA-MULTIMODAL] PDF parece escaneado, usando Vision para OCR...');
+      
+      // Para PDFs escaneados, enviar a URL diretamente para o modelo de visão
+      // Alguns modelos conseguem ler PDFs diretamente
+      const apiUrl = LOVABLE_API_KEY 
+        ? 'https://ai.gateway.lovable.dev/v1/chat/completions'
+        : 'https://api.openai.com/v1/chat/completions';
+      
+      const apiKey = LOVABLE_API_KEY || OPENAI_API_KEY;
+      
+      const ocrResponse = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: LOVABLE_API_KEY ? 'google/gemini-2.5-flash' : 'gpt-4o',
+          messages: [
+            {
+              role: 'system',
+              content: `Você é um extrator de dados de documentos jurídicos e financeiros.
+Analise este documento PDF e extraia TODAS as informações relevantes.
+
+Se for um CONTRATO DE EMPRÉSTIMO/FINANCIAMENTO:
+- Taxa de juros mensal e anual
+- CET (Custo Efetivo Total)
+- Valor financiado e valor total com juros
+- Presença de SEGURO PRESTAMISTA (valor e se foi contratado voluntariamente)
+- Presença de CAPITALIZAÇÃO ou título de capitalização
+- IOF, tarifas e outros encargos
+- Prazo e número de parcelas
+
+Se for um EXTRATO BANCÁRIO:
+- Débitos suspeitos (seguros, capitalização, tarifas)
+- Parcelas de empréstimo
+- Descontos recorrentes não identificados
+
+${context ? `Contexto: ${context}` : ''}`
+            },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Analise este documento e extraia todas as informações financeiras e jurídicas relevantes:' },
+                { 
+                  type: 'image_url', 
+                  image_url: { url: pdfUrl } 
+                }
+              ]
+            }
+          ],
+          max_tokens: 2000,
+        }),
+      });
+      
+      if (ocrResponse.ok) {
+        const ocrData = await ocrResponse.json();
+        const ocrAnalysis = ocrData.choices?.[0]?.message?.content || '';
+        if (ocrAnalysis.length > 20) {
+          console.log('[ISA-MULTIMODAL] ✅ OCR do PDF concluído');
+          return ocrAnalysis;
+        }
+      }
+      
+      return '[PDF recebido mas não foi possível extrair o texto. O documento pode estar protegido ou ser uma imagem escaneada de baixa qualidade. Peça ao cliente para enviar uma foto legível das páginas principais do contrato.]';
+    }
+    
+    // Analisar o texto extraído com GPT
+    const apiUrl = LOVABLE_API_KEY 
+      ? 'https://ai.gateway.lovable.dev/v1/chat/completions'
+      : 'https://api.openai.com/v1/chat/completions';
+    
+    const apiKey = LOVABLE_API_KEY || OPENAI_API_KEY;
+    
+    const analysisResponse = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: LOVABLE_API_KEY ? 'google/gemini-2.5-flash' : 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: `Você é uma assistente jurídica especializada em Direito Bancário.
+Analise o texto do documento abaixo e identifique:
+
+1. **JUROS ABUSIVOS**: Taxa de juros mensal e anual. Compare com a taxa média do Banco Central. Indique se são abusivos.
+2. **SEGURO PRESTAMISTA**: Verifique se há cobrança de seguro prestamista. Informe o valor e se configura venda casada.
+3. **CAPITALIZAÇÃO**: Verifique se há título de capitalização ou seguro de capitalização embutido.
+4. **CET**: Custo Efetivo Total - se estiver muito acima da taxa de juros, há encargos ocultos.
+5. **TARIFAS ABUSIVAS**: TAC, TEC, tarifa de cadastro, etc.
+6. **IOF**: Valor cobrado.
+7. **VALOR FINANCIADO vs VALOR TOTAL**: Calcule a diferença.
+
+Formate a resposta de forma clara e objetiva para que um advogado possa avaliar rapidamente.
+
+${context ? `Contexto adicional: ${context}` : ''}`
+          },
+          {
+            role: 'user',
+            content: `Analise este documento:\n\n${extractedText}`
+          }
+        ],
+        max_tokens: 2000,
+      }),
+    });
+    
+    if (!analysisResponse.ok) {
+      throw new Error('Falha na análise do PDF');
+    }
+    
+    const analysisData = await analysisResponse.json();
+    const analysis = analysisData.choices?.[0]?.message?.content || '';
+    
+    console.log('[ISA-MULTIMODAL] ✅ Análise do PDF concluída:', analysis.substring(0, 100));
+    return analysis;
+    
+  } catch (error) {
+    console.error('[ISA-MULTIMODAL] ❌ Erro ao processar PDF:', error);
+    return '[Não foi possível processar o PDF. Peça ao cliente para enviar fotos das páginas principais do contrato.]';
+  }
+}
+
+// ============================================================
 // CLASSIFICAÇÃO E EXTRAÇÃO DE DOCUMENTOS
 // ============================================================
 async function classifyAndExtractDocument(
@@ -529,6 +701,48 @@ serve(async (req: Request) => {
             transcription,
             message: `🎙️ Transcrição do áudio: "${transcription}"`
           };
+        } else if (mediaType === 'document' || mimeType?.includes('pdf') || mediaUrl?.match(/\.pdf/i)) {
+          // PDF / Documento - extrair texto e analisar
+          const pdfAnalysis = await extractAndAnalyzePDF(mediaUrl, context);
+          result = {
+            success: true,
+            mediaType: 'pdf',
+            analysis: pdfAnalysis,
+            message: pdfAnalysis
+          };
+          
+          // Se tem leadId, salvar no checklist de documentos
+          if (leadId) {
+            const docType = 'CONTRATO_PDF';
+            const { data: existingDoc } = await supabase
+              .from('lead_docs_checklist')
+              .select('id')
+              .eq('lead_id', leadId)
+              .eq('doc_type', docType)
+              .maybeSingle();
+            
+            if (existingDoc) {
+              await supabase
+                .from('lead_docs_checklist')
+                .update({
+                  received: true,
+                  received_at: new Date().toISOString(),
+                  notes: `PDF recebido e analisado via WhatsApp`
+                })
+                .eq('id', existingDoc.id);
+            } else {
+              await supabase
+                .from('lead_docs_checklist')
+                .insert({
+                  lead_id: leadId,
+                  doc_type: docType,
+                  doc_label: 'Contrato PDF',
+                  received: true,
+                  received_at: new Date().toISOString(),
+                  notes: `PDF recebido e analisado via WhatsApp`
+                });
+            }
+          }
         } else if (mediaType === 'image' || mimeType?.includes('image') || mediaUrl?.match(/\.(jpg|jpeg|png|gif|webp)/i)) {
           // Se tem leadId, processar como documento
           if (leadId) {
@@ -554,7 +768,7 @@ serve(async (req: Request) => {
           result = { 
             success: false, 
             error: 'Tipo de mídia não suportado',
-            supportedTypes: ['audio', 'image']
+            supportedTypes: ['audio', 'image', 'pdf', 'document']
           };
         }
         break;

@@ -241,7 +241,9 @@ async function processMedia(
       if (result.analysis) {
         return { 
           processed: true, 
-          content: `[IMAGEM ANALISADA]: ${result.analysis}` 
+          content: result.mediaType === 'pdf' 
+            ? `[PDF ANALISADO - CONTRATO/EXTRATO]: ${result.analysis}` 
+            : `[IMAGEM ANALISADA]: ${result.analysis}` 
         };
       }
       if (result.documentType) {
