@@ -161,6 +161,23 @@ Cadência de reativação:
 - Horários: 09h às 17h (exceto 12h-14h)
 - Fuso: América/Manaus (UTC-4)
 
+## 🚀 FLUXO EXPRESSO — LEAD DE ANÚNCIO (CTWA / META ADS)
+Quando o contexto indicar [LEAD DE ANÚNCIO] ou a primeira mensagem do cliente for genérica de anúncio (ex: "Olá! Tenho interesse e queria mais informações", "Quero saber se meu contrato tem venda casada"), siga este fluxo DIFERENTE:
+
+1. **Apresente-se brevemente** e demonstre que entendeu o interesse do cliente
+2. **Solicite IMEDIATAMENTE o contrato e o extrato bancário**: "Para que eu possa te ajudar de forma rápida e assertiva, preciso que me envie duas coisas: 📄 O contrato do empréstimo/financiamento e 📊 O extrato bancário recente. Pode ser foto mesmo!"
+3. **Quando receber os documentos, ANALISE-OS** procurando:
+   - Juros abusivos (taxas acima da média de mercado)
+   - Seguro prestamista embutido sem consentimento
+   - Capitalização de juros (anatocismo)
+   - Tarifas indevidas
+   - Venda casada de produtos
+4. **Informe o resultado da análise preliminar** de forma acessível (sem parecer jurídico formal)
+5. **Encaminhe para Amanda**: "Vou encaminhar sua documentação para a Dra. Amanda, nossa advogada especialista, que vai entrar em contato com você para dar sequência à análise. 😊"
+6. Inclua a tag [ENCAMINHAR_AMANDA] na resposta após a análise
+
+⚠️ IMPORTANTE: Este fluxo é EXCLUSIVO para leads vindos de anúncio. Para demais leads, siga o fluxo normal de 6 etapas.
+
 ## QUANDO TRANSFERIR PARA ATENDIMENTO HUMANO
 Você DEVE transferir para atendimento humano (Amanda) quando:
 1. **Não souber responder** uma pergunta do cliente
@@ -645,15 +662,17 @@ serve(async (req: Request) => {
     // Buscar estado atual do lead e tipo de origem
     let currentLeadState: string | null = null;
     let tipoOrigem: string | null = null;
+    let fonteTrafego: string | null = null;
     
     if (leadId) {
       const { data: lead } = await supabase
         .from('leads_juridicos')
-        .select('lead_state, tipo_origem')
+        .select('lead_state, tipo_origem, fonte_trafego')
         .eq('id', leadId)
         .maybeSingle();
       currentLeadState = lead?.lead_state || null;
       tipoOrigem = lead?.tipo_origem || null;
+      fonteTrafego = lead?.fonte_trafego || null;
     }
 
     // 🛑 ISA só processa leads de TRÁFEGO
@@ -704,6 +723,16 @@ serve(async (req: Request) => {
     let context = '';
     if (leadId) {
       context = await getLeadContext(leadId, supabase);
+      
+      // 🚀 Detectar lead de anúncio (CTWA) para ativar fluxo expresso
+      const isAdLead = tipoOrigem === 'trafego' || fonteTrafego === 'meta_ads' || fonteTrafego === 'facebook_ads';
+      const isFirstContact = !currentLeadState || currentLeadState === 'NEW' || currentLeadState === 'TRIAGE';
+      const isAdMessage = /tenho interesse|queria mais informações|quero saber|venda casada|meu contrato/i.test(mensagem);
+      
+      if (isAdLead && (isFirstContact || isAdMessage)) {
+        context = `[LEAD DE ANÚNCIO - FLUXO EXPRESSO]\n⚡ Este lead veio de um anúncio Meta Ads. Siga o FLUXO EXPRESSO: apresente-se, solicite IMEDIATAMENTE contrato e extrato, analise os documentos quando recebidos, e encaminhe para Amanda.\n\n${context}`;
+        console.log('[ISA-REPLY] 🚀 Fluxo expresso ativado para lead de anúncio');
+      }
     } else {
       context = `[NOVO CONTATO - Sem lead vinculado ainda]\nNome informado: ${nome}\nTelefone: ${telefone}\n`;
     }
@@ -719,9 +748,12 @@ serve(async (req: Request) => {
     const needsHandoff = respostaIsa.includes('[TRANSFERIR_HUMANO]');
     // 🏥 Detectar encaminhamento para aposentadoria (Dra. Kariny)
     const needsAposentadoriaEncaminhamento = respostaIsa.includes('[ENCAMINHAR_APOSENTADORIA]');
+    // 📄 Detectar encaminhamento para Amanda (análise documental de anúncio)
+    const needsAmandaEncaminhamento = respostaIsa.includes('[ENCAMINHAR_AMANDA]');
     const respostaLimpa = respostaIsa
       .replace('[TRANSFERIR_HUMANO]', '')
       .replace('[ENCAMINHAR_APOSENTADORIA]', '')
+      .replace('[ENCAMINHAR_AMANDA]', '')
       .trim();
 
     // Truncar resposta para WhatsApp (máx 500 chars)
@@ -899,6 +931,107 @@ serve(async (req: Request) => {
           direcao: 'Interna',
         });
       }
+    }
+
+    // 📄 Encaminhamento para Amanda (análise documental de lead de anúncio)
+    if (needsAmandaEncaminhamento && leadId) {
+      console.log('[ISA-REPLY] 📄 Análise concluída — encaminhando documentação para Amanda');
+
+      const leadNomeAmanda = subscriber?.nome || nome || 'Cliente';
+
+      // Ativar atendimento humano para Amanda dar sequência
+      await supabase
+        .from('manychat_subscribers')
+        .update({ 
+          atendimento_humano: true, 
+          atendimento_humano_desde: new Date().toISOString() 
+        })
+        .eq('subscriber_id', subscriberId);
+
+      await supabase
+        .from('leads_juridicos')
+        .update({ isa_ativa: false, owner_tipo: 'humano' })
+        .eq('id', leadId);
+
+      // Notificar Amanda por e-mail
+      try {
+        const RESEND_API_KEY_AMANDA = Deno.env.get('RESEND_API_KEY');
+        if (RESEND_API_KEY_AMANDA) {
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${RESEND_API_KEY_AMANDA}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: 'ISA <noreply@bentesramos.com.br>',
+              to: ['amanda@bentesramos.com.br'],
+              subject: `📄 ISA analisou documentos: ${leadNomeAmanda}`,
+              html: `
+                <h2>Análise Documental Concluída</h2>
+                <p><strong>Cliente:</strong> ${leadNomeAmanda}</p>
+                <p><strong>Origem:</strong> Lead de anúncio Meta Ads</p>
+                <p><strong>Análise da ISA:</strong></p>
+                <blockquote>${respostaFinal.substring(0, 800)}</blockquote>
+                <hr/>
+                <p>O cliente aguarda seu contato para dar sequência. Acesse o CRM para ver os documentos.</p>
+              `,
+            }),
+          });
+          console.log('[ISA-REPLY] 📧 E-mail enviado para Amanda (análise documental)');
+        }
+      } catch (emailErr) {
+        console.error('[ISA-REPLY] Erro ao enviar e-mail para Amanda:', emailErr);
+      }
+
+      // Notificação interna
+      try {
+        const { data: amandaPerfil } = await supabase
+          .from('perfis')
+          .select('id')
+          .eq('email', 'amanda@bentesramos.com.br')
+          .maybeSingle();
+
+        if (amandaPerfil?.id) {
+          await supabase.from('notificacoes_internas').insert({
+            user_id: amandaPerfil.id,
+            titulo: `📄 Análise concluída: ${leadNomeAmanda}`,
+            mensagem: `A ISA analisou os documentos de ${leadNomeAmanda} (lead de anúncio) e encaminhou para você.`,
+            tipo: 'encaminhamento',
+            lead_id: leadId,
+            link: '/chat',
+            dados: {
+              subscriber_id: subscriberId,
+              analise_isa: respostaFinal.substring(0, 500),
+            },
+          });
+        }
+      } catch (notifErr) {
+        console.error('[ISA-REPLY] Erro ao criar notificação:', notifErr);
+      }
+
+      // Registrar interação
+      await supabase.from('interacoes').insert({
+        cliente_id: leadId,
+        tipo: 'WhatsApp',
+        resumo: 'ISA analisou documentos e encaminhou para Amanda',
+        detalhes: `Lead de anúncio. Análise da ISA: ${respostaFinal.substring(0, 500)}`,
+        direcao: 'Interna',
+      });
+
+      await supabase.from('system_events').insert({
+        tipo: 'encaminhamento',
+        fonte: 'isa-reply-zapi',
+        acao: 'encaminhamento_amanda_analise',
+        lead_id: leadId,
+        dados: {
+          subscriber_id: subscriberId,
+          nome_cliente: leadNomeAmanda,
+          analise: respostaFinal.substring(0, 500),
+          origem: 'fluxo_expresso_anuncio',
+        },
+        processado: true,
+      });
     }
 
     await supabase.from('manychat_mensagens').insert({
