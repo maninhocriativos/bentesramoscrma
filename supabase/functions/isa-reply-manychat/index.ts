@@ -933,6 +933,107 @@ serve(async (req: Request) => {
       }
     }
 
+    // 📄 Encaminhamento para Amanda (análise documental de lead de anúncio)
+    if (needsAmandaEncaminhamento && leadId) {
+      console.log('[ISA-REPLY] 📄 Análise concluída — encaminhando documentação para Amanda');
+
+      const leadNomeAmanda = subscriber?.nome || nome || 'Cliente';
+
+      // Ativar atendimento humano para Amanda dar sequência
+      await supabase
+        .from('manychat_subscribers')
+        .update({ 
+          atendimento_humano: true, 
+          atendimento_humano_desde: new Date().toISOString() 
+        })
+        .eq('subscriber_id', subscriberId);
+
+      await supabase
+        .from('leads_juridicos')
+        .update({ isa_ativa: false, owner_tipo: 'humano' })
+        .eq('id', leadId);
+
+      // Notificar Amanda por e-mail
+      try {
+        const RESEND_API_KEY_AMANDA = Deno.env.get('RESEND_API_KEY');
+        if (RESEND_API_KEY_AMANDA) {
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${RESEND_API_KEY_AMANDA}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: 'ISA <noreply@bentesramos.com.br>',
+              to: ['amanda@bentesramos.com.br'],
+              subject: `📄 ISA analisou documentos: ${leadNomeAmanda}`,
+              html: `
+                <h2>Análise Documental Concluída</h2>
+                <p><strong>Cliente:</strong> ${leadNomeAmanda}</p>
+                <p><strong>Origem:</strong> Lead de anúncio Meta Ads</p>
+                <p><strong>Análise da ISA:</strong></p>
+                <blockquote>${respostaFinal.substring(0, 800)}</blockquote>
+                <hr/>
+                <p>O cliente aguarda seu contato para dar sequência. Acesse o CRM para ver os documentos.</p>
+              `,
+            }),
+          });
+          console.log('[ISA-REPLY] 📧 E-mail enviado para Amanda (análise documental)');
+        }
+      } catch (emailErr) {
+        console.error('[ISA-REPLY] Erro ao enviar e-mail para Amanda:', emailErr);
+      }
+
+      // Notificação interna
+      try {
+        const { data: amandaPerfil } = await supabase
+          .from('perfis')
+          .select('id')
+          .eq('email', 'amanda@bentesramos.com.br')
+          .maybeSingle();
+
+        if (amandaPerfil?.id) {
+          await supabase.from('notificacoes_internas').insert({
+            user_id: amandaPerfil.id,
+            titulo: `📄 Análise concluída: ${leadNomeAmanda}`,
+            mensagem: `A ISA analisou os documentos de ${leadNomeAmanda} (lead de anúncio) e encaminhou para você.`,
+            tipo: 'encaminhamento',
+            lead_id: leadId,
+            link: '/chat',
+            dados: {
+              subscriber_id: subscriberId,
+              analise_isa: respostaFinal.substring(0, 500),
+            },
+          });
+        }
+      } catch (notifErr) {
+        console.error('[ISA-REPLY] Erro ao criar notificação:', notifErr);
+      }
+
+      // Registrar interação
+      await supabase.from('interacoes').insert({
+        cliente_id: leadId,
+        tipo: 'WhatsApp',
+        resumo: 'ISA analisou documentos e encaminhou para Amanda',
+        detalhes: `Lead de anúncio. Análise da ISA: ${respostaFinal.substring(0, 500)}`,
+        direcao: 'Interna',
+      });
+
+      await supabase.from('system_events').insert({
+        tipo: 'encaminhamento',
+        fonte: 'isa-reply-zapi',
+        acao: 'encaminhamento_amanda_analise',
+        lead_id: leadId,
+        dados: {
+          subscriber_id: subscriberId,
+          nome_cliente: leadNomeAmanda,
+          analise: respostaFinal.substring(0, 500),
+          origem: 'fluxo_expresso_anuncio',
+        },
+        processado: true,
+      });
+    }
+
     await supabase.from('manychat_mensagens').insert({
       subscriber_id: subscriberId,
       subscriber_nome: subscriber?.nome || nome,
