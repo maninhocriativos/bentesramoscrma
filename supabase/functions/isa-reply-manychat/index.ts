@@ -723,6 +723,16 @@ serve(async (req: Request) => {
     let context = '';
     if (leadId) {
       context = await getLeadContext(leadId, supabase);
+      
+      // 🚀 Detectar lead de anúncio (CTWA) para ativar fluxo expresso
+      const isAdLead = tipoOrigem === 'trafego' || fonteTrafego === 'meta_ads' || fonteTrafego === 'facebook_ads';
+      const isFirstContact = !currentLeadState || currentLeadState === 'NEW' || currentLeadState === 'TRIAGE';
+      const isAdMessage = /tenho interesse|queria mais informações|quero saber|venda casada|meu contrato/i.test(mensagem);
+      
+      if (isAdLead && (isFirstContact || isAdMessage)) {
+        context = `[LEAD DE ANÚNCIO - FLUXO EXPRESSO]\n⚡ Este lead veio de um anúncio Meta Ads. Siga o FLUXO EXPRESSO: apresente-se, solicite IMEDIATAMENTE contrato e extrato, analise os documentos quando recebidos, e encaminhe para Amanda.\n\n${context}`;
+        console.log('[ISA-REPLY] 🚀 Fluxo expresso ativado para lead de anúncio');
+      }
     } else {
       context = `[NOVO CONTATO - Sem lead vinculado ainda]\nNome informado: ${nome}\nTelefone: ${telefone}\n`;
     }
