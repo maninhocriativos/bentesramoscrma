@@ -701,6 +701,48 @@ serve(async (req: Request) => {
             transcription,
             message: `🎙️ Transcrição do áudio: "${transcription}"`
           };
+        } else if (mediaType === 'document' || mimeType?.includes('pdf') || mediaUrl?.match(/\.pdf/i)) {
+          // PDF / Documento - extrair texto e analisar
+          const pdfAnalysis = await extractAndAnalyzePDF(mediaUrl, context);
+          result = {
+            success: true,
+            mediaType: 'pdf',
+            analysis: pdfAnalysis,
+            message: pdfAnalysis
+          };
+          
+          // Se tem leadId, salvar no checklist de documentos
+          if (leadId) {
+            const docType = 'CONTRATO_PDF';
+            const { data: existingDoc } = await supabase
+              .from('lead_docs_checklist')
+              .select('id')
+              .eq('lead_id', leadId)
+              .eq('doc_type', docType)
+              .maybeSingle();
+            
+            if (existingDoc) {
+              await supabase
+                .from('lead_docs_checklist')
+                .update({
+                  received: true,
+                  received_at: new Date().toISOString(),
+                  notes: `PDF recebido e analisado via WhatsApp`
+                })
+                .eq('id', existingDoc.id);
+            } else {
+              await supabase
+                .from('lead_docs_checklist')
+                .insert({
+                  lead_id: leadId,
+                  doc_type: docType,
+                  doc_label: 'Contrato PDF',
+                  received: true,
+                  received_at: new Date().toISOString(),
+                  notes: `PDF recebido e analisado via WhatsApp`
+                });
+            }
+          }
         } else if (mediaType === 'image' || mimeType?.includes('image') || mediaUrl?.match(/\.(jpg|jpeg|png|gif|webp)/i)) {
           // Se tem leadId, processar como documento
           if (leadId) {
@@ -726,7 +768,7 @@ serve(async (req: Request) => {
           result = { 
             success: false, 
             error: 'Tipo de mídia não suportado',
-            supportedTypes: ['audio', 'image']
+            supportedTypes: ['audio', 'image', 'pdf', 'document']
           };
         }
         break;
