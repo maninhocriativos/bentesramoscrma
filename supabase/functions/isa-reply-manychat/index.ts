@@ -662,15 +662,17 @@ serve(async (req: Request) => {
     // Buscar estado atual do lead e tipo de origem
     let currentLeadState: string | null = null;
     let tipoOrigem: string | null = null;
+    let fonteTrafego: string | null = null;
     
     if (leadId) {
       const { data: lead } = await supabase
         .from('leads_juridicos')
-        .select('lead_state, tipo_origem')
+        .select('lead_state, tipo_origem, fonte_trafego')
         .eq('id', leadId)
         .maybeSingle();
       currentLeadState = lead?.lead_state || null;
       tipoOrigem = lead?.tipo_origem || null;
+      fonteTrafego = lead?.fonte_trafego || null;
     }
 
     // 🛑 ISA só processa leads de TRÁFEGO
