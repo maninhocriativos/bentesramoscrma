@@ -3478,7 +3478,7 @@ const ManyChatInboxContent = () => {
 
             {/* Input de Mensagem */}
             <div className={`min-h-[52px] md:h-[66px] px-2 md:px-4 py-1.5 md:py-2 flex items-center gap-1 md:gap-2 ${themeClasses.header} border-t ${isDark ? 'border-[#222D34]/50' : 'border-[#E9EDEF]/50'}`}>
-              <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*,audio/*,video/*" className="hidden" />
+              <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" className="hidden" />
               
               <Button variant="ghost" size="icon" className={`hidden md:flex h-10 w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}>
                 <Smile className="h-6 w-6" />
