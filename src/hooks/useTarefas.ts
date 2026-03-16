@@ -83,11 +83,8 @@ export function useTarefas(processoId?: string) {
 
   // Realtime subscriptions
   useEffect(() => {
-    console.log('🔔 Tarefas: Configurando realtime...');
-    
     const channel = supabase.channel('tarefas-realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tarefas' }, (payload) => {
-        console.log('🆕 Tarefa inserida:', payload.new);
         const newTarefa = payload.new as Tarefa;
         if (!processoId || newTarefa.processo_id === processoId) {
           setTarefas(prev => {
@@ -101,21 +98,16 @@ export function useTarefas(processoId?: string) {
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tarefas' }, (payload) => {
-        console.log('✏️ Tarefa atualizada:', payload.new);
         const updated = payload.new as Tarefa;
         setTarefas(prev => prev.map(t => t.id === updated.id ? updated : t));
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tarefas' }, (payload) => {
-        console.log('🗑️ Tarefa deletada:', payload.old);
         const deleted = payload.old as { id: string };
         setTarefas(prev => prev.filter(t => t.id !== deleted.id));
       })
-      .subscribe((status) => {
-        console.log('📡 Tarefas channel status:', status);
-      });
+      .subscribe();
 
     return () => {
-      console.log('🔕 Tarefas: Removendo canal realtime');
       supabase.removeChannel(channel);
     };
   }, [processoId]);
