@@ -1,13 +1,14 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { ProcessosTable } from '@/components/processos/ProcessosTable';
-import { ProcessoModalExpanded } from '@/components/processos/ProcessoModalExpanded';
-import { ConsultaProcessoExterno } from '@/components/processos/ConsultaProcessoExterno';
 import { useProcessos } from '@/hooks/useProcessos';
 import { usePerfil } from '@/hooks/usePerfil';
 import { useLeads } from '@/hooks/useLeads';
 import { Processo, ProcessoStatus } from '@/types/processos';
+
+const ProcessoModalExpanded = lazy(() => import('@/components/processos/ProcessoModalExpanded').then(m => ({ default: m.ProcessoModalExpanded })));
+const ConsultaProcessoExterno = lazy(() => import('@/components/processos/ConsultaProcessoExterno').then(m => ({ default: m.ConsultaProcessoExterno })));
 import { 
   Loader2, Search, Scale, Plus, FileText, AlertTriangle, 
   CheckCircle2, PauseCircle, Archive, Trophy, XCircle,
@@ -41,6 +42,24 @@ export default function ProcessosPage() {
   const [statusFilter, setStatusFilter] = useState<string>('todos');
   const [syncing, setSyncing] = useState(false);
 
+  const handleProcessoClick = useCallback((processo: Processo) => {
+    setSelectedProcesso(processo);
+    setIsNew(false);
+    setIsModalOpen(true);
+  }, []);
+
+  const handleNewProcesso = useCallback(() => {
+    setSelectedProcesso(null);
+    setIsNew(true);
+    setIsModalOpen(true);
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setIsModalOpen(false);
+    setSelectedProcesso(null);
+    setIsNew(false);
+  }, []);
+
   useEffect(() => {
     if (!perfilLoading && !canAccessProcessos) {
       navigate('/dashboard');
@@ -57,6 +76,19 @@ export default function ProcessosPage() {
     const perdidos = processos.filter(p => p.status === 'Perdido').length;
     return { total, emAndamento, suspensos, arquivados, ganhos, perdidos };
   }, [processos]);
+
+  const filteredProcessos = useMemo(() => processos.filter(p => {
+    const search = searchTerm.toLowerCase();
+    const matchesSearch = (
+      (p.numero_processo?.toLowerCase().includes(search)) ||
+      (p.titulo_acao?.toLowerCase().includes(search)) ||
+      (p.advogado_responsavel?.toLowerCase().includes(search)) ||
+      (p.assunto?.toLowerCase().includes(search)) ||
+      (p.orgao_julgador?.toLowerCase().includes(search))
+    );
+    const matchesStatus = statusFilter === 'todos' || p.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  }), [processos, searchTerm, statusFilter]);
 
   const handleSyncAll = async () => {
     setSyncing(true);
@@ -86,37 +118,6 @@ export default function ProcessosPage() {
   }
 
   if (!canAccessProcessos) return null;
-
-  const handleProcessoClick = (processo: Processo) => {
-    setSelectedProcesso(processo);
-    setIsNew(false);
-    setIsModalOpen(true);
-  };
-
-  const handleNewProcesso = () => {
-    setSelectedProcesso(null);
-    setIsNew(true);
-    setIsModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setSelectedProcesso(null);
-    setIsNew(false);
-  };
-
-  const filteredProcessos = processos.filter(p => {
-    const search = searchTerm.toLowerCase();
-    const matchesSearch = (
-      (p.numero_processo?.toLowerCase().includes(search)) ||
-      (p.titulo_acao?.toLowerCase().includes(search)) ||
-      (p.advogado_responsavel?.toLowerCase().includes(search)) ||
-      (p.assunto?.toLowerCase().includes(search)) ||
-      (p.orgao_julgador?.toLowerCase().includes(search))
-    );
-    const matchesStatus = statusFilter === 'todos' || p.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
 
   const kpiCards = [
     { label: 'Total', value: kpis.total, icon: Scale, color: 'text-foreground', bg: 'bg-card' },
@@ -241,7 +242,6 @@ export default function ProcessosPage() {
               </div>
             ) : (
               <ProcessosTable 
-                key={`${searchTerm}-${statusFilter}`}
                 processos={filteredProcessos} 
                 onProcessoClick={handleProcessoClick}
                 leads={leads}
@@ -250,19 +250,25 @@ export default function ProcessosPage() {
           </TabsContent>
 
           <TabsContent value="consulta">
-            <ConsultaProcessoExterno />
+            <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>}>
+              <ConsultaProcessoExterno />
+            </Suspense>
           </TabsContent>
         </Tabs>
       </div>
 
-      <ProcessoModalExpanded
-        processo={selectedProcesso}
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        isNew={isNew}
-        canDelete={canDelete}
-        leads={leads}
-      />
+      {isModalOpen && (
+        <Suspense fallback={null}>
+          <ProcessoModalExpanded
+            processo={selectedProcesso}
+            isOpen={isModalOpen}
+            onClose={handleCloseModal}
+            isNew={isNew}
+            canDelete={canDelete}
+            leads={leads}
+          />
+        </Suspense>
+      )}
     </AppLayout>
   );
 }
