@@ -34,7 +34,7 @@ const formatCurrency = (value: number): string => {
 };
 
 export function ConversionMetrics({ leads }: ConversionMetricsProps) {
-  const now = new Date();
+  const [now] = useState(() => new Date());
 
   // Somente leads de tráfego
   const trafficLeads = useMemo(() => leads.filter(isTrafficLead), [leads]);
