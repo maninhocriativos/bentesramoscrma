@@ -138,7 +138,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
       .sort((a, b) => (b.valor_causa || 0) - (a.valor_causa || 0))
       .slice(0, 5);
 
-    return { origemData, totalLeads, funnelData, getConversionRate, valorPorStatus, totalValorCausa, origemValorData, valorPorOrigem, ganhosLeads, valorGanhos, topLeadsByValor };
+    return { origemData, totalLeads, funnelData, getConversionRate, valorPorStatus, totalValorCausa, origemValorData, valorPorOrigem, ganhosLeads, valorGanhos, topLeadsByValor, statusCounts };
   }, [leads]);
 
   return (
