@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Processo } from '@/types/processos';
-import { Lead } from '@/types/leads';
+import { LeadName } from '@/hooks/useLeadNames';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Scale, ChevronRight, Building2, Gavel, User, Users, FileText, Clock } from 'lucide-react';
@@ -11,7 +11,7 @@ const ITEMS_PER_PAGE = 30;
 interface ProcessosTableProps {
   processos: Processo[];
   onProcessoClick: (processo: Processo) => void;
-  leads: Lead[];
+  leads: LeadName[];
 }
 
 const statusConfig: Record<string, { bg: string; text: string; dot: string }> = {

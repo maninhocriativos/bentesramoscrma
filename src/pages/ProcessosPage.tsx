@@ -4,7 +4,7 @@ import { AppLayout } from '@/components/layouts/AppLayout';
 import { ProcessosTable } from '@/components/processos/ProcessosTable';
 import { useProcessos } from '@/hooks/useProcessos';
 import { usePerfil } from '@/hooks/usePerfil';
-import { useLeads } from '@/hooks/useLeads';
+import { useLeadNames } from '@/hooks/useLeadNames';
 import { Processo, ProcessoStatus } from '@/types/processos';
 
 const ProcessoModalExpanded = lazy(() => import('@/components/processos/ProcessoModalExpanded').then(m => ({ default: m.ProcessoModalExpanded })));
@@ -32,7 +32,7 @@ import { toast } from 'sonner';
 export default function ProcessosPage() {
   const navigate = useNavigate();
   const { processos, loading } = useProcessos();
-  const { leads } = useLeads();
+  const { leadNames } = useLeadNames();
   const { canDelete, canAccessProcessos, loading: perfilLoading, cargo } = usePerfil();
   
   const [selectedProcesso, setSelectedProcesso] = useState<Processo | null>(null);
@@ -244,7 +244,7 @@ export default function ProcessosPage() {
               <ProcessosTable 
                 processos={filteredProcessos} 
                 onProcessoClick={handleProcessoClick}
-                leads={leads}
+            leads={leadNames}
               />
             )}
           </TabsContent>
@@ -265,7 +265,7 @@ export default function ProcessosPage() {
             onClose={handleCloseModal}
             isNew={isNew}
             canDelete={canDelete}
-            leads={leads}
+            leads={leadNames}
           />
         </Suspense>
       )}

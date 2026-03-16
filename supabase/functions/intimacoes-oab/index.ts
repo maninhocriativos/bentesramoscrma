@@ -353,6 +353,43 @@ serve(async (req) => {
       else console.warn(`⚠️ Erro ao salvar:`, error.message);
     }
 
+    // Notify admin users about new intimações
+    if (savedCount > 0) {
+      console.log(`🔔 Criando notificações para ${savedCount} novas intimações`);
+      
+      // Get all admin/gerente users to notify
+      const { data: adminRoles } = await supabase
+        .from("user_roles")
+        .select("user_id, role")
+        .in("role", ["Administrador", "Gerente"]);
+
+      const userIds = [...new Set((adminRoles || []).map((r: any) => r.user_id))];
+      
+      if (userIds.length > 0) {
+        const notifications = userIds.map((uid: string) => ({
+          user_id: uid,
+          titulo: `${savedCount} nova(s) intimação(ões)`,
+          mensagem: savedCount === 1
+            ? `Nova intimação encontrada: ${intimacoes[intimacoes.length - 1]?.processo_cnj || 'Processo não identificado'}`
+            : `Foram encontradas ${savedCount} novas intimações/movimentações nos seus processos.`,
+          tipo: 'alerta',
+          lida: false,
+          link: '/intimacoes',
+          dados: { source: 'intimacoes_oab', count: savedCount },
+        }));
+
+        const { error: notifError } = await supabase
+          .from("notificacoes_internas")
+          .insert(notifications);
+
+        if (notifError) {
+          console.warn(`⚠️ Erro ao criar notificações:`, notifError.message);
+        } else {
+          console.log(`✅ ${notifications.length} notificações criadas`);
+        }
+      }
+    }
+
     // Backfill fix: correct existing rows where all 3 dates were previously saved as identical
     let correctedLegacyCount = 0;
     const { data: legacyRows } = await supabase

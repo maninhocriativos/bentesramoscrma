@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 import type { Processo } from "@/types/processos";
-import type { Lead } from "@/types/leads";
+import type { LeadName } from "@/hooks/useLeadNames";
 
 type SentNotification = {
   id: string;
@@ -20,7 +20,7 @@ type SentNotification = {
 
 export interface ProcessoNotificacoesTabProps {
   processo: Processo;
-  cliente?: Lead;
+  cliente?: LeadName;
   sending: boolean;
   onSendManual: () => void;
   config: React.ReactNode;
