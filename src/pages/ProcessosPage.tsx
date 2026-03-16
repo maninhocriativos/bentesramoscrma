@@ -244,7 +244,7 @@ export default function ProcessosPage() {
               <ProcessosTable 
                 processos={filteredProcessos} 
                 onProcessoClick={handleProcessoClick}
-                leads={leads}
+            leads={leadNames}
               />
             )}
           </TabsContent>
