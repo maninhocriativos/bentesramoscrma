@@ -1773,15 +1773,13 @@ const ManyChatInboxContent = () => {
 
       // Send via Z-API (non-blocking DB save)
       const outboundInstanceId = resolveInstanceId(subscriberSnapshot);
-      const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-send', {
-        body: {
-          to_phone: subscriberSnapshot.telefone,
-          message: signed.signedUrl,
-          type: mediaType,
-          lead_id: subscriberSnapshot.lead_id,
-          file_name: originalFileName,
-          ...(outboundInstanceId && { instance_id: outboundInstanceId }),
-        },
+      const { data: zapiResult, error: zapiError } = await invokeZapiSend({
+        to_phone: subscriberSnapshot.telefone,
+        message: signed.signedUrl,
+        type: mediaType,
+        lead_id: subscriberSnapshot.lead_id,
+        file_name: originalFileName,
+        ...(outboundInstanceId && { instance_id: outboundInstanceId }),
       });
 
       if (zapiError) throw new Error(zapiError.message);
