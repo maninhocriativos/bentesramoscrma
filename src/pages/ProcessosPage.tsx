@@ -42,6 +42,24 @@ export default function ProcessosPage() {
   const [statusFilter, setStatusFilter] = useState<string>('todos');
   const [syncing, setSyncing] = useState(false);
 
+  const handleProcessoClick = useCallback((processo: Processo) => {
+    setSelectedProcesso(processo);
+    setIsNew(false);
+    setIsModalOpen(true);
+  }, []);
+
+  const handleNewProcesso = useCallback(() => {
+    setSelectedProcesso(null);
+    setIsNew(true);
+    setIsModalOpen(true);
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setIsModalOpen(false);
+    setSelectedProcesso(null);
+    setIsNew(false);
+  }, []);
+
   useEffect(() => {
     if (!perfilLoading && !canAccessProcessos) {
       navigate('/dashboard');
@@ -58,6 +76,19 @@ export default function ProcessosPage() {
     const perdidos = processos.filter(p => p.status === 'Perdido').length;
     return { total, emAndamento, suspensos, arquivados, ganhos, perdidos };
   }, [processos]);
+
+  const filteredProcessos = useMemo(() => processos.filter(p => {
+    const search = searchTerm.toLowerCase();
+    const matchesSearch = (
+      (p.numero_processo?.toLowerCase().includes(search)) ||
+      (p.titulo_acao?.toLowerCase().includes(search)) ||
+      (p.advogado_responsavel?.toLowerCase().includes(search)) ||
+      (p.assunto?.toLowerCase().includes(search)) ||
+      (p.orgao_julgador?.toLowerCase().includes(search))
+    );
+    const matchesStatus = statusFilter === 'todos' || p.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  }), [processos, searchTerm, statusFilter]);
 
   const handleSyncAll = async () => {
     setSyncing(true);
@@ -87,37 +118,6 @@ export default function ProcessosPage() {
   }
 
   if (!canAccessProcessos) return null;
-
-  const handleProcessoClick = useCallback((processo: Processo) => {
-    setSelectedProcesso(processo);
-    setIsNew(false);
-    setIsModalOpen(true);
-  }, []);
-
-  const handleNewProcesso = useCallback(() => {
-    setSelectedProcesso(null);
-    setIsNew(true);
-    setIsModalOpen(true);
-  }, []);
-
-  const handleCloseModal = useCallback(() => {
-    setIsModalOpen(false);
-    setSelectedProcesso(null);
-    setIsNew(false);
-  }, []);
-
-  const filteredProcessos = processos.filter(p => {
-    const search = searchTerm.toLowerCase();
-    const matchesSearch = (
-      (p.numero_processo?.toLowerCase().includes(search)) ||
-      (p.titulo_acao?.toLowerCase().includes(search)) ||
-      (p.advogado_responsavel?.toLowerCase().includes(search)) ||
-      (p.assunto?.toLowerCase().includes(search)) ||
-      (p.orgao_julgador?.toLowerCase().includes(search))
-    );
-    const matchesStatus = statusFilter === 'todos' || p.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
 
   const kpiCards = [
     { label: 'Total', value: kpis.total, icon: Scale, color: 'text-foreground', bg: 'bg-card' },
