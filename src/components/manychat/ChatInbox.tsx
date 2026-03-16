@@ -27,6 +27,7 @@ import { ConversationSearch } from '@/components/chat/ConversationSearch';
 import { SendContactModal } from '@/components/chat/SendContactModal';
 import { formatWhatsAppText as formatWhatsAppTextHelper } from '@/lib/whatsappTextFormatter';
 import { InstanceInfo, getInstanceFromPhone } from '@/lib/instanceUtils';
+import { invokeZapiSend } from '@/lib/zapiSendClient';
 
 // Map connectedPhone (stored in instance_name) to Z-API instance_id for outgoing routing
 const PHONE_TO_INSTANCE_ID: Record<string, string> = {
@@ -1551,15 +1552,13 @@ const ManyChatInboxContent = () => {
       try {
         // Enviar via Z-API com tipo correto
         const outboundInstanceId = resolveInstanceId(subscriberSnapshot);
-        const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-send', {
-          body: {
-            to_phone: subscriberSnapshot.telefone,
-            message: content,
-            type: mediaType || 'text',
-            lead_id: subscriberSnapshot.lead_id,
-            file_name: fileName,
-            ...(outboundInstanceId && { instance_id: outboundInstanceId }),
-          },
+        const { data: zapiResult, error: zapiError } = await invokeZapiSend({
+          to_phone: subscriberSnapshot.telefone,
+          message: content,
+          type: mediaType || 'text',
+          lead_id: subscriberSnapshot.lead_id,
+          file_name: fileName,
+          ...(outboundInstanceId && { instance_id: outboundInstanceId }),
         });
 
         console.log('[Chat] Z-API response:', zapiResult, zapiError);
@@ -1774,15 +1773,13 @@ const ManyChatInboxContent = () => {
 
       // Send via Z-API (non-blocking DB save)
       const outboundInstanceId = resolveInstanceId(subscriberSnapshot);
-      const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-send', {
-        body: {
-          to_phone: subscriberSnapshot.telefone,
-          message: signed.signedUrl,
-          type: mediaType,
-          lead_id: subscriberSnapshot.lead_id,
-          file_name: originalFileName,
-          ...(outboundInstanceId && { instance_id: outboundInstanceId }),
-        },
+      const { data: zapiResult, error: zapiError } = await invokeZapiSend({
+        to_phone: subscriberSnapshot.telefone,
+        message: signed.signedUrl,
+        type: mediaType,
+        lead_id: subscriberSnapshot.lead_id,
+        file_name: originalFileName,
+        ...(outboundInstanceId && { instance_id: outboundInstanceId }),
       });
 
       if (zapiError) throw new Error(zapiError.message);
@@ -1927,15 +1924,13 @@ const ManyChatInboxContent = () => {
       const signedUrl = signResult.data.signedUrl;
       
       // Enviar via Z-API
-      const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-send', {
-        body: {
-          to_phone: subscriberSnapshot.telefone,
-          message: signedUrl,
-          type: 'audio',
-          lead_id: subscriberSnapshot.lead_id,
-          file_name: audioFile.name,
-          ...(outboundInstanceId && { instance_id: outboundInstanceId }),
-        },
+      const { data: zapiResult, error: zapiError } = await invokeZapiSend({
+        to_phone: subscriberSnapshot.telefone,
+        message: signedUrl,
+        type: 'audio',
+        lead_id: subscriberSnapshot.lead_id,
+        file_name: audioFile.name,
+        ...(outboundInstanceId && { instance_id: outboundInstanceId }),
       });
       
       if (zapiError) throw new Error(zapiError.message);
@@ -2366,13 +2361,11 @@ const ManyChatInboxContent = () => {
     const providerMessageId = getProviderMessageId(msg);
     if (providerMessageId && selectedSubscriber?.telefone) {
       const outboundInstanceId = resolveInstanceId(selectedSubscriber);
-      const { data, error } = await supabase.functions.invoke('zapi-send', {
-        body: {
-          to_phone: selectedSubscriber.telefone,
-          type: 'delete',
-          message_id: providerMessageId,
-          instance_id: outboundInstanceId,
-        },
+      const { data, error } = await invokeZapiSend({
+        to_phone: selectedSubscriber.telefone,
+        type: 'delete',
+        message_id: providerMessageId,
+        instance_id: outboundInstanceId,
       });
 
       if (error || !data?.success) {
@@ -2433,14 +2426,12 @@ const ManyChatInboxContent = () => {
     const providerMessageId = getProviderMessageId(originalMsg);
     if (providerMessageId && selectedSubscriber?.telefone) {
       const outboundInstanceId = resolveInstanceId(selectedSubscriber);
-      const { data, error } = await supabase.functions.invoke('zapi-send', {
-        body: {
-          to_phone: selectedSubscriber.telefone,
-          message: editingText.trim(),
-          type: 'edit',
-          message_id: providerMessageId,
-          instance_id: outboundInstanceId,
-        },
+      const { data, error } = await invokeZapiSend({
+        to_phone: selectedSubscriber.telefone,
+        message: editingText.trim(),
+        type: 'edit',
+        message_id: providerMessageId,
+        instance_id: outboundInstanceId,
       });
 
       if (error || !data?.success) {
@@ -2521,14 +2512,12 @@ const ManyChatInboxContent = () => {
       const outboundInstanceId = resolveInstanceId(targetSub);
       const forwarded = `⤵️ *Mensagem encaminhada*\n\n${forwardMessageContent}`;
       
-      await supabase.functions.invoke('zapi-send', {
-        body: {
-          to_phone: targetSub.telefone,
-          message: forwarded,
-          type: 'text',
-          lead_id: targetSub.lead_id,
-          ...(outboundInstanceId && { instance_id: outboundInstanceId }),
-        },
+      await invokeZapiSend({
+        to_phone: targetSub.telefone,
+        message: forwarded,
+        type: 'text',
+        lead_id: targetSub.lead_id,
+        ...(outboundInstanceId && { instance_id: outboundInstanceId }),
       });
       
       await supabase.from('manychat_mensagens' as any).insert({
@@ -2553,14 +2542,12 @@ const ManyChatInboxContent = () => {
     const outboundInstanceId = resolveInstanceId(selectedSubscriber);
     const contactMsg = `👤 *Contato compartilhado*\n📛 ${contact.nome}\n📱 ${contact.telefone}`;
     
-    await supabase.functions.invoke('zapi-send', {
-      body: {
-        to_phone: selectedSubscriber.telefone,
-        message: contactMsg,
-        type: 'text',
-        lead_id: selectedSubscriber.lead_id,
-        ...(outboundInstanceId && { instance_id: outboundInstanceId }),
-      },
+    await invokeZapiSend({
+      to_phone: selectedSubscriber.telefone,
+      message: contactMsg,
+      type: 'text',
+      lead_id: selectedSubscriber.lead_id,
+      ...(outboundInstanceId && { instance_id: outboundInstanceId }),
     });
     
     await supabase.from('manychat_mensagens' as any).insert({
