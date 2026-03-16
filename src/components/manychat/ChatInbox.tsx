@@ -2542,14 +2542,12 @@ const ManyChatInboxContent = () => {
     const outboundInstanceId = resolveInstanceId(selectedSubscriber);
     const contactMsg = `👤 *Contato compartilhado*\n📛 ${contact.nome}\n📱 ${contact.telefone}`;
     
-    await supabase.functions.invoke('zapi-send', {
-      body: {
-        to_phone: selectedSubscriber.telefone,
-        message: contactMsg,
-        type: 'text',
-        lead_id: selectedSubscriber.lead_id,
-        ...(outboundInstanceId && { instance_id: outboundInstanceId }),
-      },
+    await invokeZapiSend({
+      to_phone: selectedSubscriber.telefone,
+      message: contactMsg,
+      type: 'text',
+      lead_id: selectedSubscriber.lead_id,
+      ...(outboundInstanceId && { instance_id: outboundInstanceId }),
     });
     
     await supabase.from('manychat_mensagens' as any).insert({
