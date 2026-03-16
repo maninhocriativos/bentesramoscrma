@@ -75,7 +75,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
   const [valorView, setValorView] = useState<ValorView>('status');
 
   // === Origem dos Leads (pie) ===
-  const { origemData, totalLeads, funnelData, getConversionRate, valorPorStatus, totalValorCausa, origemValorData, valorPorOrigem, ganhosLeads, valorGanhos, topLeadsByValor } = useMemo(() => {
+  const { origemData, totalLeads, funnelData, getConversionRate, valorPorStatus, totalValorCausa, origemValorData, valorPorOrigem, ganhosLeads, valorGanhos, topLeadsByValor, statusCounts } = useMemo(() => {
     const origemCounts = leads.reduce((acc, lead) => {
       const origem = lead.origem || 'Outro';
       acc[origem] = (acc[origem] || 0) + 1;
