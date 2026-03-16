@@ -32,7 +32,7 @@ import { toast } from 'sonner';
 export default function ProcessosPage() {
   const navigate = useNavigate();
   const { processos, loading } = useProcessos();
-  const { leads } = useLeads();
+  const { leadNames } = useLeadNames();
   const { canDelete, canAccessProcessos, loading: perfilLoading, cargo } = usePerfil();
   
   const [selectedProcesso, setSelectedProcesso] = useState<Processo | null>(null);
