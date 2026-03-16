@@ -338,7 +338,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
                 <div className="h-[220px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={origemData} cx="50%" cy="50%" innerRadius={55} outerRadius={95} paddingAngle={3} dataKey="value" stroke="none">
+                      <Pie data={origemData} cx="50%" cy="50%" innerRadius={55} outerRadius={95} paddingAngle={3} dataKey="value" stroke="none" isAnimationActive={false}>
                         {origemData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} className="transition-all duration-300 hover:opacity-80" />
                         ))}
