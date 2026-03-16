@@ -132,7 +132,7 @@ serve(async (req) => {
 
       for (const proc of processos) {
         const cnj = proc.numero_cnj || proc.numero_processo;
-        if (!cnj) continue;
+        if (!cnj) { console.log(`⏭️ Processo sem CNJ, pulando`); continue; }
 
         // Extract tribunal from fontes
         const fonteTribunal = proc.fontes?.find((f: any) => f.tipo === "TRIBUNAL") || proc.fontes?.[0];
