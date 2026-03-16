@@ -1604,6 +1604,24 @@ const ManyChatInboxContent = () => {
           if (insertErr) {
             if (insertErr.message?.includes('duplicate') || insertErr.code === '23505') {
               console.log('[Chat] Mensagem já existe, ignorando duplicata:', msgId);
+              // Duplicata = webhook já salvou. Buscar a mensagem real para substituir o temp
+              const { data: existingMsg } = await supabase
+                .from('manychat_mensagens' as any)
+                .select('*')
+                .eq('metadata->>message_id', msgId)
+                .maybeSingle();
+              if (existingMsg) {
+                const realMsg = existingMsg as Message;
+                dedupKeysRef.current.add(getMessageDedupeKey(realMsg));
+                dedupKeysRef.current.add(`db_${realMsg.id}`);
+                setMessages(prev => {
+                  const withoutTemp = prev.filter(m => m.id !== tempId);
+                  const updated = mergeMessageDedup(withoutTemp, realMsg);
+                  messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
+                  return updated;
+                });
+              }
+              // Se não encontrou, manter o temp - realtime ou polling vão resolver
             } else {
               console.error('[Chat] Erro ao salvar mensagem:', insertErr);
             }
@@ -1621,14 +1639,8 @@ const ManyChatInboxContent = () => {
               messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
               return updated;
             });
-          } else {
-            // Mesmo sem savedMsg, remover o temp pois pode já existir via realtime
-            setMessages(prev => {
-              const updated = prev.filter(m => m.id !== tempId);
-              messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
-              return updated;
-            });
           }
+          // NÃO remover temp se savedMsg é null - realtime/polling vão substituir
         } else {
           // Sem messageId do Z-API, salvar sem deduplicação (fallback)
           const { data: savedMsg } = await supabase.from('manychat_mensagens' as any).insert({
