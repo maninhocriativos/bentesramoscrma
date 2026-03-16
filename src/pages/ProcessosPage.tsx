@@ -1,13 +1,14 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { ProcessosTable } from '@/components/processos/ProcessosTable';
-import { ProcessoModalExpanded } from '@/components/processos/ProcessoModalExpanded';
-import { ConsultaProcessoExterno } from '@/components/processos/ConsultaProcessoExterno';
 import { useProcessos } from '@/hooks/useProcessos';
 import { usePerfil } from '@/hooks/usePerfil';
 import { useLeads } from '@/hooks/useLeads';
 import { Processo, ProcessoStatus } from '@/types/processos';
+
+const ProcessoModalExpanded = lazy(() => import('@/components/processos/ProcessoModalExpanded').then(m => ({ default: m.ProcessoModalExpanded })));
+const ConsultaProcessoExterno = lazy(() => import('@/components/processos/ConsultaProcessoExterno').then(m => ({ default: m.ConsultaProcessoExterno })));
 import { 
   Loader2, Search, Scale, Plus, FileText, AlertTriangle, 
   CheckCircle2, PauseCircle, Archive, Trophy, XCircle,
