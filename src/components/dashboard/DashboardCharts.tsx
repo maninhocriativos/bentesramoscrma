@@ -75,73 +75,71 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
   const [valorView, setValorView] = useState<ValorView>('status');
 
   // === Origem dos Leads (pie) ===
-  const origemCounts = leads.reduce((acc, lead) => {
-    const origem = lead.origem || 'Outro';
-    acc[origem] = (acc[origem] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const { origemData, totalLeads, funnelData, getConversionRate, valorPorStatus, totalValorCausa, origemValorData, valorPorOrigem, ganhosLeads, valorGanhos, topLeadsByValor } = useMemo(() => {
+    const origemCounts = leads.reduce((acc, lead) => {
+      const origem = lead.origem || 'Outro';
+      acc[origem] = (acc[origem] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
 
-  const totalLeads = leads.length;
-  const origemData = Object.entries(origemCounts).map(([name, value]) => ({
-    name, value, total: totalLeads, color: ORIGEM_COLORS[name] || 'hsl(24, 10%, 65%)',
-  }));
+    const totalLeads = leads.length;
+    const origemData = Object.entries(origemCounts).map(([name, value]) => ({
+      name, value, total: totalLeads, color: ORIGEM_COLORS[name] || 'hsl(24, 10%, 65%)',
+    }));
 
-  // === Funnel ===
-  const statusCounts = leads.reduce((acc, lead) => {
-    acc[lead.status] = (acc[lead.status] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+    const statusCounts = leads.reduce((acc, lead) => {
+      acc[lead.status] = (acc[lead.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
 
-  const funnelData = STATUS_CONFIG.map(config => ({
-    ...config, count: statusCounts[config.status] || 0,
-  }));
+    const funnelData = STATUS_CONFIG.map(config => ({
+      ...config, count: statusCounts[config.status] || 0,
+    }));
 
-  const getConversionRate = (currentIndex: number) => {
-    if (currentIndex === 0) return 100;
-    const currentCount = funnelData[currentIndex].count;
-    const previousCount = funnelData[currentIndex - 1].count;
-    if (previousCount === 0) return 0;
-    return Math.round((currentCount / previousCount) * 100);
-  };
+    const getConversionRate = (currentIndex: number) => {
+      if (currentIndex === 0) return 100;
+      const currentCount = funnelData[currentIndex].count;
+      const previousCount = funnelData[currentIndex - 1].count;
+      if (previousCount === 0) return 0;
+      return Math.round((currentCount / previousCount) * 100);
+    };
 
-  // === Valor por Status (bar chart) ===
-  const valorPorStatus = STATUS_CONFIG.map(config => {
-    const statusLeads = leads.filter(lead => lead.status === config.status);
-    const totalValor = statusLeads.reduce((sum, lead) => sum + (lead.valor_causa || 0), 0);
-    return { status: config.label, valor: totalValor, color: config.color, count: statusLeads.length };
-  }).filter(item => item.valor > 0);
+    const valorPorStatus = STATUS_CONFIG.map(config => {
+      const statusLeads = leads.filter(lead => lead.status === config.status);
+      const totalValor = statusLeads.reduce((sum, lead) => sum + (lead.valor_causa || 0), 0);
+      return { status: config.label, valor: totalValor, color: config.color, count: statusLeads.length };
+    }).filter(item => item.valor > 0);
 
-  const totalValorCausa = leads.reduce((sum, lead) => sum + (lead.valor_causa || 0), 0);
+    const totalValorCausa = leads.reduce((sum, lead) => sum + (lead.valor_causa || 0), 0);
 
-  // === Valor por Origem (tipo_origem) ===
-  const valorPorOrigem = leads.reduce((acc, lead) => {
-    const tipoOrigem = (lead as any).tipo_origem || 'indefinido';
-    if (!acc[tipoOrigem]) acc[tipoOrigem] = { valor: 0, count: 0, leads: [] as Lead[] };
-    acc[tipoOrigem].valor += (lead.valor_causa || 0);
-    acc[tipoOrigem].count += 1;
-    acc[tipoOrigem].leads.push(lead);
-    return acc;
-  }, {} as Record<string, { valor: number; count: number; leads: Lead[] }>);
+    const valorPorOrigem = leads.reduce((acc, lead) => {
+      const tipoOrigem = (lead as any).tipo_origem || 'indefinido';
+      if (!acc[tipoOrigem]) acc[tipoOrigem] = { valor: 0, count: 0 };
+      acc[tipoOrigem].valor += (lead.valor_causa || 0);
+      acc[tipoOrigem].count += 1;
+      return acc;
+    }, {} as Record<string, { valor: number; count: number }>);
 
-  const origemValorData = Object.entries(valorPorOrigem)
-    .map(([key, data]) => ({
-      name: TIPO_ORIGEM_LABELS[key] || key,
-      valor: data.valor,
-      count: data.count,
-      color: TIPO_ORIGEM_COLORS[key] || 'hsl(24, 10%, 65%)',
-    }))
-    .filter(item => item.valor > 0)
-    .sort((a, b) => b.valor - a.valor);
+    const origemValorData = Object.entries(valorPorOrigem)
+      .map(([key, data]) => ({
+        name: TIPO_ORIGEM_LABELS[key] || key,
+        valor: data.valor,
+        count: data.count,
+        color: TIPO_ORIGEM_COLORS[key] || 'hsl(24, 10%, 65%)',
+      }))
+      .filter(item => item.valor > 0)
+      .sort((a, b) => b.valor - a.valor);
 
-  // === Ganhos (cases won) ===
-  const ganhosLeads = leads.filter(l => l.status === 'Ganho' || l.status === 'Contrato Assinado');
-  const valorGanhos = ganhosLeads.reduce((sum, l) => sum + (l.valor_causa || 0), 0);
+    const ganhosLeads = leads.filter(l => l.status === 'Ganho' || l.status === 'Contrato Assinado');
+    const valorGanhos = ganhosLeads.reduce((sum, l) => sum + (l.valor_causa || 0), 0);
 
-  // === Top leads contributing value ===
-  const topLeadsByValor = [...leads]
-    .filter(l => (l.valor_causa || 0) > 0)
-    .sort((a, b) => (b.valor_causa || 0) - (a.valor_causa || 0))
-    .slice(0, 5);
+    const topLeadsByValor = [...leads]
+      .filter(l => (l.valor_causa || 0) > 0)
+      .sort((a, b) => (b.valor_causa || 0) - (a.valor_causa || 0))
+      .slice(0, 5);
+
+    return { origemData, totalLeads, funnelData, getConversionRate, valorPorStatus, totalValorCausa, origemValorData, valorPorOrigem, ganhosLeads, valorGanhos, topLeadsByValor };
+  }, [leads]);
 
   return (
     <div className="space-y-6">
