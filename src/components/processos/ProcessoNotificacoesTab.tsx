@@ -20,7 +20,7 @@ type SentNotification = {
 
 export interface ProcessoNotificacoesTabProps {
   processo: Processo;
-  cliente?: Lead;
+  cliente?: LeadName;
   sending: boolean;
   onSendManual: () => void;
   config: React.ReactNode;
