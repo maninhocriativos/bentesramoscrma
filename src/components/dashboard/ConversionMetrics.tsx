@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Lead } from '@/types/leads';
 import { TrendingUp, TrendingDown, Minus, Calendar, Target, DollarSign, Megaphone, FileSignature } from 'lucide-react';
@@ -34,7 +34,7 @@ const formatCurrency = (value: number): string => {
 };
 
 export function ConversionMetrics({ leads }: ConversionMetricsProps) {
-  const now = new Date();
+  const [now] = useState(() => new Date());
 
   // Somente leads de tráfego
   const trafficLeads = useMemo(() => leads.filter(isTrafficLead), [leads]);
@@ -250,9 +250,9 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: '11px' }} />
-                <Bar yAxisId="left" dataKey="leads_trafego" fill="hsl(var(--muted-foreground))" opacity={0.3} radius={[4, 4, 0, 0]} name="Leads Tráfego" />
-                <Bar yAxisId="left" dataKey="contratos" fill="hsl(142, 76%, 36%)" radius={[4, 4, 0, 0]} name="Contratos Assinados" />
-                <Line yAxisId="right" type="monotone" dataKey="taxa" stroke="hsl(38, 30%, 70%)" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3, strokeWidth: 2 }} name="Taxa (%)" />
+                <Bar yAxisId="left" dataKey="leads_trafego" fill="hsl(var(--muted-foreground))" opacity={0.3} radius={[4, 4, 0, 0]} name="Leads Tráfego" isAnimationActive={false} />
+                <Bar yAxisId="left" dataKey="contratos" fill="hsl(142, 76%, 36%)" radius={[4, 4, 0, 0]} name="Contratos Assinados" isAnimationActive={false} />
+                <Line yAxisId="right" type="monotone" dataKey="taxa" stroke="hsl(38, 30%, 70%)" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3, strokeWidth: 2 }} name="Taxa (%)" isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
           </div>

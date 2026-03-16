@@ -1,7 +1,12 @@
+// @ts-ignore - tiptap v3 types
 import { useEditor, EditorContent } from '@tiptap/react';
+// @ts-ignore - tiptap v3 types
 import StarterKit from '@tiptap/starter-kit';
+// @ts-ignore - tiptap v3 types
 import Underline from '@tiptap/extension-underline';
+// @ts-ignore - tiptap v3 types
 import TextAlign from '@tiptap/extension-text-align';
+// @ts-ignore - tiptap v3 types
 import Placeholder from '@tiptap/extension-placeholder';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
