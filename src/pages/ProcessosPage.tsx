@@ -88,23 +88,23 @@ export default function ProcessosPage() {
 
   if (!canAccessProcessos) return null;
 
-  const handleProcessoClick = (processo: Processo) => {
+  const handleProcessoClick = useCallback((processo: Processo) => {
     setSelectedProcesso(processo);
     setIsNew(false);
     setIsModalOpen(true);
-  };
+  }, []);
 
-  const handleNewProcesso = () => {
+  const handleNewProcesso = useCallback(() => {
     setSelectedProcesso(null);
     setIsNew(true);
     setIsModalOpen(true);
-  };
+  }, []);
 
-  const handleCloseModal = () => {
+  const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
     setSelectedProcesso(null);
     setIsNew(false);
-  };
+  }, []);
 
   const filteredProcessos = processos.filter(p => {
     const search = searchTerm.toLowerCase();
