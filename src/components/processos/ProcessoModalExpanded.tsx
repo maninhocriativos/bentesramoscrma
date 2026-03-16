@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Processo, ProcessoStatus, ProcessoParte, ProcessoMovimento } from '@/types/processos';
-import { Lead } from '@/types/leads';
+import { LeadName } from '@/hooks/useLeadNames';
 import { useProcessos } from '@/hooks/useProcessos';
 import { ProcessoNotificacaoConfig } from './ProcessoNotificacaoConfig';
 import { ProcessoNotificacoesTab } from './ProcessoNotificacoesTab';
