@@ -11,7 +11,7 @@ const ITEMS_PER_PAGE = 30;
 interface ProcessosTableProps {
   processos: Processo[];
   onProcessoClick: (processo: Processo) => void;
-  leads: Lead[];
+  leads: LeadName[];
 }
 
 const statusConfig: Record<string, { bg: string; text: string; dot: string }> = {

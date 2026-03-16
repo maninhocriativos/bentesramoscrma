@@ -49,7 +49,7 @@ interface ProcessoModalExpandedProps {
   onClose: () => void;
   isNew?: boolean;
   canDelete?: boolean;
-  leads: Lead[];
+  leads: LeadName[];
 }
 
 const STATUSES: ProcessoStatus[] = [

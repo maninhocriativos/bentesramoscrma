@@ -265,7 +265,7 @@ export default function ProcessosPage() {
             onClose={handleCloseModal}
             isNew={isNew}
             canDelete={canDelete}
-            leads={leads}
+            leads={leadNames}
           />
         </Suspense>
       )}
