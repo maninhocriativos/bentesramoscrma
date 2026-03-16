@@ -2361,13 +2361,11 @@ const ManyChatInboxContent = () => {
     const providerMessageId = getProviderMessageId(msg);
     if (providerMessageId && selectedSubscriber?.telefone) {
       const outboundInstanceId = resolveInstanceId(selectedSubscriber);
-      const { data, error } = await supabase.functions.invoke('zapi-send', {
-        body: {
-          to_phone: selectedSubscriber.telefone,
-          type: 'delete',
-          message_id: providerMessageId,
-          instance_id: outboundInstanceId,
-        },
+      const { data, error } = await invokeZapiSend({
+        to_phone: selectedSubscriber.telefone,
+        type: 'delete',
+        message_id: providerMessageId,
+        instance_id: outboundInstanceId,
       });
 
       if (error || !data?.success) {
