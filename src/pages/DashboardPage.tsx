@@ -1,21 +1,28 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useCallback, lazy, Suspense } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
-import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
 import { DashboardFiltersBar, DashboardFilters } from '@/components/dashboard/DashboardFilters';
-import { ConversionMetrics } from '@/components/dashboard/ConversionMetrics';
-import { RealtimeLeadsMonitor } from '@/components/dashboard/RealtimeLeadsMonitor';
 import { LeadOriginKPIs } from '@/components/dashboard/LeadOriginKPIs';
 import { AlertasWidget } from '@/components/AlertasWidget';
-import { TeamStatusWidget } from '@/components/dashboard/TeamStatusWidget';
 import { useLeads } from '@/hooks/useLeads';
 import { useProcessos } from '@/hooks/useProcessos';
 import { useAlertas } from '@/hooks/useAlertas';
-import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, isAfter } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
+
+// Lazy-load heavy chart components (Recharts is large)
+const DashboardCharts = lazy(() => import('@/components/dashboard/DashboardCharts').then(m => ({ default: m.DashboardCharts })));
+const ConversionMetrics = lazy(() => import('@/components/dashboard/ConversionMetrics').then(m => ({ default: m.ConversionMetrics })));
+const RealtimeLeadsMonitor = lazy(() => import('@/components/dashboard/RealtimeLeadsMonitor').then(m => ({ default: m.RealtimeLeadsMonitor })));
+const TeamStatusWidget = lazy(() => import('@/components/dashboard/TeamStatusWidget').then(m => ({ default: m.TeamStatusWidget })));
+
+const ChartFallback = () => (
+  <div className="flex items-center justify-center py-12">
+    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+  </div>
+);
 
 export default function DashboardPage() {
   const { leads, loading: leadsLoading, fetchLeads } = useLeads();
@@ -26,9 +33,6 @@ export default function DashboardPage() {
   const handleRefreshLeads = useCallback(() => {
     fetchLeads();
   }, [fetchLeads]);
-
-  // Contract changes are already covered by leads realtime subscription
-  // Removed separate contract_reminders subscription to avoid duplicate refetches
   
   const [filters, setFilters] = useState<DashboardFilters>({
     period: 'all',
@@ -101,9 +105,8 @@ export default function DashboardPage() {
         ) : (
           <div className="px-4 md:px-6 lg:px-8 py-6 space-y-6 animate-fade-in">
             
-            {/* ===== TOP: Hero KPIs (big numbers like the reference) ===== */}
+            {/* ===== TOP: Hero KPIs ===== */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Qtd. de Leads */}
               <div className="bg-card rounded-xl overflow-hidden shadow-soft border border-border/40">
                 <div className="bg-primary px-4 py-2">
                   <span className="text-primary-foreground text-xs font-semibold uppercase tracking-wider">
@@ -116,7 +119,6 @@ export default function DashboardPage() {
                 </div>
               </div>
               
-              {/* Faturamento */}
               <div className="bg-card rounded-xl overflow-hidden shadow-soft border border-border/40">
                 <div className="bg-[hsl(var(--gold))] px-4 py-2">
                   <span className="text-[hsl(var(--gold-foreground))] text-xs font-semibold uppercase tracking-wider">
@@ -129,7 +131,6 @@ export default function DashboardPage() {
                 </div>
               </div>
               
-              {/* Processos */}
               <div className="bg-card rounded-xl overflow-hidden shadow-soft border border-border/40">
                 <div className="bg-[hsl(var(--success))] px-4 py-2">
                   <span className="text-[hsl(var(--success-foreground))] text-xs font-semibold uppercase tracking-wider">
@@ -146,7 +147,7 @@ export default function DashboardPage() {
             {/* ===== FILTERS ===== */}
             <DashboardFiltersBar filters={filters} onFiltersChange={setFilters} />
 
-            {/* ===== ROW 2: Origem + KPIs Métricas ===== */}
+            {/* ===== ROW 2: Origem + KPIs ===== */}
             <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
               <div className="space-y-6">
                 <LeadOriginKPIs leads={leads} />
@@ -158,15 +159,23 @@ export default function DashboardPage() {
               />
             </div>
 
-            {/* ===== ROW 3: Conversão ===== */}
-            <ConversionMetrics leads={leads} />
+            {/* ===== ROW 3: Conversão (lazy) ===== */}
+            <Suspense fallback={<ChartFallback />}>
+              <ConversionMetrics leads={leads} />
+            </Suspense>
 
-            {/* ===== ROW 4: Charts + Monitor ===== */}
+            {/* ===== ROW 4: Charts + Monitor (lazy) ===== */}
             <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
-              <DashboardCharts leads={filteredLeads} />
+              <Suspense fallback={<ChartFallback />}>
+                <DashboardCharts leads={filteredLeads} />
+              </Suspense>
               <div className="space-y-6">
-                <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
-                <TeamStatusWidget />
+                <Suspense fallback={<ChartFallback />}>
+                  <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
+                </Suspense>
+                <Suspense fallback={<ChartFallback />}>
+                  <TeamStatusWidget />
+                </Suspense>
               </div>
             </div>
           </div>
