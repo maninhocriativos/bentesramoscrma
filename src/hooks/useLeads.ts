@@ -8,10 +8,13 @@ export function useLeads() {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
+  // Select only the columns actually used by dashboard/kanban/list views
+  const LEADS_SELECT = 'id,created_at,updated_at,nome,telefone,email,status,origem,tipo_acao,lead_state,state_updated_at,valor_causa,resumo_ia,tipo_origem,fonte_trafego,linha_whatsapp,empresa_tag,owner_tipo,isa_ativa,is_lost,lost_reason,lost_at,link_contrato,contract_key,contract_sent_at,contract_signed_at,last_contact_at,cidade,uf,cpf,triage_started_at,canal_origem,facebook_lead_id,contratos_adicionais';
+
   const fetchLeads = useCallback(async () => {
     const { data, error } = await supabase
       .from('leads_juridicos')
-      .select('*')
+      .select(LEADS_SELECT)
       .order('created_at', { ascending: false });
 
     if (error) {
