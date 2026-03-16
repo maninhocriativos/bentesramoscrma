@@ -1816,11 +1816,8 @@ const ManyChatInboxContent = () => {
             return updated;
           });
         } else {
-          setMessages(prev => {
-            const updated = prev.filter(m => m.id !== tempId);
-            messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
-            return updated;
-          });
+          // NÃO remover temp - realtime/polling vão substituir
+          console.log('[File] savedMsg null, mantendo temp até realtime resolver');
         }
       });
 
