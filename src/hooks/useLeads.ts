@@ -1,15 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Lead, LeadStatus } from '@/types/leads';
 import { useToast } from '@/hooks/use-toast';
+
+// Select only the columns actually used by dashboard/kanban/list views
+const LEADS_SELECT = 'id,created_at,updated_at,nome,telefone,email,status,origem,tipo_acao,lead_state,state_updated_at,valor_causa,resumo_ia,tipo_origem,fonte_trafego,linha_whatsapp,empresa_tag,owner_tipo,isa_ativa,is_lost,lost_reason,lost_at,link_contrato,contract_key,contract_sent_at,contract_signed_at,last_contact_at,cidade,uf,cpf,triage_started_at,canal_origem,facebook_lead_id,contratos_adicionais';
 
 export function useLeads() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-
-  // Select only the columns actually used by dashboard/kanban/list views
-  const LEADS_SELECT = 'id,created_at,updated_at,nome,telefone,email,status,origem,tipo_acao,lead_state,state_updated_at,valor_causa,resumo_ia,tipo_origem,fonte_trafego,linha_whatsapp,empresa_tag,owner_tipo,isa_ativa,is_lost,lost_reason,lost_at,link_contrato,contract_key,contract_sent_at,contract_signed_at,last_contact_at,cidade,uf,cpf,triage_started_at,canal_origem,facebook_lead_id,contratos_adicionais';
+  const lastRefetchRef = useRef(Date.now());
 
   const fetchLeads = useCallback(async () => {
     const { data, error } = await supabase
@@ -29,57 +30,50 @@ export function useLeads() {
     setLoading(false);
   }, [toast]);
 
+  // Initial fetch
   useEffect(() => {
     fetchLeads();
   }, [fetchLeads]);
 
-  // Fallback sync: ensures new leads appear even if Realtime drops
+  // Fallback sync with proper debounce
   useEffect(() => {
     let mounted = true;
-    let lastRefetch = Date.now();
-    const MIN_REFETCH_GAP = 30_000; // 30s minimum between refetches
+    const MIN_GAP = 60_000; // 60s minimum between refetches
 
-    const safeRefetch = async () => {
+    const safeRefetch = () => {
       if (!mounted) return;
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (document.visibilityState !== 'visible') return;
       const now = Date.now();
-      if (now - lastRefetch < MIN_REFETCH_GAP) return;
-      lastRefetch = now;
-      await fetchLeads();
+      if (now - lastRefetchRef.current < MIN_GAP) return;
+      lastRefetchRef.current = now;
+      fetchLeads();
     };
 
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') void safeRefetch();
+      if (document.visibilityState === 'visible') safeRefetch();
     };
 
-    window.addEventListener('focus', () => void safeRefetch());
     document.addEventListener('visibilitychange', onVisibility);
 
-    // Periodic check – increased to 120s (realtime handles instant updates)
-    const interval = window.setInterval(() => {
-      void safeRefetch();
-    }, 120_000);
+    // Periodic check – 120s (realtime handles instant updates)
+    const interval = setInterval(safeRefetch, 120_000);
 
     return () => {
       mounted = false;
-      window.clearInterval(interval);
-      window.removeEventListener('focus', () => void safeRefetch());
+      clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [fetchLeads]);
 
-  // Separate effect for realtime subscription to avoid re-subscribing on fetchLeads change
+  // Realtime subscription (single, stable)
   useEffect(() => {
-    // Real-time subscription - ensures UI updates immediately
     const channel = supabase
-      .channel('leads-dashboard-realtime')
+      .channel('leads-realtime')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'leads_juridicos' },
         (payload) => {
-          console.log('🟢 Lead INSERT:', payload.new);
           setLeads(prev => {
-            // Avoid duplicates
             if (prev.some(l => l.id === (payload.new as Lead).id)) return prev;
             return [payload.new as Lead, ...prev];
           });
@@ -89,9 +83,8 @@ export function useLeads() {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'leads_juridicos' },
         (payload) => {
-          console.log('🟡 Lead UPDATE:', payload.new);
-          setLeads(prev => 
-            prev.map(lead => 
+          setLeads(prev =>
+            prev.map(lead =>
               lead.id === (payload.new as Lead).id ? (payload.new as Lead) : lead
             )
           );
@@ -101,13 +94,10 @@ export function useLeads() {
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'leads_juridicos' },
         (payload) => {
-          console.log('🔴 Lead DELETE:', payload.old);
           setLeads(prev => prev.filter(lead => lead.id !== (payload.old as Lead).id));
         }
       )
-      .subscribe((status) => {
-        console.log('📡 Leads realtime status:', status);
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
@@ -122,11 +112,7 @@ export function useLeads() {
       .single();
 
     if (error) {
-      toast({
-        title: 'Erro ao criar lead',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro ao criar lead', description: error.message, variant: 'destructive' });
       return { error };
     }
 
@@ -141,14 +127,9 @@ export function useLeads() {
       .eq('id', id);
 
     if (error) {
-      toast({
-        title: 'Erro ao atualizar lead',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro ao atualizar lead', description: error.message, variant: 'destructive' });
       return { error };
     }
-
     return { error: null };
   };
 
@@ -159,11 +140,7 @@ export function useLeads() {
       .eq('id', id);
 
     if (error) {
-      toast({
-        title: 'Erro ao excluir lead',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro ao excluir lead', description: error.message, variant: 'destructive' });
       return { error };
     }
 
@@ -171,14 +148,12 @@ export function useLeads() {
     return { error: null };
   };
 
-  // Optimistic update for drag and drop - UI updates immediately
+  // Optimistic update for drag and drop
   const updateLeadStatus = async (id: string, status: LeadStatus) => {
-    // Store previous state for rollback
     const previousLeads = [...leads];
-    
-    // Optimistic update - update UI immediately
-    setLeads(prev => 
-      prev.map(lead => 
+
+    setLeads(prev =>
+      prev.map(lead =>
         lead.id === id ? { ...lead, status, updated_at: new Date().toISOString() } : lead
       )
     );
@@ -189,13 +164,8 @@ export function useLeads() {
       .eq('id', id);
 
     if (error) {
-      // Revert on error
       setLeads(previousLeads);
-      toast({
-        title: 'Erro ao mover lead',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro ao mover lead', description: error.message, variant: 'destructive' });
       return { error };
     }
 

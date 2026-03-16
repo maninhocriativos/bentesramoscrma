@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Processo, ProcessoStatus } from '@/types/processos';
 import { useToast } from '@/hooks/use-toast';
 import { usePerfil } from './usePerfil';
 import { useAuth } from './useAuth';
+
+// Only select columns actually needed in listings/dashboard
+const PROCESSOS_SELECT = 'id,numero_processo,titulo_acao,status,advogado_responsavel,cliente_id,created_at,tribunal,vara_comarca,assunto,valor_causa,data_ajuizamento,data_ultima_atualizacao,orgao_julgador,grau,classe_cnj,status_detalhado,origem_cliente,ultima_consulta_api_at,frequencia_notificacao_dias,notificacao_ativa,ultima_notificacao_at';
 
 export function useProcessos() {
   const [processos, setProcessos] = useState<Processo[]>([]);
@@ -12,15 +15,14 @@ export function useProcessos() {
   const { perfil, isAdvogado } = usePerfil();
   const { user } = useAuth();
 
-  const fetchProcessos = async () => {
+  const fetchProcessos = useCallback(async () => {
     setLoading(true);
-    
+
     let query = supabase
       .from('processos')
-      .select('*')
+      .select(PROCESSOS_SELECT)
       .order('created_at', { ascending: false });
 
-    // Advogados see only their processes
     if (isAdvogado && perfil?.nome) {
       query = query.eq('advogado_responsavel', perfil.nome);
     }
@@ -28,37 +30,29 @@ export function useProcessos() {
     const { data, error } = await query;
 
     if (error) {
-      toast({
-        title: 'Erro ao carregar processos',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro ao carregar processos', description: error.message, variant: 'destructive' });
     } else {
       setProcessos((data as Processo[]) || []);
     }
     setLoading(false);
-  };
+  }, [isAdvogado, perfil?.nome, toast]);
 
   useEffect(() => {
     if (user) {
       fetchProcessos();
     }
-  }, [user, isAdvogado, perfil?.nome]);
+  }, [user, fetchProcessos]);
 
-  // Separate effect for realtime subscription
+  // Realtime subscription
   useEffect(() => {
     const channel = supabase
-      .channel('processos-dashboard-realtime')
+      .channel('processos-realtime')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'processos' },
         (payload) => {
-          console.log('🟢 Processo INSERT:', payload.new);
           const next = payload.new as Processo;
-
-          // respeita o filtro do advogado (mesma regra do fetch)
           if (isAdvogado && perfil?.nome && next.advogado_responsavel !== perfil.nome) return;
-
           setProcessos((prev) => {
             if (prev.some((p) => p.id === next.id)) return prev;
             return [next, ...prev];
@@ -69,12 +63,8 @@ export function useProcessos() {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'processos' },
         (payload) => {
-          console.log('🟡 Processo UPDATE:', payload.new);
           const next = payload.new as Processo;
-
-          // respeita o filtro do advogado (mesma regra do fetch)
           if (isAdvogado && perfil?.nome && next.advogado_responsavel !== perfil.nome) return;
-
           setProcessos((prev) => {
             const exists = prev.some((p) => p.id === next.id);
             if (!exists) return [next, ...prev];
@@ -86,13 +76,10 @@ export function useProcessos() {
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'processos' },
         (payload) => {
-          console.log('🔴 Processo DELETE:', payload.old);
           setProcessos((prev) => prev.filter((p) => p.id !== (payload.old as Processo).id));
         }
       )
-      .subscribe((status) => {
-        console.log('📡 Processos realtime status:', status);
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
@@ -107,16 +94,12 @@ export function useProcessos() {
       .single();
 
     if (error) {
-      toast({
-        title: 'Erro ao criar processo',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro ao criar processo', description: error.message, variant: 'destructive' });
       return { error };
     }
 
     toast({ title: 'Processo criado com sucesso!' });
-    await fetchProcessos();
+    // Realtime will handle the state update — no need to refetch
     return { data: data as Processo };
   };
 
@@ -127,17 +110,12 @@ export function useProcessos() {
       .eq('id', id);
 
     if (error) {
-      toast({
-        title: 'Erro ao atualizar processo',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro ao atualizar processo', description: error.message, variant: 'destructive' });
       return { error };
     }
 
     toast({ title: 'Processo atualizado!' });
-    // Refetch to ensure local state has latest data (including partes_json)
-    await fetchProcessos();
+    // Realtime will handle the state update — no need to refetch
     return { error: null };
   };
 
@@ -148,11 +126,7 @@ export function useProcessos() {
       .eq('id', id);
 
     if (error) {
-      toast({
-        title: 'Erro ao excluir processo',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro ao excluir processo', description: error.message, variant: 'destructive' });
       return { error };
     }
 
