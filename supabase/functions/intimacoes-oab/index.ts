@@ -112,6 +112,7 @@ serve(async (req) => {
 
     if (processosResp.ok) {
       const processosData = await processosResp.json();
+      console.log(`📦 Escavador response keys: ${Object.keys(processosData || {}).join(', ')}`);
       const processos = processosData?.items || processosData?.data || [];
       // Handle pagination: fetch next pages
       let nextUrl = processosData?.links?.next;
