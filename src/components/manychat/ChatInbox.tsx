@@ -1552,15 +1552,13 @@ const ManyChatInboxContent = () => {
       try {
         // Enviar via Z-API com tipo correto
         const outboundInstanceId = resolveInstanceId(subscriberSnapshot);
-        const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-send', {
-          body: {
-            to_phone: subscriberSnapshot.telefone,
-            message: content,
-            type: mediaType || 'text',
-            lead_id: subscriberSnapshot.lead_id,
-            file_name: fileName,
-            ...(outboundInstanceId && { instance_id: outboundInstanceId }),
-          },
+        const { data: zapiResult, error: zapiError } = await invokeZapiSend({
+          to_phone: subscriberSnapshot.telefone,
+          message: content,
+          type: mediaType || 'text',
+          lead_id: subscriberSnapshot.lead_id,
+          file_name: fileName,
+          ...(outboundInstanceId && { instance_id: outboundInstanceId }),
         });
 
         console.log('[Chat] Z-API response:', zapiResult, zapiError);
