@@ -1604,6 +1604,24 @@ const ManyChatInboxContent = () => {
           if (insertErr) {
             if (insertErr.message?.includes('duplicate') || insertErr.code === '23505') {
               console.log('[Chat] Mensagem já existe, ignorando duplicata:', msgId);
+              // Duplicata = webhook já salvou. Buscar a mensagem real para substituir o temp
+              const { data: existingMsg } = await supabase
+                .from('manychat_mensagens' as any)
+                .select('*')
+                .eq('metadata->>message_id', msgId)
+                .maybeSingle();
+              if (existingMsg) {
+                const realMsg = existingMsg as Message;
+                dedupKeysRef.current.add(getMessageDedupeKey(realMsg));
+                dedupKeysRef.current.add(`db_${realMsg.id}`);
+                setMessages(prev => {
+                  const withoutTemp = prev.filter(m => m.id !== tempId);
+                  const updated = mergeMessageDedup(withoutTemp, realMsg);
+                  messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
+                  return updated;
+                });
+              }
+              // Se não encontrou, manter o temp - realtime ou polling vão resolver
             } else {
               console.error('[Chat] Erro ao salvar mensagem:', insertErr);
             }
@@ -1621,14 +1639,8 @@ const ManyChatInboxContent = () => {
               messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
               return updated;
             });
-          } else {
-            // Mesmo sem savedMsg, remover o temp pois pode já existir via realtime
-            setMessages(prev => {
-              const updated = prev.filter(m => m.id !== tempId);
-              messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
-              return updated;
-            });
           }
+          // NÃO remover temp se savedMsg é null - realtime/polling vão substituir
         } else {
           // Sem messageId do Z-API, salvar sem deduplicação (fallback)
           const { data: savedMsg } = await supabase.from('manychat_mensagens' as any).insert({
@@ -1804,11 +1816,8 @@ const ManyChatInboxContent = () => {
             return updated;
           });
         } else {
-          setMessages(prev => {
-            const updated = prev.filter(m => m.id !== tempId);
-            messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
-            return updated;
-          });
+          // NÃO remover temp - realtime/polling vão substituir
+          console.log('[File] savedMsg null, mantendo temp até realtime resolver');
         }
       });
 
@@ -3466,7 +3475,7 @@ const ManyChatInboxContent = () => {
 
             {/* Input de Mensagem */}
             <div className={`min-h-[52px] md:h-[66px] px-2 md:px-4 py-1.5 md:py-2 flex items-center gap-1 md:gap-2 ${themeClasses.header} border-t ${isDark ? 'border-[#222D34]/50' : 'border-[#E9EDEF]/50'}`}>
-              <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*,audio/*,video/*" className="hidden" />
+              <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" className="hidden" />
               
               <Button variant="ghost" size="icon" className={`hidden md:flex h-10 w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}>
                 <Smile className="h-6 w-6" />
