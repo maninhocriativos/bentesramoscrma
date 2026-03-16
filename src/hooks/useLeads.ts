@@ -8,10 +8,13 @@ export function useLeads() {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
+  // Select only the columns actually used by dashboard/kanban/list views
+  const LEADS_SELECT = 'id,created_at,updated_at,nome,telefone,email,status,origem,tipo_acao,lead_state,state_updated_at,valor_causa,resumo_ia,tipo_origem,fonte_trafego,linha_whatsapp,empresa_tag,owner_tipo,isa_ativa,is_lost,lost_reason,lost_at,link_contrato,contract_key,contract_sent_at,contract_signed_at,last_contact_at,cidade,uf,cpf,triage_started_at,canal_origem,facebook_lead_id,contratos_adicionais';
+
   const fetchLeads = useCallback(async () => {
     const { data, error } = await supabase
       .from('leads_juridicos')
-      .select('*')
+      .select(LEADS_SELECT)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -33,11 +36,15 @@ export function useLeads() {
   // Fallback sync: ensures new leads appear even if Realtime drops
   useEffect(() => {
     let mounted = true;
+    let lastRefetch = Date.now();
+    const MIN_REFETCH_GAP = 30_000; // 30s minimum between refetches
 
     const safeRefetch = async () => {
       if (!mounted) return;
-      // Only refetch when tab is visible to avoid background churn
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastRefetch < MIN_REFETCH_GAP) return;
+      lastRefetch = now;
       await fetchLeads();
     };
 
@@ -45,22 +52,18 @@ export function useLeads() {
       if (document.visibilityState === 'visible') void safeRefetch();
     };
 
-    const onFocus = () => {
-      void safeRefetch();
-    };
-
-    window.addEventListener('focus', onFocus);
+    window.addEventListener('focus', () => void safeRefetch());
     document.addEventListener('visibilitychange', onVisibility);
 
-    // Periodic check (covers missed Realtime events)
+    // Periodic check – increased to 120s (realtime handles instant updates)
     const interval = window.setInterval(() => {
       void safeRefetch();
-    }, 45000);
+    }, 120_000);
 
     return () => {
       mounted = false;
       window.clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('focus', () => void safeRefetch());
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [fetchLeads]);
