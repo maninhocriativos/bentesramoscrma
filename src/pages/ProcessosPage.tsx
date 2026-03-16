@@ -242,7 +242,6 @@ export default function ProcessosPage() {
               </div>
             ) : (
               <ProcessosTable 
-                key={`${searchTerm}-${statusFilter}`}
                 processos={filteredProcessos} 
                 onProcessoClick={handleProcessoClick}
                 leads={leads}
