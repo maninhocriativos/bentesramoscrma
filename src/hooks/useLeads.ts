@@ -36,11 +36,15 @@ export function useLeads() {
   // Fallback sync: ensures new leads appear even if Realtime drops
   useEffect(() => {
     let mounted = true;
+    let lastRefetch = Date.now();
+    const MIN_REFETCH_GAP = 30_000; // 30s minimum between refetches
 
     const safeRefetch = async () => {
       if (!mounted) return;
-      // Only refetch when tab is visible to avoid background churn
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastRefetch < MIN_REFETCH_GAP) return;
+      lastRefetch = now;
       await fetchLeads();
     };
 
@@ -48,22 +52,18 @@ export function useLeads() {
       if (document.visibilityState === 'visible') void safeRefetch();
     };
 
-    const onFocus = () => {
-      void safeRefetch();
-    };
-
-    window.addEventListener('focus', onFocus);
+    window.addEventListener('focus', () => void safeRefetch());
     document.addEventListener('visibilitychange', onVisibility);
 
-    // Periodic check (covers missed Realtime events)
+    // Periodic check – increased to 120s (realtime handles instant updates)
     const interval = window.setInterval(() => {
       void safeRefetch();
-    }, 45000);
+    }, 120_000);
 
     return () => {
       mounted = false;
       window.clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('focus', () => void safeRefetch());
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [fetchLeads]);
