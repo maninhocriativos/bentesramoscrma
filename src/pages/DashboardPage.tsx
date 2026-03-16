@@ -27,22 +27,8 @@ export default function DashboardPage() {
     fetchLeads();
   }, [fetchLeads]);
 
-  // Auto-refresh leads when contract_reminders change (contract signed/updated)
-  useEffect(() => {
-    const channel = supabase
-      .channel('dashboard-contract-sync')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'contract_reminders' },
-        (payload) => {
-          console.log('📋 Contract reminder change detected, refreshing leads...', payload.eventType);
-          fetchLeads();
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [fetchLeads]);
+  // Contract changes are already covered by leads realtime subscription
+  // Removed separate contract_reminders subscription to avoid duplicate refetches
   
   const [filters, setFilters] = useState<DashboardFilters>({
     period: 'all',
