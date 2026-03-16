@@ -114,23 +114,18 @@ serve(async (req) => {
       const processosData = await processosResp.json();
       console.log(`📦 Escavador response keys: ${Object.keys(processosData || {}).join(', ')}`);
       const processos = processosData?.items || processosData?.data || [];
-      // Handle pagination: fetch next pages
-      let nextUrl = processosData?.links?.next;
-      while (nextUrl) {
-        const nextResp = await fetch(nextUrl, {
-          headers: { Authorization: `Bearer ${ESCAVADOR_API_KEY}`, "X-Requested-With": "XMLHttpRequest" },
-        });
-        if (!nextResp.ok) break;
-        const nextData = await nextResp.json();
-        const moreProcessos = nextData?.items || nextData?.data || [];
-        if (moreProcessos.length === 0) break;
-        processos.push(...moreProcessos);
-        nextUrl = nextData?.links?.next;
+
+      // Skip pagination to save time/credits - first page usually has all active processos
+      console.log(`📋 ${processos.length} processos encontrados via OAB (página 1)`);
+
+      // Limit to 10 processos per run to avoid Edge Function timeout
+      const maxProcessos = 10;
+      const processosToFetch = processos.slice(0, maxProcessos);
+      if (processos.length > maxProcessos) {
+        console.log(`⚠️ Limitando a ${maxProcessos} de ${processos.length} processos`);
       }
 
-      console.log(`📋 ${processos.length} processos encontrados via OAB`);
-
-      for (const proc of processos) {
+      for (const proc of processosToFetch) {
         const cnj = proc.numero_cnj || proc.numero_processo;
         if (!cnj) { console.log(`⏭️ Processo sem CNJ, pulando`); continue; }
 
@@ -139,10 +134,12 @@ serve(async (req) => {
         const tribunalSigla = fonteTribunal?.sigla || fonteTribunal?.tribunal?.sigla || fonteTribunal?.nome || "";
         const classeProcesso = fonteTribunal?.capa?.classe || proc.titulo_classe || "";
 
+        console.log(`🔎 Buscando movimentações: ${cnj}`);
+
         // Fetch movimentações for each processo using V2 endpoint
         try {
           const movResp = await fetch(
-            `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?limit=50`,
+            `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?limit=20`,
             {
               headers: {
                 Authorization: `Bearer ${ESCAVADOR_API_KEY}`,
@@ -153,8 +150,8 @@ serve(async (req) => {
 
           if (movResp.ok) {
             const movData = await movResp.json();
-            // V2 movimentações response: { items: [{ id, data, tipo, conteudo, fonte: { sigla, nome, ... } }] }
             const movimentacoes = movData?.items || [];
+            console.log(`  📄 ${movimentacoes.length} movimentações para ${cnj}`);
 
             for (const mov of movimentacoes) {
               const conteudo = mov.conteudo || "";
@@ -163,25 +160,6 @@ serve(async (req) => {
               const tipoLower = tipo.toLowerCase();
               const combined = conteudoLower + " " + tipoLower;
 
-              // Accept all movimentações (they're already from the right processo)
-              // but filter for relevance
-              const isRelevant =
-                combined.includes("intimação") || combined.includes("intimacao") ||
-                combined.includes("citação") || combined.includes("citacao") ||
-                combined.includes("notificação") || combined.includes("notificacao") ||
-                combined.includes("despacho") || combined.includes("sentença") ||
-                combined.includes("sentenca") || combined.includes("decisão") ||
-                combined.includes("decisao") || combined.includes("publicação") ||
-                combined.includes("publicacao") || combined.includes("edital") ||
-                combined.includes("diário") || combined.includes("diario") ||
-                combined.includes("distribuição") || combined.includes("distribuicao") ||
-                combined.includes("juntada") || combined.includes("conclus") ||
-                combined.includes("certidão") || combined.includes("certidao") ||
-                combined.includes("expedid") || combined.includes("audiência") ||
-                combined.includes("audiencia");
-
-              // For 2026 filter, accept ALL movimentações (not just "intimações")
-              // since any movement is relevant for tracking
               const movDate = mov.data || "";
               if (movDate && movDate < "2026-01-01") continue;
 
@@ -197,18 +175,16 @@ serve(async (req) => {
               else if (combined.includes("publicação") || combined.includes("publicacao")) tipoIntimacao = "Publicação";
               else if (combined.includes("audiência") || combined.includes("audiencia")) tipoIntimacao = "Audiência";
 
-              // V2 movimentações have: data (single date), conteudo, fonte.sigla
               const rawDate = mov.data || null;
               const tribunal = mov.fonte?.sigla || mov.fonte?.nome || tribunalSigla;
 
-              // Calculate CPC dates from the movement date
               let dataDisponibilizacao = rawDate;
               let dataPublicacao = rawDate ? nextBusinessDay(rawDate) : null;
               let dataIntimacao = dataPublicacao ? nextBusinessDay(dataPublicacao) : rawDate;
 
               intimacoes.push({
                 processo_cnj: cnj,
-                processo_titulo: classeProcesso || `${proc.titulo_polo_ativo} X ${proc.titulo_polo_passivo}`,
+                processo_titulo: classeProcesso || `${proc.titulo_polo_ativo || ''} X ${proc.titulo_polo_passivo || ''}`,
                 tribunal: tribunal,
                 tipo_intimacao: tipoIntimacao,
                 conteudo: conteudo.slice(0, 5000),
