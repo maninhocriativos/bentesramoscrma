@@ -2512,14 +2512,12 @@ const ManyChatInboxContent = () => {
       const outboundInstanceId = resolveInstanceId(targetSub);
       const forwarded = `⤵️ *Mensagem encaminhada*\n\n${forwardMessageContent}`;
       
-      await supabase.functions.invoke('zapi-send', {
-        body: {
-          to_phone: targetSub.telefone,
-          message: forwarded,
-          type: 'text',
-          lead_id: targetSub.lead_id,
-          ...(outboundInstanceId && { instance_id: outboundInstanceId }),
-        },
+      await invokeZapiSend({
+        to_phone: targetSub.telefone,
+        message: forwarded,
+        type: 'text',
+        lead_id: targetSub.lead_id,
+        ...(outboundInstanceId && { instance_id: outboundInstanceId }),
       });
       
       await supabase.from('manychat_mensagens' as any).insert({
