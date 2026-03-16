@@ -251,19 +251,25 @@ export default function ProcessosPage() {
           </TabsContent>
 
           <TabsContent value="consulta">
-            <ConsultaProcessoExterno />
+            <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>}>
+              <ConsultaProcessoExterno />
+            </Suspense>
           </TabsContent>
         </Tabs>
       </div>
 
-      <ProcessoModalExpanded
-        processo={selectedProcesso}
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        isNew={isNew}
-        canDelete={canDelete}
-        leads={leads}
-      />
+      {isModalOpen && (
+        <Suspense fallback={null}>
+          <ProcessoModalExpanded
+            processo={selectedProcesso}
+            isOpen={isModalOpen}
+            onClose={handleCloseModal}
+            isNew={isNew}
+            canDelete={canDelete}
+            leads={leads}
+          />
+        </Suspense>
+      )}
     </AppLayout>
   );
 }
