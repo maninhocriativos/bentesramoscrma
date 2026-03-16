@@ -1924,15 +1924,13 @@ const ManyChatInboxContent = () => {
       const signedUrl = signResult.data.signedUrl;
       
       // Enviar via Z-API
-      const { data: zapiResult, error: zapiError } = await supabase.functions.invoke('zapi-send', {
-        body: {
-          to_phone: subscriberSnapshot.telefone,
-          message: signedUrl,
-          type: 'audio',
-          lead_id: subscriberSnapshot.lead_id,
-          file_name: audioFile.name,
-          ...(outboundInstanceId && { instance_id: outboundInstanceId }),
-        },
+      const { data: zapiResult, error: zapiError } = await invokeZapiSend({
+        to_phone: subscriberSnapshot.telefone,
+        message: signedUrl,
+        type: 'audio',
+        lead_id: subscriberSnapshot.lead_id,
+        file_name: audioFile.name,
+        ...(outboundInstanceId && { instance_id: outboundInstanceId }),
       });
       
       if (zapiError) throw new Error(zapiError.message);
