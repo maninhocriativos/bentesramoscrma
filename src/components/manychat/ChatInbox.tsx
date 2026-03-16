@@ -27,6 +27,7 @@ import { ConversationSearch } from '@/components/chat/ConversationSearch';
 import { SendContactModal } from '@/components/chat/SendContactModal';
 import { formatWhatsAppText as formatWhatsAppTextHelper } from '@/lib/whatsappTextFormatter';
 import { InstanceInfo, getInstanceFromPhone } from '@/lib/instanceUtils';
+import { invokeZapiSend } from '@/lib/zapiSendClient';
 
 // Map connectedPhone (stored in instance_name) to Z-API instance_id for outgoing routing
 const PHONE_TO_INSTANCE_ID: Record<string, string> = {
