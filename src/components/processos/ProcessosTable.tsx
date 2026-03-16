@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Processo } from '@/types/processos';
-import { Lead } from '@/types/leads';
+import { LeadName } from '@/hooks/useLeadNames';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Scale, ChevronRight, Building2, Gavel, User, Users, FileText, Clock } from 'lucide-react';
