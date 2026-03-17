@@ -114,19 +114,28 @@ export default function IntimacoesPage() {
       toast.error('Configure seu número da OAB no perfil para buscar intimações');
       return;
     }
+
     setSyncing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('intimacoes-oab', {
+      const { data, error } = await supabase.functions.invoke('intimacoes-scheduler', {
         body: { oab_numero: oabNumero, oab_uf: oabUf, advogado_id: user?.id },
       });
+
       if (error) throw error;
+
       if (data?.success) {
-        toast.success(`${data.total} intimações encontradas`, {
-          description: `${data.saved} novas · ${data.updated || 0} atualizadas · Fonte: ${data.fonte}`,
-        });
-        await fetchIntimacoes();
+        toast.success(
+          data?.deduplicated ? 'Sincronização já estava em andamento' : 'Sincronização iniciada',
+          {
+            description: 'A busca foi colocada em fila e será processada automaticamente em segundo plano.',
+          },
+        );
+
+        window.setTimeout(() => {
+          void fetchIntimacoes();
+        }, 4000);
       } else {
-        toast.error(data?.error || 'Erro ao buscar intimações');
+        toast.error(data?.error || 'Erro ao iniciar sincronização');
       }
     } catch (err: any) {
       toast.error('Erro ao sincronizar intimações', { description: err.message });
