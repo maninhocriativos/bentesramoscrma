@@ -114,13 +114,13 @@ export default function PetitionPreviewModal({ open, onOpenChange, content, titu
           <div className="p-6">
             {/* Document simulation - A4-like paper */}
             <div className="bg-white border border-border/40 rounded-lg shadow-sm mx-auto max-w-[720px] overflow-hidden">
-              {/* Letterhead */}
-              <div className="border-b-2 border-primary/20 px-10 py-5 bg-gradient-to-r from-primary/[0.02] to-transparent">
-                <div className="text-center">
-                  <h2 className="font-serif text-lg font-bold tracking-wide text-foreground">Bentes Ramos</h2>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary/70 mt-0.5">Advocacia e Consultoria Jurídica</p>
-                </div>
+              {/* Letterhead — matching real document */}
+              <div className="px-10 pt-8 pb-5 flex flex-col items-center gap-1">
+                <img src={logoBR} alt="Bentes Ramos" className="h-14 object-contain" />
+                <h2 className="font-serif text-lg font-bold tracking-wide" style={{ color: '#9B7B3C' }}>Bentes Ramos</h2>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.25em]" style={{ color: '#9B7B3C' }}>Advocacia e Consultoria Jurídica</p>
               </div>
+              <div className="mx-10 border-b" style={{ borderColor: '#9B7B3C' }} />
 
               {/* Content */}
               <div className="px-10 py-8 space-y-5 font-serif text-foreground/90 leading-relaxed">
