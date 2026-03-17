@@ -51,6 +51,31 @@ interface Intimacao {
   created_at: string;
 }
 
+async function copyTextToClipboard(text: string, label = 'Número do processo') {
+  if (!text) return;
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+
+    toast.success(`${label} copiado!`);
+  } catch (error) {
+    console.error('Erro ao copiar texto:', error);
+    toast.error(`Não foi possível copiar ${label.toLowerCase()}`);
+  }
+}
+
 export default function IntimacoesPage() {
   const { perfil } = usePerfil();
   const { settings: officeSettings } = useOfficeSettings();
