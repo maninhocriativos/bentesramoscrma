@@ -46,7 +46,9 @@ serve(async (req) => {
 
     // Priority: 1) Anthropic Claude  2) Lovable AI Gateway  3) OpenAI
     if (anthropicKey) {
-      const claudeModel = petType?.agent_model || "claude-sonnet-4-20250514";
+      // Only use agent_model if it's a valid Claude model, otherwise use default
+      const rawModel = petType?.agent_model || "";
+      const claudeModel = rawModel.startsWith("claude") ? rawModel : "claude-sonnet-4-20250514";
       console.log("Using Anthropic Claude:", claudeModel);
 
       const resp = await fetch("https://api.anthropic.com/v1/messages", {
