@@ -89,25 +89,15 @@ export function generateProcuracaoHtml(data: ProcuracaoData, office: OfficeData)
     .header {
       text-align: center;
       margin-bottom: 30px;
-      border-bottom: 2px solid #c9a227;
+      border-bottom: 2px solid #9B7B3C;
       padding-bottom: 20px;
     }
     .header-logo {
-      max-height: 60px;
-      margin-bottom: 10px;
+      max-height: 80px;
+      margin-bottom: 5px;
     }
-    .header h1 {
-      font-size: 18pt;
-      color: #1a365d;
-      margin: 0;
-      font-weight: bold;
-    }
-    .header h2 {
-      font-size: 11pt;
-      color: #4a5568;
-      margin: 5px 0 0 0;
-      font-weight: normal;
-      letter-spacing: 2px;
+    .header h1, .header h2 {
+      display: none;
     }
     .title {
       text-align: center;
@@ -166,21 +156,29 @@ export function generateProcuracaoHtml(data: ProcuracaoData, office: OfficeData)
     }
     .footer {
       margin-top: 40px;
-      padding-top: 20px;
-      border-top: 2px solid #c9a227;
-      font-size: 9pt;
-      color: #4a5568;
+      padding: 15px 20px;
+      background: #2D2D2D;
       text-align: center;
+      border-radius: 0 0 4px 4px;
     }
     .footer-line {
       margin: 3px 0;
+      color: #B0B0B0;
+      font-size: 9pt;
+    }
+    .footer-line strong {
+      color: #C4A95B;
+      font-size: 10pt;
+      letter-spacing: 1px;
+    }
+    .footer-line a {
+      color: #7BA4D4;
     }
   </style>
 </head>
 <body>
   <div class="header">
-    <h1>${office.officeName || 'BENTES RAMOS'}</h1>
-    <h2>ADVOCACIA E CONSULTORIA JURÍDICA</h2>
+    <img class="header-logo" src="/images/logo-bentes-ramos-header.jpg" alt="Bentes Ramos - Advocacia e Consultoria Jurídica" />
   </div>
 
   <div class="title">INSTRUMENTO DE PROCURAÇÃO "AD JUDICIA ET EXTRA"</div>
@@ -223,8 +221,8 @@ export function generateProcuracaoHtml(data: ProcuracaoData, office: OfficeData)
 
   <div class="footer">
     <div class="footer-line"><strong>${office.officeName || 'BENTES RAMOS ADVOCACIA E CONSULTORIA JURÍDICA'}</strong></div>
-    <div class="footer-line">📍 ${office.address || 'Rua Salvador, 120, Sala 708 – Vieiralves Business Center'} – ${office.city || 'Manaus'}/${office.state || 'AM'} – CEP ${office.zipCode || '69057-040'}</div>
-    <div class="footer-line">📞 ${office.phone || '(92) 3343-6173'} | ✉️ ${office.email || 'juridico@bentesramos.adv.br'}${office.website ? ` | 🌐 ${office.website}` : ''}</div>
+    <div class="footer-line">End.: ${office.address || 'Rua Salvador, n° 120, sala 708, 7° andar – Edifício Vieiralves Business Center'} – bairro: Adrianópolis – ${office.city || 'Manaus'}/${office.state || 'AM'} – Cep: ${office.zipCode || '69.057-040'}</div>
+    <div class="footer-line">Tel.: ${office.phone || '(92) 3343-6173'} – Cel.: (92) 98223-7330 / 98160-4348 · E-mail: <a href="mailto:${office.email || 'juridico@bentesramos.adv.br'}">${office.email || 'juridico@bentesramos.adv.br'}</a></div>
   </div>
 </body>
 </html>
