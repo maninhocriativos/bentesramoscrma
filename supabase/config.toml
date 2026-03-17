@@ -137,3 +137,6 @@ verify_jwt = false
 
 [functions.petition-rewrite]
 verify_jwt = false
+
+[functions.petition-generate-v3]
+verify_jwt = false

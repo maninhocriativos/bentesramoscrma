@@ -2149,6 +2149,272 @@ export type Database = {
         }
         Relationships: []
       }
+      petition_cases: {
+        Row: {
+          cliente_bairro: string | null
+          cliente_cep: string | null
+          cliente_cidade: string | null
+          cliente_condicao_especial: string | null
+          cliente_cpf: string | null
+          cliente_data_nascimento: string | null
+          cliente_email: string | null
+          cliente_endereco: string | null
+          cliente_estado_civil: string | null
+          cliente_idade: number | null
+          cliente_nacionalidade: string | null
+          cliente_naturalidade: string | null
+          cliente_nome: string | null
+          cliente_profissao: string | null
+          cliente_rg: string | null
+          cliente_telefone: string | null
+          cliente_uf: string | null
+          comarca: string | null
+          created_at: string | null
+          created_by: string | null
+          current_step: number | null
+          dados_faticos: Json | null
+          desinteresse_conciliacao: boolean | null
+          documentos_anexados: string[] | null
+          estado: string | null
+          fatos_adicionais: string | null
+          fundamento_prioridade: string | null
+          generated_content: Json | null
+          generated_docx_url: string | null
+          generated_pdf_url: string | null
+          id: string
+          lead_id: string | null
+          observacoes_advogado: string | null
+          pedir_danos_morais: boolean | null
+          pedir_inversao_onus: boolean | null
+          pedir_justica_gratuita: boolean | null
+          pedir_repeticao_indebito: boolean | null
+          pedir_tutela_urgencia: boolean | null
+          petition_type_id: string
+          reu_cnpj: string | null
+          reu_endereco: string | null
+          reu_natureza_relacao: string | null
+          reu_nome: string | null
+          reu_tipo: string | null
+          status: Database["public"]["Enums"]["petition_status_v3"] | null
+          tentativa_administrativa: boolean | null
+          tipo_vara: string | null
+          titulo: string | null
+          tramitacao_preferencial: boolean | null
+          updated_at: string | null
+          updated_by: string | null
+          valor_dano_moral: number | null
+          vara: string | null
+        }
+        Insert: {
+          cliente_bairro?: string | null
+          cliente_cep?: string | null
+          cliente_cidade?: string | null
+          cliente_condicao_especial?: string | null
+          cliente_cpf?: string | null
+          cliente_data_nascimento?: string | null
+          cliente_email?: string | null
+          cliente_endereco?: string | null
+          cliente_estado_civil?: string | null
+          cliente_idade?: number | null
+          cliente_nacionalidade?: string | null
+          cliente_naturalidade?: string | null
+          cliente_nome?: string | null
+          cliente_profissao?: string | null
+          cliente_rg?: string | null
+          cliente_telefone?: string | null
+          cliente_uf?: string | null
+          comarca?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          current_step?: number | null
+          dados_faticos?: Json | null
+          desinteresse_conciliacao?: boolean | null
+          documentos_anexados?: string[] | null
+          estado?: string | null
+          fatos_adicionais?: string | null
+          fundamento_prioridade?: string | null
+          generated_content?: Json | null
+          generated_docx_url?: string | null
+          generated_pdf_url?: string | null
+          id?: string
+          lead_id?: string | null
+          observacoes_advogado?: string | null
+          pedir_danos_morais?: boolean | null
+          pedir_inversao_onus?: boolean | null
+          pedir_justica_gratuita?: boolean | null
+          pedir_repeticao_indebito?: boolean | null
+          pedir_tutela_urgencia?: boolean | null
+          petition_type_id: string
+          reu_cnpj?: string | null
+          reu_endereco?: string | null
+          reu_natureza_relacao?: string | null
+          reu_nome?: string | null
+          reu_tipo?: string | null
+          status?: Database["public"]["Enums"]["petition_status_v3"] | null
+          tentativa_administrativa?: boolean | null
+          tipo_vara?: string | null
+          titulo?: string | null
+          tramitacao_preferencial?: boolean | null
+          updated_at?: string | null
+          updated_by?: string | null
+          valor_dano_moral?: number | null
+          vara?: string | null
+        }
+        Update: {
+          cliente_bairro?: string | null
+          cliente_cep?: string | null
+          cliente_cidade?: string | null
+          cliente_condicao_especial?: string | null
+          cliente_cpf?: string | null
+          cliente_data_nascimento?: string | null
+          cliente_email?: string | null
+          cliente_endereco?: string | null
+          cliente_estado_civil?: string | null
+          cliente_idade?: number | null
+          cliente_nacionalidade?: string | null
+          cliente_naturalidade?: string | null
+          cliente_nome?: string | null
+          cliente_profissao?: string | null
+          cliente_rg?: string | null
+          cliente_telefone?: string | null
+          cliente_uf?: string | null
+          comarca?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          current_step?: number | null
+          dados_faticos?: Json | null
+          desinteresse_conciliacao?: boolean | null
+          documentos_anexados?: string[] | null
+          estado?: string | null
+          fatos_adicionais?: string | null
+          fundamento_prioridade?: string | null
+          generated_content?: Json | null
+          generated_docx_url?: string | null
+          generated_pdf_url?: string | null
+          id?: string
+          lead_id?: string | null
+          observacoes_advogado?: string | null
+          pedir_danos_morais?: boolean | null
+          pedir_inversao_onus?: boolean | null
+          pedir_justica_gratuita?: boolean | null
+          pedir_repeticao_indebito?: boolean | null
+          pedir_tutela_urgencia?: boolean | null
+          petition_type_id?: string
+          reu_cnpj?: string | null
+          reu_endereco?: string | null
+          reu_natureza_relacao?: string | null
+          reu_nome?: string | null
+          reu_tipo?: string | null
+          status?: Database["public"]["Enums"]["petition_status_v3"] | null
+          tentativa_administrativa?: boolean | null
+          tipo_vara?: string | null
+          titulo?: string | null
+          tramitacao_preferencial?: boolean | null
+          updated_at?: string | null
+          updated_by?: string | null
+          valor_dano_moral?: number | null
+          vara?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "petition_cases_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "petition_cases_petition_type_id_fkey"
+            columns: ["petition_type_id"]
+            isOneToOne: false
+            referencedRelation: "petition_types_v3"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      petition_categories: {
+        Row: {
+          ativo: boolean | null
+          cor: string | null
+          created_at: string | null
+          descricao: string | null
+          icone: string | null
+          id: string
+          nome: string
+          ordem: number | null
+          slug: string
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          cor?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          icone?: string | null
+          id?: string
+          nome: string
+          ordem?: number | null
+          slug: string
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          cor?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          icone?: string | null
+          id?: string
+          nome?: string
+          ordem?: number | null
+          slug?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      petition_generation_versions: {
+        Row: {
+          case_id: string
+          content_json: Json
+          created_at: string | null
+          docx_url: string | null
+          generated_by: string | null
+          id: string
+          notes: string | null
+          pdf_url: string | null
+          version: number | null
+        }
+        Insert: {
+          case_id: string
+          content_json?: Json
+          created_at?: string | null
+          docx_url?: string | null
+          generated_by?: string | null
+          id?: string
+          notes?: string | null
+          pdf_url?: string | null
+          version?: number | null
+        }
+        Update: {
+          case_id?: string
+          content_json?: Json
+          created_at?: string | null
+          docx_url?: string | null
+          generated_by?: string | null
+          id?: string
+          notes?: string | null
+          pdf_url?: string | null
+          version?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "petition_generation_versions_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "petition_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       petition_models_v2: {
         Row: {
           action_type_id: string
@@ -2222,6 +2488,106 @@ export type Database = {
             columns: ["action_type_id"]
             isOneToOne: false
             referencedRelation: "action_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      petition_status_logs: {
+        Row: {
+          case_id: string
+          changed_by: string | null
+          created_at: string | null
+          from_status: string | null
+          id: string
+          reason: string | null
+          to_status: string
+        }
+        Insert: {
+          case_id: string
+          changed_by?: string | null
+          created_at?: string | null
+          from_status?: string | null
+          id?: string
+          reason?: string | null
+          to_status: string
+        }
+        Update: {
+          case_id?: string
+          changed_by?: string | null
+          created_at?: string | null
+          from_status?: string | null
+          id?: string
+          reason?: string | null
+          to_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "petition_status_logs_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "petition_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      petition_types_v3: {
+        Row: {
+          agent_model: string | null
+          agent_prompt: string | null
+          ativo: boolean | null
+          category_id: string
+          cor: string | null
+          created_at: string | null
+          descricao: string | null
+          field_schema: Json | null
+          icone: string | null
+          id: string
+          nome: string
+          ordem: number | null
+          slug: string
+          template_docx_url: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          agent_model?: string | null
+          agent_prompt?: string | null
+          ativo?: boolean | null
+          category_id: string
+          cor?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          field_schema?: Json | null
+          icone?: string | null
+          id?: string
+          nome: string
+          ordem?: number | null
+          slug: string
+          template_docx_url?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          agent_model?: string | null
+          agent_prompt?: string | null
+          ativo?: boolean | null
+          category_id?: string
+          cor?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          field_schema?: Json | null
+          icone?: string | null
+          id?: string
+          nome?: string
+          ordem?: number | null
+          slug?: string
+          template_docx_url?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "petition_types_v3_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "petition_categories"
             referencedColumns: ["id"]
           },
         ]
@@ -3274,6 +3640,14 @@ export type Database = {
     }
     Enums: {
       app_role: "Administrador" | "Advogado" | "Secretaria" | "Gerente"
+      petition_status_v3:
+        | "rascunho"
+        | "gerando"
+        | "gerado"
+        | "revisao"
+        | "aprovado"
+        | "exportado"
+        | "arquivado"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3402,6 +3776,15 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["Administrador", "Advogado", "Secretaria", "Gerente"],
+      petition_status_v3: [
+        "rascunho",
+        "gerando",
+        "gerado",
+        "revisao",
+        "aprovado",
+        "exportado",
+        "arquivado",
+      ],
     },
   },
 } as const
