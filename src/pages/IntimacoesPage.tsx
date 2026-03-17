@@ -626,18 +626,18 @@ function IntimacaoDetailModal({
             </Badge>
           </div>
           {intimacao.processo_cnj && (
-            <div className="mt-0.5 flex items-center gap-1">
-              <p className="text-sm font-mono text-primary/80">{intimacao.processo_cnj}</p>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 rounded-md"
-                onClick={() => void copyTextToClipboard(intimacao.processo_cnj)}
-                title="Copiar número do processo"
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </Button>
+            <div className="mt-1.5 flex items-center gap-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/[0.06] border border-primary/15">
+                <p className="text-sm font-mono font-semibold text-primary tracking-wide">{intimacao.processo_cnj}</p>
+                <button
+                  type="button"
+                  onClick={() => void copyTextToClipboard(intimacao.processo_cnj)}
+                  title="Copiar número do processo"
+                  className="h-6 w-6 rounded-md flex items-center justify-center bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+                >
+                  <Copy className="h-3 w-3" />
+                </button>
+              </div>
             </div>
           )}
         </div>
