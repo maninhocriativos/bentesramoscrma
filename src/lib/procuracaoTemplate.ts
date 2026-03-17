@@ -178,8 +178,7 @@ export function generateProcuracaoHtml(data: ProcuracaoData, office: OfficeData)
 </head>
 <body>
   <div class="header">
-    <h1>${office.officeName || 'BENTES RAMOS'}</h1>
-    <h2>ADVOCACIA E CONSULTORIA JURÍDICA</h2>
+    <img class="header-logo" src="/images/logo-bentes-ramos-header.jpg" alt="Bentes Ramos - Advocacia e Consultoria Jurídica" />
   </div>
 
   <div class="title">INSTRUMENTO DE PROCURAÇÃO "AD JUDICIA ET EXTRA"</div>
