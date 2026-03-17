@@ -241,7 +241,7 @@ Retorne um JSON com EXATAMENTE as chaves abaixo, nesta ordem. Cada valor é o te
 
   "nome_acao": "[TIPO EXATO DA AÇÃO EM MAIÚSCULAS NEGRITO – ex: AÇÃO DECLARATÓRIA DE INEXISTÊNCIA DE DÉBITO C/C INDENIZAÇÃO POR DANOS MORAIS E MATERIAIS COM PEDIDO DE LIMINAR]",
 
-  "qualificacao_reu": "em face de [NOME/RAZÃO SOCIAL DO RÉU EM MAIÚSCULAS], [qualificação jurídica: pessoa jurídica de direito privado / empresa pública / pessoa jurídica de direito público interno], inscrit(o/a) no CNPJ ${isFP ? "n.˚" : "sob o n°"} [CNPJ], ${isFP ? "na pessoa do Procurador Geral do Estado, podendo ser citado na sede da Procuradoria Geral do Estado, à [endereço PGE]" : "com sede ${caseData.reu_endereco ? "à " + caseData.reu_endereco : "à [endereço do réu]"}"}, pelos ${isFP ? "seguintes fundamentos de fato e de direito:" : "fatos e fundamentos a seguir expostos:"}",
+  "qualificacao_reu": "em face de [NOME/RAZAO SOCIAL DO REU EM MAIUSCULAS], [qualificacao juridica], inscrit(o/a) no CNPJ ${isFP ? "n." : "sob o n"} [CNPJ], ${isFP ? "na pessoa do Procurador Geral do Estado, podendo ser citado na sede da Procuradoria Geral do Estado, [endereco PGE]" : "com sede " + (caseData.reu_endereco || "[endereco do reu]")}, pelos ${isFP ? "seguintes fundamentos de fato e de direito:" : "fatos e fundamentos a seguir expostos:"}",
 
   "requerimentos_previos": "Seção numerada '1 – DOS REQUERIMENTOS PRÉVIOS' com subseções:
     ${isIdoso ? "1.1 – PRIORIDADE NA TRAMITAÇÃO PROCESSUAL – REQUERENTE IDOSO (se não houver seção separada de tramitação preferencial acima)\\n" : ""}
