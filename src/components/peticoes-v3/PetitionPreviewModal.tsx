@@ -219,7 +219,7 @@ export default function PetitionPreviewModal({ open, onOpenChange, content, titu
             <div ref={docRef} className="bg-white border border-border/40 rounded-lg shadow-sm mx-auto max-w-[720px] overflow-hidden">
               {/* Letterhead — only the gold logo */}
               <div className="px-10 pt-8 pb-5 flex flex-col items-center">
-                <img src={logoBR} alt="Bentes Ramos - Advocacia e Consultoria Jurídica" className="h-20 object-contain" />
+                <img src={logoBR} alt="Bentes Ramos - Advocacia e Consultoria Jurídica" className="h-28 object-contain" />
               </div>
               <div className="mx-10 border-b" style={{ borderColor: '#9B7B3C' }} />
 
