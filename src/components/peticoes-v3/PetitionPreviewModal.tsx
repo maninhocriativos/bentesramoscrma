@@ -4,6 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { RefreshCw, Eye, FileDown, Copy, CheckCircle } from 'lucide-react';
 import { useState } from 'react';
+import logoBR from '@/assets/logo-bentes-ramos.png';
 
 interface Props {
   open: boolean;
@@ -113,13 +114,13 @@ export default function PetitionPreviewModal({ open, onOpenChange, content, titu
           <div className="p-6">
             {/* Document simulation - A4-like paper */}
             <div className="bg-white border border-border/40 rounded-lg shadow-sm mx-auto max-w-[720px] overflow-hidden">
-              {/* Letterhead */}
-              <div className="border-b-2 border-primary/20 px-10 py-5 bg-gradient-to-r from-primary/[0.02] to-transparent">
-                <div className="text-center">
-                  <h2 className="font-serif text-lg font-bold tracking-wide text-foreground">Bentes Ramos</h2>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary/70 mt-0.5">Advocacia e Consultoria Jurídica</p>
-                </div>
+              {/* Letterhead — matching real document */}
+              <div className="px-10 pt-8 pb-5 flex flex-col items-center gap-1">
+                <img src={logoBR} alt="Bentes Ramos" className="h-14 object-contain" />
+                <h2 className="font-serif text-lg font-bold tracking-wide" style={{ color: '#9B7B3C' }}>Bentes Ramos</h2>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.25em]" style={{ color: '#9B7B3C' }}>Advocacia e Consultoria Jurídica</p>
               </div>
+              <div className="mx-10 border-b" style={{ borderColor: '#9B7B3C' }} />
 
               {/* Content */}
               <div className="px-10 py-8 space-y-5 font-serif text-foreground/90 leading-relaxed">
@@ -153,13 +154,18 @@ export default function PetitionPreviewModal({ open, onOpenChange, content, titu
                 )}
               </div>
 
-              {/* Footer */}
-              <div className="border-t border-border/30 px-10 py-4 bg-muted/20">
-                <div className="text-center text-[10px] text-muted-foreground leading-relaxed">
-                  <p className="font-semibold uppercase tracking-wider">Bentes Ramos Advocacia e Consultoria Jurídica</p>
-                  <p className="mt-1">📍 Rua Salvador, 120, Sala 708 – Vieiralves Business Center – Adrianópolis, Manaus/AM – CEP 69057-040</p>
-                  <p>📞 (92) 3343-6173 | 📱 (92) 98223-7330 / (92) 99160-4348 / 98588-8190</p>
-                  <p>juridico@bentesramos.adv.br | 🌐 www.bentesramos.com.br</p>
+              {/* Footer — matching real document (dark bg, gold text) */}
+              <div className="px-10 py-4" style={{ backgroundColor: '#2D2D2D' }}>
+                <div className="text-center leading-relaxed">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.15em]" style={{ color: '#C4A95B' }}>
+                    Bentes Ramos Advocacia e Consultoria Jurídica
+                  </p>
+                  <p className="text-[10px] mt-1" style={{ color: '#B0B0B0' }}>
+                    End.: Rua Salvador, n° 120, sala 708, 7° andar – Edifício Vieiralves Business Center – bairro: Adrianópolis – Manaus/AM – Cep: 69.057-040
+                  </p>
+                  <p className="text-[10px]" style={{ color: '#B0B0B0' }}>
+                    Tel.: (92) 3343-6173 – Cel.: (92) 98223-7330 / 98160-4348 · E-mail: <span style={{ color: '#7BA4D4' }}>juridico@bentesramos.adv.br</span>
+                  </p>
                 </div>
               </div>
             </div>
