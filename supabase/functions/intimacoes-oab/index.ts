@@ -220,6 +220,12 @@ serve(async (req) => {
         const buscaData = await buscaResp.json();
         const resultados = buscaData?.items?.data || buscaData?.items || buscaData?.data || [];
         console.log(`📋 V1: ${resultados.length} resultados em diários`);
+        if (resultados.length > 0) {
+          const sample = resultados[0];
+          console.log(`📋 V1 sample keys: ${Object.keys(sample).join(', ')}`);
+          console.log(`📋 V1 sample diario_data: ${sample.diario_data}, data_publicacao: ${sample.data_publicacao}, data: ${sample.data}`);
+          console.log(`📋 V1 sample texto length: ${(sample.texto || '').length}, conteudo: ${(sample.conteudo || '').length}`);
+        }
 
         for (const item of resultados) {
           const conteudo = item.texto || item.conteudo || item.content || "";
