@@ -152,7 +152,7 @@ serve(async (req) => {
 
         try {
           const movResp = await fetch(
-            `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?limit=20`,
+            `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?limit=50`,
             {
               headers: {
                 Authorization: `Bearer ${ESCAVADOR_API_KEY}`,
