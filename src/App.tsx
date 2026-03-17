@@ -30,7 +30,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const PoliticaPrivacidadePage = lazy(() => import("./pages/PoliticaPrivacidadePage"));
 const TermosServicoPage = lazy(() => import("./pages/TermosServicoPage"));
 const InstallPage = lazy(() => import("./pages/InstallPage"));
-const PeticoesPage = lazy(() => import("./pages/PeticoesPage"));
+const PeticoesIniciaisPage = lazy(() => import("./pages/PeticoesIniciaisPage"));
 const PeticaoEditarPage = lazy(() => import("./pages/PeticaoEditarPage"));
 const PeticaoRevisaoPage = lazy(() => import("./pages/PeticaoRevisaoPage"));
 const PeticaoSaidaPage = lazy(() => import("./pages/PeticaoSaidaPage"));
