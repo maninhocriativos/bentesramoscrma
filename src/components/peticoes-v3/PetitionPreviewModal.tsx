@@ -4,6 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { RefreshCw, Eye, FileDown, Copy, CheckCircle } from 'lucide-react';
 import { useState } from 'react';
+import logoBR from '@/assets/logo-bentes-ramos.png';
 
 interface Props {
   open: boolean;
