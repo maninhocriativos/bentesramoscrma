@@ -129,6 +129,9 @@ verify_jwt = false
 [functions.intimacoes-scheduler]
 verify_jwt = false
 
+[functions.intimacoes-worker]
+verify_jwt = false
+
 [functions.backup-chat-drive]
 verify_jwt = false
 

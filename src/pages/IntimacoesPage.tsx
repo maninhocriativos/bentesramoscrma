@@ -626,7 +626,19 @@ function IntimacaoDetailModal({
             </Badge>
           </div>
           {intimacao.processo_cnj && (
-            <p className="text-sm font-mono text-primary/80 mt-0.5">{intimacao.processo_cnj}</p>
+            <div className="mt-0.5 flex items-center gap-1">
+              <p className="text-sm font-mono text-primary/80">{intimacao.processo_cnj}</p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-md"
+                onClick={() => void copyTextToClipboard(intimacao.processo_cnj)}
+                title="Copiar número do processo"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -644,10 +656,14 @@ function IntimacaoDetailModal({
           Relatório PDF
         </Button>
         {intimacao.processo_cnj && (
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"
-            onClick={() => { navigator.clipboard.writeText(intimacao.processo_cnj); toast.success('CNJ copiado!'); }}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            onClick={() => void copyTextToClipboard(intimacao.processo_cnj)}
+          >
             <Copy className="h-3.5 w-3.5" />
-            Copiar CNJ
+            Copiar nº do processo
           </Button>
         )}
       </div>
