@@ -221,8 +221,8 @@ export function generateProcuracaoHtml(data: ProcuracaoData, office: OfficeData)
 
   <div class="footer">
     <div class="footer-line"><strong>${office.officeName || 'BENTES RAMOS ADVOCACIA E CONSULTORIA JURÍDICA'}</strong></div>
-    <div class="footer-line">📍 ${office.address || 'Rua Salvador, 120, Sala 708 – Vieiralves Business Center'} – ${office.city || 'Manaus'}/${office.state || 'AM'} – CEP ${office.zipCode || '69057-040'}</div>
-    <div class="footer-line">📞 ${office.phone || '(92) 3343-6173'} | ✉️ ${office.email || 'juridico@bentesramos.adv.br'}${office.website ? ` | 🌐 ${office.website}` : ''}</div>
+    <div class="footer-line">End.: ${office.address || 'Rua Salvador, n° 120, sala 708, 7° andar – Edifício Vieiralves Business Center'} – bairro: Adrianópolis – ${office.city || 'Manaus'}/${office.state || 'AM'} – Cep: ${office.zipCode || '69.057-040'}</div>
+    <div class="footer-line">Tel.: ${office.phone || '(92) 3343-6173'} – Cel.: (92) 98223-7330 / 98160-4348 · E-mail: <a href="mailto:${office.email || 'juridico@bentesramos.adv.br'}">${office.email || 'juridico@bentesramos.adv.br'}</a></div>
   </div>
 </body>
 </html>
