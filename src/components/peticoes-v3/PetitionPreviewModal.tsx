@@ -1,10 +1,9 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { RefreshCw, Eye, FileDown, Copy, CheckCircle } from 'lucide-react';
-import { useState } from 'react';
-import logoBR from '@/assets/logo-bentes-ramos.png';
+import { RefreshCw, Eye, FileDown, Copy, CheckCircle, FileText } from 'lucide-react';
+import { useState, useRef } from 'react';
+import logoBR from '@/assets/logo-bentes-ramos-gold.png';
 
 interface Props {
   open: boolean;
@@ -32,30 +31,68 @@ const SECTION_ORDER = [
   'valor_causa',
   'fechamento',
   'documentos_anexos',
-  'texto_completo', // fallback for unstructured
+  'texto_completo',
 ];
 
-const SECTION_STYLES: Record<string, { title?: string; centered?: boolean; bold?: boolean; uppercase?: boolean; className?: string }> = {
+// No more duplicate 'title' fields — Claude already includes them in the content
+const SECTION_STYLES: Record<string, { centered?: boolean; bold?: boolean; uppercase?: boolean; className?: string }> = {
   enderecamento: { centered: true, bold: true, uppercase: true, className: 'text-sm' },
   tramitacao_preferencial: { centered: true, bold: true, uppercase: true, className: 'text-sm' },
   qualificacao_autor: { className: 'text-sm indent-8' },
   nome_acao: { centered: true, bold: true, uppercase: true, className: 'text-base' },
   qualificacao_reu: { className: 'text-sm indent-8' },
-  requerimentos_previos: { title: '1 – DOS REQUERIMENTOS PRÉVIOS', className: 'text-sm' },
-  fatos: { title: '2 – DOS FATOS', className: 'text-sm' },
-  direito: { title: '3 – DO DIREITO', className: 'text-sm' },
+  requerimentos_previos: { className: 'text-sm' },
+  fatos: { className: 'text-sm' },
+  direito: { className: 'text-sm' },
   tutela_urgencia: { className: 'text-sm' },
   inversao_onus: { className: 'text-sm' },
   pedidos: { className: 'text-sm' },
   provas: { className: 'text-sm' },
   valor_causa: { className: 'text-sm indent-8' },
   fechamento: { className: 'text-sm text-center' },
-  documentos_anexos: { title: 'Documentos Anexos:', className: 'text-sm' },
+  documentos_anexos: { className: 'text-sm' },
   texto_completo: { className: 'text-sm' },
 };
 
+function buildFullHtml(sections: { key: string; value: string }[], logoUrl: string): string {
+  const body = sections.map(({ key, value }) => {
+    const style = SECTION_STYLES[key] || {};
+    const textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    const classes: string[] = [];
+    if (style.centered) classes.push('text-align:center;');
+    if (style.bold) classes.push('font-weight:bold;');
+    if (style.uppercase) classes.push('text-transform:uppercase;');
+    if (key === 'qualificacao_autor' || key === 'qualificacao_reu' || key === 'valor_causa') {
+      classes.push('text-indent:3em;');
+    }
+    return `<div style="margin-bottom:18px;${classes.join('')}white-space:pre-wrap;font-size:12pt;line-height:1.7;text-align:${style.centered ? 'center' : 'justify'};">${textContent.replace(/\n/g, '<br/>')}</div>`;
+  }).join('\n');
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+@page { margin: 2cm 2.5cm; size: A4; }
+body { font-family: 'Times New Roman', Times, serif; font-size: 12pt; line-height: 1.7; color: #1a1a1a; max-width: 18cm; margin: 0 auto; }
+.header { text-align: center; padding-bottom: 15px; border-bottom: 2px solid #9B7B3C; margin-bottom: 25px; }
+.header img { height: 70px; }
+.footer { margin-top: 35px; padding: 12px 20px; background: #2D2D2D; text-align: center; }
+.footer .name { color: #C4A95B; font-weight: bold; font-size: 10pt; text-transform: uppercase; letter-spacing: 1px; }
+.footer .info { color: #B0B0B0; font-size: 9pt; margin-top: 3px; }
+.footer a { color: #7BA4D4; }
+</style></head><body>
+<div class="header"><img src="${logoUrl}" alt="Bentes Ramos"/></div>
+${body}
+<div class="footer">
+<div class="name">Bentes Ramos Advocacia e Consultoria Jurídica</div>
+<div class="info">End.: Rua Salvador, n° 120, sala 708, 7° andar – Edifício Vieiralves Business Center – bairro: Adrianópolis – Manaus/AM – Cep: 69.057-040</div>
+<div class="info">Tel.: (92) 3343-6173 – Cel.: (92) 98223-7330 / 98160-4348 · E-mail: <a href="mailto:juridico@bentesramos.adv.br">juridico@bentesramos.adv.br</a></div>
+</div>
+</body></html>`;
+}
+
 export default function PetitionPreviewModal({ open, onOpenChange, content, titulo, onRegenerate, regenerating }: Props) {
   const [copied, setCopied] = useState(false);
+  const [exporting, setExporting] = useState<'pdf' | 'docx' | null>(null);
+  const docRef = useRef<HTMLDivElement>(null);
 
   if (!content) return null;
 
@@ -81,6 +118,64 @@ export default function PetitionPreviewModal({ open, onOpenChange, content, titu
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const exportAsDocx = async () => {
+    setExporting('docx');
+    try {
+      const html = buildFullHtml(orderedSections, window.location.origin + '/images/logo-bentes-ramos-header.jpg');
+      const blob = new Blob(
+        [
+          `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+          <head><meta charset="utf-8"><style>@page { margin: 2cm 2.5cm; size: A4; } body { font-family: 'Times New Roman'; font-size: 12pt; }</style></head><body>${html}</body></html>`,
+        ],
+        { type: 'application/msword' }
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${titulo || 'peticao'}.doc`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const exportAsPdf = async () => {
+    setExporting('pdf');
+    try {
+      const { jsPDF } = await import('jspdf');
+      const el = docRef.current;
+      if (!el) return;
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const margin = 20;
+      const usableWidth = pageWidth - margin * 2;
+
+      // Use html method for proper rendering
+      await new Promise<void>((resolve) => {
+        pdf.html(el, {
+          callback: (doc) => {
+            doc.save(`${titulo || 'peticao'}.pdf`);
+            resolve();
+          },
+          x: margin,
+          y: margin,
+          width: usableWidth,
+          windowWidth: el.scrollWidth,
+          html2canvas: {
+            scale: 0.264, // mm/px conversion
+            useCORS: true,
+            logging: false,
+          },
+        });
+      });
+    } finally {
+      setExporting(null);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[92vh] p-0 gap-0">
@@ -100,6 +195,14 @@ export default function PetitionPreviewModal({ open, onOpenChange, content, titu
                 {copied ? <CheckCircle className="h-3.5 w-3.5 mr-1.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 mr-1.5" />}
                 {copied ? 'Copiado' : 'Copiar'}
               </Button>
+              <Button variant="outline" size="sm" onClick={exportAsDocx} disabled={!!exporting} className="h-8">
+                <FileText className={`h-3.5 w-3.5 mr-1.5 ${exporting === 'docx' ? 'animate-pulse' : ''}`} />
+                Word
+              </Button>
+              <Button variant="outline" size="sm" onClick={exportAsPdf} disabled={!!exporting} className="h-8">
+                <FileDown className={`h-3.5 w-3.5 mr-1.5 ${exporting === 'pdf' ? 'animate-pulse' : ''}`} />
+                PDF
+              </Button>
               {onRegenerate && (
                 <Button variant="outline" size="sm" onClick={onRegenerate} disabled={regenerating} className="h-8">
                   <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${regenerating ? 'animate-spin' : ''}`} />
@@ -113,8 +216,8 @@ export default function PetitionPreviewModal({ open, onOpenChange, content, titu
         <ScrollArea className="max-h-[78vh]">
           <div className="p-6">
             {/* Document simulation - A4-like paper */}
-            <div className="bg-white border border-border/40 rounded-lg shadow-sm mx-auto max-w-[720px] overflow-hidden">
-              {/* Letterhead — only logo, no duplicate text */}
+            <div ref={docRef} className="bg-white border border-border/40 rounded-lg shadow-sm mx-auto max-w-[720px] overflow-hidden">
+              {/* Letterhead — only the gold logo */}
               <div className="px-10 pt-8 pb-5 flex flex-col items-center">
                 <img src={logoBR} alt="Bentes Ramos - Advocacia e Consultoria Jurídica" className="h-20 object-contain" />
               </div>
@@ -128,11 +231,8 @@ export default function PetitionPreviewModal({ open, onOpenChange, content, titu
 
                   return (
                     <div key={key}>
-                      {style.title && (
-                        <h3 className="font-bold text-sm uppercase tracking-wide text-foreground mb-3">{style.title}</h3>
-                      )}
                       <div
-                        className={`whitespace-pre-wrap ${style.className || 'text-sm'} ${style.centered ? 'text-center' : ''} ${style.bold ? 'font-bold' : ''} ${style.uppercase ? 'uppercase' : ''}`}
+                        className={`whitespace-pre-wrap ${style.className || 'text-sm'} ${style.centered ? 'text-center' : 'text-justify'} ${style.bold ? 'font-bold' : ''} ${style.uppercase ? 'uppercase' : ''}`}
                       >
                         {/* Highlight [PENDENTE] markers */}
                         {textContent.split(/(\[PENDENTE:[^\]]*\])/).map((part, i) =>
@@ -152,7 +252,7 @@ export default function PetitionPreviewModal({ open, onOpenChange, content, titu
                 )}
               </div>
 
-              {/* Footer — matching real document (dark bg, gold text) */}
+              {/* Footer — dark bg, gold text */}
               <div className="px-10 py-4" style={{ backgroundColor: '#2D2D2D' }}>
                 <div className="text-center leading-relaxed">
                   <p className="text-[11px] font-bold uppercase tracking-[0.15em]" style={{ color: '#C4A95B' }}>
