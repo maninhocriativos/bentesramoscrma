@@ -235,7 +235,7 @@ export default function PetitionPreviewModal({ open, onOpenChange, content, titu
         <ScrollArea className="max-h-[78vh]">
           <div className="p-6">
             {/* Document simulation - A4-like paper */}
-            <div ref={docRef} className="bg-white border border-border/40 rounded-lg shadow-sm mx-auto max-w-[720px] overflow-hidden">
+            <div ref={docRef} data-pdf-root className="bg-white border border-border/40 rounded-lg shadow-sm mx-auto max-w-[720px] overflow-hidden">
               {/* Letterhead — only the gold logo */}
               <div className="px-10 pt-8 pb-5 flex flex-col items-center">
                 <img src={logoBR} alt="Bentes Ramos - Advocacia e Consultoria Jurídica" className="h-28 object-contain" />
