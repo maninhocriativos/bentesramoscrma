@@ -107,10 +107,34 @@ serve(async (req) => {
     if (processosResp.ok) {
       const processosData = await processosResp.json();
       console.log(`📦 Escavador response keys: ${Object.keys(processosData || {}).join(', ')}`);
-      const processos = processosData?.items || processosData?.data || [];
+      let processos = processosData?.items || processosData?.data || [];
       console.log(`📋 ${processos.length} processos encontrados via OAB (página 1)`);
 
-      const maxProcessos = 10;
+      // Fetch page 2 if available (older processes with actual movements)
+      const nextPageUrl = processosData?.links?.next || processosData?.paginator?.next_page_url;
+      if (nextPageUrl) {
+        try {
+          const page2Resp = await fetch(
+            nextPageUrl.startsWith("http") ? nextPageUrl : `https://api.escavador.com${nextPageUrl}`,
+            {
+              headers: {
+                Authorization: `Bearer ${ESCAVADOR_API_KEY}`,
+                "X-Requested-With": "XMLHttpRequest",
+              },
+            }
+          );
+          if (page2Resp.ok) {
+            const page2Data = await page2Resp.json();
+            const page2Items = page2Data?.items || page2Data?.data || [];
+            console.log(`📋 Página 2: ${page2Items.length} processos adicionais`);
+            processos = [...processos, ...page2Items];
+          }
+        } catch (e) {
+          console.warn(`⚠️ Erro ao buscar página 2:`, e);
+        }
+      }
+
+      const maxProcessos = 15;
       const processosToFetch = processos.slice(0, maxProcessos);
       if (processos.length > maxProcessos) {
         console.log(`⚠️ Limitando a ${maxProcessos} de ${processos.length} processos`);
