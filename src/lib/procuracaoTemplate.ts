@@ -89,25 +89,15 @@ export function generateProcuracaoHtml(data: ProcuracaoData, office: OfficeData)
     .header {
       text-align: center;
       margin-bottom: 30px;
-      border-bottom: 2px solid #c9a227;
+      border-bottom: 2px solid #9B7B3C;
       padding-bottom: 20px;
     }
     .header-logo {
-      max-height: 60px;
-      margin-bottom: 10px;
+      max-height: 80px;
+      margin-bottom: 5px;
     }
-    .header h1 {
-      font-size: 18pt;
-      color: #1a365d;
-      margin: 0;
-      font-weight: bold;
-    }
-    .header h2 {
-      font-size: 11pt;
-      color: #4a5568;
-      margin: 5px 0 0 0;
-      font-weight: normal;
-      letter-spacing: 2px;
+    .header h1, .header h2 {
+      display: none;
     }
     .title {
       text-align: center;
