@@ -211,7 +211,8 @@ serve(async (req) => {
               });
             }
           } else {
-            console.warn(`⚠️ Movimentações falhou para ${cnj}: ${movResp.status}`);
+            const errBody = await movResp.text().catch(() => "");
+            console.warn(`⚠️ Movimentações falhou para ${cnj}: ${movResp.status} - ${errBody.slice(0, 200)}`);
           }
         } catch (e) {
           console.warn(`⚠️ Erro ao buscar movimentações para ${cnj}:`, e);
