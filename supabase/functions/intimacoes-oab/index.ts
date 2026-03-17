@@ -81,11 +81,10 @@ serve(async (req) => {
       return d.toISOString().split("T")[0];
     }
 
-    // Strategy 1: Use Escavador V2 monitoramento de diários
     const intimacoes: any[] = [];
-    let fonte = "escavador_v2";
+    let fonte = "escavador_v2+v1";
 
-    // First: try V2 advogado/processos endpoint
+    // ── Strategy 1: V2 advogado/processos + movimentações ──
     const processosResp = await fetch(
       `https://api.escavador.com/api/v2/advogado/processos?oab_numero=${oab_numero}&oab_estado=${oab_uf}`,
       {
@@ -105,20 +104,12 @@ serve(async (req) => {
       );
     }
 
-    if (!processosResp.ok) {
-      const errText = await processosResp.text().catch(() => "");
-      console.warn(`⚠️ V2 falhou (${processosResp.status}): ${errText.slice(0, 500)}`);
-    }
-
     if (processosResp.ok) {
       const processosData = await processosResp.json();
       console.log(`📦 Escavador response keys: ${Object.keys(processosData || {}).join(', ')}`);
       const processos = processosData?.items || processosData?.data || [];
-
-      // Skip pagination to save time/credits - first page usually has all active processos
       console.log(`📋 ${processos.length} processos encontrados via OAB (página 1)`);
 
-      // Limit to 10 processos per run to avoid Edge Function timeout
       const maxProcessos = 10;
       const processosToFetch = processos.slice(0, maxProcessos);
       if (processos.length > maxProcessos) {
@@ -129,14 +120,12 @@ serve(async (req) => {
         const cnj = proc.numero_cnj || proc.numero_processo;
         if (!cnj) { console.log(`⏭️ Processo sem CNJ, pulando`); continue; }
 
-        // Extract tribunal from fontes
         const fonteTribunal = proc.fontes?.find((f: any) => f.tipo === "TRIBUNAL") || proc.fontes?.[0];
         const tribunalSigla = fonteTribunal?.sigla || fonteTribunal?.tribunal?.sigla || fonteTribunal?.nome || "";
         const classeProcesso = fonteTribunal?.capa?.classe || proc.titulo_classe || "";
 
         console.log(`🔎 Buscando movimentações: ${cnj}`);
 
-        // Fetch movimentações for each processo using V2 endpoint
         try {
           const movResp = await fetch(
             `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?limit=20`,
@@ -163,7 +152,6 @@ serve(async (req) => {
               const movDate = mov.data || "";
               if (movDate && movDate < "2026-01-01") continue;
 
-              // Classify type
               let tipoIntimacao = "Movimentação";
               if (combined.includes("intimação") || combined.includes("intimacao")) tipoIntimacao = "Intimação";
               else if (combined.includes("citação") || combined.includes("citacao")) tipoIntimacao = "Citação";
@@ -206,12 +194,16 @@ serve(async (req) => {
         }
       }
     } else {
-      // Fallback: V1 busca em diários
-      console.log("🔄 Fallback: busca V1 em diários");
-      fonte = "escavador_v1";
-      const searchTerm = `OAB ${oab_uf} ${oab_numero}`;
+      const errText = await processosResp.text().catch(() => "");
+      console.warn(`⚠️ V2 falhou (${processosResp.status}): ${errText.slice(0, 500)}`);
+    }
 
-      // Try V1 busca em diários with date filter
+    console.log(`📊 V2 encontrou ${intimacoes.length} itens. Agora buscando V1 diários...`);
+
+    // ── Strategy 2: ALWAYS also search V1 diários oficiais ──
+    // This is the primary source for actual intimações/publicações in court journals
+    const searchTerm = `OAB ${oab_uf} ${oab_numero}`;
+    try {
       const buscaResp = await fetch(
         `https://api.escavador.com/api/v1/busca?q=${encodeURIComponent(searchTerm)}&qo=d&limit=50&page=1&data_inicio=2026-01-01`,
         {
@@ -222,13 +214,14 @@ serve(async (req) => {
         }
       );
 
+      console.log(`📡 Escavador V1 diários status: ${buscaResp.status}`);
+
       if (buscaResp.ok) {
         const buscaData = await buscaResp.json();
         const resultados = buscaData?.items?.data || buscaData?.items || buscaData?.data || [];
-        console.log(`📋 V1: ${resultados.length} resultados encontrados`);
+        console.log(`📋 V1: ${resultados.length} resultados em diários`);
 
         for (const item of resultados) {
-          // V1 diário structure: texto, diario_data, diario_nome, diario_sigla
           const conteudo = item.texto || item.conteudo || item.content || "";
           const titulo = item.diario_nome || item.titulo || item.title || "";
           const cnjMatch = conteudo.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
@@ -242,13 +235,9 @@ serve(async (req) => {
           else if (conteudoLower.includes("decisão") || conteudoLower.includes("decisao")) tipoIntimacao = "Decisão";
           else if (conteudoLower.includes("notificação") || conteudoLower.includes("notificacao")) tipoIntimacao = "Notificação";
 
-          // Use diario_data as the primary date
           const diarioData = item.diario_data || item.data_publicacao || item.data || "";
-          
-          // Filter: only 2026+
           if (diarioData && diarioData < "2026-01-01") continue;
 
-          // Calculate CPC dates from diario_data (disponibilização)
           let dataDisponibilizacao = diarioData || null;
           let dataPublicacao = dataDisponibilizacao ? nextBusinessDay(dataDisponibilizacao) : null;
           let dataIntimacao = dataPublicacao ? nextBusinessDay(dataPublicacao) : diarioData || null;
@@ -269,7 +258,11 @@ serve(async (req) => {
             raw_json: item,
           });
         }
+      } else {
+        console.warn(`⚠️ V1 diários falhou: ${buscaResp.status}`);
       }
+    } catch (e) {
+      console.warn(`⚠️ Erro na busca V1 diários:`, e);
     }
 
     console.log(`📌 ${intimacoes.length} publicações processadas`);
