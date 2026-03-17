@@ -74,17 +74,18 @@ function buildFullHtml(sections: { key: string; value: string }[], logoUrl: stri
 body { font-family: 'Times New Roman', Times, serif; font-size: 12pt; line-height: 1.7; color: #1a1a1a; max-width: 18cm; margin: 0 auto; }
 .header { text-align: center; padding-bottom: 15px; border-bottom: 2px solid #9B7B3C; margin-bottom: 25px; }
 .header img { height: 70px; }
-.footer { margin-top: 35px; padding: 12px 20px; background: #2D2D2D; text-align: center; }
-.footer .name { color: #C4A95B; font-weight: bold; font-size: 10pt; text-transform: uppercase; letter-spacing: 1px; }
-.footer .info { color: #B0B0B0; font-size: 9pt; margin-top: 3px; }
-.footer a { color: #7BA4D4; }
+.footer-bar { margin-top: 35px; padding: 10px 20px; background: #2D2D2D; text-align: center; }
+.footer-bar .name { color: #C4A95B; font-weight: bold; font-size: 10pt; text-transform: uppercase; letter-spacing: 1px; }
+.footer-info { padding: 10px 20px; background: #F5F5F5; text-align: center; }
+.footer-info p { color: #555; font-size: 9pt; margin: 2px 0; }
+.footer-info a { color: #3B82F6; }
 </style></head><body>
 <div class="header"><img src="${logoUrl}" alt="Bentes Ramos"/></div>
 ${body}
-<div class="footer">
-<div class="name">Bentes Ramos Advocacia e Consultoria Jurídica</div>
-<div class="info">End.: Rua Salvador, n° 120, sala 708, 7° andar – Edifício Vieiralves Business Center – bairro: Adrianópolis – Manaus/AM – Cep: 69.057-040</div>
-<div class="info">Tel.: (92) 3343-6173 – Cel.: (92) 98223-7330 / 98160-4348 · E-mail: <a href="mailto:juridico@bentesramos.adv.br">juridico@bentesramos.adv.br</a></div>
+<div class="footer-bar"><div class="name">Bentes Ramos Advocacia e Consultoria Jurídica</div></div>
+<div class="footer-info">
+<p>End.: Rua Salvador, n° 120, sala 708, 7° andar – Edifício Vieiralves Business Center – bairro: Adrianópolis – Manaus/AM – Cep: 69.057-040</p>
+<p>Tel.: (92) 3343-6173 – Cel.: (92) 98223-7330 / 98160-4348 · E-mail: <a href="mailto:juridico@bentesramos.adv.br">juridico@bentesramos.adv.br</a></p>
 </div>
 </body></html>`;
 }
@@ -252,17 +253,21 @@ export default function PetitionPreviewModal({ open, onOpenChange, content, titu
                 )}
               </div>
 
-              {/* Footer — dark bg, gold text */}
-              <div className="px-10 py-4" style={{ backgroundColor: '#2D2D2D' }}>
-                <div className="text-center leading-relaxed">
+              {/* Footer */}
+              <div className="text-center">
+                {/* Dark bar — firm name only */}
+                <div className="px-10 py-2.5" style={{ backgroundColor: '#2D2D2D' }}>
                   <p className="text-[11px] font-bold uppercase tracking-[0.15em]" style={{ color: '#C4A95B' }}>
                     Bentes Ramos Advocacia e Consultoria Jurídica
                   </p>
-                  <p className="text-[10px] mt-1" style={{ color: '#B0B0B0' }}>
+                </div>
+                {/* Light area — address & contacts */}
+                <div className="px-10 py-3" style={{ backgroundColor: '#F5F5F5' }}>
+                  <p className="text-[10px] leading-relaxed" style={{ color: '#555' }}>
                     End.: Rua Salvador, n° 120, sala 708, 7° andar – Edifício Vieiralves Business Center – bairro: Adrianópolis – Manaus/AM – Cep: 69.057-040
                   </p>
-                  <p className="text-[10px]" style={{ color: '#B0B0B0' }}>
-                    Tel.: (92) 3343-6173 – Cel.: (92) 98223-7330 / 98160-4348 · E-mail: <span style={{ color: '#7BA4D4' }}>juridico@bentesramos.adv.br</span>
+                  <p className="text-[10px] leading-relaxed" style={{ color: '#555' }}>
+                    Tel.: (92) 3343-6173 – Cel.: (92) 98223-7330 / 98160-4348 · E-mail: <a href="mailto:juridico@bentesramos.adv.br" style={{ color: '#3B82F6' }}>juridico@bentesramos.adv.br</a>
                   </p>
                 </div>
               </div>
