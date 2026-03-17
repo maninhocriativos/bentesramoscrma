@@ -156,14 +156,23 @@ export function generateProcuracaoHtml(data: ProcuracaoData, office: OfficeData)
     }
     .footer {
       margin-top: 40px;
-      padding-top: 20px;
-      border-top: 2px solid #c9a227;
-      font-size: 9pt;
-      color: #4a5568;
+      padding: 15px 20px;
+      background: #2D2D2D;
       text-align: center;
+      border-radius: 0 0 4px 4px;
     }
     .footer-line {
       margin: 3px 0;
+      color: #B0B0B0;
+      font-size: 9pt;
+    }
+    .footer-line strong {
+      color: #C4A95B;
+      font-size: 10pt;
+      letter-spacing: 1px;
+    }
+    .footer-line a {
+      color: #7BA4D4;
     }
   </style>
 </head>
