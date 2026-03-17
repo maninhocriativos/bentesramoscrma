@@ -140,3 +140,6 @@ verify_jwt = false
 
 [functions.petition-generate-v3]
 verify_jwt = false
+
+[functions.petition-test-generate]
+verify_jwt = false
