@@ -1065,6 +1065,66 @@ export type Database = {
         }
         Relationships: []
       }
+      intimacoes_sync_jobs: {
+        Row: {
+          advogado_id: string | null
+          attempts: number
+          completed_at: string | null
+          created_at: string
+          id: string
+          job_type: string
+          last_error: string | null
+          max_attempts: number
+          oab_numero: string
+          oab_uf: string
+          payload: Json
+          result_summary: Json | null
+          run_after: string
+          started_at: string | null
+          status: string
+          trigger_source: string
+          updated_at: string
+        }
+        Insert: {
+          advogado_id?: string | null
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          job_type?: string
+          last_error?: string | null
+          max_attempts?: number
+          oab_numero: string
+          oab_uf?: string
+          payload?: Json
+          result_summary?: Json | null
+          run_after?: string
+          started_at?: string | null
+          status?: string
+          trigger_source?: string
+          updated_at?: string
+        }
+        Update: {
+          advogado_id?: string | null
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          job_type?: string
+          last_error?: string | null
+          max_attempts?: number
+          oab_numero?: string
+          oab_uf?: string
+          payload?: Json
+          result_summary?: Json | null
+          run_after?: string
+          started_at?: string | null
+          status?: string
+          trigger_source?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       lead_classifications: {
         Row: {
           case_type: string
@@ -3131,6 +3191,34 @@ export type Database = {
     }
     Functions: {
       checar_cargo_usuario: { Args: never; Returns: string }
+      claim_next_intimacoes_sync_job: {
+        Args: never
+        Returns: {
+          advogado_id: string | null
+          attempts: number
+          completed_at: string | null
+          created_at: string
+          id: string
+          job_type: string
+          last_error: string | null
+          max_attempts: number
+          oab_numero: string
+          oab_uf: string
+          payload: Json
+          result_summary: Json | null
+          run_after: string
+          started_at: string | null
+          status: string
+          trigger_source: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "intimacoes_sync_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       gerar_hash_movimentacao: {
         Args: {
           p_cnj: string

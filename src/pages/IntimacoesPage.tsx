@@ -51,6 +51,31 @@ interface Intimacao {
   created_at: string;
 }
 
+async function copyTextToClipboard(text: string, label = 'Número do processo') {
+  if (!text) return;
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+
+    toast.success(`${label} copiado!`);
+  } catch (error) {
+    console.error('Erro ao copiar texto:', error);
+    toast.error(`Não foi possível copiar ${label.toLowerCase()}`);
+  }
+}
+
 export default function IntimacoesPage() {
   const { perfil } = usePerfil();
   const { settings: officeSettings } = useOfficeSettings();
@@ -89,19 +114,28 @@ export default function IntimacoesPage() {
       toast.error('Configure seu número da OAB no perfil para buscar intimações');
       return;
     }
+
     setSyncing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('intimacoes-oab', {
+      const { data, error } = await supabase.functions.invoke('intimacoes-scheduler', {
         body: { oab_numero: oabNumero, oab_uf: oabUf, advogado_id: user?.id },
       });
+
       if (error) throw error;
+
       if (data?.success) {
-        toast.success(`${data.total} intimações encontradas`, {
-          description: `${data.saved} novas · ${data.updated || 0} atualizadas · Fonte: ${data.fonte}`,
-        });
-        await fetchIntimacoes();
+        toast.success(
+          data?.deduplicated ? 'Sincronização já estava em andamento' : 'Sincronização iniciada',
+          {
+            description: 'A busca foi colocada em fila e será processada automaticamente em segundo plano.',
+          },
+        );
+
+        window.setTimeout(() => {
+          void fetchIntimacoes();
+        }, 4000);
       } else {
-        toast.error(data?.error || 'Erro ao buscar intimações');
+        toast.error(data?.error || 'Erro ao iniciar sincronização');
       }
     } catch (err: any) {
       toast.error('Erro ao sincronizar intimações', { description: err.message });
@@ -420,12 +454,29 @@ export default function IntimacoesPage() {
                         </div>
 
                         {/* CNJ + title */}
-                        <div>
-                          <p className="text-sm font-bold text-foreground tracking-tight">
-                            {intimacao.processo_cnj || 'Sem CNJ'}
-                          </p>
-                          {intimacao.processo_titulo && (
-                            <p className="text-xs text-muted-foreground mt-0.5">{intimacao.processo_titulo}</p>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-foreground tracking-tight">
+                              {intimacao.processo_cnj || 'Sem CNJ'}
+                            </p>
+                            {intimacao.processo_titulo && (
+                              <p className="text-xs text-muted-foreground mt-0.5">{intimacao.processo_titulo}</p>
+                            )}
+                          </div>
+                          {intimacao.processo_cnj && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-lg shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void copyTextToClipboard(intimacao.processo_cnj);
+                              }}
+                              title="Copiar número do processo"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                            </Button>
                           )}
                         </div>
 
@@ -575,7 +626,19 @@ function IntimacaoDetailModal({
             </Badge>
           </div>
           {intimacao.processo_cnj && (
-            <p className="text-sm font-mono text-primary/80 mt-0.5">{intimacao.processo_cnj}</p>
+            <div className="mt-0.5 flex items-center gap-1">
+              <p className="text-sm font-mono text-primary/80">{intimacao.processo_cnj}</p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-md"
+                onClick={() => void copyTextToClipboard(intimacao.processo_cnj)}
+                title="Copiar número do processo"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -593,10 +656,14 @@ function IntimacaoDetailModal({
           Relatório PDF
         </Button>
         {intimacao.processo_cnj && (
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"
-            onClick={() => { navigator.clipboard.writeText(intimacao.processo_cnj); toast.success('CNJ copiado!'); }}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            onClick={() => void copyTextToClipboard(intimacao.processo_cnj)}
+          >
             <Copy className="h-3.5 w-3.5" />
-            Copiar CNJ
+            Copiar nº do processo
           </Button>
         )}
       </div>
