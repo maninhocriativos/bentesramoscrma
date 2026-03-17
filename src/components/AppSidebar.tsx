@@ -55,7 +55,7 @@ const menuSections: MenuSection[] = [
       { title: 'Financeiro', url: '/financeiro', icon: DollarSign, visibility: 'financeiro-only' },
       { title: 'Documentos', url: '/documentos', icon: FileText, visibility: 'all' },
       { title: 'Contratos', url: '/contratos', icon: FileSignature, visibility: 'all' },
-      { title: 'Petições', url: '/peticoes', icon: FileEdit, visibility: 'all' },
+      { title: 'Petições Iniciais', url: '/peticoes', icon: FileEdit, visibility: 'all' },
     ],
   },
   {

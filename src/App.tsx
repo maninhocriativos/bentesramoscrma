@@ -91,7 +91,7 @@ const App = () => (
                 <Route path="/meta-leads" element={<MetaLeadsPage />} />
                 <Route path="/api-hub" element={<ApiHubPage />} />
                 <Route path="/api-docs" element={<ApiDocsPage />} />
-                <Route path="/peticoes" element={<PeticoesPage />} />
+                <Route path="/peticoes" element={<PeticoesIniciaisPage />} />
                 <Route path="/peticoes/nova" element={<PeticaoEditarPage />} />
                 <Route path="/peticoes/:id/editar" element={<PeticaoEditarPage />} />
                 <Route path="/peticoes/:id/revisao" element={<PeticaoRevisaoPage />} />

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import AppLayout from '@/components/layouts/AppLayout';
+import { AppLayout } from '@/components/layouts/AppLayout';
 import { usePetitionV3, PetitionTypeV3, PetitionCase } from '@/hooks/usePetitionV3';
 import PetitionCaseModal from '@/components/peticoes-v3/PetitionCaseModal';
 import PetitionPreviewModal from '@/components/peticoes-v3/PetitionPreviewModal';
