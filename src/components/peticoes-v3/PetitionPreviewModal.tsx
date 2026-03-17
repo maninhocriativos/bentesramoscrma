@@ -144,34 +144,52 @@ export default function PetitionPreviewModal({ open, onOpenChange, content, titu
   const exportAsPdf = async () => {
     setExporting('pdf');
     try {
-      const { jsPDF } = await import('jspdf');
+      const [{ jsPDF }, { default: html2canvas }] = await Promise.all([
+        import('jspdf'),
+        import('html2canvas'),
+      ]);
       const el = docRef.current;
       if (!el) return;
 
+      // High-quality capture
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        // Ensure footer backgrounds are captured
+        onclone: (clonedDoc) => {
+          const clonedEl = clonedDoc.querySelector('[data-pdf-root]') as HTMLElement;
+          if (clonedEl) {
+            clonedEl.style.width = '720px';
+          }
+        },
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pageWidth = 210;
       const pageHeight = 297;
-      const margin = 20;
+      const margin = 10;
       const usableWidth = pageWidth - margin * 2;
+      const imgHeight = (canvas.height * usableWidth) / canvas.width;
 
-      // Use html method for proper rendering
-      await new Promise<void>((resolve) => {
-        pdf.html(el, {
-          callback: (doc) => {
-            doc.save(`${titulo || 'peticao'}.pdf`);
-            resolve();
-          },
-          x: margin,
-          y: margin,
-          width: usableWidth,
-          windowWidth: el.scrollWidth,
-          html2canvas: {
-            scale: 0.264, // mm/px conversion
-            useCORS: true,
-            logging: false,
-          },
-        });
-      });
+      let heightLeft = imgHeight;
+      let position = margin;
+
+      // First page
+      pdf.addImage(imgData, 'JPEG', margin, position, usableWidth, imgHeight);
+      heightLeft -= (pageHeight - margin * 2);
+
+      // Additional pages if content overflows
+      while (heightLeft > 0) {
+        position -= (pageHeight - margin * 2);
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', margin, position, usableWidth, imgHeight);
+        heightLeft -= (pageHeight - margin * 2);
+      }
+
+      pdf.save(`${titulo || 'peticao'}.pdf`);
     } finally {
       setExporting(null);
     }
