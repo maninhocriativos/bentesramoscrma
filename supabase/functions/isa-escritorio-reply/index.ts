@@ -34,18 +34,25 @@ const ISA_ESCRITORIO_PROMPT = `Você é a Isa Escritório, assistente virtual do
 ### 📋 CONSULTA DE PROCESSOS
 Quando o cliente perguntar sobre o andamento do processo:
 - PRIMEIRO, peça o CPF do cliente para localizar os processos (caso não tenha sido fornecido ainda)
-- Se o CPF já foi fornecido e há dados do Escavador no [CONTEXTO], apresente as informações de forma clara e organizada
-- Formate as informações do processo assim:
+- Se o CPF já foi fornecido e há dados do Escavador no [CONTEXTO], apresente TODOS os processos ATIVOS de forma clara e organizada
+- Formate CADA processo assim:
   📋 *Processo:* [número CNJ formatado]
   ⚖️ *Tipo:* [classe processual]
   🏛️ *Tribunal:* [tribunal]
   📍 *Vara:* [órgão julgador]
   📊 *Status:* [status atual]
   📅 *Última movimentação:* [data e descrição]
-- Se houver múltiplos processos, liste cada um separadamente
+- Se houver MÚLTIPLOS processos, liste TODOS separadamente com numeração (1️⃣, 2️⃣, 3️⃣ etc.)
+- Informe ao cliente a quantidade total de processos encontrados no início da resposta
+- Se existirem processos ARQUIVADOS, mencione brevemente ao final ("Além desses, há X processo(s) já arquivado(s)")
 - Se não encontrar processos para o CPF, informe educadamente e sugira verificar o número
 - Nunca invente informações — se não tiver dados, diga que vai verificar
 - Se o cliente forneceu o nome mas não o CPF, peça o CPF para fazer a busca oficial
+
+### 🎙️ ÁUDIOS E IMAGENS
+- Você pode OUVIR áudios (aparecem como [ÁUDIO TRANSCRITO]) — responda normalmente ao conteúdo
+- Você pode VER imagens (aparecem como [IMAGEM ANALISADA]) — responda sobre o que foi identificado
+- Se receber um documento/imagem de comprovante, extrato ou contrato, analise e informe o que identificou
 
 ### 📅 AGENDA / FALAR COM ADVOGADO
 Quando o cliente quiser falar com o advogado:
@@ -195,52 +202,56 @@ function formatarProcessosEscavador(processos: any[], detalhes: Map<string, any>
     return '\n[RESULTADO BUSCA ESCAVADOR]\nNenhum processo encontrado para este CPF.';
   }
 
-  const parts: string[] = [];
-  parts.push(`\n[RESULTADO BUSCA ESCAVADOR - ${processos.length} processo(s) encontrado(s)]`);
-
-  for (const proc of processos.slice(0, 5)) {
-    const cnj = proc.numero_cnj || proc.numero_processo || 'Sem número';
+  // Separar ativos de arquivados
+  const processosComStatus = processos.map((proc) => {
+    const cnj = proc.numero_cnj || proc.numero_processo || '';
     const detalhe = detalhes.get(cnj);
     const fonte = detalhe?.fontes?.find((f: any) => f.tipo === 'TRIBUNAL') || detalhe?.fontes?.[0];
+    const statusPredito = fonte?.status_predito || detalhe?.status_predito;
+    const isAtivo = statusPredito !== 'INATIVO' && statusPredito !== 'BAIXADO';
+    return { proc, cnj, detalhe, fonte, isAtivo, statusPredito };
+  });
+
+  const ativos = processosComStatus.filter(p => p.isAtivo);
+  const arquivados = processosComStatus.filter(p => !p.isAtivo);
+
+  const parts: string[] = [];
+  parts.push(`\n[RESULTADO BUSCA ESCAVADOR - ${processos.length} processo(s) encontrado(s), ${ativos.length} ativo(s), ${arquivados.length} arquivado(s)]`);
+
+  // Formatar TODOS os processos ativos
+  const processosParaDetalhar = ativos.length > 0 ? ativos : processosComStatus.slice(0, 5);
+  
+  for (let i = 0; i < processosParaDetalhar.length; i++) {
+    const { proc, cnj, detalhe, fonte, isAtivo, statusPredito } = processosParaDetalhar[i];
     const capa = fonte?.capa || {};
 
-    parts.push(`\n📋 Processo: ${cnj}`);
+    parts.push(`\n${i + 1}️⃣ Processo: ${cnj || 'Sem número'}`);
     
-    // Classe/Tipo
     const classe = capa.classe || fonte?.classe?.nome || proc.titulo_classe || proc.classe || 'Não informado';
     parts.push(`   Tipo/Classe: ${classe}`);
 
-    // Tribunal
     const tribunal = fonte?.tribunal?.sigla || fonte?.sigla || proc.tribunal || 'Não informado';
     parts.push(`   Tribunal: ${tribunal}`);
 
-    // Órgão julgador / Vara
     const orgao = capa.orgao_julgador || fonte?.orgao_julgador?.nome || 'Não informado';
     parts.push(`   Vara/Órgão: ${orgao}`);
 
-    // Status
     let status = 'Em Andamento';
-    const statusPredito = fonte?.status_predito || detalhe?.status_predito;
     if (statusPredito === 'INATIVO' || statusPredito === 'BAIXADO') status = 'Arquivado';
     else if (statusPredito === 'SUSPENSO') status = 'Suspenso';
     parts.push(`   Status: ${status}`);
 
-    // Assunto
     const assunto = capa.assunto || capa.assuntos_normalizados?.[0]?.nome || proc.assunto || '';
     if (assunto) parts.push(`   Assunto: ${assunto}`);
 
-    // Valor da causa
     const valorCausa = capa.valor_causa?.valor || proc.valor_causa;
     if (valorCausa) parts.push(`   Valor da Causa: R$ ${Number(valorCausa).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
 
-    // Data distribuição
     const dataDistrib = capa.data_distribuicao || fonte?.data_inicio || proc.data_inicio;
     if (dataDistrib) {
-      const dataFormatada = new Date(dataDistrib).toLocaleDateString('pt-BR');
-      parts.push(`   Data Distribuição: ${dataFormatada}`);
+      parts.push(`   Data Distribuição: ${new Date(dataDistrib).toLocaleDateString('pt-BR')}`);
     }
 
-    // Partes
     const envolvidos = fonte?.envolvidos || detalhe?.envolvidos || [];
     if (envolvidos.length > 0) {
       parts.push(`   Partes:`);
@@ -251,7 +262,6 @@ function formatarProcessosEscavador(processos: any[], detalhes: Map<string, any>
       }
     }
 
-    // Últimas movimentações
     const movs = detalhe?._movimentacoes || [];
     if (movs.length > 0) {
       parts.push(`   Últimas movimentações:`);
@@ -262,6 +272,15 @@ function formatarProcessosEscavador(processos: any[], detalhes: Map<string, any>
         const complemento = mov.conteudo || mov.complemento || '';
         parts.push(`   - ${dataStr}: ${titulo}${complemento ? ` — ${complemento.substring(0, 120)}` : ''}`);
       }
+    }
+  }
+
+  // Mencionar arquivados resumidamente
+  if (arquivados.length > 0 && ativos.length > 0) {
+    parts.push(`\n📁 Além dos processos ativos, há ${arquivados.length} processo(s) já arquivado(s):`);
+    for (const arq of arquivados.slice(0, 5)) {
+      const classe = arq.fonte?.capa?.classe || arq.proc.titulo_classe || arq.proc.classe || '';
+      parts.push(`   - ${arq.cnj || 'Sem número'}${classe ? ` (${classe})` : ''} — Arquivado`);
     }
   }
 
@@ -447,7 +466,7 @@ async function generateResponse(message: string, context: string): Promise<strin
         { role: 'system', content: ISA_ESCRITORIO_PROMPT },
         { role: 'user', content: `${context}\n\n[NOVA MENSAGEM DO CLIENTE]\n${message}` }
       ],
-      max_tokens: 800,
+      max_tokens: 1500,
       temperature: 0.6,
     }),
   });
@@ -602,9 +621,9 @@ serve(async (req: Request) => {
       } else if (processos.length === 0) {
         escavadorContext = `\n[RESULTADO BUSCA ESCAVADOR]\nNenhum processo encontrado para o CPF ${cpfDetectado}. Informe ao cliente que não foram localizados processos vinculados a este CPF.`;
       } else {
-        // Buscar detalhes dos primeiros processos (max 3 para economizar créditos)
+        // Buscar detalhes de TODOS os processos (até 10 para não estourar créditos)
         const detalhesMap = new Map<string, any>();
-        const detailPromises = processos.slice(0, 3).map(async (proc: any) => {
+        const detailPromises = processos.slice(0, 10).map(async (proc: any) => {
           const cnj = proc.numero_cnj || proc.numero_processo;
           if (cnj) {
             const detalhe = await buscarDetalhesProcesso(cnj);
