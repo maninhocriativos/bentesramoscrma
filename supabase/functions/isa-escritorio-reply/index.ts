@@ -932,39 +932,65 @@ serve(async (req: Request) => {
     }
 
     // ============================================================
-    // DETECTAR CPF E BUSCAR NO ESCAVADOR
+    // DETECTAR CPF/NOME E BUSCAR PROCESSOS INTERNOS PRIMEIRO
     // ============================================================
-    let escavadorContext = '';
+    let processosContext = '';
     const cpfDetectado = extractCPF(processedMessage);
 
-    if (cpfDetectado) {
-      console.log(`[ISA-ESCRITORIO] 🔍 CPF detectado: ${cpfDetectado}`);
+    // Também extrair possível número CNJ da mensagem
+    const cnjMatch = processedMessage.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/);
+    const cnjDetectado = cnjMatch ? cnjMatch[0] : null;
 
-      const { processos, error: escError } = await buscarProcessosPorCPF(cpfDetectado);
+    // Buscar nome do lead para busca por nome
+    let nomeLead: string | null = null;
+    const { data: leadInfo } = await supabase
+      .from('leads_juridicos')
+      .select('nome, cpf')
+      .eq('id', lead_id)
+      .maybeSingle();
+    if (leadInfo?.nome) nomeLead = leadInfo.nome;
 
-      if (escError) {
-        console.error(`[ISA-ESCRITORIO] Erro Escavador: ${escError}`);
-        escavadorContext = `\n[RESULTADO BUSCA ESCAVADOR]\nErro ao consultar: ${escError}. Informe ao cliente que houve uma falha temporária e tente novamente.`;
-      } else if (processos.length === 0) {
-        escavadorContext = `\n[RESULTADO BUSCA ESCAVADOR]\nNenhum processo encontrado para o CPF ${cpfDetectado}. Informe ao cliente que não foram localizados processos vinculados a este CPF.`;
+    // CPF do lead (caso não tenha sido enviado na mensagem)
+    const cpfParaBusca = cpfDetectado || (leadInfo?.cpf ? leadInfo.cpf.replace(/\D/g, '') : null);
+
+    if (cpfParaBusca || cnjDetectado || nomeLead) {
+      console.log(`[ISA-ESCRITORIO] 🔍 Buscando processos internos — CPF: ${cpfParaBusca || 'N/A'}, CNJ: ${cnjDetectado || 'N/A'}, Nome: ${nomeLead || 'N/A'}`);
+
+      // 1. Buscar primeiro no sistema interno
+      const { processos: internos, found } = await buscarProcessosInternos(supabase, cpfParaBusca, nomeLead, cnjDetectado);
+
+      if (found) {
+        console.log(`[ISA-ESCRITORIO] ✅ Encontrados ${internos.length} processos no sistema interno`);
+        processosContext = formatarProcessosInternos(internos);
+      } else if (cpfDetectado) {
+        // 2. Fallback: buscar no Escavador apenas se CPF foi fornecido explicitamente e nada foi encontrado internamente
+        console.log(`[ISA-ESCRITORIO] 📡 Nada encontrado internamente, buscando no Escavador...`);
+        const { processos, error: escError } = await buscarProcessosPorCPF(cpfDetectado);
+
+        if (escError) {
+          processosContext = `\n[RESULTADO BUSCA]\nErro ao consultar: ${escError}. Informe ao cliente que houve uma falha temporária.`;
+        } else if (processos.length === 0) {
+          processosContext = `\n[RESULTADO BUSCA]\nNenhum processo encontrado para o CPF ${cpfDetectado}.`;
+        } else {
+          const detalhesMap = new Map<string, any>();
+          const detailPromises = processos.slice(0, 10).map(async (proc: any) => {
+            const cnj = proc.numero_cnj || proc.numero_processo;
+            if (cnj) {
+              const detalhe = await buscarDetalhesProcesso(cnj);
+              if (detalhe) detalhesMap.set(cnj, detalhe);
+            }
+          });
+          await Promise.all(detailPromises);
+          processosContext = formatarProcessosEscavador(processos, detalhesMap);
+        }
       } else {
-        const detalhesMap = new Map<string, any>();
-        const detailPromises = processos.slice(0, 10).map(async (proc: any) => {
-          const cnj = proc.numero_cnj || proc.numero_processo;
-          if (cnj) {
-            const detalhe = await buscarDetalhesProcesso(cnj);
-            if (detalhe) detalhesMap.set(cnj, detalhe);
-          }
-        });
-        await Promise.all(detailPromises);
-
-        escavadorContext = formatarProcessosEscavador(processos, detalhesMap);
+        processosContext = `\n[PROCESSOS] Nenhum processo encontrado vinculado a este cliente no sistema.`;
       }
 
       await supabase.from('system_events').insert({
-        tipo: 'escavador_cpf_search',
+        tipo: 'processo_search',
         fonte: 'isa_escritorio',
-        dados: { lead_id, cpf: cpfDetectado, resultados: processos?.length || 0 }
+        dados: { lead_id, cpf: cpfParaBusca, cnj: cnjDetectado, fonte: found ? 'interno' : 'escavador', resultados: found ? internos.length : 0 }
       });
     }
 
