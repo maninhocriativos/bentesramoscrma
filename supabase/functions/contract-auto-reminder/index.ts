@@ -45,8 +45,6 @@ serve(async (req: Request): Promise<Response> => {
     
     console.log(`[Contract Reminder Z-API] Processing reminders at ${now.toISOString()}`);
 
-    // Verificar se Z-API está configurado
-    const zapiConfig = await getZapiConfig(supabase);
     // Buscar todas as instâncias para roteamento por lead
     const { data: allInstances } = await supabase
       .from('zapi_instances')
