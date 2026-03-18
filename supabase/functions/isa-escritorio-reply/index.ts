@@ -34,8 +34,10 @@ const ISA_ESCRITORIO_PROMPT = `Você é a Isa Escritório, assistente virtual do
 
 ### 📋 CONSULTA DE PROCESSOS
 Quando o cliente perguntar sobre o andamento do processo:
-- PRIMEIRO, peça o CPF do cliente para localizar os processos (caso não tenha sido fornecido ainda)
-- Se o CPF já foi fornecido e há dados do Escavador no [CONTEXTO], apresente TODOS os processos ATIVOS de forma clara e organizada
+- PRIMEIRO, verifique se já há processos no [CONTEXTO] vindos do sistema interno (marcados como [PROCESSOS ENCONTRADOS NO SISTEMA])
+- Se NÃO houver processos no contexto, peça o CPF do cliente para buscar
+- Se o CPF já foi fornecido e há dados no contexto, apresente TODOS os processos ATIVOS de forma clara
+- Você pode buscar por: CPF, nome do cliente ou número do processo (CNJ)
 - Formate CADA processo assim:
   📋 *Processo:* [número CNJ formatado]
   ⚖️ *Tipo:* [classe processual]
@@ -45,10 +47,9 @@ Quando o cliente perguntar sobre o andamento do processo:
   📅 *Última movimentação:* [data e descrição]
 - Se houver MÚLTIPLOS processos, liste TODOS separadamente com numeração (1️⃣, 2️⃣, 3️⃣ etc.)
 - Informe ao cliente a quantidade total de processos encontrados no início da resposta
-- Se existirem processos ARQUIVADOS, mencione brevemente ao final ("Além desses, há X processo(s) já arquivado(s)")
-- Se não encontrar processos para o CPF, informe educadamente e sugira verificar o número
+- Se existirem processos ARQUIVADOS, mencione brevemente ao final
+- Se não encontrar processos, informe educadamente e sugira verificar o número ou CPF
 - Nunca invente informações — se não tiver dados, diga que vai verificar
-- Se o cliente forneceu o nome mas não o CPF, peça o CPF para fazer a busca oficial
 
 ### 🎙️ ÁUDIOS, IMAGENS E PDFs
 - Você pode OUVIR áudios (aparecem como [ÁUDIO TRANSCRITO]) — responda normalmente ao conteúdo
@@ -147,8 +148,127 @@ function formatarDataMovimentacao(dateStr: string | null | undefined): string {
 }
 
 // ============================================================
-// BUSCAR PROCESSOS NO ESCAVADOR POR CPF
+// BUSCAR PROCESSOS INTERNOS (no banco de dados do sistema)
 // ============================================================
+async function buscarProcessosInternos(supabase: any, cpf?: string | null, nome?: string | null, numeroCnj?: string | null): Promise<{ processos: any[]; found: boolean }> {
+  const results: any[] = [];
+  const foundIds = new Set<string>();
+
+  // 1. Buscar por CPF no campo cpf_cliente
+  if (cpf) {
+    const cpfLimpo = cpf.replace(/\D/g, '');
+    const { data: byCpf } = await supabase
+      .from('processos')
+      .select('id, numero_processo, titulo_acao, status, tribunal, orgao_julgador, grau, assunto, valor_causa, advogado_responsavel, movimentos_json, partes_json, data_ultima_atualizacao, cpf_cliente')
+      .eq('cpf_cliente', cpfLimpo);
+
+    if (byCpf?.length) {
+      for (const p of byCpf) { foundIds.add(p.id); results.push(p); }
+    }
+
+    // 2. Buscar por CPF nas partes (processo_partes.documento)
+    const { data: byPartes } = await supabase
+      .from('processo_partes')
+      .select('processo_id')
+      .ilike('documento', `%${cpfLimpo}%`);
+
+    if (byPartes?.length) {
+      const ids = byPartes.map((p: any) => p.processo_id).filter((id: string) => !foundIds.has(id));
+      if (ids.length > 0) {
+        const { data: procs } = await supabase
+          .from('processos')
+          .select('id, numero_processo, titulo_acao, status, tribunal, orgao_julgador, grau, assunto, valor_causa, advogado_responsavel, movimentos_json, partes_json, data_ultima_atualizacao, cpf_cliente')
+          .in('id', ids);
+        if (procs?.length) {
+          for (const p of procs) { foundIds.add(p.id); results.push(p); }
+        }
+      }
+    }
+  }
+
+  // 3. Buscar por número CNJ
+  if (numeroCnj) {
+    const { data: byCnj } = await supabase
+      .from('processos')
+      .select('id, numero_processo, titulo_acao, status, tribunal, orgao_julgador, grau, assunto, valor_causa, advogado_responsavel, movimentos_json, partes_json, data_ultima_atualizacao, cpf_cliente')
+      .eq('numero_processo', numeroCnj);
+
+    if (byCnj?.length) {
+      for (const p of byCnj) {
+        if (!foundIds.has(p.id)) { foundIds.add(p.id); results.push(p); }
+      }
+    }
+  }
+
+  // 4. Buscar por nome nas partes
+  if (nome && nome.length > 4) {
+    const { data: byNome } = await supabase
+      .from('processo_partes')
+      .select('processo_id')
+      .ilike('nome', `%${nome}%`);
+
+    if (byNome?.length) {
+      const ids = byNome.map((p: any) => p.processo_id).filter((id: string) => !foundIds.has(id));
+      if (ids.length > 0) {
+        const { data: procs } = await supabase
+          .from('processos')
+          .select('id, numero_processo, titulo_acao, status, tribunal, orgao_julgador, grau, assunto, valor_causa, advogado_responsavel, movimentos_json, partes_json, data_ultima_atualizacao, cpf_cliente')
+          .in('id', ids);
+        if (procs?.length) {
+          for (const p of procs) { foundIds.add(p.id); results.push(p); }
+        }
+      }
+    }
+  }
+
+  return { processos: results, found: results.length > 0 };
+}
+
+// ============================================================
+// FORMATAR PROCESSOS INTERNOS PARA CONTEXTO DA IA
+// ============================================================
+function formatarProcessosInternos(processos: any[]): string {
+  if (processos.length === 0) return '';
+
+  const parts: string[] = [];
+  parts.push(`\n[PROCESSOS ENCONTRADOS NO SISTEMA — ${processos.length} processo(s)]`);
+
+  const ativos = processos.filter(p => p.status !== 'Arquivado' && p.status !== 'Perdido');
+  const arquivados = processos.filter(p => p.status === 'Arquivado' || p.status === 'Perdido');
+
+  const toShow = ativos.length > 0 ? ativos : processos.slice(0, 5);
+
+  for (let i = 0; i < toShow.length; i++) {
+    const proc = toShow[i];
+    parts.push(`\n${i + 1}️⃣ Processo: ${proc.numero_processo || 'Sem número'}`);
+    if (proc.titulo_acao) parts.push(`   Tipo/Classe: ${proc.titulo_acao}`);
+    if (proc.tribunal) parts.push(`   🏛️ Tribunal: ${proc.tribunal}`);
+    if (proc.orgao_julgador) parts.push(`   📍 Órgão Julgador: ${proc.orgao_julgador}`);
+    if (proc.grau) parts.push(`   Grau: ${proc.grau}`);
+    parts.push(`   📊 Status: ${proc.status || 'Em Andamento'}`);
+    if (proc.assunto) parts.push(`   Assunto: ${proc.assunto}`);
+    if (proc.valor_causa) parts.push(`   Valor da Causa: R$ ${Number(proc.valor_causa).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+    if (proc.advogado_responsavel) parts.push(`   Advogado: ${proc.advogado_responsavel}`);
+
+    // Últimas movimentações do JSON
+    const movs = proc.movimentos_json || [];
+    if (movs.length > 0) {
+      parts.push(`   Últimas movimentações:`);
+      for (const mov of movs.slice(0, 5)) {
+        const dataStr = formatarDataMovimentacao(mov.dataHora || mov.data);
+        parts.push(`   - ${dataStr}: ${mov.nome || mov.titulo || 'Movimentação'}${mov.complemento ? ` — ${mov.complemento.substring(0, 120)}` : ''}`);
+      }
+    }
+  }
+
+  if (arquivados.length > 0 && ativos.length > 0) {
+    parts.push(`\n📁 Além dos processos ativos, há ${arquivados.length} processo(s) arquivado(s)/perdido(s).`);
+  }
+
+  return parts.join('\n');
+}
+
+
 async function buscarProcessosPorCPF(cpf: string): Promise<{ processos: any[]; error: string | null }> {
   if (!ESCAVADOR_API_KEY) {
     return { processos: [], error: 'ESCAVADOR_API_KEY não configurada' };
@@ -813,39 +933,65 @@ serve(async (req: Request) => {
     }
 
     // ============================================================
-    // DETECTAR CPF E BUSCAR NO ESCAVADOR
+    // DETECTAR CPF/NOME E BUSCAR PROCESSOS INTERNOS PRIMEIRO
     // ============================================================
-    let escavadorContext = '';
+    let processosContext = '';
     const cpfDetectado = extractCPF(processedMessage);
 
-    if (cpfDetectado) {
-      console.log(`[ISA-ESCRITORIO] 🔍 CPF detectado: ${cpfDetectado}`);
+    // Também extrair possível número CNJ da mensagem
+    const cnjMatch = processedMessage.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/);
+    const cnjDetectado = cnjMatch ? cnjMatch[0] : null;
 
-      const { processos, error: escError } = await buscarProcessosPorCPF(cpfDetectado);
+    // Buscar nome do lead para busca por nome
+    let nomeLead: string | null = null;
+    const { data: leadInfo } = await supabase
+      .from('leads_juridicos')
+      .select('nome, cpf')
+      .eq('id', lead_id)
+      .maybeSingle();
+    if (leadInfo?.nome) nomeLead = leadInfo.nome;
 
-      if (escError) {
-        console.error(`[ISA-ESCRITORIO] Erro Escavador: ${escError}`);
-        escavadorContext = `\n[RESULTADO BUSCA ESCAVADOR]\nErro ao consultar: ${escError}. Informe ao cliente que houve uma falha temporária e tente novamente.`;
-      } else if (processos.length === 0) {
-        escavadorContext = `\n[RESULTADO BUSCA ESCAVADOR]\nNenhum processo encontrado para o CPF ${cpfDetectado}. Informe ao cliente que não foram localizados processos vinculados a este CPF.`;
+    // CPF do lead (caso não tenha sido enviado na mensagem)
+    const cpfParaBusca = cpfDetectado || (leadInfo?.cpf ? leadInfo.cpf.replace(/\D/g, '') : null);
+
+    if (cpfParaBusca || cnjDetectado || nomeLead) {
+      console.log(`[ISA-ESCRITORIO] 🔍 Buscando processos internos — CPF: ${cpfParaBusca || 'N/A'}, CNJ: ${cnjDetectado || 'N/A'}, Nome: ${nomeLead || 'N/A'}`);
+
+      // 1. Buscar primeiro no sistema interno
+      const { processos: internos, found } = await buscarProcessosInternos(supabase, cpfParaBusca, nomeLead, cnjDetectado);
+
+      if (found) {
+        console.log(`[ISA-ESCRITORIO] ✅ Encontrados ${internos.length} processos no sistema interno`);
+        processosContext = formatarProcessosInternos(internos);
+      } else if (cpfDetectado) {
+        // 2. Fallback: buscar no Escavador apenas se CPF foi fornecido explicitamente e nada foi encontrado internamente
+        console.log(`[ISA-ESCRITORIO] 📡 Nada encontrado internamente, buscando no Escavador...`);
+        const { processos, error: escError } = await buscarProcessosPorCPF(cpfDetectado);
+
+        if (escError) {
+          processosContext = `\n[RESULTADO BUSCA]\nErro ao consultar: ${escError}. Informe ao cliente que houve uma falha temporária.`;
+        } else if (processos.length === 0) {
+          processosContext = `\n[RESULTADO BUSCA]\nNenhum processo encontrado para o CPF ${cpfDetectado}.`;
+        } else {
+          const detalhesMap = new Map<string, any>();
+          const detailPromises = processos.slice(0, 10).map(async (proc: any) => {
+            const cnj = proc.numero_cnj || proc.numero_processo;
+            if (cnj) {
+              const detalhe = await buscarDetalhesProcesso(cnj);
+              if (detalhe) detalhesMap.set(cnj, detalhe);
+            }
+          });
+          await Promise.all(detailPromises);
+          processosContext = formatarProcessosEscavador(processos, detalhesMap);
+        }
       } else {
-        const detalhesMap = new Map<string, any>();
-        const detailPromises = processos.slice(0, 10).map(async (proc: any) => {
-          const cnj = proc.numero_cnj || proc.numero_processo;
-          if (cnj) {
-            const detalhe = await buscarDetalhesProcesso(cnj);
-            if (detalhe) detalhesMap.set(cnj, detalhe);
-          }
-        });
-        await Promise.all(detailPromises);
-
-        escavadorContext = formatarProcessosEscavador(processos, detalhesMap);
+        processosContext = `\n[PROCESSOS] Nenhum processo encontrado vinculado a este cliente no sistema.`;
       }
 
       await supabase.from('system_events').insert({
-        tipo: 'escavador_cpf_search',
+        tipo: 'processo_search',
         fonte: 'isa_escritorio',
-        dados: { lead_id, cpf: cpfDetectado, resultados: processos?.length || 0 }
+        dados: { lead_id, cpf: cpfParaBusca, cnj: cnjDetectado, fonte: found ? 'interno' : 'escavador', resultados: found ? internos.length : 0 }
       });
     }
 
@@ -856,7 +1002,7 @@ serve(async (req: Request) => {
     const context = await getLeadFullContext(lead_id, supabase, querAgendar);
 
     // Combinar contextos
-    const fullContext = context + escavadorContext;
+    const fullContext = context + processosContext;
 
     // Gerar resposta
     const response = await generateResponse(processedMessage, fullContext);
