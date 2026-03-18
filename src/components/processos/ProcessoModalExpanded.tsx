@@ -305,7 +305,7 @@ export function ProcessoModalExpanded({
         setPartes(newPartes);
         setMovimentos(newMovimentos);
 
-        // Preparar dados para atualização
+        // Preparar dados para atualização — preencher todos os campos da aba Dados
         const updateData: Record<string, unknown> = {
           titulo_acao: proc.classe || formData.titulo_acao,
           status: mapApiStatusToLocal(proc.status),
@@ -320,18 +320,35 @@ export function ProcessoModalExpanded({
           fonte_preferida: proc.fonte || 'datajud',
           ultima_consulta_api_at: new Date().toISOString(),
           data_ultima_atualizacao: new Date().toISOString(),
+          // Campos adicionais da aba Dados
+          classe_cnj: proc.classeCodigo || formData.classe_cnj || null,
+          assunto_cnj: proc.assuntos?.[0]?.codigo || formData.assunto_cnj || null,
+          vara_comarca: proc.orgaoJulgador || formData.vara_comarca || null,
+          status_detalhado: proc.statusDetalhado || null,
+          segredo_justica: proc.nivelSigilo === 'Segredo de Justiça',
+          sistema_judicial: proc.sistemaProcessual || formData.sistema_judicial || null,
+          tipo_orgao_julgador: proc.orgaoJulgador || formData.tipo_orgao_julgador || null,
+          data_distribuicao: proc.dataAjuizamento || formData.data_distribuicao || null,
+          data_ajuizamento: proc.dataAjuizamento || null,
         };
 
-        // Atualizar form local
+        // Atualizar form local com todos os campos retornados
         setFormData(prev => ({
           ...prev,
-          titulo_acao: updateData.titulo_acao as string,
+          titulo_acao: (updateData.titulo_acao as string) || prev.titulo_acao,
           status: updateData.status as ProcessoStatus,
-          tribunal: updateData.tribunal as string,
-          orgao_julgador: updateData.orgao_julgador as string,
-          grau: updateData.grau as string,
-          assunto: updateData.assunto as string,
-          valor_causa: proc.valorCausa?.toString() || '',
+          tribunal: (updateData.tribunal as string) || prev.tribunal,
+          orgao_julgador: (updateData.orgao_julgador as string) || prev.orgao_julgador,
+          grau: (updateData.grau as string) || prev.grau,
+          assunto: (updateData.assunto as string) || prev.assunto,
+          valor_causa: proc.valorCausa?.toString() || prev.valor_causa,
+          classe_cnj: (updateData.classe_cnj as string) || prev.classe_cnj,
+          assunto_cnj: (updateData.assunto_cnj as string) || prev.assunto_cnj,
+          vara_comarca: (updateData.vara_comarca as string) || prev.vara_comarca,
+          segredo_justica: updateData.segredo_justica as boolean,
+          sistema_judicial: (updateData.sistema_judicial as string) || prev.sistema_judicial,
+          tipo_orgao_julgador: (updateData.tipo_orgao_julgador as string) || prev.tipo_orgao_julgador,
+          data_distribuicao: (updateData.data_distribuicao as string) || prev.data_distribuicao,
         }));
 
         // Se é um processo existente, salvar no banco imediatamente
