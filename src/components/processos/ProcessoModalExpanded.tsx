@@ -93,6 +93,7 @@ const createEmptyFormData = (): ProcessoFormData => ({
   status: 'Em Andamento',
   advogado_responsavel: '',
   cliente_id: '',
+  cpf_cliente: '',
   tribunal: '',
   vara_comarca: '',
   assunto: '',
