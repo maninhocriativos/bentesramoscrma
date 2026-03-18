@@ -2967,6 +2967,7 @@ export type Database = {
           classe_cnj_nome: string | null
           cliente_id: string | null
           cnj_normalizado: string | null
+          cpf_cliente: string | null
           created_at: string | null
           dados_datajud: Json | null
           data_ajuizamento: string | null
@@ -3009,6 +3010,7 @@ export type Database = {
           classe_cnj_nome?: string | null
           cliente_id?: string | null
           cnj_normalizado?: string | null
+          cpf_cliente?: string | null
           created_at?: string | null
           dados_datajud?: Json | null
           data_ajuizamento?: string | null
@@ -3051,6 +3053,7 @@ export type Database = {
           classe_cnj_nome?: string | null
           cliente_id?: string | null
           cnj_normalizado?: string | null
+          cpf_cliente?: string | null
           created_at?: string | null
           dados_datajud?: Json | null
           data_ajuizamento?: string | null
