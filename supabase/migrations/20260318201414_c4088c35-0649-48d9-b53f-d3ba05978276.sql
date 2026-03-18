@@ -1,0 +1,1 @@
+INSERT INTO app_settings (key, value) VALUES ('ISA_ESCRITORIO_ENABLED', 'false') ON CONFLICT (key) DO UPDATE SET value = 'false', updated_at = now();
