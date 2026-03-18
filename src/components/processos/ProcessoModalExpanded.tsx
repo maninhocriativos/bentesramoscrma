@@ -66,6 +66,7 @@ const PROCESSO_DRAFT_MAX_AGE_MS = 1000 * 60 * 60 * 24;
 
 type ProcessoFormData = {
   numero_processo: string;
+  numero_complementar: string;
   titulo_acao: string;
   status: ProcessoStatus;
   advogado_responsavel: string;
@@ -78,6 +79,24 @@ type ProcessoFormData = {
   orgao_julgador: string;
   grau: string;
   origem_cliente: string;
+  descricao: string;
+  marcadores: string;
+  area: string;
+  fase: string;
+  classe_cnj: string;
+  assunto_cnj: string;
+  segredo_justica: boolean;
+  data_distribuicao: string;
+  data_citacao: string;
+  data_recebimento: string;
+  data_arquivamento: string;
+  data_encerramento: string;
+  valor_provisionado: string;
+  probabilidade: string;
+  monitorar_push: boolean;
+  tipo_orgao_julgador: string;
+  sistema_judicial: string;
+  complemento_enderecamento: string;
 };
 
 interface ProcessoModalDraft {
@@ -89,6 +108,7 @@ interface ProcessoModalDraft {
 
 const createEmptyFormData = (): ProcessoFormData => ({
   numero_processo: '',
+  numero_complementar: '',
   titulo_acao: '',
   status: 'Em Andamento',
   advogado_responsavel: '',
@@ -101,6 +121,24 @@ const createEmptyFormData = (): ProcessoFormData => ({
   orgao_julgador: '',
   grau: '',
   origem_cliente: '',
+  descricao: '',
+  marcadores: '',
+  area: '',
+  fase: '',
+  classe_cnj: '',
+  assunto_cnj: '',
+  segredo_justica: false,
+  data_distribuicao: '',
+  data_citacao: '',
+  data_recebimento: '',
+  data_arquivamento: '',
+  data_encerramento: '',
+  valor_provisionado: '',
+  probabilidade: '',
+  monitorar_push: true,
+  tipo_orgao_julgador: '',
+  sistema_judicial: '',
+  complemento_enderecamento: '',
 });
 
 export function ProcessoModalExpanded({ 
