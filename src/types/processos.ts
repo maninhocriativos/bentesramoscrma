@@ -24,6 +24,7 @@ export interface ProcessoParte {
 export interface Processo {
   id: string;
   numero_processo: string | null;
+  numero_complementar: string | null;
   titulo_acao: string | null;
   status: ProcessoStatus | null;
   advogado_responsavel: string | null;
@@ -34,7 +35,7 @@ export interface Processo {
   frequencia_notificacao_dias: number | null;
   notificacao_ativa: boolean | null;
   ultima_notificacao_at: string | null;
-  // Novos campos detalhados
+  // Campos detalhados
   tribunal: string | null;
   vara_comarca: string | null;
   assunto: string | null;
@@ -50,4 +51,22 @@ export interface Processo {
   dados_datajud: any | null;
   ultima_consulta_api_at: string | null;
   origem_cliente: string | null;
+  // Campos Projuris
+  descricao: string | null;
+  marcadores: string | null;
+  area: string | null;
+  fase: string | null;
+  assunto_cnj: string | null;
+  segredo_justica: boolean | null;
+  data_distribuicao: string | null;
+  data_citacao: string | null;
+  data_recebimento: string | null;
+  data_arquivamento: string | null;
+  data_encerramento: string | null;
+  valor_provisionado: number | null;
+  probabilidade: string | null;
+  monitorar_push: boolean | null;
+  tipo_orgao_julgador: string | null;
+  sistema_judicial: string | null;
+  complemento_enderecamento: string | null;
 }
