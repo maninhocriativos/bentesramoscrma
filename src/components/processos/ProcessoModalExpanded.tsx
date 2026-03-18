@@ -443,8 +443,10 @@ export function ProcessoModalExpanded({
     setDraftHydrated(false);
 
     if (processo) {
+      const p = processo as any;
       setFormData({
         numero_processo: processo.numero_processo || '',
+        numero_complementar: p.numero_complementar || '',
         titulo_acao: processo.titulo_acao || '',
         status: (processo.status as ProcessoStatus) || 'Em Andamento',
         advogado_responsavel: processo.advogado_responsavel || '',
@@ -456,7 +458,25 @@ export function ProcessoModalExpanded({
         valor_causa: processo.valor_causa ? processo.valor_causa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '',
         orgao_julgador: processo.orgao_julgador || '',
         grau: processo.grau || '',
-        origem_cliente: (processo as any).origem_cliente || '',
+        origem_cliente: p.origem_cliente || '',
+        descricao: p.descricao || '',
+        marcadores: p.marcadores || '',
+        area: p.area || '',
+        fase: p.fase || '',
+        classe_cnj: processo.classe_cnj || '',
+        assunto_cnj: p.assunto_cnj || '',
+        segredo_justica: p.segredo_justica || false,
+        data_distribuicao: p.data_distribuicao || '',
+        data_citacao: p.data_citacao || '',
+        data_recebimento: p.data_recebimento || '',
+        data_arquivamento: p.data_arquivamento || '',
+        data_encerramento: p.data_encerramento || '',
+        valor_provisionado: p.valor_provisionado ? String(p.valor_provisionado) : '',
+        probabilidade: p.probabilidade || '',
+        monitorar_push: p.monitorar_push ?? true,
+        tipo_orgao_julgador: p.tipo_orgao_julgador || '',
+        sistema_judicial: p.sistema_judicial || '',
+        complemento_enderecamento: p.complemento_enderecamento || '',
       });
       setPartes(processo.partes_json || []);
       setMovimentos(processo.movimentos_json || []);
