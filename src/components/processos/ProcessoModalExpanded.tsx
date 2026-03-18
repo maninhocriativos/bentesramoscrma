@@ -596,6 +596,7 @@ export function ProcessoModalExpanded({
         status: formData.status,
         advogado_responsavel: formData.advogado_responsavel || null,
         cliente_id: formData.cliente_id === '__none__' ? null : formData.cliente_id || null,
+        cpf_cliente: formData.cpf_cliente ? formData.cpf_cliente.replace(/\D/g, '') : null,
         tribunal: formData.tribunal || null,
         vara_comarca: formData.vara_comarca || null,
         assunto: formData.assunto || null,
