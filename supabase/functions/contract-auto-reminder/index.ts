@@ -47,7 +47,14 @@ serve(async (req: Request): Promise<Response> => {
 
     // Verificar se Z-API está configurado
     const zapiConfig = await getZapiConfig(supabase);
-    if (!zapiConfig) {
+    // Buscar todas as instâncias para roteamento por lead
+    const { data: allInstances } = await supabase
+      .from('zapi_instances')
+      .select('instance_id, is_default, name, token, client_token, phone_number')
+      .eq('is_active', true)
+      .order('is_default', { ascending: false });
+
+    if (!allInstances || allInstances.length === 0) {
       return new Response(JSON.stringify({ 
         success: false, 
         error: 'Z-API não configurado ou inativo' 
