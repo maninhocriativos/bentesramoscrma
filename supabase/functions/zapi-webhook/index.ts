@@ -834,13 +834,15 @@ serve(async (req: Request) => {
         // ============================================
         console.log(`[Z-API Webhook] 🏢 OFFICE lead - calling isa-escritorio-reply for lead ${leadId}`);
         
-        const lockKeyEscritorio = `isa_esc_${normalized.messageId || Date.now()}_${leadId}`;
+        // Lock por LEAD (não por mensagem) para evitar duplicatas quando
+        // o cliente envia múltiplas mensagens rápidas (ex: imagem + emoji)
+        const lockKeyEscritorio = `isa_esc_lead_${leadId}`;
         const { data: existingEscLock } = await supabase
           .from('system_events')
           .select('id')
           .eq('tipo', 'isa_processing_lock')
           .eq('dados->>lock_key', lockKeyEscritorio)
-          .gte('created_at', new Date(Date.now() - 60000).toISOString())
+          .gte('created_at', new Date(Date.now() - 15000).toISOString())
           .maybeSingle();
         
         if (!existingEscLock) {
