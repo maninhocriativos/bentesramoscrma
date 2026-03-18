@@ -827,7 +827,7 @@ serve(async (req: Request) => {
         } catch (isaErr) {
           console.error('[Z-API Webhook] Error calling Isa:', isaErr);
         }
-      } else if (!humanAttendanceActive && !isaExplicitlyDisabled && linhaWhatsapp === 'bentes_ramos_antigo') {
+      } else if (!humanAttendanceActive && linhaWhatsapp === 'bentes_ramos_antigo') {
         // ============================================
         // ISA ESCRITÓRIO — Atende clientes do escritório
         // Consulta processos, agenda, documentos e financeiro
