@@ -202,52 +202,56 @@ function formatarProcessosEscavador(processos: any[], detalhes: Map<string, any>
     return '\n[RESULTADO BUSCA ESCAVADOR]\nNenhum processo encontrado para este CPF.';
   }
 
-  const parts: string[] = [];
-  parts.push(`\n[RESULTADO BUSCA ESCAVADOR - ${processos.length} processo(s) encontrado(s)]`);
-
-  for (const proc of processos.slice(0, 5)) {
-    const cnj = proc.numero_cnj || proc.numero_processo || 'Sem número';
+  // Separar ativos de arquivados
+  const processosComStatus = processos.map((proc) => {
+    const cnj = proc.numero_cnj || proc.numero_processo || '';
     const detalhe = detalhes.get(cnj);
     const fonte = detalhe?.fontes?.find((f: any) => f.tipo === 'TRIBUNAL') || detalhe?.fontes?.[0];
+    const statusPredito = fonte?.status_predito || detalhe?.status_predito;
+    const isAtivo = statusPredito !== 'INATIVO' && statusPredito !== 'BAIXADO';
+    return { proc, cnj, detalhe, fonte, isAtivo, statusPredito };
+  });
+
+  const ativos = processosComStatus.filter(p => p.isAtivo);
+  const arquivados = processosComStatus.filter(p => !p.isAtivo);
+
+  const parts: string[] = [];
+  parts.push(`\n[RESULTADO BUSCA ESCAVADOR - ${processos.length} processo(s) encontrado(s), ${ativos.length} ativo(s), ${arquivados.length} arquivado(s)]`);
+
+  // Formatar TODOS os processos ativos
+  const processosParaDetalhar = ativos.length > 0 ? ativos : processosComStatus.slice(0, 5);
+  
+  for (let i = 0; i < processosParaDetalhar.length; i++) {
+    const { proc, cnj, detalhe, fonte, isAtivo, statusPredito } = processosParaDetalhar[i];
     const capa = fonte?.capa || {};
 
-    parts.push(`\n📋 Processo: ${cnj}`);
+    parts.push(`\n${i + 1}️⃣ Processo: ${cnj || 'Sem número'}`);
     
-    // Classe/Tipo
     const classe = capa.classe || fonte?.classe?.nome || proc.titulo_classe || proc.classe || 'Não informado';
     parts.push(`   Tipo/Classe: ${classe}`);
 
-    // Tribunal
     const tribunal = fonte?.tribunal?.sigla || fonte?.sigla || proc.tribunal || 'Não informado';
     parts.push(`   Tribunal: ${tribunal}`);
 
-    // Órgão julgador / Vara
     const orgao = capa.orgao_julgador || fonte?.orgao_julgador?.nome || 'Não informado';
     parts.push(`   Vara/Órgão: ${orgao}`);
 
-    // Status
     let status = 'Em Andamento';
-    const statusPredito = fonte?.status_predito || detalhe?.status_predito;
     if (statusPredito === 'INATIVO' || statusPredito === 'BAIXADO') status = 'Arquivado';
     else if (statusPredito === 'SUSPENSO') status = 'Suspenso';
     parts.push(`   Status: ${status}`);
 
-    // Assunto
     const assunto = capa.assunto || capa.assuntos_normalizados?.[0]?.nome || proc.assunto || '';
     if (assunto) parts.push(`   Assunto: ${assunto}`);
 
-    // Valor da causa
     const valorCausa = capa.valor_causa?.valor || proc.valor_causa;
     if (valorCausa) parts.push(`   Valor da Causa: R$ ${Number(valorCausa).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
 
-    // Data distribuição
     const dataDistrib = capa.data_distribuicao || fonte?.data_inicio || proc.data_inicio;
     if (dataDistrib) {
-      const dataFormatada = new Date(dataDistrib).toLocaleDateString('pt-BR');
-      parts.push(`   Data Distribuição: ${dataFormatada}`);
+      parts.push(`   Data Distribuição: ${new Date(dataDistrib).toLocaleDateString('pt-BR')}`);
     }
 
-    // Partes
     const envolvidos = fonte?.envolvidos || detalhe?.envolvidos || [];
     if (envolvidos.length > 0) {
       parts.push(`   Partes:`);
@@ -258,7 +262,6 @@ function formatarProcessosEscavador(processos: any[], detalhes: Map<string, any>
       }
     }
 
-    // Últimas movimentações
     const movs = detalhe?._movimentacoes || [];
     if (movs.length > 0) {
       parts.push(`   Últimas movimentações:`);
@@ -269,6 +272,15 @@ function formatarProcessosEscavador(processos: any[], detalhes: Map<string, any>
         const complemento = mov.conteudo || mov.complemento || '';
         parts.push(`   - ${dataStr}: ${titulo}${complemento ? ` — ${complemento.substring(0, 120)}` : ''}`);
       }
+    }
+  }
+
+  // Mencionar arquivados resumidamente
+  if (arquivados.length > 0 && ativos.length > 0) {
+    parts.push(`\n📁 Além dos processos ativos, há ${arquivados.length} processo(s) já arquivado(s):`);
+    for (const arq of arquivados.slice(0, 5)) {
+      const classe = arq.fonte?.capa?.classe || arq.proc.titulo_classe || arq.proc.classe || '';
+      parts.push(`   - ${arq.cnj || 'Sem número'}${classe ? ` (${classe})` : ''} — Arquivado`);
     }
   }
 
