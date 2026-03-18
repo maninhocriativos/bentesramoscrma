@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+const serve = Deno.serve;
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { formatInTimeZone, toZonedTime } from "npm:date-fns-tz@3";
 import { addDays, format, addWeeks, getDay } from "npm:date-fns@3";
