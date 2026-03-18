@@ -856,10 +856,11 @@ serve(async (req: Request) => {
             const mediaUrlEsc = normalized.mediaUrl || 
               normalized.media?.audioUrl || 
               normalized.media?.imageUrl || 
+              normalized.media?.documentUrl ||
               normalized.media?.link ||
               normalized.media?.url;
             
-            const mensagemEsc = (normalized.messageType === 'audio' || normalized.messageType === 'image') && mediaUrlEsc
+            const mensagemEsc = (normalized.messageType === 'audio' || normalized.messageType === 'image' || normalized.messageType === 'document') && mediaUrlEsc
               ? mediaUrlEsc
               : normalized.message;
             

@@ -50,10 +50,11 @@ Quando o cliente perguntar sobre o andamento do processo:
 - Nunca invente informações — se não tiver dados, diga que vai verificar
 - Se o cliente forneceu o nome mas não o CPF, peça o CPF para fazer a busca oficial
 
-### 🎙️ ÁUDIOS E IMAGENS
+### 🎙️ ÁUDIOS, IMAGENS E PDFs
 - Você pode OUVIR áudios (aparecem como [ÁUDIO TRANSCRITO]) — responda normalmente ao conteúdo
 - Você pode VER imagens (aparecem como [IMAGEM ANALISADA]) — responda sobre o que foi identificado
-- Se receber um documento/imagem de comprovante, extrato ou contrato, analise e informe o que identificou
+- Você pode LER PDFs e documentos (aparecem como [DOCUMENTO/IMAGEM ANALISADO]) — analise e informe o que identificou
+- Se receber um contrato, extrato, comprovante ou qualquer documento, analise e apresente as informações principais ao cliente
 
 ### 📅 AGENDA / FALAR COM ADVOGADO
 Quando o cliente EXPLICITAMENTE pedir para falar com o advogado ou agendar:
@@ -778,9 +779,9 @@ serve(async (req: Request) => {
       });
     }
 
-    // Processar mídia se presente (áudio/imagem)
+    // Processar mídia se presente (áudio/imagem/documento)
     let processedMessage = mensagem;
-    if (media_url && (tipo_mensagem === 'audio' || tipo_mensagem === 'image')) {
+    if (media_url && (tipo_mensagem === 'audio' || tipo_mensagem === 'image' || tipo_mensagem === 'document')) {
       try {
         const mediaResponse = await fetch(`${supabaseUrl}/functions/v1/isa-multimodal`, {
           method: 'POST',
@@ -802,7 +803,7 @@ serve(async (req: Request) => {
             if (mediaResult.transcription) {
               processedMessage = `[ÁUDIO TRANSCRITO]: "${mediaResult.transcription}"`;
             } else if (mediaResult.analysis) {
-              processedMessage = `[IMAGEM/DOC ANALISADO]: ${mediaResult.analysis}`;
+              processedMessage = `[DOCUMENTO/IMAGEM ANALISADO]: ${mediaResult.analysis}`;
             }
           }
         }
