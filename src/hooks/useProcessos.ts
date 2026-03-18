@@ -32,7 +32,7 @@ export function useProcessos() {
     if (error) {
       toast({ title: 'Erro ao carregar processos', description: error.message, variant: 'destructive' });
     } else {
-      setProcessos((data as Processo[]) || []);
+      setProcessos((data as unknown as Processo[]) || []);
     }
     setLoading(false);
   }, [isAdvogado, perfil?.nome, toast]);
