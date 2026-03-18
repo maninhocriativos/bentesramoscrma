@@ -131,7 +131,21 @@ serve(async (req: Request): Promise<Response> => {
         case 3: message = CONTRACT_MESSAGES.reminder_5d(clientName, contractLink); break;
       }
 
-      // Enviar via Z-API
+      // REGRA ESTRITA: resolver instância correta por lead
+      const isTrafego = lead.linha_whatsapp === 'trafego_isa' || lead.linha_whatsapp === 'trafego' ||
+                        lead.tipo_origem === 'trafego' || lead.tipo_origem === 'trafego_isa';
+      const target = isTrafego 
+        ? allInstances.find((i: any) => !i.is_default) || allInstances[0]
+        : allInstances.find((i: any) => i.is_default) || allInstances[0];
+      const zapiConfig = {
+        instance_id: target.instance_id,
+        token: target.token,
+        client_token: target.client_token,
+        name: target.name,
+        phone_number: target.phone_number,
+      };
+
+      // Enviar via Z-API pela instância correta
       const result = await sendText(zapiConfig, lead.telefone, message);
 
       if (result.success) {
