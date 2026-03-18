@@ -490,7 +490,7 @@ export async function enviarParaLead(
   // Buscar dados do lead
   const { data: lead, error } = await supabase
     .from('leads_juridicos')
-    .select('id, nome, telefone')
+    .select('id, nome, telefone, linha_whatsapp, tipo_origem')
     .eq('id', leadId)
     .single();
 
@@ -502,11 +502,54 @@ export async function enviarParaLead(
     };
   }
 
+  // Resolver instância correta baseado na origem do lead
+  const instanceId = await resolveInstanceForLead(supabase, lead);
+
   return await enviarMensagemZapi(supabase, lead.telefone, message, {
     leadId: lead.id,
     subscriberNome: lead.nome || 'Cliente',
-    context
+    context,
+    instanceId
   });
+}
+
+/**
+ * Resolve a instância Z-API correta para enviar mensagem a um lead.
+ * REGRA ESTRITA:
+ * - Clientes Bentes Ramos (559291604348) → responder APENAS pela instância Bentes Ramos
+ * - Clientes de Tráfego (559285888190) → responder APENAS pela instância Tráfego
+ */
+export async function resolveInstanceForLead(
+  supabase: any,
+  lead: { linha_whatsapp?: string | null; tipo_origem?: string | null; id?: string }
+): Promise<string | undefined> {
+  const linhaWhatsapp = lead.linha_whatsapp || 'indefinido';
+  const tipoOrigem = lead.tipo_origem || 'indefinido';
+
+  // Determinar se é tráfego
+  const isTrafego = linhaWhatsapp === 'trafego' || linhaWhatsapp === 'trafego_isa' ||
+                    tipoOrigem === 'trafego' || tipoOrigem === 'trafego_isa';
+
+  // Buscar todas as instâncias ativas
+  const { data: instances } = await supabase
+    .from('zapi_instances')
+    .select('instance_id, is_default, name')
+    .eq('is_active', true)
+    .order('is_default', { ascending: false });
+
+  if (!instances || instances.length === 0) return undefined;
+
+  let target;
+  if (isTrafego) {
+    // Tráfego → instância NÃO default (Bentes Ramos-2)
+    target = instances.find((i: any) => !i.is_default) || instances[0];
+  } else {
+    // Bentes Ramos / orgânico → instância default (Bentes Ramos)
+    target = instances.find((i: any) => i.is_default) || instances[0];
+  }
+
+  console.log(`[Z-API Helper] 📱 Roteamento: linha=${linhaWhatsapp}, tipo=${tipoOrigem}, isTrafego=${isTrafego} → ${target.name}`);
+  return target.instance_id;
 }
 
 /**

@@ -79,7 +79,7 @@ async function resolveInstance(supabase: any, cliente: any) {
   // Determine which instance to use
   // Tráfego clients → Tráfego instance (non-default)
   // Bentes Ramos / organic clients → Bentes Ramos instance (default)
-  const isTrafego = linhaWhatsapp === "trafego" || tipoOrigem === "trafego" || tipoOrigem === "trafego_isa";
+  const isTrafego = linhaWhatsapp === "trafego" || linhaWhatsapp === "trafego_isa" || tipoOrigem === "trafego" || tipoOrigem === "trafego_isa";
 
   console.log(`📱 Roteamento: linha_whatsapp=${linhaWhatsapp}, tipo_origem=${tipoOrigem}, isTrafego=${isTrafego}`);
 
