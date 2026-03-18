@@ -55,14 +55,28 @@ serve(async (req: Request) => {
     
     console.log('[Z-API Followup] Action:', action);
     
-    // Get Z-API config
-    const zapiConfig = await getZapiConfig(supabase);
-    if (!zapiConfig) {
+    // Buscar TODAS as instâncias ativas para roteamento por lead
+    const { data: allInstances } = await supabase
+      .from('zapi_instances')
+      .select('*')
+      .eq('is_active', true)
+      .order('is_default', { ascending: false });
+
+    if (!allInstances || allInstances.length === 0) {
       return new Response(JSON.stringify({ error: 'Z-API not configured' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    // Default config (Bentes Ramos) para ações que não dependem do lead
+    const zapiConfig = {
+      instance_id: allInstances[0].instance_id,
+      token: allInstances[0].token,
+      client_token: allInstances[0].client_token,
+      name: allInstances[0].name,
+      phone_number: allInstances[0].phone_number,
+    };
     
     switch (action) {
       case 'create': {
