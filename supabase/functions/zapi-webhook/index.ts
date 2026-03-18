@@ -778,14 +778,91 @@ serve(async (req: Request) => {
         } catch (isaErr) {
           console.error('[Z-API Webhook] Error calling Isa:', isaErr);
         }
+      } else if (!humanAttendanceActive && !isaExplicitlyDisabled && linhaWhatsapp === 'bentes_ramos_antigo') {
+        // ============================================
+        // ISA ESCRITÓRIO — Atende clientes do escritório
+        // Consulta processos, agenda, documentos e financeiro
+        // ============================================
+        console.log(`[Z-API Webhook] 🏢 OFFICE lead - calling isa-escritorio-reply for lead ${leadId}`);
+        
+        const lockKeyEscritorio = `isa_esc_${normalized.messageId || Date.now()}_${leadId}`;
+        const { data: existingEscLock } = await supabase
+          .from('system_events')
+          .select('id')
+          .eq('tipo', 'isa_processing_lock')
+          .eq('dados->>lock_key', lockKeyEscritorio)
+          .gte('created_at', new Date(Date.now() - 60000).toISOString())
+          .maybeSingle();
+        
+        if (!existingEscLock) {
+          await supabase.from('system_events').insert({
+            tipo: 'isa_processing_lock',
+            fonte: 'zapi_webhook',
+            dados: { lock_key: lockKeyEscritorio, lead_id: leadId, message_id: normalized.messageId }
+          });
+          
+          try {
+            const mediaUrlEsc = normalized.mediaUrl || 
+              normalized.media?.audioUrl || 
+              normalized.media?.imageUrl || 
+              normalized.media?.link ||
+              normalized.media?.url;
+            
+            const mensagemEsc = (normalized.messageType === 'audio' || normalized.messageType === 'image') && mediaUrlEsc
+              ? mediaUrlEsc
+              : normalized.message;
+            
+            const { data: escResponse, error: escError } = await supabase.functions.invoke('isa-escritorio-reply', {
+              body: {
+                lead_id: leadId,
+                mensagem: mensagemEsc,
+                subscriber_id: gerarSubscriberId(normalized.phone),
+                subscriber_nome: normalized.name || lead.nome || normalized.phone,
+                tipo_mensagem: normalized.messageType,
+                media_url: mediaUrlEsc
+              }
+            });
+
+            if (!escError && escResponse?.response && zapiConfig) {
+              const sendResult = await sendText(
+                zapiConfig, 
+                normalized.phone!, 
+                escResponse.response
+              );
+              
+              if (sendResult.success) {
+                await supabase.from('manychat_mensagens').insert({
+                  subscriber_id: gerarSubscriberId(normalized.phone!),
+                  subscriber_nome: 'Isa Escritório',
+                  lead_id: leadId,
+                  conteudo: escResponse.response,
+                  direcao: 'saida',
+                  tipo: 'text',
+                  canal: 'whatsapp',
+                  metadata: { 
+                    source: 'zapi', 
+                    context: 'isa_escritorio_response',
+                    message_id: sendResult.messageId,
+                    instance_id: zapiInstanceId,
+                    instance_name: zapiInstanceName,
+                    sent_via: 'isa_escritorio'
+                  }
+                });
+                
+                console.log(`[Z-API Webhook] ✅ Isa Escritório response sent to ${normalized.phone}`);
+              }
+            } else if (escError) {
+              console.error('[Z-API Webhook] Isa Escritório error:', escError);
+            }
+          } catch (escErr) {
+            console.error('[Z-API Webhook] Error calling Isa Escritório:', escErr);
+          }
+        }
       } else {
-        // Log detalhado do motivo de não acionar a ISA
         if (humanAttendanceActive) {
           console.log(`[Z-API Webhook] 👤 Human attendance active for lead ${leadId}, skipping Isa`);
         } else if (isaExplicitlyDisabled) {
           console.log(`[Z-API Webhook] 🚫 Isa explicitly disabled for lead ${leadId}`);
-        } else if (!isTrafficLine && !isTrafficOrigin && !isMetaLeadAds) {
-          console.log(`[Z-API Webhook] 📞 OFFICE lead (not traffic) - human-only attendance for lead ${leadId}`);
         }
       }
     }
