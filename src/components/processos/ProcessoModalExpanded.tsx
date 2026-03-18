@@ -280,14 +280,17 @@ export function ProcessoModalExpanded({
       const tribunal = (formData.tribunal || '').trim();
 
       // Usar force_refresh e persistir para salvar automaticamente
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout
+
       const { data, error } = await supabase.functions.invoke('consulta-processos', {
         body: {
           numeroProcesso: numero,
           tribunal: tribunal ? tribunal : undefined,
           force_refresh: true,
-          persistir: !!processo?.id, // Persistir se já existe no banco
+          persistir: !!processo?.id,
         },
-      });
+      }).finally(() => clearTimeout(timeout));
 
       if (error) throw error;
 
@@ -360,7 +363,7 @@ export function ProcessoModalExpanded({
             console.error('Erro ao salvar no banco:', updateError);
             toast.error('Erro ao salvar movimentações');
           } else {
-            await fetchProcessos(); // Atualizar lista
+            fetchProcessos(); // Atualizar lista em background (sem await)
             toast.success('Processo atualizado!', {
               description: `${newMovimentos.length} movimentações e ${newPartes.length} partes carregadas`
             });
