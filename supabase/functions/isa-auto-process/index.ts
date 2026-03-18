@@ -1,5 +1,5 @@
 // xhr polyfill removed — using native fetch
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+const serve = Deno.serve;
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { 
   DIAS_PERMITIDOS, 
