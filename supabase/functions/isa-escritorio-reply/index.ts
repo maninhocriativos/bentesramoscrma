@@ -147,8 +147,127 @@ function formatarDataMovimentacao(dateStr: string | null | undefined): string {
 }
 
 // ============================================================
-// BUSCAR PROCESSOS NO ESCAVADOR POR CPF
+// BUSCAR PROCESSOS INTERNOS (no banco de dados do sistema)
 // ============================================================
+async function buscarProcessosInternos(supabase: any, cpf?: string | null, nome?: string | null, numeroCnj?: string | null): Promise<{ processos: any[]; found: boolean }> {
+  const results: any[] = [];
+  const foundIds = new Set<string>();
+
+  // 1. Buscar por CPF no campo cpf_cliente
+  if (cpf) {
+    const cpfLimpo = cpf.replace(/\D/g, '');
+    const { data: byCpf } = await supabase
+      .from('processos')
+      .select('id, numero_processo, titulo_acao, status, tribunal, orgao_julgador, grau, assunto, valor_causa, advogado_responsavel, movimentos_json, partes_json, data_ultima_atualizacao, cpf_cliente')
+      .eq('cpf_cliente', cpfLimpo);
+
+    if (byCpf?.length) {
+      for (const p of byCpf) { foundIds.add(p.id); results.push(p); }
+    }
+
+    // 2. Buscar por CPF nas partes (processo_partes.documento)
+    const { data: byPartes } = await supabase
+      .from('processo_partes')
+      .select('processo_id')
+      .ilike('documento', `%${cpfLimpo}%`);
+
+    if (byPartes?.length) {
+      const ids = byPartes.map((p: any) => p.processo_id).filter((id: string) => !foundIds.has(id));
+      if (ids.length > 0) {
+        const { data: procs } = await supabase
+          .from('processos')
+          .select('id, numero_processo, titulo_acao, status, tribunal, orgao_julgador, grau, assunto, valor_causa, advogado_responsavel, movimentos_json, partes_json, data_ultima_atualizacao, cpf_cliente')
+          .in('id', ids);
+        if (procs?.length) {
+          for (const p of procs) { foundIds.add(p.id); results.push(p); }
+        }
+      }
+    }
+  }
+
+  // 3. Buscar por número CNJ
+  if (numeroCnj) {
+    const { data: byCnj } = await supabase
+      .from('processos')
+      .select('id, numero_processo, titulo_acao, status, tribunal, orgao_julgador, grau, assunto, valor_causa, advogado_responsavel, movimentos_json, partes_json, data_ultima_atualizacao, cpf_cliente')
+      .eq('numero_processo', numeroCnj);
+
+    if (byCnj?.length) {
+      for (const p of byCnj) {
+        if (!foundIds.has(p.id)) { foundIds.add(p.id); results.push(p); }
+      }
+    }
+  }
+
+  // 4. Buscar por nome nas partes
+  if (nome && nome.length > 4) {
+    const { data: byNome } = await supabase
+      .from('processo_partes')
+      .select('processo_id')
+      .ilike('nome', `%${nome}%`);
+
+    if (byNome?.length) {
+      const ids = byNome.map((p: any) => p.processo_id).filter((id: string) => !foundIds.has(id));
+      if (ids.length > 0) {
+        const { data: procs } = await supabase
+          .from('processos')
+          .select('id, numero_processo, titulo_acao, status, tribunal, orgao_julgador, grau, assunto, valor_causa, advogado_responsavel, movimentos_json, partes_json, data_ultima_atualizacao, cpf_cliente')
+          .in('id', ids);
+        if (procs?.length) {
+          for (const p of procs) { foundIds.add(p.id); results.push(p); }
+        }
+      }
+    }
+  }
+
+  return { processos: results, found: results.length > 0 };
+}
+
+// ============================================================
+// FORMATAR PROCESSOS INTERNOS PARA CONTEXTO DA IA
+// ============================================================
+function formatarProcessosInternos(processos: any[]): string {
+  if (processos.length === 0) return '';
+
+  const parts: string[] = [];
+  parts.push(`\n[PROCESSOS ENCONTRADOS NO SISTEMA — ${processos.length} processo(s)]`);
+
+  const ativos = processos.filter(p => p.status !== 'Arquivado' && p.status !== 'Perdido');
+  const arquivados = processos.filter(p => p.status === 'Arquivado' || p.status === 'Perdido');
+
+  const toShow = ativos.length > 0 ? ativos : processos.slice(0, 5);
+
+  for (let i = 0; i < toShow.length; i++) {
+    const proc = toShow[i];
+    parts.push(`\n${i + 1}️⃣ Processo: ${proc.numero_processo || 'Sem número'}`);
+    if (proc.titulo_acao) parts.push(`   Tipo/Classe: ${proc.titulo_acao}`);
+    if (proc.tribunal) parts.push(`   🏛️ Tribunal: ${proc.tribunal}`);
+    if (proc.orgao_julgador) parts.push(`   📍 Órgão Julgador: ${proc.orgao_julgador}`);
+    if (proc.grau) parts.push(`   Grau: ${proc.grau}`);
+    parts.push(`   📊 Status: ${proc.status || 'Em Andamento'}`);
+    if (proc.assunto) parts.push(`   Assunto: ${proc.assunto}`);
+    if (proc.valor_causa) parts.push(`   Valor da Causa: R$ ${Number(proc.valor_causa).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+    if (proc.advogado_responsavel) parts.push(`   Advogado: ${proc.advogado_responsavel}`);
+
+    // Últimas movimentações do JSON
+    const movs = proc.movimentos_json || [];
+    if (movs.length > 0) {
+      parts.push(`   Últimas movimentações:`);
+      for (const mov of movs.slice(0, 5)) {
+        const dataStr = formatarDataMovimentacao(mov.dataHora || mov.data);
+        parts.push(`   - ${dataStr}: ${mov.nome || mov.titulo || 'Movimentação'}${mov.complemento ? ` — ${mov.complemento.substring(0, 120)}` : ''}`);
+      }
+    }
+  }
+
+  if (arquivados.length > 0 && ativos.length > 0) {
+    parts.push(`\n📁 Além dos processos ativos, há ${arquivados.length} processo(s) arquivado(s)/perdido(s).`);
+  }
+
+  return parts.join('\n');
+}
+
+
 async function buscarProcessosPorCPF(cpf: string): Promise<{ processos: any[]; error: string | null }> {
   if (!ESCAVADOR_API_KEY) {
     return { processos: [], error: 'ESCAVADOR_API_KEY não configurada' };
