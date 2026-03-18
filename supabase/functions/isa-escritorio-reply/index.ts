@@ -1001,7 +1001,7 @@ serve(async (req: Request) => {
     const context = await getLeadFullContext(lead_id, supabase, querAgendar);
 
     // Combinar contextos
-    const fullContext = context + escavadorContext;
+    const fullContext = context + processosContext;
 
     // Gerar resposta
     const response = await generateResponse(processedMessage, fullContext);
