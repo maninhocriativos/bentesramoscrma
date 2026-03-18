@@ -832,6 +832,19 @@ serve(async (req: Request) => {
         // ISA ESCRITÓRIO — Atende clientes do escritório
         // Consulta processos, agenda, documentos e financeiro
         // ============================================
+        
+        // Check if Isa Escritório is globally disabled
+        const { data: isaEscSetting } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'ISA_ESCRITORIO_ENABLED')
+          .maybeSingle();
+        
+        const isaEscEnabled = isaEscSetting?.value !== 'false';
+        
+        if (!isaEscEnabled) {
+          console.log(`[Z-API Webhook] 🏢 Isa Escritório DESATIVADA globalmente — ignorando mensagem de ${normalized.phone}`);
+        } else {
         console.log(`[Z-API Webhook] 🏢 OFFICE lead - calling isa-escritorio-reply for lead ${leadId}`);
         
         // Lock por LEAD (não por mensagem) para evitar duplicatas quando
