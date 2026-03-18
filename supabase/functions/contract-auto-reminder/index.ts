@@ -70,7 +70,7 @@ serve(async (req: Request): Promise<Response> => {
       .select(`
         *,
         leads_juridicos!contract_reminders_lead_id_fkey(
-          id, nome, telefone, status, lead_state, contract_signed_at
+          id, nome, telefone, status, lead_state, contract_signed_at, linha_whatsapp, tipo_origem
         )
       `)
       .eq('status', 'pending')
