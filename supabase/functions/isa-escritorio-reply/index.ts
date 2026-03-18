@@ -466,7 +466,7 @@ async function generateResponse(message: string, context: string): Promise<strin
         { role: 'system', content: ISA_ESCRITORIO_PROMPT },
         { role: 'user', content: `${context}\n\n[NOVA MENSAGEM DO CLIENTE]\n${message}` }
       ],
-      max_tokens: 800,
+      max_tokens: 1500,
       temperature: 0.6,
     }),
   });
