@@ -621,9 +621,9 @@ serve(async (req: Request) => {
       } else if (processos.length === 0) {
         escavadorContext = `\n[RESULTADO BUSCA ESCAVADOR]\nNenhum processo encontrado para o CPF ${cpfDetectado}. Informe ao cliente que não foram localizados processos vinculados a este CPF.`;
       } else {
-        // Buscar detalhes dos primeiros processos (max 3 para economizar créditos)
+        // Buscar detalhes de TODOS os processos (até 10 para não estourar créditos)
         const detalhesMap = new Map<string, any>();
-        const detailPromises = processos.slice(0, 3).map(async (proc: any) => {
+        const detailPromises = processos.slice(0, 10).map(async (proc: any) => {
           const cnj = proc.numero_cnj || proc.numero_processo;
           if (cnj) {
             const detalhe = await buscarDetalhesProcesso(cnj);
