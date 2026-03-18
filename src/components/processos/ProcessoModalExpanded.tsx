@@ -363,7 +363,7 @@ export function ProcessoModalExpanded({
             console.error('Erro ao salvar no banco:', updateError);
             toast.error('Erro ao salvar movimentações');
           } else {
-            await fetchProcessos(); // Atualizar lista
+            fetchProcessos(); // Atualizar lista em background (sem await)
             toast.success('Processo atualizado!', {
               description: `${newMovimentos.length} movimentações e ${newPartes.length} partes carregadas`
             });
