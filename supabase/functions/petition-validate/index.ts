@@ -1,4 +1,4 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
+// xhr polyfill removed — using native fetch
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
