@@ -5,14 +5,16 @@ import { ProcessosTable } from '@/components/processos/ProcessosTable';
 import { useProcessos } from '@/hooks/useProcessos';
 import { usePerfil } from '@/hooks/usePerfil';
 import { useLeadNames } from '@/hooks/useLeadNames';
-import { Processo, ProcessoStatus } from '@/types/processos';
+import { Processo } from '@/types/processos';
+import { ImportProcessosCsvModal } from '@/components/processos/ImportProcessosCsvModal';
+import { SyncProcessosModal } from '@/components/processos/SyncProcessosModal';
 
 const ProcessoModalExpanded = lazy(() => import('@/components/processos/ProcessoModalExpanded').then(m => ({ default: m.ProcessoModalExpanded })));
 const ConsultaProcessoExterno = lazy(() => import('@/components/processos/ConsultaProcessoExterno').then(m => ({ default: m.ConsultaProcessoExterno })));
 import { 
-  Loader2, Search, Scale, Plus, FileText, AlertTriangle, 
+  Loader2, Search, Scale, Plus, 
   CheckCircle2, PauseCircle, Archive, Trophy, XCircle,
-  RefreshCw, Filter, SlidersHorizontal
+  RefreshCw, SlidersHorizontal, Upload
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -26,21 +28,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export default function ProcessosPage() {
   const navigate = useNavigate();
   const { processos, loading } = useProcessos();
   const { leadNames } = useLeadNames();
-  const { canDelete, canAccessProcessos, loading: perfilLoading, cargo } = usePerfil();
+  const { canDelete, canAccessProcessos, loading: perfilLoading } = usePerfil();
   
   const [selectedProcesso, setSelectedProcesso] = useState<Processo | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isNew, setIsNew] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('todos');
-  const [syncing, setSyncing] = useState(false);
+  const [showImportCsv, setShowImportCsv] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
   const handleProcessoClick = useCallback((processo: Processo) => {
     setSelectedProcesso(processo);
@@ -66,7 +73,6 @@ export default function ProcessosPage() {
     }
   }, [perfilLoading, canAccessProcessos, navigate]);
 
-  // KPI counts
   const kpis = useMemo(() => {
     const total = processos.length;
     const emAndamento = processos.filter(p => p.status === 'Em Andamento').length;
@@ -90,23 +96,6 @@ export default function ProcessosPage() {
     return matchesSearch && matchesStatus;
   }), [processos, searchTerm, statusFilter]);
 
-  const handleSyncAll = async () => {
-    setSyncing(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('processo-auto-sync', {
-        body: { force_all: true },
-      });
-      if (error) throw error;
-      toast.success('Sincronização iniciada', {
-        description: `${data?.synced || 0} processos atualizados`,
-      });
-    } catch (err) {
-      toast.error('Erro ao sincronizar processos');
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   if (perfilLoading) {
     return (
       <AppLayout>
@@ -120,17 +109,17 @@ export default function ProcessosPage() {
   if (!canAccessProcessos) return null;
 
   const kpiCards = [
-    { label: 'Total', value: kpis.total, icon: Scale, color: 'text-foreground', bg: 'bg-card' },
-    { label: 'Em Andamento', value: kpis.emAndamento, icon: CheckCircle2, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-950/30' },
-    { label: 'Suspensos', value: kpis.suspensos, icon: PauseCircle, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/30' },
-    { label: 'Arquivados', value: kpis.arquivados, icon: Archive, color: 'text-muted-foreground', bg: 'bg-muted' },
-    { label: 'Ganhos', value: kpis.ganhos, icon: Trophy, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
-    { label: 'Perdidos', value: kpis.perdidos, icon: XCircle, color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-950/30' },
+    { label: 'Total', value: kpis.total, icon: Scale, color: 'text-foreground', bg: 'bg-card', filterKey: 'todos' },
+    { label: 'Em Andamento', value: kpis.emAndamento, icon: CheckCircle2, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-950/30', filterKey: 'Em Andamento' },
+    { label: 'Suspensos', value: kpis.suspensos, icon: PauseCircle, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/30', filterKey: 'Suspenso' },
+    { label: 'Arquivados', value: kpis.arquivados, icon: Archive, color: 'text-muted-foreground', bg: 'bg-muted', filterKey: 'Arquivado' },
+    { label: 'Ganhos', value: kpis.ganhos, icon: Trophy, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30', filterKey: 'Ganho' },
+    { label: 'Perdidos', value: kpis.perdidos, icon: XCircle, color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-950/30', filterKey: 'Perdido' },
   ];
 
   return (
     <AppLayout>
-      {/* Custom Header */}
+      {/* Header */}
       <header className="sticky top-0 z-40 w-full bg-card/80 backdrop-blur-md border-b border-border">
         <div className="flex h-14 md:h-16 items-center justify-between px-3 md:px-6 gap-2">
           <div className="flex items-center gap-2 md:gap-4 min-w-0">
@@ -148,21 +137,34 @@ export default function ProcessosPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={handleSyncAll}
-              disabled={syncing}
+              onClick={() => setShowSyncModal(true)}
               className="rounded-xl h-8 md:h-9 text-xs md:text-sm"
             >
-              <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
+              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
               <span className="hidden md:inline">Sincronizar</span>
             </Button>
-            <Button 
-              onClick={handleNewProcesso}
-              className="rounded-xl bg-primary hover:bg-primary/90 shadow-soft h-8 md:h-9 px-2.5 md:px-4"
-              size="sm"
-            >
-              <Plus className="h-4 w-4 md:mr-2" />
-              <span className="hidden md:inline">Novo Processo</span>
-            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  className="rounded-xl bg-primary hover:bg-primary/90 shadow-soft h-8 md:h-9 px-2.5 md:px-4"
+                  size="sm"
+                >
+                  <Plus className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">Novo</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleNewProcesso}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Novo Processo
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowImportCsv(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Importar CSV
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
@@ -173,16 +175,11 @@ export default function ProcessosPage() {
           {kpiCards.map((kpi) => (
             <button
               key={kpi.label}
-              onClick={() => setStatusFilter(kpi.label === 'Total' ? 'todos' : kpi.label === 'Em Andamento' ? 'Em Andamento' : kpi.label === 'Suspensos' ? 'Suspenso' : kpi.label === 'Arquivados' ? 'Arquivado' : kpi.label === 'Ganhos' ? 'Ganho' : 'Perdido')}
+              onClick={() => setStatusFilter(kpi.filterKey)}
               className={`flex flex-col items-center gap-1 p-3 md:p-4 rounded-xl border border-border/50 transition-all hover:shadow-md ${
-                (statusFilter === 'todos' && kpi.label === 'Total') ||
-                (statusFilter === 'Em Andamento' && kpi.label === 'Em Andamento') ||
-                (statusFilter === 'Suspenso' && kpi.label === 'Suspensos') ||
-                (statusFilter === 'Arquivado' && kpi.label === 'Arquivados') ||
-                (statusFilter === 'Ganho' && kpi.label === 'Ganhos') ||
-                (statusFilter === 'Perdido' && kpi.label === 'Perdidos')
+                statusFilter === kpi.filterKey
                   ? 'ring-2 ring-primary/30 shadow-md bg-card' 
-                  : `${kpi.bg}`
+                  : kpi.bg
               }`}
             >
               <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
@@ -199,7 +196,6 @@ export default function ProcessosPage() {
           </TabsList>
 
           <TabsContent value="internos" className="space-y-4">
-            {/* Search and Filters Bar */}
             <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
               <div className="relative flex-1 w-full md:max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -244,7 +240,7 @@ export default function ProcessosPage() {
               <ProcessosTable 
                 processos={filteredProcessos} 
                 onProcessoClick={handleProcessoClick}
-            leads={leadNames}
+                leads={leadNames}
               />
             )}
           </TabsContent>
@@ -269,6 +265,9 @@ export default function ProcessosPage() {
           />
         </Suspense>
       )}
+
+      <ImportProcessosCsvModal isOpen={showImportCsv} onClose={() => setShowImportCsv(false)} />
+      <SyncProcessosModal isOpen={showSyncModal} onClose={() => setShowSyncModal(false)} totalProcessos={processos.length} />
     </AppLayout>
   );
 }
