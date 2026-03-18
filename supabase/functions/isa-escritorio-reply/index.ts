@@ -778,9 +778,9 @@ serve(async (req: Request) => {
       });
     }
 
-    // Processar mídia se presente (áudio/imagem)
+    // Processar mídia se presente (áudio/imagem/documento)
     let processedMessage = mensagem;
-    if (media_url && (tipo_mensagem === 'audio' || tipo_mensagem === 'image')) {
+    if (media_url && (tipo_mensagem === 'audio' || tipo_mensagem === 'image' || tipo_mensagem === 'document')) {
       try {
         const mediaResponse = await fetch(`${supabaseUrl}/functions/v1/isa-multimodal`, {
           method: 'POST',
@@ -802,7 +802,7 @@ serve(async (req: Request) => {
             if (mediaResult.transcription) {
               processedMessage = `[ÁUDIO TRANSCRITO]: "${mediaResult.transcription}"`;
             } else if (mediaResult.analysis) {
-              processedMessage = `[IMAGEM/DOC ANALISADO]: ${mediaResult.analysis}`;
+              processedMessage = `[DOCUMENTO/IMAGEM ANALISADO]: ${mediaResult.analysis}`;
             }
           }
         }
