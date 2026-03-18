@@ -259,7 +259,7 @@ export function validarAgendamento(date: Date | string, hora?: string): Validaca
     const nomeDia = NOMES_DIAS[diaSemana];
     return {
       valido: false,
-      motivo: `${nomeDia.charAt(0).toUpperCase() + nomeDia.slice(1)} NÃO é dia de atendimento. Atendemos apenas Segunda, Quarta e Sexta.`,
+      motivo: `${nomeDia.charAt(0).toUpperCase() + nomeDia.slice(1)} NÃO é dia de atendimento. Atendemos apenas Terça, Quarta e Quinta.`,
       sugestoes: getProximosDiasDisponiveis(3)
     };
   }
