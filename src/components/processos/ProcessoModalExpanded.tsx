@@ -70,6 +70,7 @@ type ProcessoFormData = {
   status: ProcessoStatus;
   advogado_responsavel: string;
   cliente_id: string;
+  cpf_cliente: string;
   tribunal: string;
   vara_comarca: string;
   assunto: string;
