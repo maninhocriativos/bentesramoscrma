@@ -143,3 +143,6 @@ verify_jwt = false
 
 [functions.isa-escritorio-reply]
 verify_jwt = false
+
+[functions.campaign-optin-dispatch]
+verify_jwt = false
