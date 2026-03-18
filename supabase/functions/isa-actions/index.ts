@@ -809,7 +809,7 @@ serve(async (req) => {
         // Buscar dados do lead
         const { data: lead } = await supabase
           .from('leads_juridicos')
-          .select('nome, status, telefone')
+          .select('nome, status, telefone, linha_whatsapp, tipo_origem')
           .eq('id', lead_id)
           .single();
 
@@ -817,6 +817,24 @@ serve(async (req) => {
         const tipoDoc = tipo_documento || 'os documentos necessários';
 
         const mensagem = `Olá ${nomeCliente}! 👋\n\nPassando para lembrar sobre ${tipoDoc} que precisamos para dar continuidade ao seu processo.\n\n📄 A documentação é essencial para analisarmos seu caso com precisão.\n\nPrecisa de ajuda para enviar? Pode responder essa mensagem que te orientamos! 📲`;
+
+        // Resolver instância correta baseado na origem do lead
+        let instanceIdForSend: string | undefined;
+        if (lead) {
+          const isTrafego = lead.linha_whatsapp === 'trafego_isa' || lead.linha_whatsapp === 'trafego' ||
+                            lead.tipo_origem === 'trafego' || lead.tipo_origem === 'trafego_isa';
+          const { data: instances } = await supabase
+            .from('zapi_instances')
+            .select('instance_id, is_default, name')
+            .eq('is_active', true);
+          if (instances) {
+            const target = isTrafego 
+              ? instances.find((i: any) => !i.is_default) || instances[0]
+              : instances.find((i: any) => i.is_default) || instances[0];
+            instanceIdForSend = target.instance_id;
+            console.log(`[ISA-ACTIONS] 📱 Instância: ${target.name} (trafego=${isTrafego})`);
+          }
+        }
 
         // Enviar via Z-API
         try {
@@ -833,6 +851,7 @@ serve(async (req) => {
               message: mensagem,
               type: 'text',
               lead_id,
+              ...(instanceIdForSend && { instance_id: instanceIdForSend }),
             },
           });
 

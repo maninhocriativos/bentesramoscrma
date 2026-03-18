@@ -55,14 +55,28 @@ serve(async (req: Request) => {
     
     console.log('[Z-API Followup] Action:', action);
     
-    // Get Z-API config
-    const zapiConfig = await getZapiConfig(supabase);
-    if (!zapiConfig) {
+    // Buscar TODAS as instâncias ativas para roteamento por lead
+    const { data: allInstances } = await supabase
+      .from('zapi_instances')
+      .select('*')
+      .eq('is_active', true)
+      .order('is_default', { ascending: false });
+
+    if (!allInstances || allInstances.length === 0) {
       return new Response(JSON.stringify({ error: 'Z-API not configured' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    // Default config (Bentes Ramos) para ações que não dependem do lead
+    const zapiConfig = {
+      instance_id: allInstances[0].instance_id,
+      token: allInstances[0].token,
+      client_token: allInstances[0].client_token,
+      name: allInstances[0].name,
+      phone_number: allInstances[0].phone_number,
+    };
     
     switch (action) {
       case 'create': {
@@ -206,12 +220,18 @@ async function processFollowups(supabase: any, zapiConfig: any) {
   const now = new Date();
   const results: any[] = [];
   
+  // Buscar TODAS as instâncias para roteamento por lead
+  const { data: allInstances } = await supabase
+    .from('zapi_instances')
+    .select('instance_id, is_default, name, token, client_token, phone_number')
+    .eq('is_active', true);
+
   // Get all active follow-ups that are due
   const { data: pendingFollowups, error } = await supabase
     .from('zapi_followups')
     .select(`
       *,
-      lead:leads_juridicos(id, nome, status, lead_state, telefone)
+      lead:leads_juridicos(id, nome, status, lead_state, telefone, linha_whatsapp, tipo_origem)
     `)
     .eq('status', 'ativo')
     .eq('respondido', false)
@@ -323,9 +343,26 @@ async function processFollowups(supabase: any, zapiConfig: any) {
         continue;
       }
       
+      // REGRA ESTRITA: resolver instância correta por lead
+      const isTrafego = lead.linha_whatsapp === 'trafego_isa' || lead.linha_whatsapp === 'trafego' ||
+                        lead.tipo_origem === 'trafego' || lead.tipo_origem === 'trafego_isa';
+      let leadZapiConfig = zapiConfig;
+      if (allInstances && allInstances.length > 1) {
+        const target = isTrafego 
+          ? allInstances.find((i: any) => !i.is_default) || allInstances[0]
+          : allInstances.find((i: any) => i.is_default) || allInstances[0];
+        leadZapiConfig = {
+          instance_id: target.instance_id,
+          token: target.token,
+          client_token: target.client_token,
+          name: target.name,
+          phone_number: target.phone_number,
+        };
+      }
+
       // Send message via Z-API
-      console.log(`[Z-API Followup] Sending ${tipoEnviado} to ${lead.nome} (${followup.telefone})`);
-      const sendResult = await sendText(zapiConfig, followup.telefone, message);
+      console.log(`[Z-API Followup] Sending ${tipoEnviado} to ${lead.nome} (${followup.telefone}) via ${leadZapiConfig.name}`);
+      const sendResult = await sendText(leadZapiConfig, followup.telefone, message);
       
       if (sendResult.success) {
         // Save message to history

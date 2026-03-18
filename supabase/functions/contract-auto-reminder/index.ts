@@ -45,9 +45,14 @@ serve(async (req: Request): Promise<Response> => {
     
     console.log(`[Contract Reminder Z-API] Processing reminders at ${now.toISOString()}`);
 
-    // Verificar se Z-API está configurado
-    const zapiConfig = await getZapiConfig(supabase);
-    if (!zapiConfig) {
+    // Buscar todas as instâncias para roteamento por lead
+    const { data: allInstances } = await supabase
+      .from('zapi_instances')
+      .select('instance_id, is_default, name, token, client_token, phone_number')
+      .eq('is_active', true)
+      .order('is_default', { ascending: false });
+
+    if (!allInstances || allInstances.length === 0) {
       return new Response(JSON.stringify({ 
         success: false, 
         error: 'Z-API não configurado ou inativo' 
@@ -63,7 +68,7 @@ serve(async (req: Request): Promise<Response> => {
       .select(`
         *,
         leads_juridicos!contract_reminders_lead_id_fkey(
-          id, nome, telefone, status, lead_state, contract_signed_at
+          id, nome, telefone, status, lead_state, contract_signed_at, linha_whatsapp, tipo_origem
         )
       `)
       .eq('status', 'pending')
@@ -124,7 +129,21 @@ serve(async (req: Request): Promise<Response> => {
         case 3: message = CONTRACT_MESSAGES.reminder_5d(clientName, contractLink); break;
       }
 
-      // Enviar via Z-API
+      // REGRA ESTRITA: resolver instância correta por lead
+      const isTrafego = lead.linha_whatsapp === 'trafego_isa' || lead.linha_whatsapp === 'trafego' ||
+                        lead.tipo_origem === 'trafego' || lead.tipo_origem === 'trafego_isa';
+      const target = isTrafego 
+        ? allInstances.find((i: any) => !i.is_default) || allInstances[0]
+        : allInstances.find((i: any) => i.is_default) || allInstances[0];
+      const zapiConfig = {
+        instance_id: target.instance_id,
+        token: target.token,
+        client_token: target.client_token,
+        name: target.name,
+        phone_number: target.phone_number,
+      };
+
+      // Enviar via Z-API pela instância correta
       const result = await sendText(zapiConfig, lead.telefone, message);
 
       if (result.success) {

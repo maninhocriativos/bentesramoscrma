@@ -195,14 +195,29 @@ serve(async (req: Request) => {
     
     console.log('[Traffic Followup] Action:', action);
     
-    // Get Z-API config
-    const zapiConfig = await getZapiConfig(supabase);
-    if (!zapiConfig) {
+    // REGRA ESTRITA: Traffic followup DEVE usar a instância de tráfego (não-default)
+    const { data: allInstances } = await supabase
+      .from('zapi_instances')
+      .select('*')
+      .eq('is_active', true)
+      .order('is_default', { ascending: true }); // não-default primeiro
+
+    const trafegoInstance = allInstances?.find((i: any) => !i.is_default) || allInstances?.[0];
+    if (!trafegoInstance) {
       return new Response(JSON.stringify({ error: 'Z-API not configured' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    const zapiConfig = {
+      instance_id: trafegoInstance.instance_id,
+      token: trafegoInstance.token,
+      client_token: trafegoInstance.client_token,
+      name: trafegoInstance.name,
+      phone_number: trafegoInstance.phone_number,
+    };
+    console.log(`[Traffic Followup] 📱 Usando instância de tráfego: ${zapiConfig.name}`);
     
     switch (action) {
       case 'enroll': {

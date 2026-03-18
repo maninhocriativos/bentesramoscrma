@@ -1057,16 +1057,61 @@ serve(async (req: Request) => {
     
     const phoneToSend = subData?.telefone || telefone;
     
-    // Resolver instance_id a partir do instance_name (connectedPhone)
+    // Resolver instance_id a partir do instance_name (connectedPhone) do subscriber
+    // REGRA ESTRITA: responder SEMPRE pela mesma instância que recebeu o contato
     let instanceId: string | null = null;
     if (subData?.instance_name) {
-      const { data: inst } = await supabase
+      const cleanPhone = subData.instance_name.replace(/\D/g, '');
+      const last8 = cleanPhone.slice(-8);
+      
+      // Buscar instância que corresponde ao número conectado
+      const { data: instances } = await supabase
         .from('zapi_instances')
-        .select('instance_id')
-        .eq('is_active', true)
-        .or(`phone.ilike.%${subData.instance_name.slice(-8)}%,name.ilike.%${subData.instance_name}%`)
+        .select('instance_id, phone_number, name')
+        .eq('is_active', true);
+      
+      if (instances) {
+        const matched = instances.find((i: any) => {
+          if (!i.phone_number) return false;
+          const instPhone = i.phone_number.replace(/\D/g, '');
+          return instPhone.endsWith(last8) || cleanPhone.endsWith(instPhone.slice(-8));
+        });
+        if (matched) {
+          instanceId = matched.instance_id;
+          console.log(`[ISA-REPLY] 📱 Instância resolvida: ${matched.name} (${matched.instance_id})`);
+        }
+      }
+      
+      if (!instanceId) {
+        console.log(`[ISA-REPLY] ⚠️ Instância não encontrada para connectedPhone: ${subData.instance_name}`);
+      }
+    }
+    
+    // Fallback: resolver pela origem do lead
+    if (!instanceId && leadId) {
+      const { data: leadData } = await supabase
+        .from('leads_juridicos')
+        .select('linha_whatsapp, tipo_origem')
+        .eq('id', leadId)
         .maybeSingle();
-      instanceId = inst?.instance_id || null;
+      
+      if (leadData) {
+        const isTrafego = leadData.linha_whatsapp === 'trafego_isa' || leadData.linha_whatsapp === 'trafego' ||
+                          leadData.tipo_origem === 'trafego' || leadData.tipo_origem === 'trafego_isa';
+        
+        const { data: instances } = await supabase
+          .from('zapi_instances')
+          .select('instance_id, is_default, name')
+          .eq('is_active', true);
+        
+        if (instances) {
+          const target = isTrafego 
+            ? instances.find((i: any) => !i.is_default) || instances[0]
+            : instances.find((i: any) => i.is_default) || instances[0];
+          instanceId = target.instance_id;
+          console.log(`[ISA-REPLY] 📱 Instância via lead origin: ${target.name} (trafego=${isTrafego})`);
+        }
+      }
     }
     
     const enviado = await sendViaZapi(phoneToSend, respostaFinal, leadId, instanceId);
