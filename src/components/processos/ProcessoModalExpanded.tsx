@@ -280,14 +280,17 @@ export function ProcessoModalExpanded({
       const tribunal = (formData.tribunal || '').trim();
 
       // Usar force_refresh e persistir para salvar automaticamente
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout
+
       const { data, error } = await supabase.functions.invoke('consulta-processos', {
         body: {
           numeroProcesso: numero,
           tribunal: tribunal ? tribunal : undefined,
           force_refresh: true,
-          persistir: !!processo?.id, // Persistir se já existe no banco
+          persistir: !!processo?.id,
         },
-      });
+      }).finally(() => clearTimeout(timeout));
 
       if (error) throw error;
 
