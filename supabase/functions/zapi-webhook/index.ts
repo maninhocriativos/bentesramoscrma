@@ -847,6 +847,40 @@ serve(async (req: Request) => {
         } else {
         console.log(`[Z-API Webhook] 🏢 OFFICE lead - calling isa-escritorio-reply for lead ${leadId}`);
         
+        // ============================================
+        // FORÇAR INSTÂNCIA DO ESCRITÓRIO PARA ENVIO
+        // Não usar zapiConfig genérico — buscar explicitamente a instância
+        // do escritório pelo phone_number para garantir roteamento correto
+        // ============================================
+        const officePhones = ['559291604348', '5592991604348'];
+        const { data: officeInstance } = await supabase
+          .from('zapi_instances')
+          .select('*')
+          .eq('is_active', true)
+          .or(officePhones.map(p => `phone_number.eq.${p}`).join(','))
+          .maybeSingle();
+        
+        const officeConfig: any = officeInstance ? {
+          instance_id: officeInstance.instance_id,
+          token: officeInstance.token,
+          client_token: officeInstance.client_token,
+          name: officeInstance.name,
+          phone_number: officeInstance.phone_number,
+        } : null;
+        
+        console.log(`[Z-API Webhook] 🏢 [ROUTING] Instância para envio:`, {
+          office_found: !!officeConfig,
+          office_name: officeConfig?.name || 'N/A',
+          office_instance_id: officeConfig?.instance_id || 'N/A',
+          office_phone: officeConfig?.phone_number || 'N/A',
+          generic_zapiConfig_name: zapiConfig?.name || 'N/A',
+          generic_zapiConfig_instance_id: zapiConfig?.instance_id || 'N/A',
+          match: officeConfig?.instance_id === zapiConfig?.instance_id ? '✅ SAME' : '❌ DIFFERENT — bug would have occurred!',
+        });
+        
+        // Usar officeConfig se encontrado, senão fallback para zapiConfig
+        const sendConfig = officeConfig || zapiConfig;
+        
         // Lock por LEAD (não por mensagem) para evitar duplicatas quando
         // o cliente envia múltiplas mensagens rápidas (ex: imagem + emoji)
         const lockKeyEscritorio = `isa_esc_lead_${leadId}`;
@@ -888,9 +922,11 @@ serve(async (req: Request) => {
               }
             });
 
-            if (!escError && escResponse?.response && zapiConfig) {
+            if (!escError && escResponse?.response && sendConfig) {
+              console.log(`[Z-API Webhook] 🏢 [SEND] Enviando via ${sendConfig.name} (instance_id: ${sendConfig.instance_id}) para ${normalized.phone}`);
+              
               const sendResult = await sendText(
-                zapiConfig, 
+                sendConfig, 
                 normalized.phone!, 
                 escResponse.response
               );
@@ -908,13 +944,19 @@ serve(async (req: Request) => {
                     source: 'zapi', 
                     context: 'isa_escritorio_response',
                     message_id: sendResult.messageId,
-                    instance_id: zapiInstanceId,
-                    instance_name: zapiInstanceName,
-                    sent_via: 'isa_escritorio'
+                    instance_id: officeInstance?.id || zapiInstanceId,
+                    instance_name: sendConfig.name || zapiInstanceName,
+                    sent_via: 'isa_escritorio',
+                    routing_debug: {
+                      generic_config: zapiConfig?.name,
+                      office_config: officeConfig?.name,
+                      used_config: sendConfig.name,
+                      was_corrected: officeConfig?.instance_id !== zapiConfig?.instance_id
+                    }
                   }
                 });
                 
-                console.log(`[Z-API Webhook] ✅ Isa Escritório response sent to ${normalized.phone}`);
+                console.log(`[Z-API Webhook] ✅ Isa Escritório response sent to ${normalized.phone} via ${sendConfig.name}`);
               }
             } else if (escError) {
               console.error('[Z-API Webhook] Isa Escritório error:', escError);
