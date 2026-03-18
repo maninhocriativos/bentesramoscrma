@@ -2960,18 +2960,28 @@ export type Database = {
         Row: {
           advogado_responsavel: string | null
           ajuizado_em: string | null
+          area: string | null
           assunto: string | null
+          assunto_cnj: string | null
           cache_valid_until: string | null
           classe_cnj: string | null
           classe_cnj_codigo: string | null
           classe_cnj_nome: string | null
           cliente_id: string | null
           cnj_normalizado: string | null
+          complemento_enderecamento: string | null
           cpf_cliente: string | null
           created_at: string | null
           dados_datajud: Json | null
           data_ajuizamento: string | null
+          data_arquivamento: string | null
+          data_citacao: string | null
+          data_distribuicao: string | null
+          data_encerramento: string | null
+          data_recebimento: string | null
           data_ultima_atualizacao: string | null
+          descricao: string | null
+          fase: string | null
           fonte_preferida: string | null
           fonte_raw: Json | null
           frequencia_notificacao_dias: number | null
@@ -2979,18 +2989,25 @@ export type Database = {
           grau_formato: string | null
           id: string
           last_sync_error: string | null
+          marcadores: string | null
+          monitorar_push: boolean | null
           movimentos_json: Json | null
           notificacao_ativa: boolean | null
+          numero_complementar: string | null
           numero_processo: string | null
           orgao_julgador: string | null
           origem_cliente: string | null
           partes_json: Json | null
+          probabilidade: string | null
+          segredo_justica: boolean | null
           sigilo: string | null
           sistema: string | null
+          sistema_judicial: string | null
           status: string | null
           status_detalhado: string | null
           sync_error_count: number | null
           sync_priority: string | null
+          tipo_orgao_julgador: string | null
           titulo_acao: string | null
           tribunal: string | null
           ultima_atualizacao: string | null
@@ -2998,23 +3015,34 @@ export type Database = {
           ultima_notificacao_at: string | null
           updated_at: string | null
           valor_causa: number | null
+          valor_provisionado: number | null
           vara_comarca: string | null
         }
         Insert: {
           advogado_responsavel?: string | null
           ajuizado_em?: string | null
+          area?: string | null
           assunto?: string | null
+          assunto_cnj?: string | null
           cache_valid_until?: string | null
           classe_cnj?: string | null
           classe_cnj_codigo?: string | null
           classe_cnj_nome?: string | null
           cliente_id?: string | null
           cnj_normalizado?: string | null
+          complemento_enderecamento?: string | null
           cpf_cliente?: string | null
           created_at?: string | null
           dados_datajud?: Json | null
           data_ajuizamento?: string | null
+          data_arquivamento?: string | null
+          data_citacao?: string | null
+          data_distribuicao?: string | null
+          data_encerramento?: string | null
+          data_recebimento?: string | null
           data_ultima_atualizacao?: string | null
+          descricao?: string | null
+          fase?: string | null
           fonte_preferida?: string | null
           fonte_raw?: Json | null
           frequencia_notificacao_dias?: number | null
@@ -3022,18 +3050,25 @@ export type Database = {
           grau_formato?: string | null
           id?: string
           last_sync_error?: string | null
+          marcadores?: string | null
+          monitorar_push?: boolean | null
           movimentos_json?: Json | null
           notificacao_ativa?: boolean | null
+          numero_complementar?: string | null
           numero_processo?: string | null
           orgao_julgador?: string | null
           origem_cliente?: string | null
           partes_json?: Json | null
+          probabilidade?: string | null
+          segredo_justica?: boolean | null
           sigilo?: string | null
           sistema?: string | null
+          sistema_judicial?: string | null
           status?: string | null
           status_detalhado?: string | null
           sync_error_count?: number | null
           sync_priority?: string | null
+          tipo_orgao_julgador?: string | null
           titulo_acao?: string | null
           tribunal?: string | null
           ultima_atualizacao?: string | null
@@ -3041,23 +3076,34 @@ export type Database = {
           ultima_notificacao_at?: string | null
           updated_at?: string | null
           valor_causa?: number | null
+          valor_provisionado?: number | null
           vara_comarca?: string | null
         }
         Update: {
           advogado_responsavel?: string | null
           ajuizado_em?: string | null
+          area?: string | null
           assunto?: string | null
+          assunto_cnj?: string | null
           cache_valid_until?: string | null
           classe_cnj?: string | null
           classe_cnj_codigo?: string | null
           classe_cnj_nome?: string | null
           cliente_id?: string | null
           cnj_normalizado?: string | null
+          complemento_enderecamento?: string | null
           cpf_cliente?: string | null
           created_at?: string | null
           dados_datajud?: Json | null
           data_ajuizamento?: string | null
+          data_arquivamento?: string | null
+          data_citacao?: string | null
+          data_distribuicao?: string | null
+          data_encerramento?: string | null
+          data_recebimento?: string | null
           data_ultima_atualizacao?: string | null
+          descricao?: string | null
+          fase?: string | null
           fonte_preferida?: string | null
           fonte_raw?: Json | null
           frequencia_notificacao_dias?: number | null
@@ -3065,18 +3111,25 @@ export type Database = {
           grau_formato?: string | null
           id?: string
           last_sync_error?: string | null
+          marcadores?: string | null
+          monitorar_push?: boolean | null
           movimentos_json?: Json | null
           notificacao_ativa?: boolean | null
+          numero_complementar?: string | null
           numero_processo?: string | null
           orgao_julgador?: string | null
           origem_cliente?: string | null
           partes_json?: Json | null
+          probabilidade?: string | null
+          segredo_justica?: boolean | null
           sigilo?: string | null
           sistema?: string | null
+          sistema_judicial?: string | null
           status?: string | null
           status_detalhado?: string | null
           sync_error_count?: number | null
           sync_priority?: string | null
+          tipo_orgao_julgador?: string | null
           titulo_acao?: string | null
           tribunal?: string | null
           ultima_atualizacao?: string | null
@@ -3084,6 +3137,7 @@ export type Database = {
           ultima_notificacao_at?: string | null
           updated_at?: string | null
           valor_causa?: number | null
+          valor_provisionado?: number | null
           vara_comarca?: string | null
         }
         Relationships: [

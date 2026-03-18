@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Trash2, Loader2, Users, Briefcase, BadgeCheck, RefreshCw, MessageSquare, Building2, Scale, Calendar, DollarSign, Gavel, MapPin, ChevronRight, Plus, X, Tag } from 'lucide-react';
+import { Trash2, Loader2, Users, Briefcase, BadgeCheck, RefreshCw, MessageSquare, Building2, Scale, Calendar, DollarSign, Gavel, MapPin, ChevronRight, Plus, X, Tag, FileText, Eye, Bell, Hash, StickyNote, FolderOpen, Shield } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -66,6 +66,7 @@ const PROCESSO_DRAFT_MAX_AGE_MS = 1000 * 60 * 60 * 24;
 
 type ProcessoFormData = {
   numero_processo: string;
+  numero_complementar: string;
   titulo_acao: string;
   status: ProcessoStatus;
   advogado_responsavel: string;
@@ -78,6 +79,24 @@ type ProcessoFormData = {
   orgao_julgador: string;
   grau: string;
   origem_cliente: string;
+  descricao: string;
+  marcadores: string;
+  area: string;
+  fase: string;
+  classe_cnj: string;
+  assunto_cnj: string;
+  segredo_justica: boolean;
+  data_distribuicao: string;
+  data_citacao: string;
+  data_recebimento: string;
+  data_arquivamento: string;
+  data_encerramento: string;
+  valor_provisionado: string;
+  probabilidade: string;
+  monitorar_push: boolean;
+  tipo_orgao_julgador: string;
+  sistema_judicial: string;
+  complemento_enderecamento: string;
 };
 
 interface ProcessoModalDraft {
@@ -89,6 +108,7 @@ interface ProcessoModalDraft {
 
 const createEmptyFormData = (): ProcessoFormData => ({
   numero_processo: '',
+  numero_complementar: '',
   titulo_acao: '',
   status: 'Em Andamento',
   advogado_responsavel: '',
@@ -101,6 +121,24 @@ const createEmptyFormData = (): ProcessoFormData => ({
   orgao_julgador: '',
   grau: '',
   origem_cliente: '',
+  descricao: '',
+  marcadores: '',
+  area: '',
+  fase: '',
+  classe_cnj: '',
+  assunto_cnj: '',
+  segredo_justica: false,
+  data_distribuicao: '',
+  data_citacao: '',
+  data_recebimento: '',
+  data_arquivamento: '',
+  data_encerramento: '',
+  valor_provisionado: '',
+  probabilidade: '',
+  monitorar_push: true,
+  tipo_orgao_julgador: '',
+  sistema_judicial: '',
+  complemento_enderecamento: '',
 });
 
 export function ProcessoModalExpanded({ 
@@ -443,8 +481,10 @@ export function ProcessoModalExpanded({
     setDraftHydrated(false);
 
     if (processo) {
+      const p = processo as any;
       setFormData({
         numero_processo: processo.numero_processo || '',
+        numero_complementar: p.numero_complementar || '',
         titulo_acao: processo.titulo_acao || '',
         status: (processo.status as ProcessoStatus) || 'Em Andamento',
         advogado_responsavel: processo.advogado_responsavel || '',
@@ -456,7 +496,25 @@ export function ProcessoModalExpanded({
         valor_causa: processo.valor_causa ? processo.valor_causa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '',
         orgao_julgador: processo.orgao_julgador || '',
         grau: processo.grau || '',
-        origem_cliente: (processo as any).origem_cliente || '',
+        origem_cliente: p.origem_cliente || '',
+        descricao: p.descricao || '',
+        marcadores: p.marcadores || '',
+        area: p.area || '',
+        fase: p.fase || '',
+        classe_cnj: processo.classe_cnj || '',
+        assunto_cnj: p.assunto_cnj || '',
+        segredo_justica: p.segredo_justica || false,
+        data_distribuicao: p.data_distribuicao || '',
+        data_citacao: p.data_citacao || '',
+        data_recebimento: p.data_recebimento || '',
+        data_arquivamento: p.data_arquivamento || '',
+        data_encerramento: p.data_encerramento || '',
+        valor_provisionado: p.valor_provisionado ? String(p.valor_provisionado) : '',
+        probabilidade: p.probabilidade || '',
+        monitorar_push: p.monitorar_push ?? true,
+        tipo_orgao_julgador: p.tipo_orgao_julgador || '',
+        sistema_judicial: p.sistema_judicial || '',
+        complemento_enderecamento: p.complemento_enderecamento || '',
       });
       setPartes(processo.partes_json || []);
       setMovimentos(processo.movimentos_json || []);
@@ -592,6 +650,7 @@ export function ProcessoModalExpanded({
     try {
       const data = {
         numero_processo: formData.numero_processo || null,
+        numero_complementar: formData.numero_complementar || null,
         titulo_acao: formData.titulo_acao || null,
         status: formData.status,
         advogado_responsavel: formData.advogado_responsavel || null,
@@ -604,6 +663,24 @@ export function ProcessoModalExpanded({
         orgao_julgador: formData.orgao_julgador || null,
         grau: formData.grau || null,
         origem_cliente: formData.origem_cliente || null,
+        descricao: formData.descricao || null,
+        marcadores: formData.marcadores || null,
+        area: formData.area || null,
+        fase: formData.fase || null,
+        classe_cnj: formData.classe_cnj || null,
+        assunto_cnj: formData.assunto_cnj || null,
+        segredo_justica: formData.segredo_justica,
+        data_distribuicao: formData.data_distribuicao || null,
+        data_citacao: formData.data_citacao || null,
+        data_recebimento: formData.data_recebimento || null,
+        data_arquivamento: formData.data_arquivamento || null,
+        data_encerramento: formData.data_encerramento || null,
+        valor_provisionado: formData.valor_provisionado ? parseFloat(formData.valor_provisionado.replace(/\./g, '').replace(',', '.')) : null,
+        probabilidade: formData.probabilidade || null,
+        monitorar_push: formData.monitorar_push,
+        tipo_orgao_julgador: formData.tipo_orgao_julgador || null,
+        sistema_judicial: formData.sistema_judicial || null,
+        complemento_enderecamento: formData.complemento_enderecamento || null,
         partes_json: partes.length > 0 ? partes : null,
         movimentos_json: movimentos.length > 0 ? movimentos : null,
         ultima_consulta_api_at: partes.length > 0 || movimentos.length > 0 ? new Date().toISOString() : null,
@@ -748,26 +825,25 @@ export function ProcessoModalExpanded({
           </TabsList>
 
           <div className="flex-1 min-h-0 overflow-auto">
-            {/* Tab: Dados (com todas as seções do cadastro) */}
+            {/* Tab: Dados (estilo Projuris) */}
             <TabsContent value="dados" className="h-full mt-0 data-[state=inactive]:hidden" forceMount>
               <ScrollArea className="h-full pr-4">
-                <div className="space-y-6 py-4">
+                <div className="space-y-5 py-4">
                   
-                  {/* Section 1: Dados do Processo */}
-                  <div className="space-y-4">
+                  {/* Numeração */}
+                  <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center">
-                        <Scale className="h-3.5 w-3.5 text-primary" />
+                        <Hash className="h-3.5 w-3.5 text-primary" />
                       </div>
-                      <h3 className="text-sm font-semibold text-foreground">Dados do Processo</h3>
+                      <h3 className="text-sm font-semibold text-foreground">Numeração</h3>
                     </div>
                     <div className="bg-muted/30 rounded-xl p-4 space-y-4 border border-border/30">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="md:col-span-2 space-y-1.5">
-                          <Label htmlFor="numero_processo" className="text-xs text-muted-foreground">Número CNJ</Label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Numeração padrão CNJ</Label>
                           <div className="relative">
                             <Input
-                              id="numero_processo"
                               value={formData.numero_processo}
                               onChange={(e) => setFormData({ ...formData, numero_processo: e.target.value })}
                               className="rounded-xl pr-10 bg-card font-mono text-sm"
@@ -784,138 +860,75 @@ export function ProcessoModalExpanded({
                           )}
                         </div>
                         <div className="space-y-1.5">
-                          <Label htmlFor="classe_cnj" className="text-xs text-muted-foreground">Classe CNJ</Label>
+                          <Label className="text-xs text-muted-foreground">Numeração complementar</Label>
                           <Input
-                            id="classe_cnj"
-                            value={formData.titulo_acao}
-                            onChange={(e) => setFormData({ ...formData, titulo_acao: e.target.value })}
-                            className="rounded-xl bg-card"
-                            placeholder="Ex: Ação de Indenização"
+                            value={formData.numero_complementar}
+                            onChange={(e) => setFormData({ ...formData, numero_complementar: e.target.value })}
+                            className="rounded-xl bg-card text-sm"
+                            placeholder="Numeração complementar"
                           />
                         </div>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Detalhes do Processo */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center">
+                        <FileText className="h-3.5 w-3.5 text-primary" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-foreground">Detalhes do Processo</h3>
+                    </div>
+                    <div className="bg-muted/30 rounded-xl p-4 space-y-4 border border-border/30">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                          <Label htmlFor="assunto" className="text-xs text-muted-foreground">Assunto</Label>
+                          <Label className="text-xs text-muted-foreground">Situação</Label>
+                          <Select
+                            value={formData.status}
+                            onValueChange={(value) => setFormData({ ...formData, status: value as ProcessoStatus })}
+                          >
+                            <SelectTrigger className="rounded-xl bg-card">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {STATUSES.map((status) => (
+                                <SelectItem key={status} value={status}>{status}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Assunto</Label>
                           <Input
-                            id="assunto"
                             value={formData.assunto}
                             onChange={(e) => setFormData({ ...formData, assunto: e.target.value })}
                             className="rounded-xl bg-card"
                             placeholder="Ex: Danos Morais"
                           />
                         </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="tribunal" className="text-xs text-muted-foreground">Tribunal</Label>
-                          <Input
-                            id="tribunal"
-                            value={formData.tribunal}
-                            onChange={(e) => setFormData({ ...formData, tribunal: e.target.value })}
-                            className="rounded-xl bg-card"
-                            placeholder="Ex: TRT11, TJAM"
-                          />
-                        </div>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-1.5">
-                          <Label htmlFor="vara_comarca" className="text-xs text-muted-foreground">Vara / Comarca</Label>
-                          <Input
-                            id="vara_comarca"
-                            value={formData.vara_comarca}
-                            onChange={(e) => setFormData({ ...formData, vara_comarca: e.target.value })}
-                            className="rounded-xl bg-card"
-                            placeholder="Ex: 1ª Vara Cível de Manaus"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="orgao_julgador" className="text-xs text-muted-foreground">Órgão Julgador</Label>
-                          <Input
-                            id="orgao_julgador"
-                            value={formData.orgao_julgador}
-                            onChange={(e) => setFormData({ ...formData, orgao_julgador: e.target.value })}
-                            className="rounded-xl bg-card"
-                            placeholder="Ex: Juízo da 2ª Vara"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="grau" className="text-xs text-muted-foreground">Grau</Label>
-                          <Select
-                            value={formData.grau || 'G1'}
-                            onValueChange={(value) => setFormData({ ...formData, grau: value })}
-                          >
-                            <SelectTrigger className="rounded-xl bg-card">
-                              <SelectValue placeholder="Selecione" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="G1">1º Grau</SelectItem>
-                              <SelectItem value="G2">2º Grau</SelectItem>
-                              <SelectItem value="SUP">Superior</SelectItem>
-                              <SelectItem value="JE">Juizado Especial</SelectItem>
-                              <SelectItem value="TR">Turma Recursal</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Section 2: Financeiro & Responsáveis */}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-md bg-success/10 flex items-center justify-center">
-                        <DollarSign className="h-3.5 w-3.5 text-success" />
-                      </div>
-                      <h3 className="text-sm font-semibold text-foreground">Financeiro & Responsáveis</h3>
-                    </div>
-                    <div className="bg-muted/30 rounded-xl p-4 space-y-4 border border-border/30">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-1.5">
-                          <Label htmlFor="valor_causa" className="text-xs text-muted-foreground">Valor da Causa (R$)</Label>
-                          <Input
-                            id="valor_causa"
-                            value={formData.valor_causa}
-                            onChange={(e) => {
-                              const val = e.target.value.replace(/[^0-9.,]/g, '');
-                              setFormData({ ...formData, valor_causa: val });
-                            }}
-                            className="rounded-xl bg-card"
-                            placeholder="0,00"
-                            inputMode="decimal"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="advogado_responsavel" className="text-xs text-muted-foreground">Advogado Responsável</Label>
-                          <Input
-                            id="advogado_responsavel"
-                            value={formData.advogado_responsavel}
-                            onChange={(e) => setFormData({ ...formData, advogado_responsavel: e.target.value })}
-                            className="rounded-xl bg-card"
-                            placeholder="Nome do advogado"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="cpf_cliente" className="text-xs text-muted-foreground">CPF do Cliente</Label>
-                          <Input
-                            id="cpf_cliente"
-                            value={formData.cpf_cliente}
-                            onChange={(e) => {
-                              let val = e.target.value.replace(/\D/g, '');
-                              if (val.length > 11) val = val.slice(0, 11);
-                              if (val.length > 9) val = val.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
-                              else if (val.length > 6) val = val.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
-                              else if (val.length > 3) val = val.replace(/(\d{3})(\d{1,3})/, '$1.$2');
-                              setFormData({ ...formData, cpf_cliente: val });
-                            }}
-                            className="rounded-xl bg-card"
-                            placeholder="000.000.000-00"
-                            maxLength={14}
-                          />
-                          <p className="text-[11px] text-muted-foreground">Usado pela Isa para localizar processos</p>
-                        </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Descrição</Label>
+                        <Textarea
+                          value={formData.descricao}
+                          onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                          className="rounded-xl bg-card min-h-[80px] text-sm"
+                          placeholder="Anotações e descrição do processo..."
+                        />
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                          <Label htmlFor="cliente_id" className="text-xs text-muted-foreground">Cliente (Lead)</Label>
+                          <Label className="text-xs text-muted-foreground">Marcadores</Label>
+                          <Input
+                            value={formData.marcadores}
+                            onChange={(e) => setFormData({ ...formData, marcadores: e.target.value })}
+                            className="rounded-xl bg-card"
+                            placeholder="Separados por vírgula"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Pasta do Cliente</Label>
                           <Select
                             value={formData.cliente_id || '__none__'}
                             onValueChange={(value) =>
@@ -935,8 +948,31 @@ export function ProcessoModalExpanded({
                             </SelectContent>
                           </Select>
                         </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Responsável & Organização */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded-md bg-accent/20 flex items-center justify-center">
+                        <Users className="h-3.5 w-3.5 text-accent-foreground" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-foreground">Responsável & Organização</h3>
+                    </div>
+                    <div className="bg-muted/30 rounded-xl p-4 space-y-4 border border-border/30">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                          <Label htmlFor="origem_cliente" className="text-xs text-muted-foreground">Origem do Cliente</Label>
+                          <Label className="text-xs text-muted-foreground">Responsável</Label>
+                          <Input
+                            value={formData.advogado_responsavel}
+                            onChange={(e) => setFormData({ ...formData, advogado_responsavel: e.target.value })}
+                            className="rounded-xl bg-card"
+                            placeholder="Nome do advogado responsável"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Origem do Cliente</Label>
                           <Select
                             value={formData.origem_cliente || '__none__'}
                             onValueChange={(value) =>
@@ -954,64 +990,325 @@ export function ProcessoModalExpanded({
                           </Select>
                         </div>
                       </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">CPF do Cliente</Label>
+                          <Input
+                            value={formData.cpf_cliente}
+                            onChange={(e) => {
+                              let val = e.target.value.replace(/\D/g, '');
+                              if (val.length > 11) val = val.slice(0, 11);
+                              if (val.length > 9) val = val.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+                              else if (val.length > 6) val = val.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+                              else if (val.length > 3) val = val.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+                              setFormData({ ...formData, cpf_cliente: val });
+                            }}
+                            className="rounded-xl bg-card"
+                            placeholder="000.000.000-00"
+                            maxLength={14}
+                          />
+                          <p className="text-[11px] text-muted-foreground">Usado pela Isa para localizar processos</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Section 3: Datas & Status */}
-                  <div className="space-y-4">
+                  {/* Endereçamento */}
+                  <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="h-6 w-6 rounded-md bg-blue-500/10 flex items-center justify-center">
-                        <Calendar className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                        <Building2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                       </div>
-                      <h3 className="text-sm font-semibold text-foreground">Datas & Status</h3>
+                      <h3 className="text-sm font-semibold text-foreground">Endereçamento</h3>
                     </div>
                     <div className="bg-muted/30 rounded-xl p-4 space-y-4 border border-border/30">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                          <Label htmlFor="status" className="text-xs text-muted-foreground">Status</Label>
+                          <Label className="text-xs text-muted-foreground">Justiça</Label>
+                          <Input
+                            value={formData.tribunal}
+                            onChange={(e) => setFormData({ ...formData, tribunal: e.target.value })}
+                            className="rounded-xl bg-card"
+                            placeholder="Ex: Justiça dos Estados e do DF"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Instância</Label>
                           <Select
-                            value={formData.status}
-                            onValueChange={(value) => setFormData({ ...formData, status: value as ProcessoStatus })}
+                            value={formData.grau || 'G1'}
+                            onValueChange={(value) => setFormData({ ...formData, grau: value })}
                           >
                             <SelectTrigger className="rounded-xl bg-card">
-                              <SelectValue />
+                              <SelectValue placeholder="Selecione" />
                             </SelectTrigger>
                             <SelectContent>
-                              {STATUSES.map((status) => (
-                                <SelectItem key={status} value={status}>
-                                  {status}
-                                </SelectItem>
-                              ))}
+                              <SelectItem value="G1">1º Grau</SelectItem>
+                              <SelectItem value="G2">2º Grau</SelectItem>
+                              <SelectItem value="SUP">Superior</SelectItem>
+                              <SelectItem value="JE">Juizado Especial</SelectItem>
+                              <SelectItem value="TR">Turma Recursal</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Órgão</Label>
+                          <Input
+                            value={formData.vara_comarca}
+                            onChange={(e) => setFormData({ ...formData, vara_comarca: e.target.value })}
+                            className="rounded-xl bg-card"
+                            placeholder="Vara / Comarca"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Órgão Julgador</Label>
+                          <Input
+                            value={formData.orgao_julgador}
+                            onChange={(e) => setFormData({ ...formData, orgao_julgador: e.target.value })}
+                            className="rounded-xl bg-card"
+                            placeholder="Ex: Juízo da 2ª Vara"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Tipo de Órgão Julgador</Label>
+                          <Input
+                            value={formData.tipo_orgao_julgador}
+                            onChange={(e) => setFormData({ ...formData, tipo_orgao_julgador: e.target.value })}
+                            className="rounded-xl bg-card"
+                            placeholder="Selecione"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Complemento</Label>
+                          <Input
+                            value={formData.complemento_enderecamento}
+                            onChange={(e) => setFormData({ ...formData, complemento_enderecamento: e.target.value })}
+                            className="rounded-xl bg-card"
+                            placeholder="Complemento"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Sistema</Label>
+                          <Input
+                            value={formData.sistema_judicial}
+                            onChange={(e) => setFormData({ ...formData, sistema_judicial: e.target.value })}
+                            className="rounded-xl bg-card"
+                            placeholder="Ex: PJe, e-SAJ"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Distribuição</Label>
+                          <Input
+                            type="date"
+                            value={formData.data_distribuicao}
+                            onChange={(e) => setFormData({ ...formData, data_distribuicao: e.target.value })}
+                            className="rounded-xl bg-card text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Citação</Label>
+                          <Input
+                            type="date"
+                            value={formData.data_citacao}
+                            onChange={(e) => setFormData({ ...formData, data_citacao: e.target.value })}
+                            className="rounded-xl bg-card text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Recebimento</Label>
+                          <Input
+                            type="date"
+                            value={formData.data_recebimento}
+                            onChange={(e) => setFormData({ ...formData, data_recebimento: e.target.value })}
+                            className="rounded-xl bg-card text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Arquivamento</Label>
+                          <Input
+                            type="date"
+                            value={formData.data_arquivamento}
+                            onChange={(e) => setFormData({ ...formData, data_arquivamento: e.target.value })}
+                            className="rounded-xl bg-card text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Encerramento</Label>
+                          <Input
+                            type="date"
+                            value={formData.data_encerramento}
+                            onChange={(e) => setFormData({ ...formData, data_encerramento: e.target.value })}
+                            className="rounded-xl bg-card text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 pt-1">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={formData.monitorar_push}
+                            onChange={(e) => setFormData({ ...formData, monitorar_push: e.target.checked })}
+                            className="rounded border-border"
+                          />
+                          <span className="text-xs text-foreground flex items-center gap-1.5">
+                            <Bell className="h-3.5 w-3.5 text-primary" />
+                            Monitorar processo (Push)
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Autos */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded-md bg-amber-500/10 flex items-center justify-center">
+                        <FolderOpen className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-foreground">Autos</h3>
+                    </div>
+                    <div className="bg-muted/30 rounded-xl p-4 space-y-4 border border-border/30">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Área</Label>
+                          <Select
+                            value={formData.area || '__none__'}
+                            onValueChange={(value) => setFormData({ ...formData, area: value === '__none__' ? '' : value })}
+                          >
+                            <SelectTrigger className="rounded-xl bg-card">
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Selecione</SelectItem>
+                              <SelectItem value="Cível">Cível</SelectItem>
+                              <SelectItem value="Trabalhista">Trabalhista</SelectItem>
+                              <SelectItem value="Criminal">Criminal</SelectItem>
+                              <SelectItem value="Tributário">Tributário</SelectItem>
+                              <SelectItem value="Previdenciário">Previdenciário</SelectItem>
+                              <SelectItem value="Administrativo">Administrativo</SelectItem>
+                              <SelectItem value="Consumidor">Consumidor</SelectItem>
+                              <SelectItem value="Família">Família</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-xs text-muted-foreground">Data de Ajuizamento</Label>
-                          <Input
-                            type="date"
-                            value={processo?.data_ajuizamento || ''}
-                            readOnly
-                            className="rounded-xl bg-card text-sm"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-muted-foreground">Última Atualização</Label>
-                          <Input
-                            type="date"
-                            value={processo?.data_ultima_atualizacao || ''}
-                            readOnly
-                            className="rounded-xl bg-card text-sm"
-                          />
+                          <Label className="text-xs text-muted-foreground">Fase</Label>
+                          <Select
+                            value={formData.fase || '__none__'}
+                            onValueChange={(value) => setFormData({ ...formData, fase: value === '__none__' ? '' : value })}
+                          >
+                            <SelectTrigger className="rounded-xl bg-card">
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Selecione</SelectItem>
+                              <SelectItem value="Conhecimento">Conhecimento</SelectItem>
+                              <SelectItem value="Execução">Execução</SelectItem>
+                              <SelectItem value="Recursal">Recursal</SelectItem>
+                              <SelectItem value="Cumprimento de Sentença">Cumprimento de Sentença</SelectItem>
+                              <SelectItem value="Liquidação">Liquidação</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
-                      {processo?.status_detalhado && (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-1.5">
-                          <Label className="text-xs text-muted-foreground">Status Detalhado</Label>
-                          <p className="text-sm text-foreground bg-card rounded-xl px-3 py-2 border border-border/30">
-                            {processo.status_detalhado}
-                          </p>
+                          <Label className="text-xs text-muted-foreground">Classe - CNJ</Label>
+                          <Input
+                            value={formData.titulo_acao}
+                            onChange={(e) => setFormData({ ...formData, titulo_acao: e.target.value })}
+                            className="rounded-xl bg-card"
+                            placeholder="Ex: Procedimento Comum Cível"
+                          />
                         </div>
-                      )}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Assunto - CNJ</Label>
+                          <Input
+                            value={formData.assunto_cnj}
+                            onChange={(e) => setFormData({ ...formData, assunto_cnj: e.target.value })}
+                            className="rounded-xl bg-card"
+                            placeholder="Assunto CNJ"
+                          />
+                        </div>
+                        <div className="flex items-end pb-1">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.segredo_justica}
+                              onChange={(e) => setFormData({ ...formData, segredo_justica: e.target.checked })}
+                              className="rounded border-border"
+                            />
+                            <span className="text-xs text-foreground flex items-center gap-1.5">
+                              <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+                              Segredo de justiça
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pedidos */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded-md bg-success/10 flex items-center justify-center">
+                        <DollarSign className="h-3.5 w-3.5 text-success" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-foreground">Pedidos</h3>
+                    </div>
+                    <div className="bg-muted/30 rounded-xl p-4 space-y-4 border border-border/30">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Valor da Ação (R$)</Label>
+                          <Input
+                            value={formData.valor_causa}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/[^0-9.,]/g, '');
+                              setFormData({ ...formData, valor_causa: val });
+                            }}
+                            className="rounded-xl bg-card"
+                            placeholder="0,00"
+                            inputMode="decimal"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Valor Provisionado (R$)</Label>
+                          <Input
+                            value={formData.valor_provisionado}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/[^0-9.,]/g, '');
+                              setFormData({ ...formData, valor_provisionado: val });
+                            }}
+                            className="rounded-xl bg-card"
+                            placeholder="0,00"
+                            inputMode="decimal"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Probabilidade</Label>
+                          <Select
+                            value={formData.probabilidade || '__none__'}
+                            onValueChange={(value) => setFormData({ ...formData, probabilidade: value === '__none__' ? '' : value })}
+                          >
+                            <SelectTrigger className="rounded-xl bg-card">
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Selecione</SelectItem>
+                              <SelectItem value="Provável">Provável</SelectItem>
+                              <SelectItem value="Possível">Possível</SelectItem>
+                              <SelectItem value="Remota">Remota</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
