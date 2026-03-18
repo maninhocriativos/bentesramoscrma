@@ -172,9 +172,9 @@ export function getProximaSegundaFormatada(): string {
 // ============================================================
 
 /**
- * Dias permitidos para agendamento: Segunda (1), Quarta (3), Sexta (5)
+ * Dias permitidos para agendamento: Terça (2), Quarta (3), Quinta (4)
  */
-export const DIAS_PERMITIDOS = [1, 3, 5]; // 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sab
+export const DIAS_PERMITIDOS = [2, 3, 4]; // 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sab
 
 /**
  * Nomes dos dias da semana
