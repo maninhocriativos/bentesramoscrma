@@ -731,581 +731,557 @@ export function ProcessoModalExpanded({
           </div>
         </div>
 
-        <Tabs defaultValue="dados" className="flex-1 min-h-0 overflow-hidden flex flex-col">
-          <TabsList className="grid grid-cols-4 w-full flex-shrink-0 bg-muted/50 rounded-xl p-1">
-            <TabsTrigger value="dados" className="rounded-lg text-xs data-[state=active]:shadow-sm">
-              <Scale className="h-3.5 w-3.5 mr-1.5" />Dados
-            </TabsTrigger>
-            <TabsTrigger value="partes" className="rounded-lg text-xs data-[state=active]:shadow-sm">
-              <Users className="h-3.5 w-3.5 mr-1.5" />Partes
-            </TabsTrigger>
-            <TabsTrigger value="movimentos" className="rounded-lg text-xs data-[state=active]:shadow-sm">
-              <Calendar className="h-3.5 w-3.5 mr-1.5" />Movimentos
-            </TabsTrigger>
-            <TabsTrigger value="notificacoes" className="rounded-lg text-xs data-[state=active]:shadow-sm">
-              <MessageSquare className="h-3.5 w-3.5 mr-1.5" />Notificações
-            </TabsTrigger>
-          </TabsList>
-
-          <div className="flex-1 min-h-0 overflow-auto">
-            {/* Tab: Dados */}
-            <TabsContent value="dados" className="h-full mt-0 data-[state=inactive]:hidden" forceMount>
-              <ScrollArea className="h-full pr-4">
-                <div className="space-y-6 py-4">
-                  
-                  {/* Section: Identificação */}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center">
-                        <Scale className="h-3.5 w-3.5 text-primary" />
-                      </div>
-                      <h3 className="text-sm font-semibold text-foreground">Identificação</h3>
-                    </div>
-                    <div className="bg-muted/30 rounded-xl p-4 space-y-4 border border-border/30">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="md:col-span-2 space-y-1.5">
-                          <Label htmlFor="numero_processo" className="text-xs text-muted-foreground">Número do Processo</Label>
-                          <div className="relative">
-                            <Input
-                              id="numero_processo"
-                              value={formData.numero_processo}
-                              onChange={(e) => setFormData({ ...formData, numero_processo: e.target.value })}
-                              className="rounded-xl pr-10 bg-card font-mono text-sm"
-                              placeholder="0000000-00.0000.0.00.0000"
-                            />
-                            {fetchingData && (
-                              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-primary" />
-                            )}
-                          </div>
-                          {isNew && (
-                            <p className="text-[11px] text-muted-foreground">
-                              Digite o número completo para carregar dados automaticamente
-                            </p>
-                          )}
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="status" className="text-xs text-muted-foreground">Status</Label>
-                          <Select
-                            value={formData.status}
-                            onValueChange={(value) => setFormData({ ...formData, status: value as ProcessoStatus })}
-                          >
-                            <SelectTrigger className="rounded-xl bg-card">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {STATUSES.map((status) => (
-                                <SelectItem key={status} value={status}>
-                                  {status}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <Label htmlFor="titulo_acao" className="text-xs text-muted-foreground">Título / Classe da Ação</Label>
-                          <Input
-                            id="titulo_acao"
-                            value={formData.titulo_acao}
-                            onChange={(e) => setFormData({ ...formData, titulo_acao: e.target.value })}
-                            className="rounded-xl bg-card"
-                            placeholder="Ex: Ação de Indenização"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="assunto" className="text-xs text-muted-foreground">Assunto Principal</Label>
-                          <Input
-                            id="assunto"
-                            value={formData.assunto}
-                            onChange={(e) => setFormData({ ...formData, assunto: e.target.value })}
-                            className="rounded-xl bg-card"
-                            placeholder="Ex: Danos Morais"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Section: Jurisdição */}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-md bg-accent/20 flex items-center justify-center">
-                        <Building2 className="h-3.5 w-3.5 text-accent-foreground" />
-                      </div>
-                      <h3 className="text-sm font-semibold text-foreground">Jurisdição</h3>
-                    </div>
-                    <div className="bg-muted/30 rounded-xl p-4 space-y-4 border border-border/30">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <Label htmlFor="tribunal" className="text-xs text-muted-foreground">Tribunal</Label>
-                          <Input
-                            id="tribunal"
-                            value={formData.tribunal}
-                            onChange={(e) => setFormData({ ...formData, tribunal: e.target.value })}
-                            className="rounded-xl bg-card"
-                            placeholder="Ex: TRT11, TJAM"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="vara_comarca" className="text-xs text-muted-foreground">Vara / Comarca</Label>
-                          <Input
-                            id="vara_comarca"
-                            value={formData.vara_comarca}
-                            onChange={(e) => setFormData({ ...formData, vara_comarca: e.target.value })}
-                            className="rounded-xl bg-card"
-                            placeholder="Ex: 1ª Vara Cível de Manaus"
-                          />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <Label htmlFor="orgao_julgador" className="text-xs text-muted-foreground">Órgão Julgador</Label>
-                          <Input
-                            id="orgao_julgador"
-                            value={formData.orgao_julgador}
-                            onChange={(e) => setFormData({ ...formData, orgao_julgador: e.target.value })}
-                            className="rounded-xl bg-card"
-                            placeholder="Ex: Juízo da 2ª Vara"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="grau" className="text-xs text-muted-foreground">Grau de Jurisdição</Label>
-                          <Select
-                            value={formData.grau || 'G1'}
-                            onValueChange={(value) => setFormData({ ...formData, grau: value })}
-                          >
-                            <SelectTrigger className="rounded-xl bg-card">
-                              <SelectValue placeholder="Selecione" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="G1">1º Grau</SelectItem>
-                              <SelectItem value="G2">2º Grau</SelectItem>
-                              <SelectItem value="SUP">Superior</SelectItem>
-                              <SelectItem value="JE">Juizado Especial</SelectItem>
-                              <SelectItem value="TR">Turma Recursal</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Section: Financeiro & Responsáveis */}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-md bg-success/10 flex items-center justify-center">
-                        <DollarSign className="h-3.5 w-3.5 text-success" />
-                      </div>
-                      <h3 className="text-sm font-semibold text-foreground">Financeiro & Responsáveis</h3>
-                    </div>
-                    <div className="bg-muted/30 rounded-xl p-4 space-y-4 border border-border/30">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-1.5">
-                          <Label htmlFor="valor_causa" className="text-xs text-muted-foreground">Valor da Causa (R$)</Label>
-                          <Input
-                            id="valor_causa"
-                            value={formData.valor_causa}
-                            onChange={(e) => {
-                              const val = e.target.value.replace(/[^0-9.,]/g, '');
-                              setFormData({ ...formData, valor_causa: val });
-                            }}
-                            className="rounded-xl bg-card"
-                            placeholder="0,00"
-                            inputMode="decimal"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="cpf_cliente" className="text-xs text-muted-foreground">CPF do Cliente</Label>
-                          <Input
-                            id="cpf_cliente"
-                            value={formData.cpf_cliente}
-                            onChange={(e) => {
-                              let val = e.target.value.replace(/\D/g, '');
-                              if (val.length > 11) val = val.slice(0, 11);
-                              if (val.length > 9) val = val.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
-                              else if (val.length > 6) val = val.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
-                              else if (val.length > 3) val = val.replace(/(\d{3})(\d{1,3})/, '$1.$2');
-                              setFormData({ ...formData, cpf_cliente: val });
-                            }}
-                            className="rounded-xl bg-card"
-                            placeholder="000.000.000-00"
-                            maxLength={14}
-                          />
-                          <p className="text-[11px] text-muted-foreground">Usado pela Isa para localizar processos</p>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="advogado_responsavel" className="text-xs text-muted-foreground">Advogado Responsável</Label>
-                          <Input
-                            id="advogado_responsavel"
-                            value={formData.advogado_responsavel}
-                            onChange={(e) => setFormData({ ...formData, advogado_responsavel: e.target.value })}
-                            className="rounded-xl bg-card"
-                            placeholder="Nome do advogado"
-                          />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <Label htmlFor="cliente_id" className="text-xs text-muted-foreground">Cliente (Lead)</Label>
-                          <Select
-                            value={formData.cliente_id || '__none__'}
-                            onValueChange={(value) =>
-                              setFormData({ ...formData, cliente_id: value === '__none__' ? '' : value })
-                            }
-                          >
-                            <SelectTrigger className="rounded-xl bg-card">
-                              <SelectValue placeholder="Selecione um cliente" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none__">Nenhum</SelectItem>
-                              {clienteOptions.map((lead) => (
-                                <SelectItem key={lead.id} value={lead.id}>
-                                  {lead.nome} {lead.telefone ? `(${lead.telefone})` : ''}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="origem_cliente" className="text-xs text-muted-foreground">Origem do Cliente</Label>
-                          <Select
-                            value={formData.origem_cliente || '__none__'}
-                            onValueChange={(value) =>
-                              setFormData({ ...formData, origem_cliente: value === '__none__' ? '' : value })
-                            }
-                          >
-                            <SelectTrigger className="rounded-xl bg-card">
-                              <SelectValue placeholder="Selecione a origem" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none__">Não informado</SelectItem>
-                              <SelectItem value="Marketing">Marketing</SelectItem>
-                              <SelectItem value="Bentes e Ramos">Bentes e Ramos</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
+        <ScrollArea className="flex-1 min-h-0 pr-2">
+          <div className="space-y-6 py-4">
+            
+            {/* Section 1: Dados do Processo */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center">
+                  <Scale className="h-3.5 w-3.5 text-primary" />
                 </div>
-              </ScrollArea>
-            </TabsContent>
-
-            {/* Tab: Partes */}
-            <TabsContent value="partes" className="h-full mt-0 data-[state=inactive]:hidden" forceMount>
-              <ScrollArea className="h-[calc(92vh-220px)] pr-2">
-                <div className="py-4 space-y-4">
-                  {/* Header com contagem */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center">
-                        <Users className="h-3.5 w-3.5 text-primary" />
-                      </div>
-                      <h3 className="text-sm font-semibold text-foreground">Partes do Processo</h3>
-                      {partes.length > 0 && (
-                        <Badge variant="outline" className="rounded-lg text-xs">{partes.length}</Badge>
+                <h3 className="text-sm font-semibold text-foreground">Dados do Processo</h3>
+              </div>
+              <div className="bg-muted/30 rounded-xl p-4 space-y-4 border border-border/30">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-2 space-y-1.5">
+                    <Label htmlFor="numero_processo" className="text-xs text-muted-foreground">Número CNJ</Label>
+                    <div className="relative">
+                      <Input
+                        id="numero_processo"
+                        value={formData.numero_processo}
+                        onChange={(e) => setFormData({ ...formData, numero_processo: e.target.value })}
+                        className="rounded-xl pr-10 bg-card font-mono text-sm"
+                        placeholder="0000000-00.0000.0.00.0000"
+                      />
+                      {fetchingData && (
+                        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-primary" />
                       )}
                     </div>
-                  </div>
-
-                  {/* Lista de partes (ACIMA) */}
-                  {partes.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 py-10 text-center">
-                      <Users className="h-10 w-10 mx-auto text-muted-foreground/40 mb-2" />
-                      <p className="text-sm text-muted-foreground">Nenhuma parte cadastrada</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Adicione partes abaixo ou use "Buscar DataJud"
+                    {isNew && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Digite o número completo para carregar dados automaticamente
                       </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {partes.map((parte, i) => {
-                        const tipoLower = (parte.tipo || '').toLowerCase();
-                        const isAutor = tipoLower.includes('autor');
-                        const isReu = tipoLower.includes('réu') || tipoLower.includes('reu');
-                        const borderColor = isAutor
-                          ? 'border-l-emerald-500'
-                          : isReu
-                            ? 'border-l-red-500'
-                            : 'border-l-muted-foreground/30';
-                        const badgeClasses = isAutor
-                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
-                          : isReu
-                            ? 'bg-destructive/15 text-destructive border-destructive/30'
-                            : 'bg-muted text-muted-foreground border-border';
-
-                        return (
-                          <div
-                            key={i}
-                            className={`group relative rounded-xl border border-border/50 bg-card p-3.5 pl-4 border-l-[3px] ${borderColor} transition-all hover:shadow-sm`}
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex-1 min-w-0">
-                                <span className="font-medium text-sm block truncate">{parte.nome}</span>
-                                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
-                                  {parte.documento && (
-                                    <span className="text-xs text-muted-foreground">Doc: {parte.documento}</span>
-                                  )}
-                                  {parte.celular && (
-                                    <span className="text-xs text-muted-foreground">📱 {parte.celular}</span>
-                                  )}
-                                  {parte.telefone_adicional && (
-                                    <span className="text-xs text-muted-foreground">📞 {parte.telefone_adicional}</span>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 flex-shrink-0">
-                                <Badge variant="outline" className={`rounded-lg text-xs ${badgeClasses}`}>
-                                  {parte.tipo}
-                                </Badge>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 text-muted-foreground/50 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={() => setPartes(prev => prev.filter((_, idx) => idx !== i))}
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
-                            </div>
-                            {parte.advogados && parte.advogados.length > 0 && (
-                              <div className="mt-2.5 pt-2.5 border-t border-border/30">
-                                <p className="text-[11px] text-muted-foreground mb-1.5 uppercase tracking-wider font-medium flex items-center gap-1">
-                                  <Briefcase className="h-3 w-3" /> Advogado(s)
-                                </p>
-                                <div className="space-y-1">
-                                  {parte.advogados.map((adv, j) => (
-                                    <div key={j} className="flex items-center justify-between gap-2">
-                                      <p className="text-xs font-medium break-words min-w-0 flex-1">{adv.nome}</p>
-                                      {adv.oab && (
-                                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
-                                          <BadgeCheck className="h-3 w-3 text-primary" />
-                                          {adv.oab}
-                                        </span>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Separador visual */}
-                  <Separator className="my-2" />
-
-                  {/* Formulário para adicionar parte (ABAIXO) */}
-                  <div className="rounded-xl border border-dashed border-primary/30 bg-primary/[0.02] p-4 space-y-3">
-                    <p className="text-sm font-medium flex items-center gap-2 text-foreground">
-                      <Plus className="h-4 w-4 text-primary" /> Adicionar Parte
-                    </p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Nome *</Label>
-                        <Input
-                          id="nova_parte_nome"
-                          className="rounded-xl h-9 text-sm bg-card"
-                          placeholder="Nome da parte"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Tipo/Polo *</Label>
-                        <select
-                          id="nova_parte_tipo"
-                          className="flex h-9 w-full rounded-xl border border-input bg-card px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          <option value="">Selecione</option>
-                          <option value="Autor">Autor</option>
-                          <option value="Réu">Réu</option>
-                          <option value="Terceiro Interessado">Terceiro Interessado</option>
-                          <option value="Testemunha">Testemunha</option>
-                          <option value="Perito">Perito</option>
-                          <option value="Advogado">Advogado</option>
-                        </select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Documento (CPF/CNPJ)</Label>
-                        <Input
-                          id="nova_parte_doc"
-                          className="rounded-xl h-9 text-sm bg-card"
-                          placeholder="Opcional"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Celular</Label>
-                        <Input
-                          id="nova_parte_celular"
-                          className="rounded-xl h-9 text-sm bg-card"
-                          placeholder="(00) 00000-0000"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Telefone Adicional</Label>
-                        <Input
-                          id="nova_parte_telefone"
-                          className="rounded-xl h-9 text-sm bg-card"
-                          placeholder="(00) 0000-0000"
-                        />
-                      </div>
-                      <div className="flex items-end">
-                        <Button
-                          type="button"
-                          className="rounded-xl w-full h-9"
-                          onClick={() => {
-                            const nomeInput = document.getElementById('nova_parte_nome') as HTMLInputElement;
-                            const tipoSelect = document.getElementById('nova_parte_tipo') as HTMLSelectElement;
-                            const docInput = document.getElementById('nova_parte_doc') as HTMLInputElement;
-                            const celularInput = document.getElementById('nova_parte_celular') as HTMLInputElement;
-                            const telefoneInput = document.getElementById('nova_parte_telefone') as HTMLInputElement;
-                            
-                            const nome = nomeInput?.value?.trim();
-                            const tipo = tipoSelect?.value;
-                            const documento = docInput?.value?.trim();
-                            const celular = celularInput?.value?.trim();
-                            const telefone_adicional = telefoneInput?.value?.trim();
-
-                            if (!nome || !tipo) {
-                              toast.error('Preencha o nome e o tipo da parte');
-                              return;
-                            }
-
-                            const novaParte: ProcessoParte = {
-                              nome,
-                              tipo,
-                              polo: tipo === 'Autor' ? 'AT' : tipo === 'Réu' ? 'PA' : 'TC',
-                              tipoPessoa: 'FISICA',
-                              documento: documento || undefined,
-                              celular: celular || undefined,
-                              telefone_adicional: telefone_adicional || undefined,
-                            };
-
-                            setPartes(prev => [...prev, novaParte]);
-                            nomeInput.value = '';
-                            tipoSelect.value = '';
-                            if (docInput) docInput.value = '';
-                            if (celularInput) celularInput.value = '';
-                            if (telefoneInput) telefoneInput.value = '';
-                            toast.success(`Parte "${nome}" adicionada. Clique em "Salvar" para persistir.`);
-                          }}
-                        >
-                          <Plus className="h-4 w-4 mr-1.5" />
-                          Adicionar
-                        </Button>
-                      </div>
-                    </div>
+                    )}
                   </div>
-                </div>
-              </ScrollArea>
-            </TabsContent>
-
-            {/* Tab: Movimentos */}
-            <TabsContent value="movimentos" className="h-full mt-0 data-[state=inactive]:hidden" forceMount>
-              <ScrollArea className="h-[calc(92vh-220px)] pr-4">
-                <div className="py-4 space-y-2">
-                  {movimentosEnriquecidos.length === 0 ? (
-                    <Card>
-                      <CardContent className="py-8 text-center">
-                        <Calendar className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
-                        <p className="text-muted-foreground">Nenhuma movimentação</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Use o botão "Atualizar DataJud" para carregar movimentações
-                        </p>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <>
-                      <p className="text-xs text-muted-foreground mb-2">
-                        {movimentosEnriquecidos.length} movimentação(ões) • Clique para ver detalhes
-                      </p>
-                      {movimentosEnriquecidos.map((mov, i) => (
-                        <Card 
-                          key={i} 
-                          className="cursor-pointer hover:bg-accent/50 transition-colors group"
-                          onClick={() => {
-                            setSelectedMovimento(mov);
-                            setMovimentoModalOpen(true);
-                          }}
-                        >
-                          <CardContent className="p-3">
-                            <div className="flex justify-between items-start gap-2">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="text-sm font-medium">{mov.titulo_humano}</p>
-                                  <Badge 
-                                    variant="outline" 
-                                    className={`text-xs ${getCategoriaColor(mov.categoria)}`}
-                                  >
-                                    {mov.badge}
-                                  </Badge>
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                  {mov.descricao_humana}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2 flex-shrink-0">
-                                <span className="text-xs text-muted-foreground whitespace-nowrap">{mov.dataHora}</span>
-                                <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </>
-                  )}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-
-            {/* Tab: Notificações */}
-            <TabsContent value="notificacoes" className="h-full mt-0 data-[state=inactive]:hidden" forceMount>
-              <ScrollArea className="h-[calc(92vh-220px)] pr-4">
-                <div className="py-4 space-y-4">
-                  {!isNew && processo ? (
-                    <ProcessoNotificacoesTab
-                      processo={processo}
-                      cliente={clienteSelecionado}
-                      sending={sendingNotification}
-                      onSendManual={handleSendNotification}
-                      config={
-                        <ProcessoNotificacaoConfig
-                          processoId={processo.id}
-                          frequenciaDias={processo.frequencia_notificacao_dias || 7}
-                          notificacaoAtiva={processo.notificacao_ativa ?? true}
-                          ultimaNotificacao={processo.ultima_notificacao_at}
-                          onUpdate={() => fetchProcessos()}
-                        />
-                      }
-                      previewData={{
-                        nomeCliente: clienteSelecionado?.nome,
-                        numeroProcesso: formData.numero_processo || processo.numero_processo,
-                        acao: formData.titulo_acao || processo.titulo_acao,
-                        status: (formData.status as unknown as string) || (processo.status as unknown as string),
-                        tribunal: formData.tribunal || processo.tribunal,
-                        ultimaAtualizacao: processo.data_ultima_atualizacao,
-                        movimentos: movimentos.slice(0, 3),
-                      }}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="classe_cnj" className="text-xs text-muted-foreground">Classe CNJ</Label>
+                    <Input
+                      id="classe_cnj"
+                      value={formData.titulo_acao}
+                      onChange={(e) => setFormData({ ...formData, titulo_acao: e.target.value })}
+                      className="rounded-xl bg-card"
+                      placeholder="Ex: Ação de Indenização"
                     />
-                  ) : isNew ? (
-                    <Card>
-                      <CardContent className="py-8 text-center">
-                        <MessageSquare className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
-                        <p className="text-muted-foreground">Salve o processo primeiro</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          As configurações de notificação estarão disponíveis após criar o processo
-                        </p>
-                      </CardContent>
-                    </Card>
-                  ) : null}
+                  </div>
                 </div>
-              </ScrollArea>
-            </TabsContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="assunto" className="text-xs text-muted-foreground">Assunto</Label>
+                    <Input
+                      id="assunto"
+                      value={formData.assunto}
+                      onChange={(e) => setFormData({ ...formData, assunto: e.target.value })}
+                      className="rounded-xl bg-card"
+                      placeholder="Ex: Danos Morais"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="tribunal" className="text-xs text-muted-foreground">Tribunal</Label>
+                    <Input
+                      id="tribunal"
+                      value={formData.tribunal}
+                      onChange={(e) => setFormData({ ...formData, tribunal: e.target.value })}
+                      className="rounded-xl bg-card"
+                      placeholder="Ex: TRT11, TJAM"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="vara_comarca" className="text-xs text-muted-foreground">Vara / Comarca</Label>
+                    <Input
+                      id="vara_comarca"
+                      value={formData.vara_comarca}
+                      onChange={(e) => setFormData({ ...formData, vara_comarca: e.target.value })}
+                      className="rounded-xl bg-card"
+                      placeholder="Ex: 1ª Vara Cível de Manaus"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="orgao_julgador" className="text-xs text-muted-foreground">Órgão Julgador</Label>
+                    <Input
+                      id="orgao_julgador"
+                      value={formData.orgao_julgador}
+                      onChange={(e) => setFormData({ ...formData, orgao_julgador: e.target.value })}
+                      className="rounded-xl bg-card"
+                      placeholder="Ex: Juízo da 2ª Vara"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="grau" className="text-xs text-muted-foreground">Grau</Label>
+                    <Select
+                      value={formData.grau || 'G1'}
+                      onValueChange={(value) => setFormData({ ...formData, grau: value })}
+                    >
+                      <SelectTrigger className="rounded-xl bg-card">
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="G1">1º Grau</SelectItem>
+                        <SelectItem value="G2">2º Grau</SelectItem>
+                        <SelectItem value="SUP">Superior</SelectItem>
+                        <SelectItem value="JE">Juizado Especial</SelectItem>
+                        <SelectItem value="TR">Turma Recursal</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Financeiro & Responsáveis */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="h-6 w-6 rounded-md bg-success/10 flex items-center justify-center">
+                  <DollarSign className="h-3.5 w-3.5 text-success" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground">Financeiro & Responsáveis</h3>
+              </div>
+              <div className="bg-muted/30 rounded-xl p-4 space-y-4 border border-border/30">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="valor_causa" className="text-xs text-muted-foreground">Valor da Causa (R$)</Label>
+                    <Input
+                      id="valor_causa"
+                      value={formData.valor_causa}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9.,]/g, '');
+                        setFormData({ ...formData, valor_causa: val });
+                      }}
+                      className="rounded-xl bg-card"
+                      placeholder="0,00"
+                      inputMode="decimal"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="advogado_responsavel" className="text-xs text-muted-foreground">Advogado Responsável</Label>
+                    <Input
+                      id="advogado_responsavel"
+                      value={formData.advogado_responsavel}
+                      onChange={(e) => setFormData({ ...formData, advogado_responsavel: e.target.value })}
+                      className="rounded-xl bg-card"
+                      placeholder="Nome do advogado"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cpf_cliente" className="text-xs text-muted-foreground">CPF do Cliente</Label>
+                    <Input
+                      id="cpf_cliente"
+                      value={formData.cpf_cliente}
+                      onChange={(e) => {
+                        let val = e.target.value.replace(/\D/g, '');
+                        if (val.length > 11) val = val.slice(0, 11);
+                        if (val.length > 9) val = val.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+                        else if (val.length > 6) val = val.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+                        else if (val.length > 3) val = val.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+                        setFormData({ ...formData, cpf_cliente: val });
+                      }}
+                      className="rounded-xl bg-card"
+                      placeholder="000.000.000-00"
+                      maxLength={14}
+                    />
+                    <p className="text-[11px] text-muted-foreground">Usado pela Isa para localizar processos</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cliente_id" className="text-xs text-muted-foreground">Cliente (Lead)</Label>
+                    <Select
+                      value={formData.cliente_id || '__none__'}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, cliente_id: value === '__none__' ? '' : value })
+                      }
+                    >
+                      <SelectTrigger className="rounded-xl bg-card">
+                        <SelectValue placeholder="Selecione um cliente" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Nenhum</SelectItem>
+                        {clienteOptions.map((lead) => (
+                          <SelectItem key={lead.id} value={lead.id}>
+                            {lead.nome} {lead.telefone ? `(${lead.telefone})` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="origem_cliente" className="text-xs text-muted-foreground">Origem do Cliente</Label>
+                    <Select
+                      value={formData.origem_cliente || '__none__'}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, origem_cliente: value === '__none__' ? '' : value })
+                      }
+                    >
+                      <SelectTrigger className="rounded-xl bg-card">
+                        <SelectValue placeholder="Selecione a origem" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Não informado</SelectItem>
+                        <SelectItem value="Marketing">Marketing</SelectItem>
+                        <SelectItem value="Bentes e Ramos">Bentes e Ramos</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Datas & Status */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="h-6 w-6 rounded-md bg-blue-500/10 flex items-center justify-center">
+                  <Calendar className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground">Datas & Status</h3>
+              </div>
+              <div className="bg-muted/30 rounded-xl p-4 space-y-4 border border-border/30">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="status" className="text-xs text-muted-foreground">Status</Label>
+                    <Select
+                      value={formData.status}
+                      onValueChange={(value) => setFormData({ ...formData, status: value as ProcessoStatus })}
+                    >
+                      <SelectTrigger className="rounded-xl bg-card">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STATUSES.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Data de Ajuizamento</Label>
+                    <Input
+                      type="date"
+                      value={processo?.data_ajuizamento || ''}
+                      readOnly
+                      className="rounded-xl bg-card text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Última Atualização</Label>
+                    <Input
+                      type="date"
+                      value={processo?.data_ultima_atualizacao || ''}
+                      readOnly
+                      className="rounded-xl bg-card text-sm"
+                    />
+                  </div>
+                </div>
+                {processo?.status_detalhado && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Status Detalhado</Label>
+                    <p className="text-sm text-foreground bg-card rounded-xl px-3 py-2 border border-border/30">
+                      {processo.status_detalhado}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Section 4: Partes do Processo */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center">
+                    <Users className="h-3.5 w-3.5 text-primary" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground">Partes do Processo</h3>
+                  {partes.length > 0 && (
+                    <Badge variant="outline" className="rounded-lg text-xs">{partes.length}</Badge>
+                  )}
+                </div>
+              </div>
+              <div className="bg-muted/30 rounded-xl p-4 space-y-4 border border-border/30">
+                {partes.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 py-8 text-center">
+                    <Users className="h-8 w-8 mx-auto text-muted-foreground/40 mb-2" />
+                    <p className="text-sm text-muted-foreground">Nenhuma parte cadastrada</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Adicione partes abaixo ou use "Buscar DataJud"
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {partes.map((parte, i) => {
+                      const tipoLower = (parte.tipo || '').toLowerCase();
+                      const isAutor = tipoLower.includes('autor');
+                      const isReu = tipoLower.includes('réu') || tipoLower.includes('reu');
+                      const borderColor = isAutor
+                        ? 'border-l-emerald-500'
+                        : isReu
+                          ? 'border-l-red-500'
+                          : 'border-l-muted-foreground/30';
+                      const badgeClasses = isAutor
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
+                        : isReu
+                          ? 'bg-destructive/15 text-destructive border-destructive/30'
+                          : 'bg-muted text-muted-foreground border-border';
+
+                      return (
+                        <div
+                          key={i}
+                          className={`group relative rounded-xl border border-border/50 bg-card p-3 pl-4 border-l-[3px] ${borderColor} transition-all hover:shadow-sm`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <span className="font-medium text-sm block truncate">{parte.nome}</span>
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
+                                {parte.documento && (
+                                  <span className="text-xs text-muted-foreground">Doc: {parte.documento}</span>
+                                )}
+                                {parte.celular && (
+                                  <span className="text-xs text-muted-foreground">📱 {parte.celular}</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <Badge variant="outline" className={`rounded-lg text-xs ${badgeClasses}`}>
+                                {parte.tipo}
+                              </Badge>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-muted-foreground/50 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => setPartes(prev => prev.filter((_, idx) => idx !== i))}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                          {parte.advogados && parte.advogados.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-border/30">
+                              <p className="text-[11px] text-muted-foreground mb-1 uppercase tracking-wider font-medium flex items-center gap-1">
+                                <Briefcase className="h-3 w-3" /> Advogado(s)
+                              </p>
+                              {parte.advogados.map((adv, j) => (
+                                <div key={j} className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-medium">{adv.nome}</p>
+                                  {adv.oab && (
+                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                      <BadgeCheck className="h-3 w-3 text-primary" />
+                                      {adv.oab}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <Separator />
+
+                {/* Formulário para adicionar parte */}
+                <div className="rounded-xl border border-dashed border-primary/30 bg-primary/[0.02] p-4 space-y-3">
+                  <p className="text-sm font-medium flex items-center gap-2 text-foreground">
+                    <Plus className="h-4 w-4 text-primary" /> Adicionar Parte
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Nome *</Label>
+                      <Input id="nova_parte_nome" className="rounded-xl h-9 text-sm bg-card" placeholder="Nome da parte" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Tipo/Polo *</Label>
+                      <select
+                        id="nova_parte_tipo"
+                        className="flex h-9 w-full rounded-xl border border-input bg-card px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <option value="">Selecione</option>
+                        <option value="Autor">Autor</option>
+                        <option value="Réu">Réu</option>
+                        <option value="Terceiro Interessado">Terceiro Interessado</option>
+                        <option value="Testemunha">Testemunha</option>
+                        <option value="Perito">Perito</option>
+                        <option value="Advogado">Advogado</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Documento (CPF/CNPJ)</Label>
+                      <Input id="nova_parte_doc" className="rounded-xl h-9 text-sm bg-card" placeholder="Opcional" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Celular</Label>
+                      <Input id="nova_parte_celular" className="rounded-xl h-9 text-sm bg-card" placeholder="(00) 00000-0000" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Telefone Adicional</Label>
+                      <Input id="nova_parte_telefone" className="rounded-xl h-9 text-sm bg-card" placeholder="(00) 0000-0000" />
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        className="rounded-xl w-full h-9"
+                        onClick={() => {
+                          const nomeInput = document.getElementById('nova_parte_nome') as HTMLInputElement;
+                          const tipoSelect = document.getElementById('nova_parte_tipo') as HTMLSelectElement;
+                          const docInput = document.getElementById('nova_parte_doc') as HTMLInputElement;
+                          const celularInput = document.getElementById('nova_parte_celular') as HTMLInputElement;
+                          const telefoneInput = document.getElementById('nova_parte_telefone') as HTMLInputElement;
+                          
+                          const nome = nomeInput?.value?.trim();
+                          const tipo = tipoSelect?.value;
+                          const documento = docInput?.value?.trim();
+                          const celular = celularInput?.value?.trim();
+                          const telefone_adicional = telefoneInput?.value?.trim();
+
+                          if (!nome || !tipo) {
+                            toast.error('Preencha o nome e o tipo da parte');
+                            return;
+                          }
+
+                          const novaParte: ProcessoParte = {
+                            nome,
+                            tipo,
+                            polo: tipo === 'Autor' ? 'AT' : tipo === 'Réu' ? 'PA' : 'TC',
+                            tipoPessoa: 'FISICA',
+                            documento: documento || undefined,
+                            celular: celular || undefined,
+                            telefone_adicional: telefone_adicional || undefined,
+                          };
+
+                          setPartes(prev => [...prev, novaParte]);
+                          nomeInput.value = '';
+                          tipoSelect.value = '';
+                          if (docInput) docInput.value = '';
+                          if (celularInput) celularInput.value = '';
+                          if (telefoneInput) telefoneInput.value = '';
+                          toast.success(`Parte "${nome}" adicionada. Clique em "Salvar" para persistir.`);
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-1.5" />
+                        Adicionar
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 5: Movimentações */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="h-6 w-6 rounded-md bg-amber-500/10 flex items-center justify-center">
+                  <Gavel className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground">Movimentações</h3>
+                {movimentosEnriquecidos.length > 0 && (
+                  <Badge variant="outline" className="rounded-lg text-xs">{movimentosEnriquecidos.length}</Badge>
+                )}
+              </div>
+              <div className="bg-muted/30 rounded-xl p-4 space-y-2 border border-border/30">
+                {movimentosEnriquecidos.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 py-8 text-center">
+                    <Calendar className="h-8 w-8 mx-auto text-muted-foreground/40 mb-2" />
+                    <p className="text-sm text-muted-foreground">Nenhuma movimentação</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Use o botão "Buscar DataJud" para carregar movimentações
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      {movimentosEnriquecidos.length} movimentação(ões) • Clique para ver detalhes
+                    </p>
+                    {movimentosEnriquecidos.map((mov, i) => (
+                      <Card 
+                        key={i} 
+                        className="cursor-pointer hover:bg-accent/50 transition-colors group"
+                        onClick={() => {
+                          setSelectedMovimento(mov);
+                          setMovimentoModalOpen(true);
+                        }}
+                      >
+                        <CardContent className="p-3">
+                          <div className="flex justify-between items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-medium">{mov.titulo_humano}</p>
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-xs ${getCategoriaColor(mov.categoria)}`}
+                                >
+                                  {mov.badge}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                {mov.descricao_humana}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <span className="text-xs text-muted-foreground whitespace-nowrap">{mov.dataHora}</span>
+                              <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Section 6: Notificações (only for existing processos) */}
+            {!isNew && processo && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-6 w-6 rounded-md bg-purple-500/10 flex items-center justify-center">
+                    <MessageSquare className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground">Notificações</h3>
+                </div>
+                <div className="bg-muted/30 rounded-xl p-4 border border-border/30">
+                  <ProcessoNotificacoesTab
+                    processo={processo}
+                    cliente={clienteSelecionado}
+                    sending={sendingNotification}
+                    onSendManual={handleSendNotification}
+                    config={
+                      <ProcessoNotificacaoConfig
+                        processoId={processo.id}
+                        frequenciaDias={processo.frequencia_notificacao_dias || 7}
+                        notificacaoAtiva={processo.notificacao_ativa ?? true}
+                        ultimaNotificacao={processo.ultima_notificacao_at}
+                        onUpdate={() => fetchProcessos()}
+                      />
+                    }
+                    previewData={{
+                      nomeCliente: clienteSelecionado?.nome,
+                      numeroProcesso: formData.numero_processo || processo.numero_processo,
+                      acao: formData.titulo_acao || processo.titulo_acao,
+                      status: (formData.status as unknown as string) || (processo.status as unknown as string),
+                      tribunal: formData.tribunal || processo.tribunal,
+                      ultimaAtualizacao: processo.data_ultima_atualizacao,
+                      movimentos: movimentos.slice(0, 3),
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
           </div>
-        </Tabs>
+        </ScrollArea>
 
         {/* Premium Footer */}
         <div className="flex-shrink-0 -mx-6 -mb-4 px-6 py-4 bg-muted/30 border-t border-border/50">
