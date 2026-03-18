@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { formatarDataHora, formatarData, MANAUS_TIMEZONE } from "../_shared/timezone-helpers.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -38,7 +39,7 @@ Quando o cliente perguntar sobre o andamento do processo:
 - Formate CADA processo assim:
   📋 *Processo:* [número CNJ formatado]
   ⚖️ *Tipo:* [classe processual]
-  🏛️ *Tribunal:* [tribunal]
+  🏛️ *Tribunal:* [tribunal] — [instância: 1ª ou 2ª]
   📍 *Vara:* [órgão julgador]
   📊 *Status:* [status atual]
   📅 *Última movimentação:* [data e descrição]
@@ -59,7 +60,11 @@ Quando o cliente quiser falar com o advogado:
 - Informe que vai verificar a disponibilidade na agenda
 - Inclua a tag [AGENDAR_ADVOGADO] na resposta
 - Pergunte preferência de dia e horário
-- Horários: Segunda, Quarta e Sexta, 09h-17h (exceto 12h-14h), fuso Manaus
+- DIAS DE ATENDIMENTO: Terça, Quarta e Quinta-feira APENAS
+- Horários: 09h-17h (exceto 12h-14h almoço), fuso Manaus
+- Se o [CONTEXTO] incluir [AGENDA DISPONÍVEL], use essas informações para sugerir horários livres
+- Se o [CONTEXTO] incluir [AGENDA LOTADA], informe que não há horários na semana e sugira a próxima
+- NUNCA sugira segunda, sexta, sábado ou domingo
 
 ### 📄 DOCUMENTOS
 Quando o cliente perguntar sobre documentos:
@@ -94,16 +99,43 @@ Inclua [TRANSFERIR_HUMANO] quando:
 // DETECTAR CPF NA MENSAGEM
 // ============================================================
 function extractCPF(message: string): string | null {
-  // CPF com pontuação: 123.456.789-00
   const formatted = message.match(/\d{3}[.\s]?\d{3}[.\s]?\d{3}[-.\s]?\d{2}/);
   if (formatted) {
     const cpf = formatted[0].replace(/[^\d]/g, '');
     if (cpf.length === 11) return cpf;
   }
-  // Sequência de 11 dígitos
   const raw = message.match(/\b(\d{11})\b/);
   if (raw) return raw[1];
   return null;
+}
+
+// ============================================================
+// FORMATAR DATA COM TIMEZONE MANAUS
+// ============================================================
+function formatarDataMovimentacao(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'N/A';
+  try {
+    // Datas do Escavador podem vir como "2026-03-10" (apenas data) ou "2026-03-10T14:30:00"
+    // Se vier apenas data (YYYY-MM-DD), NÃO converter para UTC — interpretar como data local
+    const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(dateStr);
+    
+    if (isDateOnly) {
+      // Parse como data local para evitar shift de timezone
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const d = new Date(year, month - 1, day);
+      return d.toLocaleDateString('pt-BR', {
+        timeZone: MANAUS_TIMEZONE,
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      });
+    }
+    
+    // Data com hora — usar formatador com timezone
+    return formatarData(dateStr);
+  } catch {
+    return dateStr;
+  }
 }
 
 // ============================================================
@@ -149,6 +181,7 @@ async function buscarProcessosPorCPF(cpf: string): Promise<{ processos: any[]; e
 
 // ============================================================
 // BUSCAR DETALHES DE UM PROCESSO POR CNJ NO ESCAVADOR
+// Busca TODAS as fontes (1ª e 2ª instância)
 // ============================================================
 async function buscarDetalhesProcesso(cnj: string): Promise<any | null> {
   if (!ESCAVADOR_API_KEY) return null;
@@ -169,24 +202,80 @@ async function buscarDetalhesProcesso(cnj: string): Promise<any | null> {
     if (!response.ok) return null;
     const data = await response.json();
 
-    // Fetch movimentações
-    try {
-      const movResp = await fetch(
-        `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?pagina=1&quantidade=5`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${ESCAVADOR_API_KEY}`,
-            'X-Requested-With': 'XMLHttpRequest',
-            'Content-Type': 'application/json',
-          },
+    // Buscar movimentações de TODAS as fontes (1ª e 2ª instância)
+    // A API v2 retorna fontes[] com tribunal e grau
+    const fontes = data.fontes || [];
+    const allMovimentacoes: any[] = [];
+
+    for (const fonte of fontes) {
+      const fonteId = fonte.id;
+      const grau = fonte.grau || '1º Grau';
+      const tribunalSigla = fonte.tribunal?.sigla || fonte.sigla || '';
+      
+      try {
+        const movResp = await fetch(
+          `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?fonte_id=${fonteId}&pagina=1&quantidade=10`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${ESCAVADOR_API_KEY}`,
+              'X-Requested-With': 'XMLHttpRequest',
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+        if (movResp.ok) {
+          const movData = await movResp.json();
+          const movItems = movData?.items || movData?.data || [];
+          // Tag each movimentação with its source info
+          for (const mov of movItems) {
+            mov._grau = grau;
+            mov._tribunal = tribunalSigla;
+            mov._fonte_id = fonteId;
+          }
+          allMovimentacoes.push(...movItems);
         }
-      );
-      if (movResp.ok) {
-        const movData = await movResp.json();
-        data._movimentacoes = movData?.items || movData?.data || [];
-      }
-    } catch { /* ignore */ }
+      } catch { /* ignore individual fonte errors */ }
+    }
+
+    // Se não encontrou por fonte_id, tentar sem
+    if (allMovimentacoes.length === 0) {
+      try {
+        const movResp = await fetch(
+          `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?pagina=1&quantidade=10`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${ESCAVADOR_API_KEY}`,
+              'X-Requested-With': 'XMLHttpRequest',
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+        if (movResp.ok) {
+          const movData = await movResp.json();
+          allMovimentacoes.push(...(movData?.items || movData?.data || []));
+        }
+      } catch { /* ignore */ }
+    }
+
+    // Ordenar por data mais recente
+    allMovimentacoes.sort((a, b) => {
+      const dateA = a.data || a.data_hora || '';
+      const dateB = b.data || b.data_hora || '';
+      return dateB.localeCompare(dateA);
+    });
+
+    data._movimentacoes = allMovimentacoes;
+    
+    // Marcar informações de instância em cada fonte
+    data._fontes_info = fontes.map((f: any) => ({
+      id: f.id,
+      grau: f.grau || '1º Grau',
+      tribunal: f.tribunal?.sigla || f.sigla || '',
+      status_predito: f.status_predito,
+      orgao_julgador: f.capa?.orgao_julgador || f.orgao_julgador?.nome || '',
+    }));
 
     return data;
   } catch {
@@ -202,14 +291,21 @@ function formatarProcessosEscavador(processos: any[], detalhes: Map<string, any>
     return '\n[RESULTADO BUSCA ESCAVADOR]\nNenhum processo encontrado para este CPF.';
   }
 
-  // Separar ativos de arquivados
   const processosComStatus = processos.map((proc) => {
     const cnj = proc.numero_cnj || proc.numero_processo || '';
     const detalhe = detalhes.get(cnj);
-    const fonte = detalhe?.fontes?.find((f: any) => f.tipo === 'TRIBUNAL') || detalhe?.fontes?.[0];
+    
+    // Verificar TODAS as fontes para determinar se alguma instância está ativa
+    const fontesInfo = detalhe?._fontes_info || [];
+    const fontes = detalhe?.fontes || [];
+    const fonte = fontes.find((f: any) => f.tipo === 'TRIBUNAL') || fontes[0];
+    
+    // Processo é ativo se QUALQUER instância estiver ativa
     const statusPredito = fonte?.status_predito || detalhe?.status_predito;
-    const isAtivo = statusPredito !== 'INATIVO' && statusPredito !== 'BAIXADO';
-    return { proc, cnj, detalhe, fonte, isAtivo, statusPredito };
+    const algumFonteAtiva = fontesInfo.some((fi: any) => fi.status_predito !== 'INATIVO' && fi.status_predito !== 'BAIXADO');
+    const isAtivo = algumFonteAtiva || (statusPredito !== 'INATIVO' && statusPredito !== 'BAIXADO');
+    
+    return { proc, cnj, detalhe, fonte, fontes, fontesInfo, isAtivo, statusPredito };
   });
 
   const ativos = processosComStatus.filter(p => p.isAtivo);
@@ -218,11 +314,10 @@ function formatarProcessosEscavador(processos: any[], detalhes: Map<string, any>
   const parts: string[] = [];
   parts.push(`\n[RESULTADO BUSCA ESCAVADOR - ${processos.length} processo(s) encontrado(s), ${ativos.length} ativo(s), ${arquivados.length} arquivado(s)]`);
 
-  // Formatar TODOS os processos ativos
   const processosParaDetalhar = ativos.length > 0 ? ativos : processosComStatus.slice(0, 5);
   
   for (let i = 0; i < processosParaDetalhar.length; i++) {
-    const { proc, cnj, detalhe, fonte, isAtivo, statusPredito } = processosParaDetalhar[i];
+    const { proc, cnj, detalhe, fonte, fontes, fontesInfo } = processosParaDetalhar[i];
     const capa = fonte?.capa || {};
 
     parts.push(`\n${i + 1}️⃣ Processo: ${cnj || 'Sem número'}`);
@@ -230,16 +325,19 @@ function formatarProcessosEscavador(processos: any[], detalhes: Map<string, any>
     const classe = capa.classe || fonte?.classe?.nome || proc.titulo_classe || proc.classe || 'Não informado';
     parts.push(`   Tipo/Classe: ${classe}`);
 
-    const tribunal = fonte?.tribunal?.sigla || fonte?.sigla || proc.tribunal || 'Não informado';
-    parts.push(`   Tribunal: ${tribunal}`);
-
-    const orgao = capa.orgao_julgador || fonte?.orgao_julgador?.nome || 'Não informado';
-    parts.push(`   Vara/Órgão: ${orgao}`);
-
-    let status = 'Em Andamento';
-    if (statusPredito === 'INATIVO' || statusPredito === 'BAIXADO') status = 'Arquivado';
-    else if (statusPredito === 'SUSPENSO') status = 'Suspenso';
-    parts.push(`   Status: ${status}`);
+    // Listar TODAS as instâncias do processo
+    if (fontesInfo.length > 0) {
+      for (const fi of fontesInfo) {
+        const statusInst = fi.status_predito === 'INATIVO' || fi.status_predito === 'BAIXADO' ? 'Arquivado' : 
+                          fi.status_predito === 'SUSPENSO' ? 'Suspenso' : 'Em Andamento';
+        parts.push(`   🏛️ ${fi.tribunal} — ${fi.grau} — Status: ${statusInst}${fi.orgao_julgador ? ` — ${fi.orgao_julgador}` : ''}`);
+      }
+    } else {
+      const tribunal = fonte?.tribunal?.sigla || fonte?.sigla || proc.tribunal || 'Não informado';
+      parts.push(`   Tribunal: ${tribunal}`);
+      const orgao = capa.orgao_julgador || fonte?.orgao_julgador?.nome || 'Não informado';
+      parts.push(`   Vara/Órgão: ${orgao}`);
+    }
 
     const assunto = capa.assunto || capa.assuntos_normalizados?.[0]?.nome || proc.assunto || '';
     if (assunto) parts.push(`   Assunto: ${assunto}`);
@@ -249,7 +347,7 @@ function formatarProcessosEscavador(processos: any[], detalhes: Map<string, any>
 
     const dataDistrib = capa.data_distribuicao || fonte?.data_inicio || proc.data_inicio;
     if (dataDistrib) {
-      parts.push(`   Data Distribuição: ${new Date(dataDistrib).toLocaleDateString('pt-BR')}`);
+      parts.push(`   Data Distribuição: ${formatarDataMovimentacao(dataDistrib)}`);
     }
 
     const envolvidos = fonte?.envolvidos || detalhe?.envolvidos || [];
@@ -262,20 +360,21 @@ function formatarProcessosEscavador(processos: any[], detalhes: Map<string, any>
       }
     }
 
+    // Movimentações — agrupadas por instância se disponível
     const movs = detalhe?._movimentacoes || [];
     if (movs.length > 0) {
       parts.push(`   Últimas movimentações:`);
-      for (const mov of movs.slice(0, 3)) {
+      for (const mov of movs.slice(0, 5)) {
         const dataMov = mov.data || mov.data_hora;
-        const dataStr = dataMov ? new Date(dataMov).toLocaleDateString('pt-BR') : 'N/A';
+        const dataStr = formatarDataMovimentacao(dataMov);
         const titulo = mov.classificacao_predita?.nome || mov.titulo || mov.conteudo || 'Movimentação';
         const complemento = mov.conteudo || mov.complemento || '';
-        parts.push(`   - ${dataStr}: ${titulo}${complemento ? ` — ${complemento.substring(0, 120)}` : ''}`);
+        const grauTag = mov._grau ? ` [${mov._grau}]` : '';
+        parts.push(`   - ${dataStr}${grauTag}: ${titulo}${complemento ? ` — ${complemento.substring(0, 120)}` : ''}`);
       }
     }
   }
 
-  // Mencionar arquivados resumidamente
   if (arquivados.length > 0 && ativos.length > 0) {
     parts.push(`\n📁 Além dos processos ativos, há ${arquivados.length} processo(s) já arquivado(s):`);
     for (const arq of arquivados.slice(0, 5)) {
@@ -288,9 +387,96 @@ function formatarProcessosEscavador(processos: any[], detalhes: Map<string, any>
 }
 
 // ============================================================
+// BUSCAR DISPONIBILIDADE DA AGENDA (Ter/Qua/Qui)
+// ============================================================
+async function getAgendaDisponibilidade(supabase: any): Promise<string> {
+  try {
+    const DIAS_ATENDIMENTO = [2, 3, 4]; // Ter, Qua, Qui
+    const HORARIOS = ['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'];
+    const NOMES_DIAS: Record<number, string> = {
+      0: 'domingo', 1: 'segunda', 2: 'terça', 3: 'quarta', 4: 'quinta', 5: 'sexta', 6: 'sábado'
+    };
+
+    // Pegar os próximos 14 dias de atendimento
+    const hoje = new Date();
+    const diasDisponiveis: { date: Date; label: string; dayOfWeek: number }[] = [];
+    
+    for (let i = 1; i <= 21 && diasDisponiveis.length < 6; i++) {
+      const d = new Date(hoje.getTime() + i * 24 * 60 * 60 * 1000);
+      // Obter dia da semana em Manaus
+      const formatter = new Intl.DateTimeFormat('en-US', { timeZone: MANAUS_TIMEZONE, weekday: 'short' });
+      const dayStr = formatter.format(d);
+      const daysMap: Record<string, number> = { 'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6 };
+      const dow = daysMap[dayStr] ?? d.getDay();
+      
+      if (DIAS_ATENDIMENTO.includes(dow)) {
+        diasDisponiveis.push({
+          date: d,
+          label: `${NOMES_DIAS[dow]}, ${formatarData(d)}`,
+          dayOfWeek: dow,
+        });
+      }
+    }
+
+    if (diasDisponiveis.length === 0) {
+      return '\n[AGENDA LOTADA] Não foram encontrados dias de atendimento disponíveis nas próximas semanas.';
+    }
+
+    // Buscar compromissos existentes nesses dias
+    const startDate = diasDisponiveis[0].date;
+    const endDate = new Date(diasDisponiveis[diasDisponiveis.length - 1].date.getTime() + 24 * 60 * 60 * 1000);
+    
+    const { data: compromissos } = await supabase
+      .from('compromissos')
+      .select('data_inicio, data_fim, titulo')
+      .gte('data_inicio', startDate.toISOString())
+      .lte('data_inicio', endDate.toISOString())
+      .order('data_inicio');
+
+    // Montar mapa de horários ocupados por dia
+    const ocupados = new Map<string, Set<string>>();
+    for (const c of (compromissos || [])) {
+      const dataInicio = new Date(c.data_inicio);
+      const diaKey = dataInicio.toLocaleDateString('en-CA', { timeZone: MANAUS_TIMEZONE });
+      if (!ocupados.has(diaKey)) ocupados.set(diaKey, new Set());
+      const hora = dataInicio.toLocaleTimeString('pt-BR', { 
+        timeZone: MANAUS_TIMEZONE, hour: '2-digit', minute: '2-digit' 
+      });
+      ocupados.get(diaKey)!.add(hora);
+    }
+
+    const parts: string[] = [];
+    parts.push('\n[AGENDA DISPONÍVEL - Dias de atendimento: Terça, Quarta e Quinta]');
+    
+    let temDisponibilidade = false;
+    for (const dia of diasDisponiveis) {
+      const diaKey = dia.date.toLocaleDateString('en-CA', { timeZone: MANAUS_TIMEZONE });
+      const horasOcupadas = ocupados.get(diaKey) || new Set();
+      const horasLivres = HORARIOS.filter(h => !horasOcupadas.has(h));
+      
+      if (horasLivres.length > 0) {
+        temDisponibilidade = true;
+        parts.push(`📅 ${dia.label}: ${horasLivres.join(', ')}`);
+      } else {
+        parts.push(`📅 ${dia.label}: LOTADO (sem horários)`);
+      }
+    }
+
+    if (!temDisponibilidade) {
+      parts.push('\n⚠️ Todos os horários das próximas semanas estão ocupados.');
+    }
+
+    return parts.join('\n');
+  } catch (error) {
+    console.error('[ISA-ESCRITORIO] Erro ao buscar agenda:', error);
+    return '\n[AGENDA] Erro ao verificar disponibilidade.';
+  }
+}
+
+// ============================================================
 // BUSCAR CONTEXTO DO LEAD (processos, docs, financeiro, agenda)
 // ============================================================
-async function getLeadFullContext(leadId: string, supabase: any): Promise<string> {
+async function getLeadFullContext(leadId: string, supabase: any, includeAgenda: boolean = false): Promise<string> {
   try {
     const parts: string[] = [];
 
@@ -331,7 +517,7 @@ async function getLeadFullContext(leadId: string, supabase: any): Promise<string
         if (movs.length > 0) {
           parts.push(`   Últimas movimentações:`);
           for (const mov of movs) {
-            const data = mov.data_movimentacao ? new Date(mov.data_movimentacao).toLocaleDateString('pt-BR') : 'N/A';
+            const data = formatarDataMovimentacao(mov.data_movimentacao);
             parts.push(`   - ${data}: ${mov.titulo}${mov.descricao ? ` — ${mov.descricao.substring(0, 100)}` : ''}`);
           }
         }
@@ -366,13 +552,17 @@ async function getLeadFullContext(leadId: string, supabase: any): Promise<string
       .limit(3);
 
     if (compromissos?.length > 0) {
-      parts.push(`\n[AGENDA]`);
+      parts.push(`\n[AGENDA DO CLIENTE]`);
       for (const c of compromissos) {
-        const data = new Date(c.data_inicio).toLocaleDateString('pt-BR', { 
-          weekday: 'long', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
-        });
+        const data = formatarDataHora(c.data_inicio);
         parts.push(`📅 ${c.titulo} — ${data} (${c.tipo})`);
       }
+    }
+
+    // Se precisa verificar agenda disponível
+    if (includeAgenda) {
+      const agendaDisp = await getAgendaDisponibilidade(supabase);
+      parts.push(agendaDisp);
     }
 
     // Financeiro
@@ -395,7 +585,7 @@ async function getLeadFullContext(leadId: string, supabase: any): Promise<string
         }
         if (proximas.length > 0) {
           for (const p of proximas) {
-            parts.push(`   Próxima: R$ ${p.valor} vence em ${new Date(p.data_vencimento).toLocaleDateString('pt-BR')}`);
+            parts.push(`   Próxima: R$ ${p.valor} vence em ${formatarData(p.data_vencimento)}`);
           }
         }
       }
@@ -527,6 +717,17 @@ async function processActionTags(response: string, leadId: string, supabase: any
 }
 
 // ============================================================
+// DETECTAR INTENÇÃO DE AGENDAMENTO
+// ============================================================
+function detectarIntencaoAgendamento(message: string): boolean {
+  const palavras = ['agendar', 'agenda', 'marcar', 'horário', 'horario', 'reunião', 'reuniao', 
+                    'consulta', 'falar com', 'advogado', 'atendimento', 'dia', 'semana que vem',
+                    'disponibilidade', 'disponível', 'disponivel'];
+  const msgLower = message.toLowerCase();
+  return palavras.some(p => msgLower.includes(p));
+}
+
+// ============================================================
 // MAIN HANDLER
 // ============================================================
 serve(async (req: Request) => {
@@ -612,7 +813,6 @@ serve(async (req: Request) => {
     if (cpfDetectado) {
       console.log(`[ISA-ESCRITORIO] 🔍 CPF detectado: ${cpfDetectado}`);
 
-      // Buscar processos por CPF
       const { processos, error: escError } = await buscarProcessosPorCPF(cpfDetectado);
 
       if (escError) {
@@ -621,7 +821,6 @@ serve(async (req: Request) => {
       } else if (processos.length === 0) {
         escavadorContext = `\n[RESULTADO BUSCA ESCAVADOR]\nNenhum processo encontrado para o CPF ${cpfDetectado}. Informe ao cliente que não foram localizados processos vinculados a este CPF.`;
       } else {
-        // Buscar detalhes de TODOS os processos (até 10 para não estourar créditos)
         const detalhesMap = new Map<string, any>();
         const detailPromises = processos.slice(0, 10).map(async (proc: any) => {
           const cnj = proc.numero_cnj || proc.numero_processo;
@@ -635,7 +834,6 @@ serve(async (req: Request) => {
         escavadorContext = formatarProcessosEscavador(processos, detalhesMap);
       }
 
-      // Registrar busca
       await supabase.from('system_events').insert({
         tipo: 'escavador_cpf_search',
         fonte: 'isa_escritorio',
@@ -643,8 +841,11 @@ serve(async (req: Request) => {
       });
     }
 
+    // Detectar se o cliente quer agendar → incluir disponibilidade da agenda
+    const querAgendar = detectarIntencaoAgendamento(processedMessage);
+
     // Buscar contexto completo do lead
-    const context = await getLeadFullContext(lead_id, supabase);
+    const context = await getLeadFullContext(lead_id, supabase, querAgendar);
 
     // Combinar contextos
     const fullContext = context + escavadorContext;
