@@ -220,12 +220,18 @@ async function processFollowups(supabase: any, zapiConfig: any) {
   const now = new Date();
   const results: any[] = [];
   
+  // Buscar TODAS as instâncias para roteamento por lead
+  const { data: allInstances } = await supabase
+    .from('zapi_instances')
+    .select('instance_id, is_default, name, token, client_token, phone_number')
+    .eq('is_active', true);
+
   // Get all active follow-ups that are due
   const { data: pendingFollowups, error } = await supabase
     .from('zapi_followups')
     .select(`
       *,
-      lead:leads_juridicos(id, nome, status, lead_state, telefone)
+      lead:leads_juridicos(id, nome, status, lead_state, telefone, linha_whatsapp, tipo_origem)
     `)
     .eq('status', 'ativo')
     .eq('respondido', false)
