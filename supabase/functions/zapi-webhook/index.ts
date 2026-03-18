@@ -923,6 +923,7 @@ serve(async (req: Request) => {
             console.error('[Z-API Webhook] Error calling Isa Escritório:', escErr);
           }
         }
+        } // end isaEscEnabled check
       } else {
         if (humanAttendanceActive) {
           console.log(`[Z-API Webhook] 👤 Human attendance active for lead ${leadId}, skipping Isa`);
