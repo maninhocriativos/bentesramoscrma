@@ -900,7 +900,7 @@ export function ProcessoModalExpanded({
                       <h3 className="text-sm font-semibold text-foreground">Financeiro & Responsáveis</h3>
                     </div>
                     <div className="bg-muted/30 rounded-xl p-4 space-y-4 border border-border/30">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-1.5">
                           <Label htmlFor="valor_causa" className="text-xs text-muted-foreground">Valor da Causa (R$)</Label>
                           <Input
@@ -914,6 +914,25 @@ export function ProcessoModalExpanded({
                             placeholder="0,00"
                             inputMode="decimal"
                           />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="cpf_cliente" className="text-xs text-muted-foreground">CPF do Cliente</Label>
+                          <Input
+                            id="cpf_cliente"
+                            value={formData.cpf_cliente}
+                            onChange={(e) => {
+                              let val = e.target.value.replace(/\D/g, '');
+                              if (val.length > 11) val = val.slice(0, 11);
+                              if (val.length > 9) val = val.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+                              else if (val.length > 6) val = val.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+                              else if (val.length > 3) val = val.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+                              setFormData({ ...formData, cpf_cliente: val });
+                            }}
+                            className="rounded-xl bg-card"
+                            placeholder="000.000.000-00"
+                            maxLength={14}
+                          />
+                          <p className="text-[11px] text-muted-foreground">Usado pela Isa para localizar processos</p>
                         </div>
                         <div className="space-y-1.5">
                           <Label htmlFor="advogado_responsavel" className="text-xs text-muted-foreground">Advogado Responsável</Label>
