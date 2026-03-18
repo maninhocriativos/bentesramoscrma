@@ -303,6 +303,22 @@ export function ProcessoModalExpanded({
 
       if (data?.encontrado && data?.processo) {
         const proc = data.processo;
+        console.log('📋 [Refresh] Dados retornados da API:', JSON.stringify({
+          classe: proc.classe,
+          classeCodigo: proc.classeCodigo,
+          tribunal: proc.tribunal,
+          orgaoJulgador: proc.orgaoJulgador,
+          grau: proc.grau,
+          assuntos: proc.assuntos,
+          valorCausa: proc.valorCausa,
+          dataAjuizamento: proc.dataAjuizamento,
+          nivelSigilo: proc.nivelSigilo,
+          sistemaProcessual: proc.sistemaProcessual,
+          statusDetalhado: proc.statusDetalhado,
+          status: proc.status,
+          partesCount: proc.partes?.length,
+          movimentosCount: proc.movimentos?.length,
+        }));
 
         // Extrair partes e movimentos
         const newPartes = proc.partes || [];
@@ -311,6 +327,26 @@ export function ProcessoModalExpanded({
         // Atualizar states locais
         setPartes(newPartes);
         setMovimentos(newMovimentos);
+
+        // Helper para normalizar datas para formato YYYY-MM-DD (input type="date")
+        const toDateInput = (val: string | null | undefined): string => {
+          if (!val) return '';
+          // Already YYYY-MM-DD
+          if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+          // ISO format: 2024-01-15T00:00:00Z → 2024-01-15
+          if (/^\d{4}-\d{2}-\d{2}T/.test(val)) return val.slice(0, 10);
+          // pt-BR: DD/MM/YYYY → YYYY-MM-DD
+          const ptBr = val.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+          if (ptBr) return `${ptBr[3]}-${ptBr[2]}-${ptBr[1]}`;
+          // Try Date parse as fallback
+          try {
+            const d = new Date(val);
+            if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+          } catch { /* ignore */ }
+          return '';
+        };
+
+        const dataDistribuicao = toDateInput(proc.dataAjuizamento);
 
         // Preparar dados para atualização — preencher todos os campos da aba Dados
         const updateData: Record<string, unknown> = {
@@ -328,16 +364,18 @@ export function ProcessoModalExpanded({
           ultima_consulta_api_at: new Date().toISOString(),
           data_ultima_atualizacao: new Date().toISOString(),
           // Campos adicionais da aba Dados
-          classe_cnj: proc.classeCodigo || formData.classe_cnj || null,
-          assunto_cnj: proc.assuntos?.[0]?.codigo || formData.assunto_cnj || null,
+          classe_cnj: proc.classe || formData.classe_cnj || null,
+          assunto_cnj: proc.assuntos?.[0]?.codigo?.toString() || proc.assuntos?.[0]?.nome || formData.assunto_cnj || null,
           vara_comarca: proc.orgaoJulgador || formData.vara_comarca || null,
           status_detalhado: proc.statusDetalhado || null,
           segredo_justica: proc.nivelSigilo === 'Segredo de Justiça',
           sistema_judicial: proc.sistemaProcessual || formData.sistema_judicial || null,
           tipo_orgao_julgador: proc.orgaoJulgador || formData.tipo_orgao_julgador || null,
-          data_distribuicao: proc.dataAjuizamento || formData.data_distribuicao || null,
-          data_ajuizamento: proc.dataAjuizamento || null,
+          data_distribuicao: dataDistribuicao || formData.data_distribuicao || null,
+          data_ajuizamento: dataDistribuicao || null,
         };
+
+        console.log('📋 [Refresh] updateData preparado:', JSON.stringify(updateData));
 
         // Atualizar form local com todos os campos retornados
         setFormData(prev => ({
@@ -355,7 +393,7 @@ export function ProcessoModalExpanded({
           segredo_justica: updateData.segredo_justica as boolean,
           sistema_judicial: (updateData.sistema_judicial as string) || prev.sistema_judicial,
           tipo_orgao_julgador: (updateData.tipo_orgao_julgador as string) || prev.tipo_orgao_julgador,
-          data_distribuicao: (updateData.data_distribuicao as string) || prev.data_distribuicao,
+          data_distribuicao: dataDistribuicao || prev.data_distribuicao,
         }));
 
         // Se é um processo existente, salvar no banco imediatamente
