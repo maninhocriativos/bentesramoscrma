@@ -342,7 +342,56 @@ serve(async (req: Request) => {
         .eq('lead_id', leadId)
         .eq('automation_active', true);
     }
-    
+
+      // ============================================
+      // 📢 DETECÇÃO DE OPT-IN DA CAMPANHA (resposta "SIM")
+      // Se o contato respondeu SIM e está na lista de campanha, dispara a mensagem principal
+      // ============================================
+      if (normalized.message && !normalized.fromMe) {
+        const msgLower = normalized.message.toLowerCase().trim();
+        const isOptinReply = msgLower === 'sim' || msgLower === 'sim!' || msgLower === 'sim.' || 
+                             msgLower === 'quero' || msgLower === 'quero sim' || msgLower === 'tenho interesse';
+        
+        if (isOptinReply && normalized.phone) {
+          const phoneNorm = normalizePhone(normalized.phone);
+          try {
+            // Buscar recipient da campanha que está aguardando opt-in
+            const { data: campaignRecipient } = await supabase
+              .from('campaign_recipients')
+              .select('id, nome, telefone_normalizado, campaign_name')
+              .eq('telefone_normalizado', phoneNorm)
+              .eq('stage', 'optin_sent')
+              .maybeSingle();
+            
+            if (campaignRecipient) {
+              console.log(`[Z-API Webhook] 📢 Campaign opt-in detected from ${campaignRecipient.nome} (${phoneNorm})`);
+              
+              // Marcar como aceito
+              await supabase
+                .from('campaign_recipients')
+                .update({ stage: 'accepted', accepted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+                .eq('id', campaignRecipient.id);
+              
+              // Disparar mensagem de campanha automaticamente (fire-and-forget)
+              supabase.functions.invoke('campaign-optin-dispatch', {
+                body: {
+                  action: 'send_campaign',
+                  recipient_id: campaignRecipient.id,
+                  telefone: campaignRecipient.telefone_normalizado,
+                  nome: campaignRecipient.nome,
+                }
+              }).then((res: any) => {
+                console.log(`[Z-API Webhook] 📢 Campaign message dispatched for ${campaignRecipient.nome}:`, res.data);
+              }).catch((err: any) => {
+                console.error(`[Z-API Webhook] 📢 Campaign dispatch error:`, err);
+              });
+            }
+          } catch (campaignErr) {
+            console.error('[Z-API Webhook] Campaign opt-in check error:', campaignErr);
+          }
+        }
+      }
+
     // 🆕 INSCREVER LEAD DE TRÁFEGO NO FOLLOW-UP (se for novo lead de tráfego)
     if (leadId && isNewLead && trafficSource.isTraffic && normalized.phone) {
       try {

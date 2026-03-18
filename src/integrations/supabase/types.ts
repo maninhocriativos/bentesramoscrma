@@ -140,6 +140,68 @@ export type Database = {
         }
         Relationships: []
       }
+      campaign_recipients: {
+        Row: {
+          accepted_at: string | null
+          batch_number: number | null
+          campaign_name: string
+          campaign_sent_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          lead_id: string | null
+          nome: string | null
+          optin_sent_at: string | null
+          stage: string
+          subscriber_id: string | null
+          telefone: string
+          telefone_normalizado: string | null
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          batch_number?: number | null
+          campaign_name?: string
+          campaign_sent_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          lead_id?: string | null
+          nome?: string | null
+          optin_sent_at?: string | null
+          stage?: string
+          subscriber_id?: string | null
+          telefone: string
+          telefone_normalizado?: string | null
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          batch_number?: number | null
+          campaign_name?: string
+          campaign_sent_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          lead_id?: string | null
+          nome?: string | null
+          optin_sent_at?: string | null
+          stage?: string
+          subscriber_id?: string | null
+          telefone?: string
+          telefone_normalizado?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_recipients_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_tags: {
         Row: {
           category: string | null
