@@ -6,7 +6,7 @@ import { usePerfil } from './usePerfil';
 import { useAuth } from './useAuth';
 
 // Only select columns actually needed in listings/dashboard
-const PROCESSOS_SELECT = 'id,numero_processo,titulo_acao,status,advogado_responsavel,cliente_id,cpf_cliente,created_at,tribunal,vara_comarca,assunto,valor_causa,data_ajuizamento,data_ultima_atualizacao,orgao_julgador,grau,classe_cnj,status_detalhado,origem_cliente,ultima_consulta_api_at,frequencia_notificacao_dias,notificacao_ativa,ultima_notificacao_at,partes_json,movimentos_json';
+const PROCESSOS_SELECT = 'id,numero_processo,numero_complementar,titulo_acao,status,advogado_responsavel,cliente_id,cpf_cliente,created_at,tribunal,vara_comarca,assunto,valor_causa,data_ajuizamento,data_ultima_atualizacao,orgao_julgador,grau,classe_cnj,status_detalhado,origem_cliente,ultima_consulta_api_at,frequencia_notificacao_dias,notificacao_ativa,ultima_notificacao_at,partes_json,movimentos_json,descricao,marcadores,area,fase,assunto_cnj,segredo_justica,data_distribuicao,data_citacao,data_recebimento,data_arquivamento,data_encerramento,valor_provisionado,probabilidade,monitorar_push,tipo_orgao_julgador,sistema_judicial,complemento_enderecamento';
 
 export function useProcessos() {
   const [processos, setProcessos] = useState<Processo[]>([]);
