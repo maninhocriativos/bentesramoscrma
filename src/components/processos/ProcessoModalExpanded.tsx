@@ -216,10 +216,17 @@ export function ProcessoModalExpanded({
           cliente_id: clienteId || prev.cliente_id,
           advogado_responsavel: advogadoResponsavel || prev.advogado_responsavel,
           tribunal: proc.tribunal || prev.tribunal || '',
-          orgao_julgador: proc.orgaoJulgador || '',
-          grau: proc.grau || '',
-          assunto: proc.assuntos?.[0]?.nome || '',
-          valor_causa: proc.valorCausa?.toString() || '',
+          orgao_julgador: proc.orgaoJulgador || prev.orgao_julgador || '',
+          grau: proc.grau || prev.grau || '',
+          assunto: proc.assuntos?.[0]?.nome || prev.assunto || '',
+          valor_causa: proc.valorCausa?.toString() || prev.valor_causa || '',
+          classe_cnj: proc.classeCodigo || prev.classe_cnj || '',
+          assunto_cnj: proc.assuntos?.[0]?.codigo || prev.assunto_cnj || '',
+          vara_comarca: proc.orgaoJulgador || prev.vara_comarca || '',
+          segredo_justica: proc.nivelSigilo === 'Segredo de Justiça',
+          sistema_judicial: proc.sistemaProcessual || prev.sistema_judicial || '',
+          tipo_orgao_julgador: proc.orgaoJulgador || prev.tipo_orgao_julgador || '',
+          data_distribuicao: proc.dataAjuizamento || prev.data_distribuicao || '',
         }));
 
         if (proc.partes && Array.isArray(proc.partes)) {
