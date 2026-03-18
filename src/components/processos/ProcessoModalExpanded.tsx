@@ -449,6 +449,7 @@ export function ProcessoModalExpanded({
         status: (processo.status as ProcessoStatus) || 'Em Andamento',
         advogado_responsavel: processo.advogado_responsavel || '',
         cliente_id: processo.cliente_id || '',
+        cpf_cliente: processo.cpf_cliente || '',
         tribunal: processo.tribunal || '',
         vara_comarca: processo.vara_comarca || '',
         assunto: processo.assunto || '',
