@@ -11,6 +11,7 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+const ESCAVADOR_API_KEY = Deno.env.get('ESCAVADOR_API_KEY');
 
 // ============================================================
 // PROMPT DA ISA ESCRITÓRIO — ATENDIMENTO AO CLIENTE BENTES & RAMOS
@@ -32,10 +33,19 @@ const ISA_ESCRITORIO_PROMPT = `Você é a Isa Escritório, assistente virtual do
 
 ### 📋 CONSULTA DE PROCESSOS
 Quando o cliente perguntar sobre o andamento do processo:
-- Use os dados do [CONTEXTO] para informar o status atual
-- Informe a última movimentação registrada
-- Se não houver processo vinculado, pergunte o número do CNJ ou nome completo
+- PRIMEIRO, peça o CPF do cliente para localizar os processos (caso não tenha sido fornecido ainda)
+- Se o CPF já foi fornecido e há dados do Escavador no [CONTEXTO], apresente as informações de forma clara e organizada
+- Formate as informações do processo assim:
+  📋 *Processo:* [número CNJ formatado]
+  ⚖️ *Tipo:* [classe processual]
+  🏛️ *Tribunal:* [tribunal]
+  📍 *Vara:* [órgão julgador]
+  📊 *Status:* [status atual]
+  📅 *Última movimentação:* [data e descrição]
+- Se houver múltiplos processos, liste cada um separadamente
+- Se não encontrar processos para o CPF, informe educadamente e sugira verificar o número
 - Nunca invente informações — se não tiver dados, diga que vai verificar
+- Se o cliente forneceu o nome mas não o CPF, peça o CPF para fazer a busca oficial
 
 ### 📅 AGENDA / FALAR COM ADVOGADO
 Quando o cliente quiser falar com o advogado:
@@ -65,12 +75,198 @@ Inclua [TRANSFERIR_HUMANO] quando:
 4. Houver reclamação ou insatisfação
 
 ## REGRAS DE COMUNICAÇÃO
-1. Mensagens curtas (3-4 linhas máx)
+1. Mensagens curtas (3-4 linhas máx), exceto quando apresentando dados de processos
 2. Use o nome do cliente quando disponível
 3. Emojis com moderação (1-2 por mensagem)
 4. Sempre confirme informações antes de passar
 5. Se não souber, diga que vai verificar — nunca invente
+6. Use *negrito* para destacar informações importantes (formato WhatsApp)
 `;
+
+// ============================================================
+// DETECTAR CPF NA MENSAGEM
+// ============================================================
+function extractCPF(message: string): string | null {
+  // CPF com pontuação: 123.456.789-00
+  const formatted = message.match(/\d{3}[.\s]?\d{3}[.\s]?\d{3}[-.\s]?\d{2}/);
+  if (formatted) {
+    const cpf = formatted[0].replace(/[^\d]/g, '');
+    if (cpf.length === 11) return cpf;
+  }
+  // Sequência de 11 dígitos
+  const raw = message.match(/\b(\d{11})\b/);
+  if (raw) return raw[1];
+  return null;
+}
+
+// ============================================================
+// BUSCAR PROCESSOS NO ESCAVADOR POR CPF
+// ============================================================
+async function buscarProcessosPorCPF(cpf: string): Promise<{ processos: any[]; error: string | null }> {
+  if (!ESCAVADOR_API_KEY) {
+    return { processos: [], error: 'ESCAVADOR_API_KEY não configurada' };
+  }
+
+  const cpfLimpo = cpf.replace(/[^\d]/g, '');
+  console.log(`[ISA-ESCRITORIO] 🔍 Buscando processos por CPF: ${cpfLimpo}`);
+
+  try {
+    const response = await fetch(
+      `https://api.escavador.com/api/v2/envolvido/processos?cpf_cnpj=${cpfLimpo}`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${ESCAVADOR_API_KEY}`,
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      if (response.status === 402) {
+        return { processos: [], error: 'Créditos do Escavador insuficientes' };
+      }
+      return { processos: [], error: `Erro HTTP ${response.status}` };
+    }
+
+    const data = await response.json();
+    const items = data.items || data.data || [];
+    console.log(`[ISA-ESCRITORIO] ✅ Encontrados ${items.length} processos`);
+    return { processos: items, error: null };
+  } catch (err: any) {
+    console.error(`[ISA-ESCRITORIO] ❌ Erro Escavador:`, err);
+    return { processos: [], error: err.message };
+  }
+}
+
+// ============================================================
+// BUSCAR DETALHES DE UM PROCESSO POR CNJ NO ESCAVADOR
+// ============================================================
+async function buscarDetalhesProcesso(cnj: string): Promise<any | null> {
+  if (!ESCAVADOR_API_KEY) return null;
+
+  try {
+    const response = await fetch(
+      `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${ESCAVADOR_API_KEY}`,
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) return null;
+    const data = await response.json();
+
+    // Fetch movimentações
+    try {
+      const movResp = await fetch(
+        `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?pagina=1&quantidade=5`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${ESCAVADOR_API_KEY}`,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      if (movResp.ok) {
+        const movData = await movResp.json();
+        data._movimentacoes = movData?.items || movData?.data || [];
+      }
+    } catch { /* ignore */ }
+
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================
+// FORMATAR DADOS DO ESCAVADOR PARA CONTEXTO DA IA
+// ============================================================
+function formatarProcessosEscavador(processos: any[], detalhes: Map<string, any>): string {
+  if (processos.length === 0) {
+    return '\n[RESULTADO BUSCA ESCAVADOR]\nNenhum processo encontrado para este CPF.';
+  }
+
+  const parts: string[] = [];
+  parts.push(`\n[RESULTADO BUSCA ESCAVADOR - ${processos.length} processo(s) encontrado(s)]`);
+
+  for (const proc of processos.slice(0, 5)) {
+    const cnj = proc.numero_cnj || proc.numero_processo || 'Sem número';
+    const detalhe = detalhes.get(cnj);
+    const fonte = detalhe?.fontes?.find((f: any) => f.tipo === 'TRIBUNAL') || detalhe?.fontes?.[0];
+    const capa = fonte?.capa || {};
+
+    parts.push(`\n📋 Processo: ${cnj}`);
+    
+    // Classe/Tipo
+    const classe = capa.classe || fonte?.classe?.nome || proc.titulo_classe || proc.classe || 'Não informado';
+    parts.push(`   Tipo/Classe: ${classe}`);
+
+    // Tribunal
+    const tribunal = fonte?.tribunal?.sigla || fonte?.sigla || proc.tribunal || 'Não informado';
+    parts.push(`   Tribunal: ${tribunal}`);
+
+    // Órgão julgador / Vara
+    const orgao = capa.orgao_julgador || fonte?.orgao_julgador?.nome || 'Não informado';
+    parts.push(`   Vara/Órgão: ${orgao}`);
+
+    // Status
+    let status = 'Em Andamento';
+    const statusPredito = fonte?.status_predito || detalhe?.status_predito;
+    if (statusPredito === 'INATIVO' || statusPredito === 'BAIXADO') status = 'Arquivado';
+    else if (statusPredito === 'SUSPENSO') status = 'Suspenso';
+    parts.push(`   Status: ${status}`);
+
+    // Assunto
+    const assunto = capa.assunto || capa.assuntos_normalizados?.[0]?.nome || proc.assunto || '';
+    if (assunto) parts.push(`   Assunto: ${assunto}`);
+
+    // Valor da causa
+    const valorCausa = capa.valor_causa?.valor || proc.valor_causa;
+    if (valorCausa) parts.push(`   Valor da Causa: R$ ${Number(valorCausa).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+
+    // Data distribuição
+    const dataDistrib = capa.data_distribuicao || fonte?.data_inicio || proc.data_inicio;
+    if (dataDistrib) {
+      const dataFormatada = new Date(dataDistrib).toLocaleDateString('pt-BR');
+      parts.push(`   Data Distribuição: ${dataFormatada}`);
+    }
+
+    // Partes
+    const envolvidos = fonte?.envolvidos || detalhe?.envolvidos || [];
+    if (envolvidos.length > 0) {
+      parts.push(`   Partes:`);
+      for (const env of envolvidos.slice(0, 6)) {
+        const nome = env.nome || env.pessoa?.nome || 'Desconhecido';
+        const polo = env.polo === 'ATIVO' ? '(Autor)' : env.polo === 'PASSIVO' ? '(Réu)' : '';
+        parts.push(`   - ${nome} ${polo}`);
+      }
+    }
+
+    // Últimas movimentações
+    const movs = detalhe?._movimentacoes || [];
+    if (movs.length > 0) {
+      parts.push(`   Últimas movimentações:`);
+      for (const mov of movs.slice(0, 3)) {
+        const dataMov = mov.data || mov.data_hora;
+        const dataStr = dataMov ? new Date(dataMov).toLocaleDateString('pt-BR') : 'N/A';
+        const titulo = mov.classificacao_predita?.nome || mov.titulo || mov.conteudo || 'Movimentação';
+        const complemento = mov.conteudo || mov.complemento || '';
+        parts.push(`   - ${dataStr}: ${titulo}${complemento ? ` — ${complemento.substring(0, 120)}` : ''}`);
+      }
+    }
+  }
+
+  return parts.join('\n');
+}
 
 // ============================================================
 // BUSCAR CONTEXTO DO LEAD (processos, docs, financeiro, agenda)
@@ -112,7 +308,6 @@ async function getLeadFullContext(leadId: string, supabase: any): Promise<string
         parts.push(`   Status: ${proc.status || 'Ativo'}`);
         parts.push(`   Última atualização: ${proc.ultima_verificacao || proc.updated_at || 'N/A'}`);
         
-        // Últimas movimentações
         const movs = proc.movimentacoes?.slice(0, 3) || [];
         if (movs.length > 0) {
           parts.push(`   Últimas movimentações:`);
@@ -123,7 +318,7 @@ async function getLeadFullContext(leadId: string, supabase: any): Promise<string
         }
       }
     } else {
-      parts.push(`\n[PROCESSOS] Nenhum processo vinculado a este cliente.`);
+      parts.push(`\n[PROCESSOS] Nenhum processo vinculado a este cliente no sistema interno.`);
     }
 
     // Documentos pendentes
@@ -161,7 +356,7 @@ async function getLeadFullContext(leadId: string, supabase: any): Promise<string
       }
     }
 
-    // Financeiro: Honorários e parcelas
+    // Financeiro
     const { data: honorarios } = await supabase
       .from('honorarios')
       .select('*, parcelas:parcelas_honorarios(valor, data_vencimento, status)')
@@ -252,7 +447,7 @@ async function generateResponse(message: string, context: string): Promise<strin
         { role: 'system', content: ISA_ESCRITORIO_PROMPT },
         { role: 'user', content: `${context}\n\n[NOVA MENSAGEM DO CLIENTE]\n${message}` }
       ],
-      max_tokens: 500,
+      max_tokens: 800,
       temperature: 0.6,
     }),
   });
@@ -271,11 +466,9 @@ async function generateResponse(message: string, context: string): Promise<strin
 // PROCESSAR TAGS DE AÇÃO NA RESPOSTA
 // ============================================================
 async function processActionTags(response: string, leadId: string, supabase: any): Promise<void> {
-  // [TRANSFERIR_HUMANO]
   if (response.includes('[TRANSFERIR_HUMANO]')) {
     console.log('[ISA-ESCRITORIO] 🔄 Transferindo para humano');
     
-    // Desativar Isa e ativar atendimento humano
     await supabase
       .from('leads_juridicos')
       .update({ isa_ativa: false })
@@ -286,7 +479,6 @@ async function processActionTags(response: string, leadId: string, supabase: any
       .update({ atendimento_humano: true })
       .eq('lead_id', leadId);
 
-    // Registrar evento
     await supabase.from('system_events').insert({
       tipo: 'handoff_humano',
       fonte: 'isa_escritorio',
@@ -294,7 +486,6 @@ async function processActionTags(response: string, leadId: string, supabase: any
     });
   }
 
-  // [AGENDAR_ADVOGADO]
   if (response.includes('[AGENDAR_ADVOGADO]')) {
     console.log('[ISA-ESCRITORIO] 📅 Solicitação de agendamento');
     
@@ -305,7 +496,6 @@ async function processActionTags(response: string, leadId: string, supabase: any
     });
   }
 
-  // [FINANCEIRO_DUVIDA]
   if (response.includes('[FINANCEIRO_DUVIDA]')) {
     console.log('[ISA-ESCRITORIO] 💰 Dúvida financeira');
     
@@ -394,13 +584,56 @@ serve(async (req: Request) => {
       }
     }
 
+    // ============================================================
+    // DETECTAR CPF E BUSCAR NO ESCAVADOR
+    // ============================================================
+    let escavadorContext = '';
+    const cpfDetectado = extractCPF(processedMessage);
+
+    if (cpfDetectado) {
+      console.log(`[ISA-ESCRITORIO] 🔍 CPF detectado: ${cpfDetectado}`);
+
+      // Buscar processos por CPF
+      const { processos, error: escError } = await buscarProcessosPorCPF(cpfDetectado);
+
+      if (escError) {
+        console.error(`[ISA-ESCRITORIO] Erro Escavador: ${escError}`);
+        escavadorContext = `\n[RESULTADO BUSCA ESCAVADOR]\nErro ao consultar: ${escError}. Informe ao cliente que houve uma falha temporária e tente novamente.`;
+      } else if (processos.length === 0) {
+        escavadorContext = `\n[RESULTADO BUSCA ESCAVADOR]\nNenhum processo encontrado para o CPF ${cpfDetectado}. Informe ao cliente que não foram localizados processos vinculados a este CPF.`;
+      } else {
+        // Buscar detalhes dos primeiros processos (max 3 para economizar créditos)
+        const detalhesMap = new Map<string, any>();
+        const detailPromises = processos.slice(0, 3).map(async (proc: any) => {
+          const cnj = proc.numero_cnj || proc.numero_processo;
+          if (cnj) {
+            const detalhe = await buscarDetalhesProcesso(cnj);
+            if (detalhe) detalhesMap.set(cnj, detalhe);
+          }
+        });
+        await Promise.all(detailPromises);
+
+        escavadorContext = formatarProcessosEscavador(processos, detalhesMap);
+      }
+
+      // Registrar busca
+      await supabase.from('system_events').insert({
+        tipo: 'escavador_cpf_search',
+        fonte: 'isa_escritorio',
+        dados: { lead_id, cpf: cpfDetectado, resultados: processos?.length || 0 }
+      });
+    }
+
     // Buscar contexto completo do lead
     const context = await getLeadFullContext(lead_id, supabase);
 
-    // Gerar resposta
-    const response = await generateResponse(processedMessage, context);
+    // Combinar contextos
+    const fullContext = context + escavadorContext;
 
-    // Limpar tags da resposta para envio (não exibir pro cliente)
+    // Gerar resposta
+    const response = await generateResponse(processedMessage, fullContext);
+
+    // Limpar tags da resposta para envio
     const cleanResponse = response
       .replace(/\[TRANSFERIR_HUMANO\]\s*/g, '')
       .replace(/\[AGENDAR_ADVOGADO\]\s*/g, '')
