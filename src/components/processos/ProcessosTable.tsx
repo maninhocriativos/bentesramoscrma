@@ -171,7 +171,7 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
       <div className="md:hidden rounded-xl border border-border bg-card shadow-soft overflow-hidden divide-y divide-border">
         {paginatedProcessos.map((processo) => {
           const style = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
-          const clienteName = getClienteName(processo.cliente_id);
+          const clienteName = getClienteName(processo);
           const partes = processo.partes_json || [];
           const parteAtiva = partes.find(p => p.polo === 'ativo');
 
