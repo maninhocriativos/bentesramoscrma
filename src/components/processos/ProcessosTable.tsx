@@ -36,15 +36,23 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
   );
 
   const getClienteName = (processo: Processo) => {
-    // Always prefer nome_cliente from the processo record (imported from CSV/DB)
-    if (processo.nome_cliente) {
-      return processo.nome_cliente;
-    }
+    if (processo.nome_cliente) return processo.nome_cliente;
     if (processo.cliente_id) {
       const lead = leads.find(l => l.id === processo.cliente_id);
       if (lead?.nome) return lead.nome;
     }
-    return null;
+    // Fallback: try active party name (polo can be 'ativo', 'AT', 'Ativo', etc.)
+    const partes = processo.partes_json || [];
+    const parteAtiva = partes.find(p => 
+      p.polo?.toLowerCase() === 'ativo' || p.polo === 'AT' || 
+      p.tipo?.toLowerCase()?.includes('autor') || p.tipo?.toLowerCase()?.includes('requerente')
+    );
+    return parteAtiva?.nome || partes[0]?.nome || null;
+  };
+
+  const truncateStatus = (text: string, max = 40) => {
+    if (text.length <= max) return text;
+    return text.slice(0, max).trim() + '…';
   };
 
   if (processos.length === 0) {
@@ -74,85 +82,84 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
           {paginatedProcessos.map((processo) => {
             const style = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
             const clienteName = getClienteName(processo);
-            const partes = processo.partes_json || [];
-            const parteAtiva = partes.find(p => p.polo === 'ativo');
-            const partePassiva = partes.find(p => p.polo === 'passivo');
             const movCount = processo.movimentos_json?.length || 0;
             
-            // Get real procedural status from Escavador data
+            // Real procedural status from Escavador
             const ultimaMovimentacao = processo.movimentos_json?.[0];
             const statusReal = processo.status_detalhado || ultimaMovimentacao?.nome || null;
             const dataUltimaAtualizacao = processo.data_ultima_atualizacao || ultimaMovimentacao?.dataHora;
 
+            // Opposing party for display
+            const partes = processo.partes_json || [];
+            const partePassiva = partes.find(p => 
+              p.polo?.toLowerCase() === 'passivo' || p.polo === 'PA' ||
+              p.tipo?.toLowerCase()?.includes('réu') || p.tipo?.toLowerCase()?.includes('requerido')
+            );
+
             return (
               <div
                 key={processo.id}
-                className="grid grid-cols-[1fr_1.2fr_0.7fr_minmax(200px,1fr)] gap-4 px-5 py-4 cursor-pointer hover:bg-accent/30 transition-colors group"
+                className="grid grid-cols-[1fr_1.2fr_0.7fr_minmax(180px,auto)] gap-4 px-5 py-3.5 cursor-pointer hover:bg-accent/30 transition-colors group"
                 onClick={() => onProcessoClick(processo)}
               >
-                {/* Cliente / Partes */}
-                <div className="space-y-1.5 min-w-0">
-                  {clienteName ? (
-                    <p className="text-sm font-semibold text-foreground truncate">{clienteName}</p>
-                  ) : parteAtiva ? (
-                    <p className="text-sm font-semibold text-foreground truncate">{parteAtiva.nome}</p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground/50">—</p>
-                  )}
+                {/* Cliente */}
+                <div className="min-w-0 flex flex-col justify-center gap-0.5">
+                  <p className="text-sm font-semibold text-foreground truncate">
+                    {clienteName || processo.titulo_acao || 'Sem identificação'}
+                  </p>
                   {partePassiva && (
-                    <p className="text-xs text-muted-foreground truncate">vs {partePassiva.nome}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">vs {partePassiva.nome}</p>
                   )}
                 </div>
 
                 {/* Número do Processo */}
-                <div className="space-y-1 min-w-0">
+                <div className="min-w-0 flex flex-col justify-center gap-0.5">
                   <p className="font-mono text-sm font-semibold text-foreground truncate">
                     {processo.numero_processo || '—'}
                   </p>
                   {(processo.classe_cnj || processo.assunto || processo.titulo_acao) && (
-                    <p className="text-xs text-muted-foreground truncate">
+                    <p className="text-[11px] text-muted-foreground truncate">
                       {processo.classe_cnj || processo.assunto || processo.titulo_acao}
                     </p>
                   )}
                 </div>
 
                 {/* Tribunal */}
-                <div className="min-w-0">
+                <div className="min-w-0 flex flex-col justify-center">
                   {processo.tribunal ? (
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted text-xs font-medium text-foreground">
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted text-xs font-medium text-foreground w-fit">
                       <Building2 className="h-3 w-3 text-muted-foreground shrink-0" />
                       {processo.tribunal}
                     </span>
                   ) : (
                     <span className="text-sm text-muted-foreground/50">—</span>
                   )}
-                  {processo.orgao_julgador && processo.orgao_julgador !== 'Não informado' && (
-                    <p className="text-[11px] text-muted-foreground truncate mt-1">{processo.orgao_julgador}</p>
-                  )}
                 </div>
 
-                {/* Situação Atual - real status from Escavador */}
-                <div className="flex flex-col items-end gap-2 min-w-0">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${style.bg} ${style.text}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${style.dot}`} />
-                    {processo.status || 'Indefinido'}
-                  </span>
-                  {statusReal && (
-                    <p className="text-[11px] font-medium text-muted-foreground text-right truncate max-w-full leading-tight">
-                      {statusReal}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-1.5 mt-auto">
-                    {dataUltimaAtualizacao && (
-                      <span className="text-[10px] text-muted-foreground/60">
-                        {format(new Date(dataUltimaAtualizacao), "dd/MM/yy", { locale: ptBR })}
-                      </span>
+                {/* Situação Atual */}
+                <div className="flex items-center justify-end gap-3 min-w-0">
+                  <div className="flex flex-col items-end gap-1 min-w-0">
+                    {statusReal && (
+                      <p className="text-[11px] font-medium text-muted-foreground text-right truncate max-w-[180px] leading-snug" title={statusReal}>
+                        {truncateStatus(statusReal)}
+                      </p>
                     )}
-                    {movCount > 0 && (
-                      <span className="text-[10px] text-muted-foreground/50">• {movCount} mov.</span>
-                    )}
-                    <ChevronRight className="h-4 w-4 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="flex items-center gap-1.5">
+                      {dataUltimaAtualizacao && (
+                        <span className="text-[10px] text-muted-foreground/50">
+                          {format(new Date(dataUltimaAtualizacao), "dd/MM/yy", { locale: ptBR })}
+                        </span>
+                      )}
+                      {movCount > 0 && (
+                        <span className="text-[10px] text-muted-foreground/40">• {movCount} mov.</span>
+                      )}
+                    </div>
                   </div>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap shrink-0 ${style.bg} ${style.text}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${style.dot}`} />
+                    {processo.status || '—'}
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                 </div>
               </div>
             );
@@ -164,8 +171,6 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
         {paginatedProcessos.map((processo) => {
           const style = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
           const clienteName = getClienteName(processo);
-          const partes = processo.partes_json || [];
-          const parteAtiva = partes.find(p => p.polo === 'ativo');
           const statusReal = processo.status_detalhado || processo.movimentos_json?.[0]?.nome || null;
 
           return (
@@ -179,18 +184,18 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${style.bg} ${style.text}`}>
                       <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-                      {processo.status || 'Indefinido'}
+                      {processo.status || '—'}
                     </span>
                     {processo.tribunal && (
                       <span className="text-[10px] text-muted-foreground">{processo.tribunal}</span>
                     )}
                   </div>
                   <p className="font-semibold text-sm truncate">
-                    {clienteName || parteAtiva?.nome || processo.titulo_acao || 'Sem título'}
+                    {clienteName || processo.titulo_acao || 'Sem identificação'}
                   </p>
                   <p className="font-mono text-xs text-muted-foreground">{processo.numero_processo || '—'}</p>
                   {statusReal && (
-                    <p className="text-[11px] font-medium text-muted-foreground truncate">{statusReal}</p>
+                    <p className="text-[11px] font-medium text-muted-foreground truncate">{truncateStatus(statusReal, 50)}</p>
                   )}
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground/40 mt-1 shrink-0" />
