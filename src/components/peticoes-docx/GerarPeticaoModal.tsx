@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,64 +9,62 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { FileText, Loader2, Sparkles } from 'lucide-react';
 import type { ModeloPeticao } from '@/hooks/useModelosPeticaoDocx';
 
+const FIELD_LABELS: Record<string, { label: string; placeholder: string; type?: 'textarea' }> = {
+  NOME_COMPLETO: { label: 'Nome completo do cliente *', placeholder: 'Nome completo' },
+  QUALIFICACAO: { label: 'Qualificação', placeholder: 'Ex: brasileiro, casado, professor, portador do...' },
+  CPF: { label: 'CPF', placeholder: '000.000.000-00' },
+  RG: { label: 'RG', placeholder: 'Número do RG' },
+  RG_MILITAR: { label: 'RG Militar', placeholder: 'Número do RG Militar' },
+  DOC_ID: { label: 'Registro Geral (Doc ID)', placeholder: 'Número do documento' },
+  ENDERECO_CLIENTE: { label: 'Endereço completo', placeholder: 'Rua, número, bairro, cidade - UF' },
+  TIPO_ACAO: { label: 'Tipo da Ação', placeholder: 'Ex: Ação de Obrigação de Fazer c/c Indenização' },
+  REU_NOME: { label: 'Nome do réu / parte contrária', placeholder: 'Nome da parte ré/requerida' },
+  REU_CNPJ: { label: 'CNPJ do réu', placeholder: '00.000.000/0000-00' },
+  REU_ENDERECO: { label: 'Endereço do réu', placeholder: 'Endereço completo do réu' },
+  VARA_JUIZO: { label: 'Vara / Juízo', placeholder: 'Ex: 1ª Vara Cível de Manaus' },
+  COMARCA: { label: 'Comarca', placeholder: 'Ex: Manaus/AM' },
+  IDOSO_IDADE: { label: 'Idade do idoso (por extenso)', placeholder: 'Ex: 68 (SESSENTA E OITO)' },
+};
+
 interface GerarPeticaoModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   modelos: ModeloPeticao[];
-  onGenerate: (modeloId: string, dados: {
-    cliente_nome: string;
-    cliente_cpf_rg: string;
-    cliente_endereco: string;
-    valor_causa: string;
-    parte_contraria: string;
-    vara_comarca: string;
-    informacoes_adicionais: string;
-  }) => Promise<ArrayBuffer | null>;
+  onGenerate: (modeloId: string, dados: Record<string, string>) => Promise<ArrayBuffer | null>;
   onPreview: (docxBuffer: ArrayBuffer) => void;
 }
 
 export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGenerate, onPreview }: GerarPeticaoModalProps) {
   const [modeloId, setModeloId] = useState('');
-  const [clienteNome, setClienteNome] = useState('');
-  const [cpfRg, setCpfRg] = useState('');
-  const [endereco, setEndereco] = useState('');
-  const [valorCausa, setValorCausa] = useState('');
-  const [parteContraria, setParteContraria] = useState('');
-  const [varaComarca, setVaraComarca] = useState('');
-  const [infoAdicionais, setInfoAdicionais] = useState('');
+  const [formData, setFormData] = useState<Record<string, string>>({});
   const [generating, setGenerating] = useState(false);
 
-  const formatCurrency = (value: string) => {
-    const digits = value.replace(/\D/g, '');
-    const num = parseInt(digits || '0') / 100;
-    return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const selectedModelo = useMemo(() => modelos.find(m => m.id === modeloId), [modelos, modeloId]);
+
+  const modelVars = useMemo(() => {
+    if (!selectedModelo) return [];
+    return selectedModelo.variaveis.map(v => v.variavel);
+  }, [selectedModelo]);
+
+  const handleModelChange = (id: string) => {
+    setModeloId(id);
+    setFormData({});
+  };
+
+  const handleFieldChange = (varName: string, value: string) => {
+    setFormData(prev => ({ ...prev, [varName]: value }));
   };
 
   const handleGenerate = async () => {
-    if (!modeloId || !clienteNome) return;
+    if (!modeloId || !formData.NOME_COMPLETO) return;
     setGenerating(true);
     try {
-      const result = await onGenerate(modeloId, {
-        cliente_nome: clienteNome,
-        cliente_cpf_rg: cpfRg,
-        cliente_endereco: endereco,
-        valor_causa: valorCausa,
-        parte_contraria: parteContraria,
-        vara_comarca: varaComarca,
-        informacoes_adicionais: infoAdicionais,
-      });
+      const result = await onGenerate(modeloId, formData);
       if (result) {
         onPreview(result);
         onOpenChange(false);
-        // Reset form
         setModeloId('');
-        setClienteNome('');
-        setCpfRg('');
-        setEndereco('');
-        setValorCausa('');
-        setParteContraria('');
-        setVaraComarca('');
-        setInfoAdicionais('');
+        setFormData({});
       }
     } finally {
       setGenerating(false);
@@ -82,7 +80,7 @@ export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGener
             Nova Petição
           </DialogTitle>
           <DialogDescription>
-            Preencha os dados do cliente e selecione o modelo para gerar o documento.
+            Selecione o modelo e preencha os dados para gerar o documento.
           </DialogDescription>
         </DialogHeader>
 
@@ -90,7 +88,7 @@ export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGener
           <div className="space-y-4 pr-3">
             <div>
               <Label>Selecionar Modelo *</Label>
-              <Select value={modeloId} onValueChange={setModeloId}>
+              <Select value={modeloId} onValueChange={handleModelChange}>
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Escolha o tipo de petição" />
                 </SelectTrigger>
@@ -107,55 +105,33 @@ export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGener
               </Select>
             </div>
 
-            <div>
-              <Label>Nome completo do cliente *</Label>
-              <Input value={clienteNome} onChange={e => setClienteNome(e.target.value)} placeholder="Nome completo" className="mt-1" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>CPF / RG</Label>
-                <Input value={cpfRg} onChange={e => setCpfRg(e.target.value)} placeholder="000.000.000-00" className="mt-1" />
-              </div>
-              <div>
-                <Label>Valor da Causa</Label>
-                <Input
-                  value={valorCausa}
-                  onChange={e => setValorCausa(formatCurrency(e.target.value))}
-                  placeholder="R$ 0,00"
-                  className="mt-1"
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label>Endereço completo</Label>
-              <Input value={endereco} onChange={e => setEndereco(e.target.value)} placeholder="Rua, número, bairro, cidade - UF" className="mt-1" />
-            </div>
-
-            <div>
-              <Label>Parte contrária</Label>
-              <Input value={parteContraria} onChange={e => setParteContraria(e.target.value)} placeholder="Nome da parte ré/requerida" className="mt-1" />
-            </div>
-
-            <div>
-              <Label>Vara / Comarca</Label>
-              <Input value={varaComarca} onChange={e => setVaraComarca(e.target.value)} placeholder="Ex: 1ª Vara Cível de Manaus" className="mt-1" />
-            </div>
-
-            <div>
-              <Label>Informações adicionais</Label>
-              <Textarea
-                value={infoAdicionais}
-                onChange={e => setInfoAdicionais(e.target.value)}
-                placeholder="Dados específicos desta petição que devem constar no documento..."
-                className="mt-1 min-h-[100px]"
-              />
-            </div>
+            {modelVars.map(varName => {
+              const field = FIELD_LABELS[varName] || { label: varName, placeholder: '' };
+              return (
+                <div key={varName}>
+                  <Label>{field.label}</Label>
+                  {field.type === 'textarea' ? (
+                    <Textarea
+                      value={formData[varName] || ''}
+                      onChange={e => handleFieldChange(varName, e.target.value)}
+                      placeholder={field.placeholder}
+                      className="mt-1 min-h-[80px]"
+                    />
+                  ) : (
+                    <Input
+                      value={formData[varName] || ''}
+                      onChange={e => handleFieldChange(varName, e.target.value)}
+                      placeholder={field.placeholder}
+                      className="mt-1"
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </ScrollArea>
 
-        <Button onClick={handleGenerate} disabled={!modeloId || !clienteNome || generating} className="w-full mt-2">
+        <Button onClick={handleGenerate} disabled={!modeloId || !formData.NOME_COMPLETO || generating} className="w-full mt-2">
           {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
           {generating ? 'Gerando Petição...' : 'Gerar Petição'}
         </Button>
