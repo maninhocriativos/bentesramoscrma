@@ -244,19 +244,19 @@ export function ImportProcessosCsvModal({ isOpen, onClose }: ImportProcessosCsvM
               </div>
               <Badge variant="outline">{parsed.length} processos</Badge>
             </div>
-            <ScrollArea className="flex-1 min-h-0 max-h-[50vh] rounded-lg border border-border">
+            <div className="flex-1 min-h-0 max-h-[50vh] rounded-lg border border-border overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/30 scrollbar-track-transparent">
               <div className="divide-y divide-border">
                 {parsed.map((p, i) => (
-                  <div key={i} className="px-3 py-2 flex items-center justify-between text-sm">
+                  <div key={i} className="px-4 py-2.5 flex items-start justify-between text-sm gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="font-mono text-xs truncate">{p.numero_processo}</p>
-                      <p className="text-xs text-muted-foreground truncate">{p.titulo_acao || p.assunto || '—'}</p>
+                      <p className="font-mono text-xs">{p.numero_processo}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 whitespace-normal break-words">{p.titulo_acao || p.assunto || '—'}</p>
                     </div>
-                    <Badge variant="secondary" className="text-[10px] shrink-0 ml-2">{p.status || 'Em Andamento'}</Badge>
+                    <Badge variant="secondary" className="text-[10px] shrink-0 mt-0.5">{p.status || 'Em Andamento'}</Badge>
                   </div>
                 ))}
               </div>
-            </ScrollArea>
+            </div>
             <div className="flex gap-2 justify-end shrink-0">
               <Button variant="outline" onClick={reset}>Cancelar</Button>
               <Button onClick={handleImport}>
