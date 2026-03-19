@@ -216,7 +216,7 @@ export function useModelosPeticaoDocx() {
       return null;
     }
 
-    const output = doc.getZip().generate({ type: 'uint8array' });
+    const output = doc.getZip().generate({ type: 'arraybuffer' }) as ArrayBuffer;
 
     // Upload generated file
     const fileName = `geradas/${Date.now()}_${dados.cliente_nome.replace(/\s+/g, '_')}.docx`;
