@@ -36,11 +36,14 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
   );
 
   const getClienteName = (processo: Processo) => {
-    if (processo.cliente_id) {
-      const lead = leads.find(l => l.id === processo.cliente_id);
-      if (lead?.nome) return lead.nome;
+    const leadName = processo.cliente_id
+      ? leads.find(l => l.id === processo.cliente_id)?.nome
+      : null;
+    // Prefer nome_cliente when lead name is missing or suspiciously short
+    if (processo.nome_cliente && (!leadName || leadName.length < 3)) {
+      return processo.nome_cliente;
     }
-    return processo.nome_cliente || null;
+    return leadName || processo.nome_cliente || null;
   };
 
   if (processos.length === 0) {
