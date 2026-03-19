@@ -11,6 +11,7 @@ interface CreateProcessoModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   clienteId: string;
+  clienteNome?: string;
   onSuccess: () => void;
 }
 
