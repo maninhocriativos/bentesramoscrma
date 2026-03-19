@@ -148,13 +148,23 @@ export default function ModelosPeticaoTab({ modelos, onUpload, onDelete, onSelec
                             )}
                           </div>
                         </div>
-                        <Button
-                          variant="ghost" size="icon"
-                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive/60 hover:text-destructive hover:bg-destructive/5"
-                          onClick={() => setDeleteTarget(modelo)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <Button
+                            variant="ghost" size="sm"
+                            className="h-7 text-xs gap-1 opacity-0 group-hover:opacity-100 transition-opacity text-primary"
+                            onClick={(e) => { e.stopPropagation(); onSelectModel?.(modelo.id); }}
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            Gerar
+                          </Button>
+                          <Button
+                            variant="ghost" size="icon"
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive/60 hover:text-destructive hover:bg-destructive/5"
+                            onClick={(e) => { e.stopPropagation(); setDeleteTarget(modelo); }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>
