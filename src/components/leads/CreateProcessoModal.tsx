@@ -23,7 +23,7 @@ const STATUSES: ProcessoStatus[] = [
   'Perdido',
 ];
 
-export function CreateProcessoModal({ open, onOpenChange, clienteId, onSuccess }: CreateProcessoModalProps) {
+export function CreateProcessoModal({ open, onOpenChange, clienteId, clienteNome, onSuccess }: CreateProcessoModalProps) {
   const { createProcesso } = useProcessos();
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
