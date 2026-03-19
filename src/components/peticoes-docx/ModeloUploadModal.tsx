@@ -6,7 +6,24 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Upload, Plus, Trash2, FileText, Loader2, Variable } from 'lucide-react';
-import { VARIAVEIS_PADRAO, type VariavelMapping } from '@/hooks/useModelosPeticaoDocx';
+import type { VariavelMapping } from '@/hooks/useModelosPeticaoDocx';
+
+const VARIAVEIS_PADRAO = [
+  { variavel: 'NOME_COMPLETO', label: 'Nome Completo' },
+  { variavel: 'QUALIFICACAO', label: 'Qualificação' },
+  { variavel: 'CPF', label: 'CPF' },
+  { variavel: 'RG', label: 'RG' },
+  { variavel: 'ENDERECO_CLIENTE', label: 'Endereço do Cliente' },
+  { variavel: 'TIPO_ACAO', label: 'Tipo da Ação' },
+  { variavel: 'REU_NOME', label: 'Nome do Réu' },
+  { variavel: 'REU_CNPJ', label: 'CNPJ do Réu' },
+  { variavel: 'REU_ENDERECO', label: 'Endereço do Réu' },
+  { variavel: 'VARA_JUIZO', label: 'Vara / Juízo' },
+  { variavel: 'COMARCA', label: 'Comarca' },
+  { variavel: 'RG_MILITAR', label: 'RG Militar' },
+  { variavel: 'DOC_ID', label: 'Registro Geral (Doc ID)' },
+  { variavel: 'IDOSO_IDADE', label: 'Idade do Idoso' },
+];
 
 interface ModeloUploadModalProps {
   open: boolean;
