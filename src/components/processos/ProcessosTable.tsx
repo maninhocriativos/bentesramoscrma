@@ -3,7 +3,7 @@ import { Processo } from '@/types/processos';
 import { LeadName } from '@/hooks/useLeadNames';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Scale, ChevronRight, Building2, Gavel, User, Users, FileText, Clock } from 'lucide-react';
+import { Scale, ChevronRight, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const ITEMS_PER_PAGE = 30;
@@ -22,11 +22,6 @@ const statusConfig: Record<string, { bg: string; text: string; dot: string }> = 
   'Perdido': { bg: 'bg-red-50 dark:bg-red-950/30', text: 'text-red-700 dark:text-red-400', dot: 'bg-red-500' },
 };
 
-const poloBadgeConfig: Record<string, { bg: string; text: string }> = {
-  'ativo': { bg: 'bg-emerald-600', text: 'text-white' },
-  'passivo': { bg: 'bg-purple-600', text: 'text-white' },
-};
-
 export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const totalPages = Math.ceil(processos.length / ITEMS_PER_PAGE);
@@ -41,16 +36,15 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
       const lead = leads.find(l => l.id === processo.cliente_id);
       if (lead?.nome) return lead.nome;
     }
-    // Fallback: try active party name (polo can be 'ativo', 'AT', 'Ativo', etc.)
     const partes = processo.partes_json || [];
     const parteAtiva = partes.find(p => 
       p.polo?.toLowerCase() === 'ativo' || p.polo === 'AT' || 
       p.tipo?.toLowerCase()?.includes('autor') || p.tipo?.toLowerCase()?.includes('requerente')
     );
-    return parteAtiva?.nome || partes[0]?.nome || null;
+    return parteAtiva?.nome || null;
   };
 
-  const truncateStatus = (text: string, max = 40) => {
+  const truncateText = (text: string, max: number) => {
     if (text.length <= max) return text;
     return text.slice(0, max).trim() + '…';
   };
@@ -67,106 +61,105 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
 
   return (
     <div className="space-y-0">
-      {/* Desktop Card List */}
+      {/* Desktop Table */}
       <div className="hidden md:block rounded-xl border border-border bg-card shadow-soft overflow-hidden">
-        {/* Header */}
-        <div className="grid grid-cols-[1fr_1.2fr_0.7fr_minmax(200px,1fr)] gap-4 px-5 py-3 bg-muted/40 border-b border-border">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cliente</span>
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Processo</span>
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tribunal</span>
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Situação Atual</span>
-        </div>
+        <table className="w-full">
+          <thead>
+            <tr className="bg-muted/40 border-b border-border">
+              <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-3 w-[25%]">Cliente</th>
+              <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3 w-[28%]">Processo</th>
+              <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-4 py-3 w-[10%]">Tribunal</th>
+              <th className="text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-3 w-[37%]">Situação Atual</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {paginatedProcessos.map((processo) => {
+              const style = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
+              const clienteName = getClienteName(processo);
+              const movCount = processo.movimentos_json?.length || 0;
+              const ultimaMovimentacao = processo.movimentos_json?.[0];
+              const statusReal = processo.status_detalhado || ultimaMovimentacao?.nome || null;
+              const dataUltimaAtualizacao = processo.data_ultima_atualizacao || ultimaMovimentacao?.dataHora;
 
-        {/* Rows */}
-        <div className="divide-y divide-border">
-          {paginatedProcessos.map((processo) => {
-            const style = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
-            const clienteName = getClienteName(processo);
-            const movCount = processo.movimentos_json?.length || 0;
-            
-            // Real procedural status from Escavador
-            const ultimaMovimentacao = processo.movimentos_json?.[0];
-            const statusReal = processo.status_detalhado || ultimaMovimentacao?.nome || null;
-            const dataUltimaAtualizacao = processo.data_ultima_atualizacao || ultimaMovimentacao?.dataHora;
-
-            // Opposing party for display
-            const partes = processo.partes_json || [];
-            const partePassiva = partes.find(p => 
-              p.polo?.toLowerCase() === 'passivo' || p.polo === 'PA' ||
-              p.tipo?.toLowerCase()?.includes('réu') || p.tipo?.toLowerCase()?.includes('requerido')
-            );
-
-            return (
-              <div
-                key={processo.id}
-                className="grid grid-cols-[1fr_1.2fr_0.7fr_minmax(180px,auto)] gap-4 px-5 py-3.5 cursor-pointer hover:bg-accent/30 transition-colors group"
-                onClick={() => onProcessoClick(processo)}
-              >
-                {/* Cliente */}
-                <div className="min-w-0 flex flex-col justify-center gap-0.5">
-                  <p className="text-sm font-semibold text-foreground truncate">
-                    {clienteName || processo.titulo_acao || 'Sem identificação'}
-                  </p>
-                  {partePassiva && (
-                    <p className="text-[11px] text-muted-foreground truncate">vs {partePassiva.nome}</p>
-                  )}
-                </div>
-
-                {/* Número do Processo */}
-                <div className="min-w-0 flex flex-col justify-center gap-0.5">
-                  <p className="font-mono text-sm font-semibold text-foreground truncate">
-                    {processo.numero_processo || '—'}
-                  </p>
-                  {(processo.classe_cnj || processo.assunto || processo.titulo_acao) && (
-                    <p className="text-[11px] text-muted-foreground truncate">
-                      {processo.classe_cnj || processo.assunto || processo.titulo_acao}
+              return (
+                <tr
+                  key={processo.id}
+                  className="cursor-pointer hover:bg-accent/30 transition-colors group"
+                  onClick={() => onProcessoClick(processo)}
+                >
+                  {/* Cliente */}
+                  <td className="px-5 py-3 align-middle">
+                    <p className="text-sm font-semibold text-foreground truncate max-w-[220px]">
+                      {clienteName || '—'}
                     </p>
-                  )}
-                </div>
-
-                {/* Tribunal */}
-                <div className="min-w-0 flex flex-col justify-center">
-                  {processo.tribunal ? (
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted text-xs font-medium text-foreground w-fit">
-                      <Building2 className="h-3 w-3 text-muted-foreground shrink-0" />
-                      {processo.tribunal}
-                    </span>
-                  ) : (
-                    <span className="text-sm text-muted-foreground/50">—</span>
-                  )}
-                </div>
-
-                {/* Situação Atual */}
-                <div className="flex items-center justify-end gap-3 min-w-0">
-                  <div className="flex flex-col items-end gap-1 min-w-0">
-                    {statusReal && (
-                      <p className="text-[11px] font-medium text-muted-foreground text-right truncate max-w-[180px] leading-snug" title={statusReal}>
-                        {truncateStatus(statusReal)}
+                    {processo.classe_cnj && (
+                      <p className="text-[11px] text-muted-foreground truncate max-w-[220px] mt-0.5">
+                        {processo.classe_cnj}
                       </p>
                     )}
-                    <div className="flex items-center gap-1.5">
-                      {dataUltimaAtualizacao && (
-                        <span className="text-[10px] text-muted-foreground/50">
-                          {format(new Date(dataUltimaAtualizacao), "dd/MM/yy", { locale: ptBR })}
-                        </span>
-                      )}
-                      {movCount > 0 && (
-                        <span className="text-[10px] text-muted-foreground/40">• {movCount} mov.</span>
-                      )}
+                  </td>
+
+                  {/* Número do Processo */}
+                  <td className="px-4 py-3 align-middle">
+                    <p className="font-mono text-[13px] font-semibold text-foreground">
+                      {processo.numero_processo || '—'}
+                    </p>
+                    {processo.assunto && (
+                      <p className="text-[11px] text-muted-foreground truncate max-w-[260px] mt-0.5">
+                        {processo.assunto}
+                      </p>
+                    )}
+                  </td>
+
+                  {/* Tribunal */}
+                  <td className="px-4 py-3 align-middle">
+                    {processo.tribunal ? (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted text-[11px] font-medium text-foreground">
+                        <Building2 className="h-3 w-3 text-muted-foreground shrink-0" />
+                        {processo.tribunal}
+                      </span>
+                    ) : (
+                      <span className="text-sm text-muted-foreground/40">—</span>
+                    )}
+                  </td>
+
+                  {/* Situação Atual */}
+                  <td className="px-5 py-3 align-middle">
+                    <div className="flex items-center justify-end gap-3">
+                      {/* Status details */}
+                      <div className="flex flex-col items-end gap-0.5 min-w-0">
+                        {statusReal && (
+                          <p className="text-[11px] font-medium text-muted-foreground text-right truncate max-w-[200px]" title={statusReal}>
+                            {truncateText(statusReal, 35)}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-1.5">
+                          {dataUltimaAtualizacao && (
+                            <span className="text-[10px] text-muted-foreground/50">
+                              {format(new Date(dataUltimaAtualizacao), "dd/MM/yy", { locale: ptBR })}
+                            </span>
+                          )}
+                          {movCount > 0 && (
+                            <span className="text-[10px] text-muted-foreground/40">• {movCount} mov.</span>
+                          )}
+                        </div>
+                      </div>
+                      {/* Badge */}
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap shrink-0 ${style.bg} ${style.text}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${style.dot}`} />
+                        {processo.status || '—'}
+                      </span>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/20 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                     </div>
-                  </div>
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap shrink-0 ${style.bg} ${style.text}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${style.dot}`} />
-                    {processo.status || '—'}
-                  </span>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
+      {/* Mobile Cards */}
       <div className="md:hidden rounded-xl border border-border bg-card shadow-soft overflow-hidden divide-y divide-border">
         {paginatedProcessos.map((processo) => {
           const style = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
@@ -191,11 +184,11 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
                     )}
                   </div>
                   <p className="font-semibold text-sm truncate">
-                    {clienteName || processo.titulo_acao || 'Sem identificação'}
+                    {clienteName || 'Sem identificação'}
                   </p>
                   <p className="font-mono text-xs text-muted-foreground">{processo.numero_processo || '—'}</p>
                   {statusReal && (
-                    <p className="text-[11px] font-medium text-muted-foreground truncate">{truncateStatus(statusReal, 50)}</p>
+                    <p className="text-[11px] font-medium text-muted-foreground truncate">{truncateText(statusReal, 50)}</p>
                   )}
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground/40 mt-1 shrink-0" />
