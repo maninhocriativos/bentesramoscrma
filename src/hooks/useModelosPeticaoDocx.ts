@@ -170,7 +170,7 @@ export function useModelosPeticaoDocx() {
       vara_comarca: string;
       informacoes_adicionais: string;
     }
-  ): Promise<Uint8Array | null> => {
+  ): Promise<ArrayBuffer | null> => {
     const modelo = modelos.find(m => m.id === modeloId);
     if (!modelo) {
       toast.error('Modelo não encontrado');
