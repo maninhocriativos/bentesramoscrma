@@ -222,7 +222,7 @@ export function useModelosPeticaoDocx() {
     const fileName = `geradas/${Date.now()}_${dados.cliente_nome.replace(/\s+/g, '_')}.docx`;
     const { error: uploadError } = await supabase.storage
       .from('peticoes-modelos')
-      .upload(fileName, output);
+      .upload(fileName, new Uint8Array(output));
 
     if (uploadError) {
       console.error('Erro ao fazer upload:', uploadError);

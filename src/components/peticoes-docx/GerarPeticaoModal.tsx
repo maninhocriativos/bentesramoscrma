@@ -21,8 +21,8 @@ interface GerarPeticaoModalProps {
     parte_contraria: string;
     vara_comarca: string;
     informacoes_adicionais: string;
-  }) => Promise<Uint8Array | null>;
-  onPreview: (docxBuffer: Uint8Array) => void;
+  }) => Promise<ArrayBuffer | null>;
+  onPreview: (docxBuffer: ArrayBuffer) => void;
 }
 
 export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGenerate, onPreview }: GerarPeticaoModalProps) {
