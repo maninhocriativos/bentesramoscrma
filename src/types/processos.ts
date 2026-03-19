@@ -30,6 +30,7 @@ export interface Processo {
   advogado_responsavel: string | null;
   cliente_id: string | null;
   cpf_cliente: string | null;
+  nome_cliente: string | null;
   created_at: string | null;
   // Campos de notificação
   frequencia_notificacao_dias: number | null;

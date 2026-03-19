@@ -22,6 +22,7 @@ interface ParsedProcesso {
   vara_comarca?: string;
   valor_causa?: number;
   cpf_cliente?: string;
+  nome_cliente?: string;
   area?: string;
   fase?: string;
   descricao?: string;
@@ -78,6 +79,8 @@ export function ImportProcessosCsvModal({ isOpen, onClose }: ImportProcessosCsvM
       'valor': 'valor_causa',
       'cpf': 'cpf_cliente',
       'cpf_cliente': 'cpf_cliente',
+      'nome_cliente': 'nome_cliente',
+      'cliente': 'nome_cliente',
       'area': 'area',
       'fase': 'fase',
       'descricao': 'descricao',
@@ -98,6 +101,7 @@ export function ImportProcessosCsvModal({ isOpen, onClose }: ImportProcessosCsvM
         titulo_acao: row.titulo_acao || undefined,
         advogado_responsavel: row.advogado_responsavel || undefined,
         status: row.status || 'Em Andamento',
+        nome_cliente: row.nome_cliente || undefined,
         tribunal: row.tribunal || undefined,
         assunto: row.assunto || undefined,
         vara_comarca: row.vara_comarca || undefined,
@@ -184,6 +188,7 @@ export function ImportProcessosCsvModal({ isOpen, onClose }: ImportProcessosCsvM
           vara_comarca: proc.vara_comarca || null,
           valor_causa: proc.valor_causa || null,
           cpf_cliente: proc.cpf_cliente || null,
+          nome_cliente: proc.nome_cliente || null,
           cliente_id: clienteId,
           area: proc.area || null,
           fase: proc.fase || null,

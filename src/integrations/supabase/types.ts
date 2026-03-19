@@ -2992,6 +2992,7 @@ export type Database = {
           marcadores: string | null
           monitorar_push: boolean | null
           movimentos_json: Json | null
+          nome_cliente: string | null
           notificacao_ativa: boolean | null
           numero_complementar: string | null
           numero_processo: string | null
@@ -3053,6 +3054,7 @@ export type Database = {
           marcadores?: string | null
           monitorar_push?: boolean | null
           movimentos_json?: Json | null
+          nome_cliente?: string | null
           notificacao_ativa?: boolean | null
           numero_complementar?: string | null
           numero_processo?: string | null
@@ -3114,6 +3116,7 @@ export type Database = {
           marcadores?: string | null
           monitorar_push?: boolean | null
           movimentos_json?: Json | null
+          nome_cliente?: string | null
           notificacao_ativa?: boolean | null
           numero_complementar?: string | null
           numero_processo?: string | null

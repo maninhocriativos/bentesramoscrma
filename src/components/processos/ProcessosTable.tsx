@@ -35,10 +35,12 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
     currentPage * ITEMS_PER_PAGE
   );
 
-  const getClienteName = (clienteId: string | null) => {
-    if (!clienteId) return null;
-    const lead = leads.find(l => l.id === clienteId);
-    return lead?.nome || null;
+  const getClienteName = (processo: Processo) => {
+    if (processo.cliente_id) {
+      const lead = leads.find(l => l.id === processo.cliente_id);
+      if (lead?.nome) return lead.nome;
+    }
+    return processo.nome_cliente || null;
   };
 
   if (processos.length === 0) {
@@ -67,7 +69,7 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
         <div className="divide-y divide-border">
           {paginatedProcessos.map((processo) => {
             const style = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
-            const clienteName = getClienteName(processo.cliente_id);
+            const clienteName = getClienteName(processo);
             const partes = processo.partes_json || [];
             const parteAtiva = partes.find(p => p.polo === 'ativo');
             const partePassiva = partes.find(p => p.polo === 'passivo');
@@ -169,7 +171,7 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
       <div className="md:hidden rounded-xl border border-border bg-card shadow-soft overflow-hidden divide-y divide-border">
         {paginatedProcessos.map((processo) => {
           const style = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
-          const clienteName = getClienteName(processo.cliente_id);
+          const clienteName = getClienteName(processo);
           const partes = processo.partes_json || [];
           const parteAtiva = partes.find(p => p.polo === 'ativo');
 
