@@ -232,7 +232,42 @@ serve(async (req) => {
             updated_at: new Date().toISOString(),
             sync_error_count: 0,
             last_sync_error: null,
+            // Campos enriquecidos
+            classe_cnj: proc.classe || null,
+            assunto_cnj: proc.assuntos?.[0]?.codigo?.toString() || proc.assuntos?.[0]?.nome || null,
+            vara_comarca: proc.orgaoJulgador || null,
+            status_detalhado: proc.statusDetalhado || null,
+            segredo_justica: proc.nivelSigilo === "Segredo de Justiça",
+            sistema_judicial: proc.sistemaProcessual || null,
+            tipo_orgao_julgador: proc.orgaoJulgador || null,
+            data_distribuicao: proc.dataAjuizamento ? parseDataISO(proc.dataAjuizamento) : null,
+            data_ajuizamento: proc.dataAjuizamento ? parseDataISO(proc.dataAjuizamento) : null,
           };
+
+          // Auto-populate nome_cliente from partes if missing
+          if (proc.partes && Array.isArray(proc.partes)) {
+            const parteAutor = proc.partes.find((p: any) =>
+              p.tipo === "Autor" || p.polo?.toUpperCase() === "AT" || p.polo?.toUpperCase() === "PA"
+            );
+            if (parteAutor?.nome) {
+              // Check if nome_cliente is empty
+              const { data: current } = await supabase
+                .from("processos")
+                .select("nome_cliente")
+                .eq("id", processo.id)
+                .single();
+              if (!current?.nome_cliente) {
+                updateData.nome_cliente = parteAutor.nome.toUpperCase();
+              }
+              // Auto-fix CPF
+              if (parteAutor.documento) {
+                const cpfDigits = (parteAutor.documento || "").replace(/\D/g, "");
+                if (cpfDigits.length >= 11) {
+                  updateData.cpf_cliente = cpfDigits;
+                }
+              }
+            }
+          }
 
           await supabase.from("processos").update(updateData).eq("id", processo.id);
 
