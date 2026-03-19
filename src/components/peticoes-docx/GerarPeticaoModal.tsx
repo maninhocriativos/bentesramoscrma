@@ -28,12 +28,15 @@ export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGener
   const [docType, setDocType] = useState<'civil' | 'militar'>('civil');
   const [isIdoso, setIsIdoso] = useState(false);
 
-  // Sync defaultModeloId when modal opens
-  useState(() => {});
-  const prevOpen = useState(false);
-  if (open && defaultModeloId && modeloId !== defaultModeloId && !generating) {
-    // Only set on first open with a new default
-  }
+  // When modal opens with a defaultModeloId, pre-select it
+  useEffect(() => {
+    if (open && defaultModeloId) {
+      setModeloId(defaultModeloId);
+      setFormData({});
+      setDocType('civil');
+      setIsIdoso(false);
+    }
+  }, [open, defaultModeloId]);
 
   // Group models by category
   const groupedModelos = useMemo(() => {
