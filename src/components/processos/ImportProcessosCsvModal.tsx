@@ -79,6 +79,8 @@ export function ImportProcessosCsvModal({ isOpen, onClose }: ImportProcessosCsvM
       'valor': 'valor_causa',
       'cpf': 'cpf_cliente',
       'cpf_cliente': 'cpf_cliente',
+      'nome_cliente': 'nome_cliente',
+      'cliente': 'nome_cliente',
       'area': 'area',
       'fase': 'fase',
       'descricao': 'descricao',
