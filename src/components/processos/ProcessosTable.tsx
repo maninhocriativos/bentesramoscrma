@@ -78,16 +78,20 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
             const parteAtiva = partes.find(p => p.polo === 'ativo');
             const partePassiva = partes.find(p => p.polo === 'passivo');
             const movCount = processo.movimentos_json?.length || 0;
+            
+            // Get real procedural status from Escavador data
+            const ultimaMovimentacao = processo.movimentos_json?.[0];
+            const statusReal = processo.status_detalhado || ultimaMovimentacao?.nome || null;
+            const dataUltimaAtualizacao = processo.data_ultima_atualizacao || ultimaMovimentacao?.dataHora;
 
             return (
               <div
                 key={processo.id}
-                className="grid grid-cols-[1fr_1fr_1fr_auto] gap-4 px-5 py-4 cursor-pointer hover:bg-accent/30 transition-colors group"
+                className="grid grid-cols-[1fr_1.2fr_0.7fr_minmax(200px,1fr)] gap-4 px-5 py-4 cursor-pointer hover:bg-accent/30 transition-colors group"
                 onClick={() => onProcessoClick(processo)}
               >
                 {/* Cliente / Partes */}
                 <div className="space-y-1.5 min-w-0">
-                  <p className="text-xs text-muted-foreground font-medium">Cliente</p>
                   {clienteName ? (
                     <p className="text-sm font-semibold text-foreground truncate">{clienteName}</p>
                   ) : parteAtiva ? (
@@ -95,72 +99,57 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
                   ) : (
                     <p className="text-sm text-muted-foreground/50">—</p>
                   )}
-                  {parteAtiva && (
-                    <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${poloBadgeConfig['ativo'].bg} ${poloBadgeConfig['ativo'].text}`}>
-                      Requerente
-                    </span>
-                  )}
                   {partePassiva && (
-                    <div className="mt-1.5 space-y-0.5">
-                      <p className="text-[11px] text-muted-foreground">Envolvido</p>
-                      <p className="text-xs text-foreground/80 truncate">{partePassiva.nome}</p>
-                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${poloBadgeConfig['passivo'].bg} ${poloBadgeConfig['passivo'].text}`}>
-                        Requerido
-                      </span>
-                    </div>
+                    <p className="text-xs text-muted-foreground truncate">vs {partePassiva.nome}</p>
                   )}
                 </div>
 
                 {/* Número do Processo */}
-                <div className="space-y-1.5 min-w-0">
-                  <p className="text-xs text-muted-foreground font-medium">Número do processo</p>
+                <div className="space-y-1 min-w-0">
                   <p className="font-mono text-sm font-semibold text-foreground truncate">
                     {processo.numero_processo || '—'}
                   </p>
-                  {processo.assunto && (
-                    <>
-                      <p className="text-[11px] text-muted-foreground mt-1">Assunto</p>
-                      <p className="text-xs text-foreground/80 truncate">{processo.assunto}</p>
-                    </>
-                  )}
-                  {!processo.assunto && processo.titulo_acao && (
-                    <>
-                      <p className="text-[11px] text-muted-foreground mt-1">Classe</p>
-                      <p className="text-xs text-foreground/80 truncate">{processo.titulo_acao}</p>
-                    </>
+                  {(processo.classe_cnj || processo.assunto || processo.titulo_acao) && (
+                    <p className="text-xs text-muted-foreground truncate">
+                      {processo.classe_cnj || processo.assunto || processo.titulo_acao}
+                    </p>
                   )}
                 </div>
 
-                {/* Órgão */}
-                <div className="space-y-1.5 min-w-0">
+                {/* Tribunal */}
+                <div className="min-w-0">
                   {processo.tribunal ? (
-                    <>
-                      <p className="text-xs text-muted-foreground font-medium">Tribunal</p>
-                      <p className="text-sm font-medium text-foreground truncate">{processo.tribunal}</p>
-                    </>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted text-xs font-medium text-foreground">
+                      <Building2 className="h-3 w-3 text-muted-foreground shrink-0" />
+                      {processo.tribunal}
+                    </span>
                   ) : (
-                    <>
-                      <p className="text-xs text-muted-foreground font-medium">Órgão</p>
-                      <p className="text-sm text-muted-foreground/50">—</p>
-                    </>
+                    <span className="text-sm text-muted-foreground/50">—</span>
                   )}
                   {processo.orgao_julgador && processo.orgao_julgador !== 'Não informado' && (
-                    <>
-                      <p className="text-[11px] text-muted-foreground mt-1">Órgão julgador</p>
-                      <p className="text-xs text-foreground/80 truncate">{processo.orgao_julgador}</p>
-                    </>
+                    <p className="text-[11px] text-muted-foreground truncate mt-1">{processo.orgao_julgador}</p>
                   )}
                 </div>
 
-                {/* Status */}
-                <div className="flex flex-col items-end justify-between w-28">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${style.bg} ${style.text}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                {/* Situação Atual - real status from Escavador */}
+                <div className="flex flex-col items-end gap-2 min-w-0">
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${style.bg} ${style.text}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${style.dot}`} />
                     {processo.status || 'Indefinido'}
                   </span>
-                  <div className="flex items-center gap-1 mt-auto pt-2">
+                  {statusReal && (
+                    <p className="text-[11px] font-medium text-muted-foreground text-right truncate max-w-full leading-tight">
+                      {statusReal}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-1.5 mt-auto">
+                    {dataUltimaAtualizacao && (
+                      <span className="text-[10px] text-muted-foreground/60">
+                        {format(new Date(dataUltimaAtualizacao), "dd/MM/yy", { locale: ptBR })}
+                      </span>
+                    )}
                     {movCount > 0 && (
-                      <span className="text-[10px] text-muted-foreground/60">{movCount} mov.</span>
+                      <span className="text-[10px] text-muted-foreground/50">• {movCount} mov.</span>
                     )}
                     <ChevronRight className="h-4 w-4 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
