@@ -759,13 +759,28 @@ export function ProcessoModalExpanded({
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Resolve nome_cliente from selected lead or existing partes
+      const resolvedClienteId = formData.cliente_id === '__none__' ? null : formData.cliente_id || null;
+      let nomeCliente: string | null = null;
+      if (resolvedClienteId) {
+        const selectedLead = leads.find(l => l.id === resolvedClienteId);
+        if (selectedLead?.nome) nomeCliente = selectedLead.nome;
+      }
+      if (!nomeCliente && partes.length > 0) {
+        const parteAtiva = partes.find(p =>
+          p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT' || p.polo?.toLowerCase() === 'ativo'
+        );
+        if (parteAtiva?.nome) nomeCliente = parteAtiva.nome;
+      }
+
       const data = {
         numero_processo: formData.numero_processo || null,
         numero_complementar: formData.numero_complementar || null,
         titulo_acao: formData.titulo_acao || null,
         status: formData.status,
         advogado_responsavel: formData.advogado_responsavel || null,
-        cliente_id: formData.cliente_id === '__none__' ? null : formData.cliente_id || null,
+        cliente_id: resolvedClienteId,
+        nome_cliente: nomeCliente,
         cpf_cliente: formData.cpf_cliente ? formData.cpf_cliente.replace(/\D/g, '') : null,
         tribunal: formData.tribunal || null,
         vara_comarca: formData.vara_comarca || null,
@@ -782,6 +797,7 @@ export function ProcessoModalExpanded({
         assunto_cnj: formData.assunto_cnj || null,
         segredo_justica: formData.segredo_justica,
         data_distribuicao: formData.data_distribuicao || null,
+        data_ajuizamento: formData.data_distribuicao || null,
         data_citacao: formData.data_citacao || null,
         data_recebimento: formData.data_recebimento || null,
         data_arquivamento: formData.data_arquivamento || null,
@@ -1347,8 +1363,8 @@ export function ProcessoModalExpanded({
                         <div className="space-y-1.5">
                           <Label className="text-xs text-muted-foreground">Classe - CNJ</Label>
                           <Input
-                            value={formData.titulo_acao}
-                            onChange={(e) => setFormData({ ...formData, titulo_acao: e.target.value })}
+                            value={formData.classe_cnj}
+                            onChange={(e) => setFormData({ ...formData, classe_cnj: e.target.value })}
                             className="rounded-xl bg-card"
                             placeholder="Ex: Procedimento Comum Cível"
                           />

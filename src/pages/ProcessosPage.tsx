@@ -85,12 +85,15 @@ export default function ProcessosPage() {
 
   const filteredProcessos = useMemo(() => processos.filter(p => {
     const search = searchTerm.toLowerCase();
-    const matchesSearch = (
+    const matchesSearch = !search || (
       (p.numero_processo?.toLowerCase().includes(search)) ||
       (p.titulo_acao?.toLowerCase().includes(search)) ||
       (p.advogado_responsavel?.toLowerCase().includes(search)) ||
       (p.assunto?.toLowerCase().includes(search)) ||
-      (p.orgao_julgador?.toLowerCase().includes(search))
+      (p.orgao_julgador?.toLowerCase().includes(search)) ||
+      (p.nome_cliente?.toLowerCase().includes(search)) ||
+      (p.cpf_cliente?.includes(search)) ||
+      (p.classe_cnj?.toLowerCase().includes(search))
     );
     const matchesStatus = statusFilter === 'todos' || p.status === statusFilter;
     return matchesSearch && matchesStatus;

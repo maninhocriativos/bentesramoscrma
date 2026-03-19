@@ -242,7 +242,7 @@ export default function LeadDetailPage() {
           </TabsContent>
 
           <TabsContent value="processos" className="mt-6">
-            <LeadProcessosTab clienteId={lead.id} />
+            <LeadProcessosTab clienteId={lead.id} clienteNome={lead.nome || undefined} />
           </TabsContent>
 
           <TabsContent value="financeiro" className="mt-6">

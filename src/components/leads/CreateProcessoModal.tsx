@@ -11,6 +11,7 @@ interface CreateProcessoModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   clienteId: string;
+  clienteNome?: string;
   onSuccess: () => void;
 }
 
@@ -22,7 +23,7 @@ const STATUSES: ProcessoStatus[] = [
   'Perdido',
 ];
 
-export function CreateProcessoModal({ open, onOpenChange, clienteId, onSuccess }: CreateProcessoModalProps) {
+export function CreateProcessoModal({ open, onOpenChange, clienteId, clienteNome, onSuccess }: CreateProcessoModalProps) {
   const { createProcesso } = useProcessos();
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -39,6 +40,7 @@ export function CreateProcessoModal({ open, onOpenChange, clienteId, onSuccess }
     await createProcesso({
       ...formData,
       cliente_id: clienteId,
+      nome_cliente: clienteNome || null,
     });
 
     setSaving(false);
