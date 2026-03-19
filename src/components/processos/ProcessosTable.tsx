@@ -160,13 +160,13 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
         </div>
       </div>
 
-      {/* Mobile Cards */}
       <div className="md:hidden rounded-xl border border-border bg-card shadow-soft overflow-hidden divide-y divide-border">
         {paginatedProcessos.map((processo) => {
           const style = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
           const clienteName = getClienteName(processo);
           const partes = processo.partes_json || [];
           const parteAtiva = partes.find(p => p.polo === 'ativo');
+          const statusReal = processo.status_detalhado || processo.movimentos_json?.[0]?.nome || null;
 
           return (
             <div
@@ -176,7 +176,7 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0 space-y-1.5">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${style.bg} ${style.text}`}>
                       <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
                       {processo.status || 'Indefinido'}
@@ -189,8 +189,8 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
                     {clienteName || parteAtiva?.nome || processo.titulo_acao || 'Sem título'}
                   </p>
                   <p className="font-mono text-xs text-muted-foreground">{processo.numero_processo || '—'}</p>
-                  {processo.assunto && (
-                    <p className="text-xs text-muted-foreground truncate">{processo.assunto}</p>
+                  {statusReal && (
+                    <p className="text-[11px] font-medium text-muted-foreground truncate">{statusReal}</p>
                   )}
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground/40 mt-1 shrink-0" />
