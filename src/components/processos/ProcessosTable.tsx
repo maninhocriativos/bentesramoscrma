@@ -62,11 +62,11 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
       {/* Desktop Card List */}
       <div className="hidden md:block rounded-xl border border-border bg-card shadow-soft overflow-hidden">
         {/* Header */}
-        <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-4 px-5 py-3 bg-muted/40 border-b border-border">
+        <div className="grid grid-cols-[1fr_1.2fr_0.7fr_minmax(200px,1fr)] gap-4 px-5 py-3 bg-muted/40 border-b border-border">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cliente</span>
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Número do Processo</span>
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Órgão</span>
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider w-28 text-right">Status</span>
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Processo</span>
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tribunal</span>
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Situação Atual</span>
         </div>
 
         {/* Rows */}
