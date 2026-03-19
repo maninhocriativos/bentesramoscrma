@@ -30,7 +30,7 @@ interface ModelosPeticaoTabProps {
   onSelectModel?: (modeloId: string) => void;
 }
 
-export default function ModelosPeticaoTab({ modelos, onUpload, onDelete }: ModelosPeticaoTabProps) {
+export default function ModelosPeticaoTab({ modelos, onUpload, onDelete, onSelectModel }: ModelosPeticaoTabProps) {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ModeloPeticao | null>(null);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
