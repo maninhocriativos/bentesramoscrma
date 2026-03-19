@@ -35,10 +35,12 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
     currentPage * ITEMS_PER_PAGE
   );
 
-  const getClienteName = (clienteId: string | null) => {
-    if (!clienteId) return null;
-    const lead = leads.find(l => l.id === clienteId);
-    return lead?.nome || null;
+  const getClienteName = (processo: Processo) => {
+    if (processo.cliente_id) {
+      const lead = leads.find(l => l.id === processo.cliente_id);
+      if (lead?.nome) return lead.nome;
+    }
+    return processo.nome_cliente || null;
   };
 
   if (processos.length === 0) {
