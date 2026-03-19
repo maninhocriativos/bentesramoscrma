@@ -352,14 +352,16 @@ export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGener
           </div>
         </ScrollArea>
 
-        <Button
-          onClick={handleGenerate}
-          disabled={!modeloId || !formData.NOME_COMPLETO || generating}
-          className="w-full mt-2"
-        >
-          {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-          {generating ? 'Gerando Petição...' : 'Gerar Petição'}
-        </Button>
+        <div className="px-6 pb-6 pt-4 border-t border-border/30">
+          <Button
+            onClick={handleGenerate}
+            disabled={!modeloId || !formData.NOME_COMPLETO || generating}
+            className="w-full"
+          >
+            {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+            {generating ? 'Gerando Petição...' : 'Gerar Petição'}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );
