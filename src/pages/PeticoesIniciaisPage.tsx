@@ -8,9 +8,10 @@ import DocxPreviewModal from '@/components/peticoes-docx/DocxPreviewModal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
-  Search, Plus, Scale, FileText, FolderOpen, Sparkles,
+  Search, Scale, FileText, FolderOpen, Sparkles, TrendingUp, Clock,
 } from 'lucide-react';
 
 export default function PeticoesIniciaisPage() {
@@ -22,6 +23,7 @@ export default function PeticoesIniciaisPage() {
   const [search, setSearch] = useState('');
   const [mainTab, setMainTab] = useState('geradas');
   const [gerarModalOpen, setGerarModalOpen] = useState(false);
+  const [defaultModeloId, setDefaultModeloId] = useState<string | undefined>();
   const [docxPreviewOpen, setDocxPreviewOpen] = useState(false);
   const [docxBuffer, setDocxBuffer] = useState<ArrayBuffer | Blob | null>(null);
   const [docxPreviewTitle, setDocxPreviewTitle] = useState('');
@@ -51,6 +53,11 @@ export default function PeticoesIniciaisPage() {
     }
   };
 
+  const handleOpenModal = (modeloId?: string) => {
+    setDefaultModeloId(modeloId);
+    setGerarModalOpen(true);
+  };
+
   return (
     <AppLayout>
       <div className="space-y-5">
@@ -77,12 +84,53 @@ export default function PeticoesIniciaisPage() {
                 className="pl-8 w-48 h-8 text-xs"
               />
             </div>
-            <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setGerarModalOpen(true)}>
+            <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => handleOpenModal()}>
               <Sparkles className="h-3.5 w-3.5" />
               Nova Petição
             </Button>
           </div>
         </div>
+
+        {/* KPI Cards when there are petições */}
+        {peticoesGeradas.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Card className="border-border/40">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <FileText className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{peticoesGeradas.length}</p>
+                  <p className="text-[11px] text-muted-foreground">Petições Geradas</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-border/40">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-accent/50 flex items-center justify-center">
+                  <FolderOpen className="h-4 w-4 text-foreground/60" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{modelos.length}</p>
+                  <p className="text-[11px] text-muted-foreground">Modelos Ativos</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-border/40">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-accent/50 flex items-center justify-center">
+                  <TrendingUp className="h-4 w-4 text-foreground/60" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">
+                    {new Set(peticoesGeradas.map(p => p.modelo_id)).size}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">Modelos Utilizados</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Tabs */}
         <Tabs value={mainTab} onValueChange={setMainTab}>
@@ -110,7 +158,7 @@ export default function PeticoesIniciaisPage() {
               peticoes={filteredPeticoes}
               onDownload={downloadPeticao}
               onPreview={handlePreviewFromHistory}
-              onNewPeticao={() => setGerarModalOpen(true)}
+              onNewPeticao={() => handleOpenModal()}
             />
           </TabsContent>
 
@@ -119,6 +167,7 @@ export default function PeticoesIniciaisPage() {
               modelos={modelos}
               onUpload={uploadModelo}
               onDelete={deleteModelo}
+              onSelectModel={(id) => handleOpenModal(id)}
             />
           </TabsContent>
         </Tabs>
@@ -130,6 +179,7 @@ export default function PeticoesIniciaisPage() {
         modelos={modelos}
         onGenerate={gerarPeticao}
         onPreview={handleDocxPreview}
+        defaultModeloId={defaultModeloId}
       />
 
       <DocxPreviewModal
