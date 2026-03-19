@@ -127,9 +127,10 @@ export default function ModelosPeticaoTab({ modelos, onUpload, onDelete, onSelec
                     {items.map((modelo, idx) => (
                       <div
                         key={modelo.id}
-                        className={`flex items-center gap-3 px-4 py-2.5 group hover:bg-muted/20 transition-colors ${
+                        className={`flex items-center gap-3 px-4 py-2.5 group hover:bg-muted/20 transition-colors cursor-pointer ${
                           idx < items.length - 1 ? 'border-b border-border/20' : ''
                         }`}
+                        onClick={() => onSelectModel?.(modelo.id)}
                       >
                         <FileText className="h-4 w-4 text-muted-foreground/40 shrink-0" />
                         <div className="flex-1 min-w-0">
