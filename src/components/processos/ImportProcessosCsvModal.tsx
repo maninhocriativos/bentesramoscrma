@@ -147,6 +147,31 @@ export function ImportProcessosCsvModal({ isOpen, onClose }: ImportProcessosCsvM
         continue;
       }
 
+      // Vincular cliente pelo CPF se disponível
+      let clienteId: string | null = null;
+      if (proc.cpf_cliente) {
+        const cpfLimpo = proc.cpf_cliente.replace(/[^\d]/g, '');
+        if (cpfLimpo.length >= 11) {
+          const { data: lead } = await supabase
+            .from('leads_juridicos')
+            .select('id')
+            .eq('cpf', proc.cpf_cliente)
+            .maybeSingle();
+          
+          if (!lead) {
+            // Tentar busca com CPF sem formatação
+            const { data: lead2 } = await supabase
+              .from('leads_juridicos')
+              .select('id')
+              .eq('cpf', cpfLimpo)
+              .maybeSingle();
+            clienteId = lead2?.id || null;
+          } else {
+            clienteId = lead.id;
+          }
+        }
+      }
+
       const { error } = await supabase
         .from('processos')
         .insert({
@@ -159,6 +184,7 @@ export function ImportProcessosCsvModal({ isOpen, onClose }: ImportProcessosCsvM
           vara_comarca: proc.vara_comarca || null,
           valor_causa: proc.valor_causa || null,
           cpf_cliente: proc.cpf_cliente || null,
+          cliente_id: clienteId,
           area: proc.area || null,
           fase: proc.fase || null,
           descricao: proc.descricao || null,
