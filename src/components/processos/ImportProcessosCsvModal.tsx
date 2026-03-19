@@ -188,6 +188,7 @@ export function ImportProcessosCsvModal({ isOpen, onClose }: ImportProcessosCsvM
           vara_comarca: proc.vara_comarca || null,
           valor_causa: proc.valor_causa || null,
           cpf_cliente: proc.cpf_cliente || null,
+          nome_cliente: proc.nome_cliente || null,
           cliente_id: clienteId,
           area: proc.area || null,
           fase: proc.fase || null,
