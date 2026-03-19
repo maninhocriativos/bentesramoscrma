@@ -19,6 +19,7 @@ interface Processo {
 
 interface LeadProcessosTabProps {
   clienteId: string;
+  clienteNome?: string;
 }
 
 const statusColors: Record<string, string> = {
