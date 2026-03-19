@@ -22,6 +22,7 @@ interface ParsedProcesso {
   vara_comarca?: string;
   valor_causa?: number;
   cpf_cliente?: string;
+  nome_cliente?: string;
   area?: string;
   fase?: string;
   descricao?: string;
