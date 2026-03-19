@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Plus, FileText, Trash2, Landmark, Building2, Plane, Shield,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Sparkles,
 } from 'lucide-react';
 import type { ModeloPeticao } from '@/hooks/useModelosPeticaoDocx';
 import ModeloUploadModal from './ModeloUploadModal';
