@@ -1,0 +1,1 @@
+DELETE FROM processos WHERE numero_processo !~ '^\d{7}';
