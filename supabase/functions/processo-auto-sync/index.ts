@@ -400,3 +400,16 @@ function parseDataBR(dataBR: string): string {
   }
   return new Date().toISOString();
 }
+
+function parseDataISO(val: string): string | null {
+  if (!val) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(val)) return val.slice(0, 10);
+  const ptBr = val.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (ptBr) return `${ptBr[3]}-${ptBr[2]}-${ptBr[1]}`;
+  try {
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  } catch { /* ignore */ }
+  return null;
+}
