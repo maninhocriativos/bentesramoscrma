@@ -903,6 +903,15 @@ export function ProcessoModalExpanded({
                 {formData.numero_processo && (
                   <p className="text-xs text-muted-foreground font-mono">{formData.numero_processo}</p>
                 )}
+                {!isNew && processo?.ultima_consulta_api_at && (
+                  <p className="text-[10px] text-muted-foreground/60">
+                    Última sync: {new Date(processo.ultima_consulta_api_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    {fetchingData && ' · Atualizando...'}
+                  </p>
+                )}
+                {fetchingData && !processo?.ultima_consulta_api_at && (
+                  <p className="text-[10px] text-primary animate-pulse">Buscando dados do Escavador...</p>
+                )}
               </div>
             </div>
             {!isNew && formData.status && (
