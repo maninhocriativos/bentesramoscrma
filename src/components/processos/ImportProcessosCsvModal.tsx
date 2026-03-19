@@ -236,15 +236,15 @@ export function ImportProcessosCsvModal({ isOpen, onClose }: ImportProcessosCsvM
         )}
 
         {stage === 'preview' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 min-h-0 flex-1">
+            <div className="flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium">{fileName}</span>
               </div>
               <Badge variant="outline">{parsed.length} processos</Badge>
             </div>
-            <ScrollArea className="h-64 rounded-lg border border-border">
+            <ScrollArea className="flex-1 min-h-0 max-h-[50vh] rounded-lg border border-border">
               <div className="divide-y divide-border">
                 {parsed.map((p, i) => (
                   <div key={i} className="px-3 py-2 flex items-center justify-between text-sm">
@@ -257,7 +257,7 @@ export function ImportProcessosCsvModal({ isOpen, onClose }: ImportProcessosCsvM
                 ))}
               </div>
             </ScrollArea>
-            <div className="flex gap-2 justify-end">
+            <div className="flex gap-2 justify-end shrink-0">
               <Button variant="outline" onClick={reset}>Cancelar</Button>
               <Button onClick={handleImport}>
                 <Upload className="h-4 w-4 mr-2" />
