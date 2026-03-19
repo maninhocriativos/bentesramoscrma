@@ -101,6 +101,7 @@ export function ImportProcessosCsvModal({ isOpen, onClose }: ImportProcessosCsvM
         titulo_acao: row.titulo_acao || undefined,
         advogado_responsavel: row.advogado_responsavel || undefined,
         status: row.status || 'Em Andamento',
+        nome_cliente: row.nome_cliente || undefined,
         tribunal: row.tribunal || undefined,
         assunto: row.assunto || undefined,
         vara_comarca: row.vara_comarca || undefined,
