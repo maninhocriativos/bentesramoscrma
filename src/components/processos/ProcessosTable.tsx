@@ -36,15 +36,23 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
   );
 
   const getClienteName = (processo: Processo) => {
-    // Always prefer nome_cliente from the processo record (imported from CSV/DB)
-    if (processo.nome_cliente) {
-      return processo.nome_cliente;
-    }
+    if (processo.nome_cliente) return processo.nome_cliente;
     if (processo.cliente_id) {
       const lead = leads.find(l => l.id === processo.cliente_id);
       if (lead?.nome) return lead.nome;
     }
-    return null;
+    // Fallback: try active party name (polo can be 'ativo', 'AT', 'Ativo', etc.)
+    const partes = processo.partes_json || [];
+    const parteAtiva = partes.find(p => 
+      p.polo?.toLowerCase() === 'ativo' || p.polo === 'AT' || 
+      p.tipo?.toLowerCase()?.includes('autor') || p.tipo?.toLowerCase()?.includes('requerente')
+    );
+    return parteAtiva?.nome || partes[0]?.nome || null;
+  };
+
+  const truncateStatus = (text: string, max = 40) => {
+    if (text.length <= max) return text;
+    return text.slice(0, max).trim() + '…';
   };
 
   if (processos.length === 0) {
