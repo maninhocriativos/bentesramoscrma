@@ -100,7 +100,7 @@ export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGener
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0">
+      <DialogContent className="max-w-[min(52rem,calc(100vw-2rem))] max-h-[calc(100dvh-3rem)] flex flex-col overflow-hidden p-0">
         <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
