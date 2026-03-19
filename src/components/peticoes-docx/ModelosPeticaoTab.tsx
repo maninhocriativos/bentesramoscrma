@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Plus, FileText, Trash2, Landmark, Building2, Plane, Shield,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Sparkles,
 } from 'lucide-react';
 import type { ModeloPeticao } from '@/hooks/useModelosPeticaoDocx';
 import ModeloUploadModal from './ModeloUploadModal';
@@ -27,9 +27,10 @@ interface ModelosPeticaoTabProps {
   modelos: ModeloPeticao[];
   onUpload: (nome: string, file: File, variaveis: VariavelMapping[]) => Promise<void>;
   onDelete: (id: string, arquivoUrl: string) => Promise<void>;
+  onSelectModel?: (modeloId: string) => void;
 }
 
-export default function ModelosPeticaoTab({ modelos, onUpload, onDelete }: ModelosPeticaoTabProps) {
+export default function ModelosPeticaoTab({ modelos, onUpload, onDelete, onSelectModel }: ModelosPeticaoTabProps) {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ModeloPeticao | null>(null);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
@@ -126,9 +127,10 @@ export default function ModelosPeticaoTab({ modelos, onUpload, onDelete }: Model
                     {items.map((modelo, idx) => (
                       <div
                         key={modelo.id}
-                        className={`flex items-center gap-3 px-4 py-2.5 group hover:bg-muted/20 transition-colors ${
+                        className={`flex items-center gap-3 px-4 py-2.5 group hover:bg-muted/20 transition-colors cursor-pointer ${
                           idx < items.length - 1 ? 'border-b border-border/20' : ''
                         }`}
+                        onClick={() => onSelectModel?.(modelo.id)}
                       >
                         <FileText className="h-4 w-4 text-muted-foreground/40 shrink-0" />
                         <div className="flex-1 min-w-0">
@@ -146,13 +148,23 @@ export default function ModelosPeticaoTab({ modelos, onUpload, onDelete }: Model
                             )}
                           </div>
                         </div>
-                        <Button
-                          variant="ghost" size="icon"
-                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive/60 hover:text-destructive hover:bg-destructive/5"
-                          onClick={() => setDeleteTarget(modelo)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <Button
+                            variant="ghost" size="sm"
+                            className="h-7 text-xs gap-1 opacity-0 group-hover:opacity-100 transition-opacity text-primary"
+                            onClick={(e) => { e.stopPropagation(); onSelectModel?.(modelo.id); }}
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            Gerar
+                          </Button>
+                          <Button
+                            variant="ghost" size="icon"
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive/60 hover:text-destructive hover:bg-destructive/5"
+                            onClick={(e) => { e.stopPropagation(); setDeleteTarget(modelo); }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>

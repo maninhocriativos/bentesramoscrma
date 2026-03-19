@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,14 +18,25 @@ interface GerarPeticaoModalProps {
   modelos: ModeloPeticao[];
   onGenerate: (modeloId: string, dados: Record<string, string>) => Promise<ArrayBuffer | null>;
   onPreview: (docxBuffer: ArrayBuffer) => void;
+  defaultModeloId?: string;
 }
 
-export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGenerate, onPreview }: GerarPeticaoModalProps) {
+export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGenerate, onPreview, defaultModeloId }: GerarPeticaoModalProps) {
   const [modeloId, setModeloId] = useState('');
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [generating, setGenerating] = useState(false);
   const [docType, setDocType] = useState<'civil' | 'militar'>('civil');
   const [isIdoso, setIsIdoso] = useState(false);
+
+  // When modal opens with a defaultModeloId, pre-select it
+  useEffect(() => {
+    if (open && defaultModeloId) {
+      setModeloId(defaultModeloId);
+      setFormData({});
+      setDocType('civil');
+      setIsIdoso(false);
+    }
+  }, [open, defaultModeloId]);
 
   // Group models by category
   const groupedModelos = useMemo(() => {
@@ -89,8 +100,8 @@ export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGener
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
             Nova Petição
@@ -100,8 +111,8 @@ export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGener
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
-          <div className="space-y-6 pb-4">
+        <ScrollArea className="flex-1 px-6">
+          <div className="space-y-6 pb-6">
             {/* Seção: Seleção do Modelo */}
             <div className="space-y-3">
               <div className="flex items-center gap-2">
@@ -352,14 +363,16 @@ export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGener
           </div>
         </ScrollArea>
 
-        <Button
-          onClick={handleGenerate}
-          disabled={!modeloId || !formData.NOME_COMPLETO || generating}
-          className="w-full mt-2"
-        >
-          {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-          {generating ? 'Gerando Petição...' : 'Gerar Petição'}
-        </Button>
+        <div className="px-6 pb-6 pt-4 border-t border-border/30">
+          <Button
+            onClick={handleGenerate}
+            disabled={!modeloId || !formData.NOME_COMPLETO || generating}
+            className="w-full"
+          >
+            {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+            {generating ? 'Gerando Petição...' : 'Gerar Petição'}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );
