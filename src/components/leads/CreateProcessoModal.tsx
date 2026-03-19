@@ -40,6 +40,7 @@ export function CreateProcessoModal({ open, onOpenChange, clienteId, clienteNome
     await createProcesso({
       ...formData,
       cliente_id: clienteId,
+      nome_cliente: clienteNome || null,
     });
 
     setSaving(false);
