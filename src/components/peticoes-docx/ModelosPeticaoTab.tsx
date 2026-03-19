@@ -27,6 +27,7 @@ interface ModelosPeticaoTabProps {
   modelos: ModeloPeticao[];
   onUpload: (nome: string, file: File, variaveis: VariavelMapping[]) => Promise<void>;
   onDelete: (id: string, arquivoUrl: string) => Promise<void>;
+  onSelectModel?: (modeloId: string) => void;
 }
 
 export default function ModelosPeticaoTab({ modelos, onUpload, onDelete }: ModelosPeticaoTabProps) {
