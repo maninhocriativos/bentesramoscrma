@@ -1363,8 +1363,8 @@ export function ProcessoModalExpanded({
                         <div className="space-y-1.5">
                           <Label className="text-xs text-muted-foreground">Classe - CNJ</Label>
                           <Input
-                            value={formData.titulo_acao}
-                            onChange={(e) => setFormData({ ...formData, titulo_acao: e.target.value })}
+                            value={formData.classe_cnj}
+                            onChange={(e) => setFormData({ ...formData, classe_cnj: e.target.value })}
                             className="rounded-xl bg-card"
                             placeholder="Ex: Procedimento Comum Cível"
                           />
