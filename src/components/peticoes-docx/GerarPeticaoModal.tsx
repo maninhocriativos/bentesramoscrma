@@ -90,7 +90,7 @@ export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGener
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0">
-        <DialogHeader>
+        <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
             Nova Petição
@@ -100,8 +100,8 @@ export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGener
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
-          <div className="space-y-6 pb-4">
+        <ScrollArea className="flex-1 px-6">
+          <div className="space-y-6 pb-6">
             {/* Seção: Seleção do Modelo */}
             <div className="space-y-3">
               <div className="flex items-center gap-2">
