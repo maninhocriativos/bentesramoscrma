@@ -632,11 +632,21 @@ export function ProcessoModalExpanded({
     );
 
     if (draft && draftHasMeaningfulContent) {
-      setFormData((prev) => ({
-        ...prev,
-        ...draft.formData,
-        status: (draft.formData.status as ProcessoStatus) || prev.status,
-      }));
+      setFormData((prev) => {
+        const merged = {
+          ...prev,
+          ...draft.formData,
+          status: (draft.formData.status as ProcessoStatus) || prev.status,
+        };
+        // For existing processes, never let draft override critical DB fields with empty values
+        if (!isNew && processo) {
+          if (!merged.numero_processo && prev.numero_processo) merged.numero_processo = prev.numero_processo;
+          if (!merged.titulo_acao && prev.titulo_acao) merged.titulo_acao = prev.titulo_acao;
+          if (!merged.cliente_id && prev.cliente_id) merged.cliente_id = prev.cliente_id;
+          if (!merged.cpf_cliente && prev.cpf_cliente) merged.cpf_cliente = prev.cpf_cliente;
+        }
+        return merged;
+      });
       // For existing processos, NEVER restore partes/movimentos from draft - DB is source of truth
       if (isNew) {
         setPartes(Array.isArray(draft.partes) ? draft.partes : []);
