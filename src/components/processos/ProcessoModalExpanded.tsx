@@ -1067,6 +1067,11 @@ export function ProcessoModalExpanded({
                               ))}
                             </SelectContent>
                           </Select>
+                          {processo?.nome_cliente && clienteSelecionado && clienteSelecionado.nome !== processo.nome_cliente && (
+                            <p className="text-[10px] text-muted-foreground">
+                              Nome no processo: <span className="font-medium text-foreground">{processo.nome_cliente}</span>
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
