@@ -69,7 +69,7 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
         <div className="divide-y divide-border">
           {paginatedProcessos.map((processo) => {
             const style = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
-            const clienteName = getClienteName(processo.cliente_id);
+            const clienteName = getClienteName(processo);
             const partes = processo.partes_json || [];
             const parteAtiva = partes.find(p => p.polo === 'ativo');
             const partePassiva = partes.find(p => p.polo === 'passivo');
