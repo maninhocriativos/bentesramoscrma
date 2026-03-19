@@ -64,9 +64,9 @@ serve(async (req) => {
     // Notifications are only sent to those with notificacao_ativa = true
 
     const { data: allProcessos, error: fetchError } = await query
-      .order("status", { ascending: true }) // Em Andamento first
       .order("ultima_consulta_api_at", { ascending: true, nullsFirst: true })
-      .limit(100);
+      .order("status", { ascending: true })
+      .limit(500);
 
     if (fetchError) {
       throw new Error(`Erro ao buscar processos: ${fetchError.message}`);
