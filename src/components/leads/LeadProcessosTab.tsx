@@ -121,6 +121,7 @@ export function LeadProcessosTab({ clienteId, clienteNome }: LeadProcessosTabPro
         open={modalOpen}
         onOpenChange={setModalOpen}
         clienteId={clienteId}
+        clienteNome={clienteNome}
         onSuccess={fetchProcessos}
       />
     </div>
