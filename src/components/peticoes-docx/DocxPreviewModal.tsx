@@ -26,9 +26,9 @@ export default function DocxPreviewModal({ open, onOpenChange, docxBuffer, title
         if (cancelled || !containerRef.current) return;
         
         containerRef.current.innerHTML = '';
-        
-        const blob = docxBuffer instanceof Blob ? docxBuffer : new Blob([docxBuffer]);
-        
+        const blob = docxBuffer instanceof Blob
+          ? docxBuffer
+          : new Blob([new Uint8Array(docxBuffer)]);
         await renderAsync(blob, containerRef.current, undefined, {
           className: 'docx-preview-container',
           inWrapper: true,
