@@ -6,7 +6,7 @@ import { Download, Printer, Loader2, FileText } from 'lucide-react';
 interface DocxPreviewModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  docxBuffer: Uint8Array | Blob | null;
+  docxBuffer: ArrayBuffer | Blob | null;
   title?: string;
 }
 
