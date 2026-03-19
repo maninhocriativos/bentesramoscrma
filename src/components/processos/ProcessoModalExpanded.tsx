@@ -398,6 +398,29 @@ export function ProcessoModalExpanded({
 
         // Se é um processo existente, salvar no banco imediatamente
         if (processo?.id) {
+          // Auto-fix CPF from partes if current is invalid
+          const currentCpfDigits = (formData.cpf_cliente || '').replace(/\D/g, '');
+          if (currentCpfDigits.length < 11 && newPartes.length > 0) {
+            const parteAutor = newPartes.find((p: any) =>
+              p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT'
+            );
+            if (parteAutor?.documento && parteAutor.documento.replace(/\D/g, '').length >= 11) {
+              const fixedCpf = parteAutor.documento.replace(/\D/g, '');
+              (updateData as Record<string, unknown>).cpf_cliente = fixedCpf;
+              setFormData(prev => ({ ...prev, cpf_cliente: fixedCpf }));
+            }
+          }
+
+          // Auto-fix nome_cliente from partes if missing
+          if (!processo.nome_cliente && newPartes.length > 0) {
+            const parteAutor = newPartes.find((p: any) =>
+              p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT'
+            );
+            if (parteAutor?.nome) {
+              (updateData as Record<string, unknown>).nome_cliente = parteAutor.nome.toUpperCase();
+            }
+          }
+
           // Vincular cliente automaticamente se encontrado
           if (!formData.cliente_id && newPartes.length > 0) {
             const parteAutor = newPartes.find((p: { tipo?: string; polo?: string }) =>
