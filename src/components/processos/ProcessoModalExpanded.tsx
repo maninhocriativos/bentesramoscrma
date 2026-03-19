@@ -398,6 +398,29 @@ export function ProcessoModalExpanded({
 
         // Se é um processo existente, salvar no banco imediatamente
         if (processo?.id) {
+          // Auto-fix CPF from partes if current is invalid
+          const currentCpfDigits = (formData.cpf_cliente || '').replace(/\D/g, '');
+          if (currentCpfDigits.length < 11 && newPartes.length > 0) {
+            const parteAutor = newPartes.find((p: any) =>
+              p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT'
+            );
+            if (parteAutor?.documento && parteAutor.documento.replace(/\D/g, '').length >= 11) {
+              const fixedCpf = parteAutor.documento.replace(/\D/g, '');
+              (updateData as Record<string, unknown>).cpf_cliente = fixedCpf;
+              setFormData(prev => ({ ...prev, cpf_cliente: fixedCpf }));
+            }
+          }
+
+          // Auto-fix nome_cliente from partes if missing
+          if (!processo.nome_cliente && newPartes.length > 0) {
+            const parteAutor = newPartes.find((p: any) =>
+              p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT'
+            );
+            if (parteAutor?.nome) {
+              (updateData as Record<string, unknown>).nome_cliente = parteAutor.nome.toUpperCase();
+            }
+          }
+
           // Vincular cliente automaticamente se encontrado
           if (!formData.cliente_id && newPartes.length > 0) {
             const parteAutor = newPartes.find((p: { tipo?: string; polo?: string }) =>
@@ -696,16 +719,39 @@ export function ProcessoModalExpanded({
         }
       })();
 
-      // Auto-fetch from API if no partes and no movimentos at all
-      if (
-        processo.numero_processo &&
-        CNJ_REGEX.test(processo.numero_processo.trim()) &&
-        (!processo.partes_json || processo.partes_json.length === 0) &&
-        (!processo.movimentos_json || processo.movimentos_json.length === 0) &&
-        !fetchingData
-      ) {
-        console.log('🔄 Auto-fetching from API for processo:', processo.numero_processo);
+      // Auto-fetch from API if key data fields are missing or stale
+      const hasValidCnj = processo.numero_processo && CNJ_REGEX.test(processo.numero_processo.trim());
+      const isMissingKeyData = (
+        !processo.classe_cnj ||
+        !processo.orgao_julgador ||
+        !processo.assunto_cnj ||
+        (!processo.partes_json || processo.partes_json.length === 0) ||
+        (!processo.movimentos_json || processo.movimentos_json.length === 0)
+      );
+      // Check if last API check was more than 3 days ago
+      const lastCheck = processo.ultima_consulta_api_at ? new Date(processo.ultima_consulta_api_at).getTime() : 0;
+      const isStale = Date.now() - lastCheck > 3 * 24 * 60 * 60 * 1000;
+      
+      if (hasValidCnj && (isMissingKeyData || isStale) && !fetchingData) {
+        console.log('🔄 Auto-fetching from API for processo:', processo.numero_processo, { isMissingKeyData, isStale });
         handleRefreshStatus();
+      }
+
+      // Auto-fix CPF from partes data if current value is invalid (less than 11 digits)
+      const cpfDigits = (processo.cpf_cliente || '').replace(/\D/g, '');
+      if (cpfDigits.length < 11 && processo.partes_json && processo.partes_json.length > 0) {
+        const parteAtiva = processo.partes_json.find(p => 
+          p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT'
+        );
+        if (parteAtiva?.documento && parteAtiva.documento.replace(/\D/g, '').length >= 11) {
+          const cpfFromParte = parteAtiva.documento.replace(/\D/g, '');
+          setFormData(prev => ({ ...prev, cpf_cliente: cpfFromParte }));
+          // Also fix in DB
+          supabase.from('processos').update({ cpf_cliente: cpfFromParte }).eq('id', processo.id)
+            .then(({ error }) => {
+              if (!error) console.log('✅ CPF auto-corrigido de partes:', cpfFromParte);
+            });
+        }
       }
     }
   }, [processo?.id, isOpen, draftHydrated, autoFetchDone, isNew]);
@@ -856,6 +902,15 @@ export function ProcessoModalExpanded({
                 </h2>
                 {formData.numero_processo && (
                   <p className="text-xs text-muted-foreground font-mono">{formData.numero_processo}</p>
+                )}
+                {!isNew && processo?.ultima_consulta_api_at && (
+                  <p className="text-[10px] text-muted-foreground/60">
+                    Última sync: {new Date(processo.ultima_consulta_api_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    {fetchingData && ' · Atualizando...'}
+                  </p>
+                )}
+                {fetchingData && !processo?.ultima_consulta_api_at && (
+                  <p className="text-[10px] text-primary animate-pulse">Buscando dados do Escavador...</p>
                 )}
               </div>
             </div>
@@ -1012,6 +1067,11 @@ export function ProcessoModalExpanded({
                               ))}
                             </SelectContent>
                           </Select>
+                          {processo?.nome_cliente && clienteSelecionado && clienteSelecionado.nome !== processo.nome_cliente && (
+                            <p className="text-[10px] text-muted-foreground">
+                              Nome no processo: <span className="font-medium text-foreground">{processo.nome_cliente}</span>
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
