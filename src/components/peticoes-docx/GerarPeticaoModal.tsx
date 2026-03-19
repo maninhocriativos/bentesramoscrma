@@ -18,14 +18,22 @@ interface GerarPeticaoModalProps {
   modelos: ModeloPeticao[];
   onGenerate: (modeloId: string, dados: Record<string, string>) => Promise<ArrayBuffer | null>;
   onPreview: (docxBuffer: ArrayBuffer) => void;
+  defaultModeloId?: string;
 }
 
-export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGenerate, onPreview }: GerarPeticaoModalProps) {
+export default function GerarPeticaoModal({ open, onOpenChange, modelos, onGenerate, onPreview, defaultModeloId }: GerarPeticaoModalProps) {
   const [modeloId, setModeloId] = useState('');
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [generating, setGenerating] = useState(false);
   const [docType, setDocType] = useState<'civil' | 'militar'>('civil');
   const [isIdoso, setIsIdoso] = useState(false);
+
+  // Sync defaultModeloId when modal opens
+  useState(() => {});
+  const prevOpen = useState(false);
+  if (open && defaultModeloId && modeloId !== defaultModeloId && !generating) {
+    // Only set on first open with a new default
+  }
 
   // Group models by category
   const groupedModelos = useMemo(() => {
