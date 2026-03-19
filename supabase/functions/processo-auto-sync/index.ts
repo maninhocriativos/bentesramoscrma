@@ -232,7 +232,42 @@ serve(async (req) => {
             updated_at: new Date().toISOString(),
             sync_error_count: 0,
             last_sync_error: null,
+            // Campos enriquecidos
+            classe_cnj: proc.classe || null,
+            assunto_cnj: proc.assuntos?.[0]?.codigo?.toString() || proc.assuntos?.[0]?.nome || null,
+            vara_comarca: proc.orgaoJulgador || null,
+            status_detalhado: proc.statusDetalhado || null,
+            segredo_justica: proc.nivelSigilo === "Segredo de Justiça",
+            sistema_judicial: proc.sistemaProcessual || null,
+            tipo_orgao_julgador: proc.orgaoJulgador || null,
+            data_distribuicao: proc.dataAjuizamento ? parseDataISO(proc.dataAjuizamento) : null,
+            data_ajuizamento: proc.dataAjuizamento ? parseDataISO(proc.dataAjuizamento) : null,
           };
+
+          // Auto-populate nome_cliente from partes if missing
+          if (proc.partes && Array.isArray(proc.partes)) {
+            const parteAutor = proc.partes.find((p: any) =>
+              p.tipo === "Autor" || p.polo?.toUpperCase() === "AT" || p.polo?.toUpperCase() === "PA"
+            );
+            if (parteAutor?.nome) {
+              // Check if nome_cliente is empty
+              const { data: current } = await supabase
+                .from("processos")
+                .select("nome_cliente")
+                .eq("id", processo.id)
+                .single();
+              if (!current?.nome_cliente) {
+                updateData.nome_cliente = parteAutor.nome.toUpperCase();
+              }
+              // Auto-fix CPF
+              if (parteAutor.documento) {
+                const cpfDigits = (parteAutor.documento || "").replace(/\D/g, "");
+                if (cpfDigits.length >= 11) {
+                  updateData.cpf_cliente = cpfDigits;
+                }
+              }
+            }
+          }
 
           await supabase.from("processos").update(updateData).eq("id", processo.id);
 
@@ -364,4 +399,17 @@ function parseDataBR(dataBR: string): string {
     return `${match[3]}-${match[2]}-${match[1]}T00:00:00Z`;
   }
   return new Date().toISOString();
+}
+
+function parseDataISO(val: string): string | null {
+  if (!val) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(val)) return val.slice(0, 10);
+  const ptBr = val.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (ptBr) return `${ptBr[3]}-${ptBr[2]}-${ptBr[1]}`;
+  try {
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  } catch { /* ignore */ }
+  return null;
 }
