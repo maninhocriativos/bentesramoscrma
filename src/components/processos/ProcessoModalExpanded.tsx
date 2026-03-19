@@ -696,16 +696,39 @@ export function ProcessoModalExpanded({
         }
       })();
 
-      // Auto-fetch from API if no partes and no movimentos at all
-      if (
-        processo.numero_processo &&
-        CNJ_REGEX.test(processo.numero_processo.trim()) &&
-        (!processo.partes_json || processo.partes_json.length === 0) &&
-        (!processo.movimentos_json || processo.movimentos_json.length === 0) &&
-        !fetchingData
-      ) {
-        console.log('🔄 Auto-fetching from API for processo:', processo.numero_processo);
+      // Auto-fetch from API if key data fields are missing or stale
+      const hasValidCnj = processo.numero_processo && CNJ_REGEX.test(processo.numero_processo.trim());
+      const isMissingKeyData = (
+        !processo.classe_cnj ||
+        !processo.orgao_julgador ||
+        !processo.assunto_cnj ||
+        (!processo.partes_json || processo.partes_json.length === 0) ||
+        (!processo.movimentos_json || processo.movimentos_json.length === 0)
+      );
+      // Check if last API check was more than 3 days ago
+      const lastCheck = processo.ultima_consulta_api_at ? new Date(processo.ultima_consulta_api_at).getTime() : 0;
+      const isStale = Date.now() - lastCheck > 3 * 24 * 60 * 60 * 1000;
+      
+      if (hasValidCnj && (isMissingKeyData || isStale) && !fetchingData) {
+        console.log('🔄 Auto-fetching from API for processo:', processo.numero_processo, { isMissingKeyData, isStale });
         handleRefreshStatus();
+      }
+
+      // Auto-fix CPF from partes data if current value is invalid (less than 11 digits)
+      const cpfDigits = (processo.cpf_cliente || '').replace(/\D/g, '');
+      if (cpfDigits.length < 11 && processo.partes_json && processo.partes_json.length > 0) {
+        const parteAtiva = processo.partes_json.find(p => 
+          p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT'
+        );
+        if (parteAtiva?.documento && parteAtiva.documento.replace(/\D/g, '').length >= 11) {
+          const cpfFromParte = parteAtiva.documento.replace(/\D/g, '');
+          setFormData(prev => ({ ...prev, cpf_cliente: cpfFromParte }));
+          // Also fix in DB
+          supabase.from('processos').update({ cpf_cliente: cpfFromParte }).eq('id', processo.id)
+            .then(({ error }) => {
+              if (!error) console.log('✅ CPF auto-corrigido de partes:', cpfFromParte);
+            });
+        }
       }
     }
   }, [processo?.id, isOpen, draftHydrated, autoFetchDone, isNew]);
