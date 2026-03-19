@@ -114,8 +114,8 @@ export function useModelosPeticaoDocx() {
       }
     }
 
-    const processedBuffer = zip.generate({ type: 'uint8array' });
-    const processedFile = new File([processedBuffer], file.name, { type: file.type });
+    const processedBuffer = zip.generate({ type: 'arraybuffer' });
+    const processedFile = new File([new Uint8Array(processedBuffer as ArrayBuffer)], file.name, { type: file.type });
 
     const filePath = `modelos/${Date.now()}_${file.name}`;
     const { error: uploadError } = await supabase.storage

@@ -56,7 +56,9 @@ export default function DocxPreviewModal({ open, onOpenChange, docxBuffer, title
 
   const handleDownload = () => {
     if (!docxBuffer) return;
-    const blob = docxBuffer instanceof Blob ? docxBuffer : new Blob([docxBuffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    const blob = docxBuffer instanceof Blob
+      ? docxBuffer
+      : new Blob([new Uint8Array(docxBuffer)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
