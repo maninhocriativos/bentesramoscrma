@@ -171,8 +171,6 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
         {paginatedProcessos.map((processo) => {
           const style = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
           const clienteName = getClienteName(processo);
-          const partes = processo.partes_json || [];
-          const parteAtiva = partes.find(p => p.polo === 'ativo');
           const statusReal = processo.status_detalhado || processo.movimentos_json?.[0]?.nome || null;
 
           return (
@@ -186,18 +184,18 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${style.bg} ${style.text}`}>
                       <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-                      {processo.status || 'Indefinido'}
+                      {processo.status || '—'}
                     </span>
                     {processo.tribunal && (
                       <span className="text-[10px] text-muted-foreground">{processo.tribunal}</span>
                     )}
                   </div>
                   <p className="font-semibold text-sm truncate">
-                    {clienteName || parteAtiva?.nome || processo.titulo_acao || 'Sem título'}
+                    {clienteName || processo.titulo_acao || 'Sem identificação'}
                   </p>
                   <p className="font-mono text-xs text-muted-foreground">{processo.numero_processo || '—'}</p>
                   {statusReal && (
-                    <p className="text-[11px] font-medium text-muted-foreground truncate">{statusReal}</p>
+                    <p className="text-[11px] font-medium text-muted-foreground truncate">{truncateStatus(statusReal, 50)}</p>
                   )}
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground/40 mt-1 shrink-0" />
