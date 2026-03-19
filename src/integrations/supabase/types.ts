@@ -1915,22 +1915,28 @@ export type Database = {
       modelos_peticao: {
         Row: {
           arquivo_url: string
+          categoria: string | null
           created_at: string | null
           id: string
+          marcadores: Json | null
           nome: string
           variaveis: Json | null
         }
         Insert: {
           arquivo_url: string
+          categoria?: string | null
           created_at?: string | null
           id?: string
+          marcadores?: Json | null
           nome: string
           variaveis?: Json | null
         }
         Update: {
           arquivo_url?: string
+          categoria?: string | null
           created_at?: string | null
           id?: string
+          marcadores?: Json | null
           nome?: string
           variaveis?: Json | null
         }
@@ -2241,39 +2247,78 @@ export type Database = {
           cliente_cpf_rg: string | null
           cliente_endereco: string | null
           cliente_nome: string | null
+          comarca: string | null
+          cpf: string | null
           created_at: string | null
+          endereco_cliente: string | null
           id: string
+          idoso_idade: string | null
           informacoes_adicionais: string | null
           modelo_id: string | null
+          nome_completo: string | null
           parte_contraria: string | null
+          qualificacao: string | null
+          reu_cnpj: string | null
+          reu_endereco: string | null
+          reu_nome: string | null
+          rg: string | null
+          rg_militar: string | null
+          tipo_acao: string | null
           valor_causa: string | null
           vara_comarca: string | null
+          vara_juizo: string | null
         }
         Insert: {
           arquivo_gerado_url?: string | null
           cliente_cpf_rg?: string | null
           cliente_endereco?: string | null
           cliente_nome?: string | null
+          comarca?: string | null
+          cpf?: string | null
           created_at?: string | null
+          endereco_cliente?: string | null
           id?: string
+          idoso_idade?: string | null
           informacoes_adicionais?: string | null
           modelo_id?: string | null
+          nome_completo?: string | null
           parte_contraria?: string | null
+          qualificacao?: string | null
+          reu_cnpj?: string | null
+          reu_endereco?: string | null
+          reu_nome?: string | null
+          rg?: string | null
+          rg_militar?: string | null
+          tipo_acao?: string | null
           valor_causa?: string | null
           vara_comarca?: string | null
+          vara_juizo?: string | null
         }
         Update: {
           arquivo_gerado_url?: string | null
           cliente_cpf_rg?: string | null
           cliente_endereco?: string | null
           cliente_nome?: string | null
+          comarca?: string | null
+          cpf?: string | null
           created_at?: string | null
+          endereco_cliente?: string | null
           id?: string
+          idoso_idade?: string | null
           informacoes_adicionais?: string | null
           modelo_id?: string | null
+          nome_completo?: string | null
           parte_contraria?: string | null
+          qualificacao?: string | null
+          reu_cnpj?: string | null
+          reu_endereco?: string | null
+          reu_nome?: string | null
+          rg?: string | null
+          rg_militar?: string | null
+          tipo_acao?: string | null
           valor_causa?: string | null
           vara_comarca?: string | null
+          vara_juizo?: string | null
         }
         Relationships: [
           {
