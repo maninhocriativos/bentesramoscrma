@@ -30,7 +30,7 @@ const statusColors: Record<string, string> = {
   'Perdido': 'bg-red-500/10 text-red-600',
 };
 
-export function LeadProcessosTab({ clienteId }: LeadProcessosTabProps) {
+export function LeadProcessosTab({ clienteId, clienteNome }: LeadProcessosTabProps) {
   const navigate = useNavigate();
   const [processos, setProcessos] = useState<Processo[]>([]);
   const [loading, setLoading] = useState(true);
