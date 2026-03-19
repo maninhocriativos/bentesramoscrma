@@ -1912,6 +1912,30 @@ export type Database = {
         }
         Relationships: []
       }
+      modelos_peticao: {
+        Row: {
+          arquivo_url: string
+          created_at: string | null
+          id: string
+          nome: string
+          variaveis: Json | null
+        }
+        Insert: {
+          arquivo_url: string
+          created_at?: string | null
+          id?: string
+          nome: string
+          variaveis?: Json | null
+        }
+        Update: {
+          arquivo_url?: string
+          created_at?: string | null
+          id?: string
+          nome?: string
+          variaveis?: Json | null
+        }
+        Relationships: []
+      }
       notificacoes_internas: {
         Row: {
           created_at: string
@@ -2210,6 +2234,56 @@ export type Database = {
           telefone?: string | null
         }
         Relationships: []
+      }
+      peticoes_geradas: {
+        Row: {
+          arquivo_gerado_url: string | null
+          cliente_cpf_rg: string | null
+          cliente_endereco: string | null
+          cliente_nome: string | null
+          created_at: string | null
+          id: string
+          informacoes_adicionais: string | null
+          modelo_id: string | null
+          parte_contraria: string | null
+          valor_causa: string | null
+          vara_comarca: string | null
+        }
+        Insert: {
+          arquivo_gerado_url?: string | null
+          cliente_cpf_rg?: string | null
+          cliente_endereco?: string | null
+          cliente_nome?: string | null
+          created_at?: string | null
+          id?: string
+          informacoes_adicionais?: string | null
+          modelo_id?: string | null
+          parte_contraria?: string | null
+          valor_causa?: string | null
+          vara_comarca?: string | null
+        }
+        Update: {
+          arquivo_gerado_url?: string | null
+          cliente_cpf_rg?: string | null
+          cliente_endereco?: string | null
+          cliente_nome?: string | null
+          created_at?: string | null
+          id?: string
+          informacoes_adicionais?: string | null
+          modelo_id?: string | null
+          parte_contraria?: string | null
+          valor_causa?: string | null
+          vara_comarca?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "peticoes_geradas_modelo_id_fkey"
+            columns: ["modelo_id"]
+            isOneToOne: false
+            referencedRelation: "modelos_peticao"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       petition_cases: {
         Row: {
