@@ -41,6 +41,7 @@ export default function ProcessosPage() {
   const { processos, loading } = useProcessos();
   const { leadNames } = useLeadNames();
   const { canDelete, canAccessProcessos, loading: perfilLoading } = usePerfil();
+  const { toast } = useToast();
   
   const [selectedProcesso, setSelectedProcesso] = useState<Processo | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
