@@ -82,8 +82,8 @@ export default function ProcessosPage() {
     const arquivados = processos.filter(p => p.status === 'Arquivado').length;
     const ganhos = processos.filter(p => p.status === 'Ganho').length;
     const perdidos = processos.filter(p => p.status === 'Perdido').length;
-    const recursal = processos.filter(p => p.fase?.toLowerCase() === 'recursal' || p.status === 'Recursal').length;
-    const execucao = processos.filter(p => p.fase?.toLowerCase() === 'execução' || p.fase?.toLowerCase() === 'execucao' || p.status === 'Execução').length;
+    const recursal = processos.filter(p => p.fase?.toLowerCase() === 'recursal').length;
+    const execucao = processos.filter(p => p.fase?.toLowerCase() === 'execução' || p.fase?.toLowerCase() === 'execucao').length;
     return { total, emAndamento, suspensos, arquivados, ganhos, perdidos, recursal, execucao };
   }, [processos]);
 
