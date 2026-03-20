@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Trash2, Loader2, Users, Briefcase, BadgeCheck, RefreshCw, MessageSquare, Building2, Scale, Calendar, DollarSign, Gavel, MapPin, ChevronRight, Plus, X, Tag, FileText, Eye, Bell, Hash, StickyNote, FolderOpen, Shield } from 'lucide-react';
+import { Trash2, Loader2, Users, Briefcase, BadgeCheck, RefreshCw, MessageSquare, Building2, Scale, Calendar, DollarSign, Gavel, MapPin, ChevronRight, Plus, X, Tag, FileText, Eye, Bell, Hash, StickyNote, FolderOpen, Shield, Pencil } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
