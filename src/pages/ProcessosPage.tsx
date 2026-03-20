@@ -258,21 +258,7 @@ export default function ProcessosPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="recursal" className="space-y-4">
-            <div className="text-center py-16 bg-card rounded-xl shadow-soft border border-border">
-              <Scale className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
-              <p className="text-muted-foreground font-medium">Fase Recursal</p>
-              <p className="text-sm text-muted-foreground/70 mt-1">Em breve: acompanhamento de recursos e segunda instância.</p>
-            </div>
-          </TabsContent>
 
-          <TabsContent value="execucao" className="space-y-4">
-            <div className="text-center py-16 bg-card rounded-xl shadow-soft border border-border">
-              <Scale className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
-              <p className="text-muted-foreground font-medium">Fase de Execução</p>
-              <p className="text-sm text-muted-foreground/70 mt-1">Em breve: controle de execução, cálculos e cumprimento de sentença.</p>
-            </div>
-          </TabsContent>
 
           <TabsContent value="consulta">
             <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>}>
