@@ -182,14 +182,17 @@ export default function ProcessosPage() {
           {kpiCards.map((kpi) => (
             <button
               key={kpi.label}
+              disabled={kpi.value === null}
               onClick={() => {
                 if (kpi.value !== null) {
                   setStatusFilter(kpi.filterKey);
-                } else {
-                  toast({ title: `${kpi.label}`, description: 'Funcionalidade em desenvolvimento. Em breve!' });
                 }
               }}
-              className={`flex flex-col items-center gap-1 p-3 md:p-4 rounded-xl border border-border/50 transition-all hover:shadow-md cursor-pointer ${
+              className={`flex flex-col items-center gap-1 p-3 md:p-4 rounded-xl border border-border/50 transition-all ${
+                kpi.value === null
+                  ? 'opacity-40 cursor-not-allowed'
+                  : 'hover:shadow-md cursor-pointer'
+              } ${
                 statusFilter === kpi.filterKey && kpi.value !== null
                   ? 'ring-2 ring-primary/30 shadow-md bg-card' 
                   : kpi.bg
