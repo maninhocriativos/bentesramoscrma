@@ -12,7 +12,6 @@ export function PageTransition({ children }: PageTransitionProps) {
   const prevPathRef = useRef(location.pathname);
 
   useEffect(() => {
-    // Only trigger transition if path actually changed
     if (prevPathRef.current !== location.pathname) {
       setTransitionStage('exit');
       
@@ -20,18 +19,17 @@ export function PageTransition({ children }: PageTransitionProps) {
         setDisplayedChildren(children);
         setTransitionStage('enter');
         prevPathRef.current = location.pathname;
-      }, 350);
+      }, 150); // Reduced from 350ms for snappier navigation
 
       return () => clearTimeout(exitTimer);
     } else {
-      // Same path, just update children without transition
       setDisplayedChildren(children);
     }
   }, [location.pathname, children]);
 
   return (
     <div
-      className={`flex-1 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+      className={`flex-1 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
         transitionStage === 'enter'
           ? 'opacity-100 translate-x-0 scale-100'
           : 'opacity-0 translate-x-6 scale-[0.98]'
