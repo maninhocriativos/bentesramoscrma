@@ -176,19 +176,27 @@ export default function ProcessosPage() {
       
       <div className="flex-1 p-4 md:p-6 space-y-5 animate-fade-in">
         {/* KPI Cards */}
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
           {kpiCards.map((kpi) => (
             <button
               key={kpi.label}
-              onClick={() => setStatusFilter(kpi.filterKey)}
+              onClick={() => {
+                if (kpi.value !== null) setStatusFilter(kpi.filterKey);
+              }}
               className={`flex flex-col items-center gap-1 p-3 md:p-4 rounded-xl border border-border/50 transition-all hover:shadow-md ${
-                statusFilter === kpi.filterKey
-                  ? 'ring-2 ring-primary/30 shadow-md bg-card' 
-                  : kpi.bg
+                kpi.value === null
+                  ? 'opacity-60 cursor-default'
+                  : statusFilter === kpi.filterKey
+                    ? 'ring-2 ring-primary/30 shadow-md bg-card' 
+                    : kpi.bg
               }`}
             >
               <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
-              <span className={`text-xl md:text-2xl font-bold ${kpi.color}`}>{kpi.value}</span>
+              {kpi.value !== null ? (
+                <span className={`text-xl md:text-2xl font-bold ${kpi.color}`}>{kpi.value}</span>
+              ) : (
+                <span className="text-[10px] text-muted-foreground/60 font-medium">Em breve</span>
+              )}
               <span className="text-[10px] md:text-xs text-muted-foreground font-medium">{kpi.label}</span>
             </button>
           ))}
