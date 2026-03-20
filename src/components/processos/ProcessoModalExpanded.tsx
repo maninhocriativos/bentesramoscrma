@@ -268,10 +268,16 @@ export function ProcessoModalExpanded({
 
   const handleRefreshStatus = async () => {
     const numero = (formData.numero_processo || '').trim();
-    if (!numero) {
-      toast.error('Informe o número do processo', {
-        description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
-      });
+    if (!numero || !CNJ_REGEX.test(numero)) {
+      if (!numero) {
+        toast.error('Informe o número do processo', {
+          description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
+        });
+      } else {
+        toast.error('Número do processo inválido', {
+          description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
+        });
+      }
       return;
     }
 
