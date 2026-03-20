@@ -34,7 +34,8 @@ import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, Command
 
 import { format, parseISO, isValid, addDays, addBusinessDays, isWeekend } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { generateIntimacaoReport } from '@/lib/intimacaoReportGenerator';
+import { generateIntimacaoReport, generateBatchIntimacaoReport } from '@/lib/intimacaoReportGenerator';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface Intimacao {
   id: string;
