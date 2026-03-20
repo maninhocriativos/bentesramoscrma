@@ -242,6 +242,34 @@ export default function IntimacoesPage() {
     toast.success('Relatório gerado com sucesso');
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(i => i.id)));
+    }
+  };
+
+  const handleBatchReport = () => {
+    const items = filtered.filter(i => selectedIds.has(i.id));
+    if (items.length === 0) { toast.error('Selecione ao menos uma intimação'); return; }
+    generateBatchIntimacaoReport(items);
+    toast.success(`Relatório em lote gerado (${items.length} intimações)`);
+  };
+
+  const handleReportAll = () => {
+    generateBatchIntimacaoReport(filtered);
+    toast.success(`Relatório gerado com todas as ${filtered.length} intimações`);
+  };
+
   const filtered = intimacoes.filter((i) => {
     const matchesSearch =
       !searchTerm ||
