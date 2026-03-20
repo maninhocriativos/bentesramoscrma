@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Trash2, Loader2, Users, Briefcase, BadgeCheck, RefreshCw, MessageSquare, Building2, Scale, Calendar, DollarSign, Gavel, MapPin, ChevronRight, Plus, X, Tag, FileText, Eye, Bell, Hash, StickyNote, FolderOpen, Shield } from 'lucide-react';
+import { Trash2, Loader2, Users, Briefcase, BadgeCheck, RefreshCw, MessageSquare, Building2, Scale, Calendar, DollarSign, Gavel, MapPin, ChevronRight, Plus, X, Tag, FileText, Eye, Bell, Hash, StickyNote, FolderOpen, Shield, Pencil } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -268,19 +269,19 @@ export function ProcessoModalExpanded({
 
   const handleRefreshStatus = async () => {
     const numero = (formData.numero_processo || '').trim();
-    if (!numero) {
-      toast.error('Informe o número do processo', {
-        description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
-      });
+    if (!numero || !CNJ_REGEX.test(numero)) {
+      if (!numero) {
+        toast.error('Informe o número do processo', {
+          description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
+        });
+      } else {
+        toast.error('Número do processo inválido', {
+          description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
+        });
+      }
       return;
     }
 
-    if (!CNJ_REGEX.test(numero)) {
-      toast.error('Número do processo inválido', {
-        description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
-      });
-      return;
-    }
 
     setFetchingData(true);
     try {
@@ -1508,61 +1509,103 @@ export function ProcessoModalExpanded({
                             ? 'bg-destructive/15 text-destructive border-destructive/30'
                             : 'bg-muted text-muted-foreground border-border';
 
+                        const updateParte = (field: string, value: string) => {
+                          setPartes(prev => prev.map((p, idx) => idx === i ? { ...p, [field]: value } : p));
+                        };
+
                         return (
-                          <div
-                            key={i}
-                            className={`group relative rounded-xl border border-border/50 bg-card p-3.5 pl-4 border-l-[3px] ${borderColor} transition-all hover:shadow-sm`}
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex-1 min-w-0">
-                                <span className="font-medium text-sm block truncate">{parte.nome}</span>
-                                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
-                                  {parte.documento && (
-                                    <span className="text-xs text-muted-foreground">Doc: {parte.documento}</span>
-                                  )}
-                                  {parte.celular && (
-                                    <span className="text-xs text-muted-foreground">📱 {parte.celular}</span>
-                                  )}
-                                  {parte.telefone_adicional && (
-                                    <span className="text-xs text-muted-foreground">📞 {parte.telefone_adicional}</span>
-                                  )}
+                          <Collapsible key={i}>
+                            <div className={`rounded-xl border border-border/50 bg-card border-l-[3px] ${borderColor} transition-all hover:shadow-sm`}>
+                              <div className="flex items-center justify-between gap-3 p-3.5 pl-4">
+                                <div className="flex-1 min-w-0">
+                                  <span className="font-medium text-sm block truncate">{parte.nome}</span>
+                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
+                                    {parte.documento && (
+                                      <span className="text-xs text-muted-foreground">Doc: {parte.documento}</span>
+                                    )}
+                                    {parte.celular && (
+                                      <span className="text-xs text-muted-foreground">📱 {parte.celular}</span>
+                                    )}
+                                    {parte.telefone_adicional && (
+                                      <span className="text-xs text-muted-foreground">📞 {parte.telefone_adicional}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  <Badge variant="outline" className={`rounded-lg text-xs ${badgeClasses}`}>
+                                    {parte.tipo}
+                                  </Badge>
+                                  <CollapsibleTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground/50 hover:text-primary" title="Editar">
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </CollapsibleTrigger>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-muted-foreground/50 hover:text-destructive"
+                                    onClick={() => setPartes(prev => prev.filter((_, idx) => idx !== i))}
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </Button>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2 flex-shrink-0">
-                                <Badge variant="outline" className={`rounded-lg text-xs ${badgeClasses}`}>
-                                  {parte.tipo}
-                                </Badge>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 text-muted-foreground/50 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={() => setPartes(prev => prev.filter((_, idx) => idx !== i))}
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
+                              <CollapsibleContent>
+                                <div className="px-4 pb-4 pt-1 border-t border-border/30 space-y-3">
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                      <Label className="text-xs text-muted-foreground">Nome</Label>
+                                      <Input value={parte.nome || ''} onChange={e => updateParte('nome', e.target.value)} className="rounded-xl h-8 text-sm bg-muted/30" />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-xs text-muted-foreground">Tipo/Polo</Label>
+                                      <select
+                                        value={parte.tipo || ''}
+                                        onChange={e => updateParte('tipo', e.target.value)}
+                                        className="flex h-8 w-full rounded-xl border border-input bg-muted/30 px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      >
+                                        <option value="Autor">Autor</option>
+                                        <option value="Réu">Réu</option>
+                                        <option value="Terceiro Interessado">Terceiro Interessado</option>
+                                        <option value="Testemunha">Testemunha</option>
+                                        <option value="Perito">Perito</option>
+                                        <option value="Advogado">Advogado</option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-3 gap-3">
+                                    <div className="space-y-1">
+                                      <Label className="text-xs text-muted-foreground">CPF/CNPJ</Label>
+                                      <Input value={parte.documento || ''} onChange={e => updateParte('documento', e.target.value)} className="rounded-xl h-8 text-sm bg-muted/30" placeholder="Documento" />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-xs text-muted-foreground">Celular</Label>
+                                      <Input value={parte.celular || ''} onChange={e => updateParte('celular', e.target.value)} className="rounded-xl h-8 text-sm bg-muted/30" placeholder="(00) 00000-0000" />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-xs text-muted-foreground">Tel. Adicional</Label>
+                                      <Input value={parte.telefone_adicional || ''} onChange={e => updateParte('telefone_adicional', e.target.value)} className="rounded-xl h-8 text-sm bg-muted/30" placeholder="(00) 0000-0000" />
+                                    </div>
+                                  </div>
+                                </div>
+                              </CollapsibleContent>
                             </div>
                             {parte.advogados && parte.advogados.length > 0 && (
-                              <div className="mt-2.5 pt-2.5 border-t border-border/30">
-                                <p className="text-[11px] text-muted-foreground mb-1.5 uppercase tracking-wider font-medium flex items-center gap-1">
-                                  <Briefcase className="h-3 w-3" /> Advogado(s)
-                                </p>
-                                <div className="space-y-1">
-                                  {parte.advogados.map((adv, j) => (
-                                    <div key={j} className="flex items-center justify-between gap-2">
-                                      <p className="text-xs font-medium break-words min-w-0 flex-1">{adv.nome}</p>
-                                      {adv.oab && (
-                                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
-                                          <BadgeCheck className="h-3 w-3 text-primary" />
-                                          {adv.oab}
-                                        </span>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
+                              <div className="ml-4 mt-1 mb-1 pl-3 border-l-2 border-border/30">
+                                {parte.advogados.map((adv, j) => (
+                                  <div key={j} className="flex items-center justify-between gap-2 py-0.5">
+                                    <p className="text-xs font-medium break-words min-w-0 flex-1">{adv.nome}</p>
+                                    {adv.oab && (
+                                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
+                                        <BadgeCheck className="h-3 w-3 text-primary" />
+                                        {adv.oab}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
                               </div>
                             )}
-                          </div>
+                          </Collapsible>
                         );
                       })}
                     </div>
