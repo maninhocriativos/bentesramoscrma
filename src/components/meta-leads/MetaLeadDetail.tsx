@@ -139,8 +139,8 @@ export function MetaLeadDetail({ lead, messages, messagesLoading, onUpdateStatus
       <div className="px-5 py-3 border-b space-y-2.5 shrink-0 bg-card">
         <Button 
           onClick={() => {
-            const phone = lead.telefone?.replace(/\D/g, '');
-            navigate(phone ? `/chat?phone=${phone}` : '/chat');
+            const targetId = lead.linked_lead_id || lead.id;
+            navigate(`/chat?lead_id=${targetId}`);
           }} 
           className="w-full h-11 text-sm font-semibold shadow-sm" 
           size="default"
