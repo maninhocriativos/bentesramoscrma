@@ -29,6 +29,8 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { Textarea } from '@/components/ui/textarea';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 
 import { format, parseISO, isValid, addDays, addBusinessDays, isWeekend } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -895,21 +897,37 @@ function IntimacaoDetailModal({
               <p className="text-sm text-muted-foreground">Nenhuma tarefa relacionada.</p>
             )}
 
-            {/* Seletor de tarefas */}
+            {/* Seletor de tarefas em dropdown */}
             {showTarefaSelector && (
               <div className="border border-border rounded-lg p-3 bg-muted/20 space-y-3">
-                <p className="text-xs font-semibold text-foreground">Selecione o tipo de tarefa:</p>
-                <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
-                  {allTarefaOptions.filter(t => !tarefasAdicionadas.includes(t)).map((tarefa) => (
-                    <button
-                      key={tarefa}
-                      onClick={() => adicionarTarefa(tarefa)}
-                      className="px-2.5 py-1 text-xs rounded-md border border-border bg-card hover:bg-primary/10 hover:border-primary/30 transition-colors text-foreground"
-                    >
-                      {tarefa}
-                    </button>
-                  ))}
-                </div>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between h-9 text-xs">
+                      Selecione o tipo de tarefa...
+                      <ChevronDown className="h-3.5 w-3.5 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar tarefa..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhuma tarefa encontrada.</CommandEmpty>
+                        <CommandGroup>
+                          {allTarefaOptions.filter(t => !tarefasAdicionadas.includes(t)).map((tarefa) => (
+                            <CommandItem
+                              key={tarefa}
+                              value={tarefa}
+                              onSelect={() => adicionarTarefa(tarefa)}
+                              className="text-xs cursor-pointer"
+                            >
+                              {tarefa}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
 
                 {/* Cadastrar nova */}
                 <div className="flex gap-2 pt-1 border-t border-border/50">
