@@ -101,6 +101,7 @@ const App = () => (
                 <Route path="/peticoes/modelo-editor" element={<PeticaoModeloEditorPage />} />
                 <Route path="/historico-acessos" element={<HistoricoAcessosPage />} />
                 <Route path="/intimacoes" element={<IntimacoesPage />} />
+                <Route path="/bem-vindo" element={<BemVindoPage />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />
