@@ -443,6 +443,40 @@ export default function IntimacoesPage() {
           </Card>
         ) : (
           <div className="space-y-2.5">
+            {/* Batch Selection Toolbar */}
+            <div className="flex items-center justify-between gap-2 flex-wrap py-2 px-1">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={selectedIds.size === filtered.length && filtered.length > 0}
+                  onCheckedChange={toggleSelectAll}
+                  aria-label="Selecionar todas"
+                />
+                <span className="text-xs text-muted-foreground">
+                  {selectedIds.size > 0 ? `${selectedIds.size} selecionada(s)` : 'Selecionar'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {selectedIds.size > 0 && (
+                  <Button
+                    size="sm" variant="default"
+                    className="h-7 text-xs gap-1.5 rounded-lg"
+                    onClick={handleBatchReport}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Relatório Selecionadas ({selectedIds.size})
+                  </Button>
+                )}
+                <Button
+                  size="sm" variant="outline"
+                  className="h-7 text-xs gap-1.5 rounded-lg"
+                  onClick={handleReportAll}
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  Relatório de Todas ({filtered.length})
+                </Button>
+              </div>
+            </div>
+
             {filtered.map((intimacao) => {
               const prazos = calcularPrazos(intimacao);
               const fmtPrazo = (d: Date | null) => d ? format(d, 'dd/MM/yyyy') : null;
@@ -452,6 +486,8 @@ export default function IntimacoesPage() {
                 <Card
                   key={intimacao.id}
                   className={`group transition-all duration-200 hover:shadow-xl cursor-pointer overflow-hidden ${
+                    selectedIds.has(intimacao.id) ? 'ring-1 ring-primary/30 border-primary/40' : ''
+                  } ${
                     !intimacao.lida
                       ? 'border-l-4 border-l-destructive bg-gradient-to-r from-destructive/[0.02] to-transparent ring-1 ring-destructive/10'
                       : 'hover:ring-1 hover:ring-secondary/30'
@@ -463,6 +499,14 @@ export default function IntimacoesPage() {
                 >
                   <CardContent className="p-5">
                     <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3 shrink-0 pt-1">
+                        <Checkbox
+                          checked={selectedIds.has(intimacao.id)}
+                          onCheckedChange={() => toggleSelect(intimacao.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`Selecionar ${intimacao.processo_cnj}`}
+                        />
+                      </div>
                       <div className="min-w-0 flex-1 space-y-2.5">
                         {/* Top row: badges */}
                         <div className="flex items-center gap-2 flex-wrap">
