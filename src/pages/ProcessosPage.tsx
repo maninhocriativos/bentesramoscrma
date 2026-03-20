@@ -192,28 +192,15 @@ export default function ProcessosPage() {
           {kpiCards.map((kpi) => (
             <button
               key={kpi.label}
-              disabled={kpi.value === null}
-              onClick={() => {
-                if (kpi.value !== null) {
-                  setStatusFilter(kpi.filterKey);
-                }
-              }}
-              className={`flex flex-col items-center gap-1 p-3 md:p-4 rounded-xl border border-border/50 transition-all ${
-                kpi.value === null
-                  ? 'opacity-40 cursor-not-allowed'
-                  : 'hover:shadow-md cursor-pointer'
-              } ${
-                statusFilter === kpi.filterKey && kpi.value !== null
+              onClick={() => setStatusFilter(kpi.filterKey)}
+              className={`flex flex-col items-center gap-1 p-3 md:p-4 rounded-xl border border-border/50 transition-all hover:shadow-md cursor-pointer ${
+                statusFilter === kpi.filterKey
                   ? 'ring-2 ring-primary/30 shadow-md bg-card' 
                   : kpi.bg
               }`}
             >
               <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
-              {kpi.value !== null ? (
-                <span className={`text-xl md:text-2xl font-bold ${kpi.color}`}>{kpi.value}</span>
-              ) : (
-                <span className="text-[10px] text-muted-foreground/60 font-medium">Em breve</span>
-              )}
+              <span className={`text-xl md:text-2xl font-bold ${kpi.color}`}>{kpi.value}</span>
               <span className="text-[10px] md:text-xs text-muted-foreground font-medium">{kpi.label}</span>
             </button>
           ))}
