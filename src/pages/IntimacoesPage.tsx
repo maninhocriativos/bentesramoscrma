@@ -580,6 +580,42 @@ function IntimacaoDetailModal({
   const [linkedProcesso, setLinkedProcesso] = useState<{ id: string; numero: string; titulo: string } | null>(null);
   const [showProcessoDropdown, setShowProcessoDropdown] = useState(false);
 
+  // Tarefas relacionadas
+  const TAREFAS_PREDEFINIDAS = [
+    'Manifestação', 'Recurso de Apelação', 'Recurso Especial', 'Recurso Extraordinário',
+    'Recurso Ordinário', 'Recurso Inominado', 'Embargos de Declaração', 'Contrarrazões',
+    'Alegações Finais', 'Memoriais', 'Agravo de Instrumento', 'Agravo Interno',
+    'Sentença', 'Acórdão', 'Sessão de Julgamento', 'Réplica', 'Perícia',
+  ];
+  const [tarefasAdicionadas, setTarefasAdicionadas] = useState<string[]>([]);
+  const [tarefasCustom, setTarefasCustom] = useState<string[]>([]);
+  const [showTarefaSelector, setShowTarefaSelector] = useState(false);
+  const [novaTarefaCustom, setNovaTarefaCustom] = useState('');
+
+  const allTarefaOptions = [...TAREFAS_PREDEFINIDAS, ...tarefasCustom];
+
+  const adicionarTarefa = (tarefa: string) => {
+    if (!tarefasAdicionadas.includes(tarefa)) {
+      setTarefasAdicionadas(prev => [...prev, tarefa]);
+    }
+  };
+
+  const removerTarefa = (tarefa: string) => {
+    setTarefasAdicionadas(prev => prev.filter(t => t !== tarefa));
+  };
+
+  const adicionarTarefaCustom = () => {
+    const nome = novaTarefaCustom.trim();
+    if (nome && !allTarefaOptions.includes(nome)) {
+      setTarefasCustom(prev => [...prev, nome]);
+      setTarefasAdicionadas(prev => [...prev, nome]);
+      setNovaTarefaCustom('');
+    } else if (nome && !tarefasAdicionadas.includes(nome)) {
+      adicionarTarefa(nome);
+      setNovaTarefaCustom('');
+    }
+  };
+
   const searchProcessos = async (term: string) => {
     setProcessoSearch(term);
     if (term.length < 2) { setProcessoResults([]); setShowProcessoDropdown(false); return; }
