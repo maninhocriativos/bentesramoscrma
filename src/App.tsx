@@ -38,6 +38,7 @@ const ModelosPage = lazy(() => import("./pages/ModelosPage"));
 const PeticaoModeloEditorPage = lazy(() => import("./pages/PeticaoModeloEditorPage"));
 const HistoricoAcessosPage = lazy(() => import("./pages/HistoricoAcessosPage"));
 const IntimacoesPage = lazy(() => import("./pages/IntimacoesPage"));
+const BemVindoPage = lazy(() => import("./pages/BemVindoPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
