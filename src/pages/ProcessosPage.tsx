@@ -99,7 +99,15 @@ export default function ProcessosPage() {
       (p.cpf_cliente?.includes(search)) ||
       (p.classe_cnj?.toLowerCase().includes(search))
     );
-    const matchesStatus = statusFilter === 'todos' || p.status === statusFilter;
+    const matchesFase = (filter: string) => {
+      if (filter === 'recursal') return p.fase?.toLowerCase() === 'recursal';
+      if (filter === 'execucao') return p.fase?.toLowerCase() === 'execução' || p.fase?.toLowerCase() === 'execucao';
+      return false;
+    };
+    const matchesStatus = statusFilter === 'todos' 
+      || statusFilter === 'recursal' || statusFilter === 'execucao'
+        ? (statusFilter === 'todos' || matchesFase(statusFilter))
+        : p.status === statusFilter;
     return matchesSearch && matchesStatus;
   }), [processos, searchTerm, statusFilter]);
 
