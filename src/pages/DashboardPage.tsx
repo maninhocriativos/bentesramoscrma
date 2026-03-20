@@ -8,6 +8,7 @@ import { AlertasWidget } from '@/components/AlertasWidget';
 import { useLeads } from '@/hooks/useLeads';
 import { useProcessos } from '@/hooks/useProcessos';
 import { useAlertas } from '@/hooks/useAlertas';
+import { useDashboardStats } from '@/hooks/useDashboardStats';
 import { Loader2 } from 'lucide-react';
 import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, isAfter } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -25,6 +26,7 @@ const ChartFallback = () => (
 );
 
 export default function DashboardPage() {
+  const { stats, loading: statsLoading } = useDashboardStats();
   const { leads, loading: leadsLoading, fetchLeads } = useLeads();
   const { processos, loading: processosLoading } = useProcessos();
   const { alertas } = useAlertas(leads, processos);
@@ -40,8 +42,6 @@ export default function DashboardPage() {
     status: 'all',
     search: '',
   });
-
-  const isLoading = leadsLoading || processosLoading;
 
   const filteredLeads = useMemo(() => {
     return leads.filter(lead => {
@@ -78,22 +78,22 @@ export default function DashboardPage() {
     else if (alerta.processoId) navigate('/processos');
   };
 
-  const totalValorCausa = useMemo(() => {
-    return leads.reduce((sum, lead) => sum + (lead.valor_causa || 0), 0);
-  }, [leads]);
-
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency', currency: 'BRL', minimumFractionDigits: 2,
     }).format(value);
   };
 
+  // Show hero KPIs immediately from fast RPC, rest loads progressively
+  const heroReady = !statsLoading;
+  const chartsReady = !leadsLoading && !processosLoading;
+
   return (
     <AppLayout>
       <AppHeader title="Dashboard" />
       
       <div className="flex-1 overflow-auto">
-        {isLoading ? (
+        {!heroReady ? (
           <div className="flex items-center justify-center py-20">
             <div className="flex flex-col items-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
@@ -105,7 +105,7 @@ export default function DashboardPage() {
         ) : (
           <div className="px-4 md:px-6 lg:px-8 py-6 space-y-6 animate-fade-in">
             
-            {/* ===== TOP: Hero KPIs ===== */}
+            {/* ===== TOP: Hero KPIs (instant from RPC) ===== */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-card rounded-xl overflow-hidden shadow-soft border border-border/40">
                 <div className="bg-primary px-4 py-2">
@@ -114,7 +114,7 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <div className="px-6 py-5 text-center">
-                  <p className="text-5xl font-bold text-foreground tracking-tight">{leads.length}</p>
+                  <p className="text-5xl font-bold text-foreground tracking-tight">{stats.total_leads}</p>
                   <p className="text-xs text-muted-foreground mt-1">leads no CRM</p>
                 </div>
               </div>
@@ -126,7 +126,7 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <div className="px-6 py-5 text-center">
-                  <p className="text-4xl font-bold text-foreground tracking-tight">{formatCurrency(totalValorCausa)}</p>
+                  <p className="text-4xl font-bold text-foreground tracking-tight">{formatCurrency(stats.total_valor_causa)}</p>
                   <p className="text-xs text-muted-foreground mt-1">total em pipeline</p>
                 </div>
               </div>
@@ -138,7 +138,7 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <div className="px-6 py-5 text-center">
-                  <p className="text-5xl font-bold text-foreground tracking-tight">{processos.length}</p>
+                  <p className="text-5xl font-bold text-foreground tracking-tight">{stats.total_processos}</p>
                   <p className="text-xs text-muted-foreground mt-1">processos cadastrados</p>
                 </div>
               </div>
@@ -147,37 +147,48 @@ export default function DashboardPage() {
             {/* ===== FILTERS ===== */}
             <DashboardFiltersBar filters={filters} onFiltersChange={setFilters} />
 
-            {/* ===== ROW 2: Origem + KPIs ===== */}
-            <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
-              <div className="space-y-6">
-                <LeadOriginKPIs leads={leads} />
-                <DashboardKPIs leads={filteredLeads} processos={processos} />
-              </div>
-              <AlertasWidget 
-                alertas={alertas} 
-                onAlertClick={handleAlertClick}
-              />
-            </div>
+            {/* ===== ROW 2: Origem + KPIs (progressive load) ===== */}
+            {chartsReady ? (
+              <>
+                <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
+                  <div className="space-y-6">
+                    <LeadOriginKPIs leads={leads} />
+                    <DashboardKPIs leads={filteredLeads} processos={processos} />
+                  </div>
+                  <AlertasWidget 
+                    alertas={alertas} 
+                    onAlertClick={handleAlertClick}
+                  />
+                </div>
 
-            {/* ===== ROW 3: Conversão (lazy) ===== */}
-            <Suspense fallback={<ChartFallback />}>
-              <ConversionMetrics leads={leads} />
-            </Suspense>
+                {/* ===== ROW 3: Conversão (lazy) ===== */}
+                <Suspense fallback={<ChartFallback />}>
+                  <ConversionMetrics leads={leads} />
+                </Suspense>
 
-            {/* ===== ROW 4: Charts + Monitor (lazy) ===== */}
-            <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
-              <Suspense fallback={<ChartFallback />}>
-                <DashboardCharts leads={filteredLeads} />
-              </Suspense>
-              <div className="space-y-6">
-                <Suspense fallback={<ChartFallback />}>
-                  <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
-                </Suspense>
-                <Suspense fallback={<ChartFallback />}>
-                  <TeamStatusWidget />
-                </Suspense>
+                {/* ===== ROW 4: Charts + Monitor (lazy) ===== */}
+                <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
+                  <Suspense fallback={<ChartFallback />}>
+                    <DashboardCharts leads={filteredLeads} />
+                  </Suspense>
+                  <div className="space-y-6">
+                    <Suspense fallback={<ChartFallback />}>
+                      <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
+                    </Suspense>
+                    <Suspense fallback={<ChartFallback />}>
+                      <TeamStatusWidget />
+                    </Suspense>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-center py-12">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Carregando gráficos...</span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>

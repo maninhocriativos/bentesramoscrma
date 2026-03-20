@@ -16,8 +16,8 @@ export function useProcessos() {
   const { perfil, isAdvogado } = usePerfil();
   const { user } = useAuth();
 
-  const fetchProcessos = useCallback(async () => {
-    setLoading(true);
+  const fetchProcessos = useCallback(async (isInitial = false) => {
+    if (isInitial) setLoading(true);
 
     let query = supabase
       .from('processos')
@@ -40,7 +40,7 @@ export function useProcessos() {
 
   useEffect(() => {
     if (user) {
-      fetchProcessos();
+      fetchProcessos(true);
     }
   }, [user, fetchProcessos]);
 
