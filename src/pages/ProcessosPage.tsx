@@ -82,7 +82,9 @@ export default function ProcessosPage() {
     const arquivados = processos.filter(p => p.status === 'Arquivado').length;
     const ganhos = processos.filter(p => p.status === 'Ganho').length;
     const perdidos = processos.filter(p => p.status === 'Perdido').length;
-    return { total, emAndamento, suspensos, arquivados, ganhos, perdidos };
+    const recursal = processos.filter(p => p.fase?.toLowerCase() === 'recursal').length;
+    const execucao = processos.filter(p => p.fase?.toLowerCase() === 'execução' || p.fase?.toLowerCase() === 'execucao').length;
+    return { total, emAndamento, suspensos, arquivados, ganhos, perdidos, recursal, execucao };
   }, [processos]);
 
   const filteredProcessos = useMemo(() => processos.filter(p => {
@@ -97,7 +99,15 @@ export default function ProcessosPage() {
       (p.cpf_cliente?.includes(search)) ||
       (p.classe_cnj?.toLowerCase().includes(search))
     );
-    const matchesStatus = statusFilter === 'todos' || p.status === statusFilter;
+    const matchesFase = (filter: string) => {
+      if (filter === 'recursal') return p.fase?.toLowerCase() === 'recursal';
+      if (filter === 'execucao') return p.fase?.toLowerCase() === 'execução' || p.fase?.toLowerCase() === 'execucao';
+      return false;
+    };
+    const matchesStatus = statusFilter === 'todos' 
+      || statusFilter === 'recursal' || statusFilter === 'execucao'
+        ? (statusFilter === 'todos' || matchesFase(statusFilter))
+        : p.status === statusFilter;
     return matchesSearch && matchesStatus;
   }), [processos, searchTerm, statusFilter]);
 
@@ -120,8 +130,8 @@ export default function ProcessosPage() {
     { label: 'Arquivados', value: kpis.arquivados, icon: Archive, color: 'text-muted-foreground', bg: 'bg-muted', filterKey: 'Arquivado' },
     { label: 'Ganhos', value: kpis.ganhos, icon: Trophy, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30', filterKey: 'Ganho' },
     { label: 'Perdidos', value: kpis.perdidos, icon: XCircle, color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-950/30', filterKey: 'Perdido' },
-    { label: 'Recursal', value: null, icon: Gavel, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-950/30', filterKey: 'recursal' },
-    { label: 'Execução', value: null, icon: FileCheck, color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-950/30', filterKey: 'execucao' },
+    { label: 'Recursal', value: kpis.recursal, icon: Gavel, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-950/30', filterKey: 'recursal' },
+    { label: 'Execução', value: kpis.execucao, icon: FileCheck, color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-950/30', filterKey: 'execucao' },
   ];
 
   return (
@@ -182,28 +192,15 @@ export default function ProcessosPage() {
           {kpiCards.map((kpi) => (
             <button
               key={kpi.label}
-              disabled={kpi.value === null}
-              onClick={() => {
-                if (kpi.value !== null) {
-                  setStatusFilter(kpi.filterKey);
-                }
-              }}
-              className={`flex flex-col items-center gap-1 p-3 md:p-4 rounded-xl border border-border/50 transition-all ${
-                kpi.value === null
-                  ? 'opacity-40 cursor-not-allowed'
-                  : 'hover:shadow-md cursor-pointer'
-              } ${
-                statusFilter === kpi.filterKey && kpi.value !== null
+              onClick={() => setStatusFilter(kpi.filterKey)}
+              className={`flex flex-col items-center gap-1 p-3 md:p-4 rounded-xl border border-border/50 transition-all hover:shadow-md cursor-pointer ${
+                statusFilter === kpi.filterKey
                   ? 'ring-2 ring-primary/30 shadow-md bg-card' 
                   : kpi.bg
               }`}
             >
               <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
-              {kpi.value !== null ? (
-                <span className={`text-xl md:text-2xl font-bold ${kpi.color}`}>{kpi.value}</span>
-              ) : (
-                <span className="text-[10px] text-muted-foreground/60 font-medium">Em breve</span>
-              )}
+              <span className={`text-xl md:text-2xl font-bold ${kpi.color}`}>{kpi.value}</span>
               <span className="text-[10px] md:text-xs text-muted-foreground font-medium">{kpi.label}</span>
             </button>
           ))}
