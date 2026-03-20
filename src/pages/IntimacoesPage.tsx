@@ -864,9 +864,75 @@ function IntimacaoDetailModal({
         </CollapsibleSection>
 
         <CollapsibleSection icon={ClipboardList} title="Tarefas relacionadas"
-          actions={<Button size="sm" className="h-7 text-xs bg-emerald-500 hover:bg-emerald-600 text-white rounded-md">Adicionar</Button>}
+          actions={
+            <Button
+              size="sm"
+              className="h-7 text-xs bg-emerald-500 hover:bg-emerald-600 text-white rounded-md"
+              onClick={(e) => { e.stopPropagation(); setShowTarefaSelector(prev => !prev); }}
+            >
+              Adicionar
+            </Button>
+          }
         >
-          <p className="text-sm text-muted-foreground">Nenhuma tarefa relacionada.</p>
+          <div className="space-y-3">
+            {/* Tarefas adicionadas */}
+            {tarefasAdicionadas.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {tarefasAdicionadas.map((tarefa) => (
+                  <Badge
+                    key={tarefa}
+                    variant="secondary"
+                    className="gap-1.5 px-3 py-1.5 text-xs cursor-pointer hover:bg-destructive/10 hover:text-destructive transition-colors"
+                    onClick={() => removerTarefa(tarefa)}
+                    title="Clique para remover"
+                  >
+                    {tarefa}
+                    <span className="text-[10px] opacity-60">✕</span>
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nenhuma tarefa relacionada.</p>
+            )}
+
+            {/* Seletor de tarefas */}
+            {showTarefaSelector && (
+              <div className="border border-border rounded-lg p-3 bg-muted/20 space-y-3">
+                <p className="text-xs font-semibold text-foreground">Selecione o tipo de tarefa:</p>
+                <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+                  {allTarefaOptions.filter(t => !tarefasAdicionadas.includes(t)).map((tarefa) => (
+                    <button
+                      key={tarefa}
+                      onClick={() => adicionarTarefa(tarefa)}
+                      className="px-2.5 py-1 text-xs rounded-md border border-border bg-card hover:bg-primary/10 hover:border-primary/30 transition-colors text-foreground"
+                    >
+                      {tarefa}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Cadastrar nova */}
+                <div className="flex gap-2 pt-1 border-t border-border/50">
+                  <Input
+                    placeholder="Cadastrar nova tarefa..."
+                    value={novaTarefaCustom}
+                    onChange={(e) => setNovaTarefaCustom(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && adicionarTarefaCustom()}
+                    className="h-8 text-xs"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs shrink-0"
+                    onClick={adicionarTarefaCustom}
+                    disabled={!novaTarefaCustom.trim()}
+                  >
+                    Cadastrar
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </CollapsibleSection>
 
         <CollapsibleSection icon={MessageSquare} title="Comentários" defaultOpen>
