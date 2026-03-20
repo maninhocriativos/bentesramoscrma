@@ -115,3 +115,104 @@ export function generateIntimacaoReport(data: IntimacaoData): void {
   const cnj = (data.processo_cnj || 'intimacao').replace(/[.\-/]/g, '_');
   doc.save(`Relatorio_Intimacao_${cnj}_${new Date().toISOString().split('T')[0]}.pdf`);
 }
+
+export function generateBatchIntimacaoReport(items: IntimacaoData[]): void {
+  const doc = new jsPDF();
+  const pw = doc.internal.pageSize.getWidth();
+  const margin = 20;
+  const maxW = pw - margin * 2;
+
+  // Cover page
+  let y = 60;
+  doc.setFontSize(20);
+  doc.setTextColor(37, 99, 235);
+  doc.text('RELATÓRIO DE INTIMAÇÕES', pw / 2, y, { align: 'center' });
+  y += 12;
+  doc.setFontSize(10);
+  doc.setTextColor(120);
+  doc.text('Bentes & Ramos Advocacia', pw / 2, y, { align: 'center' });
+  y += 20;
+  doc.setDrawColor(200);
+  doc.line(margin, y, pw - margin, y);
+  y += 14;
+  doc.setFontSize(12);
+  doc.setTextColor(60);
+  doc.text(`Total de publicações: ${items.length}`, pw / 2, y, { align: 'center' });
+  y += 8;
+  doc.setFontSize(10);
+  doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pw / 2, y, { align: 'center' });
+
+  items.forEach((data, idx) => {
+    doc.addPage();
+    let cy = 20;
+
+    // Header
+    doc.setFontSize(9);
+    doc.setTextColor(150);
+    doc.text(`Intimação ${idx + 1} de ${items.length}`, pw - margin, cy, { align: 'right' });
+
+    doc.setFontSize(14);
+    doc.setTextColor(37, 99, 235);
+    doc.text('RELATÓRIO DE INTIMAÇÃO', margin, cy);
+    cy += 10;
+    doc.setDrawColor(200);
+    doc.line(margin, cy, pw - margin, cy);
+    cy += 10;
+
+    const addField = (label: string, value: string) => {
+      if (cy > 270) { doc.addPage(); cy = 20; }
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(60);
+      doc.setFontSize(10);
+      doc.text(label, margin, cy);
+      doc.setFont('helvetica', 'normal');
+      doc.text(value || '—', margin + 50, cy);
+      cy += 7;
+    };
+
+    addField('Processo:', data.processo_cnj || '—');
+    addField('Ação:', data.processo_titulo || '—');
+    addField('Tribunal:', data.tribunal || '—');
+    addField('Tipo:', data.tipo_intimacao || '—');
+    addField('OAB:', `${data.oab_uf} ${data.oab_numero}`);
+    cy += 4;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(37, 99, 235);
+    doc.text('DATAS', margin, cy);
+    cy += 8;
+    doc.setFontSize(10);
+    addField('Disponibilização:', fmtDate(data.data_disponibilizacao));
+    addField('Publicação:', fmtDate(data.data_publicacao));
+    addField('Intimação:', fmtDate(data.data_intimacao));
+    cy += 4;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(37, 99, 235);
+    doc.text('CONTEÚDO DA PUBLICAÇÃO', margin, cy);
+    cy += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(50);
+    const content = data.conteudo || 'Sem conteúdo detalhado disponível.';
+    const lines = doc.splitTextToSize(content, maxW);
+    for (const line of lines) {
+      if (cy > 275) { doc.addPage(); cy = 20; }
+      doc.text(line, margin, cy);
+      cy += 5;
+    }
+  });
+
+  // Footer on all pages
+  const pages = doc.getNumberOfPages();
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text(`Página ${i} de ${pages} | Gerado em ${new Date().toLocaleString('pt-BR')}`, pw / 2, 287, { align: 'center' });
+  }
+
+  doc.save(`Relatorio_Intimacoes_Lote_${new Date().toISOString().split('T')[0]}.pdf`);
+}
