@@ -118,6 +118,8 @@ export default function ProcessosPage() {
     { label: 'Arquivados', value: kpis.arquivados, icon: Archive, color: 'text-muted-foreground', bg: 'bg-muted', filterKey: 'Arquivado' },
     { label: 'Ganhos', value: kpis.ganhos, icon: Trophy, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30', filterKey: 'Ganho' },
     { label: 'Perdidos', value: kpis.perdidos, icon: XCircle, color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-950/30', filterKey: 'Perdido' },
+    { label: 'Recursal', value: null, icon: Gavel, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-950/30', filterKey: 'recursal' },
+    { label: 'Execução', value: null, icon: FileCheck, color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-950/30', filterKey: 'execucao' },
   ];
 
   return (
@@ -174,42 +176,36 @@ export default function ProcessosPage() {
       
       <div className="flex-1 p-4 md:p-6 space-y-5 animate-fade-in">
         {/* KPI Cards */}
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
           {kpiCards.map((kpi) => (
             <button
               key={kpi.label}
-              onClick={() => setStatusFilter(kpi.filterKey)}
+              onClick={() => {
+                if (kpi.value !== null) setStatusFilter(kpi.filterKey);
+              }}
               className={`flex flex-col items-center gap-1 p-3 md:p-4 rounded-xl border border-border/50 transition-all hover:shadow-md ${
-                statusFilter === kpi.filterKey
-                  ? 'ring-2 ring-primary/30 shadow-md bg-card' 
-                  : kpi.bg
+                kpi.value === null
+                  ? 'opacity-60 cursor-default'
+                  : statusFilter === kpi.filterKey
+                    ? 'ring-2 ring-primary/30 shadow-md bg-card' 
+                    : kpi.bg
               }`}
             >
               <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
-              <span className={`text-xl md:text-2xl font-bold ${kpi.color}`}>{kpi.value}</span>
+              {kpi.value !== null ? (
+                <span className={`text-xl md:text-2xl font-bold ${kpi.color}`}>{kpi.value}</span>
+              ) : (
+                <span className="text-[10px] text-muted-foreground/60 font-medium">Em breve</span>
+              )}
               <span className="text-[10px] md:text-xs text-muted-foreground font-medium">{kpi.label}</span>
             </button>
           ))}
         </div>
 
         <Tabs defaultValue="internos" className="w-full">
-          <TabsList className="mb-4 h-auto p-1 gap-1">
-            <TabsTrigger value="internos" className="gap-1.5 px-3 py-2 text-xs md:text-sm">
-              <Briefcase className="h-4 w-4" />
-              Processos do Escritório
-            </TabsTrigger>
-            <TabsTrigger value="recursal" className="gap-1.5 px-3 py-2 text-xs md:text-sm">
-              <Gavel className="h-4 w-4" />
-              Recursal
-            </TabsTrigger>
-            <TabsTrigger value="execucao" className="gap-1.5 px-3 py-2 text-xs md:text-sm">
-              <FileCheck className="h-4 w-4" />
-              Execução
-            </TabsTrigger>
-            <TabsTrigger value="consulta" className="gap-1.5 px-3 py-2 text-xs md:text-sm">
-              <Search className="h-4 w-4" />
-              Consultar CNJ
-            </TabsTrigger>
+          <TabsList className="mb-4">
+            <TabsTrigger value="internos">Processos do Escritório</TabsTrigger>
+            <TabsTrigger value="consulta">Consultar CNJ</TabsTrigger>
           </TabsList>
 
           <TabsContent value="internos" className="space-y-4">
@@ -262,21 +258,7 @@ export default function ProcessosPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="recursal" className="space-y-4">
-            <div className="text-center py-16 bg-card rounded-xl shadow-soft border border-border">
-              <Scale className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
-              <p className="text-muted-foreground font-medium">Fase Recursal</p>
-              <p className="text-sm text-muted-foreground/70 mt-1">Em breve: acompanhamento de recursos e segunda instância.</p>
-            </div>
-          </TabsContent>
 
-          <TabsContent value="execucao" className="space-y-4">
-            <div className="text-center py-16 bg-card rounded-xl shadow-soft border border-border">
-              <Scale className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
-              <p className="text-muted-foreground font-medium">Fase de Execução</p>
-              <p className="text-sm text-muted-foreground/70 mt-1">Em breve: controle de execução, cálculos e cumprimento de sentença.</p>
-            </div>
-          </TabsContent>
 
           <TabsContent value="consulta">
             <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>}>
