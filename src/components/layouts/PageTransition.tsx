@@ -12,7 +12,6 @@ export function PageTransition({ children }: PageTransitionProps) {
   const prevPathRef = useRef(location.pathname);
 
   useEffect(() => {
-    // Only trigger transition if path actually changed
     if (prevPathRef.current !== location.pathname) {
       setTransitionStage('exit');
       
@@ -20,11 +19,10 @@ export function PageTransition({ children }: PageTransitionProps) {
         setDisplayedChildren(children);
         setTransitionStage('enter');
         prevPathRef.current = location.pathname;
-      }, 350);
+      }, 150); // Reduced from 350ms for snappier navigation
 
       return () => clearTimeout(exitTimer);
     } else {
-      // Same path, just update children without transition
       setDisplayedChildren(children);
     }
   }, [location.pathname, children]);
