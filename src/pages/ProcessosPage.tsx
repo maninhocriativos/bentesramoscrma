@@ -14,7 +14,7 @@ const ConsultaProcessoExterno = lazy(() => import('@/components/processos/Consul
 import { 
   Loader2, Search, Scale, Plus, 
   CheckCircle2, PauseCircle, Archive, Trophy, XCircle,
-  RefreshCw, SlidersHorizontal, Upload
+  RefreshCw, SlidersHorizontal, Upload, Briefcase, Gavel, FileCheck
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
