@@ -29,6 +29,8 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { Textarea } from '@/components/ui/textarea';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 
 import { format, parseISO, isValid, addDays, addBusinessDays, isWeekend } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
