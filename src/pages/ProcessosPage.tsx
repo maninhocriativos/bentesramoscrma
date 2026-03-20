@@ -118,6 +118,8 @@ export default function ProcessosPage() {
     { label: 'Arquivados', value: kpis.arquivados, icon: Archive, color: 'text-muted-foreground', bg: 'bg-muted', filterKey: 'Arquivado' },
     { label: 'Ganhos', value: kpis.ganhos, icon: Trophy, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30', filterKey: 'Ganho' },
     { label: 'Perdidos', value: kpis.perdidos, icon: XCircle, color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-950/30', filterKey: 'Perdido' },
+    { label: 'Recursal', value: null, icon: Gavel, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-950/30', filterKey: 'recursal' },
+    { label: 'Execução', value: null, icon: FileCheck, color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-950/30', filterKey: 'execucao' },
   ];
 
   return (
