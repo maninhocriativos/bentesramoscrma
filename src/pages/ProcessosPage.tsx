@@ -193,11 +193,23 @@ export default function ProcessosPage() {
         </div>
 
         <Tabs defaultValue="internos" className="w-full">
-          <TabsList className="mb-4">
-            <TabsTrigger value="internos">Processos do Escritório</TabsTrigger>
-            <TabsTrigger value="recursal">Recursal</TabsTrigger>
-            <TabsTrigger value="execucao">Execução</TabsTrigger>
-            <TabsTrigger value="consulta">Consultar CNJ</TabsTrigger>
+          <TabsList className="mb-4 h-auto p-1 gap-1">
+            <TabsTrigger value="internos" className="gap-1.5 px-3 py-2 text-xs md:text-sm">
+              <Briefcase className="h-4 w-4" />
+              Processos do Escritório
+            </TabsTrigger>
+            <TabsTrigger value="recursal" className="gap-1.5 px-3 py-2 text-xs md:text-sm">
+              <Gavel className="h-4 w-4" />
+              Recursal
+            </TabsTrigger>
+            <TabsTrigger value="execucao" className="gap-1.5 px-3 py-2 text-xs md:text-sm">
+              <FileCheck className="h-4 w-4" />
+              Execução
+            </TabsTrigger>
+            <TabsTrigger value="consulta" className="gap-1.5 px-3 py-2 text-xs md:text-sm">
+              <Search className="h-4 w-4" />
+              Consultar CNJ
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="internos" className="space-y-4">
