@@ -8,6 +8,7 @@ import { useLeadNames } from '@/hooks/useLeadNames';
 import { Processo } from '@/types/processos';
 import { ImportProcessosCsvModal } from '@/components/processos/ImportProcessosCsvModal';
 import { SyncProcessosModal } from '@/components/processos/SyncProcessosModal';
+import { useToast } from '@/hooks/use-toast';
 
 const ProcessoModalExpanded = lazy(() => import('@/components/processos/ProcessoModalExpanded').then(m => ({ default: m.ProcessoModalExpanded })));
 const ConsultaProcessoExterno = lazy(() => import('@/components/processos/ConsultaProcessoExterno').then(m => ({ default: m.ConsultaProcessoExterno })));
