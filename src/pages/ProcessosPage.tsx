@@ -8,6 +8,7 @@ import { useLeadNames } from '@/hooks/useLeadNames';
 import { Processo } from '@/types/processos';
 import { ImportProcessosCsvModal } from '@/components/processos/ImportProcessosCsvModal';
 import { SyncProcessosModal } from '@/components/processos/SyncProcessosModal';
+import { useToast } from '@/hooks/use-toast';
 
 const ProcessoModalExpanded = lazy(() => import('@/components/processos/ProcessoModalExpanded').then(m => ({ default: m.ProcessoModalExpanded })));
 const ConsultaProcessoExterno = lazy(() => import('@/components/processos/ConsultaProcessoExterno').then(m => ({ default: m.ConsultaProcessoExterno })));
@@ -40,6 +41,7 @@ export default function ProcessosPage() {
   const { processos, loading } = useProcessos();
   const { leadNames } = useLeadNames();
   const { canDelete, canAccessProcessos, loading: perfilLoading } = usePerfil();
+  const { toast } = useToast();
   
   const [selectedProcesso, setSelectedProcesso] = useState<Processo | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -181,14 +183,16 @@ export default function ProcessosPage() {
             <button
               key={kpi.label}
               onClick={() => {
-                if (kpi.value !== null) setStatusFilter(kpi.filterKey);
+                if (kpi.value !== null) {
+                  setStatusFilter(kpi.filterKey);
+                } else {
+                  toast({ title: `${kpi.label}`, description: 'Funcionalidade em desenvolvimento. Em breve!' });
+                }
               }}
-              className={`flex flex-col items-center gap-1 p-3 md:p-4 rounded-xl border border-border/50 transition-all hover:shadow-md ${
-                kpi.value === null
-                  ? 'opacity-60 cursor-default'
-                  : statusFilter === kpi.filterKey
-                    ? 'ring-2 ring-primary/30 shadow-md bg-card' 
-                    : kpi.bg
+              className={`flex flex-col items-center gap-1 p-3 md:p-4 rounded-xl border border-border/50 transition-all hover:shadow-md cursor-pointer ${
+                statusFilter === kpi.filterKey && kpi.value !== null
+                  ? 'ring-2 ring-primary/30 shadow-md bg-card' 
+                  : kpi.bg
               }`}
             >
               <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
