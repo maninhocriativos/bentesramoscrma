@@ -40,7 +40,7 @@ export function useProcessos() {
 
   useEffect(() => {
     if (user) {
-      fetchProcessos();
+      fetchProcessos(true);
     }
   }, [user, fetchProcessos]);
 
