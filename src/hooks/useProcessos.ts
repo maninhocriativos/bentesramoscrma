@@ -21,7 +21,7 @@ export function useProcessos() {
 
     let query = supabase
       .from('processos')
-      .select(PROCESSOS_SELECT)
+      .select(PROCESSOS_LIST_SELECT)
       .order('created_at', { ascending: false });
 
     if (isAdvogado && perfil?.nome) {
