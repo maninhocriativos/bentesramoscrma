@@ -29,7 +29,7 @@ export function PageTransition({ children }: PageTransitionProps) {
 
   return (
     <div
-      className={`flex-1 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+      className={`flex-1 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
         transitionStage === 'enter'
           ? 'opacity-100 translate-x-0 scale-100'
           : 'opacity-0 translate-x-6 scale-[0.98]'
