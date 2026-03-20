@@ -281,12 +281,6 @@ export function ProcessoModalExpanded({
       return;
     }
 
-    if (!CNJ_REGEX.test(numero)) {
-      toast.error('Número do processo inválido', {
-        description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
-      });
-      return;
-    }
 
     setFetchingData(true);
     try {
