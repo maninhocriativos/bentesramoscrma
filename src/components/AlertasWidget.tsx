@@ -83,20 +83,25 @@ export function AlertasWidget({ alertas, compact = false, onAlertClick }: Alerta
                 <div
                   key={alerta.id}
                   className={cn(
-                    "flex items-start gap-3 px-5 py-3 hover:bg-muted/30 transition-colors",
-                    onAlertClick && "cursor-pointer"
+                    "flex items-start gap-3 px-5 py-3 transition-colors rounded-lg mx-2 my-1",
+                    PRIORIDADE_CARD[alerta.prioridade],
+                    onAlertClick && "cursor-pointer hover:opacity-80"
                   )}
                   onClick={() => onAlertClick?.(alerta)}
                 >
                   <div className={cn("p-1.5 rounded-lg shrink-0 mt-0.5", config.bg)}>
-                    <Icon className={cn("h-3.5 w-3.5", config.color)} />
+                    <Icon className={cn(
+                      "h-3.5 w-3.5",
+                      config.color,
+                      alerta.prioridade === 'alta' && "animate-pulse"
+                    )} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-sm font-medium text-foreground truncate">
                         {alerta.titulo}
                       </span>
-                      <Badge className={cn("text-[9px] px-1.5 py-0 h-4", PRIORIDADE_BADGE[alerta.prioridade])}>
+                      <Badge className={cn("text-[9px] px-1.5 py-0 h-4 border-0", PRIORIDADE_BADGE[alerta.prioridade])}>
                         {alerta.prioridade}
                       </Badge>
                     </div>

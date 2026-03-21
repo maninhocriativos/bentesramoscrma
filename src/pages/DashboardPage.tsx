@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback, lazy, Suspense, memo } from 'react';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { AppLayout } from '@/components/layouts/AppLayout';
+import { CardContent } from '@/components/ui/card';
+import { Users, DollarSign, Scale } from 'lucide-react';
 import { AppHeader } from '@/components/AppHeader';
 import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
 import { DashboardFiltersBar, DashboardFilters } from '@/components/dashboard/DashboardFilters';

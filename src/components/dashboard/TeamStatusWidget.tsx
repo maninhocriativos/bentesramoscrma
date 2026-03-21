@@ -105,7 +105,7 @@ export function TeamStatusWidget() {
                   <div key={member.id}>
                     <div
                       className={cn(
-                        "flex items-center gap-3 px-5 py-3 hover:bg-muted/30 transition-colors",
+                        "flex items-center gap-2.5 px-4 py-2 hover:bg-muted/30 transition-colors",
                         pendentes > 0 && "cursor-pointer"
                       )}
                       onClick={() => pendentes > 0 && toggleExpand(member.id)}

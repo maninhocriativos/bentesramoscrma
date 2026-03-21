@@ -259,7 +259,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
                         contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '12px', fontSize: '12px' }} 
                         cursor={{ fill: 'hsl(var(--muted) / 0.3)' }} 
                       />
-                      <Bar dataKey="valor" radius={[0, 8, 8, 0]} isAnimationActive={false}>
+                      <Bar dataKey="valor" radius={[0, 6, 6, 0]} isAnimationActive={false}>
                         {origemValorData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
