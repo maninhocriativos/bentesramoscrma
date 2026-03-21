@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, lazy, Suspense } from 'react';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
@@ -10,6 +11,7 @@ import { useProcessos } from '@/hooks/useProcessos';
 import { useAlertas } from '@/hooks/useAlertas';
 import { useDashboardStats } from '@/hooks/useDashboardStats';
 import { Loader2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, isAfter } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 
@@ -20,8 +22,16 @@ const RealtimeLeadsMonitor = lazy(() => import('@/components/dashboard/RealtimeL
 const TeamStatusWidget = lazy(() => import('@/components/dashboard/TeamStatusWidget').then(m => ({ default: m.TeamStatusWidget })));
 
 const ChartFallback = () => (
-  <div className="flex items-center justify-center py-12">
-    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+  <div className="bg-card rounded-2xl border border-border/40 p-6 space-y-4 animate-pulse">
+    <div className="flex items-center justify-between">
+      <Skeleton className="h-5 w-40" />
+      <Skeleton className="h-8 w-28" />
+    </div>
+    <div className="h-[220px] flex items-end gap-3 px-2">
+      {[60, 85, 45, 90, 55, 75, 40, 80, 65, 95, 50, 70].map((h, i) => (
+        <div key={i} className="flex-1 bg-muted rounded-t-md" style={{ height: `${h}%` }} />
+      ))}
+    </div>
   </div>
 );
 
@@ -94,16 +104,9 @@ export default function DashboardPage() {
       
       <div className="flex-1 overflow-auto">
         {!heroReady ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
-              <p className="text-sm text-muted-foreground">Carregando dados...</p>
-            </div>
-          </div>
+          <PageSkeleton cards={3} rows={4} />
         ) : (
-          <div className="px-4 md:px-6 lg:px-8 py-6 space-y-6 animate-fade-in">
+          <div className="px-4 md:px-6 lg:px-8 py-6 space-y-6 page-enter">
             
             {/* ===== TOP: Hero KPIs (instant from RPC) ===== */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

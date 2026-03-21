@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
@@ -32,9 +33,7 @@ export default function ConfiguracoesPage() {
     
     return (
       <AppLayout>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="animate-pulse text-muted-foreground">Carregando...</div>
-        </div>
+        <PageSkeleton cards={2} rows={4} />
       </AppLayout>
     );
   }
@@ -50,7 +49,7 @@ export default function ConfiguracoesPage() {
     <AppLayout>
       <AppHeader title="Configurações" />
       
-      <div className="flex-1 p-4 md:p-6 animate-fade-in">
+      <div className="flex-1 p-4 md:p-6 page-enter">
         <Tabs defaultValue="usuarios" className="space-y-6">
           <TabsList className="rounded-xl bg-card shadow-soft p-1 h-auto flex-wrap">
             <TabsTrigger 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { ProcessosTable } from '@/components/processos/ProcessosTable';
@@ -114,9 +115,7 @@ export default function ProcessosPage() {
   if (perfilLoading) {
     return (
       <AppLayout>
-        <div className="flex items-center justify-center min-h-screen">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
+        <PageSkeleton cards={5} rows={8} />
       </AppLayout>
     );
   }

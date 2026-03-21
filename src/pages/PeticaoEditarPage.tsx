@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { DetailSkeleton } from '@/components/ui/PageSkeleton';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRight, Save, Sparkles, Loader2, User, MapPin,
@@ -275,7 +276,7 @@ export default function PeticaoEditarPage() {
   if (loadingInitial) {
     return (
       <AppLayout><AppHeader title="Carregando..." />
-        <div className="flex-1 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+        <DetailSkeleton />
       </AppLayout>
     );
   }

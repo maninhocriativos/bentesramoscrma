@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { DetailSkeleton } from '@/components/ui/PageSkeleton';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Download, FileText, Loader2, CheckCircle2, Edit3,
@@ -77,7 +78,7 @@ export default function PeticaoRevisaoPage() {
   if (loading) {
     return (
       <AppLayout><AppHeader title="Carregando..." />
-        <div className="flex-1 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+        <DetailSkeleton />
       </AppLayout>
     );
   }

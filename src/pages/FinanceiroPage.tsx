@@ -34,7 +34,7 @@ export default function FinanceiroPage() {
 
   return (
     <AppLayout>
-    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6 page-enter">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-foreground">Financeiro</h1>
