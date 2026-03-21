@@ -29,7 +29,7 @@ export default function ConfiguracoesPage() {
   }, [canAccessSettings, loading, navigate]);
 
   if (loading) {
-    console.log('ConfiguracoesPage: Showing loading state');
+    
     return (
       <AppLayout>
         <div className="flex items-center justify-center min-h-screen">
