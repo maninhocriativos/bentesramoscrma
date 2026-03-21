@@ -118,28 +118,13 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
     loadSubscribers();
   }, [loadSubscribers]);
 
-  // Polling and visibility handlers — realtime is primary, polling is fallback only
+  // Polling fallback only — no visibility refetch (handled by QueryClient staleTime)
   useEffect(() => {
     const pollInterval = setInterval(() => {
       loadSubscribers();
-    }, 120000); // 2 min fallback (realtime handles instant updates)
+    }, 120000);
 
-    let lastFocusLoad = 0;
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        const now = Date.now();
-        if (now - lastFocusLoad > 30000) { // debounce: max once per 30s
-          lastFocusLoad = now;
-          loadSubscribers();
-        }
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    return () => {
-      clearInterval(pollInterval);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
+    return () => clearInterval(pollInterval);
   }, [loadSubscribers]);
 
   // Realtime subscription (primary update mechanism)
