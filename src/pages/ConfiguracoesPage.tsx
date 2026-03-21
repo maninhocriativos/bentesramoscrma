@@ -49,7 +49,7 @@ export default function ConfiguracoesPage() {
     <AppLayout>
       <AppHeader title="Configurações" />
       
-      <div className="flex-1 p-4 md:p-6 animate-fade-in">
+      <div className="flex-1 p-4 md:p-6 page-enter">
         <Tabs defaultValue="usuarios" className="space-y-6">
           <TabsList className="rounded-xl bg-card shadow-soft p-1 h-auto flex-wrap">
             <TabsTrigger 
