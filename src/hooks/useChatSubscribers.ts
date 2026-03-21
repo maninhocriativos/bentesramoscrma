@@ -118,11 +118,11 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
     loadSubscribers();
   }, [loadSubscribers]);
 
-  // Polling fallback only — no visibility refetch (handled by QueryClient staleTime)
+  // Polling fallback only — no focus/visibility refetch
   useEffect(() => {
     const pollInterval = setInterval(() => {
       loadSubscribers();
-    }, 120000);
+    }, 300000);
 
     return () => clearInterval(pollInterval);
   }, [loadSubscribers]);
