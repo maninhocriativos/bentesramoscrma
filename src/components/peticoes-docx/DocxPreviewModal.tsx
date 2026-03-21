@@ -60,7 +60,12 @@ export default function DocxPreviewModal({ open, onOpenChange, docxBuffer, title
 
       if (cancelled || !containerRef.current) return;
 
-      containerRef.current.innerHTML = result.value || '<p>Não foi possível exibir a pré-visualização deste documento.</p>';
+      containerRef.current.innerHTML = DOMPurify.sanitize(result.value || '<p>Não foi possível exibir a pré-visualização deste documento.</p>', {
+        ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'table', 'tr', 'td', 'th', 'thead', 'tbody', 'blockquote', 'hr', 'span', 'div', 'a', 'img', 'sub', 'sup'],
+        ALLOWED_ATTR: ['href', 'style', 'class', 'target', 'src', 'alt', 'width', 'height'],
+        FORBID_TAGS: ['script', 'object', 'embed', 'form', 'input'],
+        FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
+      });
       setPreviewMode('html');
     };
 

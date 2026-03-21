@@ -213,6 +213,15 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Webhook authentication
+  const ZAPI_SECRET = Deno.env.get('ZAPI_WEBHOOK_SECRET');
+  if (ZAPI_SECRET) {
+    const receivedToken = req.headers.get('x-zapi-token') || new URL(req.url).searchParams.get('token');
+    if (receivedToken !== ZAPI_SECRET) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    }
+  }
+
   const startTime = Date.now();
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
