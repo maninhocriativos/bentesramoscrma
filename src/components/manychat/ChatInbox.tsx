@@ -12,7 +12,6 @@ import { useChatNotifications } from '@/hooks/useChatNotifications';
 import { useChatTags } from '@/hooks/useChatTags';
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
-import { useChatContext } from '@/contexts/ChatContext';
 import { ChatThemeProvider, useChatTheme } from './ChatThemeProvider';
 import { TeamPresencePanel } from './TeamPresencePanel';
 import { ConversationAssignmentMenu } from './ConversationAssignmentMenu';
@@ -148,7 +147,6 @@ const ManyChatInboxContent = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const { fullName } = usePerfil();
-  const { currentUserId, currentUserName } = useChatContext();
   const { theme, toggleTheme } = useChatTheme();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -548,8 +546,8 @@ const ManyChatInboxContent = () => {
   const lastMessageIdRef = useRef<string | null>(null);
 
   const { isOnline, isTyping, setTyping } = useChatPresence(
-    currentUserId,
-    currentUserName
+    user?.id,
+    fullName || user?.email?.split('@')[0]
   );
 
   const { 
@@ -557,8 +555,8 @@ const ManyChatInboxContent = () => {
     setCurrentChat, 
     getOnlineCount 
   } = useTeamPresence(
-    currentUserId,
-    currentUserName
+    user?.id,
+    fullName || user?.email?.split('@')[0]
   );
 
   const {
@@ -909,7 +907,7 @@ const ManyChatInboxContent = () => {
     
     const setupMessagesChannel = () => {
       const channel = supabase
-        .channel(`manychat-msgs-${currentUserId || 'anon'}`)
+        .channel(`manychat-msgs-${user?.id || 'anon'}`)
         .on('postgres_changes', 
           { event: 'INSERT', schema: 'public', table: 'manychat_mensagens' },
           (payload) => {
@@ -1057,7 +1055,7 @@ const ManyChatInboxContent = () => {
     
     const setupSubscribersChannel = () => {
       const channel = supabase
-        .channel(`manychat-subs-${currentUserId || 'anon'}`)
+        .channel(`manychat-subs-${user?.id || 'anon'}`)
         .on('postgres_changes', 
           { event: '*', schema: 'public', table: 'manychat_subscribers' },
           (payload) => {
@@ -1074,7 +1072,7 @@ const ManyChatInboxContent = () => {
               const updatedSub = payload.new as Subscriber;
               const oldSub = payload.old as Subscriber;
               
-              if (updatedSub.assigned_to === currentUserId && oldSub?.assigned_to !== currentUserId) {
+              if (updatedSub.assigned_to === user?.id && oldSub?.assigned_to !== user?.id) {
                 notifyAssignment(updatedSub.nome || 'Contato', 'Um colega');
               }
               
@@ -1116,7 +1114,7 @@ const ManyChatInboxContent = () => {
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(subscribersChannel);
     };
-  }, [currentUserId, playNotificationSound, notifyNewMessage, notifyAssignment]);
+  }, [user?.id, playNotificationSound, notifyNewMessage, notifyAssignment]);
 
   // Update team presence and load messages when conversation identity changes
   // ONLY subscriber_id drives conversation switching - lead_id/telefone changes do NOT trigger reload
