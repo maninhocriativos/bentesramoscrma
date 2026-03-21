@@ -23,7 +23,7 @@ export default function ConfiguracoesPage() {
   useEffect(() => {
     
     if (!loading && !canAccessSettings) {
-      console.log('ConfiguracoesPage: REDIRECTING to dashboard');
+      
       navigate('/dashboard');
     }
   }, [canAccessSettings, loading, navigate]);
