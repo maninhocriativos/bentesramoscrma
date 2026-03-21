@@ -10,6 +10,7 @@ import {
   Clock, AlertTriangle, Eye, FileText, Filter, CalendarDays,
   Scale, BookOpen, ChevronRight, ChevronDown, ChevronUp,
   MessageSquare, ClipboardList, Pencil, Copy, ExternalLink,
+  Inbox, EyeOff, Timer, SearchCheck,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
