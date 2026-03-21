@@ -272,6 +272,37 @@ export default function IntimacoesPage() {
     toast.success(`Relatório gerado com todas as ${filtered.length} intimações`);
   };
 
+  // Urgency calculation for a given intimacao
+  const getUrgencyInfo = (intimacao: Intimacao) => {
+    const prazos = calcularPrazos(intimacao);
+    if (!prazos.dataFatal) return { level: 'none' as const, daysLeft: null, label: '' };
+    const now = new Date();
+    const diff = Math.ceil((prazos.dataFatal.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (diff < 0) return { level: 'overdue' as const, daysLeft: diff, label: `Vencido há ${Math.abs(diff)} dias` };
+    if (diff <= 7) return { level: 'urgent' as const, daysLeft: diff, label: diff === 0 ? 'Vence hoje!' : diff === 1 ? 'Falta 1 dia' : `Faltam ${diff} dias` };
+    if (diff <= 15) return { level: 'warning' as const, daysLeft: diff, label: `Faltam ${diff} dias` };
+    return { level: 'safe' as const, daysLeft: diff, label: `Faltam ${diff} dias` };
+  };
+
+  const toggleCardExpand = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedCards(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleToggleRead = async (id: string, currentlyRead: boolean, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (currentlyRead) {
+      await supabase.from('intimacoes').update({ lida: false, lida_em: null }).eq('id', id);
+      setIntimacoes(prev => prev.map(i => i.id === id ? { ...i, lida: false, lida_em: null } : i));
+    } else {
+      await handleMarkRead(id);
+    }
+  };
+
   const filtered = intimacoes.filter((i) => {
     const matchesSearch =
       !searchTerm ||
@@ -279,23 +310,49 @@ export default function IntimacoesPage() {
       i.processo_titulo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       i.conteudo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       i.tipo_intimacao?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter =
-      filterLida === 'all' ||
-      (filterLida === 'unread' && !i.lida) ||
-      (filterLida === 'read' && i.lida);
+    
+    let matchesFilter = true;
+    if (filterLida === 'unread') matchesFilter = !i.lida;
+    else if (filterLida === 'read') matchesFilter = i.lida;
+    else if (filterLida === 'urgent') {
+      const urgency = getUrgencyInfo(i);
+      matchesFilter = urgency.level === 'urgent' || urgency.level === 'overdue';
+    }
+    
     return matchesSearch && matchesFilter;
   });
 
   const unreadCount = intimacoes.filter((i) => !i.lida).length;
+  const urgentCount = intimacoes.filter(i => {
+    const u = getUrgencyInfo(i);
+    return u.level === 'urgent' || u.level === 'overdue';
+  }).length;
+
+  // Card type detection for border colors
+  const getCardTypeStyle = (tipo: string) => {
+    const t = tipo.toLowerCase();
+    if (t.includes('intimação') || t.includes('intimacao') || t.includes('citação') || t.includes('citacao')) {
+      return {
+        border: 'border-l-4 border-l-orange-500',
+        bg: 'bg-orange-50/30 dark:bg-orange-950/10',
+        badgeClass: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+      };
+    }
+    return {
+      border: 'border-l-4 border-l-blue-500',
+      bg: 'bg-blue-50/30 dark:bg-blue-950/10',
+      badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+    };
+  };
 
   const getTipoBadgeColor = (tipo: string) => {
     const t = tipo.toLowerCase();
-    if (t.includes('intimação') || t.includes('intimacao')) return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
+    if (t.includes('intimação') || t.includes('intimacao')) return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300';
     if (t.includes('citação') || t.includes('citacao')) return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300';
     if (t.includes('despacho')) return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
     if (t.includes('sentença') || t.includes('sentenca')) return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300';
     if (t.includes('decisão') || t.includes('decisao')) return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300';
-    return 'bg-muted text-muted-foreground';
+    return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
   };
 
   return (
