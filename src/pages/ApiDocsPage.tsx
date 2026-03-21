@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Copy, FileText, Webhook, Bot, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
-const API_BASE_URL = 'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1';
+const API_BASE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
 const apiDocumentation = `
 # API DE INTEGRAÇÃO - CRM JURÍDICO BENTES RAMOS

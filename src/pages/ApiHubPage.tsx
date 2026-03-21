@@ -82,8 +82,8 @@ export default function ApiHubPage() {
     limit: 200
   });
 
-  const baseUrl = 'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/api-hub';
-  const zapiWebhookUrl = 'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/zapi-webhook';
+  const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/api-hub`;
+  const zapiWebhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zapi-webhook`;
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);

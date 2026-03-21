@@ -44,7 +44,7 @@ export default function ConfiguracoesPage() {
     return null;
   }
 
-  console.log('ConfiguracoesPage: Rendering full page');
+  
 
   return (
     <AppLayout>

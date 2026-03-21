@@ -10,8 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { IntegrationConfig } from '@/types/stateMachine';
 
-// URLs de webhook (hardcoded para evitar problemas com VITE_*)
-const SUPABASE_PROJECT_URL = 'https://qgenaltkjtlvwfgykpxq.supabase.co';
+const SUPABASE_PROJECT_URL = import.meta.env.VITE_SUPABASE_URL;
 
 export function ZApiIntegrationCard() {
   const { toast } = useToast();

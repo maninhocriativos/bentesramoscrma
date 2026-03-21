@@ -6,7 +6,7 @@ import { CheckCircle2, MessageSquare, CreditCard, FileSignature, Database } from
 import { BackupChatCard } from './BackupChatCard';
 
 export function SystemStatusTab() {
-  const supabaseUrl = 'https://qgenaltkjtlvwfgykpxq.supabase.co';
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
   return (
     <div className="space-y-6">

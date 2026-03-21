@@ -235,7 +235,7 @@ export default function PeticaoEditarPage() {
         data_atual: new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }),
       };
 
-      console.log('Template data:', templateData);
+      
 
       try {
         doc.render(templateData);

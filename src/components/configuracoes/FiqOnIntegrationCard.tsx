@@ -21,7 +21,7 @@ export function FiqOnIntegrationCard() {
   const [webhookSecret, setWebhookSecret] = useState('');
   const [isActive, setIsActive] = useState(false);
 
-  const webhookUrl = 'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/api-hub/webhook/fiqon';
+  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/api-hub/webhook/fiqon`;
 
   useEffect(() => {
     loadConfig();
