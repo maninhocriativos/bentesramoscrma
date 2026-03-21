@@ -362,6 +362,15 @@ serve(async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Webhook authentication
+  const CLICKSIGN_SECRET = Deno.env.get('CLICKSIGN_WEBHOOK_SECRET');
+  if (CLICKSIGN_SECRET) {
+    const authHeader = req.headers.get('authorization');
+    if (authHeader !== `Bearer ${CLICKSIGN_SECRET}`) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } });
+    }
+  }
+
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     

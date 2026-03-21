@@ -117,7 +117,7 @@ export function useGoogleDrive() {
 
     try {
       const response = await fetch(
-        'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/google-drive?action=get_auth_url',
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-drive?action=get_auth_url`,
         {
           method: 'GET',
           headers: {

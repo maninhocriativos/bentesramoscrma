@@ -18,18 +18,18 @@ export default function ConfiguracoesPage() {
   const navigate = useNavigate();
   const { canAccessSettings, loading, roles } = usePerfil();
 
-  console.log('ConfiguracoesPage render - loading:', loading, 'canAccessSettings:', canAccessSettings, 'roles:', roles);
+  
 
   useEffect(() => {
-    console.log('ConfiguracoesPage useEffect - loading:', loading, 'canAccessSettings:', canAccessSettings);
+    
     if (!loading && !canAccessSettings) {
-      console.log('ConfiguracoesPage: REDIRECTING to dashboard');
+      
       navigate('/dashboard');
     }
   }, [canAccessSettings, loading, navigate]);
 
   if (loading) {
-    console.log('ConfiguracoesPage: Showing loading state');
+    
     return (
       <AppLayout>
         <div className="flex items-center justify-center min-h-screen">
@@ -40,11 +40,11 @@ export default function ConfiguracoesPage() {
   }
 
   if (!canAccessSettings) {
-    console.log('ConfiguracoesPage: No access, returning null');
+    
     return null;
   }
 
-  console.log('ConfiguracoesPage: Rendering full page');
+  
 
   return (
     <AppLayout>

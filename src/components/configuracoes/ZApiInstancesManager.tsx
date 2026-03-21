@@ -32,7 +32,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-const SUPABASE_PROJECT_URL = 'https://qgenaltkjtlvwfgykpxq.supabase.co';
+const SUPABASE_PROJECT_URL = import.meta.env.VITE_SUPABASE_URL;
 
 interface ZApiInstance {
   id: string;

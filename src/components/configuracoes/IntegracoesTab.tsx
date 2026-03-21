@@ -77,8 +77,8 @@ export function IntegracoesTab() {
   const [advboxSyncing, setAdvboxSyncing] = useState(false);
   const [advboxConnected, setAdvboxConnected] = useState(true); // Token já configurado
 
-  const SUPABASE_URL = 'https://qgenaltkjtlvwfgykpxq.supabase.co/rest/v1/leads_juridicos';
-  const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFnZW5hbHRranRsdndmZ3lrcHhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxNjI1NzAsImV4cCI6MjA2NDczODU3MH0.DgXi_2D3fVNDWMvz9M3aSIbY58FEJc3dTz05kfH_Mew';
+  const SUPABASE_URL = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/leads_juridicos`;
+  const API_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
   // Load Google OAuth settings from app_settings
   useEffect(() => {
@@ -249,7 +249,7 @@ export function IntegracoesTab() {
 
       // Try with query params approach
       const response = await fetch(
-        'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/google-calendar-auth?action=get_auth_url',
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-auth?action=get_auth_url`,
         { method: 'GET' }
       );
       
@@ -817,14 +817,14 @@ export function IntegracoesTab() {
                 <div className="flex gap-2">
                   <Input 
                     readOnly 
-                    value="https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/clicksign-webhook"
+                    value={`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/clicksign-webhook`}
                     className="font-mono text-xs bg-muted/30 truncate h-9"
                   />
                   <Button 
                     variant="outline" 
                     size="icon"
                     className="shrink-0 h-9 w-9 hover:bg-purple-50 hover:border-purple-300"
-                    onClick={() => copyToClipboard('https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/clicksign-webhook', 'clicksign-webhook')}
+                    onClick={() => copyToClipboard(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/clicksign-webhook`, 'clicksign-webhook')}
                   >
                     {copiedField === 'clicksign-webhook' ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
                   </Button>
