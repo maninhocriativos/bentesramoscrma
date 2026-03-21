@@ -168,35 +168,43 @@ function DashboardPage() {
             {/* ===== FILTERS ===== */}
             <DashboardFiltersBar filters={filters} onFiltersChange={setFilters} />
 
-            {/* ===== ROW 2: Origem + KPIs (progressive load) ===== */}
+            {/* ===== ROW 2: KPIs + Alertas ===== */}
             {chartsReady ? (
               <>
                 <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
-                  <div className="space-y-6">
-                    <LeadOriginKPIs leads={leads} />
-                    <DashboardKPIs leads={filteredLeads} processos={processos} />
-                  </div>
+                  <DashboardKPIs leads={filteredLeads} processos={processos} />
                   <AlertasWidget 
                     alertas={alertas} 
                     onAlertClick={handleAlertClick}
                   />
                 </div>
 
-                {/* ===== ROW 3: Conversão (lazy) ===== */}
-                <Suspense fallback={<ChartFallback />}>
-                  <ConversionMetrics leads={leads} />
-                </Suspense>
-
-                {/* ===== ROW 4: Charts + Monitor (lazy) ===== */}
-                <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
+                {/* ===== ROW 3: Valor da Causa (charts) + widgets laterais ===== */}
+                <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6 items-stretch">
                   <Suspense fallback={<ChartFallback />}>
-                    <DashboardCharts leads={filteredLeads} />
+                    <div className="h-full [&>*]:h-full">
+                      <DashboardCharts leads={filteredLeads} />
+                    </div>
                   </Suspense>
-                  <div className="space-y-6">
-                    <AgendaPrazosWidget />
+                  <div className="flex flex-col gap-4">
+                    <div className="flex-1 min-h-0 [&>*]:h-full"><AgendaPrazosWidget /></div>
+                    <div className="flex-1 min-h-0 [&>*]:h-full">
+                      <Suspense fallback={<ChartFallback />}>
+                        <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
+                      </Suspense>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ===== ROW 4: Origem + Funil + Equipe ===== */}
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch">
+                  <div className="[&>*]:h-full"><LeadOriginKPIs leads={leads} /></div>
+                  <div className="[&>*]:h-full">
                     <Suspense fallback={<ChartFallback />}>
-                      <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
+                      <ConversionMetrics leads={leads} />
                     </Suspense>
+                  </div>
+                  <div className="[&>*]:h-full">
                     <Suspense fallback={<ChartFallback />}>
                       <TeamStatusWidget />
                     </Suspense>
