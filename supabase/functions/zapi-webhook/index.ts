@@ -213,14 +213,16 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Webhook authentication - MANDATORY
-  const ZAPI_SECRET = Deno.env.get('ZAPI_WEBHOOK_SECRET');
-  if (!ZAPI_SECRET) {
-    console.error('[Z-API Webhook] ZAPI_WEBHOOK_SECRET not configured - rejecting request');
+  // Webhook authentication - accepts tokens from both Z-API instances
+  const ZAPI_SECRET_1 = Deno.env.get('ZAPI_WEBHOOK_SECRET');
+  const ZAPI_SECRET_2 = Deno.env.get('ZAPI_WEBHOOK_SECRET_2');
+  if (!ZAPI_SECRET_1 && !ZAPI_SECRET_2) {
+    console.error('[Z-API Webhook] No ZAPI_WEBHOOK_SECRET configured - rejecting request');
     return new Response(JSON.stringify({ error: 'Webhook secret not configured' }), { status: 500, headers: corsHeaders });
   }
   const receivedToken = req.headers.get('x-zapi-token') || new URL(req.url).searchParams.get('token');
-  if (receivedToken !== ZAPI_SECRET) {
+  const isValidToken = receivedToken === ZAPI_SECRET_1 || receivedToken === ZAPI_SECRET_2;
+  if (!isValidToken) {
     console.warn('[Z-API Webhook] Unauthorized request - invalid token');
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
   }
