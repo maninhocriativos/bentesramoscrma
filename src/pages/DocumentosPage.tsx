@@ -101,7 +101,7 @@ export default function DocumentosPage() {
     try {
       const { data, error } = await supabase
         .from('drive_sync_jobs')
-        .select('*')
+        .select('id, direction, kind, status, attempts, max_attempts, last_error, started_at, finished_at, created_at, document_id, drive_file_id')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(50);

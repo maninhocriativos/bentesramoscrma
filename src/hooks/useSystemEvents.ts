@@ -74,7 +74,8 @@ export function useSystemEvents(filters?: {
       const { data, error } = await supabase
         .from('system_events')
         .select('tipo, fonte, acao')
-        .gte('created_at', sinceDate);
+        .gte('created_at', sinceDate)
+        .limit(500);
 
       if (error) throw error;
 

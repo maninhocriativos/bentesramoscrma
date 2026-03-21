@@ -99,6 +99,26 @@ export default function IsaAutonomaPage() {
     }
   };
 
+  const handleNovoEvento = (novoEvento: any) => {
+    const { acao, tipo, processado, metadata } = novoEvento;
+    setStats(prev => ({
+      ...prev,
+      leadsClassificados: prev.leadsClassificados +
+        (acao === 'classificar_lead' || acao === 'dados_lead_atualizados' ? 1 : 0),
+      interacoesRegistradas: prev.interacoesRegistradas +
+        (acao === 'criar_interacao' || tipo === 'processamento' ? 1 : 0),
+      tarefasCriadas: prev.tarefasCriadas +
+        (acao === 'criar_tarefa' && processado ? 1 : 0),
+      compromissosCriados: prev.compromissosCriados +
+        ((acao === 'criar_compromisso' || tipo === 'agendamento') && processado ? 1 : 0),
+      acoesAprovadas: prev.acoesAprovadas +
+        (tipo === 'acao_pendente' && processado && !metadata?.rejeitado ? 1 : 0),
+      acoesRejeitadas: prev.acoesRejeitadas +
+        (tipo === 'acao_pendente' && processado && metadata?.rejeitado ? 1 : 0),
+    }));
+    setRecentActions(prev => [novoEvento as RecentAction, ...prev].slice(0, 30));
+  };
+
   useEffect(() => {
     fetchData();
 
@@ -113,8 +133,7 @@ export default function IsaAutonomaPage() {
           table: 'system_events',
         },
         (payload) => {
-          console.log('📊 Novo evento para stats:', payload.new);
-          fetchData();
+          handleNovoEvento(payload.new);
         }
       )
       .subscribe();
