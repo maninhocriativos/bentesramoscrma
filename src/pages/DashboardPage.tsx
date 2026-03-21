@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, lazy, Suspense, memo } from 'react';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { CardContent } from '@/components/ui/card';
-import { Users, DollarSign, Scale } from 'lucide-react';
+import { Users, DollarSign, Briefcase } from 'lucide-react';
 import { AppHeader } from '@/components/AppHeader';
 import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
 import { DashboardFiltersBar, DashboardFilters } from '@/components/dashboard/DashboardFilters';
@@ -158,7 +158,7 @@ function DashboardPage() {
                       <p className="text-xs text-muted-foreground mt-1.5">processos cadastrados</p>
                     </div>
                     <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[hsl(160,84%,39%)] to-[hsl(142,71%,45%)] flex items-center justify-center shadow-md shadow-[hsl(160,84%,39%)]/20">
-                      <Scale className="h-4 w-4 text-white" />
+                      <Briefcase className="h-4 w-4 text-white" />
                     </div>
                   </div>
                 </CardContent>
