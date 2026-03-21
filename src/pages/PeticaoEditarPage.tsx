@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { DetailSkeleton } from '@/components/ui/PageSkeleton';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRight, Save, Sparkles, Loader2, User, MapPin,
