@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useToast } from '@/hooks/use-toast';
 import { MessageCircle, FileText, Trash2, Sparkles, Bot } from 'lucide-react';
 import { useInteracoes } from '@/hooks/useInteracoes';
 import {
