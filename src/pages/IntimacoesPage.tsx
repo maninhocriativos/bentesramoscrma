@@ -88,9 +88,10 @@ export default function IntimacoesPage() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterLida, setFilterLida] = useState<'all' | 'unread' | 'read'>('all');
+  const [filterLida, setFilterLida] = useState<'all' | 'unread' | 'read' | 'urgent'>('all');
   const [selectedIntimacao, setSelectedIntimacao] = useState<Intimacao | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
 
   const oabNumero = officeSettings?.oab_number || (perfil as any)?.oab_numero || '';
   const oabUf = officeSettings?.oab_state || (perfil as any)?.oab_uf || 'AM';
