@@ -47,12 +47,12 @@ const TIPO_ORIGEM_LABELS: Record<string, string> = {
 };
 
 const STATUS_CONFIG = [
-  { status: 'Lead Frio', color: 'hsl(220, 9%, 56%)', label: 'Lead Frio' },
-  { status: 'Em Atendimento', color: 'hsl(217, 91%, 60%)', label: 'Em Atendimento' },
-  { status: 'Em Negociação', color: 'hsl(262, 83%, 58%)', label: 'Em Negociação' },
-  { status: 'Aguardando Contrato', color: 'hsl(25, 95%, 53%)', label: 'Aguardando Contrato' },
-  { status: 'Contrato Assinado', color: 'hsl(152, 69%, 31%)', label: 'Contrato Assinado' },
-  { status: 'Ganho', color: 'hsl(160, 84%, 39%)', label: 'Ganho' },
+  { status: 'Lead Frio', color: '#9ca3af', bgClass: 'bg-gray-200 text-gray-800', label: 'Lead Frio' },
+  { status: 'Em Atendimento', color: '#3b82f6', bgClass: 'bg-blue-200 text-blue-900', label: 'Em Atendimento' },
+  { status: 'Em Negociação', color: '#8b5cf6', bgClass: 'bg-violet-200 text-violet-900', label: 'Em Negociação' },
+  { status: 'Aguardando Contrato', color: '#f59e0b', bgClass: 'bg-amber-200 text-amber-900', label: 'Aguardando Contrato' },
+  { status: 'Contrato Assinado', color: '#0d9488', bgClass: 'bg-teal-200 text-teal-900', label: 'Contrato Assinado' },
+  { status: 'Ganho', color: '#22c55e', bgClass: 'bg-green-200 text-green-900', label: 'Ganho' },
 ];
 
 const CustomTooltip = ({ active, payload }: any) => {

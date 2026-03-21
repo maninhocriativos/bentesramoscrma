@@ -19,15 +19,15 @@ const TIPO_CONFIG = {
 };
 
 const PRIORIDADE_BADGE = {
-  alta: 'bg-destructive text-white',
-  media: 'bg-[hsl(38,92%,50%)] text-white',
-  baixa: 'bg-[hsl(217,91%,60%)] text-white',
+  alta: 'bg-red-100 text-red-700',
+  media: 'bg-amber-100 text-amber-700',
+  baixa: 'bg-blue-100 text-blue-700',
 };
 
 const PRIORIDADE_CARD = {
-  alta: 'bg-destructive/5 border-l-4 border-l-destructive',
-  media: 'bg-[hsl(38,92%,50%)]/5 border-l-4 border-l-[hsl(38,92%,50%)]',
-  baixa: 'bg-[hsl(217,91%,60%)]/5 border-l-4 border-l-[hsl(217,91%,60%)]',
+  alta: 'border-l-4 border-l-red-500 bg-red-50 dark:bg-red-950/20',
+  media: 'border-l-4 border-l-amber-500 bg-amber-50 dark:bg-amber-950/20',
+  baixa: 'border-l-4 border-l-blue-500 bg-blue-50 dark:bg-blue-950/20',
 };
 
 export function AlertasWidget({ alertas, compact = false, onAlertClick }: AlertasWidgetProps) {
