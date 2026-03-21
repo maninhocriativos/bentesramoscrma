@@ -203,7 +203,34 @@ export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = tr
   }, [formData, isOpen, isDraftReady, draftStorageKey]);
 
   const handleSave = async () => {
-    if (!formData.nome.trim()) return;
+    const trimmedNome = formData.nome.trim();
+    if (!trimmedNome) return;
+    
+    // Input validation
+    if (trimmedNome.length > 200) {
+      toast?.({ title: 'Nome muito longo', description: 'Máximo 200 caracteres', variant: 'destructive' });
+      return;
+    }
+    if (formData.email && formData.email.length > 255) {
+      toast?.({ title: 'Email muito longo', description: 'Máximo 255 caracteres', variant: 'destructive' });
+      return;
+    }
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      toast?.({ title: 'Email inválido', description: 'Verifique o formato do email', variant: 'destructive' });
+      return;
+    }
+    if (formData.telefone && !/^[\d\s()\-+]*$/.test(formData.telefone)) {
+      toast?.({ title: 'Telefone inválido', description: 'Use apenas números, espaços, parênteses e hífen', variant: 'destructive' });
+      return;
+    }
+    if (formData.telefone && formData.telefone.length > 20) {
+      toast?.({ title: 'Telefone muito longo', description: 'Máximo 20 caracteres', variant: 'destructive' });
+      return;
+    }
+    if (formData.resumo_ia && formData.resumo_ia.length > 5000) {
+      toast?.({ title: 'Resumo muito longo', description: 'Máximo 5000 caracteres', variant: 'destructive' });
+      return;
+    }
 
     setSaving(true);
 

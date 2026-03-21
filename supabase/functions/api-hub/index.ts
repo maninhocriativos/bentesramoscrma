@@ -52,7 +52,24 @@ serve(async (req: Request) => {
     // === FiqOn / Z-API Webhook ===
     // FiqOn recebe eventos do Z-API e encaminha para nós
     if (path === '/webhook/fiqon' || path === '/fiqon') {
-      console.log('[API-HUB] FiqOn webhook received:', JSON.stringify(body).substring(0, 500));
+      // Validate FiqOn webhook secret from integrations_config
+      const { data: fiqonConfig } = await supabase
+        .from('integrations_config')
+        .select('config_json')
+        .eq('provider', 'fiqon')
+        .eq('is_active', true)
+        .maybeSingle();
+      
+      const fiqonSecret = (fiqonConfig?.config_json as any)?.webhook_secret;
+      if (fiqonSecret) {
+        const incomingSecret = req.headers.get('x-webhook-secret') || req.headers.get('authorization');
+        if (incomingSecret !== fiqonSecret && incomingSecret !== `Bearer ${fiqonSecret}`) {
+          console.warn('[API-HUB] FiqOn webhook unauthorized - invalid secret');
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+      }
+      
+      console.log('[API-HUB] FiqOn webhook received');
       
       // Verificar se é um evento de teste
       if (body.type === 'test' || body.source === 'fiqon_test') {

@@ -362,13 +362,16 @@ serve(async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Webhook authentication
+  // Webhook authentication - MANDATORY
   const CLICKSIGN_SECRET = Deno.env.get('CLICKSIGN_WEBHOOK_SECRET');
-  if (CLICKSIGN_SECRET) {
-    const authHeader = req.headers.get('authorization');
-    if (authHeader !== `Bearer ${CLICKSIGN_SECRET}`) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } });
-    }
+  if (!CLICKSIGN_SECRET) {
+    console.error('[Clicksign Webhook] CLICKSIGN_WEBHOOK_SECRET not configured - rejecting request');
+    return new Response(JSON.stringify({ error: 'Webhook secret not configured' }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
+  }
+  const authHeader = req.headers.get('authorization');
+  if (authHeader !== `Bearer ${CLICKSIGN_SECRET}`) {
+    console.warn('[Clicksign Webhook] Unauthorized request - invalid token');
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } });
   }
 
   try {
