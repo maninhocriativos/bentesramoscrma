@@ -120,6 +120,7 @@ const createFormDataFromLead = (lead: Lead | null): LeadModalFormData => {
 };
 
 export function LeadModal({ lead, isOpen, onClose, isNew = false, canDelete = true }: LeadModalProps) {
+  const { toast } = useToast();
   const { createLead, updateLead, deleteLead } = useLeads();
   const { interacoes } = useInteracoes(lead?.id);
   const [formData, setFormData] = useState<LeadModalFormData>(() => createFormDataFromLead(lead));
