@@ -220,11 +220,11 @@ serve(async (req: Request) => {
     console.error('[Z-API Webhook] No ZAPI_WEBHOOK_SECRET configured - rejecting request');
     return new Response(JSON.stringify({ error: 'Webhook secret not configured' }), { status: 500, headers: corsHeaders });
   }
-  const receivedToken = req.headers.get('x-zapi-token') || req.headers.get('Client-Token') || req.headers.get('client-token') || new URL(req.url).searchParams.get('token');
-  console.log('[Z-API Webhook] Auth debug - received token:', receivedToken ? receivedToken.substring(0, 8) + '...' : 'NONE', '| headers:', JSON.stringify(Object.fromEntries([...new Headers(req.headers).entries()].filter(([k]) => k.includes('token') || k.includes('client') || k.includes('zapi')))));
+  const receivedToken = req.headers.get('z-api-token') || req.headers.get('x-zapi-token') || req.headers.get('Client-Token') || req.headers.get('client-token') || new URL(req.url).searchParams.get('token');
+  console.log('[Z-API Webhook] Auth - token prefix:', receivedToken ? receivedToken.substring(0, 8) + '...' : 'NONE');
   const isValidToken = receivedToken === ZAPI_SECRET_1 || receivedToken === ZAPI_SECRET_2;
   if (!isValidToken) {
-    console.warn('[Z-API Webhook] Unauthorized request - invalid token. Received:', receivedToken ? receivedToken.substring(0, 8) + '...' : 'NONE');
+    console.warn('[Z-API Webhook] Unauthorized - received:', receivedToken ? receivedToken.substring(0, 8) + '...' : 'NONE');
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
   }
 
