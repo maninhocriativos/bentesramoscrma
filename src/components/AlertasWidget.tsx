@@ -12,16 +12,22 @@ interface AlertasWidgetProps {
 }
 
 const TIPO_CONFIG = {
-  risco: { icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10' },
+  risco: { icon: AlertTriangle, color: 'text-destructive', bg: 'bg-destructive/10' },
   prazo: { icon: Clock, color: 'text-[hsl(var(--gold))]', bg: 'bg-[hsl(var(--gold))]/10' },
   tarefa: { icon: FileText, color: 'text-primary/70', bg: 'bg-primary/10' },
   resposta: { icon: AlertTriangle, color: 'text-[hsl(var(--success))]', bg: 'bg-[hsl(var(--success))]/10' },
 };
 
 const PRIORIDADE_BADGE = {
-  alta: 'bg-primary text-primary-foreground',
-  media: 'bg-[hsl(var(--gold))] text-[hsl(var(--gold-foreground))]',
-  baixa: 'bg-muted text-muted-foreground',
+  alta: 'bg-destructive text-white',
+  media: 'bg-[hsl(38,92%,50%)] text-white',
+  baixa: 'bg-[hsl(217,91%,60%)] text-white',
+};
+
+const PRIORIDADE_CARD = {
+  alta: 'bg-destructive/5 border-l-4 border-l-destructive',
+  media: 'bg-[hsl(38,92%,50%)]/5 border-l-4 border-l-[hsl(38,92%,50%)]',
+  baixa: 'bg-[hsl(217,91%,60%)]/5 border-l-4 border-l-[hsl(217,91%,60%)]',
 };
 
 export function AlertasWidget({ alertas, compact = false, onAlertClick }: AlertasWidgetProps) {
@@ -77,20 +83,25 @@ export function AlertasWidget({ alertas, compact = false, onAlertClick }: Alerta
                 <div
                   key={alerta.id}
                   className={cn(
-                    "flex items-start gap-3 px-5 py-3 hover:bg-muted/30 transition-colors",
-                    onAlertClick && "cursor-pointer"
+                    "flex items-start gap-3 px-5 py-3 transition-colors rounded-lg mx-2 my-1",
+                    PRIORIDADE_CARD[alerta.prioridade],
+                    onAlertClick && "cursor-pointer hover:opacity-80"
                   )}
                   onClick={() => onAlertClick?.(alerta)}
                 >
                   <div className={cn("p-1.5 rounded-lg shrink-0 mt-0.5", config.bg)}>
-                    <Icon className={cn("h-3.5 w-3.5", config.color)} />
+                    <Icon className={cn(
+                      "h-3.5 w-3.5",
+                      config.color,
+                      alerta.prioridade === 'alta' && "animate-pulse"
+                    )} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-sm font-medium text-foreground truncate">
                         {alerta.titulo}
                       </span>
-                      <Badge className={cn("text-[9px] px-1.5 py-0 h-4", PRIORIDADE_BADGE[alerta.prioridade])}>
+                      <Badge className={cn("text-[9px] px-1.5 py-0 h-4 border-0", PRIORIDADE_BADGE[alerta.prioridade])}>
                         {alerta.prioridade}
                       </Badge>
                     </div>
