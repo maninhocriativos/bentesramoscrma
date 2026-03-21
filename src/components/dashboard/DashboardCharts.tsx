@@ -19,17 +19,17 @@ const formatCurrency = (value: number): string => {
 
 // Vivid distinct colors for each origin
 const ORIGEM_COLORS: Record<string, string> = {
-  'Escritório': 'hsl(217, 91%, 60%)',
-  'Tráfego Pago': 'hsl(38, 92%, 50%)',
-  'Bentes Ramos': 'hsl(262, 83%, 58%)',
-  'Site': 'hsl(160, 84%, 39%)',
-  'WhatsApp Z-API': 'hsl(142, 71%, 45%)',
-  'Facebook': 'hsl(221, 83%, 53%)',
-  'WhatsApp': 'hsl(152, 69%, 31%)',
-  'Instagram': 'hsl(340, 82%, 52%)',
-  'Indicação': 'hsl(25, 95%, 53%)',
-  'Google': 'hsl(4, 90%, 58%)',
-  'Outro': 'hsl(220, 9%, 56%)',
+  'Escritório': '#378ADD',
+  'Tráfego Pago': '#EF9F27',
+  'Bentes Ramos': '#7F77DD',
+  'Site': '#1D9E75',
+  'WhatsApp Z-API': '#1D9E75',
+  'Facebook': '#3b82f6',
+  'WhatsApp': '#1D9E75',
+  'Instagram': '#ec4899',
+  'Indicação': '#f97316',
+  'Google': '#ef4444',
+  'Outro': '#9ca3af',
 };
 
 const TIPO_ORIGEM_COLORS: Record<string, string> = {
