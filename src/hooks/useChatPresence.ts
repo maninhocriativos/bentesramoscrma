@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
@@ -17,7 +17,7 @@ interface UserPresence {
 export function useChatPresence(currentUserId?: string, currentUserName?: string) {
   const [onlineUsers, setOnlineUsers] = useState<UserPresence>({});
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -104,25 +104,22 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
         }
       });
 
-    channelRef.current = presenceChannel;
+    setChannel(presenceChannel);
 
     return () => {
-      if (channelRef.current === presenceChannel) {
-        channelRef.current = null;
-      }
       supabase.removeChannel(presenceChannel);
     };
   }, [currentUserId, currentUserName]);
 
   const setTyping = useCallback(async (isTyping: boolean) => {
-    if (channelRef.current) {
-      await channelRef.current.track({
+    if (channel) {
+      await channel.track({
         online_at: new Date().toISOString(),
         typing: isTyping,
         userName: currentUserName,
       });
     }
-  }, [currentUserName]);
+  }, [channel, currentUserName]);
 
   const isOnline = useCallback((subscriberId: string) => {
     return onlineUsers[subscriberId]?.online || false;

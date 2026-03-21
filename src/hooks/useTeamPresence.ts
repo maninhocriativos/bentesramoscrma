@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
@@ -25,7 +25,7 @@ interface TeamPresence {
 export function useTeamPresence(currentUserId?: string, currentUserName?: string) {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [onlineTeam, setOnlineTeam] = useState<TeamPresence>({});
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
   const [currentChat, setCurrentChatState] = useState<string | null>(null);
 
   // Fetch team members from perfis
@@ -113,12 +113,9 @@ export function useTeamPresence(currentUserId?: string, currentUserName?: string
         }
       });
 
-    channelRef.current = presenceChannel;
+    setChannel(presenceChannel);
 
     return () => {
-      if (channelRef.current === presenceChannel) {
-        channelRef.current = null;
-      }
       supabase.removeChannel(presenceChannel);
     };
   }, [currentUserId, currentUserName]);
@@ -126,14 +123,14 @@ export function useTeamPresence(currentUserId?: string, currentUserName?: string
   // Update current chat being attended
   const setCurrentChat = useCallback(async (subscriberId: string | null) => {
     setCurrentChatState(subscriberId);
-    if (channelRef.current) {
-      await channelRef.current.track({
+    if (channel) {
+      await channel.track({
         online_at: new Date().toISOString(),
         userName: currentUserName,
         currentChat: subscriberId,
       });
     }
-  }, [currentUserName]);
+  }, [channel, currentUserName]);
 
   const isTeamMemberOnline = useCallback((userId: string) => {
     return onlineTeam[userId]?.online || false;
