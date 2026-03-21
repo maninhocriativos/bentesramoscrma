@@ -8,6 +8,7 @@ import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
 import { DashboardFiltersBar, DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { LeadOriginKPIs } from '@/components/dashboard/LeadOriginKPIs';
 import { AlertasWidget } from '@/components/AlertasWidget';
+import { AgendaPrazosWidget } from '@/components/dashboard/AgendaPrazosWidget';
 import { useLeads } from '@/hooks/useLeads';
 import { useProcessos } from '@/hooks/useProcessos';
 import { useAlertas } from '@/hooks/useAlertas';
