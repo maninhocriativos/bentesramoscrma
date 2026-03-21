@@ -103,16 +103,9 @@ export default function DashboardPage() {
       
       <div className="flex-1 overflow-auto">
         {!heroReady ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
-              <p className="text-sm text-muted-foreground">Carregando dados...</p>
-            </div>
-          </div>
+          <PageSkeleton cards={3} rows={4} />
         ) : (
-          <div className="px-4 md:px-6 lg:px-8 py-6 space-y-6 animate-fade-in">
+          <div className="px-4 md:px-6 lg:px-8 py-6 space-y-6 page-enter">
             
             {/* ===== TOP: Hero KPIs (instant from RPC) ===== */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
