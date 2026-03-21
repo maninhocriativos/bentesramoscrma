@@ -21,7 +21,7 @@ export default function ConfiguracoesPage() {
   
 
   useEffect(() => {
-    console.log('ConfiguracoesPage useEffect - loading:', loading, 'canAccessSettings:', canAccessSettings);
+    
     if (!loading && !canAccessSettings) {
       console.log('ConfiguracoesPage: REDIRECTING to dashboard');
       navigate('/dashboard');
