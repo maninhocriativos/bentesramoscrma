@@ -17,19 +17,19 @@ const formatCurrency = (value: number): string => {
   }).format(value);
 };
 
-// Harmonized with Bentes Ramos palette
+// Vivid distinct colors for each origin
 const ORIGEM_COLORS: Record<string, string> = {
-  'Escritório': 'hsl(24, 16%, 37%)',
-  'Tráfego Pago': 'hsl(38, 30%, 70%)',
-  'Bentes Ramos': 'hsl(24, 21%, 21%)',
-  'Site': 'hsl(142, 76%, 36%)',
-  'WhatsApp Z-API': 'hsl(24, 16%, 50%)',
-  'Facebook': 'hsl(38, 30%, 55%)',
-  'WhatsApp': 'hsl(24, 21%, 35%)',
-  'Instagram': 'hsl(0, 84%, 60%)',
-  'Indicação': 'hsl(142, 50%, 50%)',
-  'Google': 'hsl(38, 40%, 60%)',
-  'Outro': 'hsl(24, 10%, 65%)',
+  'Escritório': 'hsl(217, 91%, 60%)',
+  'Tráfego Pago': 'hsl(38, 92%, 50%)',
+  'Bentes Ramos': 'hsl(262, 83%, 58%)',
+  'Site': 'hsl(160, 84%, 39%)',
+  'WhatsApp Z-API': 'hsl(142, 71%, 45%)',
+  'Facebook': 'hsl(221, 83%, 53%)',
+  'WhatsApp': 'hsl(152, 69%, 31%)',
+  'Instagram': 'hsl(340, 82%, 52%)',
+  'Indicação': 'hsl(25, 95%, 53%)',
+  'Google': 'hsl(4, 90%, 58%)',
+  'Outro': 'hsl(220, 9%, 56%)',
 };
 
 const TIPO_ORIGEM_COLORS: Record<string, string> = {
