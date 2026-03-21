@@ -18,7 +18,7 @@ export default function ConfiguracoesPage() {
   const navigate = useNavigate();
   const { canAccessSettings, loading, roles } = usePerfil();
 
-  console.log('ConfiguracoesPage render - loading:', loading, 'canAccessSettings:', canAccessSettings, 'roles:', roles);
+  
 
   useEffect(() => {
     console.log('ConfiguracoesPage useEffect - loading:', loading, 'canAccessSettings:', canAccessSettings);

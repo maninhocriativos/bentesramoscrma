@@ -44,6 +44,7 @@
         "@tiptap/pm": "^3.20.3",
         "@tiptap/react": "^3.20.3",
         "@tiptap/starter-kit": "^3.20.3",
+        "@types/dompurify": "^3.2.0",
         "@types/file-saver": "^2.0.7",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
@@ -52,6 +53,7 @@
         "date-fns-tz": "^3.2.0",
         "docx-preview": "^0.3.7",
         "docxtemplater": "^3.68.3",
+        "dompurify": "^3.3.3",
         "embla-carousel-react": "^8.6.0",
         "file-saver": "^2.0.5",
         "html2canvas": "^1.4.1",
@@ -701,6 +703,8 @@
     "@types/d3-time": ["@types/d3-time@3.0.3", "", {}, "sha512-2p6olUZ4w3s+07q3Tm2dbiMZy5pCDfYwtLXXHUnVzXgQlZ/OyPtUz6OL382BkOuGlLXqfT+wqv8Fw2v8/0geBw=="],
 
     "@types/d3-timer": ["@types/d3-timer@3.0.2", "", {}, "sha512-Ps3T8E8dZDam6fUyNiMkekK3XUsaUEik+idO9/YjPtfj2qruF8tFBXS7XhtE4iIXBLxhmLjP3SXpLhVf21I9Lw=="],
+
+    "@types/dompurify": ["@types/dompurify@3.2.0", "", { "dependencies": { "dompurify": "*" } }, "sha512-Fgg31wv9QbLDA0SpTOXO3MaxySc4DKGLi8sna4/Utjo4r3ZRPdCt4UQee8BWr+Q5z21yifghREPJGYaEOEIACg=="],
 
     "@types/estree": ["@types/estree@1.0.8", "", {}, "sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w=="],
 
