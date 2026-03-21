@@ -154,7 +154,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
         }
       });
 
-    // Fallback polling every 5 minutes
+    // Fallback polling every 15 seconds for near-realtime reliability
     let pollActive = true;
     const pollInterval = setInterval(async () => {
       if (!pollActive || activeSubscriberRef.current !== subscriberId) return;
@@ -166,10 +166,11 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
         
         const { data } = await supabase
           .from('manychat_mensagens' as any)
-          .select('*')
+          .select('id,conteudo,created_at,direcao,tipo,subscriber_id,subscriber_nome,metadata')
           .or(idsFilter)
           .gt('created_at', since)
-          .order('created_at', { ascending: true });
+          .order('created_at', { ascending: true })
+          .limit(50);
         
         if (data && data.length > 0 && activeSubscriberRef.current === subscriberId) {
           setMessages(prev => {
@@ -182,7 +183,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
       } catch (e) {
         // Silent fail for polling
       }
-    }, 300000);
+    }, 15000);
 
     return () => { 
       pollActive = false;
