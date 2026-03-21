@@ -112,16 +112,16 @@ export function TeamStatusWidget() {
                     >
                       {/* Avatar with online dot */}
                       <div className="relative shrink-0">
-                        <Avatar className="h-9 w-9 border border-border/60">
-                          <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                        <Avatar className="h-8 w-8 border border-border/60">
+                          <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-semibold">
                             {getInitials(member.fullName)}
                           </AvatarFallback>
                         </Avatar>
                         <Circle
                           className={cn(
-                            "absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 fill-current stroke-white stroke-[2]",
+                            "absolute -bottom-0.5 -right-0.5 h-3 w-3 fill-current stroke-white stroke-[2]",
                             member.online
-                              ? 'text-[hsl(var(--success))]'
+                              ? 'text-[hsl(var(--success))] animate-pulse'
                               : 'text-muted-foreground/40'
                           )}
                         />
