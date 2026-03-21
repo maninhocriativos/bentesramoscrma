@@ -249,7 +249,7 @@ export function IntegracoesTab() {
 
       // Try with query params approach
       const response = await fetch(
-        'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/google-calendar-auth?action=get_auth_url',
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-auth?action=get_auth_url`,
         { method: 'GET' }
       );
       
