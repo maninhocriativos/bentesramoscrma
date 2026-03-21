@@ -213,23 +213,73 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Webhook authentication - accepts tokens from both Z-API instances
-  const ZAPI_SECRET_1 = Deno.env.get('ZAPI_WEBHOOK_SECRET');
-  const ZAPI_SECRET_2 = Deno.env.get('ZAPI_WEBHOOK_SECRET_2');
-  if (!ZAPI_SECRET_1 && !ZAPI_SECRET_2) {
-    console.error('[Z-API Webhook] No ZAPI_WEBHOOK_SECRET configured - rejecting request');
+  const startTime = Date.now();
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  const normalizeToken = (token?: string | null) => token?.replace(/^Bearer\s+/i, '').trim() || null;
+  const allowedTokens = new Set<string>();
+  const addAllowedToken = (token?: string | null) => {
+    const normalized = normalizeToken(token);
+    if (normalized) allowedTokens.add(normalized);
+  };
+
+  addAllowedToken(Deno.env.get('ZAPI_WEBHOOK_SECRET'));
+  addAllowedToken(Deno.env.get('ZAPI_WEBHOOK_SECRET_2'));
+
+  try {
+    const [{ data: zapiInstances, error: zapiInstancesError }, { data: legacyConfig, error: legacyConfigError }] = await Promise.all([
+      supabase
+        .from('zapi_instances' as any)
+        .select('token, client_token, webhook_secret')
+        .eq('is_active', true),
+      supabase
+        .from('integrations_config' as any)
+        .select('config_json')
+        .eq('provider', 'zapi')
+        .eq('is_active', true)
+        .maybeSingle(),
+    ]);
+
+    if (zapiInstancesError) {
+      console.error('[Z-API Webhook] Failed to load zapi_instances tokens:', zapiInstancesError);
+    }
+
+    if (legacyConfigError) {
+      console.error('[Z-API Webhook] Failed to load legacy Z-API tokens:', legacyConfigError);
+    }
+
+    for (const instance of zapiInstances || []) {
+      addAllowedToken(instance.token);
+      addAllowedToken(instance.client_token);
+      addAllowedToken(instance.webhook_secret);
+    }
+
+    addAllowedToken((legacyConfig as any)?.config_json?.token);
+    addAllowedToken((legacyConfig as any)?.config_json?.client_token);
+    addAllowedToken((legacyConfig as any)?.config_json?.webhook_secret);
+  } catch (tokenLoadError) {
+    console.error('[Z-API Webhook] Error while building token allowlist:', tokenLoadError);
+  }
+
+  if (allowedTokens.size === 0) {
+    console.error('[Z-API Webhook] No webhook tokens configured - rejecting request');
     return new Response(JSON.stringify({ error: 'Webhook secret not configured' }), { status: 500, headers: corsHeaders });
   }
-  const receivedToken = req.headers.get('z-api-token') || req.headers.get('x-zapi-token') || req.headers.get('Client-Token') || req.headers.get('client-token') || new URL(req.url).searchParams.get('token');
-  console.log('[Z-API Webhook] Auth - token prefix:', receivedToken ? receivedToken.substring(0, 8) + '...' : 'NONE');
-  const isValidToken = receivedToken === ZAPI_SECRET_1 || receivedToken === ZAPI_SECRET_2;
-  if (!isValidToken) {
+
+  const receivedToken = normalizeToken(
+    req.headers.get('z-api-token') ||
+    req.headers.get('x-zapi-token') ||
+    req.headers.get('Client-Token') ||
+    req.headers.get('client-token') ||
+    new URL(req.url).searchParams.get('token')
+  );
+
+  console.log('[Z-API Webhook] Auth - token prefix:', receivedToken ? receivedToken.substring(0, 8) + '...' : 'NONE', 'allowlist:', allowedTokens.size);
+
+  if (!receivedToken || !allowedTokens.has(receivedToken)) {
     console.warn('[Z-API Webhook] Unauthorized - received:', receivedToken ? receivedToken.substring(0, 8) + '...' : 'NONE');
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
   }
-
-  const startTime = Date.now();
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
     const body = await req.json();
