@@ -453,17 +453,34 @@ export default function IntimacoesPage() {
                 className="pl-10 h-10 rounded-xl border-border/50 bg-muted/30 focus:bg-card transition-colors"
               />
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1 bg-muted/40 rounded-xl p-1">
-                {(['all', 'unread', 'read'] as const).map((f) => (
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex gap-1.5 bg-muted/30 rounded-xl p-1">
+                {([
+                  { key: 'all' as const, label: 'Todas', count: intimacoes.length, icon: Inbox },
+                  { key: 'unread' as const, label: 'Não lidas', count: unreadCount, icon: EyeOff },
+                  { key: 'read' as const, label: 'Lidas', count: intimacoes.length - unreadCount, icon: Eye },
+                  { key: 'urgent' as const, label: 'Prazo urgente', count: urgentCount, icon: AlertTriangle },
+                ]).map((f) => (
                   <Button
-                    key={f}
-                    variant={filterLida === f ? 'default' : 'ghost'}
+                    key={f.key}
+                    variant={filterLida === f.key ? 'default' : 'ghost'}
                     size="sm"
-                    onClick={() => setFilterLida(f)}
-                    className={`rounded-lg text-xs h-8 px-4 font-medium ${filterLida === f ? 'shadow-sm' : 'hover:bg-card'}`}
+                    onClick={() => setFilterLida(f.key)}
+                    className={`rounded-lg text-xs h-8 px-3 font-medium gap-1.5 ${
+                      filterLida === f.key 
+                        ? f.key === 'urgent' ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground shadow-sm' : 'shadow-sm'
+                        : 'hover:bg-card'
+                    }`}
                   >
-                    {f === 'all' ? `Todas (${intimacoes.length})` : f === 'unread' ? `Não lidas (${unreadCount})` : `Lidas (${intimacoes.length - unreadCount})`}
+                    <f.icon className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">{f.label}</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                      filterLida === f.key 
+                        ? 'bg-white/20 text-current' 
+                        : 'bg-muted text-muted-foreground'
+                    }`}>
+                      {f.count}
+                    </span>
                   </Button>
                 ))}
               </div>
