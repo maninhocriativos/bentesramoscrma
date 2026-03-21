@@ -21,8 +21,16 @@ const RealtimeLeadsMonitor = lazy(() => import('@/components/dashboard/RealtimeL
 const TeamStatusWidget = lazy(() => import('@/components/dashboard/TeamStatusWidget').then(m => ({ default: m.TeamStatusWidget })));
 
 const ChartFallback = () => (
-  <div className="flex items-center justify-center py-12">
-    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+  <div className="bg-card rounded-2xl border border-border/40 p-6 space-y-4 animate-pulse">
+    <div className="flex items-center justify-between">
+      <Skeleton className="h-5 w-40" />
+      <Skeleton className="h-8 w-28" />
+    </div>
+    <div className="h-[220px] flex items-end gap-3 px-2">
+      {[60, 85, 45, 90, 55, 75, 40, 80, 65, 95, 50, 70].map((h, i) => (
+        <div key={i} className="flex-1 bg-muted rounded-t-md" style={{ height: `${h}%` }} />
+      ))}
+    </div>
   </div>
 );
 
