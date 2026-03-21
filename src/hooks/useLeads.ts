@@ -32,6 +32,11 @@ export function useLeads() {
 
   // Initial fetch
   useEffect(() => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      setLoading(false);
+      return;
+    }
+
     fetchLeads();
   }, [fetchLeads]);
 

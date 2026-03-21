@@ -86,7 +86,11 @@ export function useCompromissos() {
   }, [toast]);
 
   useEffect(() => {
-    fetchCompromissos();
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      setLoading(false);
+    } else {
+      fetchCompromissos();
+    }
 
     const channel = supabase
       .channel('compromissos-realtime')

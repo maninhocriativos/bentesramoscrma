@@ -43,7 +43,9 @@ export function useAlertas(leads: Lead[], processos: Processo[]) {
       }
     };
 
-    fetchAlertasRetomada();
+    if (!(typeof document !== 'undefined' && document.visibilityState === 'hidden')) {
+      fetchAlertasRetomada();
+    }
 
     // Subscribe para novos alertas em tempo real
     const channel = supabase
