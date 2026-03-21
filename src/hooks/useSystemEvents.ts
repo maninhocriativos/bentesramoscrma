@@ -43,7 +43,7 @@ export function useSystemEvents(filters?: {
     try {
       let query = supabase
         .from('system_events')
-        .select('*, leads_juridicos(nome)')
+        .select('id, tipo, fonte, acao, entidade_tipo, entidade_id, lead_id, dados, metadata, ip_origem, user_agent, processado, erro, created_at, leads_juridicos(nome)')
         .order('created_at', { ascending: false })
         .limit(filters?.limit || 100);
 
@@ -54,7 +54,7 @@ export function useSystemEvents(filters?: {
       const { data, error } = await query;
       if (error) throw error;
       
-      setEvents(data as SystemEvent[]);
+      setEvents(data as unknown as SystemEvent[]);
     } catch (error: any) {
       console.error('Error fetching events:', error);
       toast({ 
@@ -74,7 +74,8 @@ export function useSystemEvents(filters?: {
       const { data, error } = await supabase
         .from('system_events')
         .select('tipo, fonte, acao')
-        .gte('created_at', sinceDate);
+        .gte('created_at', sinceDate)
+        .limit(500);
 
       if (error) throw error;
 

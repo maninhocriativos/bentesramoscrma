@@ -37,9 +37,9 @@ export default function HistoricoAcessosPage() {
     setLoading(true);
     const { data } = await supabase
       .from('access_logs')
-      .select('*')
+      .select('id, user_id, user_name, user_email, accessed_at, page_path, page_title')
       .order('accessed_at', { ascending: false })
-      .limit(500);
+      .limit(50);
 
     if (data) {
       setLogs(data as AccessLog[]);

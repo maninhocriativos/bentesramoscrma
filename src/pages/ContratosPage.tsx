@@ -180,7 +180,7 @@ export default function ContratosPage() {
 
   useEffect(() => {
     fetchContractsFromClicksign();
-    const interval = setInterval(() => { fetchContractsFromClicksign(false); }, 30000);
+    const interval = setInterval(() => { fetchContractsFromClicksign(false); }, 300000);
     return () => clearInterval(interval);
   }, [fetchContractsFromClicksign]);
 
