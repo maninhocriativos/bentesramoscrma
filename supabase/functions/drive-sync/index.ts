@@ -647,10 +647,11 @@ async function retryJob(userId: string, jobId: string): Promise<boolean> {
 // Auto-sync: run for all users with auto_sync_enabled
 async function runAutoSync(): Promise<{ users: number; synced: number; imported: number }> {
   console.log('Running auto-sync for all enabled users...');
-  
+
+  // Only fetch users who explicitly have auto_sync_enabled = true
   const { data: configs, error } = await supabase
     .from('drive_sync_config')
-    .select('user_id, sync_interval_minutes, last_auto_sync_at')
+    .select('user_id, auto_sync_enabled, sync_interval_minutes, last_auto_sync_at')
     .eq('auto_sync_enabled', true);
 
   if (error || !configs) {
@@ -658,18 +659,32 @@ async function runAutoSync(): Promise<{ users: number; synced: number; imported:
     return { users: 0, synced: 0, imported: 0 };
   }
 
+  if (configs.length === 0) {
+    console.log('No users with auto_sync_enabled=true. Exiting.');
+    return { users: 0, synced: 0, imported: 0 };
+  }
+
+  // Absolute minimum interval: 60 minutes (safety floor)
+  const MIN_INTERVAL_MS = 60 * 60 * 1000;
+
   let totalSynced = 0;
   let totalImported = 0;
   let usersProcessed = 0;
 
   for (const config of configs) {
-    // Check if enough time has passed since last sync
+    // Double-check the flag (belt-and-suspenders)
+    if (!config.auto_sync_enabled) continue;
+
     const lastSync = config.last_auto_sync_at ? new Date(config.last_auto_sync_at) : null;
-    const intervalMs = (config.sync_interval_minutes || 30) * 60 * 1000;
+    // User interval with 60-min absolute floor
+    const userIntervalMs = Math.max(
+      (config.sync_interval_minutes || 30) * 60 * 1000,
+      MIN_INTERVAL_MS
+    );
     const now = Date.now();
 
-    if (lastSync && (now - lastSync.getTime()) < intervalMs) {
-      console.log(`Skipping user ${config.user_id} - not enough time elapsed`);
+    if (lastSync && (now - lastSync.getTime()) < userIntervalMs) {
+      console.log(`Skipping user ${config.user_id} - last sync ${Math.round((now - lastSync.getTime()) / 60000)}min ago, interval=${Math.round(userIntervalMs / 60000)}min`);
       continue;
     }
 
