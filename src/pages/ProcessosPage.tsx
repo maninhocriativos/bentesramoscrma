@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useCallback, lazy, Suspense, memo } from 'react';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layouts/AppLayout';
@@ -37,7 +37,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-export default function ProcessosPage() {
+function ProcessosPage() {
   const navigate = useNavigate();
   const { processos, loading } = useProcessos();
   const { leadNames } = useLeadNames();
@@ -289,3 +289,5 @@ export default function ProcessosPage() {
     </AppLayout>
   );
 }
+
+export default memo(ProcessosPage);

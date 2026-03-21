@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { LeadsTableView } from '@/components/leads/LeadsTableView';
 
-export default function LeadsPage() {
+function LeadsPage() {
   return (
     <AppLayout>
       <div className="flex flex-col h-full overflow-hidden">
@@ -10,3 +11,5 @@ export default function LeadsPage() {
     </AppLayout>
   );
 }
+
+export default memo(LeadsPage);
