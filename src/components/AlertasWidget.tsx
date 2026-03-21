@@ -12,16 +12,22 @@ interface AlertasWidgetProps {
 }
 
 const TIPO_CONFIG = {
-  risco: { icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/10' },
+  risco: { icon: AlertTriangle, color: 'text-destructive', bg: 'bg-destructive/10' },
   prazo: { icon: Clock, color: 'text-[hsl(var(--gold))]', bg: 'bg-[hsl(var(--gold))]/10' },
   tarefa: { icon: FileText, color: 'text-primary/70', bg: 'bg-primary/10' },
   resposta: { icon: AlertTriangle, color: 'text-[hsl(var(--success))]', bg: 'bg-[hsl(var(--success))]/10' },
 };
 
 const PRIORIDADE_BADGE = {
-  alta: 'bg-primary text-primary-foreground',
-  media: 'bg-[hsl(var(--gold))] text-[hsl(var(--gold-foreground))]',
-  baixa: 'bg-muted text-muted-foreground',
+  alta: 'bg-destructive text-white',
+  media: 'bg-[hsl(38,92%,50%)] text-white',
+  baixa: 'bg-[hsl(217,91%,60%)] text-white',
+};
+
+const PRIORIDADE_CARD = {
+  alta: 'bg-destructive/5 border-l-4 border-l-destructive',
+  media: 'bg-[hsl(38,92%,50%)]/5 border-l-4 border-l-[hsl(38,92%,50%)]',
+  baixa: 'bg-[hsl(217,91%,60%)]/5 border-l-4 border-l-[hsl(217,91%,60%)]',
 };
 
 export function AlertasWidget({ alertas, compact = false, onAlertClick }: AlertasWidgetProps) {
