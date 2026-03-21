@@ -140,7 +140,7 @@ function DashboardPage() {
                       <p className="text-4xl font-bold text-foreground tracking-tight">{formatCurrency(stats.total_valor_causa)}</p>
                       <p className="text-xs text-muted-foreground mt-1.5">total em pipeline</p>
                     </div>
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[hsl(38,92%,50%)] to-[hsl(45,93%,47%)] flex items-center justify-center shadow-md shadow-[hsl(38,92%,50%)]/20">
+                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[hsl(38,92%,50%)] to-[hsl(45,93%,47%)] flex items-center justify-center shadow-md shadow-[hsl(38,92%,50%)]/20">
                       <DollarSign className="h-4 w-4 text-white" />
                     </div>
                   </div>
