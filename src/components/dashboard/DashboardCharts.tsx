@@ -322,7 +322,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
 
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2 items-start">
         {/* Origem */}
-        <Card className="rounded-2xl border-0 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)]">
+        <Card className="rounded-2xl border border-border/40 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)]">
           <div className="h-1 w-full bg-primary" />
           <CardHeader className="px-5 pt-5 pb-2">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -348,13 +348,16 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
                   </ResponsiveContainer>
                 </div>
                 <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 pt-3 border-t border-border/30 mt-2">
-                  {origemData.map((entry) => (
-                    <div key={entry.name} className="flex items-center gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
-                      <span className="text-xs font-medium text-foreground">{entry.name}</span>
-                      <span className="text-[10px] text-muted-foreground">({entry.value})</span>
-                    </div>
-                  ))}
+                  {origemData.map((entry) => {
+                    const pct = totalLeads > 0 ? Math.round((entry.value / totalLeads) * 100) : 0;
+                    return (
+                      <div key={entry.name} className="flex items-center gap-1.5">
+                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
+                        <span className="text-xs font-medium text-foreground">{entry.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{entry.value} ({pct}%)</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ) : (
