@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import DOMPurify from 'dompurify';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Download, Printer, Loader2, FileText } from 'lucide-react';
