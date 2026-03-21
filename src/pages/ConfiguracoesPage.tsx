@@ -33,9 +33,7 @@ export default function ConfiguracoesPage() {
     
     return (
       <AppLayout>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="animate-pulse text-muted-foreground">Carregando...</div>
-        </div>
+        <PageSkeleton cards={2} rows={4} />
       </AppLayout>
     );
   }
