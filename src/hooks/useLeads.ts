@@ -37,32 +37,12 @@ export function useLeads() {
 
   // Fallback sync with proper debounce
   useEffect(() => {
-    let mounted = true;
-    const MIN_GAP = 60_000; // 60s minimum between refetches
+    // Periodic fallback only — no visibility refetch (handled by QueryClient staleTime)
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchLeads();
+    }, 120_000);
 
-    const safeRefetch = () => {
-      if (!mounted) return;
-      if (document.visibilityState !== 'visible') return;
-      const now = Date.now();
-      if (now - lastRefetchRef.current < MIN_GAP) return;
-      lastRefetchRef.current = now;
-      fetchLeads();
-    };
-
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') safeRefetch();
-    };
-
-    document.addEventListener('visibilitychange', onVisibility);
-
-    // Periodic check – 120s (realtime handles instant updates)
-    const interval = setInterval(safeRefetch, 120_000);
-
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
+    return () => clearInterval(interval);
   }, [fetchLeads]);
 
   // Realtime subscription (single, stable)
