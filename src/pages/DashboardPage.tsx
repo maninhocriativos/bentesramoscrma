@@ -110,40 +110,55 @@ function DashboardPage() {
             
             {/* ===== TOP: Hero KPIs (instant from RPC) ===== */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-card rounded-xl overflow-hidden shadow-soft border border-border/40">
-                <div className="bg-primary px-4 py-2">
-                  <span className="text-primary-foreground text-xs font-semibold uppercase tracking-wider">
-                    Qtd. de Leads
-                  </span>
-                </div>
-                <div className="px-6 py-5 text-center">
-                  <p className="text-5xl font-bold text-foreground tracking-tight">{stats.total_leads}</p>
-                  <p className="text-xs text-muted-foreground mt-1">leads no CRM</p>
-                </div>
+              <div className="bg-card rounded-2xl overflow-hidden shadow-md border border-border/40">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                        Qtd. de Leads
+                      </p>
+                      <p className="text-5xl font-bold text-foreground tracking-tight">{stats.total_leads}</p>
+                      <p className="text-xs text-muted-foreground mt-1.5">leads no CRM</p>
+                    </div>
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[hsl(217,91%,60%)] to-[hsl(221,83%,53%)] flex items-center justify-center shadow-lg shadow-[hsl(217,91%,60%)]/25">
+                      <Users className="h-7 w-7 text-white" />
+                    </div>
+                  </div>
+                </CardContent>
               </div>
               
-              <div className="bg-card rounded-xl overflow-hidden shadow-soft border border-border/40">
-                <div className="bg-[hsl(var(--gold))] px-4 py-2">
-                  <span className="text-[hsl(var(--gold-foreground))] text-xs font-semibold uppercase tracking-wider">
-                    Faturamento (Valor Causa)
-                  </span>
-                </div>
-                <div className="px-6 py-5 text-center">
-                  <p className="text-4xl font-bold text-foreground tracking-tight">{formatCurrency(stats.total_valor_causa)}</p>
-                  <p className="text-xs text-muted-foreground mt-1">total em pipeline</p>
-                </div>
+              <div className="bg-card rounded-2xl overflow-hidden shadow-md border border-border/40">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                        Faturamento (Valor Causa)
+                      </p>
+                      <p className="text-4xl font-bold text-foreground tracking-tight">{formatCurrency(stats.total_valor_causa)}</p>
+                      <p className="text-xs text-muted-foreground mt-1.5">total em pipeline</p>
+                    </div>
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[hsl(38,92%,50%)] to-[hsl(45,93%,47%)] flex items-center justify-center shadow-lg shadow-[hsl(38,92%,50%)]/25">
+                      <DollarSign className="h-7 w-7 text-white" />
+                    </div>
+                  </div>
+                </CardContent>
               </div>
               
-              <div className="bg-card rounded-xl overflow-hidden shadow-soft border border-border/40">
-                <div className="bg-[hsl(var(--success))] px-4 py-2">
-                  <span className="text-[hsl(var(--success-foreground))] text-xs font-semibold uppercase tracking-wider">
-                    Processos Ativos
-                  </span>
-                </div>
-                <div className="px-6 py-5 text-center">
-                  <p className="text-5xl font-bold text-foreground tracking-tight">{stats.total_processos}</p>
-                  <p className="text-xs text-muted-foreground mt-1">processos cadastrados</p>
-                </div>
+              <div className="bg-card rounded-2xl overflow-hidden shadow-md border border-border/40">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                        Processos Ativos
+                      </p>
+                      <p className="text-5xl font-bold text-foreground tracking-tight">{stats.total_processos}</p>
+                      <p className="text-xs text-muted-foreground mt-1.5">processos cadastrados</p>
+                    </div>
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[hsl(160,84%,39%)] to-[hsl(142,71%,45%)] flex items-center justify-center shadow-lg shadow-[hsl(160,84%,39%)]/25">
+                      <Scale className="h-7 w-7 text-white" />
+                    </div>
+                  </div>
+                </CardContent>
               </div>
             </div>
 
