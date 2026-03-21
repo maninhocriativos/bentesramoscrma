@@ -77,8 +77,8 @@ export function IntegracoesTab() {
   const [advboxSyncing, setAdvboxSyncing] = useState(false);
   const [advboxConnected, setAdvboxConnected] = useState(true); // Token já configurado
 
-  const SUPABASE_URL = 'https://qgenaltkjtlvwfgykpxq.supabase.co/rest/v1/leads_juridicos';
-  const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFnZW5hbHRranRsdndmZ3lrcHhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxNjI1NzAsImV4cCI6MjA2NDczODU3MH0.DgXi_2D3fVNDWMvz9M3aSIbY58FEJc3dTz05kfH_Mew';
+  const SUPABASE_URL = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/leads_juridicos`;
+  const API_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
   // Load Google OAuth settings from app_settings
   useEffect(() => {
