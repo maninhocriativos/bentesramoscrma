@@ -47,12 +47,12 @@ const TIPO_ORIGEM_LABELS: Record<string, string> = {
 };
 
 const STATUS_CONFIG = [
-  { status: 'Lead Frio', color: 'hsl(24, 10%, 55%)', label: 'Lead Frio' },
-  { status: 'Em Atendimento', color: 'hsl(38, 30%, 70%)', label: 'Em Atendimento' },
-  { status: 'Em Negociação', color: 'hsl(24, 21%, 35%)', label: 'Em Negociação' },
-  { status: 'Aguardando Contrato', color: 'hsl(38, 40%, 55%)', label: 'Aguardando Contrato' },
-  { status: 'Contrato Assinado', color: 'hsl(24, 21%, 21%)', label: 'Contrato Assinado' },
-  { status: 'Ganho', color: 'hsl(142, 76%, 36%)', label: 'Ganho' },
+  { status: 'Lead Frio', color: 'hsl(220, 9%, 56%)', label: 'Lead Frio' },
+  { status: 'Em Atendimento', color: 'hsl(217, 91%, 60%)', label: 'Em Atendimento' },
+  { status: 'Em Negociação', color: 'hsl(262, 83%, 58%)', label: 'Em Negociação' },
+  { status: 'Aguardando Contrato', color: 'hsl(25, 95%, 53%)', label: 'Aguardando Contrato' },
+  { status: 'Contrato Assinado', color: 'hsl(152, 69%, 31%)', label: 'Contrato Assinado' },
+  { status: 'Ganho', color: 'hsl(160, 84%, 39%)', label: 'Ganho' },
 ];
 
 const CustomTooltip = ({ active, payload }: any) => {
