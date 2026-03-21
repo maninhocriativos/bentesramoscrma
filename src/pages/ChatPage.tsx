@@ -1,7 +1,12 @@
 import ChatInbox from '@/components/manychat/ChatInbox';
+import { ChatProvider } from '@/contexts/ChatContext';
 
 const ChatPage = () => {
-  return <ChatInbox />;
+  return (
+    <ChatProvider>
+      <ChatInbox />
+    </ChatProvider>
+  );
 };
 
 export default ChatPage;

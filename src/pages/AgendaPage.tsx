@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { Calendar } from '@/components/agenda/Calendar';
 import { AgendaKPIs } from '@/components/agenda/AgendaKPIs';
@@ -45,7 +45,7 @@ const SITUACAO_OPTIONS = [
   { value: 'remarcado', label: 'Remarcado', color: 'bg-[#60a5fa]' },
 ];
 
-export default function AgendaPage() {
+function AgendaPage() {
   const { compromissos, loading, updateCompromisso } = useCompromissos();
   const { intimacoes, loading: loadingIntimacoes } = useIntimacoes();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -276,3 +276,5 @@ export default function AgendaPage() {
     </AppLayout>
   );
 }
+
+export default memo(AgendaPage);

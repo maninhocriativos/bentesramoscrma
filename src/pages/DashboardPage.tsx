@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, lazy, Suspense } from 'react';
+import { useState, useMemo, useCallback, lazy, Suspense, memo } from 'react';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
@@ -35,7 +35,7 @@ const ChartFallback = () => (
   </div>
 );
 
-export default function DashboardPage() {
+function DashboardPage() {
   const { stats, loading: statsLoading } = useDashboardStats();
   const { leads, loading: leadsLoading, fetchLeads } = useLeads();
   const { processos, loading: processosLoading } = useProcessos();
@@ -198,3 +198,5 @@ export default function DashboardPage() {
     </AppLayout>
   );
 }
+
+export default memo(DashboardPage);
