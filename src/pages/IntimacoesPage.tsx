@@ -557,16 +557,19 @@ export default function IntimacoesPage() {
               const prazos = calcularPrazos(intimacao);
               const fmtPrazo = (d: Date | null) => d ? format(d, 'dd/MM/yyyy') : null;
               const dataFatalStr = fmtPrazo(prazos.dataFatal);
+              const urgency = getUrgencyInfo(intimacao);
+              const cardStyle = getCardTypeStyle(intimacao.tipo_intimacao);
+              const isExpanded = expandedCards.has(intimacao.id);
+              const contentText = intimacao.conteudo || 'Sem conteúdo detalhado';
+              const isLongContent = contentText.length > 150;
 
               return (
                 <Card
                   key={intimacao.id}
-                  className={`group transition-all duration-200 hover:shadow-xl cursor-pointer overflow-hidden ${
+                  className={`group transition-all duration-200 hover:shadow-xl cursor-pointer overflow-hidden ${cardStyle.border} ${cardStyle.bg} ${
                     selectedIds.has(intimacao.id) ? 'ring-1 ring-primary/30 border-primary/40' : ''
                   } ${
-                    !intimacao.lida
-                      ? 'border-l-4 border-l-destructive bg-gradient-to-r from-destructive/[0.02] to-transparent ring-1 ring-destructive/10'
-                      : 'hover:ring-1 hover:ring-secondary/30'
+                    !intimacao.lida ? 'ring-1 ring-orange-200 dark:ring-orange-800/30' : 'hover:ring-1 hover:ring-secondary/30'
                   }`}
                   onClick={() => {
                     setSelectedIntimacao(intimacao);
@@ -584,10 +587,10 @@ export default function IntimacoesPage() {
                         />
                       </div>
                       <div className="min-w-0 flex-1 space-y-2.5">
-                        {/* Top row: badges */}
+                        {/* Top row: badges + urgency */}
                         <div className="flex items-center gap-2 flex-wrap">
                           {!intimacao.lida && (
-                            <span className="h-2.5 w-2.5 rounded-full bg-destructive shrink-0 animate-pulse shadow-sm shadow-destructive/30" />
+                            <span className="h-2.5 w-2.5 rounded-full bg-orange-500 shrink-0 animate-pulse shadow-sm shadow-orange-500/30" />
                           )}
                           <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-md ${getTipoBadgeColor(intimacao.tipo_intimacao)}`}>
                             {intimacao.tipo_intimacao}
@@ -597,47 +600,56 @@ export default function IntimacoesPage() {
                               {intimacao.tribunal}
                             </Badge>
                           )}
-                          {dataFatalStr && (
-                            <Badge variant="outline" className="text-[10px] h-5 font-semibold border-destructive/30 bg-destructive/5 text-destructive">
+                          {/* Urgency badge */}
+                          {urgency.level === 'urgent' || urgency.level === 'overdue' ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 animate-pulse">
+                              <AlertTriangle className="h-3 w-3" />
+                              ⚠️ {urgency.label}
+                            </span>
+                          ) : urgency.level === 'warning' ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                              <Timer className="h-3 w-3" />
+                              {urgency.label}
+                            </span>
+                          ) : urgency.level === 'safe' ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                              <Clock className="h-3 w-3" />
+                              {urgency.label}
+                            </span>
+                          ) : dataFatalStr ? (
+                            <Badge variant="outline" className="text-[10px] h-5 font-semibold border-muted-foreground/20">
                               <Clock className="h-3 w-3 mr-1" />
                               Fatal: {dataFatalStr}
                             </Badge>
-                          )}
+                          ) : null}
                         </div>
 
                         {/* CNJ + title */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-foreground tracking-tight">
-                              {intimacao.processo_cnj || 'Sem CNJ'}
-                            </p>
-                            {intimacao.processo_titulo && (
-                              <p className="text-xs text-muted-foreground mt-0.5">{intimacao.processo_titulo}</p>
-                            )}
-                          </div>
-                          {intimacao.processo_cnj && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 rounded-lg shrink-0"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void copyTextToClipboard(intimacao.processo_cnj);
-                              }}
-                              title="Copiar número do processo"
-                            >
-                              <Copy className="h-3.5 w-3.5" />
-                            </Button>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-foreground tracking-tight font-mono">
+                            {intimacao.processo_cnj || 'Sem CNJ'}
+                          </p>
+                          {intimacao.processo_titulo && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{intimacao.processo_titulo}</p>
                           )}
                         </div>
 
-                        {/* Content preview */}
-                        <p className="text-xs text-muted-foreground/80 leading-relaxed line-clamp-3">
-                          {intimacao.conteudo || 'Sem conteúdo detalhado'}
-                        </p>
+                        {/* Content preview - 2 lines by default, expandable */}
+                        <div>
+                          <p className={`text-xs text-muted-foreground/80 leading-relaxed ${isExpanded ? '' : 'line-clamp-2'}`}>
+                            {contentText}
+                          </p>
+                          {isLongContent && (
+                            <button
+                              onClick={(e) => toggleCardExpand(intimacao.id, e)}
+                              className="text-[11px] text-primary font-semibold mt-1 hover:underline"
+                            >
+                              {isExpanded ? '▲ Recolher' : '▼ Ver mais'}
+                            </button>
+                          )}
+                        </div>
 
-                        {/* Dates row - premium pills */}
+                        {/* Dates row */}
                         <div className="flex flex-wrap items-center gap-2 pt-1">
                           {intimacao.data_disponibilizacao && (
                             <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-lg">
@@ -660,16 +672,39 @@ export default function IntimacoesPage() {
                         </div>
                       </div>
 
-                      {/* Actions */}
-                      <div className="flex flex-col items-center gap-2 shrink-0 pt-1">
+                      {/* Quick Actions */}
+                      <div className="flex flex-col items-center gap-1.5 shrink-0 pt-1">
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-9 w-9 rounded-xl opacity-0 group-hover:opacity-100 transition-all hover:bg-secondary/15"
+                          className="h-8 w-8 rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-emerald-100 dark:hover:bg-emerald-900/30"
+                          onClick={(e) => handleToggleRead(intimacao.id, intimacao.lida, e)}
+                          title={intimacao.lida ? 'Marcar como não lida' : 'Marcar como lida'}
+                        >
+                          {intimacao.lida ? <EyeOff className="h-3.5 w-3.5 text-muted-foreground" /> : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />}
+                        </Button>
+                        {intimacao.processo_cnj && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void copyTextToClipboard(intimacao.processo_cnj);
+                            }}
+                            title="Copiar número do processo"
+                          >
+                            <Copy className="h-3.5 w-3.5 text-blue-600" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-purple-100 dark:hover:bg-purple-900/30"
                           onClick={(e) => handleGenerateReport(intimacao, e)}
                           title="Gerar relatório PDF"
                         >
-                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          <FileText className="h-3.5 w-3.5 text-purple-600" />
                         </Button>
                         <ChevronRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-secondary transition-colors" />
                       </div>
