@@ -57,7 +57,7 @@ export default function IsaAutonomaPage() {
       // Buscar todos os eventos da Isa (incluindo isa_auto e isa_scheduler)
       const { data: events } = await supabase
         .from('system_events')
-        .select('*')
+        .select('id, acao, tipo, processado, metadata, created_at, fonte, dados')
         .or('fonte.eq.isa,fonte.eq.isa_auto,fonte.eq.isa_scheduler,fonte.eq.sistema')
         .gte('created_at', last7Days)
         .order('created_at', { ascending: false });
