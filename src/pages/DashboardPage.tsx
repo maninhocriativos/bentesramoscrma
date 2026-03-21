@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, lazy, Suspense } from 'react';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
