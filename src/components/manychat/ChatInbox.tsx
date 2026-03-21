@@ -841,21 +841,7 @@ const ManyChatInboxContent = () => {
   useEffect(() => {
     loadSubscribers();
     
-    // Remove duplicate polling — useChatSubscribers already handles this
-    // Only keep a very light visibility handler here for tab switches
-    let lastLoad = Date.now();
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && Date.now() - lastLoad > 60000) {
-        lastLoad = Date.now();
-        loadSubscribers();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, []);
+    
 
   const handleTyping = useCallback(() => {
     setTyping(true);
