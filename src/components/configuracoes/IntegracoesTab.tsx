@@ -824,7 +824,7 @@ export function IntegracoesTab() {
                     variant="outline" 
                     size="icon"
                     className="shrink-0 h-9 w-9 hover:bg-purple-50 hover:border-purple-300"
-                    onClick={() => copyToClipboard('https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/clicksign-webhook', 'clicksign-webhook')}
+                    onClick={() => copyToClipboard(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/clicksign-webhook`, 'clicksign-webhook')}
                   >
                     {copiedField === 'clicksign-webhook' ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
                   </Button>
