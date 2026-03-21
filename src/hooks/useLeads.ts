@@ -37,10 +37,8 @@ export function useLeads() {
 
   // Fallback sync with proper debounce
   useEffect(() => {
-    // Periodic fallback only — no visibility refetch (handled by QueryClient staleTime)
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') fetchLeads();
-    }, 120_000);
+    // Periodic fallback only — no focus/visibility refetch
+    const interval = setInterval(fetchLeads, 300_000);
 
     return () => clearInterval(interval);
   }, [fetchLeads]);

@@ -154,7 +154,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
         }
       });
 
-    // Fallback polling every 15s
+    // Fallback polling every 5 minutes
     let pollActive = true;
     const pollInterval = setInterval(async () => {
       if (!pollActive || activeSubscriberRef.current !== subscriberId) return;
@@ -182,7 +182,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
       } catch (e) {
         // Silent fail for polling
       }
-    }, 15000);
+    }, 300000);
 
     return () => { 
       pollActive = false;
