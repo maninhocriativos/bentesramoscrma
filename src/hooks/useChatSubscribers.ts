@@ -132,7 +132,7 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
     console.log('[useChatSubscribers] Configurando realtime...');
     
     const channel = supabase
-      .channel(`chat-subscribers-${Date.now()}`)
+      .channel('chat-subscribers-realtime')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'manychat_subscribers' },
         (payload) => {
