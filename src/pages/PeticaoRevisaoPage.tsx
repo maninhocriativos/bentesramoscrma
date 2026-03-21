@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { DetailSkeleton } from '@/components/ui/PageSkeleton';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Download, FileText, Loader2, CheckCircle2, Edit3,
