@@ -817,7 +817,7 @@ export function IntegracoesTab() {
                 <div className="flex gap-2">
                   <Input 
                     readOnly 
-                    value="https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/clicksign-webhook"
+                    value={`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/clicksign-webhook`}
                     className="font-mono text-xs bg-muted/30 truncate h-9"
                   />
                   <Button 
