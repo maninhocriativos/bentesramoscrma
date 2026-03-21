@@ -203,7 +203,12 @@ export function HtmlPreviewEditor({ initialHtml, onSave, saving }: HtmlPreviewEd
                 contentEditable
                 suppressContentEditableWarning
                 className="petition-editor focus:outline-none"
-                dangerouslySetInnerHTML={{ __html: html }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html, {
+                  ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'table', 'tr', 'td', 'th', 'thead', 'tbody', 'blockquote', 'hr', 'span', 'div', 'a', 'img', 'sub', 'sup'],
+                  ALLOWED_ATTR: ['href', 'style', 'class', 'target', 'src', 'alt', 'width', 'height'],
+                  FORBID_TAGS: ['script', 'object', 'embed', 'form', 'input'],
+                  FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
+                }) }}
                 style={{
                   fontFamily: '"Times New Roman", Times, serif',
                   fontSize: '12pt',

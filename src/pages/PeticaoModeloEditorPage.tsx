@@ -448,7 +448,12 @@ export default function PeticaoModeloEditorPage() {
                 [&_th]:border [&_th]:border-border [&_th]:p-2 [&_th]:bg-muted
                 [&_td]:border [&_td]:border-border [&_td]:p-2
                 [&_blockquote]:border-l-4 [&_blockquote]:border-primary/50 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:bg-muted/30 [&_blockquote]:py-2"
-              dangerouslySetInnerHTML={{ __html: html }}
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html, {
+                ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'table', 'tr', 'td', 'th', 'thead', 'tbody', 'blockquote', 'hr', 'span', 'div', 'a', 'img', 'sub', 'sup'],
+                ALLOWED_ATTR: ['href', 'style', 'class', 'target', 'src', 'alt', 'width', 'height'],
+                FORBID_TAGS: ['script', 'object', 'embed', 'form', 'input'],
+                FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
+              }) }}
               style={{
                 fontFamily: "'Times New Roman', serif",
                 fontSize: '12pt',
