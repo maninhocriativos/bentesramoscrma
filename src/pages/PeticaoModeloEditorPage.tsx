@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import DOMPurify from 'dompurify';
 import { useNavigate } from 'react-router-dom';
 import mammoth from 'mammoth';
 import { AppLayout } from '@/components/layouts/AppLayout';
