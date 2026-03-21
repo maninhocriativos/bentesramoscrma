@@ -274,7 +274,8 @@ serve(async (req: Request) => {
     new URL(req.url).searchParams.get('token')
   );
 
-  console.log('[Z-API Webhook] Auth - token prefix:', receivedToken ? receivedToken.substring(0, 8) + '...' : 'NONE', 'allowlist:', allowedTokens.size);
+  const allowlistPrefixes = [...allowedTokens].map(t => t.substring(0, 8) + '...');
+  console.log('[Z-API Webhook] Auth - token prefix:', receivedToken ? receivedToken.substring(0, 8) + '...' : 'NONE', 'allowlist:', allowedTokens.size, 'prefixes:', JSON.stringify(allowlistPrefixes));
 
   if (!receivedToken || !allowedTokens.has(receivedToken)) {
     console.warn('[Z-API Webhook] Unauthorized - received:', receivedToken ? receivedToken.substring(0, 8) + '...' : 'NONE');
