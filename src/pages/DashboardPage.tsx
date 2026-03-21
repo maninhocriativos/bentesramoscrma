@@ -8,6 +8,7 @@ import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
 import { DashboardFiltersBar, DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { LeadOriginKPIs } from '@/components/dashboard/LeadOriginKPIs';
 import { AlertasWidget } from '@/components/AlertasWidget';
+import { AgendaPrazosWidget } from '@/components/dashboard/AgendaPrazosWidget';
 import { useLeads } from '@/hooks/useLeads';
 import { useProcessos } from '@/hooks/useProcessos';
 import { useAlertas } from '@/hooks/useAlertas';
@@ -122,8 +123,8 @@ function DashboardPage() {
                       <p className="text-5xl font-bold text-foreground tracking-tight">{stats.total_leads}</p>
                       <p className="text-xs text-muted-foreground mt-1.5">leads no CRM</p>
                     </div>
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[hsl(217,91%,60%)] to-[hsl(221,83%,53%)] flex items-center justify-center shadow-lg shadow-[hsl(217,91%,60%)]/25">
-                      <Users className="h-7 w-7 text-white" />
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[hsl(217,91%,60%)] to-[hsl(221,83%,53%)] flex items-center justify-center shadow-md shadow-[hsl(217,91%,60%)]/20">
+                      <Users className="h-4 w-4 text-white" />
                     </div>
                   </div>
                 </CardContent>
@@ -139,8 +140,8 @@ function DashboardPage() {
                       <p className="text-4xl font-bold text-foreground tracking-tight">{formatCurrency(stats.total_valor_causa)}</p>
                       <p className="text-xs text-muted-foreground mt-1.5">total em pipeline</p>
                     </div>
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[hsl(38,92%,50%)] to-[hsl(45,93%,47%)] flex items-center justify-center shadow-lg shadow-[hsl(38,92%,50%)]/25">
-                      <DollarSign className="h-7 w-7 text-white" />
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[hsl(38,92%,50%)] to-[hsl(45,93%,47%)] flex items-center justify-center shadow-md shadow-[hsl(38,92%,50%)]/20">
+                      <DollarSign className="h-4 w-4 text-white" />
                     </div>
                   </div>
                 </CardContent>
@@ -156,8 +157,8 @@ function DashboardPage() {
                       <p className="text-5xl font-bold text-foreground tracking-tight">{stats.total_processos}</p>
                       <p className="text-xs text-muted-foreground mt-1.5">processos cadastrados</p>
                     </div>
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[hsl(160,84%,39%)] to-[hsl(142,71%,45%)] flex items-center justify-center shadow-lg shadow-[hsl(160,84%,39%)]/25">
-                      <Scale className="h-7 w-7 text-white" />
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[hsl(160,84%,39%)] to-[hsl(142,71%,45%)] flex items-center justify-center shadow-md shadow-[hsl(160,84%,39%)]/20">
+                      <Scale className="h-4 w-4 text-white" />
                     </div>
                   </div>
                 </CardContent>
@@ -192,6 +193,7 @@ function DashboardPage() {
                     <DashboardCharts leads={filteredLeads} />
                   </Suspense>
                   <div className="space-y-6">
+                    <AgendaPrazosWidget />
                     <Suspense fallback={<ChartFallback />}>
                       <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
                     </Suspense>
