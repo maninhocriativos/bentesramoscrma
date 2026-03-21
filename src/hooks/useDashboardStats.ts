@@ -46,6 +46,11 @@ export function useDashboardStats() {
   }, []);
 
   useEffect(() => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      setLoading(false);
+      return;
+    }
+
     fetchStats();
   }, [fetchStats]);
 

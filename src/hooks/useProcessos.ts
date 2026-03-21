@@ -40,6 +40,11 @@ export function useProcessos() {
 
   useEffect(() => {
     if (user) {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        setLoading(false);
+        return;
+      }
+
       fetchProcessos(true);
     }
   }, [user, fetchProcessos]);
