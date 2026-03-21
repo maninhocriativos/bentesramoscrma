@@ -40,7 +40,7 @@ export default function ConfiguracoesPage() {
   }
 
   if (!canAccessSettings) {
-    console.log('ConfiguracoesPage: No access, returning null');
+    
     return null;
   }
 
