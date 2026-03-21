@@ -43,7 +43,7 @@ export function useSystemEvents(filters?: {
     try {
       let query = supabase
         .from('system_events')
-        .select('id, tipo, fonte, acao, entidade_tipo, entidade_id, lead_id, processado, erro, created_at, metadata, leads_juridicos(nome)')
+        .select('id, tipo, fonte, acao, entidade_tipo, entidade_id, lead_id, dados, metadata, ip_origem, user_agent, processado, erro, created_at, leads_juridicos(nome)')
         .order('created_at', { ascending: false })
         .limit(filters?.limit || 100);
 
