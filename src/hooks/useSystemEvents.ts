@@ -54,7 +54,7 @@ export function useSystemEvents(filters?: {
       const { data, error } = await query;
       if (error) throw error;
       
-      setEvents(data as SystemEvent[]);
+      setEvents(data as unknown as SystemEvent[]);
     } catch (error: any) {
       console.error('Error fetching events:', error);
       toast({ 
