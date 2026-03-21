@@ -192,6 +192,7 @@ function DashboardPage() {
                     <DashboardCharts leads={filteredLeads} />
                   </Suspense>
                   <div className="space-y-6">
+                    <AgendaPrazosWidget />
                     <Suspense fallback={<ChartFallback />}>
                       <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
                     </Suspense>
