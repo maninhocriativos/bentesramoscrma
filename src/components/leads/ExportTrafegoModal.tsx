@@ -23,7 +23,11 @@ interface LeadExportRow {
   email: string;
   created_at: string;
   resumo_conversas: string;
+  contrato_assinado?: boolean;
+  data_assinatura?: string;
 }
+
+type FilterMode = 'todos' | 'contrato_assinado';
 
 export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalProps) {
   const { toast } = useToast();
