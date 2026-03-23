@@ -267,17 +267,19 @@ export function ProcessoModalExpanded({
     return statusMap[apiStatus] || 'Em Andamento';
   };
 
-  const handleRefreshStatus = async () => {
+  const handleRefreshStatus = async (silent = false) => {
     const numero = (formData.numero_processo || '').trim();
     if (!numero || !CNJ_REGEX.test(numero)) {
-      if (!numero) {
-        toast.error('Informe o número do processo', {
-          description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
-        });
-      } else {
-        toast.error('Número do processo inválido', {
-          description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
-        });
+      if (!silent) {
+        if (!numero) {
+          toast.error('Informe o número do processo', {
+            description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
+          });
+        } else {
+          toast.error('Número do processo inválido', {
+            description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
+          });
+        }
       }
       return;
     }
@@ -745,7 +747,7 @@ export function ProcessoModalExpanded({
       
       if (hasValidCnj && (isMissingKeyData || isStale) && !fetchingData) {
         console.log('🔄 Auto-fetching from API for processo:', processo.numero_processo, { isMissingKeyData, isStale });
-        handleRefreshStatus();
+        handleRefreshStatus(true);
       }
 
       // Auto-fix CPF from partes data if current value is invalid (less than 11 digits)
@@ -1842,7 +1844,7 @@ export function ProcessoModalExpanded({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleRefreshStatus}
+                onClick={() => handleRefreshStatus(false)}
                 disabled={fetchingData || !(formData.numero_processo || '').trim()}
                 className="rounded-xl"
               >
