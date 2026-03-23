@@ -1844,7 +1844,7 @@ export function ProcessoModalExpanded({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleRefreshStatus}
+                onClick={() => handleRefreshStatus(false)}
                 disabled={fetchingData || !(formData.numero_processo || '').trim()}
                 className="rounded-xl"
               >
