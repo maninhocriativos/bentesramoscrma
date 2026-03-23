@@ -267,17 +267,19 @@ export function ProcessoModalExpanded({
     return statusMap[apiStatus] || 'Em Andamento';
   };
 
-  const handleRefreshStatus = async () => {
+  const handleRefreshStatus = async (silent = false) => {
     const numero = (formData.numero_processo || '').trim();
     if (!numero || !CNJ_REGEX.test(numero)) {
-      if (!numero) {
-        toast.error('Informe o número do processo', {
-          description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
-        });
-      } else {
-        toast.error('Número do processo inválido', {
-          description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
-        });
+      if (!silent) {
+        if (!numero) {
+          toast.error('Informe o número do processo', {
+            description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
+          });
+        } else {
+          toast.error('Número do processo inválido', {
+            description: 'Use o formato CNJ: 0000000-00.0000.0.00.0000',
+          });
+        }
       }
       return;
     }
