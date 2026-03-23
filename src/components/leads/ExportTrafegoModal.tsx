@@ -197,7 +197,9 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
 
         doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
-        const info = [`Tel: ${lead.telefone || 'N/A'}`, lead.email ? `Email: ${lead.email}` : '', `Entrada: ${new Date(lead.created_at).toLocaleDateString('pt-BR')}`].filter(Boolean).join('  |  ');
+        const infoArr = [`Tel: ${lead.telefone || 'N/A'}`, lead.email ? `Email: ${lead.email}` : '', `Entrada: ${new Date(lead.created_at).toLocaleDateString('pt-BR')}`];
+        if (lead.data_assinatura) infoArr.push(`Assinatura: ${new Date(lead.data_assinatura).toLocaleDateString('pt-BR')}`);
+        const info = infoArr.filter(Boolean).join('  |  ');
         doc.text(info, margin, y);
         y += 5;
 
