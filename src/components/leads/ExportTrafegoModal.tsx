@@ -47,13 +47,20 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
     const to = format(dateTo, 'yyyy-MM-dd');
 
     // Fetch traffic leads in period
-    const { data: leads, error } = await supabase
+    let query = supabase
       .from('leads_juridicos')
-      .select('id, nome, telefone, email, created_at, resumo_ia')
+      .select('id, nome, telefone, email, created_at, resumo_ia, contract_signed_at, status')
       .or('tipo_origem.eq.trafego,linha_whatsapp.eq.trafego_isa')
       .gte('created_at', `${from}T00:00:00`)
       .lte('created_at', `${to}T23:59:59`)
       .order('created_at', { ascending: false });
+
+    // Filter only signed contracts
+    if (filterMode === 'contrato_assinado') {
+      query = query.not('contract_signed_at', 'is', null);
+    }
+
+    const { data: leads, error } = await query;
 
     if (error) throw error;
     if (!leads || leads.length === 0) return [];
