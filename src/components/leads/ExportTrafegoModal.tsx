@@ -140,7 +140,7 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `leads-trafego-${format(dateFrom!, 'dd-MM-yyyy')}_a_${format(dateTo!, 'dd-MM-yyyy')}.csv`;
+      link.download = `leads-trafego${filterMode === 'contrato_assinado' ? '-contrato' : ''}-${format(dateFrom!, 'dd-MM-yyyy')}_a_${format(dateTo!, 'dd-MM-yyyy')}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
