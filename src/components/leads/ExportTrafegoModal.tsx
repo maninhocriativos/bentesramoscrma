@@ -169,7 +169,7 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
       // Header
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
-      doc.text('Relatório de Leads de Tráfego', margin, y);
+      doc.text(filterMode === 'contrato_assinado' ? 'Relatório - Leads Tráfego com Contrato Assinado' : 'Relatório de Leads de Tráfego', margin, y);
       y += 8;
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
