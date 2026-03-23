@@ -72,6 +72,7 @@ export function LeadsTableHeader({
 }: LeadsTableHeaderProps) {
   const { toast } = useToast();
   const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
+  const [isExportTrafegoOpen, setIsExportTrafegoOpen] = useState(false);
 
   const exportToCSV = async () => {
     try {
