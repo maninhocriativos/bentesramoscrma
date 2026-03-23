@@ -344,6 +344,11 @@ export function LeadsTableHeader({
         isNew={true}
         canDelete={false}
       />
+
+      <ExportTrafegoModal
+        open={isExportTrafegoOpen}
+        onOpenChange={setIsExportTrafegoOpen}
+      />
     </>
   );
 }
