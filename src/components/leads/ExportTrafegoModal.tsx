@@ -35,6 +35,7 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const [loading, setLoading] = useState(false);
   const [previewData, setPreviewData] = useState<LeadExportRow[] | null>(null);
+  const [filterMode, setFilterMode] = useState<FilterMode>('todos');
 
   const fetchData = async (): Promise<LeadExportRow[]> => {
     if (!dateFrom || !dateTo) {
