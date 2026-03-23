@@ -301,6 +301,20 @@ export function LeadsTableHeader({
                   <Button
                     variant="ghost"
                     size="icon"
+                    onClick={() => setIsExportTrafegoOpen(true)}
+                    className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
+                  >
+                    <FileBarChart className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Exportar Leads Tráfego</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={exportToCSV}
                     className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
                   >
