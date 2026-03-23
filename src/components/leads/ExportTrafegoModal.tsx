@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
-import { CalendarIcon, Download, FileText, Loader2, MessageSquare } from 'lucide-react';
+import { CalendarIcon, Download, FileText, Loader2, MessageSquare, FileCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -23,7 +23,11 @@ interface LeadExportRow {
   email: string;
   created_at: string;
   resumo_conversas: string;
+  contrato_assinado?: boolean;
+  data_assinatura?: string;
 }
+
+type FilterMode = 'todos' | 'contrato_assinado';
 
 export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalProps) {
   const { toast } = useToast();
@@ -31,6 +35,7 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const [loading, setLoading] = useState(false);
   const [previewData, setPreviewData] = useState<LeadExportRow[] | null>(null);
+  const [filterMode, setFilterMode] = useState<FilterMode>('todos');
 
   const fetchData = async (): Promise<LeadExportRow[]> => {
     if (!dateFrom || !dateTo) {
@@ -42,13 +47,20 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
     const to = format(dateTo, 'yyyy-MM-dd');
 
     // Fetch traffic leads in period
-    const { data: leads, error } = await supabase
+    let query = supabase
       .from('leads_juridicos')
-      .select('id, nome, telefone, email, created_at, resumo_ia')
+      .select('id, nome, telefone, email, created_at, resumo_ia, contract_signed_at, status')
       .or('tipo_origem.eq.trafego,linha_whatsapp.eq.trafego_isa')
       .gte('created_at', `${from}T00:00:00`)
       .lte('created_at', `${to}T23:59:59`)
       .order('created_at', { ascending: false });
+
+    // Filter only signed contracts
+    if (filterMode === 'contrato_assinado') {
+      query = query.not('contract_signed_at', 'is', null);
+    }
+
+    const { data: leads, error } = await query;
 
     if (error) throw error;
     if (!leads || leads.length === 0) return [];
@@ -82,6 +94,8 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
       email: l.email || '',
       created_at: l.created_at,
       resumo_conversas: msgMap.get(l.id)?.join(' | ') || l.resumo_ia || 'Sem conversas',
+      contrato_assinado: !!l.contract_signed_at || l.status === 'Contrato Assinado' || l.status === 'Ganho',
+      data_assinatura: l.contract_signed_at || undefined,
     }));
   };
 
@@ -107,12 +121,13 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
       const data = previewData || await fetchData();
       if (data.length === 0) return;
 
-      const headers = ['Nome', 'Telefone', 'Email', 'Data Entrada', 'Resumo Conversas'];
+      const headers = ['Nome', 'Telefone', 'Email', 'Data Entrada', ...(filterMode === 'contrato_assinado' ? ['Data Assinatura'] : []), 'Resumo Conversas'];
       const rows = data.map(r => [
         r.nome,
         r.telefone,
         r.email,
         new Date(r.created_at).toLocaleDateString('pt-BR'),
+        ...(filterMode === 'contrato_assinado' ? [r.data_assinatura ? new Date(r.data_assinatura).toLocaleDateString('pt-BR') : ''] : []),
         r.resumo_conversas,
       ]);
 
@@ -125,7 +140,7 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `leads-trafego-${format(dateFrom!, 'dd-MM-yyyy')}_a_${format(dateTo!, 'dd-MM-yyyy')}.csv`;
+      link.download = `leads-trafego${filterMode === 'contrato_assinado' ? '-contrato' : ''}-${format(dateFrom!, 'dd-MM-yyyy')}_a_${format(dateTo!, 'dd-MM-yyyy')}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -154,7 +169,7 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
       // Header
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
-      doc.text('Relatório de Leads de Tráfego', margin, y);
+      doc.text(filterMode === 'contrato_assinado' ? 'Relatório - Leads Tráfego com Contrato Assinado' : 'Relatório de Leads de Tráfego', margin, y);
       y += 8;
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
@@ -182,7 +197,9 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
 
         doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
-        const info = [`Tel: ${lead.telefone || 'N/A'}`, lead.email ? `Email: ${lead.email}` : '', `Entrada: ${new Date(lead.created_at).toLocaleDateString('pt-BR')}`].filter(Boolean).join('  |  ');
+        const infoArr = [`Tel: ${lead.telefone || 'N/A'}`, lead.email ? `Email: ${lead.email}` : '', `Entrada: ${new Date(lead.created_at).toLocaleDateString('pt-BR')}`];
+        if (lead.data_assinatura) infoArr.push(`Assinatura: ${new Date(lead.data_assinatura).toLocaleDateString('pt-BR')}`);
+        const info = infoArr.filter(Boolean).join('  |  ');
         doc.text(info, margin, y);
         y += 5;
 
@@ -204,7 +221,7 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
         y += 5;
       }
 
-      doc.save(`leads-trafego-${format(dateFrom!, 'dd-MM-yyyy')}_a_${format(dateTo!, 'dd-MM-yyyy')}.pdf`);
+      doc.save(`leads-trafego${filterMode === 'contrato_assinado' ? '-contrato' : ''}-${format(dateFrom!, 'dd-MM-yyyy')}_a_${format(dateTo!, 'dd-MM-yyyy')}.pdf`);
       toast({ title: 'PDF exportado!', description: `${data.length} leads exportados.` });
     } catch (e) {
       console.error(e);
@@ -216,6 +233,7 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
 
   const resetState = () => {
     setPreviewData(null);
+    setFilterMode('todos');
   };
 
   return (
@@ -229,8 +247,30 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
         </DialogHeader>
 
         <p className="text-sm text-muted-foreground">
-          Selecione o período para exportar leads de tráfego pago (WhatsApp) com nome, telefone, email e resumo das últimas conversas.
+          Selecione o período e o filtro para exportar leads de tráfego pago (WhatsApp).
         </p>
+
+        {/* Filter mode */}
+        <div className="flex gap-2">
+          <Button
+            variant={filterMode === 'todos' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => { setFilterMode('todos'); setPreviewData(null); }}
+            className="flex-1 gap-1.5 text-xs"
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            Todos do Tráfego
+          </Button>
+          <Button
+            variant={filterMode === 'contrato_assinado' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => { setFilterMode('contrato_assinado'); setPreviewData(null); }}
+            className="flex-1 gap-1.5 text-xs"
+          >
+            <FileCheck className="h-3.5 w-3.5" />
+            Com Contrato Assinado
+          </Button>
+        </div>
 
         {/* Date pickers */}
         <div className="flex gap-3">
