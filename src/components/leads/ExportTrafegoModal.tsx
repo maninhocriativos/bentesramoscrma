@@ -233,6 +233,7 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
 
   const resetState = () => {
     setPreviewData(null);
+    setFilterMode('todos');
   };
 
   return (
