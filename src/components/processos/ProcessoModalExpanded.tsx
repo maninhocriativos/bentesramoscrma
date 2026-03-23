@@ -679,6 +679,7 @@ export function ProcessoModalExpanded({
       // Always fetch partes from the dedicated table - DB is source of truth
       (async () => {
         try {
+          // Fetch partes from dedicated table
           const { data: dbPartes, error } = await supabase
             .from('processo_partes')
             .select('*')
@@ -686,11 +687,6 @@ export function ProcessoModalExpanded({
           
           if (error) {
             console.error('Erro ao carregar partes do banco:', error);
-            toast.error('Erro ao carregar partes', { description: error.message });
-            // Still fall back to partes_json
-            if (processo.partes_json && processo.partes_json.length > 0) {
-              setPartes(processo.partes_json);
-            }
           } else if (dbPartes && dbPartes.length > 0) {
             const mapped: ProcessoParte[] = dbPartes.map((p: any) => ({
               nome: p.nome,
@@ -705,9 +701,7 @@ export function ProcessoModalExpanded({
             setPartes(mapped);
             setPartesLoadedFromDb(true);
           } else if (processo.partes_json && processo.partes_json.length > 0) {
-            // Fallback to partes_json if no dedicated table data
             setPartes(processo.partes_json);
-            // Auto-migrate: save partes_json to processo_partes table
             const partesRows = processo.partes_json.map(p => ({
               processo_id: processo.id,
               nome: p.nome,
@@ -720,26 +714,44 @@ export function ProcessoModalExpanded({
               advogados: p.advogados || null,
             }));
             const { error: migrateError } = await supabase.from('processo_partes').insert(partesRows);
-            if (migrateError) {
-              console.warn('Auto-migração de partes falhou:', migrateError);
-            } else {
-              console.log('✅ Auto-migradas', partesRows.length, 'partes de partes_json para processo_partes');
+            if (!migrateError) {
+              console.log('✅ Auto-migradas', partesRows.length, 'partes');
               setPartesLoadedFromDb(true);
             }
           }
+
+          // Fetch movimentos from dedicated table
+          const { data: dbMovimentos, error: movError } = await supabase
+            .from('processo_movimentacoes')
+            .select('*')
+            .eq('processo_id', processo.id)
+            .order('data_movimento', { ascending: false })
+            .limit(50);
+
+          if (movError) {
+            console.error('Erro ao carregar movimentações do banco:', movError);
+          } else if (dbMovimentos && dbMovimentos.length > 0) {
+            const mapped: ProcessoMovimento[] = dbMovimentos.map((m: any) => ({
+              dataHora: m.data_movimento ? new Date(m.data_movimento).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '',
+              dataHoraRaw: m.data_movimento,
+              nome: m.movimento_titulo || 'Movimentação',
+              complemento: m.movimento_descricao || null,
+              codigo: m.movimento_cnj_codigo ? Number(m.movimento_cnj_codigo) : null,
+            }));
+            setMovimentos(mapped);
+          }
         } catch (err) {
-          console.error('Erro inesperado ao carregar partes:', err);
+          console.error('Erro inesperado ao carregar dados do processo:', err);
         }
       })();
 
       // Auto-fetch from API if key data fields are missing or stale
+      // Note: partes_json/movimentos_json are excluded from list query, so check other fields
       const hasValidCnj = processo.numero_processo && CNJ_REGEX.test(processo.numero_processo.trim());
       const isMissingKeyData = (
         !processo.classe_cnj ||
         !processo.orgao_julgador ||
-        !processo.assunto_cnj ||
-        (!processo.partes_json || processo.partes_json.length === 0) ||
-        (!processo.movimentos_json || processo.movimentos_json.length === 0)
+        !processo.assunto_cnj
       );
       // Check if last API check was more than 3 days ago
       const lastCheck = processo.ultima_consulta_api_at ? new Date(processo.ultima_consulta_api_at).getTime() : 0;
