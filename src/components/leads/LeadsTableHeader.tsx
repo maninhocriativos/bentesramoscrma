@@ -1,4 +1,4 @@
-import { Search, Download, Plus, Building2, Megaphone, X, LayoutGrid, List, DollarSign } from 'lucide-react';
+import { Search, Download, Plus, Building2, Megaphone, X, LayoutGrid, List, DollarSign, FileBarChart } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,6 +11,7 @@ import {
 import { LeadModal } from '@/components/LeadModal';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { ExportTrafegoModal } from './ExportTrafegoModal';
 import { supabase } from '@/integrations/supabase/client';
 import { LeadStatus } from '@/types/leads';
 import { Badge } from '@/components/ui/badge';
@@ -71,6 +72,7 @@ export function LeadsTableHeader({
 }: LeadsTableHeaderProps) {
   const { toast } = useToast();
   const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
+  const [isExportTrafegoOpen, setIsExportTrafegoOpen] = useState(false);
 
   const exportToCSV = async () => {
     try {
@@ -299,6 +301,20 @@ export function LeadsTableHeader({
                   <Button
                     variant="ghost"
                     size="icon"
+                    onClick={() => setIsExportTrafegoOpen(true)}
+                    className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
+                  >
+                    <FileBarChart className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Exportar Leads Tráfego</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={exportToCSV}
                     className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
                   >
@@ -327,6 +343,11 @@ export function LeadsTableHeader({
         onClose={() => setIsNewLeadModalOpen(false)}
         isNew={true}
         canDelete={false}
+      />
+
+      <ExportTrafegoModal
+        open={isExportTrafegoOpen}
+        onOpenChange={setIsExportTrafegoOpen}
       />
     </>
   );
