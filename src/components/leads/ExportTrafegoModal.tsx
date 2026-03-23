@@ -121,12 +121,13 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
       const data = previewData || await fetchData();
       if (data.length === 0) return;
 
-      const headers = ['Nome', 'Telefone', 'Email', 'Data Entrada', 'Resumo Conversas'];
+      const headers = ['Nome', 'Telefone', 'Email', 'Data Entrada', ...(filterMode === 'contrato_assinado' ? ['Data Assinatura'] : []), 'Resumo Conversas'];
       const rows = data.map(r => [
         r.nome,
         r.telefone,
         r.email,
         new Date(r.created_at).toLocaleDateString('pt-BR'),
+        ...(filterMode === 'contrato_assinado' ? [r.data_assinatura ? new Date(r.data_assinatura).toLocaleDateString('pt-BR') : ''] : []),
         r.resumo_conversas,
       ]);
 
