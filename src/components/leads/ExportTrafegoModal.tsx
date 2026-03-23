@@ -247,8 +247,30 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
         </DialogHeader>
 
         <p className="text-sm text-muted-foreground">
-          Selecione o período para exportar leads de tráfego pago (WhatsApp) com nome, telefone, email e resumo das últimas conversas.
+          Selecione o período e o filtro para exportar leads de tráfego pago (WhatsApp).
         </p>
+
+        {/* Filter mode */}
+        <div className="flex gap-2">
+          <Button
+            variant={filterMode === 'todos' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => { setFilterMode('todos'); setPreviewData(null); }}
+            className="flex-1 gap-1.5 text-xs"
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            Todos do Tráfego
+          </Button>
+          <Button
+            variant={filterMode === 'contrato_assinado' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => { setFilterMode('contrato_assinado'); setPreviewData(null); }}
+            className="flex-1 gap-1.5 text-xs"
+          >
+            <FileCheck className="h-3.5 w-3.5" />
+            Com Contrato Assinado
+          </Button>
+        </div>
 
         {/* Date pickers */}
         <div className="flex gap-3">
