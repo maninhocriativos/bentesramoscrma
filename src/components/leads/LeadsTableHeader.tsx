@@ -1,4 +1,4 @@
-import { Search, Download, Plus, Building2, Megaphone, X, LayoutGrid, List, DollarSign } from 'lucide-react';
+import { Search, Download, Plus, Building2, Megaphone, X, LayoutGrid, List, DollarSign, FileBarChart } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
