@@ -94,6 +94,8 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
       email: l.email || '',
       created_at: l.created_at,
       resumo_conversas: msgMap.get(l.id)?.join(' | ') || l.resumo_ia || 'Sem conversas',
+      contrato_assinado: !!l.contract_signed_at || l.status === 'Contrato Assinado' || l.status === 'Ganho',
+      data_assinatura: l.contract_signed_at || undefined,
     }));
   };
 
