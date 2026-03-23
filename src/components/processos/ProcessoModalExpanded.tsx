@@ -747,7 +747,7 @@ export function ProcessoModalExpanded({
       
       if (hasValidCnj && (isMissingKeyData || isStale) && !fetchingData) {
         console.log('🔄 Auto-fetching from API for processo:', processo.numero_processo, { isMissingKeyData, isStale });
-        handleRefreshStatus();
+        handleRefreshStatus(true);
       }
 
       // Auto-fix CPF from partes data if current value is invalid (less than 11 digits)
