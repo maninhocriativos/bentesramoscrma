@@ -221,7 +221,7 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
         y += 5;
       }
 
-      doc.save(`leads-trafego-${format(dateFrom!, 'dd-MM-yyyy')}_a_${format(dateTo!, 'dd-MM-yyyy')}.pdf`);
+      doc.save(`leads-trafego${filterMode === 'contrato_assinado' ? '-contrato' : ''}-${format(dateFrom!, 'dd-MM-yyyy')}_a_${format(dateTo!, 'dd-MM-yyyy')}.pdf`);
       toast({ title: 'PDF exportado!', description: `${data.length} leads exportados.` });
     } catch (e) {
       console.error(e);
