@@ -1227,7 +1227,9 @@ function normalizeZapiEvent(body: any): {
     isGroup,
     mediaUrl: mediaUrl ? 'presente' : 'ausente',
     rawPhone,
-    phone
+    rawPhoneDigits,
+    phone,
+    blockedInvalidPhone: !phone && !!rawPhone
   });
 
   return {
