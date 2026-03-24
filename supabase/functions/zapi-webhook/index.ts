@@ -515,6 +515,26 @@ serve(async (req: Request) => {
                           isTrafficNumber ? 'trafego_isa' : 'indefinido';
     const empresaTag = isOfficeNumber ? 'BENTES_RAMOS' : null;
     
+    // ============================================
+    // PROTEÇÃO: Não sobrescrever linha_whatsapp de clientes do escritório
+    // Se o subscriber já existe como 'bentes_ramos_antigo', manter essa classificação
+    // mesmo que a mensagem chegue pelo número de tráfego
+    // ============================================
+    const { data: existingSub } = await supabase
+      .from('manychat_subscribers')
+      .select('linha_whatsapp, empresa_tag')
+      .eq('subscriber_id', subscriberId)
+      .maybeSingle();
+    
+    const isExistingOfficeClient = existingSub?.linha_whatsapp === 'bentes_ramos_antigo' 
+      || existingSub?.empresa_tag === 'BENTES_RAMOS';
+    
+    // Se já é cliente do escritório, NÃO mudar para tráfego
+    const finalLinhaWhatsapp = isExistingOfficeClient ? 'bentes_ramos_antigo' : linhaWhatsapp;
+    const finalEmpresaTag = isExistingOfficeClient ? 'BENTES_RAMOS' : empresaTag;
+    // Não sobrescrever instance_name se for cliente do escritório mandando pelo tráfego
+    const finalInstanceName = isExistingOfficeClient && !isOfficeNumber ? existingSub?.linha_whatsapp ? connectedPhone : connectedPhone : connectedPhone;
+    
     const { error: subError } = await supabase
       .from('manychat_subscribers')
       .upsert({
@@ -527,13 +547,17 @@ serve(async (req: Request) => {
         updated_at: new Date().toISOString(),
         // Salvar o número conectado para identificar a instância (badge Tráfego/Bentes Ramos)
         instance_name: connectedPhone,
-        // Novos campos para separação Bentes Ramos vs Tráfego
-        linha_whatsapp: linhaWhatsapp,
-        empresa_tag: empresaTag
+        // Novos campos para separação Bentes Ramos vs Tráfego (protegidos contra sobrescrita)
+        linha_whatsapp: finalLinhaWhatsapp,
+        empresa_tag: finalEmpresaTag
       }, { 
         onConflict: 'subscriber_id',
         ignoreDuplicates: false 
       });
+    
+    if (isExistingOfficeClient && isTrafficNumber) {
+      console.log(`[Z-API Webhook] 🛡️ PROTEÇÃO: Cliente do escritório ${subscriberId} mandou mensagem pelo tráfego — mantendo classificação original`);
+    }
     
     if (subError) {
       console.error('[Z-API Webhook] Error upserting subscriber:', subError);
@@ -742,7 +766,7 @@ serve(async (req: Request) => {
       // Buscar estado atual do lead com campos de segmentação
       const { data: lead } = await supabase
         .from('leads_juridicos')
-        .select('lead_state, nome, status, isa_ativa, tipo_origem, linha_whatsapp, fonte_trafego')
+        .select('lead_state, nome, status, isa_ativa, tipo_origem, linha_whatsapp, fonte_trafego, empresa_tag')
         .eq('id', leadId)
         .single();
 
@@ -771,11 +795,20 @@ serve(async (req: Request) => {
 
       const isaExplicitlyDisabled = lead?.isa_ativa === false;
       const humanAttendanceActive = subscriber?.atendimento_humano === true;
+      
+      // ============================================
+      // BLOQUEIO: Cliente do escritório NÃO pode ser atendido pela Isa
+      // Mesmo que mande mensagem pelo número de tráfego
+      // ============================================
+      const isOfficeClient = lead?.linha_whatsapp === 'bentes_ramos_antigo' 
+        || lead?.empresa_tag === 'BENTES_RAMOS'
+        || subscriber?.linha_whatsapp === 'bentes_ramos_antigo';
 
-// ISA só atende se a mensagem entrou na linha de tráfego
+// ISA só atende se a mensagem entrou na linha de tráfego E o lead NÃO é cliente do escritório
       const shouldIsaRespond = isTrafficLine
         && !isaExplicitlyDisabled
-        && !humanAttendanceActive;
+        && !humanAttendanceActive
+        && !isOfficeClient;
       
       console.log(`[Z-API Webhook] ISA Decision for lead ${leadId}:`, {
         isTrafficLine,
@@ -783,11 +816,13 @@ serve(async (req: Request) => {
         isMetaLeadAds,
         isaExplicitlyDisabled,
         humanAttendanceActive,
+        isOfficeClient,
         shouldIsaRespond,
         linhaWhatsapp,
         leadLinhaWhatsapp: lead?.linha_whatsapp,
         tipoOrigem: lead?.tipo_origem,
-        fonteTrafego: lead?.fonte_trafego
+        fonteTrafego: lead?.fonte_trafego,
+        empresaTag: lead?.empresa_tag
       });
 
       if (shouldIsaRespond && lead) {
@@ -1037,6 +1072,8 @@ serve(async (req: Request) => {
           console.log(`[Z-API Webhook] 👤 Human attendance active for lead ${leadId}, skipping Isa`);
         } else if (isaExplicitlyDisabled) {
           console.log(`[Z-API Webhook] 🚫 Isa explicitly disabled for lead ${leadId}`);
+        } else if (isOfficeClient) {
+          console.log(`[Z-API Webhook] 🏢 Cliente do escritório ${leadId} mandou mensagem pelo tráfego — Isa BLOQUEADA`);
         }
       }
     }
