@@ -532,8 +532,6 @@ serve(async (req: Request) => {
     // Se já é cliente do escritório, NÃO mudar para tráfego
     const finalLinhaWhatsapp = isExistingOfficeClient ? 'bentes_ramos_antigo' : linhaWhatsapp;
     const finalEmpresaTag = isExistingOfficeClient ? 'BENTES_RAMOS' : empresaTag;
-    // Não sobrescrever instance_name se for cliente do escritório mandando pelo tráfego
-    const finalInstanceName = isExistingOfficeClient && !isOfficeNumber ? existingSub?.linha_whatsapp ? connectedPhone : connectedPhone : connectedPhone;
     
     const { error: subError } = await supabase
       .from('manychat_subscribers')
@@ -1125,6 +1123,9 @@ function normalizeZapiEvent(body: any): {
 } {
   // Z-API pode enviar diferentes formatos
   const rawPhone = body.phone || body.from || body.sender?.phone || body.chatId?.replace('@c.us', '');
+  const rawPhoneDigits = rawPhone ? String(rawPhone).replace(/\D/g, '') : '';
+  const isLikelyInvalidPhone = !!rawPhoneDigits && (rawPhoneDigits.length < 10 || rawPhoneDigits.length > 13);
+  const looksLikeLidIdentifier = !!body.chatLid && rawPhoneDigits === String(body.chatLid).replace(/\D/g, '');
   const name = body.senderName || body.sender?.name || body.pushName;
 
   // Alguns payloads sinalizam que a mensagem foi enviada por nós (eco de saída)
@@ -1143,6 +1144,11 @@ function normalizeZapiEvent(body: any): {
   let phone = rawPhone;
   if (isGroup && body.participantPhone) {
     phone = body.participantPhone;
+  }
+
+  // Nunca tratar chatLid/LID ou identificadores internos como telefone do cliente
+  if (!isGroup && (isLikelyInvalidPhone || looksLikeLidIdentifier)) {
+    phone = null;
   }
   
   let message = null;
@@ -1219,7 +1225,9 @@ function normalizeZapiEvent(body: any): {
     isGroup,
     mediaUrl: mediaUrl ? 'presente' : 'ausente',
     rawPhone,
-    phone
+    rawPhoneDigits,
+    phone,
+    blockedInvalidPhone: !phone && !!rawPhone
   });
 
   return {
