@@ -532,8 +532,6 @@ serve(async (req: Request) => {
     // Se já é cliente do escritório, NÃO mudar para tráfego
     const finalLinhaWhatsapp = isExistingOfficeClient ? 'bentes_ramos_antigo' : linhaWhatsapp;
     const finalEmpresaTag = isExistingOfficeClient ? 'BENTES_RAMOS' : empresaTag;
-    // Não sobrescrever instance_name se for cliente do escritório mandando pelo tráfego
-    const finalInstanceName = isExistingOfficeClient && !isOfficeNumber ? existingSub?.linha_whatsapp ? connectedPhone : connectedPhone : connectedPhone;
     
     const { error: subError } = await supabase
       .from('manychat_subscribers')

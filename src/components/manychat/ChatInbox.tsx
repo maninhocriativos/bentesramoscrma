@@ -1245,6 +1245,16 @@ const ManyChatInboxContent = () => {
         // Skip invalid phone placeholders
         if (sub.telefone === "{{wa_id}}") continue;
 
+        const cleanPhone = getPhoneDigits(sub.telefone);
+        const rawSubscriberId = sub.subscriber_id.startsWith("zapi_") ? sub.subscriber_id.replace("zapi_", "") : sub.subscriber_id;
+        const validPhoneInId = /^\d{10,13}$/.test(rawSubscriberId);
+        const hasRealPhone = cleanPhone.length >= 10 || validPhoneInId;
+        const hasHistoryByLead = !!sub.lead_id && instanceByLeadId.has(sub.lead_id);
+        const hasHistoryBySubscriber = instanceBySubscriberId.has(sub.subscriber_id);
+
+        // Esconder contatos fantasmas criados por identificadores internos (ex: chatLid)
+        if (!hasRealPhone && !hasHistoryByLead && !hasHistoryBySubscriber) continue;
+
         // Adicionar tipo_origem do lead e instance_name
         const subWithOrigem = {
           ...sub,
@@ -1257,7 +1267,7 @@ const ManyChatInboxContent = () => {
         };
 
         // Normalize phone for deduplication key
-        const phoneClean = sub.telefone?.replace(/\D/g, "") || "";
+        const phoneClean = cleanPhone || (validPhoneInId ? rawSubscriberId : "");
         const normalizedPhone = phoneClean.startsWith("55")
           ? phoneClean
           : phoneClean.length >= 8
