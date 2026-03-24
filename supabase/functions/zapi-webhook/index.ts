@@ -515,6 +515,26 @@ serve(async (req: Request) => {
                           isTrafficNumber ? 'trafego_isa' : 'indefinido';
     const empresaTag = isOfficeNumber ? 'BENTES_RAMOS' : null;
     
+    // ============================================
+    // PROTEÇÃO: Não sobrescrever linha_whatsapp de clientes do escritório
+    // Se o subscriber já existe como 'bentes_ramos_antigo', manter essa classificação
+    // mesmo que a mensagem chegue pelo número de tráfego
+    // ============================================
+    const { data: existingSub } = await supabase
+      .from('manychat_subscribers')
+      .select('linha_whatsapp, empresa_tag')
+      .eq('subscriber_id', subscriberId)
+      .maybeSingle();
+    
+    const isExistingOfficeClient = existingSub?.linha_whatsapp === 'bentes_ramos_antigo' 
+      || existingSub?.empresa_tag === 'BENTES_RAMOS';
+    
+    // Se já é cliente do escritório, NÃO mudar para tráfego
+    const finalLinhaWhatsapp = isExistingOfficeClient ? 'bentes_ramos_antigo' : linhaWhatsapp;
+    const finalEmpresaTag = isExistingOfficeClient ? 'BENTES_RAMOS' : empresaTag;
+    // Não sobrescrever instance_name se for cliente do escritório mandando pelo tráfego
+    const finalInstanceName = isExistingOfficeClient && !isOfficeNumber ? existingSub?.linha_whatsapp ? connectedPhone : connectedPhone : connectedPhone;
+    
     const { error: subError } = await supabase
       .from('manychat_subscribers')
       .upsert({
@@ -527,13 +547,17 @@ serve(async (req: Request) => {
         updated_at: new Date().toISOString(),
         // Salvar o número conectado para identificar a instância (badge Tráfego/Bentes Ramos)
         instance_name: connectedPhone,
-        // Novos campos para separação Bentes Ramos vs Tráfego
-        linha_whatsapp: linhaWhatsapp,
-        empresa_tag: empresaTag
+        // Novos campos para separação Bentes Ramos vs Tráfego (protegidos contra sobrescrita)
+        linha_whatsapp: finalLinhaWhatsapp,
+        empresa_tag: finalEmpresaTag
       }, { 
         onConflict: 'subscriber_id',
         ignoreDuplicates: false 
       });
+    
+    if (isExistingOfficeClient && isTrafficNumber) {
+      console.log(`[Z-API Webhook] 🛡️ PROTEÇÃO: Cliente do escritório ${subscriberId} mandou mensagem pelo tráfego — mantendo classificação original`);
+    }
     
     if (subError) {
       console.error('[Z-API Webhook] Error upserting subscriber:', subError);
