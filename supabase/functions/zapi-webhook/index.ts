@@ -742,7 +742,7 @@ serve(async (req: Request) => {
       // Buscar estado atual do lead com campos de segmentação
       const { data: lead } = await supabase
         .from('leads_juridicos')
-        .select('lead_state, nome, status, isa_ativa, tipo_origem, linha_whatsapp, fonte_trafego')
+        .select('lead_state, nome, status, isa_ativa, tipo_origem, linha_whatsapp, fonte_trafego, empresa_tag')
         .eq('id', leadId)
         .single();
 
