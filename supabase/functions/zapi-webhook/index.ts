@@ -771,11 +771,20 @@ serve(async (req: Request) => {
 
       const isaExplicitlyDisabled = lead?.isa_ativa === false;
       const humanAttendanceActive = subscriber?.atendimento_humano === true;
+      
+      // ============================================
+      // BLOQUEIO: Cliente do escritório NÃO pode ser atendido pela Isa
+      // Mesmo que mande mensagem pelo número de tráfego
+      // ============================================
+      const isOfficeClient = lead?.linha_whatsapp === 'bentes_ramos_antigo' 
+        || lead?.empresa_tag === 'BENTES_RAMOS'
+        || subscriber?.linha_whatsapp === 'bentes_ramos_antigo';
 
-// ISA só atende se a mensagem entrou na linha de tráfego
+// ISA só atende se a mensagem entrou na linha de tráfego E o lead NÃO é cliente do escritório
       const shouldIsaRespond = isTrafficLine
         && !isaExplicitlyDisabled
-        && !humanAttendanceActive;
+        && !humanAttendanceActive
+        && !isOfficeClient;
       
       console.log(`[Z-API Webhook] ISA Decision for lead ${leadId}:`, {
         isTrafficLine,
