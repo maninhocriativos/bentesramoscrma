@@ -792,11 +792,13 @@ serve(async (req: Request) => {
         isMetaLeadAds,
         isaExplicitlyDisabled,
         humanAttendanceActive,
+        isOfficeClient,
         shouldIsaRespond,
         linhaWhatsapp,
         leadLinhaWhatsapp: lead?.linha_whatsapp,
         tipoOrigem: lead?.tipo_origem,
-        fonteTrafego: lead?.fonte_trafego
+        fonteTrafego: lead?.fonte_trafego,
+        empresaTag: lead?.empresa_tag
       });
 
       if (shouldIsaRespond && lead) {
