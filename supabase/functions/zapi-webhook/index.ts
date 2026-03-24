@@ -1125,6 +1125,9 @@ function normalizeZapiEvent(body: any): {
 } {
   // Z-API pode enviar diferentes formatos
   const rawPhone = body.phone || body.from || body.sender?.phone || body.chatId?.replace('@c.us', '');
+  const rawPhoneDigits = rawPhone ? String(rawPhone).replace(/\D/g, '') : '';
+  const isLikelyInvalidPhone = !!rawPhoneDigits && (rawPhoneDigits.length < 10 || rawPhoneDigits.length > 13);
+  const looksLikeLidIdentifier = !!body.chatLid && rawPhoneDigits === String(body.chatLid).replace(/\D/g, '');
   const name = body.senderName || body.sender?.name || body.pushName;
 
   // Alguns payloads sinalizam que a mensagem foi enviada por nós (eco de saída)

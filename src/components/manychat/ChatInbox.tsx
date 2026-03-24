@@ -294,7 +294,7 @@ const ManyChatInboxContent = () => {
   const getSubscriberPhoneSuffix = (sub: Subscriber) => {
     const fromPhone = getPhoneDigits(sub.telefone);
     const rawId = sub.subscriber_id.startsWith("zapi_") ? sub.subscriber_id.replace("zapi_", "") : sub.subscriber_id;
-    const fromId = getPhoneDigits(rawId);
+    const fromId = /^\d{10,13}$/.test(rawId) ? getPhoneDigits(rawId) : "";
     const candidate = fromPhone || fromId;
     const normalized = candidate.startsWith("55") ? candidate.slice(2) : candidate;
     return normalized.length >= 9 ? normalized.slice(-9) : "";
