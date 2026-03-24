@@ -1072,6 +1072,8 @@ serve(async (req: Request) => {
           console.log(`[Z-API Webhook] 👤 Human attendance active for lead ${leadId}, skipping Isa`);
         } else if (isaExplicitlyDisabled) {
           console.log(`[Z-API Webhook] 🚫 Isa explicitly disabled for lead ${leadId}`);
+        } else if (isOfficeClient) {
+          console.log(`[Z-API Webhook] 🏢 Cliente do escritório ${leadId} mandou mensagem pelo tráfego — Isa BLOQUEADA`);
         }
       }
     }
