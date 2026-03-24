@@ -1147,6 +1147,11 @@ function normalizeZapiEvent(body: any): {
   if (isGroup && body.participantPhone) {
     phone = body.participantPhone;
   }
+
+  // Nunca tratar chatLid/LID ou identificadores internos como telefone do cliente
+  if (!isGroup && (isLikelyInvalidPhone || looksLikeLidIdentifier)) {
+    phone = null;
+  }
   
   let message = null;
   let messageType = 'text';
