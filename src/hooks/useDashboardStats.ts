@@ -60,5 +60,26 @@ export function useDashboardStats() {
     return () => clearInterval(interval);
   }, [fetchStats]);
 
+  // Realtime: refresh stats when leads change
+  useEffect(() => {
+    const channel = supabase
+      .channel('dashboard-stats-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'leads_juridicos' },
+        () => {
+          // Debounce: wait 2s after last change to avoid rapid re-fetches
+          clearTimeout((channel as any)._debounceTimer);
+          (channel as any)._debounceTimer = setTimeout(fetchStats, 2000);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearTimeout((channel as any)._debounceTimer);
+      supabase.removeChannel(channel);
+    };
+  }, [fetchStats]);
+
   return { stats, loading, refetch: fetchStats };
 }
