@@ -62,7 +62,7 @@ serve(async (req: Request): Promise<Response> => {
       });
     }
 
-    // Get pending reminders that are due
+    // Get pending reminders that are due (exclude any with signed_at already set)
     const { data: pendingReminders, error } = await supabase
       .from('contract_reminders')
       .select(`
@@ -72,6 +72,7 @@ serve(async (req: Request): Promise<Response> => {
         )
       `)
       .eq('status', 'pending')
+      .is('signed_at', null)
       .lte('next_reminder_at', now.toISOString())
       .lt('reminder_stage', 4)
       .order('next_reminder_at', { ascending: true })
@@ -91,12 +92,17 @@ serve(async (req: Request): Promise<Response> => {
     for (const reminder of pendingReminders || []) {
       const lead = reminder.leads_juridicos;
       
-      // Skip if lead is already won, contract signed, or if contract_reminders status changed
-      if (lead && (
+      // Skip if lead is already won/signed, or reminder itself is already signed
+      const alreadySigned = reminder.signed_at != null;
+      const leadAlreadySigned = lead && (
         lead.status === 'Ganho' || 
+        lead.status === 'Contrato Assinado' ||
         lead.lead_state === 'CONTRACT_SIGNED' ||
+        lead.lead_state === 'DOCS_PENDING' ||
+        lead.lead_state === 'READY_FOR_LAWYER' ||
         lead.contract_signed_at
-      )) {
+      );
+      if (alreadySigned || leadAlreadySigned) {
         console.log(`[Contract Reminder] Skipping ${reminder.document_key} - lead already signed/won`);
         
         await supabase
