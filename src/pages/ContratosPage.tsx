@@ -128,6 +128,138 @@ export default function ContratosPage() {
         }
       }
 
+      // Fallback: for documents without lead_id, try to match by signer phone/email
+      const unmatchedDocs = documents.filter((doc: any) => {
+        const key = doc?.key;
+        return key && !leadIdByDocKey.has(key);
+      });
+
+      if (unmatchedDocs.length > 0) {
+        // Collect signer emails and phones from unmatched docs
+        const signerEmails: string[] = [];
+        const signerPhones: string[] = [];
+        for (const doc of unmatchedDocs) {
+          for (const s of doc.signers || []) {
+            if (s.email) signerEmails.push(s.email.toLowerCase());
+            if (s.phone_number) {
+              const cleaned = String(s.phone_number).replace(/\D/g, '');
+              if (cleaned.length >= 10) signerPhones.push(cleaned);
+            }
+          }
+        }
+
+        // Search leads by email or phone
+        const fallbackLeads: Array<{ id: string; tipo_origem: string | null; email: string | null; telefone: string | null }> = [];
+        if (signerEmails.length > 0) {
+          const { data } = await supabase
+            .from('leads_juridicos')
+            .select('id, tipo_origem, email, telefone')
+            .in('email', signerEmails);
+          if (data) fallbackLeads.push(...data);
+        }
+        if (signerPhones.length > 0) {
+          // Try matching by phone suffix (last 8-9 digits)
+          const suffixes = signerPhones.map(p => p.slice(-9));
+          for (const suffix of suffixes) {
+            const { data } = await supabase
+              .from('leads_juridicos')
+              .select('id, tipo_origem, email, telefone')
+              .like('telefone', `%${suffix}`);
+            if (data) fallbackLeads.push(...data);
+          }
+        }
+
+        // Build lookup maps from fallback results
+        const tipoOrigemByEmail = new Map<string, { leadId: string; tipoOrigem: string }>();
+        const tipoOrigemByPhoneSuffix = new Map<string, { leadId: string; tipoOrigem: string }>();
+        for (const l of fallbackLeads) {
+          if (l.tipo_origem) {
+            if (l.email) tipoOrigemByEmail.set(l.email.toLowerCase(), { leadId: l.id, tipoOrigem: l.tipo_origem });
+            if (l.telefone) {
+              const suffix = l.telefone.replace(/\D/g, '').slice(-9);
+              tipoOrigemByPhoneSuffix.set(suffix, { leadId: l.id, tipoOrigem: l.tipo_origem });
+            }
+          }
+        }
+
+        // Assign to unmatched documents by email/phone
+        for (const doc of unmatchedDocs) {
+          const key = doc?.key;
+          if (!key || leadIdByDocKey.has(key)) continue;
+          for (const s of doc.signers || []) {
+            if (s.email) {
+              const match = tipoOrigemByEmail.get(s.email.toLowerCase());
+              if (match) {
+                leadIdByDocKey.set(key, match.leadId);
+                tipoOrigemByLeadId.set(match.leadId, match.tipoOrigem);
+                break;
+              }
+            }
+            if (s.phone_number) {
+              const suffix = String(s.phone_number).replace(/\D/g, '').slice(-9);
+              const match = tipoOrigemByPhoneSuffix.get(suffix);
+              if (match) {
+                leadIdByDocKey.set(key, match.leadId);
+                tipoOrigemByLeadId.set(match.leadId, match.tipoOrigem);
+                break;
+              }
+            }
+          }
+        }
+
+        // Final fallback: match by signer name from Clicksign API
+        const stillUnmatched = unmatchedDocs.filter((doc: any) => doc?.key && !leadIdByDocKey.has(doc.key));
+        if (stillUnmatched.length > 0) {
+          const signerNames = new Set<string>();
+          for (const doc of stillUnmatched) {
+            for (const s of doc.signers || []) {
+              if (s.name && s.name.trim().length > 2) signerNames.add(s.name.trim());
+            }
+            // Also extract name from filename (e.g. "Kit - Nome Completo")
+            const filename = doc.filename?.replace(/\.[^/.]+$/, '') || '';
+            const nameFromFile = filename.replace(/^(Kit|Contrato|Procuração)\s*-\s*/i, '').trim();
+            if (nameFromFile.length > 2) signerNames.add(nameFromFile);
+          }
+
+          if (signerNames.size > 0) {
+            // Search leads by name (ilike)
+            for (const name of signerNames) {
+              const firstName = name.split(' ')[0];
+              if (firstName.length < 3) continue;
+              const { data: nameMatches } = await supabase
+                .from('leads_juridicos')
+                .select('id, nome, tipo_origem, telefone')
+                .ilike('nome', `%${firstName}%`)
+                .not('tipo_origem', 'is', null)
+                .limit(5);
+
+              if (nameMatches && nameMatches.length > 0) {
+                // Find best match by checking if full name contains the lead name or vice-versa
+                for (const lead of nameMatches) {
+                  if (!lead.tipo_origem || !lead.nome) continue;
+                  const leadNameLower = lead.nome.toLowerCase();
+                  const signerNameLower = name.toLowerCase();
+                  // Check if signer name contains lead name or lead name contains signer first name
+                  if (signerNameLower.includes(leadNameLower) || leadNameLower.includes(firstName.toLowerCase())) {
+                    // Find docs that match this signer name
+                    for (const doc of stillUnmatched) {
+                      const key = doc?.key;
+                      if (!key || leadIdByDocKey.has(key)) continue;
+                      const docSignerNames = (doc.signers || []).map((s: any) => s.name?.toLowerCase() || '');
+                      const docFileName = (doc.filename?.replace(/\.[^/.]+$/, '') || '').toLowerCase();
+                      if (docSignerNames.includes(signerNameLower) || docFileName.includes(firstName.toLowerCase())) {
+                        leadIdByDocKey.set(key, lead.id);
+                        tipoOrigemByLeadId.set(lead.id, lead.tipo_origem);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
       const mappedContracts: ContratoComStatus[] = documents.map((doc: any) => {
         const key: string | undefined = doc?.key;
         const linkContrato = (key && linksByDocKey.get(key)) || (key ? `https://app.clicksign.com/sign/${key}` : 'https://app.clicksign.com');
