@@ -62,7 +62,7 @@ serve(async (req: Request): Promise<Response> => {
       });
     }
 
-    // Get pending reminders that are due
+    // Get pending reminders that are due (exclude any with signed_at already set)
     const { data: pendingReminders, error } = await supabase
       .from('contract_reminders')
       .select(`
@@ -72,6 +72,7 @@ serve(async (req: Request): Promise<Response> => {
         )
       `)
       .eq('status', 'pending')
+      .is('signed_at', null)
       .lte('next_reminder_at', now.toISOString())
       .lt('reminder_stage', 4)
       .order('next_reminder_at', { ascending: true })
