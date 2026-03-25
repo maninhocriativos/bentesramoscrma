@@ -92,12 +92,17 @@ serve(async (req: Request): Promise<Response> => {
     for (const reminder of pendingReminders || []) {
       const lead = reminder.leads_juridicos;
       
-      // Skip if lead is already won, contract signed, or if contract_reminders status changed
-      if (lead && (
+      // Skip if lead is already won/signed, or reminder itself is already signed
+      const alreadySigned = reminder.signed_at != null;
+      const leadAlreadySigned = lead && (
         lead.status === 'Ganho' || 
+        lead.status === 'Contrato Assinado' ||
         lead.lead_state === 'CONTRACT_SIGNED' ||
+        lead.lead_state === 'DOCS_PENDING' ||
+        lead.lead_state === 'READY_FOR_LAWYER' ||
         lead.contract_signed_at
-      )) {
+      );
+      if (alreadySigned || leadAlreadySigned) {
         console.log(`[Contract Reminder] Skipping ${reminder.document_key} - lead already signed/won`);
         
         await supabase
