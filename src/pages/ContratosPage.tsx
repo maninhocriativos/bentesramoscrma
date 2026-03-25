@@ -182,10 +182,10 @@ export default function ContratosPage() {
           }
         }
 
-        // Assign to unmatched documents
+        // Assign to unmatched documents by email/phone
         for (const doc of unmatchedDocs) {
           const key = doc?.key;
-          if (!key) continue;
+          if (!key || leadIdByDocKey.has(key)) continue;
           for (const s of doc.signers || []) {
             if (s.email) {
               const match = tipoOrigemByEmail.get(s.email.toLowerCase());
@@ -202,6 +202,58 @@ export default function ContratosPage() {
                 leadIdByDocKey.set(key, match.leadId);
                 tipoOrigemByLeadId.set(match.leadId, match.tipoOrigem);
                 break;
+              }
+            }
+          }
+        }
+
+        // Final fallback: match by signer name from Clicksign API
+        const stillUnmatched = unmatchedDocs.filter((doc: any) => doc?.key && !leadIdByDocKey.has(doc.key));
+        if (stillUnmatched.length > 0) {
+          const signerNames = new Set<string>();
+          for (const doc of stillUnmatched) {
+            for (const s of doc.signers || []) {
+              if (s.name && s.name.trim().length > 2) signerNames.add(s.name.trim());
+            }
+            // Also extract name from filename (e.g. "Kit - Nome Completo")
+            const filename = doc.filename?.replace(/\.[^/.]+$/, '') || '';
+            const nameFromFile = filename.replace(/^(Kit|Contrato|Procuração)\s*-\s*/i, '').trim();
+            if (nameFromFile.length > 2) signerNames.add(nameFromFile);
+          }
+
+          if (signerNames.size > 0) {
+            // Search leads by name (ilike)
+            for (const name of signerNames) {
+              const firstName = name.split(' ')[0];
+              if (firstName.length < 3) continue;
+              const { data: nameMatches } = await supabase
+                .from('leads_juridicos')
+                .select('id, nome, tipo_origem, telefone')
+                .ilike('nome', `%${firstName}%`)
+                .not('tipo_origem', 'is', null)
+                .limit(5);
+
+              if (nameMatches && nameMatches.length > 0) {
+                // Find best match by checking if full name contains the lead name or vice-versa
+                for (const lead of nameMatches) {
+                  if (!lead.tipo_origem || !lead.nome) continue;
+                  const leadNameLower = lead.nome.toLowerCase();
+                  const signerNameLower = name.toLowerCase();
+                  // Check if signer name contains lead name or lead name contains signer first name
+                  if (signerNameLower.includes(leadNameLower) || leadNameLower.includes(firstName.toLowerCase())) {
+                    // Find docs that match this signer name
+                    for (const doc of stillUnmatched) {
+                      const key = doc?.key;
+                      if (!key || leadIdByDocKey.has(key)) continue;
+                      const docSignerNames = (doc.signers || []).map((s: any) => s.name?.toLowerCase() || '');
+                      const docFileName = (doc.filename?.replace(/\.[^/.]+$/, '') || '').toLowerCase();
+                      if (docSignerNames.includes(signerNameLower) || docFileName.includes(firstName.toLowerCase())) {
+                        leadIdByDocKey.set(key, lead.id);
+                        tipoOrigemByLeadId.set(lead.id, lead.tipo_origem);
+                      }
+                    }
+                  }
+                }
               }
             }
           }
