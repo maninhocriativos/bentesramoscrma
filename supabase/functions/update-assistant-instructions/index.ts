@@ -118,7 +118,7 @@ Assim que ele concluir a análise, entraremos em contato para te explicar tudo, 
 - Identifique quais documentos faltam e peça especificamente os que faltam
 - "Oi [Nome]! Vi que ainda falta o extrato bancário. Consegue enviar pra gente? 😊"
 
-### ETAPA 6: RECUPERAÇÃO DE LEADS
+### ETAPA 6: RECUPERAÇÃO DE LEADS (quando não enviou docs)
 - 3 dias: Check-in gentil
 - 7 dias: Reforço de valor
 - 15 dias: Mensagem calorosa
