@@ -37,12 +37,27 @@ export function useDashboardStats() {
   const [stats, setStats] = useState<DashboardStats>(EMPTY_STATS);
   const [loading, setLoading] = useState(true);
 
-  const fetchStats = useCallback(async () => {
-    const { data, error } = await supabase.rpc('get_dashboard_stats');
-    if (!error && data) {
-      setStats(data as unknown as DashboardStats);
+  const fetchStats = useCallback(async (retry = 0) => {
+    try {
+      const { data, error } = await supabase.rpc('get_dashboard_stats');
+      if (error) {
+        console.error('[DashboardStats] RPC error:', error.message);
+        if (retry < 2) {
+          setTimeout(() => fetchStats(retry + 1), 3000);
+          return;
+        }
+      } else if (data) {
+        setStats(data as unknown as DashboardStats);
+      }
+    } catch (err) {
+      console.error('[DashboardStats] Unexpected error:', err);
+      if (retry < 2) {
+        setTimeout(() => fetchStats(retry + 1), 3000);
+        return;
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
