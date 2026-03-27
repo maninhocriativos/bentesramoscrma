@@ -1,0 +1,1 @@
+UPDATE processos SET notificacao_ativa = false WHERE notificacao_ativa = true;
