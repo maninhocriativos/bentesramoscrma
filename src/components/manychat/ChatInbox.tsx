@@ -1876,7 +1876,19 @@ const ManyChatInboxContent = () => {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      
+      // Detectar melhor formato suportado para compatibilidade com WhatsApp
+      const mimeType = MediaRecorder.isTypeSupported('audio/mp4')
+        ? 'audio/mp4'
+        : MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : 'audio/ogg';
+      
+      const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('webm') ? 'webm' : 'ogg';
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -1891,8 +1903,8 @@ const ManyChatInboxContent = () => {
 
         if (audioChunksRef.current.length === 0) return;
 
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/ogg" });
-        const audioFile = new File([audioBlob], `audio_${Date.now()}.ogg`, { type: "audio/ogg" });
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        const audioFile = new File([audioBlob], `audio_${Date.now()}.${ext}`, { type: mimeType });
 
         // Mostrar preview do áudio ao invés de enviar direto
         setSelectedFile(audioFile);
@@ -1901,6 +1913,7 @@ const ManyChatInboxContent = () => {
 
       mediaRecorder.start();
       setIsRecording(true);
+      console.log(`[Audio] Recording with format: ${mimeType}`);
     } catch (error) {
       toast({ title: "Erro", description: "Microfone não disponível", variant: "destructive" });
     }
@@ -1947,7 +1960,8 @@ const ManyChatInboxContent = () => {
     scrollToBottom();
 
     try {
-      const filePath = `manychat/${subscriberSnapshot.subscriber_id}/audio_${Date.now()}.ogg`;
+      const ext = audioFile.name.split('.').pop() || 'webm';
+      const filePath = `manychat/${subscriberSnapshot.subscriber_id}/audio_${Date.now()}.${ext}`;
 
       // Upload and sign URL in parallel
       const { error: uploadError } = await supabase.storage.from("documentos").upload(filePath, audioFile);
