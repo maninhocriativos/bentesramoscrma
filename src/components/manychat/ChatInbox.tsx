@@ -1960,7 +1960,8 @@ const ManyChatInboxContent = () => {
     scrollToBottom();
 
     try {
-      const filePath = `manychat/${subscriberSnapshot.subscriber_id}/audio_${Date.now()}.ogg`;
+      const ext = audioFile.name.split('.').pop() || 'webm';
+      const filePath = `manychat/${subscriberSnapshot.subscriber_id}/audio_${Date.now()}.${ext}`;
 
       // Upload and sign URL in parallel
       const { error: uploadError } = await supabase.storage.from("documentos").upload(filePath, audioFile);
