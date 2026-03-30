@@ -37,8 +37,8 @@ serve(async (req: Request) => {
       });
     }
 
-    // tipos diferentes de delete precisam de message
-    if (type !== 'delete' && !message) {
+    // tipos diferentes de delete/block precisam de message
+    if (type !== 'delete' && type !== 'block' && type !== 'unblock' && !message) {
       return new Response(JSON.stringify({ error: 'Missing message' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -115,7 +115,7 @@ serve(async (req: Request) => {
     await supabase.from('integration_logs').insert({
       provider,
       direction: 'outbound',
-      endpoint: type === 'delete' ? 'delete-message' : type === 'edit' ? 'edit-message' : 'send-message',
+      endpoint: type === 'delete' ? 'delete-message' : type === 'edit' ? 'edit-message' : type === 'block' ? 'block-contact' : type === 'unblock' ? 'unblock-contact' : 'send-message',
       payload_json: { to_phone, message: (message || '').substring(0, 100), type, message_id },
       response_json: result.data,
       status: success ? 'ok' : 'error',
@@ -307,6 +307,33 @@ async function sendViaZapi(
           success: false,
           error: editData.error || editData.message || 'Z-API edit error',
           data: editData,
+        };
+      }
+
+      case 'block':
+      case 'unblock': {
+        endpoint = `${baseUrl}/contacts/modify-blocked`;
+        const blockBody = {
+          phone: cleanPhone,
+          action: type, // "block" or "unblock"
+        };
+
+        console.log(`[Z-API Send] ${type} contact: ${cleanPhone}`);
+        const blockResponse = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(blockBody),
+        });
+        const blockData = await parseJsonSafe(blockResponse);
+        console.log(`[Z-API Send] ${type} Response:`, JSON.stringify(blockData).substring(0, 300));
+
+        if (blockResponse.ok && !blockData.error) {
+          return { success: true, data: blockData };
+        }
+        return {
+          success: false,
+          error: blockData.error || blockData.message || `Z-API ${type} error`,
+          data: blockData,
         };
       }
 
