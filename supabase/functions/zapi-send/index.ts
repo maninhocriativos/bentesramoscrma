@@ -37,8 +37,8 @@ serve(async (req: Request) => {
       });
     }
 
-    // tipos diferentes de delete precisam de message
-    if (type !== 'delete' && !message) {
+    // tipos diferentes de delete/block precisam de message
+    if (type !== 'delete' && type !== 'block' && type !== 'unblock' && !message) {
       return new Response(JSON.stringify({ error: 'Missing message' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
