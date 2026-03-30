@@ -310,6 +310,33 @@ async function sendViaZapi(
         };
       }
 
+      case 'block':
+      case 'unblock': {
+        endpoint = `${baseUrl}/contacts/modify-blocked`;
+        const blockBody = {
+          phone: cleanPhone,
+          action: type, // "block" or "unblock"
+        };
+
+        console.log(`[Z-API Send] ${type} contact: ${cleanPhone}`);
+        const blockResponse = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(blockBody),
+        });
+        const blockData = await parseJsonSafe(blockResponse);
+        console.log(`[Z-API Send] ${type} Response:`, JSON.stringify(blockData).substring(0, 300));
+
+        if (blockResponse.ok && !blockData.error) {
+          return { success: true, data: blockData };
+        }
+        return {
+          success: false,
+          error: blockData.error || blockData.message || `Z-API ${type} error`,
+          data: blockData,
+        };
+      }
+
       default:
         // Texto simples
         endpoint = `${baseUrl}/send-text`;
