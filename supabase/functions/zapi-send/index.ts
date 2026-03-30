@@ -115,7 +115,7 @@ serve(async (req: Request) => {
     await supabase.from('integration_logs').insert({
       provider,
       direction: 'outbound',
-      endpoint: type === 'delete' ? 'delete-message' : type === 'edit' ? 'edit-message' : 'send-message',
+      endpoint: type === 'delete' ? 'delete-message' : type === 'edit' ? 'edit-message' : type === 'block' ? 'block-contact' : type === 'unblock' ? 'unblock-contact' : 'send-message',
       payload_json: { to_phone, message: (message || '').substring(0, 100), type, message_id },
       response_json: result.data,
       status: success ? 'ok' : 'error',

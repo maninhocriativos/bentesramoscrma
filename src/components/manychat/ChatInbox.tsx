@@ -3404,6 +3404,33 @@ const ManyChatInboxContent = () => {
                       🔍 Buscar na conversa
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setSendContactModalOpen(true)}>👤 Enviar contato</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={async () => {
+                        if (!selectedSubscriber.telefone) {
+                          toast({ title: "Sem telefone", description: "Não é possível bloquear sem número de telefone", variant: "destructive" });
+                          return;
+                        }
+                        const confirmBlock = window.confirm(`Tem certeza que deseja BLOQUEAR ${selectedSubscriber.nome || selectedSubscriber.telefone} no WhatsApp?`);
+                        if (!confirmBlock) return;
+
+                        const outboundInstanceId = resolveInstanceId(selectedSubscriber);
+                        const { data: result, error } = await invokeZapiSend({
+                          to_phone: selectedSubscriber.telefone,
+                          type: "block",
+                          ...(outboundInstanceId && { instance_id: outboundInstanceId }),
+                        });
+
+                        if (error || !result?.success) {
+                          toast({ title: "Erro ao bloquear", description: error?.message || result?.error || "Falha ao bloquear contato", variant: "destructive" });
+                        } else {
+                          toast({ title: "🚫 Contato bloqueado", description: `${selectedSubscriber.nome || selectedSubscriber.telefone} foi bloqueado no WhatsApp` });
+                        }
+                      }}
+                    >
+                      🚫 Bloquear no WhatsApp
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
