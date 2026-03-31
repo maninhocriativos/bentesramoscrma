@@ -116,6 +116,45 @@ export type Database = {
         }
         Relationships: []
       }
+      analises_extratos: {
+        Row: {
+          banco: string
+          cpf_cliente: string | null
+          created_at: string | null
+          id: string
+          nome_cliente: string | null
+          numero_contrato: string | null
+          periodo_fim: string | null
+          periodo_inicio: string | null
+          resultado_json: Json | null
+          usuario_id: string
+        }
+        Insert: {
+          banco: string
+          cpf_cliente?: string | null
+          created_at?: string | null
+          id?: string
+          nome_cliente?: string | null
+          numero_contrato?: string | null
+          periodo_fim?: string | null
+          periodo_inicio?: string | null
+          resultado_json?: Json | null
+          usuario_id: string
+        }
+        Update: {
+          banco?: string
+          cpf_cliente?: string | null
+          created_at?: string | null
+          id?: string
+          nome_cliente?: string | null
+          numero_contrato?: string | null
+          periodo_fim?: string | null
+          periodo_inicio?: string | null
+          resultado_json?: Json | null
+          usuario_id?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           created_at: string

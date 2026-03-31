@@ -39,6 +39,7 @@ const PeticaoModeloEditorPage = lazy(() => import("./pages/PeticaoModeloEditorPa
 const HistoricoAcessosPage = lazy(() => import("./pages/HistoricoAcessosPage"));
 const IntimacoesPage = lazy(() => import("./pages/IntimacoesPage"));
 const BemVindoPage = lazy(() => import("./pages/BemVindoPage"));
+const ConferenciaExtratosPage = lazy(() => import("./pages/ConferenciaExtratosPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -103,6 +104,7 @@ const App = () => (
                 <Route path="/historico-acessos" element={<HistoricoAcessosPage />} />
                 <Route path="/intimacoes" element={<IntimacoesPage />} />
                 <Route path="/bem-vindo" element={<BemVindoPage />} />
+                <Route path="/conferencia-extratos" element={<ConferenciaExtratosPage />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />
