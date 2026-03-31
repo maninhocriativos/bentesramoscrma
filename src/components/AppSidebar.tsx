@@ -64,6 +64,7 @@ const menuSections: MenuSection[] = [
     items: [
       { title: 'Assistentes IA', url: '/assistente', icon: Bot, visibility: 'all' },
       { title: 'Isa Autônoma', url: '/isa-autonoma', icon: Zap, visibility: 'all' },
+      { title: 'Conferência de Extratos', url: '/conferencia-extratos', icon: Calculator, visibility: 'all' },
       { title: 'Chat', url: '/chat', icon: MessageSquare, visibility: 'all' },
     ],
   },

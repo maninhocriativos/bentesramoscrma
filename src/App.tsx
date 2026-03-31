@@ -104,6 +104,7 @@ const App = () => (
                 <Route path="/historico-acessos" element={<HistoricoAcessosPage />} />
                 <Route path="/intimacoes" element={<IntimacoesPage />} />
                 <Route path="/bem-vindo" element={<BemVindoPage />} />
+                <Route path="/conferencia-extratos" element={<ConferenciaExtratosPage />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />
