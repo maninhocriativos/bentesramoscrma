@@ -120,7 +120,7 @@ export function MetaLeadsHeader({
           {onSync && (
             <Button variant="default" size="sm" onClick={onSync} disabled={syncing} className="bg-emerald-600 hover:bg-emerald-700">
               {syncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sheet className="h-4 w-4 mr-2" />}
-              {syncing ? 'Sincronizando...' : 'Sincronizar Sheets'}
+              {syncing ? 'Sincronizando...' : 'Sincronizar Leads'}
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={onRefresh}>

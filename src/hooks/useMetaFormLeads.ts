@@ -90,16 +90,23 @@ export function useMetaFormLeads() {
     setSyncing(true);
     setSyncError(null);
     try {
-      const { data, error } = await supabase.functions.invoke('sheets-meta-sync');
+      const { data, error } = await supabase.functions.invoke('sheets-meta-sync', {
+        body: { sync_all: true },
+      });
       
       if (error || data?.error) {
         const msg = data?.error || error?.message || 'Erro na sincronização';
         setSyncError(msg);
         toast({ title: '⚠️ Erro na sincronização', description: msg, variant: 'destructive' });
       } else {
+        const totalNew = data?.new_leads || 0;
+        const vcNew = data?.venda_casada?.new_leads || 0;
+        const desc = vcNew > 0
+          ? `${totalNew} novos leads (${vcNew} Venda Casada)`
+          : `${totalNew} novos leads`;
         toast({
           title: '✅ Sincronização concluída',
-          description: `Sheets: ${data?.new_leads || 0} novos leads`,
+          description: desc,
         });
       }
 
