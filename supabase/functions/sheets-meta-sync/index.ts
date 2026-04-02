@@ -327,7 +327,7 @@ function normalizarTelefone(tel: string): string {
 
 // ── Process Venda Casada spreadsheet (NEW) ──
 async function syncVendaCasadaSheet(supabase: any) {
-  const SPREADSHEET_ID = '11MI-lw-ijAiqno6Xr2HxmVn7E89E0UOWx8SjOak-pkE';
+  const SPREADSHEET_ID = '11Ml-lw-ijAiqno6Xr2HxmVn7E89E0UOWx8SjOak-pkE';
   const SHEET_NAME = 'Tabela_1';
   const PROVIDER = 'google_sheets_venda_casada';
 
