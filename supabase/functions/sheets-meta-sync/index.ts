@@ -315,12 +315,25 @@ async function syncOriginalSheet(supabase: any) {
   return { new_leads: newLeads, duplicates, errors };
 }
 
+// ── Normalize phone for Venda Casada (handles p:+ from Meta) ──
+function normalizarTelefone(tel: string): string {
+  let num = tel.replace('p:+', '').replace(/\D/g, '');
+  if (!num) return '';
+  if (!num.startsWith('55')) {
+    num = '55' + num;
+  }
+  return num;
+}
+
 // ── Process Venda Casada spreadsheet (NEW) ──
 async function syncVendaCasadaSheet(supabase: any) {
   const SPREADSHEET_ID = '11MI-lw-ijAiqno6Xr2HxmVn7E89E0UOWx8SjOak-pkE';
   const SHEET_NAME = 'Tabela_1';
   const PROVIDER = 'google_sheets_venda_casada';
 
+  console.log('=== SYNC VENDA CASADA INICIADO ===');
+
+  // VERIFICAÇÃO 1: Estado de sincronização
   const { data: state, error: stateErr } = await supabase
     .from('integrations_state')
     .select('*')
@@ -329,28 +342,88 @@ async function syncVendaCasadaSheet(supabase: any) {
 
   if (stateErr) throw stateErr;
 
-  const lastRow = state?.last_row || 1;
-  const stateId = state?.id;
+  let lastRow = 1;
+  let stateId = state?.id || null;
 
-  const range = encodeURIComponent(`${SHEET_NAME}!A1:V`);
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}?key=${GOOGLE_SHEETS_API_KEY}`;
+  if (!state) {
+    console.log('[Sheets Sync VendaCasada] Creating new integration state');
+    const { data: newState, error: insertStateErr } = await supabase.from('integrations_state').insert({
+      provider: PROVIDER,
+      spreadsheet_id: SPREADSHEET_ID,
+      sheet_name: SHEET_NAME,
+      last_row: 1,
+      last_sync_at: new Date().toISOString(),
+    }).select('id').single();
+    if (insertStateErr) throw insertStateErr;
+    stateId = newState?.id;
+    lastRow = 1;
+  } else {
+    lastRow = state.last_row || 1;
+    if (lastRow === 0) {
+      console.log('[Sheets Sync VendaCasada] Correcting last_row from 0 to 1');
+      await supabase.from('integrations_state').update({ last_row: 1 }).eq('id', stateId);
+      lastRow = 1;
+    }
+  }
+
+  // VERIFICAÇÃO 2: URL correta — try with sheet name, fallback without
+  let range = encodeURIComponent(`${SHEET_NAME}!A1:V`);
+  let url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}?key=${GOOGLE_SHEETS_API_KEY}`;
 
   console.log(`[Sheets Sync VendaCasada] Fetching from row ${lastRow + 1}...`);
+  console.log(`[Sheets Sync VendaCasada] URL: ${url}`);
 
-  const res = await fetch(url);
+  let res = await fetch(url);
+
+  // Fallback: try without sheet name if 404
+  if (!res.ok && res.status === 404) {
+    console.log('[Sheets Sync VendaCasada] Sheet name not found, trying without sheet name...');
+    range = encodeURIComponent('A1:V');
+    url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}?key=${GOOGLE_SHEETS_API_KEY}`;
+    res = await fetch(url);
+  }
+
+  // Fallback 2: try unencoded sheet name
+  if (!res.ok && res.status === 404) {
+    console.log('[Sheets Sync VendaCasada] Trying unencoded sheet name...');
+    url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}!A1:V?key=${GOOGLE_SHEETS_API_KEY}`;
+    res = await fetch(url);
+  }
+
+  // Fallback 3: try Sheet1
+  if (!res.ok && res.status === 404) {
+    console.log('[Sheets Sync VendaCasada] Trying Sheet1...');
+    url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/Sheet1!A1:V?key=${GOOGLE_SHEETS_API_KEY}`;
+    res = await fetch(url);
+  }
+
+  // Fallback 4: try Página1
+  if (!res.ok && res.status === 404) {
+    console.log('[Sheets Sync VendaCasada] Trying Página1...');
+    url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent('Página1')}!A1:V?key=${GOOGLE_SHEETS_API_KEY}`;
+    res = await fetch(url);
+  }
 
   if (!res.ok) {
     const errText = await res.text();
     console.error('[Sheets Sync VendaCasada] API error:', errText);
-    return { new_leads: 0, duplicates: 0, errors: 1, error_msg: `Sheets API ${res.status}` };
+    return { new_leads: 0, duplicates: 0, errors: 1, error_msg: `Sheets API ${res.status}: ${errText}` };
   }
 
   const sheetData = await res.json();
   const allRows: string[][] = sheetData.values || [];
 
+  console.log(`[Sheets Sync VendaCasada] Total de linhas na planilha: ${allRows.length}`);
+  console.log(`[Sheets Sync VendaCasada] Última linha processada: ${lastRow}`);
+  console.log(`[Sheets Sync VendaCasada] Linhas novas a processar: ${allRows.length - lastRow}`);
+
   if (allRows.length <= 1) {
-    return { new_leads: 0, duplicates: 0, errors: 0 };
+    console.log('[Sheets Sync VendaCasada] No data rows found');
+    return { new_leads: 0, duplicates: 0, errors: 0, total_linhas: allRows.length };
   }
+
+  // Log header for debugging
+  console.log(`[Sheets Sync VendaCasada] Headers: ${JSON.stringify(allRows[0])}`);
 
   const newRows = allRows.slice(Math.max(lastRow, 1));
 
@@ -358,7 +431,8 @@ async function syncVendaCasadaSheet(supabase: any) {
     if (stateId) {
       await supabase.from('integrations_state').update({ last_sync_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', stateId);
     }
-    return { new_leads: 0, duplicates: 0, errors: 0 };
+    console.log('[Sheets Sync VendaCasada] No new rows to process');
+    return { new_leads: 0, duplicates: 0, errors: 0, total_linhas: allRows.length };
   }
 
   console.log(`[Sheets Sync VendaCasada] Processing ${newRows.length} new rows`);
@@ -367,148 +441,116 @@ async function syncVendaCasadaSheet(supabase: any) {
   let duplicates = 0;
   let errors = 0;
 
-  for (const row of newRows) {
+  for (let i = 0; i < newRows.length; i++) {
+    const row = newRows[i];
     try {
-      // Fixed column mapping per spec
-      const metaLeadId = row[0] || null;
-      const createdTimeRaw = row[1] || null;
-      const adId = row[2] || null;
-      const adName = row[3] || null;
-      const adsetId = row[4] || null;
-      const adsetName = row[5] || null;
-      const campaignId = row[6] || null;
-      const campaignName = row[7] || null;
-      const formId = row[8] || null;
-      const formName = row[9] || null;
-      const isOrganic = row[10] || null;
-      const platform = row[11] || null;
-      const produto = row[12] || null;
-      const urgencia = row[13] || null;
-      const valorCobrado = row[14] || null;
-      const tentouResolver = row[15] || null;
-      const aposentado = row[16] || null;
-      const acessoContrato = row[17] || null;
-      const documentos = row[18] || null;
-      const nome = row[19] || null;
-      const telefoneRaw = row[20] || null;
-      // const leadStatus = row[21] || null; // not used for import
+      // VERIFICAÇÃO 3: Mapeamento de colunas
+      const nome = row[19] || '';
+      const telefoneRaw = row[20] || '';
+
+      console.log(`[Sheets Sync VendaCasada] Processando linha ${lastRow + i}: nome="${nome}" tel="${telefoneRaw}"`);
 
       if (!nome && !telefoneRaw) {
-        console.log('[Sheets Sync VendaCasada] Skipping empty row');
+        console.log(`[Sheets Sync VendaCasada] Skipping empty row ${lastRow + i}`);
         continue;
       }
 
-      const telefone = normalizePhone(telefoneRaw);
-      const createdTime = parseSheetDate(createdTimeRaw);
-      const dedupeKey = generateDedupeKey(null, telefone, createdTime, nome);
-
-      // Check duplicates in leads_juridicos
-      let existingLeadId: string | null = null;
-      if (telefone) {
-        const { data: phoneMatch } = await supabase
-          .from('leads_juridicos')
-          .select('id')
-          .ilike('telefone', `%${telefone.slice(-9)}%`)
-          .maybeSingle();
-        if (phoneMatch) existingLeadId = phoneMatch.id;
+      const telefone = normalizarTelefone(telefoneRaw);
+      if (!telefone) {
+        console.log(`[Sheets Sync VendaCasada] Skipping row ${lastRow + i}: invalid phone`);
+        continue;
       }
 
-      // Also check meta_form_leads
-      if (!existingLeadId && telefone) {
-        const { data: metaMatch } = await supabase
-          .from('meta_form_leads')
-          .select('id')
-          .eq('telefone', telefone)
-          .maybeSingle();
-        if (metaMatch) {
-          duplicates++;
-          continue;
-        }
-      }
+      // VERIFICAÇÃO 4: Deduplicação em AMBAS as tabelas
+      const { data: existeMeta } = await supabase
+        .from('meta_form_leads')
+        .select('id')
+        .eq('telefone', telefone)
+        .maybeSingle();
 
-      if (existingLeadId) {
+      const { data: existeLead } = await supabase
+        .from('leads_juridicos')
+        .select('id')
+        .eq('telefone', telefone)
+        .maybeSingle();
+
+      if (existeMeta || existeLead) {
+        console.log(`[Sheets Sync VendaCasada] Lead duplicado ignorado: ${telefone}`);
         duplicates++;
         continue;
       }
 
-      const formFields = {
-        produto: produto || '',
-        urgencia: urgencia || '',
-        valor_cobrado: valorCobrado || '',
-        tentou_resolver: tentouResolver || '',
-        aposentado: aposentado || '',
-        acesso_contrato: acessoContrato || '',
-        documentos: documentos || '',
-      };
-
-      // Insert into meta_form_leads
+      // VERIFICAÇÃO 5: Inserção completa
       const { data: inserted, error: insertErr } = await supabase
         .from('meta_form_leads')
         .upsert({
-          meta_lead_id: metaLeadId ? `sheets_vc_${metaLeadId}` : `sheets_vc_${dedupeKey}`,
-          dedupe_key: `vc_${dedupeKey}`,
-          source: 'google_sheets',
-          form_id: formId || 'google_sheets_venda_casada',
+          meta_lead_id: row[0] || `sheets_vc_${Date.now()}_${i}`,
           nome,
           telefone,
-          email: null,
-          created_time: createdTime,
-          ad_id: adId,
-          ad_name: adName,
-          adset_id: adsetId,
-          adset_name: adsetName,
-          campaign_id: campaignId,
-          campaign_name: campaignName,
-          form_fields: formFields,
-          raw: { metaLeadId, formName, isOrganic, platform, ...formFields, nome, telefone: telefoneRaw },
+          created_time: row[1] || new Date().toISOString(),
+          ad_id: row[2] || null,
+          ad_name: row[3] || null,
+          adset_id: row[4] || null,
+          adset_name: row[5] || null,
+          campaign_id: row[6] || null,
+          campaign_name: row[7] || null,
+          form_id: row[8] || null,
+          source: 'google_sheets',
           status: 'novo',
+          dedupe_key: `vc_${telefone}`,
+          form_fields: {
+            produto: row[12] || '',
+            urgencia: row[13] || '',
+            valor_cobrado: row[14] || '',
+            tentou_resolver: row[15] || '',
+            aposentado: row[16] || '',
+            acesso_contrato: row[17] || '',
+            documentos: row[18] || '',
+          },
+          raw: { planilha: 'venda_casada', row },
         }, { onConflict: 'dedupe_key', ignoreDuplicates: true })
         .select('id')
         .maybeSingle();
 
       if (insertErr) {
-        if (insertErr.code === '23505') { duplicates++; } else { console.error('[Sheets Sync VendaCasada] Insert error:', insertErr); errors++; }
+        if (insertErr.code === '23505') {
+          console.log(`[Sheets Sync VendaCasada] Dedupe conflict: ${telefone}`);
+          duplicates++;
+        } else {
+          console.error('[Sheets Sync VendaCasada] Insert error:', insertErr);
+          errors++;
+        }
         continue;
       }
 
-      if (!inserted) { duplicates++; continue; }
+      if (!inserted) {
+        console.log(`[Sheets Sync VendaCasada] Upsert ignored (duplicate): ${telefone}`);
+        duplicates++;
+        continue;
+      }
 
       newLeads++;
 
-      // Build resumo_ia
-      const resumoIa = `Lead de Venda Casada — ${campaignName || 'Campanha não identificada'}
-Plataforma: ${platform || 'Não informado'}
+      const resumoIa = `Lead de Venda Casada\nProduto: ${row[12] || 'não informado'}\nUrgência: ${row[13] || 'não informado'}\nJá tentou resolver: ${row[15] || 'não informado'}\nAposentado: ${row[16] || 'não informado'}\nAcesso ao contrato: ${row[17] || 'não informado'}\nDocumentos: ${row[18] || 'não informado'}`;
 
-RESPOSTAS DO FORMULÁRIO:
-- Produto com problema: ${produto || 'Não informado'}
-- Urgência: ${urgencia || 'Não informado'}
-- Valor cobrado: ${valorCobrado || 'Não informado'}
-- Já tentou resolver: ${tentouResolver || 'Não informado'}
-- É aposentado/pensionista: ${aposentado || 'Não informado'}
-- Tem acesso ao contrato: ${acessoContrato || 'Não informado'}
-- Documentos disponíveis: ${documentos || 'Não informado'}
-
-CONTEXTO: Cliente em potencial para ação revisional de contrato bancário por venda casada. Prioridade baseada na urgência declarada.`.trim();
-
-      // Insert into leads_juridicos
       const { data: newLead } = await supabase
         .from('leads_juridicos')
         .insert({
           nome: nome || 'Lead Venda Casada',
           telefone,
-          email: null,
           status: 'Lead Frio',
           lead_state: 'NEW',
           origem: 'Facebook',
           tipo_origem: 'trafego',
           fonte_trafego: 'facebook_lead_ads',
-          canal_origem: platform || 'facebook',
+          canal_origem: row[11] === 'ig' ? 'instagram' : 'facebook',
           linha_whatsapp: 'trafego_isa',
           empresa_tag: 'bentes_ramos',
           owner_tipo: 'isa',
           isa_ativa: true,
           tipo_acao: 'Direito Bancário - Venda Casada',
           resumo_ia: resumoIa,
+          facebook_lead_id: row[0] || null,
         })
         .select('id')
         .single();
@@ -530,8 +572,39 @@ CONTEXTO: Cliente em potencial para ação revisional de contrato bancário por 
           linha_whatsapp: 'trafego_isa',
         }, { onConflict: 'subscriber_id', ignoreDuplicates: true });
 
-        // Send Z-API first contact message BEFORE Isa
-        await sendZapiFirstContact(supabase, telefone, nome || 'Cliente', produto || 'seu produto bancário');
+        // VERIFICAÇÃO 6: Mensagem automática Z-API
+        try {
+          const { data: zapiConfig } = await supabase
+            .from('integrations_config')
+            .select('config_json')
+            .eq('provider', 'zapi_instances')
+            .maybeSingle();
+
+          if (zapiConfig?.config_json) {
+            const instances = Array.isArray(zapiConfig.config_json) ? zapiConfig.config_json : zapiConfig.config_json.instances || [];
+            const trafegoInstance = instances.find((inst: any) => inst.name === 'trafego_isa' || inst.label?.toLowerCase()?.includes('trafego'));
+
+            if (trafegoInstance?.instance_id && trafegoInstance?.token) {
+              const produto = row[12] || 'seu produto bancário';
+              const mensagem = `Olá, ${nome}! 👋\n\nRecebemos seu cadastro e já estamos analisando seu caso sobre *${produto}*.\n\nNossa equipe especializada em direito bancário entrará em contato em breve para te ajudar a recuperar o que é seu por direito! ⚖️\n\nEnquanto isso, se tiver algum documento como extrato ou contrato, pode deixar separado — vai agilizar muito sua análise gratuita! 📄`;
+
+              const zapiUrl = `https://api.z-api.io/instances/${trafegoInstance.instance_id}/token/${trafegoInstance.token}/send-text`;
+              const zapiHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+              if (trafegoInstance.client_token) zapiHeaders['Client-Token'] = trafegoInstance.client_token;
+
+              const zapiRes = await fetch(zapiUrl, {
+                method: 'POST',
+                headers: zapiHeaders,
+                body: JSON.stringify({ phone: telefone, message: mensagem }),
+              });
+              console.log(`[Sheets Sync VendaCasada] Z-API send: ${zapiRes.ok ? '✅' : '❌'} ${zapiRes.status}`);
+            } else {
+              console.log('[Sheets Sync VendaCasada] Z-API trafego instance not found');
+            }
+          }
+        } catch (zapiErr) {
+          console.error('[Sheets Sync VendaCasada] Z-API error (silent):', zapiErr);
+        }
 
         // Trigger Isa first contact
         try {
@@ -539,7 +612,7 @@ CONTEXTO: Cliente em potencial para ação revisional de contrato bancário por 
           const { error: isaError } = await supabase.functions.invoke('isa-auto-process', {
             body: {
               lead_id: leadId,
-              mensagem: `Novo lead de Venda Casada (Google Sheets): ${nome || 'Sem nome'}. Telefone: ${telefone}. Produto: ${produto || 'N/A'}. Urgência: ${urgencia || 'N/A'}`,
+              mensagem: `Novo lead de Venda Casada (Google Sheets): ${nome || 'Sem nome'}. Telefone: ${telefone}. Produto: ${row[12] || 'N/A'}. Urgência: ${row[13] || 'N/A'}`,
               lead_state: 'NEW',
               canal: 'zapi',
               subscriber_id: subscriberId,
@@ -554,29 +627,21 @@ CONTEXTO: Cliente em potencial para ação revisional de contrato bancário por 
         }
       }
 
+      console.log(`[Sheets Sync VendaCasada] Resultado linha ${lastRow + i}: INSERIDO ✅`);
+
     } catch (rowErr) {
-      console.error('[Sheets Sync VendaCasada] Row error:', rowErr);
+      console.error(`[Sheets Sync VendaCasada] Row ${lastRow + i} error:`, rowErr);
       errors++;
     }
   }
 
   // Update sync state
   const newLastRow = allRows.length;
-  if (stateId) {
-    await supabase.from('integrations_state').update({
-      last_row: newLastRow,
-      last_sync_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }).eq('id', stateId);
-  } else {
-    await supabase.from('integrations_state').insert({
-      provider: PROVIDER,
-      spreadsheet_id: SPREADSHEET_ID,
-      sheet_name: SHEET_NAME,
-      last_row: newLastRow,
-      last_sync_at: new Date().toISOString(),
-    });
-  }
+  await supabase.from('integrations_state').update({
+    last_row: newLastRow,
+    last_sync_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq('id', stateId);
 
   await supabase.from('integration_logs').insert({
     provider: PROVIDER,
@@ -587,8 +652,8 @@ CONTEXTO: Cliente em potencial para ação revisional de contrato bancário por 
     response_json: { new_leads: newLeads, duplicates, errors },
   });
 
-  console.log(`[Sheets Sync VendaCasada] Done: ${newLeads} new, ${duplicates} dup, ${errors} err`);
-  return { new_leads: newLeads, duplicates, errors };
+  console.log(`=== SYNC VENDA CASADA FINALIZADO: ${newLeads} inseridos, ${duplicates} duplicados, ${errors} erros ===`);
+  return { new_leads: newLeads, duplicates, errors, total_linhas: allRows.length, ultima_linha: newLastRow };
 }
 
 // ── Main handler ──
