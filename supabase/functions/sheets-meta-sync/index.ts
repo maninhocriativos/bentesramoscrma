@@ -375,32 +375,24 @@ async function syncVendaCasadaSheet(supabase: any) {
 
   let res = await fetch(url);
 
-  // Fallback: try without sheet name if 404
-  if (!res.ok && res.status === 404) {
+  // Fallback: try without sheet name if 404 or 400
+  if (!res.ok && (res.status === 404 || res.status === 400)) {
     console.log('[Sheets Sync VendaCasada] Sheet name not found, trying without sheet name...');
-    range = encodeURIComponent('A1:V');
-    url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}?key=${GOOGLE_SHEETS_API_KEY}`;
+    url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent('A1:V')}?key=${GOOGLE_SHEETS_API_KEY}`;
     res = await fetch(url);
   }
 
-  // Fallback 2: try unencoded sheet name
-  if (!res.ok && res.status === 404) {
-    console.log('[Sheets Sync VendaCasada] Trying unencoded sheet name...');
-    url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}!A1:V?key=${GOOGLE_SHEETS_API_KEY}`;
+  // Fallback 2: try Página1
+  if (!res.ok && (res.status === 404 || res.status === 400)) {
+    console.log('[Sheets Sync VendaCasada] Trying Página1...');
+    url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent('Página1!A1:V')}?key=${GOOGLE_SHEETS_API_KEY}`;
     res = await fetch(url);
   }
 
   // Fallback 3: try Sheet1
-  if (!res.ok && res.status === 404) {
+  if (!res.ok && (res.status === 404 || res.status === 400)) {
     console.log('[Sheets Sync VendaCasada] Trying Sheet1...');
-    url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/Sheet1!A1:V?key=${GOOGLE_SHEETS_API_KEY}`;
-    res = await fetch(url);
-  }
-
-  // Fallback 4: try Página1
-  if (!res.ok && res.status === 404) {
-    console.log('[Sheets Sync VendaCasada] Trying Página1...');
-    url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent('Página1')}!A1:V?key=${GOOGLE_SHEETS_API_KEY}`;
+    url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent('Sheet1!A1:V')}?key=${GOOGLE_SHEETS_API_KEY}`;
     res = await fetch(url);
   }
 
