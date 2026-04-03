@@ -13,10 +13,18 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurada");
 
-    const imageContents = (arquivosBase64 || []).map((file: { base64: string; mimeType: string; name: string }) => ({
-      type: "image_url" as const,
-      image_url: { url: `data:${file.mimeType};base64,${file.base64}` },
-    }));
+    const imageContents = (arquivosBase64 || []).map((file: { base64: string; mimeType: string; name: string }) => {
+      if (file.mimeType === 'application/pdf') {
+        return {
+          type: "image_url" as const,
+          image_url: { url: `data:application/pdf;base64,${file.base64}` },
+        };
+      }
+      return {
+        type: "image_url" as const,
+        image_url: { url: `data:${file.mimeType};base64,${file.base64}` },
+      };
+    });
 
     const tiposTexto = (tiposCobranças || []).join(", ");
 
