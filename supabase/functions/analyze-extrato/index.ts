@@ -26,33 +26,42 @@ async function extrairLancamentos(base64: string, apiKey: string): Promise<strin
             },
             {
               type: "text",
-              text: `Leia ABSOLUTAMENTE TODAS as páginas deste extrato bancário, da primeira à última, sem pular nenhuma.
+              text: `Você é um extrator de dados bancários. Leia este extrato página por página, da primeira à última.
 
-Sua única tarefa: listar cada lançamento das categorias abaixo, UM POR LINHA, no formato exato:
-DATA|DESCRIÇÃO COMPLETA|VALOR
+Para cada lançamento das categorias abaixo, escreva EXATAMENTE UMA linha no formato:
+DATA|DESCRIÇÃO|VALOR
 
-CATEGORIAS A BUSCAR (procure em TODAS as páginas):
-1. TARIFA BANCARIA — inclui: CESTA CELULAR, CESTA CLASSIC, CESTA PREMIUM, manutenção de conta
-2. SEGURO — inclui: SEGURO VIDA, BRADESCO VIDA PREV, SEGURO PRESTAMISTA, proteção financeira, SEG.VIDA
-3. CAPITALIZAÇÃO
-4. TAC (Tarifa de Abertura de Crédito)
-5. TEC (Taxa de Emissão de Carnê)
-6. CLUBE DE BENEFICIOS
+Onde VALOR é o valor de UMA única cobrança, exatamente como aparece no extrato. NUNCA some ou multiplique.
+
+CATEGORIAS A BUSCAR:
+- TARIFA BANCARIA (CESTA CELULAR, CESTA CLASSIC, CESTA PREMIUM, manutenção)
+- SEGURO (VIDA, PRESTAMISTA, BRADESCO VIDA PREV, SEG.VIDA, proteção financeira, HAP VIDA, HP VIDA)
+- CAPITALIZAÇÃO
+- TAC (Tarifa de Abertura de Crédito)
+- TEC (Taxa de Emissão de Carnê)
+- CLUBE DE BENEFICIOS
 
 REGRAS ABSOLUTAS:
-- CADA ocorrência = UMA linha separada, mesmo que seja a mesma cobrança em meses diferentes
-- NUNCA agrupe, NUNCA some, NUNCA resuma
-- Verifique cada mês individualmente: jan, fev, mar, abr, mai, jun, jul, ago, set, out, nov, dez
-- Valor com ponto decimal: 32.00 (não vírgula)
-- NÃO inclua: IOF, ENCARGOS LIMITE DE CRED, saques, depósitos, transferências, compras, contas de luz/água/telefone
+- Uma linha por ocorrência — se a mesma cobrança aparece em 12 meses, escreva 12 linhas
+- NUNCA agrupe, NUNCA some, NUNCA multiplique valores
+- O valor na linha deve ser o valor de UMA cobrança individual
+- Use ponto como decimal: 32.00 (não vírgula, não 320.00)
+- NÃO inclua: IOF, ENCARGOS LIMITE DE CRED, saques, depósitos, transferências, compras, salário, luz, água, telefone
 
-FORMATO OBRIGATÓRIO (apenas estas linhas, sem texto adicional):
+EXEMPLO CORRETO — se CESTA CELULAR aparece em jan, fev, mar com R$32,00 cada:
 06/01/2017|TARIFA BANCARIA CESTA CELULAR|32.00
 07/02/2017|TARIFA BANCARIA CESTA CELULAR|32.00
-30/01/2017|PAGTO ELETRON COBRANCA BRADESCO VIDA PREV-SEG.VIDA|13.90
-28/03/2017|PAGTO ELETRON COBRANCA BRADESCO VIDA PREV-SEG.VIDA|14.84
+07/03/2017|TARIFA BANCARIA CESTA CELULAR|32.00
 
-Comece listando agora, sem preâmbulo:`,
+EXEMPLO ERRADO — NUNCA faça isso:
+06/01/2017|TARIFA BANCARIA CESTA CELULAR|96.00 (isso seria 3x32, PROIBIDO)
+
+EXEMPLO CORRETO — se BRADESCO VIDA aparece todo mês:
+30/01/2017|PAGTO ELETRON COBRANCA BRADESCO VIDA PREV-SEG.VIDA|13.90
+01/03/2017|PAGTO ELETRON COBRANCA BRADESCO VIDA PREV-SEG.VIDA|14.84
+28/04/2017|PAGTO ELETRON COBRANCA BRADESCO VIDA PREV-SEG.VIDA|14.84
+
+Escreva apenas as linhas DATA|DESCRIÇÃO|VALOR, sem nenhum texto adicional. Comece agora:`,
             },
           ],
         },
@@ -63,17 +72,17 @@ Comece listando agora, sem preâmbulo:`,
   if (!response.ok) {
     const err = await response.text();
     console.error("Erro extração PDF status:", response.status);
-    console.error("Erro extração PDF body:", err.substring(0, 500));
+    console.error("Erro extração PDF:", err.substring(0, 500));
     return "";
   }
   const result = await response.json();
   const texto = result.content?.[0]?.text || "";
-  console.log("Extração concluída. Chars:", texto.length);
-  console.log("Primeiros 800 chars:\n", texto.substring(0, 800));
+  console.log("Extração concluída. Total chars:", texto.length);
+  console.log("Lançamentos extraídos:\n", texto);
   return texto;
 }
 
-// ─── Parseia lançamentos do texto extraído ─────────────────────────
+// ─── Interfaces ────────────────────────────────────────────────────
 interface Lancamento {
   data: string;
   descricao: string;
@@ -88,6 +97,7 @@ interface GrupoCobranca {
   valorTotal: number;
 }
 
+// ─── Parseia lançamentos do texto extraído ─────────────────────────
 function parsearLancamentos(texto: string): Lancamento[] {
   const lancamentos: Lancamento[] = [];
   const linhas = texto.split("\n");
@@ -96,7 +106,9 @@ function parsearLancamentos(texto: string): Lancamento[] {
     const trimmed = linha.trim();
     if (!trimmed || !trimmed.includes("|")) continue;
 
-    const partes = trimmed.split("|");
+    // Remove possíveis prefixos como "- " ou "* "
+    const limpa = trimmed.replace(/^[-*•]\s*/, "");
+    const partes = limpa.split("|");
     if (partes.length < 3) continue;
 
     const data = partes[0].trim();
@@ -109,8 +121,12 @@ function parsearLancamentos(texto: string): Lancamento[] {
 
     if (!data || !descricao || isNaN(valor) || valor <= 0) continue;
 
+    // Validação de data mínima
+    if (!data.match(/\d{2}[\/\-]\d{2}[\/\-]\d{4}/)) continue;
+
     const descUpper = descricao.toUpperCase();
-    // Filtra itens que não devem entrar
+
+    // Filtra itens indevidos
     if (
       descUpper.includes("IOF") ||
       descUpper.includes("ENCARGO") ||
@@ -120,19 +136,28 @@ function parsearLancamentos(texto: string): Lancamento[] {
       descUpper.includes("TRANSFERENCIA") ||
       descUpper.includes("TRANSFERÊNCIA") ||
       descUpper.includes("COMPRA") ||
-      descUpper.includes("CREDITO DE SALARIO") ||
-      descUpper.includes("CRÉDITO DE SALÁRIO") ||
+      descUpper.includes("SALARIO") ||
+      descUpper.includes("SALÁRIO") ||
       descUpper.includes("CONTA DE LUZ") ||
       descUpper.includes("CONTA DE AGUA") ||
-      descUpper.includes("CONTA DE TELEFONE")
+      descUpper.includes("CONTA DE ÁGUA") ||
+      descUpper.includes("CONTA DE TELEFONE") ||
+      descUpper.includes("CONTA DE ESGOTO")
     )
       continue;
+
+    // Sanity check: valor unitário não deve ser absurdamente alto
+    // Se for maior que 500, pode ser que o modelo somou — ignora
+    if (valor > 500) {
+      console.warn(`Valor suspeito ignorado: ${data} | ${descricao} | ${valor} (possível soma)`);
+      continue;
+    }
 
     lancamentos.push({ data, descricao, valor });
   }
 
   console.log(`Total lançamentos parseados: ${lancamentos.length}`);
-  lancamentos.forEach((l) => console.log(`  ${l.data} | ${l.descricao} | ${l.valor}`));
+  lancamentos.forEach((l) => console.log(`  ${l.data} | ${l.descricao} | R$${l.valor}`));
   return lancamentos;
 }
 
@@ -209,7 +234,7 @@ function classificar(descricao: string): {
       baseLegal:
         "CDC Art. 39, III e IV — venda casada proibida; Resolução CNSP 382/2020 — seguro exige contratação expressa",
       justificativa:
-        "Seguro cobrado mensalmente sem apresentação de contrato de seguro assinado pelo cliente. Caracteriza venda casada proibida pelo CDC art. 39, III, quando vinculado à conta corrente ou empréstimo.",
+        "Seguro cobrado mensalmente sem apresentação de contrato assinado pelo cliente. Caracteriza venda casada proibida pelo CDC art. 39, III, quando vinculado à conta corrente ou empréstimo.",
     };
   }
 
@@ -256,7 +281,7 @@ function classificar(descricao: string): {
   };
 }
 
-// ─── Gera fundamentação jurídica detalhada ────────────────────────
+// ─── Gera fundamentação jurídica ──────────────────────────────────
 function gerarFundamentacao(grupos: GrupoCobranca[], banco: string, valorTotal: number): string {
   const temTarifa = grupos.some((g) => classificar(g.descricao).categoria === "Tarifas Bancárias");
   const temSeguro = grupos.some((g) => classificar(g.descricao).categoria === "Seguros");
@@ -281,7 +306,7 @@ function gerarFundamentacao(grupos: GrupoCobranca[], banco: string, valorTotal: 
     texto += ` A TEC (Taxa de Emissão de Carnê) cobrada é expressamente vedada pelo Banco Central desde 30/04/2008 (Resolução BACEN 3.518/2007).`;
   }
 
-  texto += ` O consumidor tem direito à devolução em dobro de todos os valores cobrados indevidamente, totalizando ${dobroFmt}, conforme Art. 42, parágrafo único do CDC ("salvo hipótese de engano justificável"). Recomenda-se: (1) envio de notificação extrajudicial ao banco concedendo prazo de 15 dias para devolução voluntária; (2) caso não atendido, ajuizamento de ação de repetição de indébito no Juizado Especial Cível, com pedido de dano moral por prática abusiva. O prazo prescricional é de 5 anos para tarifas (Art. 27 do CDC) e 10 anos para seguros (Art. 205 do Código Civil).`;
+  texto += ` O consumidor tem direito à devolução em dobro de todos os valores cobrados indevidamente, totalizando ${dobroFmt}, conforme Art. 42, parágrafo único do CDC. Recomenda-se: (1) envio de notificação extrajudicial ao banco com prazo de 15 dias para devolução voluntária; (2) caso não atendido, ajuizamento de ação de repetição de indébito no Juizado Especial Cível, com pedido de dano moral por prática abusiva. O prazo prescricional é de 5 anos para tarifas (Art. 27 do CDC) e 10 anos para seguros (Art. 205 do Código Civil).`;
 
   return texto;
 }
@@ -299,9 +324,11 @@ Deno.serve(async (req) => {
     console.log("Banco:", banco);
     console.log("Período:", dataInicial, "a", dataFinal);
     console.log("Cliente:", nomeCliente);
+    console.log("CPF:", cpf);
+    console.log("Contrato:", numeroContrato);
     console.log("Arquivos recebidos:", arquivosBase64?.length);
     arquivosBase64?.forEach((f: any, i: number) => {
-      console.log(`  Arquivo ${i + 1}: ${f.name} | tipo: ${f.mimeType} | base64: ${f.base64?.length} chars`);
+      console.log(`  [${i + 1}] nome: ${f.name} | tipo: ${f.mimeType} | base64: ${f.base64?.length} chars`);
     });
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
@@ -316,42 +343,41 @@ Deno.serve(async (req) => {
     let todosTextos = "";
     for (const file of arquivosBase64 || []) {
       if (file.mimeType === "application/pdf") {
-        console.log(`Extraindo PDF: ${file.name}`);
+        console.log(`\nExtraindo PDF: ${file.name}`);
         const texto = await extrairLancamentos(file.base64, ANTHROPIC_API_KEY);
         if (texto.trim()) {
           todosTextos += texto + "\n";
         } else {
           console.error("Extração vazia para:", file.name);
         }
-      } else {
-        console.log("Arquivo ignorado (não é PDF):", file.name, file.mimeType);
       }
     }
 
-    console.log("Total texto extraído:", todosTextos.length, "chars");
+    console.log("\nTotal texto extraído:", todosTextos.length, "chars");
 
     if (!todosTextos.trim()) {
       return new Response(
         JSON.stringify({
-          error:
-            "Não foi possível extrair lançamentos do documento. Certifique-se de que o arquivo é um extrato bancário em formato PDF.",
+          error: "Não foi possível extrair lançamentos. Verifique se o arquivo é um extrato bancário válido em PDF.",
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // PASSO 2: Parseia e agrupa — cálculos feitos no código
+    // PASSO 2: Parseia — filtra valores suspeitos acima de R$500
     const lancamentos = parsearLancamentos(todosTextos);
 
+    // Período formatado
+    const periodoAnalisado = dataInicial && dataFinal ? `${dataInicial} a ${dataFinal}` : "Período não informado";
+
     if (lancamentos.length === 0) {
-      // Retorna resultado vazio mas válido
       return new Response(
         JSON.stringify({
           resumo: {
             total_lancamentos: 0,
             irregularidades_encontradas: 0,
             valor_total_indevido: 0,
-            periodo_analisado: dataInicial && dataFinal ? `${dataInicial} a ${dataFinal}` : "Período não informado",
+            periodo_analisado: periodoAnalisado,
             banco: banco || "Não informado",
           },
           cobrancas_indevidas: [],
@@ -369,13 +395,14 @@ Deno.serve(async (req) => {
       );
     }
 
+    // PASSO 3: Agrupa por descrição + valor (matemática no código)
     const grupos = agruparPorDescricaoEValor(lancamentos);
-    console.log(`Grupos finais: ${grupos.length}`);
+    console.log(`\nGrupos finais: ${grupos.length}`);
     grupos.forEach((g) =>
-      console.log(`  ${g.descricao} | unit: ${g.valorUnitario} | x${g.ocorrencias} = ${g.valorTotal}`),
+      console.log(`  [${g.ocorrencias}x] ${g.descricao} | unit: R$${g.valorUnitario} | total: R$${g.valorTotal}`),
     );
 
-    // PASSO 3: Monta resultado com cálculos 100% precisos
+    // PASSO 4: Monta resultado
     const cobrancas_indevidas = grupos.map((g) => {
       const { categoria, baseLegal, justificativa } = classificar(g.descricao);
       return {
@@ -395,7 +422,7 @@ Deno.serve(async (req) => {
     const valor_total_indevido = parseFloat(cobrancas_indevidas.reduce((s, c) => s + c.valor_total, 0).toFixed(2));
     const estimativa_recuperacao = parseFloat((valor_total_indevido * 2).toFixed(2));
 
-    // Agrupa por categoria para o resumo
+    // Agrupa por categoria
     const catMap = new Map<string, { total: number; ocorrencias: number }>();
     for (const c of cobrancas_indevidas) {
       const ex = catMap.get(c.categoria) ?? { total: 0, ocorrencias: 0 };
@@ -415,7 +442,7 @@ Deno.serve(async (req) => {
         total_lancamentos: lancamentos.length,
         irregularidades_encontradas: cobrancas_indevidas.length,
         valor_total_indevido,
-        periodo_analisado: dataInicial && dataFinal ? `${dataInicial} a ${dataFinal}` : "Período não informado",
+        periodo_analisado: periodoAnalisado,
         banco: banco || "Não informado",
       },
       cobrancas_indevidas,
@@ -430,11 +457,12 @@ Deno.serve(async (req) => {
       },
     };
 
-    console.log("=== RESULTADO FINAL ===");
-    console.log("Total lançamentos:", resultado.resumo.total_lancamentos);
+    console.log("\n=== RESULTADO FINAL ===");
+    console.log("Lançamentos:", resultado.resumo.total_lancamentos);
     console.log("Irregularidades:", resultado.resumo.irregularidades_encontradas);
-    console.log("Valor total indevido:", resultado.resumo.valor_total_indevido);
-    console.log("Estimativa recuperação:", resultado.recomendacao.estimativa_recuperacao);
+    console.log("Valor total indevido: R$", resultado.resumo.valor_total_indevido);
+    console.log("Estimativa recuperação (2x): R$", resultado.recomendacao.estimativa_recuperacao);
+    console.log("Período:", resultado.resumo.periodo_analisado);
 
     return new Response(JSON.stringify(resultado), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
