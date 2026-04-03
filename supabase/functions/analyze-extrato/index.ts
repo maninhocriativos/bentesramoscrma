@@ -4,7 +4,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ─── Extrai TEXTO BRUTO do PDF sem interpretação ───────────────────
+// ─── Extrai texto bruto do PDF ─────────────────────────────────────
 async function extrairTextoBruto(base64: string, apiKey: string): Promise<string> {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -26,24 +26,38 @@ async function extrairTextoBruto(base64: string, apiKey: string): Promise<string
             },
             {
               type: "text",
-              text: `Transcreva LITERALMENTE todas as linhas deste extrato bancário que contenham estas palavras:
-TARIFA, CESTA, SEGURO, SEG.VIDA, VIDA PREV, BRADESCO VIDA, PRESTAMISTA, HAP VIDA, HP VIDA, CAPITALIZ, TAC, TEC, CLUBE, BENEFICIO
+              text: `Você é um copista de dados bancários. Sua única função é transcrever literalmente linhas de extratos bancários.
 
-Para cada linha encontrada, copie EXATAMENTE como aparece no extrato:
-- A data (ex: 06/01/2017)
-- A descrição completa
-- O valor do débito daquela linha específica
+Percorra TODAS as páginas deste extrato bancário e copie EXATAMENTE cada linha que contenha qualquer uma destas palavras ou similares:
 
-Formato de saída — uma linha por lançamento:
-06/01/2017 | TARIFA BANCARIA CESTA CELULAR | 32,00
-07/02/2017 | TARIFA BANCARIA CESTA CELULAR | 32,00
-30/01/2017 | PAGTO ELETRON COBRANCA BRADESCO VIDA PREV-SEG.VIDA | 13,90
+PALAVRAS-CHAVE A BUSCAR (de qualquer banco):
+TARIFA, TAXA, CESTA, PACOTE, MANUTENÇÃO, MANUTENCAO,
+SEGURO, SEG., PROTEÇÃO, PROTECAO, PRESTAMISTA, VIDA, PREV, PREVIDENCIA,
+CAPITALIZAÇÃO, CAPITALIZACAO, TITULO CAP,
+TAC, TEC, ABERTURA, EMISSÃO CARNÊ,
+CLUBE, BENEFICIO, ASSISTÊNCIA, ASSISTENCIA,
+ANUIDADE, ADMINISTRAÇÃO CARTÃO, ADM CARTÃO,
+COBRANÇA INDEVIDA, DEBITO INDEVIDO,
+SERVIÇO, SERVICO, ASSINATURA, MENSALIDADE
 
-REGRAS:
-- Copie o valor EXATO da coluna débito de cada linha individual
-- NÃO calcule, NÃO some, NÃO interprete
-- Se uma cobrança aparece em 12 meses = 12 linhas separadas
-- Inclua TODAS as páginas do documento`,
+FORMATO OBRIGATÓRIO — uma linha por lançamento:
+DD/MM/AAAA | DESCRIÇÃO EXATA DO EXTRATO | VALOR_DÉBITO
+
+REGRAS ABSOLUTAS:
+- Copie o valor EXATO da coluna débito daquela linha individual
+- NÃO calcule, NÃO some, NÃO interprete nada
+- Se a mesma cobrança aparece em 12 meses = 12 linhas separadas
+- Inclua TODAS as páginas do documento
+- NÃO inclua: IOF, ENCARGOS LIMITE, saques, depósitos, transferências, compras, salário, pagamento de conta (luz, água, telefone)
+- Se não tiver certeza se é cobrança indevida, inclua assim mesmo — melhor sobrar do que faltar
+
+Exemplo de saída correta:
+06/01/2024 | TARIFA PACOTE SERVICOS ESSENCIAL | 32,90
+06/02/2024 | TARIFA PACOTE SERVICOS ESSENCIAL | 32,90
+15/01/2024 | SEGURO PRESTAMISTA MENSAL | 28,50
+15/02/2024 | SEGURO PRESTAMISTA MENSAL | 28,50
+
+Comece a transcrição agora, sem preâmbulo:`,
             },
           ],
         },
@@ -57,17 +71,33 @@ REGRAS:
   }
   const result = await response.json();
   const texto = result.content?.[0]?.text || "";
-  console.log("Texto bruto extraído:\n", texto);
+  console.log("=== TEXTO BRUTO EXTRAÍDO ===\n", texto);
   return texto;
 }
 
-// ─── Parseia texto bruto linha por linha ───────────────────────────
+// ─── Interfaces ────────────────────────────────────────────────────
 interface Lancamento {
   data: string;
   descricao: string;
   valor: number;
 }
 
+interface GrupoCobranca {
+  data: string;
+  descricao: string;
+  valorUnitario: number;
+  ocorrencias: number;
+  valorTotal: number;
+}
+
+interface Classificacao {
+  categoria: string;
+  baseLegal: string;
+  justificativa: string;
+  indevido: boolean;
+}
+
+// ─── Parseia texto bruto ───────────────────────────────────────────
 function parsearTextoBruto(texto: string): Lancamento[] {
   const lancamentos: Lancamento[] = [];
   const linhas = texto.split("\n");
@@ -89,58 +119,281 @@ function parsearTextoBruto(texto: string): Lancamento[] {
 
     if (!data || !descricao || isNaN(valor) || valor <= 0) continue;
     if (!data.match(/\d{2}[\/\-]\d{2}[\/\-]\d{2,4}/)) continue;
+    if (descricao.length < 3) continue;
 
     const descUpper = descricao.toUpperCase();
 
-    // Rejeita lançamentos que não são cobranças indevidas
+    // Exclui categorias claramente não indevidas
     if (
       descUpper.includes("IOF") ||
-      descUpper.includes("ENCARGO") ||
+      (descUpper.includes("ENCARGO") && descUpper.includes("LIMITE")) ||
       descUpper.includes("SAQUE") ||
       descUpper.includes("DEPOSITO") ||
       descUpper.includes("DEPÓSITO") ||
       descUpper.includes("TRANSFERENCIA") ||
-      descUpper.includes("COMPRA") ||
+      descUpper.includes("TRANSFERÊNCIA") ||
+      descUpper.includes("TED ") ||
+      descUpper.includes("DOC ") ||
+      descUpper.includes("COMPRA ") ||
       descUpper.includes("SALARIO") ||
-      descUpper.includes("SALÁRIO")
-    )
-      continue;
-
-    // Rejeita valores claramente somados
-    const isSeguro =
-      descUpper.includes("SEGURO") ||
-      descUpper.includes("VIDA") ||
-      descUpper.includes("PREV") ||
-      descUpper.includes("HAP") ||
-      descUpper.includes(" HP ");
-    const isTarifa = descUpper.includes("CESTA") || descUpper.includes("TARIFA BANCARIA");
-
-    if (isSeguro && valor > 200) {
-      console.warn(`Seguro rejeitado (valor alto): ${data} | ${descricao} | ${valor}`);
+      descUpper.includes("SALÁRIO") ||
+      descUpper.includes("CONTA DE LUZ") ||
+      descUpper.includes("CONTA DE AGUA") ||
+      descUpper.includes("CONTA DE ÁGUA") ||
+      descUpper.includes("CONTA DE TELEFONE") ||
+      descUpper.includes("CONTA DE ESGOTO") ||
+      descUpper.includes("PAGTO FATURA") ||
+      descUpper.includes("PAGTO CARTAO") ||
+      descUpper.includes("PAGTO CARTÃO") ||
+      descUpper.includes("PAGTO BOLETO") ||
+      descUpper.includes("RENDIMENTO") ||
+      descUpper.includes("JUROS CRED")
+    ) {
+      console.log(`Excluído: ${data} | ${descricao}`);
       continue;
     }
-    if (isTarifa && valor > 150) {
-      console.warn(`Tarifa rejeitada (valor alto): ${data} | ${descricao} | ${valor}`);
+
+    // Verifica se o valor é suspeito (possível soma)
+    // Para tarifas e seguros individuais, raramente passam de R$150
+    const { indevido } = classificar(descricao);
+    if (!indevido) {
+      console.log(`Não classificado como indevido: ${descricao}`);
+      continue;
+    }
+
+    // Limite de valor por categoria para detectar somas acidentais
+    const cat = classificar(descricao).categoria;
+    const limites: Record<string, number> = {
+      "Tarifas Bancárias": 200,
+      Seguros: 250,
+      Capitalização: 300,
+      "Anuidade Cartão": 200,
+      "Serviços Não Solicitados": 200,
+      "TAC — Vedada": 1000,
+      "TEC — Vedada": 500,
+      "Cobranças Indevidas": 500,
+    };
+
+    const limite = limites[cat] || 500;
+    if (valor > limite) {
+      console.warn(`REJEITADO (valor ${valor} > limite ${limite} para ${cat}): ${data} | ${descricao}`);
       continue;
     }
 
     lancamentos.push({ data, descricao, valor });
   }
 
-  console.log(`\nLançamentos válidos: ${lancamentos.length}`);
+  console.log(`\n=== LANÇAMENTOS VÁLIDOS: ${lancamentos.length} ===`);
   lancamentos.forEach((l) => console.log(`  ✓ ${l.data} | ${l.descricao} | R$${l.valor}`));
   return lancamentos;
 }
 
-// ─── Agrupa por descrição + valor ─────────────────────────────────
-interface GrupoCobranca {
-  data: string;
-  descricao: string;
-  valorUnitario: number;
-  ocorrencias: number;
-  valorTotal: number;
+// ─── Classificação jurídica universal (multi-banco) ────────────────
+function classificar(descricao: string): Classificacao {
+  const d = descricao.toUpperCase();
+
+  // ── TARIFAS BANCÁRIAS ─────────────────────────────────────────
+  if (
+    // Genérico
+    d.match(/TARIFA\s*(DE\s*)?(MANUT|PACOTE|CESTA|SERV|ADM|ADMIN)/) ||
+    d.includes("CESTA") ||
+    d.includes("PACOTE DE SERV") ||
+    d.includes("MANUTENÇÃO DE CONTA") ||
+    d.includes("MANUTENCAO DE CONTA") ||
+    d.includes("TAXA DE MANUT") ||
+    d.includes("TAXA MANUT") ||
+    // Bradesco
+    d.includes("CESTA CELULAR") ||
+    d.includes("CESTA CLASSIC") ||
+    d.includes("CESTA PREMIUM") ||
+    // Itaú
+    d.includes("PACOTE ITAU") ||
+    d.includes("TARIFA ITAU") ||
+    d.includes("MENSALIDADE CONTA") ||
+    // Santander
+    d.includes("TARIFA SANTANDER") ||
+    d.includes("CONTA UNIVERSITÁRIA") ||
+    // BB
+    d.includes("TARIFA BB") ||
+    d.includes("PACOTE BB") ||
+    // Caixa
+    d.includes("TARIFA CAIXA") ||
+    d.includes("PACOTE CAIXA") ||
+    // BMG / Consignado
+    d.includes("TARIFA BMG") ||
+    // Genérico
+    d.includes("TAXA DE SERVICO") ||
+    d.includes("TAXA DE SERVIÇO") ||
+    d.includes("TARIFA SERVICO") ||
+    d.includes("TARIFA SERVIÇO")
+  ) {
+    return {
+      categoria: "Tarifas Bancárias",
+      baseLegal: "Resolução CMN nº 3.919/2010 — tarifas só permitidas com contratação expressa e documentada",
+      justificativa:
+        "Tarifa bancária cobrada sem evidência de contratação expressa. A Resolução CMN 3.919/2010 exige autorização formal do cliente para qualquer cobrança de tarifa ou pacote de serviços.",
+      indevido: true,
+    };
+  }
+
+  // ── SEGUROS ───────────────────────────────────────────────────
+  if (
+    // Genérico
+    d.includes("SEGURO") ||
+    d.includes("SEG.") ||
+    d.includes("PRESTAMISTA") ||
+    d.includes("PROTEÇÃO") ||
+    d.includes("PROTECAO") ||
+    d.includes("SEGURO VIDA") ||
+    d.includes("SEG VIDA") ||
+    d.includes("SEG.VIDA") ||
+    // Bradesco
+    d.includes("BRADESCO VIDA") ||
+    d.includes("VIDA PREV") ||
+    d.includes("HAP VIDA") ||
+    d.includes("HP VIDA") ||
+    // Itaú
+    d.includes("ITAU VIDA") ||
+    d.includes("ITAUSEG") ||
+    // Santander
+    d.includes("SANT SEG") ||
+    d.includes("SANTANDER SEG") ||
+    // BB
+    d.includes("BB SEG") ||
+    d.includes("BRASILSEG") ||
+    d.includes("BRASILPREV") ||
+    // Caixa
+    d.includes("CAIXA SEG") ||
+    d.includes("CAIXASEG") ||
+    // BMG
+    d.includes("BMG SEG") ||
+    d.includes("SEGURO BMG") ||
+    // Genérico
+    d.includes("SEGURO PRESTAMISTA") ||
+    d.includes("SEGURO DESEMPREGO") ||
+    d.includes("SEGURO ACIDENTES") ||
+    d.includes("SEGURO RESIDENCIAL") ||
+    d.includes("SEGURO AUTO") ||
+    d.includes("SEGURO CARTAO") ||
+    d.includes("SEGURO CARTÃO")
+  ) {
+    return {
+      categoria: "Seguros",
+      baseLegal:
+        "CDC Art. 39, III e IV — venda casada proibida; Resolução CNSP 382/2020 — seguro exige contratação expressa e independente",
+      justificativa:
+        "Seguro cobrado mensalmente sem apresentação de contrato assinado pelo cliente. Caracteriza venda casada proibida pelo CDC Art. 39, III.",
+      indevido: true,
+    };
+  }
+
+  // ── CAPITALIZAÇÃO ─────────────────────────────────────────────
+  if (
+    d.includes("CAPITALIZ") ||
+    d.includes("TITULO CAP") ||
+    d.includes("TÍTULO CAP") ||
+    d.includes("CAP MENSAL") ||
+    d.includes("POUPANÇA PREMIADA")
+  ) {
+    return {
+      categoria: "Capitalização",
+      baseLegal: "CDC Art. 39, III — venda casada proibida; Circular SUSEP 462/2013",
+      justificativa:
+        "Título de capitalização contratado sem autorização expressa do cliente. Prática de venda casada vedada pelo CDC.",
+      indevido: true,
+    };
+  }
+
+  // ── ANUIDADE CARTÃO ───────────────────────────────────────────
+  if (
+    d.includes("ANUIDADE") ||
+    d.includes("ANUIDADE CARTAO") ||
+    d.includes("ANUIDADE CARTÃO") ||
+    d.includes("MENSALIDADE CARTAO") ||
+    d.includes("MENSALIDADE CARTÃO") ||
+    d.includes("ADM CARTAO") ||
+    d.includes("ADM CARTÃO") ||
+    d.includes("ADMINISTRAÇÃO CARTÃO")
+  ) {
+    return {
+      categoria: "Anuidade Cartão",
+      baseLegal: "Resolução CMN nº 3.919/2010 — anuidade só é permitida com contratação expressa documentada",
+      justificativa: "Anuidade ou mensalidade de cartão cobrada sem autorização expressa do cliente.",
+      indevido: true,
+    };
+  }
+
+  // ── TAC ───────────────────────────────────────────────────────
+  if (
+    d.includes("TAC") ||
+    d.includes("TARIFA ABERTURA") ||
+    d.includes("ABERTURA DE CREDITO") ||
+    d.includes("ABERTURA DE CRÉDITO") ||
+    d.includes("ABERTURA CRÉDITO") ||
+    d.includes("ABERTURA CREDITO")
+  ) {
+    return {
+      categoria: "TAC — Vedada",
+      baseLegal: "Resolução BACEN 3.518/2007 — TAC vedada desde 30/04/2008",
+      justificativa:
+        "Tarifa de Abertura de Crédito expressamente proibida pelo Banco Central desde abril de 2008. Cobrança totalmente ilegal.",
+      indevido: true,
+    };
+  }
+
+  // ── TEC ───────────────────────────────────────────────────────
+  if (
+    d.includes("TEC") ||
+    d.includes("EMISSAO DE CARNE") ||
+    d.includes("EMISSÃO DE CARNÊ") ||
+    d.includes("EMISSÃO CARNE") ||
+    d.includes("EMISSÃO CARNÊ")
+  ) {
+    return {
+      categoria: "TEC — Vedada",
+      baseLegal: "Resolução BACEN 3.518/2007 — TEC vedada desde 30/04/2008",
+      justificativa: "Taxa de Emissão de Carnê expressamente proibida pelo Banco Central desde abril de 2008.",
+      indevido: true,
+    };
+  }
+
+  // ── SERVIÇOS NÃO SOLICITADOS ──────────────────────────────────
+  if (
+    d.includes("CLUBE") ||
+    d.includes("BENEFICIO") ||
+    d.includes("BENEFÍCIO") ||
+    d.includes("ASSISTÊNCIA") ||
+    d.includes("ASSISTENCIA") ||
+    d.includes("ASSINATURA") ||
+    d.includes("MENSALIDADE SERV") ||
+    d.includes("SERVIÇO DIGITAL") ||
+    d.includes("PLANO ") ||
+    d.includes("COBERTURA ") ||
+    d.includes("ODONTOL") ||
+    d.includes("RESIDENCIAL PROT") ||
+    d.includes("PREVIDENCIA PRIV") ||
+    d.includes("PREVIDÊNCIA PRIV") ||
+    d.includes("CONSORCIO") ||
+    d.includes("CONSÓRCIO")
+  ) {
+    return {
+      categoria: "Serviços Não Solicitados",
+      baseLegal: "CDC Art. 39, III — fornecimento de serviço sem solicitação prévia é prática abusiva",
+      justificativa:
+        "Serviço contratado e cobrado sem autorização expressa do cliente. Prática abusiva vedada pelo Código de Defesa do Consumidor.",
+      indevido: true,
+    };
+  }
+
+  return {
+    categoria: "Cobranças Indevidas",
+    baseLegal: "CDC Art. 39 — práticas abusivas proibidas",
+    justificativa: "Cobrança sem evidência de contratação expressa pelo cliente.",
+    indevido: false,
+  };
 }
 
+// ─── Agrupa por descrição + valor ─────────────────────────────────
 function agrupar(lancamentos: Lancamento[]): GrupoCobranca[] {
   const mapa = new Map<string, GrupoCobranca>();
 
@@ -168,90 +421,39 @@ function agrupar(lancamentos: Lancamento[]): GrupoCobranca[] {
   });
 }
 
-// ─── Classificação jurídica ────────────────────────────────────────
-function classificar(descricao: string) {
-  const d = descricao.toUpperCase();
-
-  if (
-    d.includes("CESTA") ||
-    d.includes("TARIFA BANCARIA") ||
-    d.includes("TARIFA BANCÁRIA") ||
-    d.includes("MANUTENCAO DE CONTA")
-  ) {
-    return {
-      categoria: "Tarifas Bancárias",
-      baseLegal: "Resolução CMN nº 3.919/2010 — tarifas só permitidas com contratação expressa",
-      justificativa: "Tarifa cobrada mensalmente sem contratação expressa documentada pelo cliente.",
-    };
-  }
-  if (
-    d.includes("SEGURO") ||
-    d.includes("SEG.VIDA") ||
-    d.includes("VIDA PREV") ||
-    d.includes("BRADESCO VIDA") ||
-    d.includes("PRESTAMISTA") ||
-    d.includes("HAP VIDA") ||
-    d.includes("HP VIDA") ||
-    d.includes("PROTECAO FINANCEIRA")
-  ) {
-    return {
-      categoria: "Seguros",
-      baseLegal: "CDC Art. 39, III e IV — venda casada proibida; Resolução CNSP 382/2020",
-      justificativa: "Seguro cobrado sem contrato assinado — caracteriza venda casada proibida pelo CDC.",
-    };
-  }
-  if (d.includes("CAPITALIZ")) {
-    return {
-      categoria: "Capitalização",
-      baseLegal: "CDC Art. 39, III — venda casada proibida",
-      justificativa: "Capitalização contratada sem autorização expressa.",
-    };
-  }
-  if (d.includes("TAC") || d.includes("ABERTURA DE CREDITO")) {
-    return {
-      categoria: "TAC — Vedada",
-      baseLegal: "Resolução BACEN 3.518/2007 — TAC vedada desde 2008",
-      justificativa: "TAC proibida pelo Banco Central desde abril de 2008.",
-    };
-  }
-  if (d.includes("TEC") || d.includes("EMISSAO DE CARNE")) {
-    return {
-      categoria: "TEC — Vedada",
-      baseLegal: "Resolução BACEN 3.518/2007 — TEC vedada desde 2008",
-      justificativa: "TEC proibida pelo Banco Central desde abril de 2008.",
-    };
-  }
-  if (d.includes("CLUBE") || d.includes("BENEFICIO")) {
-    return {
-      categoria: "Serviços Não Solicitados",
-      baseLegal: "CDC Art. 39, III — serviço sem solicitação é prática abusiva",
-      justificativa: "Serviço cobrado sem autorização expressa do cliente.",
-    };
-  }
-  return {
-    categoria: "Cobranças Indevidas",
-    baseLegal: "CDC Art. 39 — práticas abusivas proibidas",
-    justificativa: "Cobrança sem contratação expressa.",
-  };
-}
-
 // ─── Fundamentação jurídica ────────────────────────────────────────
 function gerarFundamentacao(grupos: GrupoCobranca[], banco: string, valorTotal: number): string {
-  const temTarifa = grupos.some((g) => classificar(g.descricao).categoria === "Tarifas Bancárias");
-  const temSeguro = grupos.some((g) => classificar(g.descricao).categoria === "Seguros");
-  const temTac = grupos.some((g) => classificar(g.descricao).categoria === "TAC — Vedada");
-  const temTec = grupos.some((g) => classificar(g.descricao).categoria === "TEC — Vedada");
+  const categorias = new Set(grupos.map((g) => classificar(g.descricao).categoria));
 
   const vFmt = valorTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   const dFmt = (valorTotal * 2).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-  let t = `Foram identificadas cobranças indevidas no extrato do ${banco}, totalizando ${vFmt}.`;
-  if (temTarifa) t += ` Tarifas bancárias cobradas sem contratação expressa violam a Resolução CMN nº 3.919/2010.`;
-  if (temSeguro)
+  let t = `Foram identificadas cobranças indevidas no extrato bancário do ${banco}, totalizando ${vFmt}.`;
+
+  if (categorias.has("Tarifas Bancárias")) {
+    t += ` Tarifas bancárias/pacotes de serviços cobrados sem contratação expressa violam a Resolução CMN nº 3.919/2010.`;
+  }
+  if (categorias.has("Seguros")) {
     t += ` Seguros cobrados sem contrato assinado caracterizam venda casada proibida pelo CDC Art. 39, III e Resolução CNSP 382/2020.`;
-  if (temTac) t += ` TAC vedada pelo Banco Central desde 30/04/2008 (Resolução BACEN 3.518/2007).`;
-  if (temTec) t += ` TEC vedada pelo Banco Central desde 30/04/2008 (Resolução BACEN 3.518/2007).`;
-  t += ` Direito à devolução em dobro: ${dFmt} (CDC Art. 42, parágrafo único). Recomenda-se notificação extrajudicial ao banco e, se não atendido, ação de repetição de indébito no Juizado Especial Cível com pedido de dano moral. Prazo prescricional: 5 anos para tarifas (CDC Art. 27) e 10 anos para seguros (CC Art. 205).`;
+  }
+  if (categorias.has("Capitalização")) {
+    t += ` Capitalização contratada sem autorização expressa configura venda casada (CDC Art. 39, III).`;
+  }
+  if (categorias.has("Anuidade Cartão")) {
+    t += ` Anuidades de cartão sem contratação expressa violam a Resolução CMN nº 3.919/2010.`;
+  }
+  if (categorias.has("TAC — Vedada")) {
+    t += ` TAC cobrada é vedada pelo Banco Central desde 30/04/2008 (Resolução BACEN 3.518/2007).`;
+  }
+  if (categorias.has("TEC — Vedada")) {
+    t += ` TEC cobrada é vedada pelo Banco Central desde 30/04/2008 (Resolução BACEN 3.518/2007).`;
+  }
+  if (categorias.has("Serviços Não Solicitados")) {
+    t += ` Serviços não solicitados cobrados configuram prática abusiva vedada pelo CDC Art. 39, III.`;
+  }
+
+  t += ` O consumidor tem direito à devolução em dobro totalizando ${dFmt} (CDC Art. 42, parágrafo único). Recomenda-se notificação extrajudicial ao banco com prazo de 15 dias e, se não atendido, ajuizamento de ação de repetição de indébito no Juizado Especial Cível com pedido de dano moral. Prazo prescricional: 5 anos para tarifas e anuidades (CDC Art. 27) e 10 anos para seguros e capitalização (CC Art. 205).`;
+
   return t;
 }
 
@@ -265,7 +467,7 @@ Deno.serve(async (req) => {
 
     console.log("=== NOVA ANÁLISE ===");
     console.log("Banco:", banco, "| Período:", dataInicial, "a", dataFinal);
-    console.log("Arquivos:", arquivosBase64?.length);
+    console.log("Cliente:", nomeCliente, "| Arquivos:", arquivosBase64?.length);
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
@@ -284,17 +486,21 @@ Deno.serve(async (req) => {
         console.log(`\nExtraindo: ${file.name}`);
         const texto = await extrairTextoBruto(file.base64, ANTHROPIC_API_KEY);
         if (texto.trim()) textoBrutoTotal += texto + "\n";
+      } else {
+        console.log(`Ignorado (não PDF): ${file.name}`);
       }
     }
 
     if (!textoBrutoTotal.trim()) {
-      return new Response(JSON.stringify({ error: "Não foi possível extrair lançamentos do PDF." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          error: "Não foi possível extrair lançamentos do PDF. Verifique se é um extrato bancário válido.",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
-    // PASSO 2: Parseia localmente — sem IA para cálculos
+    // PASSO 2: Parseia localmente
     const lancamentos = parsearTextoBruto(textoBrutoTotal);
 
     if (lancamentos.length === 0) {
@@ -311,7 +517,7 @@ Deno.serve(async (req) => {
           por_categoria: [],
           recomendacao: {
             tipo_acao: "Nenhuma irregularidade identificada",
-            fundamentacao: "Não foram encontradas cobranças indevidas.",
+            fundamentacao: "Não foram encontradas cobranças indevidas no período analisado.",
             estimativa_recuperacao: 0,
             prazo_prescricional: "N/A",
             prioridade: "baixa",
@@ -321,9 +527,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // PASSO 3: Agrupa e calcula — 100% no código
+    // PASSO 3: Agrupa e calcula no código
     const grupos = agrupar(lancamentos);
-    console.log(`\n=== GRUPOS ===`);
+
+    console.log(`\n=== GRUPOS FINAIS ===`);
     grupos.forEach((g) => console.log(`  [${g.ocorrencias}x R$${g.valorUnitario}] ${g.descricao} = R$${g.valorTotal}`));
 
     const cobrancas_indevidas = grupos.map((g) => {
@@ -373,7 +580,8 @@ Deno.serve(async (req) => {
         tipo_acao: "Requerimento administrativo e/ou Ação Judicial de repetição de indébito",
         fundamentacao: gerarFundamentacao(grupos, banco || "banco", valor_total_indevido),
         estimativa_recuperacao,
-        prazo_prescricional: "5 anos para tarifas (CDC Art. 27) e 10 anos para seguros (CC Art. 205)",
+        prazo_prescricional:
+          "5 anos para tarifas e anuidades (CDC Art. 27) e 10 anos para seguros e capitalização (CC Art. 205)",
         prioridade: valor_total_indevido > 300 ? "alta" : "media",
       },
     };
@@ -381,8 +589,8 @@ Deno.serve(async (req) => {
     console.log("\n=== RESULTADO FINAL ===");
     console.log("Lançamentos:", resultado.resumo.total_lancamentos);
     console.log("Grupos:", resultado.resumo.irregularidades_encontradas);
-    console.log("Total: R$", resultado.resumo.valor_total_indevido);
-    console.log("2x: R$", resultado.recomendacao.estimativa_recuperacao);
+    console.log("Total indevido: R$", resultado.resumo.valor_total_indevido);
+    console.log("Estimativa 2x: R$", resultado.recomendacao.estimativa_recuperacao);
 
     return new Response(JSON.stringify(resultado), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
