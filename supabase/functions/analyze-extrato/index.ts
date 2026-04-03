@@ -29,19 +29,32 @@ async function extrairTextoPdf(base64: string, apiKey: string): Promise<string> 
             },
             {
               type: "text",
-              text: `Analise TODAS as páginas deste extrato bancário e liste APENAS os lançamentos que se enquadram nestas categorias:
+              text: `Você é um assistente de análise bancária. Leia TODAS as páginas deste extrato bancário, da primeira à última, sem pular nenhuma.
 
-1. TARIFA BANCARIA (qualquer tipo: CESTA CELULAR, CESTA CLASSIC, manutenção, etc)
-2. SEGURO (qualquer tipo: VIDA, PRESTAMISTA, BRADESCO VIDA PREV, etc)
+TAREFA: Liste TODOS os lançamentos que se enquadram nestas categorias, verificando CADA PÁGINA individualmente:
+
+CATEGORIAS A BUSCAR:
+1. TARIFA BANCARIA (CESTA CELULAR, CESTA CLASSIC, CESTA PREMIUM, manutenção de conta)
+2. SEGURO (VIDA, PRESTAMISTA, BRADESCO VIDA PREV, proteção financeira, acidentes)
 3. CAPITALIZAÇÃO
 4. CLUBE DE BENEFICIOS
-5. TAC ou TEC
-6. Qualquer serviço cobrado mensalmente com descrição repetida
+5. TAC - Tarifa de Abertura de Crédito
+6. TEC - Taxa de Emissão de Carnê
+7. Qualquer serviço com cobrança mensal repetida
 
-Para CADA lançamento encontrado informe exatamente:
-DATA | DESCRIÇÃO EXATA | VALOR DÉBITO
+INSTRUÇÕES CRÍTICAS:
+- Verifique CADA página do documento, incluindo páginas do meio (páginas 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18...)
+- Para cada lançamento encontrado, informe: DATA | DESCRIÇÃO EXATA | VALOR DÉBITO
+- Liste CADA ocorrência individualmente, mesmo que seja a mesma cobrança em meses diferentes
+- NÃO agrupe, NÃO resuma, NÃO pule nenhuma ocorrência
+- Se encontrar TARIFA BANCARIA em abril, maio, julho ou agosto, INCLUA
+- Se encontrar SEGURO em qualquer mês, INCLUA
+- Percorra o documento mês a mês garantindo cobertura total
 
-Liste TODOS individualmente, mês a mês, do início ao fim do extrato. Não agrupe, não resuma, não pule nenhum.`,
+Formato de saída para cada lançamento:
+DATA | DESCRIÇÃO | VALOR
+
+Liste todos sem exceção.`,
             },
           ],
         },
@@ -75,6 +88,9 @@ Deno.serve(async (req) => {
     }
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) {
+      console.error("ANTHROPIC_API_KEY não configurada — usando fallback");
+    }
 
     const contentParts: any[] = [];
     let textoExtraido = "";
@@ -85,8 +101,11 @@ Deno.serve(async (req) => {
           console.log("Extraindo cobranças do PDF:", file.name);
           const texto = await extrairTextoPdf(file.base64, ANTHROPIC_API_KEY);
           if (texto) {
-            textoExtraido += `\n\n=== COBRANÇAS IDENTIFICADAS NO PDF: ${file.name} ===\n${texto}`;
-            console.log("Extração concluída, tamanho:", texto.length, "chars");
+            textoExtraido += `\n\n=== COBRANÇAS EXTRAÍDAS DO PDF: ${file.name} ===\n${texto}`;
+            console.log("Extração concluída. Tamanho:", texto.length, "chars");
+            console.log("Primeiros 1000 chars:", texto.substring(0, 1000));
+          } else {
+            console.error("Extração retornou vazio para:", file.name);
           }
         } else {
           contentParts.push({
@@ -104,7 +123,7 @@ Deno.serve(async (req) => {
 
     const tiposTexto = (tiposCobranças || []).join(", ");
 
-    const systemPrompt = `Você é um especialista em direito bancário do consumidor brasileiro. Analise os lançamentos fornecidos e identifique cobranças indevidas. Responda APENAS em JSON válido, sem markdown, sem texto fora do JSON.`;
+    const systemPrompt = `Você é um especialista em direito bancário do consumidor brasileiro. Analise os lançamentos fornecidos e identifique cobranças indevidas com precisão. Responda APENAS em JSON válido, sem markdown, sem texto fora do JSON.`;
 
     const userPrompt = `Analise as cobranças extraídas do extrato bancário do banco ${banco || "não informado"}, período ${dataInicial || "não informado"} a ${dataFinal || "não informado"}.
 
@@ -112,37 +131,32 @@ Cliente: ${nomeCliente || "não informado"}
 CPF: ${cpf || "não informado"}
 Contrato: ${numeroContrato || "não informado"}
 
-${textoExtraido}
+${textoExtraido || "Sem texto extraído — analise os arquivos anexados."}
 
 REGRAS SOBRE O QUE É INDEVIDO:
 - IOF = imposto legal, NUNCA inclua
 - ENCARGOS LIMITE DE CRED = juros cheque especial = legal, NUNCA inclua
-- TARIFA BANCARIA / CESTA CELULAR / CESTA CLASSIC = indevida sem contrato expresso, INCLUA
-- BRADESCO VIDA PREV / SEGURO VIDA = indevido sem contrato de seguro, INCLUA
-- TAC e TEC = vedadas desde 2008, INCLUA
-- Capitalização, clube de benefícios sem autorização = INCLUA
+- TARIFA BANCARIA / CESTA CELULAR / CESTA CLASSIC = indevida sem contrato expresso assinado, SEMPRE inclua
+- BRADESCO VIDA PREV / SEGURO VIDA / SEGURO PRESTAMISTA = indevido sem contrato de seguro, SEMPRE inclua
+- TAC e TEC = vedadas desde 2008 pela Resolução BACEN 3.518/2007, SEMPRE inclua
+- Capitalização, clube de benefícios sem autorização = SEMPRE inclua
 
-REGRA CRÍTICA — AGRUPAMENTO POR VALOR:
-- Se a mesma cobrança teve valores DIFERENTES em períodos distintos, crie um item SEPARADO para cada valor
-- Exemplo correto para CESTA CELULAR que variou:
-  Item 1: valor_unitario 32.00, quantidade_ocorrencias 5, valor_total 160.00 (jan a mai)
-  Item 2: valor_unitario 24.00, quantidade_ocorrencias 6, valor_total 144.00 (jun a nov)
-  Item 3: valor_unitario 26.90, quantidade_ocorrencias 1, valor_total 26.90 (dez)
-- Exemplo correto para SEGURO que variou:
-  Item 1: valor_unitario 13.90, quantidade_ocorrencias 1, valor_total 13.90 (jan)
-  Item 2: valor_unitario 14.84, quantidade_ocorrencias 10, valor_total 148.40 (fev a dez)
+REGRA CRÍTICA — NUNCA AGRUPE VALORES DIFERENTES:
+- Se CESTA CELULAR foi cobrada R$ 32,00 em jan/fev/mar/abr/mai e depois mudou para R$ 24,00 em jun/jul/ago/set/out/nov = crie 2 itens separados
+- Se CESTA mudou de valor novamente em dez para R$ 26,90 = crie mais 1 item separado
+- Se SEGURO foi cobrado R$ 13,90 em jan e depois R$ 14,84 nos demais meses = crie 2 itens separados
 - NUNCA some valores diferentes no mesmo item
 
-REGRA CRÍTICA — CONTAGEM COMPLETA:
-- Conte TODAS as ocorrências de cada valor no período inteiro
-- Verifique mês a mês do início ao fim do extrato
-- quantidade_ocorrencias deve ser o número exato de vezes que aquele valor apareceu
+REGRA CRÍTICA — CONTAGEM COMPLETA MÊS A MÊS:
+- Conte TODAS as ocorrências de cada valor, verificando os 12 meses
+- Janeiro, Fevereiro, Março, Abril, Maio, Junho, Julho, Agosto, Setembro, Outubro, Novembro, Dezembro
+- quantidade_ocorrencias = número exato de vezes que aquele valor apareceu
 - valor_total = valor_unitario × quantidade_ocorrencias
-- valor_total_indevido no resumo = soma de TODOS os valor_total
+- valor_total_indevido = soma de TODOS os valor_total
 - estimativa_recuperacao = igual ao valor_total_indevido
-- NUNCA deixe valores monetários como 0 se a cobrança foi identificada
+- NUNCA deixe valores como 0 se a cobrança foi identificada
 
-Responda EXATAMENTE neste JSON com valores reais:
+Responda EXATAMENTE neste JSON:
 {
   "resumo": {
     "total_lancamentos": 0,
@@ -153,7 +167,7 @@ Responda EXATAMENTE neste JSON com valores reais:
   },
   "cobrancas_indevidas": [
     {
-      "data": "data da primeira ocorrência deste valor específico",
+      "data": "data da primeira ocorrência deste valor",
       "descricao": "descrição exata como aparece no extrato",
       "valor_unitario": 0.00,
       "quantidade_ocorrencias": 0,
