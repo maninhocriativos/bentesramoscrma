@@ -1,22 +1,24 @@
 import jsPDF from "jspdf";
 import type { AnaliseConfig, AnaliseResultado } from "@/types/extratos";
 
-// ── Paleta de cores ──────────────────────────────────────────────
+// ── Paleta Bentes Ramos ─────────────────────────────────────────
 const COR = {
-  azulEscuro: [15, 40, 80] as [number, number, number],
-  azulMedio: [30, 80, 160] as [number, number, number],
-  azulClaro: [220, 232, 250] as [number, number, number],
-  vermelho: [180, 30, 30] as [number, number, number],
+  marrom: [114, 76, 50] as [number, number, number], // #724c32
+  marromClaro: [160, 110, 75] as [number, number, number], // versão mais clara
+  marromEscuro: [60, 35, 15] as [number, number, number], // versão escura
+  bege: [245, 244, 240] as [number, number, number], // #f5f4f0
+  begeEscuro: [225, 220, 210] as [number, number, number], // bege mais escuro
+  dourado: [180, 140, 60] as [number, number, number], // dourado complementar
+  douradoClaro: [245, 235, 200] as [number, number, number], // dourado claro
+  vermelho: [160, 30, 30] as [number, number, number],
   vermelhoClaro: [250, 220, 220] as [number, number, number],
-  verde: [20, 120, 60] as [number, number, number],
+  verde: [30, 110, 60] as [number, number, number],
   verdeClaro: [210, 240, 220] as [number, number, number],
-  amarelo: [200, 150, 20] as [number, number, number],
-  amareloClaro: [255, 245, 210] as [number, number, number],
   cinzaEscuro: [60, 60, 60] as [number, number, number],
-  cinzaMedio: [120, 120, 120] as [number, number, number],
-  cinzaClaro: [240, 240, 240] as [number, number, number],
+  cinzaMedio: [130, 120, 110] as [number, number, number],
+  cinzaClaro: [235, 230, 225] as [number, number, number],
   branco: [255, 255, 255] as [number, number, number],
-  preto: [20, 20, 20] as [number, number, number],
+  preto: [15, 10, 5] as [number, number, number],
 };
 
 export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig) {
@@ -25,21 +27,51 @@ export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig
   const now = new Date();
   const laudoNum = `LAU-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
 
-  const PW = 210; // page width mm
-  const ML = 15; // margin left
-  const MR = 15; // margin right
-  const CW = PW - ML - MR; // content width
+  const PW = 210;
+  const ML = 15;
+  const MR = 15;
+  const CW = PW - ML - MR;
   let y = 0;
 
-  // ── Helpers ─────────────────────────────────────────────────────
-  const rgb = (c: [number, number, number]) => ({ r: c[0], g: c[1], b: c[2] });
-
+  // ── Helpers ────────────────────────────────────────────────────
   const setFill = (c: [number, number, number]) => doc.setFillColor(c[0], c[1], c[2]);
   const setDraw = (c: [number, number, number]) => doc.setDrawColor(c[0], c[1], c[2]);
   const setTxt = (c: [number, number, number]) => doc.setTextColor(c[0], c[1], c[2]);
   const setFont = (size: number, style: "normal" | "bold" = "normal") => {
     doc.setFontSize(size);
     doc.setFont("helvetica", style);
+  };
+
+  const fmt = (v: number) => `R$ ${(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+
+  const drawPageHeader = () => {
+    // Faixa superior marrom escuro
+    setFill(COR.marromEscuro);
+    doc.rect(0, 0, PW, 13, "F");
+
+    // Linha dourada decorativa
+    setFill(COR.dourado);
+    doc.rect(0, 13, PW, 1, "F");
+
+    setFont(8, "bold");
+    setTxt(COR.dourado);
+    doc.text("BENTES RAMOS  —  ADVOCACIA E CONSULTORIA JURÍDICA", ML, 8.5);
+    setFont(7);
+    setTxt(COR.cinzaClaro);
+    doc.text(`Laudo nº ${laudoNum}`, PW - MR, 8.5, { align: "right" });
+    y = 20;
+  };
+
+  const drawPageFooter = () => {
+    const pageNum = (doc as any).internal.getCurrentPageInfo().pageNumber;
+    setFill(COR.marromEscuro);
+    doc.rect(0, 284, PW, 13, "F");
+    setFill(COR.dourado);
+    doc.rect(0, 283.5, PW, 0.8, "F");
+    setFont(7);
+    setTxt(COR.cinzaClaro);
+    doc.text("Documento de uso exclusivo — Sistema CRM Bentes Ramos", ML, 291);
+    doc.text(`Página ${pageNum}`, PW - MR, 291, { align: "right" });
   };
 
   const addPage = () => {
@@ -50,68 +82,49 @@ export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig
   };
 
   const checkPage = (needed: number) => {
-    if (y + needed > 270) addPage();
+    if (y + needed > 272) addPage();
   };
 
-  const fmt = (v: number) => `R$ ${(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
-
-  // ── Cabeçalho de página interno ─────────────────────────────────
-  const drawPageHeader = () => {
-    setFill(COR.azulEscuro);
-    doc.rect(0, 0, PW, 12, "F");
-    setFont(8, "bold");
-    setTxt(COR.branco);
-    doc.text("BENTES & RAMOS ADVOGADOS", ML, 7.5);
-    doc.text(`Laudo nº ${laudoNum}`, PW - MR, 7.5, { align: "right" });
-    y = 18;
-  };
-
-  // ── Rodapé de página ────────────────────────────────────────────
-  const drawPageFooter = () => {
-    const pageNum = (doc as any).internal.getCurrentPageInfo().pageNumber;
-    setFill(COR.cinzaClaro);
-    doc.rect(0, 285, PW, 12, "F");
-    setFont(7);
-    setTxt(COR.cinzaMedio);
-    doc.text("Documento gerado pelo Sistema CRM Bentes & Ramos — Uso restrito", ML, 291);
-    doc.text(`Página ${pageNum}`, PW - MR, 291, { align: "right" });
-  };
-
-  // ── Seção com título ────────────────────────────────────────────
   const drawSectionTitle = (titulo: string, num: string) => {
     checkPage(16);
-    setFill(COR.azulMedio);
+    // Fundo marrom
+    setFill(COR.marrom);
     doc.rect(ML, y, CW, 9, "F");
-    setFont(10, "bold");
-    setTxt(COR.branco);
-    doc.text(`${num}  ${titulo.toUpperCase()}`, ML + 4, y + 6.2);
+    // Linha dourada esquerda
+    setFill(COR.dourado);
+    doc.rect(ML, y, 2, 9, "F");
+    setFont(9, "bold");
+    setTxt(COR.bege);
+    doc.text(`${num}  ${titulo.toUpperCase()}`, ML + 6, y + 6);
     y += 13;
   };
 
-  // ── Card colorido ───────────────────────────────────────────────
   const drawCard = (
     x: number,
     yPos: number,
     w: number,
     h: number,
-    bgColor: [number, number, number],
+    bg: [number, number, number],
     label: string,
     value: string,
     labelColor: [number, number, number],
     valueColor: [number, number, number],
   ) => {
-    setFill(bgColor);
-    setDraw(COR.cinzaClaro);
+    setFill(bg);
+    setDraw(COR.begeEscuro);
+    doc.setLineWidth(0.3);
     doc.roundedRect(x, yPos, w, h, 2, 2, "FD");
-    setFont(7);
+    // Linha dourada no topo do card
+    setFill(COR.marrom);
+    doc.rect(x, yPos, w, 1.5, "F");
+    setFont(6.5);
     setTxt(labelColor);
-    doc.text(label, x + w / 2, yPos + 5.5, { align: "center" });
+    doc.text(label, x + w / 2, yPos + 7, { align: "center" });
     setFont(10, "bold");
     setTxt(valueColor);
-    doc.text(value, x + w / 2, yPos + 11.5, { align: "center" });
+    doc.text(value, x + w / 2, yPos + 13.5, { align: "center" });
   };
 
-  // ── Linha de tabela ─────────────────────────────────────────────
   const drawTableRow = (
     cols: string[],
     widths: number[],
@@ -126,51 +139,66 @@ export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig
     setTxt(txtColor);
     let x = ML + 2;
     cols.forEach((col, i) => {
-      const maxW = widths[i] - 4;
-      const lines = doc.splitTextToSize(col, maxW);
+      const lines = doc.splitTextToSize(col, widths[i] - 3);
       doc.text(lines[0], x, rowY + 4.8);
       x += widths[i];
     });
   };
 
-  // ════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════
   // CAPA
-  // ════════════════════════════════════════════════════════════════
-  // Fundo azul escuro superior
-  setFill(COR.azulEscuro);
-  doc.rect(0, 0, PW, 80, "F");
+  // ══════════════════════════════════════════════════════════════
 
-  // Logo / nome do escritório
+  // Fundo bege
+  setFill(COR.bege);
+  doc.rect(0, 0, PW, 297, "F");
+
+  // Cabeçalho escuro
+  setFill(COR.marromEscuro);
+  doc.rect(0, 0, PW, 75, "F");
+
+  // Linha dourada separadora
+  setFill(COR.dourado);
+  doc.rect(0, 75, PW, 1.5, "F");
+
+  // Nome do escritório
   setFont(9, "bold");
-  setTxt(COR.azulClaro);
-  doc.text("BENTES & RAMOS ADVOGADOS", PW / 2, 22, { align: "center" });
-
+  setTxt(COR.dourado);
+  doc.text("BENTES RAMOS", PW / 2, 28, { align: "center" });
   setFont(7);
-  setTxt(COR.cinzaClaro);
-  doc.text("Direito do Consumidor — Manaus/AM", PW / 2, 28, { align: "center" });
+  setTxt(COR.begeEscuro);
+  doc.text("ADVOCACIA E CONSULTORIA JURÍDICA", PW / 2, 35, { align: "center" });
 
-  // Linha decorativa
-  setFill(COR.azulMedio);
-  doc.rect(ML, 33, CW, 1.5, "F");
+  // Linha decorativa dourada
+  setFill(COR.dourado);
+  doc.rect(ML + 20, 40, CW - 40, 0.6, "F");
 
-  // Título do laudo
-  setFont(22, "bold");
-  setTxt(COR.branco);
-  doc.text("LAUDO DE ANÁLISE", PW / 2, 50, { align: "center" });
-  setFont(14, "bold");
-  setTxt(COR.azulClaro);
-  doc.text("DE COBRANÇAS BANCÁRIAS INDEVIDAS", PW / 2, 59, { align: "center" });
+  // Título principal
+  setFont(20, "bold");
+  setTxt(COR.bege);
+  doc.text("LAUDO DE ANÁLISE", PW / 2, 52, { align: "center" });
+  setFont(11, "bold");
+  setTxt(COR.marromClaro);
+  doc.text("COBRANÇAS BANCÁRIAS INDEVIDAS", PW / 2, 61, { align: "center" });
 
-  // Caixa de identificação na capa
+  // Linha decorativa dourada inferior
+  setFill(COR.dourado);
+  doc.rect(ML + 20, 66, CW - 40, 0.6, "F");
+
+  // Caixa de dados do cliente
   setFill(COR.branco);
-  doc.roundedRect(ML, 88, CW, 55, 3, 3, "F");
+  setDraw(COR.begeEscuro);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(ML, 85, CW, 62, 2, 2, "FD");
 
-  setFont(9, "bold");
-  setTxt(COR.azulEscuro);
-  doc.text("DADOS DO CLIENTE", ML + 8, 97);
+  // Barra marrom topo da caixa
+  setFill(COR.marrom);
+  doc.roundedRect(ML, 85, CW, 8, 2, 2, "F");
+  doc.rect(ML, 89, CW, 4, "F"); // fecha o arredondamento inferior
+  setFont(8, "bold");
+  setTxt(COR.bege);
+  doc.text("DADOS DO CLIENTE", ML + 4, 90.5);
 
-  setFont(8.5);
-  setTxt(COR.cinzaEscuro);
   const dadosCapa = [
     ["Cliente", config.nomeCliente || "Não informado"],
     ["CPF", config.cpf || "Não informado"],
@@ -178,38 +206,43 @@ export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig
     ["Contrato", config.numeroContrato || "Não informado"],
     ["Período", `${config.dataInicial || "N/D"} a ${config.dataFinal || "N/D"}`],
   ];
-  let yDados = 104;
-  dadosCapa.forEach(([label, valor]) => {
+
+  let yDados = 100;
+  dadosCapa.forEach(([label, valor], i) => {
+    if (i % 2 === 0) {
+      setFill(COR.bege);
+      doc.rect(ML + 0.5, yDados - 3, CW - 1, 8, "F");
+    }
     setFont(7.5, "bold");
-    setTxt(COR.cinzaMedio);
-    doc.text(`${label}:`, ML + 8, yDados);
-    setFont(8.5);
+    setTxt(COR.marrom);
+    doc.text(`${label}:`, ML + 4, yDados + 1.5);
+    setFont(8);
     setTxt(COR.cinzaEscuro);
-    doc.text(valor, ML + 35, yDados);
-    yDados += 7.5;
+    doc.text(valor, ML + 38, yDados + 1.5);
+    yDados += 9;
   });
 
-  // Cards de resumo na capa
-  const cardW = (CW - 6) / 3;
-  const cardY = 152;
+  // Cards de resumo
+  const cw3 = (CW - 6) / 3;
+  const cardY = 157;
 
   drawCard(
     ML,
     cardY,
-    cardW,
-    22,
-    COR.azulClaro,
+    cw3,
+    24,
+    COR.bege,
     "LANÇAMENTOS ANALISADOS",
     String(resumo.total_lancamentos || 0),
-    COR.azulMedio,
-    COR.azulEscuro,
+    COR.cinzaMedio,
+    COR.marromEscuro,
   );
 
   drawCard(
-    ML + cardW + 3,
+    ML + cw3 + 3,
     cardY,
-    cardW,
-    22,
+    cw3,
+    24,
     COR.vermelhoClaro,
     "IRREGULARIDADES",
     String(resumo.irregularidades_encontradas || 0),
@@ -218,10 +251,10 @@ export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig
   );
 
   drawCard(
-    ML + (cardW + 3) * 2,
+    ML + (cw3 + 3) * 2,
     cardY,
-    cardW,
-    22,
+    cw3,
+    24,
     COR.verdeClaro,
     "VALOR A RECUPERAR",
     fmt(resumo.valor_total_indevido),
@@ -229,87 +262,93 @@ export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig
     COR.verde,
   );
 
-  // Prioridade na capa
-  const prioridade = recomendacao?.prioridade?.toUpperCase() || "N/D";
-  const priorCor: [number, number, number] =
-    prioridade === "ALTA" ? COR.vermelho : prioridade === "MEDIA" ? COR.amarelo : COR.verde;
-  const priorBg: [number, number, number] =
-    prioridade === "ALTA" ? COR.vermelhoClaro : prioridade === "MEDIA" ? COR.amareloClaro : COR.verdeClaro;
+  // Badge de prioridade
+  const prio = (recomendacao?.prioridade || "media").toLowerCase();
+  const prioCor: [number, number, number] = prio === "alta" ? COR.vermelho : prio === "media" ? COR.dourado : COR.verde;
+  const prioBg: [number, number, number] =
+    prio === "alta" ? COR.vermelhoClaro : prio === "media" ? COR.douradoClaro : COR.verdeClaro;
 
-  setFill(priorBg);
-  doc.roundedRect(ML, 182, CW, 12, 2, 2, "F");
+  setFill(prioBg);
+  setDraw(prioCor);
+  doc.setLineWidth(0.5);
+  doc.roundedRect(ML, 190, CW, 11, 2, 2, "FD");
   setFont(9, "bold");
-  setTxt(priorCor);
-  doc.text(`PRIORIDADE: ${prioridade}`, PW / 2, 189.5, { align: "center" });
+  setTxt(prioCor);
+  doc.text(`PRIORIDADE: ${prio.toUpperCase()}`, PW / 2, 197, { align: "center" });
 
-  // Data e número do laudo na capa
+  // Data e laudo
   setFont(8);
   setTxt(COR.cinzaMedio);
-  doc.text(`Data de emissão: ${now.toLocaleDateString("pt-BR")}`, PW / 2, 205, { align: "center" });
-  doc.text(`Laudo nº ${laudoNum}`, PW / 2, 212, { align: "center" });
+  doc.text(`Emitido em ${now.toLocaleDateString("pt-BR")}`, PW / 2, 212, { align: "center" });
+  setFont(7.5, "bold");
+  setTxt(COR.marrom);
+  doc.text(`Laudo nº ${laudoNum}`, PW / 2, 219, { align: "center" });
 
-  // Linha decorativa inferior capa
-  setFill(COR.azulEscuro);
+  // Rodapé da capa
+  setFill(COR.marromEscuro);
   doc.rect(0, 280, PW, 17, "F");
+  setFill(COR.dourado);
+  doc.rect(0, 279.5, PW, 0.8, "F");
   setFont(7);
-  setTxt(COR.azulClaro);
-  doc.text("Documento de uso exclusivo — Sistema CRM Bentes & Ramos", PW / 2, 290, { align: "center" });
+  setTxt(COR.cinzaClaro);
+  doc.text("Documento de uso exclusivo — Sistema CRM Bentes Ramos", PW / 2, 290, { align: "center" });
 
-  // ════════════════════════════════════════════════════════════════
-  // PÁGINA 1 — IDENTIFICAÇÃO
-  // ════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════
+  // PÁG 1 — IDENTIFICAÇÃO
+  // ══════════════════════════════════════════════════════════════
   addPage();
   drawSectionTitle("Identificação do Cliente e do Caso", "1.");
 
-  // Tabela de dados
   const dadosId = [
     ["Nome Completo", config.nomeCliente || "Não informado"],
     ["CPF", config.cpf || "Não informado"],
-    ["Número do Contrato", config.numeroContrato || "Não informado"],
+    ["Nº do Contrato", config.numeroContrato || "Não informado"],
     ["Banco Analisado", config.banco || "Não informado"],
-    ["Período Analisado", `${config.dataInicial || "N/D"} a ${config.dataFinal || "N/D"}`],
-    ["Extratos Enviados", `${config.arquivos?.length || 0} arquivo(s)`],
+    ["Período", `${config.dataInicial || "N/D"} a ${config.dataFinal || "N/D"}`],
+    ["Arquivos enviados", `${config.arquivos?.length || 0} arquivo(s)`],
     ["Data da Análise", now.toLocaleDateString("pt-BR")],
     ["Número do Laudo", laudoNum],
   ];
 
   dadosId.forEach((row, i) => {
-    const bg: [number, number, number] = i % 2 === 0 ? COR.cinzaClaro : COR.branco;
+    const bg: [number, number, number] = i % 2 === 0 ? COR.bege : COR.branco;
     setFill(bg);
     doc.rect(ML, y, CW, 8, "F");
+    // Borda esquerda marrom
+    setFill(COR.marrom);
+    doc.rect(ML, y, 1.5, 8, "F");
     setFont(8, "bold");
-    setTxt(COR.azulEscuro);
-    doc.text(row[0], ML + 3, y + 5.3);
+    setTxt(COR.marrom);
+    doc.text(row[0], ML + 5, y + 5.3);
     setFont(8);
     setTxt(COR.cinzaEscuro);
-    doc.text(row[1], ML + 65, y + 5.3);
+    doc.text(row[1], ML + 68, y + 5.3);
     y += 8;
   });
 
-  // ════════════════════════════════════════════════════════════════
-  // PÁGINA 2 — RESUMO EXECUTIVO
-  // ════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════
+  // PÁG 2 — RESUMO EXECUTIVO
+  // ══════════════════════════════════════════════════════════════
   addPage();
   drawSectionTitle("Resumo Executivo", "2.");
 
-  // Cards de resumo
   const cw2 = (CW - 6) / 3;
   drawCard(
     ML,
     y,
     cw2,
-    22,
-    COR.azulClaro,
+    24,
+    COR.bege,
     "LANÇAMENTOS ANALISADOS",
     String(resumo.total_lancamentos || 0),
-    COR.azulMedio,
-    COR.azulEscuro,
+    COR.cinzaMedio,
+    COR.marromEscuro,
   );
   drawCard(
     ML + cw2 + 3,
     y,
     cw2,
-    22,
+    24,
     COR.vermelhoClaro,
     "IRREGULARIDADES",
     String(resumo.irregularidades_encontradas || 0),
@@ -320,40 +359,39 @@ export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig
     ML + (cw2 + 3) * 2,
     y,
     cw2,
-    22,
+    24,
     COR.verdeClaro,
     "VALOR A RECUPERAR",
     fmt(resumo.valor_total_indevido),
     COR.verde,
     COR.verde,
   );
-  y += 28;
+  y += 30;
 
   // Período
-  setFill(COR.azulClaro);
-  doc.roundedRect(ML, y, CW, 10, 2, 2, "F");
+  setFill(COR.bege);
+  setDraw(COR.begeEscuro);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(ML, y, CW, 10, 2, 2, "FD");
+  setFill(COR.marrom);
+  doc.rect(ML, y, 2, 10, "F");
   setFont(8, "bold");
-  setTxt(COR.azulEscuro);
-  doc.text(
-    `Período analisado: ${resumo.periodo_analisado || `${config.dataInicial} a ${config.dataFinal}`}`,
-    ML + 4,
-    y + 6.5,
-  );
+  setTxt(COR.marrom);
+  doc.text("Período analisado:", ML + 6, y + 6.5);
+  setFont(8);
+  setTxt(COR.cinzaEscuro);
+  doc.text(resumo.periodo_analisado || `${config.dataInicial} a ${config.dataFinal}`, ML + 48, y + 6.5);
   y += 16;
 
   // Por categoria
   if (por_categoria?.length) {
     drawSectionTitle("Cobranças por Categoria", "2.1");
-
-    // Header da tabela
-    const colsCat = ["Categoria", "Ocorrências", "Total"];
-    const wCat = [100, 30, 50];
-    drawTableRow(colsCat, wCat, y, COR.azulEscuro, COR.branco, true);
+    const wCat = [98, 30, 52];
+    drawTableRow(["Categoria", "Ocorrências", "Total Cobrado"], wCat, y, COR.marrom, COR.bege, true);
     y += 7;
-
     por_categoria.forEach((cat, i) => {
       checkPage(8);
-      const bg: [number, number, number] = i % 2 === 0 ? COR.cinzaClaro : COR.branco;
+      const bg: [number, number, number] = i % 2 === 0 ? COR.bege : COR.branco;
       drawTableRow(
         [cat.categoria || "N/D", String(cat.ocorrencias || 0), fmt(cat.total)],
         wCat,
@@ -363,8 +401,6 @@ export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig
       );
       y += 7;
     });
-
-    // Total
     checkPage(8);
     drawTableRow(
       [
@@ -374,31 +410,28 @@ export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig
       ],
       wCat,
       y,
-      COR.azulEscuro,
-      COR.branco,
+      COR.marromEscuro,
+      COR.bege,
       true,
     );
     y += 12;
   }
 
-  // ════════════════════════════════════════════════════════════════
-  // PÁGINA(S) — DETALHAMENTO
-  // ════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════
+  // PÁG(S) — DETALHAMENTO
+  // ══════════════════════════════════════════════════════════════
   addPage();
   drawSectionTitle("Detalhamento das Cobranças Indevidas", "3.");
 
   if (cobrancas_indevidas?.length) {
-    // Header
-    const colsDet = ["#", "Data", "Descrição", "Qtd", "Unit.", "Total"];
-    const wDet = [10, 22, 68, 14, 28, 28];
-    drawTableRow(colsDet, wDet, y, COR.azulEscuro, COR.branco, true);
+    const wDet = [10, 22, 66, 14, 28, 30];
+    drawTableRow(["#", "Data", "Descrição", "Qtd", "Unit.", "Total"], wDet, y, COR.marrom, COR.bege, true);
     y += 7;
 
     cobrancas_indevidas.forEach((c, i) => {
-      checkPage(28);
+      checkPage(30);
 
-      // Linha principal
-      const bg: [number, number, number] = i % 2 === 0 ? COR.cinzaClaro : COR.branco;
+      const bg: [number, number, number] = i % 2 === 0 ? COR.bege : COR.branco;
       drawTableRow(
         [
           String(i + 1),
@@ -415,107 +448,96 @@ export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig
       );
       y += 7;
 
-      // Badge de status
-      const statusCor: [number, number, number] =
-        c.status === "confirmado" ? COR.verde : c.status === "indicio" ? COR.amarelo : COR.cinzaMedio;
-      const statusBg: [number, number, number] =
-        c.status === "confirmado" ? COR.verdeClaro : c.status === "indicio" ? COR.amareloClaro : COR.cinzaClaro;
-
-      // Detalhes expandidos
+      // Detalhes
       checkPage(18);
       setFill(COR.branco);
-      doc.rect(ML, y, CW, 18, "F");
+      doc.rect(ML, y, CW, 17, "F");
+      setFill(COR.begeEscuro);
+      doc.rect(ML, y, CW, 17, "F");
 
-      setFont(7, "bold");
-      setTxt(statusCor);
-      setFill(statusBg);
-      doc.roundedRect(ML + 2, y + 1, 28, 5, 1, 1, "FD");
-      doc.text(`  ${(c.status || "").toUpperCase()}`, ML + 3, y + 4.5);
+      // Badge status
+      const stCor: [number, number, number] =
+        c.status === "confirmado" ? COR.verde : c.status === "indicio" ? COR.dourado : COR.cinzaMedio;
+      const stBg: [number, number, number] =
+        c.status === "confirmado" ? COR.verdeClaro : c.status === "indicio" ? COR.douradoClaro : COR.cinzaClaro;
+      setFill(stBg);
+      setDraw(stCor);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(ML + 2, y + 1.5, 30, 5, 1, 1, "FD");
+      setFont(6.5, "bold");
+      setTxt(stCor);
+      doc.text((c.status || "").toUpperCase(), ML + 17, y + 5, { align: "center" });
 
       setFont(7);
       setTxt(COR.cinzaMedio);
-      doc.text(`Categoria: ${c.categoria || "N/D"}`, ML + 35, y + 4.5);
+      doc.text(`Categoria: ${c.categoria || "N/D"}`, ML + 36, y + 5);
 
       setFont(7);
-      setTxt(COR.azulMedio);
+      setTxt(COR.marrom);
       const baseLegal = doc.splitTextToSize(`Base Legal: ${c.base_legal || "N/D"}`, CW - 4);
-      doc.text(baseLegal[0], ML + 2, y + 10);
+      doc.text(baseLegal[0], ML + 2, y + 10.5);
 
       setTxt(COR.cinzaEscuro);
       const justLines = doc.splitTextToSize(`Justificativa: ${c.justificativa || "N/D"}`, CW - 4);
       doc.text(justLines[0], ML + 2, y + 15.5);
 
-      y += 20;
+      y += 19;
 
-      // Linha separadora
-      setDraw(COR.cinzaClaro);
-      doc.setLineWidth(0.3);
+      // Separador
+      setDraw(COR.begeEscuro);
+      doc.setLineWidth(0.2);
       doc.line(ML, y, ML + CW, y);
       y += 3;
     });
 
-    // Subtotal
+    // Total geral
     checkPage(12);
     y += 2;
     setFill(COR.verdeClaro);
-    doc.rect(ML, y, CW, 10, "F");
+    setDraw(COR.verde);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(ML, y, CW, 11, 2, 2, "FD");
+    setFill(COR.verde);
+    doc.rect(ML, y, 2, 11, "F");
     setFont(9, "bold");
     setTxt(COR.verde);
-    doc.text("TOTAL DE COBRANÇAS INDEVIDAS IDENTIFICADAS:", ML + 4, y + 6.5);
-    doc.text(fmt(resumo.valor_total_indevido), ML + CW - 4, y + 6.5, { align: "right" });
-    y += 14;
+    doc.text("TOTAL DE COBRANÇAS INDEVIDAS IDENTIFICADAS:", ML + 6, y + 7);
+    doc.text(fmt(resumo.valor_total_indevido), ML + CW - 3, y + 7, { align: "right" });
+    y += 15;
   }
 
-  // ════════════════════════════════════════════════════════════════
-  // PÁGINA FINAL — RECOMENDAÇÃO JURÍDICA
-  // ════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════
+  // PÁG FINAL — RECOMENDAÇÃO JURÍDICA
+  // ══════════════════════════════════════════════════════════════
   addPage();
   drawSectionTitle("Recomendação Jurídica", "4.");
 
   if (recomendacao) {
-    // Cards de recomendação
     const cw4 = (CW - 3) / 2;
 
     drawCard(
       ML,
       y,
       cw4,
-      22,
-      COR.azulClaro,
+      24,
+      COR.bege,
       "TIPO DE AÇÃO RECOMENDADA",
       recomendacao.tipo_acao || "N/D",
-      COR.azulMedio,
-      COR.azulEscuro,
+      COR.cinzaMedio,
+      COR.marromEscuro,
     );
 
-    const priorCor2: [number, number, number] =
-      recomendacao.prioridade === "alta" ? COR.vermelho : recomendacao.prioridade === "media" ? COR.amarelo : COR.verde;
-    const priorBg2: [number, number, number] =
-      recomendacao.prioridade === "alta"
-        ? COR.vermelhoClaro
-        : recomendacao.prioridade === "media"
-          ? COR.amareloClaro
-          : COR.verdeClaro;
+    const p2Cor: [number, number, number] = prio === "alta" ? COR.vermelho : prio === "media" ? COR.dourado : COR.verde;
+    const p2Bg: [number, number, number] =
+      prio === "alta" ? COR.vermelhoClaro : prio === "media" ? COR.douradoClaro : COR.verdeClaro;
+    drawCard(ML + cw4 + 3, y, cw4, 24, p2Bg, "PRIORIDADE", prio.toUpperCase(), p2Cor, p2Cor);
+    y += 30;
 
-    drawCard(
-      ML + cw4 + 3,
-      y,
-      cw4,
-      22,
-      priorBg2,
-      "PRIORIDADE",
-      (recomendacao.prioridade || "N/D").toUpperCase(),
-      priorCor2,
-      priorCor2,
-    );
-    y += 28;
-
-    // Estimativa e prazo
     drawCard(
       ML,
       y,
       cw4,
-      22,
+      24,
       COR.verdeClaro,
       "ESTIMATIVA DE RECUPERAÇÃO",
       fmt(recomendacao.estimativa_recuperacao),
@@ -526,22 +548,24 @@ export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig
       ML + cw4 + 3,
       y,
       cw4,
-      22,
-      COR.amareloClaro,
+      24,
+      COR.douradoClaro,
       "PRAZO PRESCRICIONAL",
       recomendacao.prazo_prescricional || "N/D",
-      COR.amarelo,
+      COR.dourado,
       COR.cinzaEscuro,
     );
     y += 30;
 
     // Fundamentação
     checkPage(40);
-    setFill(COR.azulClaro);
-    doc.roundedRect(ML, y, CW, 8, 2, 2, "F");
+    setFill(COR.marrom);
+    doc.rect(ML, y, CW, 8, "F");
+    setFill(COR.dourado);
+    doc.rect(ML, y, 2, 8, "F");
     setFont(8, "bold");
-    setTxt(COR.azulEscuro);
-    doc.text("FUNDAMENTAÇÃO LEGAL", ML + 4, y + 5.5);
+    setTxt(COR.bege);
+    doc.text("FUNDAMENTAÇÃO LEGAL", ML + 6, y + 5.5);
     y += 10;
 
     setFont(8);
@@ -555,42 +579,45 @@ export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig
     y += 8;
 
     // Aviso legal
-    checkPage(25);
-    setFill(COR.amareloClaro);
-    setDraw(COR.amarelo);
-    doc.roundedRect(ML, y, CW, 22, 2, 2, "FD");
+    checkPage(28);
+    setFill(COR.douradoClaro);
+    setDraw(COR.dourado);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(ML, y, CW, 25, 2, 2, "FD");
+    setFill(COR.dourado);
+    doc.rect(ML, y, 2, 25, "F");
     setFont(7.5, "bold");
-    setTxt(COR.amarelo);
-    doc.text("⚠  AVISO LEGAL", ML + 4, y + 6);
+    setTxt(COR.marrom);
+    doc.text("AVISO LEGAL", ML + 6, y + 6);
     setFont(7.5);
     setTxt(COR.cinzaEscuro);
     const avisoLines = doc.splitTextToSize(
-      "Este laudo é um documento técnico de análise preliminar gerado pelo Sistema CRM Bentes & Ramos. " +
+      "Este laudo é um documento técnico de análise preliminar gerado pelo Sistema CRM Bentes Ramos. " +
         "As cobranças identificadas carecem de análise jurídica aprofundada por advogado habilitado antes " +
         "de qualquer medida judicial ou extrajudicial. Os valores estimados são baseados nos documentos " +
         "fornecidos e podem ser revistos após análise completa do caso.",
-      CW - 8,
+      CW - 10,
     );
     avisoLines.forEach((l: string, i: number) => {
-      doc.text(l, ML + 4, y + 11 + i * 4.5);
+      doc.text(l, ML + 6, y + 12 + i * 4.8);
     });
-    y += 28;
+    y += 30;
   }
 
-  // ── Assinatura ──────────────────────────────────────────────────
-  checkPage(35);
+  // ── Assinatura final ───────────────────────────────────────────
+  checkPage(30);
   y += 5;
-  setDraw(COR.cinzaMedio);
-  doc.setLineWidth(0.4);
-  doc.line(ML + 20, y, ML + CW - 20, y);
-  y += 5;
-  setFont(8, "bold");
-  setTxt(COR.azulEscuro);
-  doc.text("BENTES & RAMOS ADVOGADOS", PW / 2, y, { align: "center" });
+  setDraw(COR.marromClaro);
+  doc.setLineWidth(0.5);
+  doc.line(ML + 30, y, ML + CW - 30, y);
+  y += 6;
+  setFont(9, "bold");
+  setTxt(COR.marromEscuro);
+  doc.text("BENTES RAMOS ADVOCACIA E CONSULTORIA JURÍDICA", PW / 2, y, { align: "center" });
   y += 5;
   setFont(7);
   setTxt(COR.cinzaMedio);
-  doc.text("Direito do Consumidor — Manaus/AM", PW / 2, y, { align: "center" });
+  doc.text("Manaus — Amazonas", PW / 2, y, { align: "center" });
   y += 5;
   doc.text(`Emitido em ${now.toLocaleString("pt-BR")} — Laudo nº ${laudoNum}`, PW / 2, y, { align: "center" });
 
