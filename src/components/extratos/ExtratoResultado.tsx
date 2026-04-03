@@ -6,7 +6,7 @@ import { Download, UserPlus, RefreshCw, TrendingDown, AlertTriangle, Search, Cal
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import type { AnaliseConfig, AnaliseResultado } from '@/pages/ConferenciaExtratosPage';
+import type { AnaliseConfig, AnaliseResultado } from '@/types/extratos';
 import { gerarLaudoPdf } from '@/lib/extratoLaudoPdf';
 
 interface Props {

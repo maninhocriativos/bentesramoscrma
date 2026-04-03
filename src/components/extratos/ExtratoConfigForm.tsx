@@ -12,7 +12,7 @@ import { format, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { AnaliseConfig } from '@/pages/ConferenciaExtratosPage';
+import type { AnaliseConfig } from '@/types/extratos';
 
 const BANCOS = [
   'Bradesco', 'Itaú', 'Caixa Econômica Federal', 'Banco do Brasil',
