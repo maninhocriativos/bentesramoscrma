@@ -5,6 +5,7 @@ const corsHeaders = {
 };
 
 async function extrairTextoPdf(base64: string, apiKey: string): Promise<string> {
+  // Primeira passagem: extrai lançamentos relevantes diretamente
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -29,7 +30,19 @@ async function extrairTextoPdf(base64: string, apiKey: string): Promise<string> 
             },
             {
               type: "text",
-              text: "Extraia TODO o texto deste extrato bancário exatamente como aparece. Para cada lançamento transcreva: data, descrição completa, valor de débito, valor de crédito e saldo. Mantenha TODOS os lançamentos sem exceção, do primeiro ao último. Não resuma, não interprete, apenas transcreva linha por linha.",
+              text: `Analise TODAS as páginas deste extrato bancário e liste APENAS os lançamentos que se enquadram nestas categorias:
+
+1. TARIFA BANCARIA (qualquer tipo: CESTA CELULAR, CESTA CLASSIC, manutenção, etc)
+2. SEGURO (qualquer tipo: VIDA, PRESTAMISTA, BRADESCO VIDA PREV, etc)
+3. CAPITALIZAÇÃO
+4. CLUBE DE BENEFICIOS
+5. TAC ou TEC
+6. Qualquer serviço cobrado mensalmente com descrição repetida
+
+Para CADA lançamento encontrado informe:
+DATA | DESCRIÇÃO EXATA | VALOR DÉBITO
+
+Liste TODOS sem exceção, de janeiro a dezembro. Inclua até os últimos meses do extrato.`,
             },
           ],
         },
@@ -63,9 +76,6 @@ Deno.serve(async (req) => {
     }
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) {
-      console.error("ANTHROPIC_API_KEY não configurada");
-    }
 
     const contentParts: any[] = [];
     let textoExtraido = "";
@@ -73,13 +83,11 @@ Deno.serve(async (req) => {
     for (const file of arquivosBase64 || []) {
       if (file.mimeType === "application/pdf") {
         if (ANTHROPIC_API_KEY) {
-          console.log("Extraindo texto do PDF:", file.name);
+          console.log("Extraindo cobranças do PDF:", file.name);
           const texto = await extrairTextoPdf(file.base64, ANTHROPIC_API_KEY);
           if (texto) {
-            textoExtraido += `\n\n=== CONTEÚDO DO PDF: ${file.name} ===\n${texto}`;
-            console.log("Texto extraído com sucesso, tamanho:", texto.length, "chars");
-          } else {
-            console.error("Extração retornou vazio para:", file.name);
+            textoExtraido += `\n\n=== COBRANÇAS IDENTIFICADAS NO PDF: ${file.name} ===\n${texto}`;
+            console.log("Extração concluída, tamanho:", texto.length, "chars");
           }
         } else {
           contentParts.push({
@@ -97,55 +105,42 @@ Deno.serve(async (req) => {
 
     const tiposTexto = (tiposCobranças || []).join(", ");
 
-    const systemPrompt = `Você é um especialista em direito bancário do consumidor brasileiro com 20 anos de experiência. Analise extratos bancários e identifique cobranças indevidas com precisão cirúrgica. Responda APENAS em JSON válido, sem markdown, sem texto fora do JSON. NUNCA deixe valores monetários como 0 se a cobrança foi identificada no extrato.`;
+    const systemPrompt = `Você é um especialista em direito bancário do consumidor brasileiro. Analise os lançamentos fornecidos e identifique cobranças indevidas. Responda APENAS em JSON válido, sem markdown.`;
 
-    const userPrompt = `Analise os extratos bancários do banco ${banco || "não informado"} no período de ${dataInicial || "não informado"} a ${dataFinal || "não informado"}.
+    const userPrompt = `Analise as cobranças extraídas do extrato bancário do banco ${banco || "não informado"}, período ${dataInicial || "não informado"} a ${dataFinal || "não informado"}.
 
 Cliente: ${nomeCliente || "não informado"}
 CPF: ${cpf || "não informado"}
-Contrato: ${numeroContrato || "não informado"}
 
-${textoExtraido ? `CONTEÚDO COMPLETO DOS EXTRATOS:\n${textoExtraido}` : ""}
+${textoExtraido}
 
-TIPOS DE COBRANÇA PARA VERIFICAR: ${tiposTexto}
+REGRAS:
+- IOF = legal, não inclua
+- ENCARGOS LIMITE DE CRED = juros de cheque especial = legal, não inclua
+- TARIFA BANCARIA / CESTA = indevida, inclua TODAS as ocorrências
+- SEGURO VIDA / BRADESCO VIDA PREV = indevido sem contrato expresso, inclua TODAS
+- Para cada tipo de cobrança: some TODAS as ocorrências e calcule o total real
 
-REGRAS OBRIGATÓRIAS SOBRE VALORES:
-- NUNCA coloque valor_unitario, valor_total, total ou estimativa_recuperacao como 0 se a cobrança foi identificada
-- valor_unitario = valor de UMA única ocorrência (extraia do extrato)
-- quantidade_ocorrencias = total de vezes que aparece no período
-- valor_total = valor_unitario × quantidade_ocorrencias (calcule e preencha)
-- estimativa_recuperacao = soma de todos os valor_total das cobranças indevidas
+IMPORTANTE:
+- valor_unitario = valor de uma ocorrência (do extrato)
+- quantidade_ocorrencias = total de vezes no período inteiro
+- valor_total = valor_unitario × quantidade_ocorrencias
+- estimativa_recuperacao = soma de todos os valor_total
+- NUNCA deixe valores como 0 se a cobrança foi identificada
 
-REGRAS SOBRE O QUE É INDEVIDO:
-- IOF é imposto legal — NUNCA classifique como indevido
-- ENCARGOS LIMITE DE CRED (cheque especial) — legal, NÃO inclua
-- TARIFA BANCÁRIA / CESTA CELULAR / CESTA CLASSIC — indevida se cobrada mensalmente sem contrato expresso assinado
-- BRADESCO VIDA PREV / SEGURO VIDA — indevido se cobrado mensalmente sem contrato de seguro apresentado
-- TAC e TEC — vedadas desde 2008 pela Resolução BACEN 3.518/2007
-- Serviços não solicitados (capitalização, clube de benefícios) — indevidos
-
-PROCESSO DE ANÁLISE:
-1. Leia TODOS os lançamentos do extrato
-2. Identifique cada TARIFA BANCÁRIA e some os valores de todas as ocorrências no ano
-3. Identifique cada SEGURO cobrado e some os valores de todas as ocorrências no ano  
-4. Identifique outros serviços não solicitados
-5. Preencha valor_unitario com o valor real do extrato
-6. Preencha quantidade_ocorrencias com o número real de cobranças encontradas
-7. Calcule valor_total = valor_unitario × quantidade_ocorrencias
-
-Responda EXATAMENTE neste JSON com valores REAIS do extrato:
+Responda em JSON:
 {
   "resumo": {
     "total_lancamentos": 0,
     "irregularidades_encontradas": 0,
     "valor_total_indevido": 0,
-    "periodo_analisado": "",
-    "banco": ""
+    "periodo_analisado": "${dataInicial} a ${dataFinal}",
+    "banco": "${banco}"
   },
   "cobrancas_indevidas": [
     {
-      "data": "data da primeira ocorrência",
-      "descricao": "descrição exata como aparece no extrato",
+      "data": "primeira ocorrência",
+      "descricao": "descrição exata do extrato",
       "valor_unitario": 0.00,
       "quantidade_ocorrencias": 0,
       "valor_total": 0.00,
@@ -180,7 +175,7 @@ Responda EXATAMENTE neste JSON com valores REAIS do extrato:
       },
     ];
 
-    console.log("Chamando gateway. Texto extraído:", textoExtraido.length, "chars. ContentParts:", contentParts.length);
+    console.log("Chamando gateway. Texto extraído:", textoExtraido.length, "chars");
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -197,7 +192,7 @@ Responda EXATAMENTE neste JSON com valores REAIS do extrato:
 
     const responseText = await response.text();
     console.log("Status gateway:", response.status);
-    console.log("Resposta gateway (primeiros 800 chars):", responseText.substring(0, 800));
+    console.log("Resposta gateway:", responseText.substring(0, 800));
 
     if (!response.ok) {
       return new Response(
@@ -217,10 +212,10 @@ Responda EXATAMENTE neste JSON com valores REAIS do extrato:
     let parsed;
     try {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("Nenhum JSON encontrado na resposta");
+      if (!jsonMatch) throw new Error("Nenhum JSON encontrado");
       parsed = JSON.parse(jsonMatch[0]);
     } catch {
-      console.error("Falha ao parsear JSON. Conteúdo completo:", content);
+      console.error("Falha ao parsear JSON:", content.substring(0, 500));
       parsed = {
         resumo: {
           total_lancamentos: 0,
@@ -245,7 +240,7 @@ Responda EXATAMENTE neste JSON com valores REAIS do extrato:
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {
-    console.error("Erro geral analyze-extrato:", e.message);
+    console.error("Erro geral:", e.message);
     return new Response(JSON.stringify({ error: e.message || "Erro desconhecido" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
