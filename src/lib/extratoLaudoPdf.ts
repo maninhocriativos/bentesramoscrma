@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import type { AnaliseConfig, AnaliseResultado } from '@/pages/ConferenciaExtratosPage';
+import type { AnaliseConfig, AnaliseResultado } from '@/types/extratos';
 
 export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig) {
   const doc = new jsPDF();
