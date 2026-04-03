@@ -18,17 +18,22 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Monta conteúdo: imagens como image_url, PDFs como texto no prompt
-    const imageContents: any[] = [];
-    let pdfTexto = "";
+    const contentParts: any[] = [];
 
     for (const file of (arquivosBase64 || [])) {
       if (file.mimeType === "application/pdf") {
-        pdfTexto += `\n[Arquivo PDF: ${file.name}]\nOs dados base64 do PDF foram recebidos com ${file.base64.length} caracteres.\n`;
-      } else {
-        imageContents.push({
+        contentParts.push({
           type: "image_url",
-          image_url: { url: `data:${file.mimeType};base64,${file.base64}` },
+          image_url: {
+            url: `data:application/pdf;base64,${file.base64}`,
+          },
+        });
+      } else {
+        contentParts.push({
+          type: "image_url",
+          image_url: {
+            url: `data:${file.mimeType};base64,${file.base64}`,
+          },
         });
       }
     }
@@ -41,7 +46,7 @@ Deno.serve(async (req) => {
 Cliente: ${nomeCliente || "não informado"}
 CPF: ${cpf || "não informado"}
 Contrato: ${numeroContrato || "não informado"}
-${pdfTexto ? `\nINFORMAÇÕES DOS PDFs RECEBIDOS:\n${pdfTexto}` : ""}
+
 TIPOS DE COBRANÇA PARA VERIFICAR: ${tiposTexto}
 
 IMPORTANTE: Analise as imagens anexadas. Identifique todos os lançamentos visíveis. Mesmo que não encontre irregularidades claras, retorne o resumo com o total de lançamentos identificados.
@@ -79,7 +84,7 @@ Responda exatamente neste JSON:
         role: "user",
         content: [
           { type: "text", text: userPrompt },
-          ...imageContents,
+          ...contentParts,
         ],
       },
     ];
