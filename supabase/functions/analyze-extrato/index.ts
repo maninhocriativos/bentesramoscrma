@@ -18,17 +18,22 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Monta conteúdo: imagens como image_url, PDFs como texto no prompt
-    const imageContents: any[] = [];
-    let pdfTexto = "";
+    const contentParts: any[] = [];
 
     for (const file of (arquivosBase64 || [])) {
       if (file.mimeType === "application/pdf") {
-        pdfTexto += `\n[Arquivo PDF: ${file.name}]\nOs dados base64 do PDF foram recebidos com ${file.base64.length} caracteres.\n`;
-      } else {
-        imageContents.push({
+        contentParts.push({
           type: "image_url",
-          image_url: { url: `data:${file.mimeType};base64,${file.base64}` },
+          image_url: {
+            url: `data:application/pdf;base64,${file.base64}`,
+          },
+        });
+      } else {
+        contentParts.push({
+          type: "image_url",
+          image_url: {
+            url: `data:${file.mimeType};base64,${file.base64}`,
+          },
         });
       }
     }
