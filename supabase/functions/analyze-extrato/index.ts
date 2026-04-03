@@ -5,7 +5,6 @@ const corsHeaders = {
 };
 
 async function extrairTextoPdf(base64: string, apiKey: string): Promise<string> {
-  // Primeira passagem: extrai lançamentos relevantes diretamente
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -39,10 +38,10 @@ async function extrairTextoPdf(base64: string, apiKey: string): Promise<string> 
 5. TAC ou TEC
 6. Qualquer serviço cobrado mensalmente com descrição repetida
 
-Para CADA lançamento encontrado informe:
+Para CADA lançamento encontrado informe exatamente:
 DATA | DESCRIÇÃO EXATA | VALOR DÉBITO
 
-Liste TODOS sem exceção, de janeiro a dezembro. Inclua até os últimos meses do extrato.`,
+Liste TODOS individualmente, mês a mês, do início ao fim do extrato. Não agrupe, não resuma, não pule nenhum.`,
             },
           ],
         },
@@ -105,42 +104,57 @@ Deno.serve(async (req) => {
 
     const tiposTexto = (tiposCobranças || []).join(", ");
 
-    const systemPrompt = `Você é um especialista em direito bancário do consumidor brasileiro. Analise os lançamentos fornecidos e identifique cobranças indevidas. Responda APENAS em JSON válido, sem markdown.`;
+    const systemPrompt = `Você é um especialista em direito bancário do consumidor brasileiro. Analise os lançamentos fornecidos e identifique cobranças indevidas. Responda APENAS em JSON válido, sem markdown, sem texto fora do JSON.`;
 
     const userPrompt = `Analise as cobranças extraídas do extrato bancário do banco ${banco || "não informado"}, período ${dataInicial || "não informado"} a ${dataFinal || "não informado"}.
 
 Cliente: ${nomeCliente || "não informado"}
 CPF: ${cpf || "não informado"}
+Contrato: ${numeroContrato || "não informado"}
 
 ${textoExtraido}
 
-REGRAS:
-- IOF = legal, não inclua
-- ENCARGOS LIMITE DE CRED = juros de cheque especial = legal, não inclua
-- TARIFA BANCARIA / CESTA = indevida, inclua TODAS as ocorrências
-- SEGURO VIDA / BRADESCO VIDA PREV = indevido sem contrato expresso, inclua TODAS
-- Para cada tipo de cobrança: some TODAS as ocorrências e calcule o total real
+REGRAS SOBRE O QUE É INDEVIDO:
+- IOF = imposto legal, NUNCA inclua
+- ENCARGOS LIMITE DE CRED = juros cheque especial = legal, NUNCA inclua
+- TARIFA BANCARIA / CESTA CELULAR / CESTA CLASSIC = indevida sem contrato expresso, INCLUA
+- BRADESCO VIDA PREV / SEGURO VIDA = indevido sem contrato de seguro, INCLUA
+- TAC e TEC = vedadas desde 2008, INCLUA
+- Capitalização, clube de benefícios sem autorização = INCLUA
 
-IMPORTANTE:
-- valor_unitario = valor de uma ocorrência (do extrato)
-- quantidade_ocorrencias = total de vezes no período inteiro
+REGRA CRÍTICA — AGRUPAMENTO POR VALOR:
+- Se a mesma cobrança teve valores DIFERENTES em períodos distintos, crie um item SEPARADO para cada valor
+- Exemplo correto para CESTA CELULAR que variou:
+  Item 1: valor_unitario 32.00, quantidade_ocorrencias 5, valor_total 160.00 (jan a mai)
+  Item 2: valor_unitario 24.00, quantidade_ocorrencias 6, valor_total 144.00 (jun a nov)
+  Item 3: valor_unitario 26.90, quantidade_ocorrencias 1, valor_total 26.90 (dez)
+- Exemplo correto para SEGURO que variou:
+  Item 1: valor_unitario 13.90, quantidade_ocorrencias 1, valor_total 13.90 (jan)
+  Item 2: valor_unitario 14.84, quantidade_ocorrencias 10, valor_total 148.40 (fev a dez)
+- NUNCA some valores diferentes no mesmo item
+
+REGRA CRÍTICA — CONTAGEM COMPLETA:
+- Conte TODAS as ocorrências de cada valor no período inteiro
+- Verifique mês a mês do início ao fim do extrato
+- quantidade_ocorrencias deve ser o número exato de vezes que aquele valor apareceu
 - valor_total = valor_unitario × quantidade_ocorrencias
-- estimativa_recuperacao = soma de todos os valor_total
-- NUNCA deixe valores como 0 se a cobrança foi identificada
+- valor_total_indevido no resumo = soma de TODOS os valor_total
+- estimativa_recuperacao = igual ao valor_total_indevido
+- NUNCA deixe valores monetários como 0 se a cobrança foi identificada
 
-Responda em JSON:
+Responda EXATAMENTE neste JSON com valores reais:
 {
   "resumo": {
     "total_lancamentos": 0,
     "irregularidades_encontradas": 0,
-    "valor_total_indevido": 0,
+    "valor_total_indevido": 0.00,
     "periodo_analisado": "${dataInicial} a ${dataFinal}",
     "banco": "${banco}"
   },
   "cobrancas_indevidas": [
     {
-      "data": "primeira ocorrência",
-      "descricao": "descrição exata do extrato",
+      "data": "data da primeira ocorrência deste valor específico",
+      "descricao": "descrição exata como aparece no extrato",
       "valor_unitario": 0.00,
       "quantidade_ocorrencias": 0,
       "valor_total": 0.00,
