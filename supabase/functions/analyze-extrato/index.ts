@@ -119,15 +119,34 @@ Responda exatamente neste JSON:
     const aiResult = JSON.parse(responseText);
     const content = aiResult.choices?.[0]?.message?.content || "";
 
+    console.log("Conteúdo bruto da IA (primeiros 1000 chars):", content.substring(0, 1000));
+
     let parsed;
     try {
-      const cleaned = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("Nenhum JSON encontrado na resposta");
+      const cleaned = jsonMatch[0];
       parsed = JSON.parse(cleaned);
-    } catch {
-      console.error("Falha ao parsear JSON da IA:", content.substring(0, 300));
-      return new Response(JSON.stringify({ error: "A IA retornou formato inválido. Tente novamente." }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    } catch (err) {
+      console.error("Falha ao parsear. Conteúdo completo:", content);
+      parsed = {
+        resumo: {
+          total_lancamentos: 0,
+          irregularidades_encontradas: 0,
+          valor_total_indevido: 0,
+          periodo_analisado: `${dataInicial} a ${dataFinal}`,
+          banco: banco || "",
+        },
+        cobrancas_indevidas: [],
+        por_categoria: [],
+        recomendacao: {
+          tipo_acao: "Análise manual necessária",
+          fundamentacao: `Não foi possível processar automaticamente. Conteúdo recebido: ${content.substring(0, 200)}`,
+          estimativa_recuperacao: 0,
+          prazo_prescricional: "A verificar",
+          prioridade: "media",
+        },
+      };
     }
 
     return new Response(JSON.stringify(parsed), {
