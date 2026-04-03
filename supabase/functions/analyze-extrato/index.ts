@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
 Cliente: ${nomeCliente || "não informado"}
 CPF: ${cpf || "não informado"}
 Contrato: ${numeroContrato || "não informado"}
-${pdfTexto ? `\nINFORMAÇÕES DOS PDFs RECEBIDOS:\n${pdfTexto}` : ""}
+
 TIPOS DE COBRANÇA PARA VERIFICAR: ${tiposTexto}
 
 IMPORTANTE: Analise as imagens anexadas. Identifique todos os lançamentos visíveis. Mesmo que não encontre irregularidades claras, retorne o resumo com o total de lançamentos identificados.
