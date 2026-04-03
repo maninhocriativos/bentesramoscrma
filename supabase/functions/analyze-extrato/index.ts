@@ -4,7 +4,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// PASSO 1: Claude lê o PDF e extrai lançamentos no formato estruturado
+// ─── PASSO 1: Extrai lançamentos do PDF ───────────────────────────
 async function extrairLancamentos(base64: string, apiKey: string): Promise<string> {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -14,8 +14,8 @@ async function extrairLancamentos(base64: string, apiKey: string): Promise<strin
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 8192,
+      model: "claude-sonnet-4-6",
+      max_tokens: 16000,
       messages: [
         {
           role: "user",
@@ -26,34 +26,33 @@ async function extrairLancamentos(base64: string, apiKey: string): Promise<strin
             },
             {
               type: "text",
-              text: `Leia TODAS as páginas deste extrato bancário sem pular nenhuma.
+              text: `Leia ABSOLUTAMENTE TODAS as páginas deste extrato bancário, da primeira à última, sem pular nenhuma.
 
-Liste APENAS os lançamentos destas categorias, um por linha, exatamente neste formato:
-DATA|DESCRIÇÃO|VALOR
+Sua única tarefa: listar cada lançamento das categorias abaixo, UM POR LINHA, no formato exato:
+DATA|DESCRIÇÃO COMPLETA|VALOR
 
-Categorias a buscar:
-- TARIFA BANCARIA (CESTA CELULAR, CESTA CLASSIC, manutenção)
-- SEGURO (VIDA, PRESTAMISTA, BRADESCO VIDA PREV, proteção financeira)
-- CAPITALIZAÇÃO
-- TAC ou TEC
-- CLUBE DE BENEFICIOS
+CATEGORIAS A BUSCAR (procure em TODAS as páginas):
+1. TARIFA BANCARIA — inclui: CESTA CELULAR, CESTA CLASSIC, CESTA PREMIUM, manutenção de conta
+2. SEGURO — inclui: SEGURO VIDA, BRADESCO VIDA PREV, SEGURO PRESTAMISTA, proteção financeira, SEG.VIDA
+3. CAPITALIZAÇÃO
+4. TAC (Tarifa de Abertura de Crédito)
+5. TEC (Taxa de Emissão de Carnê)
+6. CLUBE DE BENEFICIOS
 
-REGRAS OBRIGATÓRIAS:
-- Uma linha por lançamento, mesmo que a mesma cobrança apareça em vários meses
-- Não agrupe, não resuma, não pule nenhuma ocorrência
-- Verifique TODOS os meses: janeiro fevereiro março abril maio junho julho agosto setembro outubro novembro dezembro
-- Formato exato: 06/01/2017|TARIFA BANCARIA CESTA CELULAR|32.00
-- Use ponto como separador decimal
-- Não inclua: IOF, ENCARGOS LIMITE DE CRED, saques, transferências, compras
+REGRAS ABSOLUTAS:
+- CADA ocorrência = UMA linha separada, mesmo que seja a mesma cobrança em meses diferentes
+- NUNCA agrupe, NUNCA some, NUNCA resuma
+- Verifique cada mês individualmente: jan, fev, mar, abr, mai, jun, jul, ago, set, out, nov, dez
+- Valor com ponto decimal: 32.00 (não vírgula)
+- NÃO inclua: IOF, ENCARGOS LIMITE DE CRED, saques, depósitos, transferências, compras, contas de luz/água/telefone
 
-Exemplo de saída correta:
+FORMATO OBRIGATÓRIO (apenas estas linhas, sem texto adicional):
 06/01/2017|TARIFA BANCARIA CESTA CELULAR|32.00
 07/02/2017|TARIFA BANCARIA CESTA CELULAR|32.00
-07/03/2017|TARIFA BANCARIA CESTA CELULAR|32.00
-07/04/2017|TARIFA BANCARIA CESTA CELULAR|32.00
-08/05/2017|TARIFA BANCARIA CESTA CELULAR|32.00
-30/01/2017|BRADESCO VIDA PREV-SEG.VIDA|13.90
-01/03/2017|BRADESCO VIDA PREV-SEG.VIDA|14.84`,
+30/01/2017|PAGTO ELETRON COBRANCA BRADESCO VIDA PREV-SEG.VIDA|13.90
+28/03/2017|PAGTO ELETRON COBRANCA BRADESCO VIDA PREV-SEG.VIDA|14.84
+
+Comece listando agora, sem preâmbulo:`,
             },
           ],
         },
@@ -62,134 +61,224 @@ Exemplo de saída correta:
   });
 
   if (!response.ok) {
-    console.error("Erro extração PDF:", await response.text());
+    const err = await response.text();
+    console.error("Erro extração PDF:", err.substring(0, 300));
     return "";
   }
   const result = await response.json();
-  return result.content?.[0]?.text || "";
+  const texto = result.content?.[0]?.text || "";
+  console.log("Extração bruta:\n", texto.substring(0, 1000));
+  return texto;
 }
 
-// PASSO 2: Claude analisa os lançamentos e gera o laudo completo em JSON
-async function analisarLancamentos(
-  lancamentosTexto: string,
-  banco: string,
-  dataInicial: string,
-  dataFinal: string,
-  nomeCliente: string,
-  cpf: string,
-  numeroContrato: string,
-  apiKey: string,
-): Promise<any> {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 8192,
-      messages: [
-        {
-          role: "user",
-          content: `Você é um especialista em direito bancário do consumidor brasileiro.
+// ─── PASSO 2: Agrupamento e cálculo no código (100% preciso) ──────
+interface Lancamento {
+  data: string;
+  descricao: string;
+  valor: number;
+}
 
-Analise os lançamentos abaixo extraídos do extrato bancário do banco ${banco}, período ${dataInicial} a ${dataFinal}.
-Cliente: ${nomeCliente || "não informado"}
-CPF: ${cpf || "não informado"}
-Contrato: ${numeroContrato || "não informado"}
+interface GrupoCobranca {
+  data: string;
+  descricao: string;
+  valorUnitario: number;
+  ocorrencias: number;
+  valorTotal: number;
+  datas: string[];
+}
 
-LANÇAMENTOS IDENTIFICADOS:
-${lancamentosTexto}
+function parsearLancamentos(texto: string): Lancamento[] {
+  const lancamentos: Lancamento[] = [];
+  const linhas = texto.split("\n");
 
-REGRAS DE CLASSIFICAÇÃO:
-- TARIFA BANCARIA / CESTA = categoria "Tarifas Bancárias", base legal "Resolução CMN nº 3.919/2010"
-- SEGURO / BRADESCO VIDA PREV = categoria "Seguros", base legal "CDC Art. 39, III — venda casada proibida"
-- TAC = categoria "TAC Vedada", base legal "Resolução BACEN 3.518/2007"
-- TEC = categoria "TEC Vedada", base legal "Resolução BACEN 3.518/2007"
-- CAPITALIZAÇÃO = categoria "Capitalização", base legal "CDC Art. 39, III"
+  for (const linha of linhas) {
+    const trimmed = linha.trim();
+    if (!trimmed || !trimmed.includes("|")) continue;
 
-REGRAS DE AGRUPAMENTO:
-- Agrupe lançamentos com MESMA descrição E MESMO valor em um único item
-- Se o VALOR mudou (ex: de 32.00 para 24.00), crie itens SEPARADOS
-- valor_unitario = valor de uma ocorrência
-- quantidade_ocorrencias = quantas vezes esse valor aparece
-- valor_total = valor_unitario × quantidade_ocorrencias
+    const partes = trimmed.split("|");
+    if (partes.length < 3) continue;
 
-IMPORTANTE:
-- estimativa_recuperacao = valor_total_indevido × 2 (devolução em dobro CDC art. 42)
-- prioridade = "alta" se valor_total_indevido > 300, senão "media"
-- Fundamentação deve citar leis específicas e mencionar os valores encontrados
+    const data = partes[0].trim();
+    const descricao = partes[1].trim();
+    const valorStr = partes[2]
+      .trim()
+      .replace(/[^0-9.,]/g, "")
+      .replace(",", ".");
+    const valor = parseFloat(valorStr);
 
-Responda APENAS com JSON válido, sem markdown:
-{
-  "resumo": {
-    "total_lancamentos": 0,
-    "irregularidades_encontradas": 0,
-    "valor_total_indevido": 0.00,
-    "periodo_analisado": "${dataInicial} a ${dataFinal}",
-    "banco": "${banco}"
-  },
-  "cobrancas_indevidas": [
-    {
-      "data": "data da primeira ocorrência",
-      "descricao": "descrição exata",
-      "valor_unitario": 0.00,
-      "quantidade_ocorrencias": 0,
-      "valor_total": 0.00,
-      "categoria": "",
-      "status": "confirmado",
-      "base_legal": "",
-      "justificativa": "",
-      "recorrente": true
-    }
-  ],
-  "por_categoria": [
-    {
-      "categoria": "",
-      "total": 0.00,
-      "ocorrencias": 0
-    }
-  ],
-  "recomendacao": {
-    "tipo_acao": "",
-    "fundamentacao": "",
-    "estimativa_recuperacao": 0.00,
-    "prazo_prescricional": "",
-    "prioridade": "alta"
+    if (!data || !descricao || isNaN(valor) || valor <= 0) continue;
+
+    // Filtra itens que não devem estar
+    const descUpper = descricao.toUpperCase();
+    if (
+      descUpper.includes("IOF") ||
+      descUpper.includes("ENCARGO") ||
+      descUpper.includes("SAQUE") ||
+      descUpper.includes("DEPOSITO") ||
+      descUpper.includes("TRANSFERENCIA") ||
+      descUpper.includes("COMPRA") ||
+      descUpper.includes("CREDITO DE SALARIO")
+    )
+      continue;
+
+    lancamentos.push({ data, descricao, valor });
   }
-}`,
-        },
-      ],
-    }),
+
+  console.log(`Lançamentos parseados: ${lancamentos.length}`);
+  lancamentos.forEach((l) => console.log(`  ${l.data} | ${l.descricao} | ${l.valor}`));
+  return lancamentos;
+}
+
+function agruparPorDescricaoEValor(lancamentos: Lancamento[]): GrupoCobranca[] {
+  const mapa = new Map<string, GrupoCobranca>();
+
+  for (const l of lancamentos) {
+    // Normaliza descrição removendo espaços extras e colocando em maiúsculo
+    const descNorm = l.descricao.toUpperCase().replace(/\s+/g, " ").trim();
+    const chave = `${descNorm}__${l.valor.toFixed(2)}`;
+
+    if (mapa.has(chave)) {
+      const g = mapa.get(chave)!;
+      g.ocorrencias++;
+      g.valorTotal = parseFloat((g.valorTotal + l.valor).toFixed(2));
+      g.datas.push(l.data);
+    } else {
+      mapa.set(chave, {
+        data: l.data,
+        descricao: l.descricao,
+        valorUnitario: l.valor,
+        ocorrencias: 1,
+        valorTotal: l.valor,
+        datas: [l.data],
+      });
+    }
+  }
+
+  return Array.from(mapa.values()).sort((a, b) => {
+    // Ordena por categoria (tarifas primeiro, depois seguros)
+    const catA = classificar(a.descricao).categoria;
+    const catB = classificar(b.descricao).categoria;
+    if (catA !== catB) return catA.localeCompare(catB);
+    return a.data.localeCompare(b.data);
   });
-
-  if (!response.ok) {
-    console.error("Erro análise Claude:", await response.text());
-    return null;
-  }
-
-  const result = await response.json();
-  const content = result.content?.[0]?.text || "";
-  console.log("Análise Claude (primeiros 500):", content.substring(0, 500));
-
-  try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("Sem JSON");
-    return JSON.parse(jsonMatch[0]);
-  } catch {
-    console.error("Falha ao parsear JSON da análise:", content.substring(0, 300));
-    return null;
-  }
 }
 
+// ─── Classificação jurídica ────────────────────────────────────────
+function classificar(descricao: string): {
+  categoria: string;
+  baseLegal: string;
+  justificativa: string;
+} {
+  const d = descricao.toUpperCase();
+
+  if (
+    d.includes("CESTA CELULAR") ||
+    d.includes("CESTA CLASSIC") ||
+    d.includes("CESTA PREMIUM") ||
+    d.includes("TARIFA BANCARIA") ||
+    d.includes("MANUTENCAO DE CONTA") ||
+    d.includes("MANUTENÇÃO DE CONTA")
+  ) {
+    return {
+      categoria: "Tarifas Bancárias",
+      baseLegal:
+        "Resolução CMN nº 3.919/2010 — tarifas bancárias só são permitidas mediante contratação expressa e documentada pelo cliente",
+      justificativa:
+        "Tarifa de pacote de serviços cobrada mensalmente sem evidência de contratação expressa. A Resolução CMN 3.919/2010 exige autorização formal do cliente para cobrança de qualquer tarifa bancária.",
+    };
+  }
+
+  if (
+    d.includes("SEGURO") ||
+    d.includes("SEG.VIDA") ||
+    d.includes("VIDA PREV") ||
+    d.includes("BRADESCO VIDA") ||
+    d.includes("PRESTAMISTA") ||
+    d.includes("PROTECAO FINANCEIRA") ||
+    d.includes("PROTEÇÃO FINANCEIRA")
+  ) {
+    return {
+      categoria: "Seguros",
+      baseLegal:
+        "CDC Art. 39, III e IV — venda casada proibida; Resolução CNSP 382/2020 — seguro exige contratação expressa e independente",
+      justificativa:
+        "Seguro cobrado mensalmente sem apresentação de contrato de seguro assinado pelo cliente. Caracteriza venda casada proibida pelo CDC art. 39, III, quando vinculado à conta corrente ou empréstimo.",
+    };
+  }
+
+  if (d.includes("CAPITALIZ")) {
+    return {
+      categoria: "Capitalização",
+      baseLegal: "CDC Art. 39, III — venda casada proibida; Circular SUSEP 462/2013",
+      justificativa:
+        "Título de capitalização contratado sem autorização expressa do cliente. Prática de venda casada vedada pelo CDC.",
+    };
+  }
+
+  if (d.includes("TAC") || d.includes("ABERTURA DE CREDITO") || d.includes("ABERTURA DE CRÉDITO")) {
+    return {
+      categoria: "TAC — Vedada",
+      baseLegal: "Resolução BACEN 3.518/2007 — TAC vedada desde 30/04/2008",
+      justificativa:
+        "Tarifa de Abertura de Crédito expressamente proibida pelo Banco Central desde abril de 2008. Cobrança totalmente ilegal.",
+    };
+  }
+
+  if (d.includes("TEC") || d.includes("EMISSAO DE CARNE") || d.includes("EMISSÃO DE CARNÊ")) {
+    return {
+      categoria: "TEC — Vedada",
+      baseLegal: "Resolução BACEN 3.518/2007 — TEC vedada desde 30/04/2008",
+      justificativa:
+        "Taxa de Emissão de Carnê expressamente proibida pelo Banco Central desde abril de 2008. Cobrança totalmente ilegal.",
+    };
+  }
+
+  if (d.includes("CLUBE") || d.includes("BENEFICIO") || d.includes("BENEFÍCIO")) {
+    return {
+      categoria: "Serviços Não Solicitados",
+      baseLegal: "CDC Art. 39, III — fornecimento de produto ou serviço sem solicitação prévia é prática abusiva",
+      justificativa:
+        "Serviço contratado e cobrado sem autorização expressa do cliente. Prática abusiva vedada pelo Código de Defesa do Consumidor.",
+    };
+  }
+
+  return {
+    categoria: "Cobranças Indevidas",
+    baseLegal: "CDC Art. 39 — práticas abusivas proibidas",
+    justificativa: "Cobrança sem evidência de contratação expressa pelo cliente.",
+  };
+}
+
+// ─── Gera fundamentação jurídica detalhada ────────────────────────
+function gerarFundamentacao(grupos: GrupoCobranca[], banco: string, valorTotal: number): string {
+  const temTarifa = grupos.some((g) => classificar(g.descricao).categoria === "Tarifas Bancárias");
+  const temSeguro = grupos.some((g) => classificar(g.descricao).categoria === "Seguros");
+
+  let texto = `Foram identificadas cobranças indevidas no extrato bancário do ${banco}, totalizando ${valorTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`;
+
+  if (temTarifa) {
+    texto += ` As tarifas bancárias (cestas de serviços) foram cobradas sem evidência de contratação expressa, violando a Resolução CMN nº 3.919/2010, que exige autorização formal do cliente para qualquer cobrança de tarifa.`;
+  }
+
+  if (temSeguro) {
+    texto += ` Os seguros foram cobrados mensalmente sem apresentação de contrato de seguro assinado, caracterizando venda casada proibida pelo Art. 39, inciso III do Código de Defesa do Consumidor (Lei 8.078/90).`;
+  }
+
+  texto += ` O consumidor tem direito à devolução em dobro de todos os valores cobrados indevidamente, conforme Art. 42, parágrafo único do CDC ("salvo hipótese de engano justificável"). Recomenda-se: (1) notificação extrajudicial ao banco com prazo de 15 dias para devolução; (2) caso não atendido, ajuizamento de ação de repetição de indébito no Juizado Especial Cível, com pedido de dano moral. O prazo prescricional é de 5 anos para tarifas (Art. 27 do CDC) e 10 anos para seguros (Art. 205 do Código Civil).`;
+
+  return texto;
+}
+
+// ─── SERVIDOR PRINCIPAL ───────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const body = await req.json();
     const { banco, dataInicial, dataFinal, nomeCliente, cpf, numeroContrato, arquivosBase64 } = body;
+
+    console.log("Recebido — banco:", banco, "período:", dataInicial, "a", dataFinal);
+    console.log("Arquivos:", arquivosBase64?.length);
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
@@ -199,17 +288,16 @@ Deno.serve(async (req) => {
       });
     }
 
+    // PASSO 1: Extrai todos os lançamentos
     let todosTextos = "";
-
-    // Passo 1: extrai lançamentos de todos os arquivos
     for (const file of arquivosBase64 || []) {
       if (file.mimeType === "application/pdf") {
-        console.log("Extraindo PDF:", file.name);
+        console.log("Processando PDF:", file.name, "— tamanho base64:", file.base64?.length);
         const texto = await extrairLancamentos(file.base64, ANTHROPIC_API_KEY);
-        if (texto) {
+        if (texto.trim()) {
           todosTextos += texto + "\n";
-          console.log("Extraído:", texto.length, "chars");
-          console.log("Lançamentos encontrados:\n", texto.substring(0, 800));
+        } else {
+          console.error("Extração vazia para:", file.name);
         }
       }
     }
@@ -217,42 +305,90 @@ Deno.serve(async (req) => {
     if (!todosTextos.trim()) {
       return new Response(
         JSON.stringify({
-          error:
-            "Não foi possível extrair lançamentos do documento. Verifique se o arquivo é um extrato bancário válido.",
+          error: "Não foi possível extrair lançamentos. Verifique se o arquivo é um extrato bancário válido em PDF.",
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // Passo 2: Claude analisa e gera o JSON completo
-    console.log("Analisando lançamentos com Claude...");
-    const resultado = await analisarLancamentos(
-      todosTextos,
-      banco || "não informado",
-      dataInicial || "",
-      dataFinal || "",
-      nomeCliente || "",
-      cpf || "",
-      numeroContrato || "",
-      ANTHROPIC_API_KEY,
-    );
+    // PASSO 2: Parseia e agrupa no código (sem IA para cálculos)
+    const lancamentos = parsearLancamentos(todosTextos);
 
-    if (!resultado) {
+    if (lancamentos.length === 0) {
       return new Response(
         JSON.stringify({
-          error: "Falha ao processar análise. Tente novamente.",
+          error:
+            "Nenhuma cobrança indevida foi identificada no extrato. O documento pode não conter tarifas ou seguros cobrados indevidamente.",
         }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    console.log("Resultado final:", JSON.stringify(resultado.resumo));
+    const grupos = agruparPorDescricaoEValor(lancamentos);
+    console.log(`Grupos finais: ${grupos.length}`);
 
+    // PASSO 3: Monta o resultado com cálculos precisos
+    const cobrancas_indevidas = grupos.map((g) => {
+      const { categoria, baseLegal, justificativa } = classificar(g.descricao);
+      return {
+        data: g.data,
+        descricao: g.descricao,
+        valor_unitario: g.valorUnitario,
+        quantidade_ocorrencias: g.ocorrencias,
+        valor_total: g.valorTotal,
+        categoria,
+        status: "confirmado",
+        base_legal: baseLegal,
+        justificativa,
+        recorrente: g.ocorrencias > 1,
+      };
+    });
+
+    const valor_total_indevido = parseFloat(cobrancas_indevidas.reduce((s, c) => s + c.valor_total, 0).toFixed(2));
+
+    const estimativa_recuperacao = parseFloat((valor_total_indevido * 2).toFixed(2));
+
+    // Agrupa por categoria
+    const catMap = new Map<string, { total: number; ocorrencias: number }>();
+    for (const c of cobrancas_indevidas) {
+      const existing = catMap.get(c.categoria) ?? { total: 0, ocorrencias: 0 };
+      catMap.set(c.categoria, {
+        total: parseFloat((existing.total + c.valor_total).toFixed(2)),
+        ocorrencias: existing.ocorrencias + c.quantidade_ocorrencias,
+      });
+    }
+    const por_categoria = Array.from(catMap.entries()).map(([categoria, v]) => ({
+      categoria,
+      total: v.total,
+      ocorrencias: v.ocorrencias,
+    }));
+
+    const resultado = {
+      resumo: {
+        total_lancamentos: lancamentos.length,
+        irregularidades_encontradas: cobrancas_indevidas.length,
+        valor_total_indevido,
+        periodo_analisado: dataInicial && dataFinal ? `${dataInicial} a ${dataFinal}` : "Período não informado",
+        banco: banco || "Não informado",
+      },
+      cobrancas_indevidas,
+      por_categoria,
+      recomendacao: {
+        tipo_acao: "Requerimento administrativo e/ou Ação Judicial de repetição de indébito",
+        fundamentacao: gerarFundamentacao(grupos, banco || "banco", valor_total_indevido),
+        estimativa_recuperacao,
+        prazo_prescricional:
+          "5 anos para tarifas bancárias (Art. 27 do CDC) e 10 anos para seguros (Art. 205 do Código Civil)",
+        prioridade: valor_total_indevido > 300 ? "alta" : "media",
+      },
+    };
+
+    console.log("✅ Resultado:", JSON.stringify(resultado.resumo));
     return new Response(JSON.stringify(resultado), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {
-    console.error("Erro geral:", e.message);
+    console.error("Erro geral:", e.message, e.stack);
     return new Response(JSON.stringify({ error: e.message || "Erro desconhecido" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
