@@ -84,7 +84,7 @@ Responda exatamente neste JSON:
         role: "user",
         content: [
           { type: "text", text: userPrompt },
-          ...imageContents,
+          ...contentParts,
         ],
       },
     ];
