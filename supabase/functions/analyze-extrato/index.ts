@@ -13,16 +13,26 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurada");
 
-    const imageContents = (arquivosBase64 || []).map((file: { base64: string; mimeType: string; name: string }) => ({
-      type: "image_url" as const,
-      image_url: { url: `data:${file.mimeType};base64,${file.base64}` },
-    }));
+    const imageContents = (arquivosBase64 || []).map((file: { base64: string; mimeType: string; name: string }) => {
+      if (file.mimeType === 'application/pdf') {
+        return {
+          type: "image_url" as const,
+          image_url: { url: `data:application/pdf;base64,${file.base64}` },
+        };
+      }
+      return {
+        type: "image_url" as const,
+        image_url: { url: `data:${file.mimeType};base64,${file.base64}` },
+      };
+    });
 
     const tiposTexto = (tiposCobranças || []).join(", ");
 
-    const systemPrompt = `Você é um especialista em direito bancário do consumidor brasileiro. Analise extratos bancários e identifique cobranças indevidas com precisão cirúrgica. Responda APENAS em JSON válido, sem markdown.`;
+    const systemPrompt = `Você é um especialista em direito bancário do consumidor brasileiro com 20 anos de experiência. Sua função é analisar extratos bancários enviados como PDF ou imagem e identificar cobranças indevidas com precisão. Você DEVE ler todo o conteúdo do documento antes de responder. Responda APENAS em JSON válido, sem markdown, sem texto fora do JSON.`;
 
-    const userPrompt = `Analise os extratos bancários anexados do banco ${banco} referentes ao período de ${dataInicial} a ${dataFinal}.
+    const userPrompt = `IMPORTANTE: Os arquivos enviados são extratos bancários reais em PDF ou imagem. Analise TODO o conteúdo visível — textos, tabelas, valores, datas e descrições de lançamentos. Leia cada linha do documento com atenção. NUNCA retorne arrays vazios se houver qualquer conteúdo no documento. Se não encontrar irregularidades claras, retorne pelo menos os lançamentos identificados no resumo com total_lancamentos preenchido corretamente.
+
+Analise os extratos bancários anexados do banco ${banco} referentes ao período de ${dataInicial} a ${dataFinal}.
 
 ${nomeCliente ? `Cliente: ${nomeCliente}` : ""}
 ${cpf ? `CPF: ${cpf}` : ""}
@@ -114,7 +124,8 @@ Responda em JSON:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-2.5-flash-preview",
+        max_tokens: 4096,
         messages,
       }),
     });
