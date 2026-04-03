@@ -8,101 +8,68 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { banco, dataInicial, dataFinal, tiposCobranças, nomeCliente, cpf, numeroContrato, arquivosBase64 } = await req.json();
+    const body = await req.json();
+    const { banco, dataInicial, dataFinal, tiposCobranças, nomeCliente, cpf, numeroContrato, arquivosBase64 } = body;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurada");
+    if (!LOVABLE_API_KEY) {
+      return new Response(JSON.stringify({ error: "LOVABLE_API_KEY não configurada" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    const imageContents = (arquivosBase64 || []).map((file: { base64: string; mimeType: string; name: string }) => {
-      if (file.mimeType === 'application/pdf') {
-        return {
-          type: "image_url" as const,
-          image_url: { url: `data:application/pdf;base64,${file.base64}` },
-        };
+    // Monta conteúdo: imagens como image_url, PDFs como texto no prompt
+    const imageContents: any[] = [];
+    let pdfTexto = "";
+
+    for (const file of (arquivosBase64 || [])) {
+      if (file.mimeType === "application/pdf") {
+        pdfTexto += `\n[Arquivo PDF: ${file.name}]\nOs dados base64 do PDF foram recebidos com ${file.base64.length} caracteres.\n`;
+      } else {
+        imageContents.push({
+          type: "image_url",
+          image_url: { url: `data:${file.mimeType};base64,${file.base64}` },
+        });
       }
-      return {
-        type: "image_url" as const,
-        image_url: { url: `data:${file.mimeType};base64,${file.base64}` },
-      };
-    });
+    }
 
     const tiposTexto = (tiposCobranças || []).join(", ");
 
-    const systemPrompt = `Você é um especialista em direito bancário do consumidor brasileiro com 20 anos de experiência. Sua função é analisar extratos bancários enviados como PDF ou imagem e identificar cobranças indevidas com precisão. Você DEVE ler todo o conteúdo do documento antes de responder. Responda APENAS em JSON válido, sem markdown, sem texto fora do JSON.`;
+    const systemPrompt = `Você é um especialista em direito bancário do consumidor brasileiro. Analise extratos bancários e identifique cobranças indevidas. Responda APENAS em JSON válido, sem markdown, sem texto fora do JSON.`;
 
-    const userPrompt = `IMPORTANTE: Os arquivos enviados são extratos bancários reais em PDF ou imagem. Analise TODO o conteúdo visível — textos, tabelas, valores, datas e descrições de lançamentos. Leia cada linha do documento com atenção. NUNCA retorne arrays vazios se houver qualquer conteúdo no documento. Se não encontrar irregularidades claras, retorne pelo menos os lançamentos identificados no resumo com total_lancamentos preenchido corretamente.
-
-Analise os extratos bancários anexados do banco ${banco} referentes ao período de ${dataInicial} a ${dataFinal}.
-
-${nomeCliente ? `Cliente: ${nomeCliente}` : ""}
-${cpf ? `CPF: ${cpf}` : ""}
-${numeroContrato ? `Contrato: ${numeroContrato}` : ""}
-
+    const userPrompt = `Analise os extratos bancários do banco ${banco || "não informado"} no período de ${dataInicial || "não informado"} a ${dataFinal || "não informado"}.
+Cliente: ${nomeCliente || "não informado"}
+CPF: ${cpf || "não informado"}
+Contrato: ${numeroContrato || "não informado"}
+${pdfTexto ? `\nINFORMAÇÕES DOS PDFs RECEBIDOS:\n${pdfTexto}` : ""}
 TIPOS DE COBRANÇA PARA VERIFICAR: ${tiposTexto}
 
+IMPORTANTE: Analise as imagens anexadas. Identifique todos os lançamentos visíveis. Mesmo que não encontre irregularidades claras, retorne o resumo com o total de lançamentos identificados.
+
 IDENTIFIQUE:
-1. Cobranças de seguros não solicitados ou sem autorização expressa
-2. Tarifas vedadas pela Resolução BACEN 3.919/2010 (TAC, TEC vedadas desde 2008)
-3. Serviços contratados sem autorização expressa
-4. Cobranças duplicadas no mesmo período
+1. Cobranças de seguros não solicitados
+2. Tarifas vedadas pela Resolução BACEN 3.919/2010
+3. Serviços contratados sem autorização
+4. Cobranças duplicadas
 5. Valores divergentes de contratos
-6. Encargos calculados incorretamente
 
-PARA CADA COBRANÇA INDEVIDA IDENTIFICADA:
-- data: data do lançamento
-- descricao: descrição exata como aparece no extrato
-- valor_unitario: valor cobrado
-- quantidade_ocorrencias: quantas vezes aparece
-- valor_total: valor total
-- categoria: tipo da cobrança
-- status: 'confirmado' | 'indicio' | 'requer_verificacao'
-- base_legal: lei ou resolução violada
-- justificativa: por que é indevida
-- recorrente: boolean
-
-REGRAS CRÍTICAS:
-- IOF é imposto legal — NUNCA classifique como indevido
-- Juros dentro da taxa BACEN são legais
-- Só confirme se houver evidência clara no extrato
-- Diferencie cobrança única de cobrança recorrente
-- Calcule o total de cada cobrança recorrente no período analisado
-
-Responda em JSON:
+Responda exatamente neste JSON:
 {
   "resumo": {
-    "total_lancamentos": number,
-    "irregularidades_encontradas": number,
-    "valor_total_indevido": number,
-    "periodo_analisado": string,
-    "banco": string
+    "total_lancamentos": 0,
+    "irregularidades_encontradas": 0,
+    "valor_total_indevido": 0,
+    "periodo_analisado": "",
+    "banco": ""
   },
-  "cobrancas_indevidas": [
-    {
-      "data": string,
-      "descricao": string,
-      "valor_unitario": number,
-      "quantidade_ocorrencias": number,
-      "valor_total": number,
-      "categoria": string,
-      "status": string,
-      "base_legal": string,
-      "justificativa": string,
-      "recorrente": boolean
-    }
-  ],
-  "por_categoria": [
-    {
-      "categoria": string,
-      "total": number,
-      "ocorrencias": number
-    }
-  ],
+  "cobrancas_indevidas": [],
+  "por_categoria": [],
   "recomendacao": {
-    "tipo_acao": string,
-    "fundamentacao": string,
-    "estimativa_recuperacao": number,
-    "prazo_prescricional": string,
-    "prioridade": "alta" | "media" | "baixa"
+    "tipo_acao": "",
+    "fundamentacao": "",
+    "estimativa_recuperacao": 0,
+    "prazo_prescricional": "",
+    "prioridade": "media"
   }
 }`;
 
@@ -117,6 +84,8 @@ Responda em JSON:
       },
     ];
 
+    console.log("Chamando gateway com modelo gemini-2.5-flash, arquivos:", arquivosBase64?.length);
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -124,41 +93,34 @@ Responda em JSON:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-preview",
+        model: "google/gemini-2.5-flash",
         max_tokens: 4096,
         messages,
       }),
     });
 
+    const responseText = await response.text();
+    console.log("Status gateway:", response.status);
+    console.log("Resposta gateway (primeiros 500 chars):", responseText.substring(0, 500));
+
     if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit excedido. Tente novamente em alguns instantes." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      return new Response(JSON.stringify({ error: "Erro no gateway de IA" }), {
+      return new Response(JSON.stringify({ 
+        error: `Gateway retornou status ${response.status}: ${responseText.substring(0, 200)}` 
+      }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const aiResult = await response.json();
+    const aiResult = JSON.parse(responseText);
     const content = aiResult.choices?.[0]?.message?.content || "";
 
-    // Parse JSON from response (remove markdown fences if present)
     let parsed;
     try {
       const cleaned = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
       parsed = JSON.parse(cleaned);
     } catch {
-      console.error("Failed to parse AI response:", content);
-      return new Response(JSON.stringify({ error: "A IA retornou um formato inválido. Tente novamente." }), {
+      console.error("Falha ao parsear JSON da IA:", content.substring(0, 300));
+      return new Response(JSON.stringify({ error: "A IA retornou formato inválido. Tente novamente." }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -166,9 +128,10 @@ Responda em JSON:
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
-    console.error("analyze-extrato error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro desconhecido" }), {
+
+  } catch (e: any) {
+    console.error("Erro geral analyze-extrato:", e.message);
+    return new Response(JSON.stringify({ error: e.message || "Erro desconhecido" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
