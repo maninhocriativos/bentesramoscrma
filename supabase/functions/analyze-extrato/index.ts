@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
 
     const tiposTexto = (tiposCobranças || []).join(", ");
 
-    const systemPrompt = `Você é um especialista em direito bancário do consumidor brasileiro. Analise extratos bancários e identifique cobranças indevidas com precisão cirúrgica. Responda APENAS em JSON válido, sem markdown.`;
+    const systemPrompt = `Você é um especialista em direito bancário do consumidor brasileiro com 20 anos de experiência. Sua função é analisar extratos bancários enviados como PDF ou imagem e identificar cobranças indevidas com precisão. Você DEVE ler todo o conteúdo do documento antes de responder. Responda APENAS em JSON válido, sem markdown, sem texto fora do JSON.`;
 
     const userPrompt = `Analise os extratos bancários anexados do banco ${banco} referentes ao período de ${dataInicial} a ${dataFinal}.
 
