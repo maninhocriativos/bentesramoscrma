@@ -25,6 +25,7 @@ interface Classificacao {
   indevido: boolean;
 }
 
+// Analisa texto puro extraído pelo pdf.js
 async function analisarTextoPuro(texto: string, apiKey: string): Promise<string> {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -36,17 +37,11 @@ async function analisarTextoPuro(texto: string, apiKey: string): Promise<string>
     body: JSON.stringify({
       model: "claude-opus-4-6",
       max_tokens: 16000,
-      messages: [
-        {
-          role: "user",
-          content: `Você é um copista de dados bancários. Receberá texto extraído de um extrato bancário.
+      messages: [{
+        role: "user",
+        content: `Você é um copista de dados bancários. Analise o texto abaixo e copie CADA lançamento das categorias indicadas, UM POR LINHA.
 
-Sua tarefa: encontre todas as linhas que contenham cobranças das categorias abaixo e copie cada uma no formato:
-
-DATA | DESCRIÇÃO | VALOR
-
-CATEGORIAS A BUSCAR:
-
+CATEGORIAS:
 - Tarifas: TARIFA, TAXA, CESTA, PACOTE, MANUTENÇÃO, MENSALIDADE CONTA
 - Seguros: SEGURO, SEG., PRESTAMISTA, VIDA, PREV, PROTEÇÃO, PREVIDENCIA
 - Capitalização: CAPITALIZ, TITULO CAP, CAP MENSAL
@@ -54,30 +49,83 @@ CATEGORIAS A BUSCAR:
 - Vedadas: TAC, TEC, ABERTURA CRÉDITO, EMISSÃO CARNÊ
 - Serviços: CLUBE, BENEFICIO, ASSISTÊNCIA, ASSINATURA, CONSÓRCIO
 
-REGRAS ABSOLUTAS:
+FORMATO — uma linha por lançamento:
+DD/MM/AAAA | DESCRIÇÃO | VALOR
 
-- Uma linha por lançamento — NUNCA agrupe ou some valores
-- Copie o valor EXATAMENTE como aparece no texto para aquela linha individual
-- Se a mesma cobrança aparece em vários meses = várias linhas separadas
-- Use o formato: DD/MM/AAAA | DESCRIÇÃO | VALOR
-- Use ponto como decimal: 32.00
-- NÃO inclua: IOF, saques, depósitos, transferências, compras, salário, contas de consumo
+REGRAS:
+- VALOR = valor EXATO daquela linha individual
+- NUNCA some ou multiplique valores
+- Mesma cobrança em vários meses = várias linhas separadas
+- Use ponto decimal: 32.00
+- NÃO inclua: IOF, saques, depósitos, transferências, compras, salário
 
-TEXTO DO EXTRATO:
-
+TEXTO:
 ${texto.substring(0, 50000)}
 
-Responda apenas com as linhas no formato DATA | DESCRIÇÃO | VALOR, sem texto adicional:`,
-        },
-      ],
+Responda APENAS as linhas DATA | DESCRIÇÃO | VALOR:`,
+      }],
     }),
   });
 
   if (!response.ok) {
-    console.error("Erro análise Claude:", response.status, await response.text());
+    console.error("Erro analisarTextoPuro:", response.status, await response.text());
     return "";
   }
+  const result = await response.json();
+  return result.content?.[0]?.text || "";
+}
 
+// Extrai lançamentos diretamente do PDF via base64
+async function extrairDoPdf(base64: string, apiKey: string): Promise<string> {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-opus-4-6",
+      max_tokens: 16000,
+      messages: [{
+        role: "user",
+        content: [
+          {
+            type: "document",
+            source: { type: "base64", media_type: "application/pdf", data: base64 },
+          },
+          {
+            type: "text",
+            text: `Você é um copista de dados bancários. Leia TODAS as páginas deste extrato e copie CADA lançamento das categorias abaixo, UM POR LINHA.
+
+CATEGORIAS:
+- Tarifas: TARIFA, TAXA, CESTA, PACOTE, MANUTENÇÃO
+- Seguros: SEGURO, SEG., PRESTAMISTA, VIDA, PREV, PROTEÇÃO
+- Capitalização: CAPITALIZ, TITULO CAP
+- Anuidades: ANUIDADE, ADM CARTÃO
+- Vedadas: TAC, TEC, ABERTURA CRÉDITO
+- Serviços: CLUBE, BENEFICIO, ASSISTÊNCIA, ASSINATURA
+
+FORMATO — uma linha por lançamento:
+DD/MM/AAAA | DESCRIÇÃO EXATA | VALOR
+
+REGRAS ABSOLUTAS:
+- VALOR = valor EXATO da coluna débito daquela linha
+- NUNCA some ou multiplique
+- Mesma cobrança em 12 meses = 12 linhas separadas
+- NÃO inclua: IOF, saques, depósitos, transferências, compras, salário
+
+Responda APENAS as linhas DATA | DESCRIÇÃO | VALOR:`,
+          },
+        ],
+      }],
+    }),
+  });
+
+  if (!response.ok) {
+    console.error("Erro extrairDoPdf:", response.status, await response.text());
+    return "";
+  }
   const result = await response.json();
   return result.content?.[0]?.text || "";
 }
@@ -108,8 +156,7 @@ function parsearLinhas(texto: string): Lancamento[] {
       d.includes("TRANSFERENCIA") || d.includes("TRANSFERÊNCIA") ||
       d.includes("COMPRA") || d.includes("SALARIO") || d.includes("SALÁRIO") ||
       d.includes("CONTA DE LUZ") || d.includes("CONTA DE AGUA") ||
-      d.includes("CONTA DE TELEFONE") || d.includes("PAGTO BOLETO") ||
-      d.includes("RENDIMENTO")
+      d.includes("CONTA DE TELEFONE") || d.includes("RENDIMENTO")
     ) continue;
 
     const { indevido, categoria } = classificar(descricao);
@@ -131,7 +178,6 @@ function parsearLinhas(texto: string): Lancamento[] {
 
   console.log(`Lançamentos válidos: ${lancamentos.length}`);
   lancamentos.forEach(l => console.log(`  ✓ ${l.data} | ${l.descricao} | R$${l.valor}`));
-
   return lancamentos;
 }
 
@@ -162,8 +208,7 @@ function classificar(descricao: string): Classificacao {
     d.includes("HAP VIDA") || d.includes("HP VIDA") ||
     d.includes("ITAUSEG") || d.includes("SANT SEG") || d.includes("BB SEG") ||
     d.includes("BRASILSEG") || d.includes("CAIXA SEG") || d.includes("BMG SEG") ||
-    d.includes("SEGURO PRESTAMISTA") || d.includes("SEGURO VIDA") ||
-    d.includes("SEG VIDA") || d.includes("SEG.VIDA")
+    d.includes("SEGURO VIDA") || d.includes("SEG VIDA") || d.includes("SEG.VIDA")
   ) {
     return {
       categoria: "Seguros",
@@ -173,10 +218,7 @@ function classificar(descricao: string): Classificacao {
     };
   }
 
-  if (
-    d.includes("CAPITALIZ") || d.includes("TITULO CAP") ||
-    d.includes("TÍTULO CAP") || d.includes("CAP MENSAL")
-  ) {
+  if (d.includes("CAPITALIZ") || d.includes("TITULO CAP") || d.includes("CAP MENSAL")) {
     return {
       categoria: "Capitalização",
       baseLegal: "CDC Art. 39, III — venda casada proibida; Circular SUSEP 462/2013",
@@ -222,8 +264,8 @@ function classificar(descricao: string): Classificacao {
   if (
     d.includes("CLUBE") || d.includes("BENEFICIO") || d.includes("BENEFÍCIO") ||
     d.includes("ASSISTÊNCIA") || d.includes("ASSISTENCIA") || d.includes("ASSINATURA") ||
-    d.includes("CONSORCIO") || d.includes("CONSÓRCIO") ||
-    d.includes("ODONTOL") || d.includes("PREVIDENCIA PRIV")
+    d.includes("CONSORCIO") || d.includes("CONSÓRCIO") || d.includes("ODONTOL") ||
+    d.includes("PREVIDENCIA PRIV")
   ) {
     return {
       categoria: "Serviços Não Solicitados",
@@ -246,7 +288,6 @@ function agrupar(lancamentos: Lancamento[]): GrupoCobranca[] {
 
   for (const l of lancamentos) {
     const chave = `${l.descricao.toUpperCase().trim()}__${l.valor.toFixed(2)}`;
-
     if (mapa.has(chave)) {
       const g = mapa.get(chave)!;
       g.ocorrencias++;
@@ -272,7 +313,6 @@ function gerarFundamentacao(grupos: GrupoCobranca[], banco: string, valorTotal: 
   const dFmt = (valorTotal * 2).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   let t = `Foram identificadas cobranças indevidas no extrato bancário do ${banco}, totalizando ${vFmt}.`;
-
   if (cats.has("Tarifas Bancárias")) t += ` Tarifas cobradas sem contratação expressa violam a Resolução CMN nº 3.919/2010.`;
   if (cats.has("Seguros")) t += ` Seguros cobrados sem contrato assinado caracterizam venda casada proibida pelo CDC Art. 39, III e Resolução CNSP 382/2020.`;
   if (cats.has("Capitalização")) t += ` Capitalização sem autorização expressa configura venda casada (CDC Art. 39, III).`;
@@ -280,9 +320,7 @@ function gerarFundamentacao(grupos: GrupoCobranca[], banco: string, valorTotal: 
   if (cats.has("TAC — Vedada")) t += ` TAC vedada pelo Banco Central desde 30/04/2008 (Resolução BACEN 3.518/2007).`;
   if (cats.has("TEC — Vedada")) t += ` TEC vedada pelo Banco Central desde 30/04/2008 (Resolução BACEN 3.518/2007).`;
   if (cats.has("Serviços Não Solicitados")) t += ` Serviços não solicitados configuram prática abusiva (CDC Art. 39, III).`;
-
-  t += ` Direito à devolução em dobro: ${dFmt} (CDC Art. 42, parágrafo único). Recomenda-se notificação extrajudicial com prazo de 15 dias e, se não atendido, ação de repetição de indébito no Juizado Especial Cível com pedido de dano moral. Prazo prescricional: 5 anos para tarifas (CDC Art. 27) e 10 anos para seguros (CC Art. 205).`;
-
+  t += ` Direito à devolução em dobro: ${dFmt} (CDC Art. 42, parágrafo único). Recomenda-se notificação extrajudicial com prazo de 15 dias e, se não atendido, ação de repetição de indébito no Juizado Especial Cível com pedido de dano moral. Prazo: 5 anos para tarifas (CDC Art. 27) e 10 anos para seguros (CC Art. 205).`;
   return t;
 }
 
@@ -291,12 +329,16 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { banco, dataInicial, dataFinal, nomeCliente, cpf, numeroContrato, textoExtraido, imagensBase64 } = body;
+    const {
+      banco, dataInicial, dataFinal, nomeCliente, cpf, numeroContrato,
+      textoExtraido, imagensBase64, arquivosBase64,
+    } = body;
 
     console.log("=== NOVA ANÁLISE ===");
     console.log("Banco:", banco, "| Período:", dataInicial, "a", dataFinal);
-    console.log("Texto extraído pelo frontend:", textoExtraido?.length || 0, "chars");
-    console.log("Imagens:", imagensBase64?.length || 0);
+    console.log("textoExtraido:", textoExtraido?.length || 0, "chars");
+    console.log("imagensBase64:", imagensBase64?.length || 0);
+    console.log("arquivosBase64:", arquivosBase64?.length || 0);
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
@@ -309,65 +351,89 @@ Deno.serve(async (req) => {
     const periodoAnalisado = dataInicial && dataFinal
       ? `${dataInicial} a ${dataFinal}` : "Período não informado";
 
-    let textoBruto = "";
+    let linhasAnalisadas = "";
 
-    // CAMINHO 1: Texto extraído pelo pdf.js no frontend
+    // CAMINHO 1: Texto extraído pelo pdf.js no frontend (mais preciso)
     if (textoExtraido?.trim()) {
-      console.log("Analisando texto puro do pdf.js...");
-      textoBruto = await analisarTextoPuro(textoExtraido, ANTHROPIC_API_KEY);
+      console.log("CAMINHO 1: Analisando texto do pdf.js...");
+      linhasAnalisadas = await analisarTextoPuro(textoExtraido, ANTHROPIC_API_KEY);
+      console.log("Linhas extraídas via texto:", linhasAnalisadas.split("\n").filter(l => l.includes("|")).length);
     }
 
-    // CAMINHO 2: Fallback para imagens
-    if (!textoBruto.trim() && imagensBase64?.length > 0) {
-      console.log("Fallback: analisando imagens...");
-      for (const img of imagensBase64) {
-        const response = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "x-api-key": ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "claude-opus-4-6",
-            max_tokens: 8000,
-            messages: [{
-              role: "user",
-              content: [
-                { type: "image", source: { type: "base64", media_type: img.mimeType, data: img.base64 } },
-                { type: "text", text: "Copie cada linha de cobrança (TARIFA, SEGURO, CESTA, etc) no formato: DATA | DESCRIÇÃO | VALOR. Uma linha por lançamento, valor individual sem somar." },
-              ],
-            }],
-          }),
-        });
+    // CAMINHO 2: PDFs via base64 (fallback quando pdf.js falha)
+    if (!linhasAnalisadas.trim()) {
+      const todosPdfs = [
+        ...(arquivosBase64 || []),
+        ...(imagensBase64 || []),
+      ].filter((f: any) => f.mimeType === "application/pdf");
 
-        if (response.ok) {
-          const r = await response.json();
-          textoBruto += (r.content?.[0]?.text || "") + "\n";
+      if (todosPdfs.length > 0) {
+        console.log(`CAMINHO 2: Extraindo de ${todosPdfs.length} PDF(s) via base64...`);
+        for (const file of todosPdfs) {
+          const resultado = await extrairDoPdf(file.base64, ANTHROPIC_API_KEY);
+          linhasAnalisadas += resultado + "\n";
+          console.log("Linhas extraídas do PDF:", resultado.split("\n").filter(l => l.includes("|")).length);
         }
       }
     }
 
-    if (!textoBruto.trim()) {
+    // CAMINHO 3: Imagens (fallback final)
+    if (!linhasAnalisadas.trim()) {
+      const imagens = [
+        ...(arquivosBase64 || []),
+        ...(imagensBase64 || []),
+      ].filter((f: any) => f.mimeType !== "application/pdf");
+
+      if (imagens.length > 0) {
+        console.log(`CAMINHO 3: Analisando ${imagens.length} imagem(ns)...`);
+        for (const img of imagens) {
+          const response = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "x-api-key": ANTHROPIC_API_KEY,
+              "anthropic-version": "2023-06-01",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "claude-opus-4-6",
+              max_tokens: 8000,
+              messages: [{
+                role: "user",
+                content: [
+                  { type: "image", source: { type: "base64", media_type: img.mimeType, data: img.base64 } },
+                  { type: "text", text: "Copie cada cobrança (TARIFA, SEGURO, CESTA) no formato: DATA | DESCRIÇÃO | VALOR. Uma linha por lançamento, valor individual." },
+                ],
+              }],
+            }),
+          });
+          if (response.ok) {
+            const r = await response.json();
+            linhasAnalisadas += (r.content?.[0]?.text || "") + "\n";
+          }
+        }
+      }
+    }
+
+    console.log("Total linhas brutas:", linhasAnalisadas.split("\n").filter(l => l.includes("|")).length);
+
+    if (!linhasAnalisadas.trim()) {
       return new Response(
         JSON.stringify({ error: "Não foi possível extrair lançamentos. Verifique se o arquivo é um extrato bancário válido." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const lancamentos = parsearLinhas(textoBruto);
+    const lancamentos = parsearLinhas(linhasAnalisadas);
 
     if (lancamentos.length === 0) {
       return new Response(JSON.stringify({
         resumo: { total_lancamentos: 0, irregularidades_encontradas: 0, valor_total_indevido: 0, periodo_analisado: periodoAnalisado, banco: banco || "Não informado" },
-        cobrancas_indevidas: [],
-        por_categoria: [],
+        cobrancas_indevidas: [], por_categoria: [],
         recomendacao: { tipo_acao: "Nenhuma irregularidade identificada", fundamentacao: "Não foram encontradas cobranças indevidas.", estimativa_recuperacao: 0, prazo_prescricional: "N/A", prioridade: "baixa" },
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const grupos = agrupar(lancamentos);
-
     console.log("=== GRUPOS FINAIS ===");
     grupos.forEach(g => console.log(`  [${g.ocorrencias}x R$${g.valorUnitario}] ${g.descricao} = R$${g.valorTotal}`));
 
@@ -381,7 +447,9 @@ Deno.serve(async (req) => {
       };
     });
 
-    const valor_total_indevido = parseFloat(cobrancas_indevidas.reduce((s, c) => s + c.valor_total, 0).toFixed(2));
+    const valor_total_indevido = parseFloat(
+      cobrancas_indevidas.reduce((s, c) => s + c.valor_total, 0).toFixed(2)
+    );
     const estimativa_recuperacao = parseFloat((valor_total_indevido * 2).toFixed(2));
 
     const catMap = new Map<string, { total: number; ocorrencias: number }>();
@@ -392,13 +460,18 @@ Deno.serve(async (req) => {
         ocorrencias: ex.ocorrencias + c.quantidade_ocorrencias,
       });
     }
-
-    const por_categoria = Array.from(catMap.entries()).map(([categoria, v]) => ({ categoria, total: v.total, ocorrencias: v.ocorrencias }));
+    const por_categoria = Array.from(catMap.entries()).map(([categoria, v]) => ({
+      categoria, total: v.total, ocorrencias: v.ocorrencias,
+    }));
 
     const resultado = {
-      resumo: { total_lancamentos: lancamentos.length, irregularidades_encontradas: cobrancas_indevidas.length, valor_total_indevido, periodo_analisado: periodoAnalisado, banco: banco || "Não informado" },
-      cobrancas_indevidas,
-      por_categoria,
+      resumo: {
+        total_lancamentos: lancamentos.length,
+        irregularidades_encontradas: cobrancas_indevidas.length,
+        valor_total_indevido, periodo_analisado: periodoAnalisado,
+        banco: banco || "Não informado",
+      },
+      cobrancas_indevidas, por_categoria,
       recomendacao: {
         tipo_acao: "Requerimento administrativo e/ou Ação Judicial de repetição de indébito",
         fundamentacao: gerarFundamentacao(grupos, banco || "banco", valor_total_indevido),
@@ -408,15 +481,21 @@ Deno.serve(async (req) => {
       },
     };
 
-    console.log("=== RESULTADO FINAL ===");
+    console.log("=== RESULTADO ===");
     console.log("Lançamentos:", resultado.resumo.total_lancamentos);
     console.log("Grupos:", resultado.resumo.irregularidades_encontradas);
     console.log("Total: R$", resultado.resumo.valor_total_indevido);
     console.log("2x: R$", resultado.recomendacao.estimativa_recuperacao);
 
-    return new Response(JSON.stringify(resultado), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify(resultado), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
   } catch (e: any) {
     console.error("Erro geral:", e.message, e.stack);
-    return new Response(JSON.stringify({ error: e.message || "Erro desconhecido" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(
+      JSON.stringify({ error: e.message || "Erro desconhecido" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 });
