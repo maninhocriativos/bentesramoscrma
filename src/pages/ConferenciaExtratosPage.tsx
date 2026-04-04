@@ -8,7 +8,6 @@ import { ExtratoLoading } from '@/components/extratos/ExtratoLoading';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
-import { extrairTextoPdf } from '@/lib/pdfExtractor';
 import type { AnaliseConfig, AnaliseResultado } from '@/types/extratos';
 
 export type { AnaliseConfig, AnaliseResultado };
