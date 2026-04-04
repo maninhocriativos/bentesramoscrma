@@ -28,40 +28,45 @@ export default function ConferenciaExtratosPage() {
     setLoadingStep(0);
 
     try {
-      // Step 1: Reading files
       const stepInterval = setInterval(() => {
         setLoadingStep(prev => Math.min(prev + 1, 3));
       }, 2000);
 
       let textoExtraido = '';
+      const arquivosBase64: Array<{ base64: string; mimeType: string; name: string }> = [];
       const imagensBase64: Array<{ base64: string; mimeType: string; name: string }> = [];
 
       for (const file of cfg.arquivos) {
+        // Sempre converte para base64 primeiro (garante fallback)
+        const buffer = await file.arrayBuffer();
+        const base64 = btoa(
+          new Uint8Array(buffer).reduce((d, b) => d + String.fromCharCode(b), '')
+        );
+
         if (file.type === 'application/pdf') {
+          // Tenta extrair texto com pdf.js
           try {
-            console.log('Extraindo texto do PDF:', file.name);
+            console.log('Tentando pdf.js:', file.name);
             const { extrairTextoPdf } = await import('@/lib/pdfExtractor');
             const texto = await extrairTextoPdf(file);
-            console.log('Texto extraído com sucesso:', texto.length, 'chars');
-            textoExtraido += `\n\n=== ARQUIVO: ${file.name} ===\n${texto}`;
+            if (texto && texto.length > 100) {
+              console.log('pdf.js OK:', texto.length, 'chars');
+              textoExtraido += `\n\n=== ARQUIVO: ${file.name} ===\n${texto}`;
+            } else {
+              console.log('pdf.js retornou pouco texto, usando base64');
+              arquivosBase64.push({ base64, mimeType: file.type, name: file.name });
+            }
           } catch (err) {
-            console.error('Falha na extração do PDF, usando base64:', err);
-            const buffer = await file.arrayBuffer();
-            const base64 = btoa(
-              new Uint8Array(buffer).reduce((d, b) => d + String.fromCharCode(b), '')
-            );
-            imagensBase64.push({ base64, mimeType: file.type, name: file.name });
+            console.error('pdf.js falhou, usando base64:', err);
+            arquivosBase64.push({ base64, mimeType: file.type, name: file.name });
           }
         } else {
-          const buffer = await file.arrayBuffer();
-          const base64 = btoa(
-            new Uint8Array(buffer).reduce((d, b) => d + String.fromCharCode(b), '')
-          );
           imagensBase64.push({ base64, mimeType: file.type, name: file.name });
         }
       }
 
-      console.log('textoExtraido total:', textoExtraido.length, 'chars');
+      console.log('textoExtraido:', textoExtraido.length, 'chars');
+      console.log('arquivosBase64 (PDFs fallback):', arquivosBase64.length);
       console.log('imagensBase64:', imagensBase64.length);
 
       const { data, error } = await supabase.functions.invoke('analyze-extrato', {
@@ -74,6 +79,7 @@ export default function ConferenciaExtratosPage() {
           cpf: cfg.cpf,
           numeroContrato: cfg.numeroContrato,
           textoExtraido,
+          arquivosBase64,
           imagensBase64,
         },
       });
@@ -86,7 +92,6 @@ export default function ConferenciaExtratosPage() {
       setResultado(data as AnaliseResultado);
       setState('result');
 
-      // Save to DB
       if (user) {
         await supabase.from('analises_extratos' as any).insert({
           usuario_id: user.id,
@@ -120,7 +125,6 @@ export default function ConferenciaExtratosPage() {
     <AppLayout>
       <AppHeader title="Conferência de Extratos" />
       <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
-        {/* Header */}
         <div className="flex items-center gap-3">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Conferência de Extratos</h1>
@@ -133,7 +137,6 @@ export default function ConferenciaExtratosPage() {
           </Badge>
         </div>
 
-        {/* Config Form */}
         {(state === 'initial' || state === 'error') && (
           <ExtratoConfigForm onSubmit={handleAnalise} />
         )}
