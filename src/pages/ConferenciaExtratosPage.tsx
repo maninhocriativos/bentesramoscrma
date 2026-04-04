@@ -8,6 +8,7 @@ import { ExtratoLoading } from '@/components/extratos/ExtratoLoading';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { extrairTextoPdf } from '@/lib/pdfExtractor';
 import type { AnaliseConfig, AnaliseResultado } from '@/types/extratos';
 
 export type { AnaliseConfig, AnaliseResultado };
@@ -33,16 +34,27 @@ export default function ConferenciaExtratosPage() {
         setLoadingStep(prev => Math.min(prev + 1, 3));
       }, 2000);
 
-      // Convert files to base64
-      const arquivosBase64 = await Promise.all(
-        cfg.arquivos.map(async (file) => {
+      // Extract text from PDFs, fallback to base64 for images
+      let textoExtraido = '';
+      const imagensBase64: Array<{ base64: string; mimeType: string; name: string }> = [];
+
+      for (const file of cfg.arquivos) {
+        if (file.type === 'application/pdf') {
+          try {
+            const texto = await extrairTextoPdf(file);
+            textoExtraido += `\n\n=== ARQUIVO: ${file.name} ===\n${texto}`;
+          } catch (err) {
+            console.error('Erro ao extrair PDF:', err);
+            const buffer = await file.arrayBuffer();
+            const base64 = btoa(new Uint8Array(buffer).reduce((d, b) => d + String.fromCharCode(b), ''));
+            imagensBase64.push({ base64, mimeType: file.type, name: file.name });
+          }
+        } else {
           const buffer = await file.arrayBuffer();
-          const base64 = btoa(
-            new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-          );
-          return { base64, mimeType: file.type, name: file.name };
-        })
-      );
+          const base64 = btoa(new Uint8Array(buffer).reduce((d, b) => d + String.fromCharCode(b), ''));
+          imagensBase64.push({ base64, mimeType: file.type, name: file.name });
+        }
+      }
 
       const { data, error } = await supabase.functions.invoke('analyze-extrato', {
         body: {
@@ -53,7 +65,8 @@ export default function ConferenciaExtratosPage() {
           nomeCliente: cfg.nomeCliente,
           cpf: cfg.cpf,
           numeroContrato: cfg.numeroContrato,
-          arquivosBase64,
+          textoExtraido,
+          imagensBase64,
         },
       });
 
