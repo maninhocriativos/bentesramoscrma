@@ -1,36 +1,59 @@
-import * as pdfjsLib from 'pdfjs-dist';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
-
 export async function extrairTextoPdf(file: File): Promise<string> {
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  let textoCompleto = '';
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
 
-  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const textContent = await page.getTextContent();
-    const items = textContent.items as any[];
+    reader.onload = async (e) => {
+      try {
+        const typedArray = new Uint8Array(e.target?.result as ArrayBuffer);
 
-    const linhasPorY = new Map<number, Array<{ x: number; str: string }>>();
+        // Importa pdf.js dinamicamente
+        const pdfjsLib = await import('pdfjs-dist');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+          'pdfjs-dist/build/pdf.worker.mjs',
+          import.meta.url
+        ).toString();
 
-    for (const item of items) {
-      if (!item.str?.trim()) continue;
-      const y = Math.round(item.transform[5]);
-      const x = Math.round(item.transform[4]);
-      if (!linhasPorY.has(y)) linhasPorY.set(y, []);
-      linhasPorY.get(y)!.push({ x, str: item.str });
-    }
+        const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
+        let textoCompleto = '';
 
-    const linhasOrdenadas = Array.from(linhasPorY.entries())
-      .sort((a, b) => b[0] - a[0])
-      .map(([, itens]) =>
-        itens.sort((a, b) => a.x - b.x).map(i => i.str).join(' ')
-      );
+        console.log(`PDF carregado: ${pdf.numPages} páginas`);
 
-    textoCompleto += `\n--- PÁGINA ${pageNum} ---\n`;
-    textoCompleto += linhasOrdenadas.join('\n');
-  }
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          const page = await pdf.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          const items = textContent.items as any[];
 
-  return textoCompleto;
+          const linhasPorY = new Map<number, Array<{ x: number; str: string }>>();
+
+          for (const item of items) {
+            if (!item.str?.trim()) continue;
+            const y = Math.round(item.transform[5]);
+            const x = Math.round(item.transform[4]);
+            if (!linhasPorY.has(y)) linhasPorY.set(y, []);
+            linhasPorY.get(y)!.push({ x, str: item.str });
+          }
+
+          const linhasOrdenadas = Array.from(linhasPorY.entries())
+            .sort((a, b) => b[0] - a[0])
+            .map(([, itens]) =>
+              itens.sort((a, b) => a.x - b.x).map(i => i.str).join(' ')
+            );
+
+          textoCompleto += `\n--- PÁGINA ${pageNum} ---\n`;
+          textoCompleto += linhasOrdenadas.join('\n');
+        }
+
+        console.log(`Texto extraído: ${textoCompleto.length} chars`);
+        console.log('Primeiros 500 chars:', textoCompleto.substring(0, 500));
+
+        resolve(textoCompleto);
+      } catch (err) {
+        console.error('Erro ao processar PDF:', err);
+        reject(err);
+      }
+    };
+
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
 }

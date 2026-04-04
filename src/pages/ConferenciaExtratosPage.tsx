@@ -8,7 +8,6 @@ import { ExtratoLoading } from '@/components/extratos/ExtratoLoading';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
-import { extrairTextoPdf } from '@/lib/pdfExtractor';
 import type { AnaliseConfig, AnaliseResultado } from '@/types/extratos';
 
 export type { AnaliseConfig, AnaliseResultado };
@@ -34,27 +33,36 @@ export default function ConferenciaExtratosPage() {
         setLoadingStep(prev => Math.min(prev + 1, 3));
       }, 2000);
 
-      // Extract text from PDFs, fallback to base64 for images
       let textoExtraido = '';
       const imagensBase64: Array<{ base64: string; mimeType: string; name: string }> = [];
 
       for (const file of cfg.arquivos) {
         if (file.type === 'application/pdf') {
           try {
+            console.log('Extraindo texto do PDF:', file.name);
+            const { extrairTextoPdf } = await import('@/lib/pdfExtractor');
             const texto = await extrairTextoPdf(file);
+            console.log('Texto extraído com sucesso:', texto.length, 'chars');
             textoExtraido += `\n\n=== ARQUIVO: ${file.name} ===\n${texto}`;
           } catch (err) {
-            console.error('Erro ao extrair PDF:', err);
+            console.error('Falha na extração do PDF, usando base64:', err);
             const buffer = await file.arrayBuffer();
-            const base64 = btoa(new Uint8Array(buffer).reduce((d, b) => d + String.fromCharCode(b), ''));
+            const base64 = btoa(
+              new Uint8Array(buffer).reduce((d, b) => d + String.fromCharCode(b), '')
+            );
             imagensBase64.push({ base64, mimeType: file.type, name: file.name });
           }
         } else {
           const buffer = await file.arrayBuffer();
-          const base64 = btoa(new Uint8Array(buffer).reduce((d, b) => d + String.fromCharCode(b), ''));
+          const base64 = btoa(
+            new Uint8Array(buffer).reduce((d, b) => d + String.fromCharCode(b), '')
+          );
           imagensBase64.push({ base64, mimeType: file.type, name: file.name });
         }
       }
+
+      console.log('textoExtraido total:', textoExtraido.length, 'chars');
+      console.log('imagensBase64:', imagensBase64.length);
 
       const { data, error } = await supabase.functions.invoke('analyze-extrato', {
         body: {
