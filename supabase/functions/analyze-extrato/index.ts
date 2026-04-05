@@ -36,9 +36,10 @@ async function analisarTextoPuro(texto: string, apiKey: string): Promise<string>
     body: JSON.stringify({
       model: "claude-opus-4-6",
       max_tokens: 16000,
-      messages: [{
-        role: "user",
-        content: `Você é um copista de dados bancários. Analise o texto abaixo e copie CADA lançamento das categorias indicadas, UM POR LINHA.
+      messages: [
+        {
+          role: "user",
+          content: `Você é um copista de dados bancários. Analise o texto abaixo e copie CADA lançamento das categorias indicadas, UM POR LINHA.
 
 CATEGORIAS:
 - Tarifas: TARIFA, TAXA, CESTA, PACOTE, MANUTENÇÃO, MENSALIDADE CONTA
@@ -62,7 +63,8 @@ TEXTO:
 ${texto.substring(0, 50000)}
 
 Responda APENAS as linhas DATA | DESCRIÇÃO | VALOR:`,
-      }],
+        },
+      ],
     }),
   });
 
@@ -85,16 +87,17 @@ async function extrairDoPdf(base64: string, apiKey: string): Promise<string> {
     body: JSON.stringify({
       model: "claude-opus-4-6",
       max_tokens: 16000,
-      messages: [{
-        role: "user",
-        content: [
-          {
-            type: "document",
-            source: { type: "base64", media_type: "application/pdf", data: base64 },
-          },
-          {
-            type: "text",
-            text: `Você é um copista de dados bancários. Leia TODAS as páginas deste extrato e copie CADA lançamento das categorias abaixo, UM POR LINHA.
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "document",
+              source: { type: "base64", media_type: "application/pdf", data: base64 },
+            },
+            {
+              type: "text",
+              text: `Você é um copista de dados bancários. Leia TODAS as páginas deste extrato e copie CADA lançamento das categorias abaixo, UM POR LINHA.
 
 CATEGORIAS:
 - Tarifas: TARIFA, TAXA, CESTA, PACOTE, MANUTENÇÃO
@@ -114,9 +117,10 @@ REGRAS ABSOLUTAS:
 - NÃO inclua: IOF, saques, depósitos, transferências, compras, salário
 
 Responda APENAS as linhas DATA | DESCRIÇÃO | VALOR:`,
-          },
-        ],
-      }],
+            },
+          ],
+        },
+      ],
     }),
   });
 
@@ -135,12 +139,15 @@ function parsearLinhas(texto: string): Lancamento[] {
     const trimmed = linha.trim();
     if (!trimmed || !trimmed.includes("|")) continue;
 
-    const partes = trimmed.split("|").map(p => p.trim());
+    const partes = trimmed.split("|").map((p) => p.trim());
     if (partes.length < 3) continue;
 
     const data = partes[0].trim();
     const descricao = partes[1].trim();
-    const valorStr = partes[2].trim().replace(/[^\d,\.]/g, "").replace(",", ".");
+    const valorStr = partes[2]
+      .trim()
+      .replace(/[^\d,\.]/g, "")
+      .replace(",", ".");
     const valor = parseFloat(valorStr);
 
     if (!data || !descricao || isNaN(valor) || valor <= 0) continue;
@@ -152,19 +159,34 @@ function parsearLinhas(texto: string): Lancamento[] {
     if (
       d.includes("IOF") ||
       (d.includes("ENCARGO") && d.includes("LIMITE")) ||
-      d.includes("SAQUE") || d.includes("DEPOSITO") || d.includes("DEPÓSITO") ||
-      d.includes("TRANSFERENCIA") || d.includes("TRANSFERÊNCIA") ||
-      d.includes("COMPRA") || d.includes("SALARIO") || d.includes("SALÁRIO") ||
-      d.includes("CONTA DE LUZ") || d.includes("CONTA DE AGUA") ||
-      d.includes("CONTA DE TELEFONE") || d.includes("RENDIMENTO")
-    ) continue;
+      d.includes("SAQUE") ||
+      d.includes("DEPOSITO") ||
+      d.includes("DEPÓSITO") ||
+      d.includes("TRANSFERENCIA") ||
+      d.includes("TRANSFERÊNCIA") ||
+      d.includes("COMPRA") ||
+      d.includes("SALARIO") ||
+      d.includes("SALÁRIO") ||
+      d.includes("CONTA DE LUZ") ||
+      d.includes("CONTA DE AGUA") ||
+      d.includes("CONTA DE TELEFONE") ||
+      d.includes("RENDIMENTO")
+    )
+      continue;
 
     // Exclui anuidades de conselhos profissionais (não são cobranças indevidas)
     if (
-      d.includes("CRC") || d.includes("CRM") || d.includes("OAB") ||
-      d.includes("CREA") || d.includes("CFO") || d.includes("CONSELHO") ||
-      d.includes("CFMV") || d.includes("COREN") || d.includes("CAU")
-    ) continue;
+      d.includes("CRC") ||
+      d.includes("CRM") ||
+      d.includes("OAB") ||
+      d.includes("CREA") ||
+      d.includes("CFO") ||
+      d.includes("CONSELHO") ||
+      d.includes("CFMV") ||
+      d.includes("COREN") ||
+      d.includes("CAU")
+    )
+      continue;
 
     const { indevido, categoria } = classificar(descricao);
     if (!indevido) continue;
@@ -172,8 +194,8 @@ function parsearLinhas(texto: string): Lancamento[] {
     // Limites por categoria para rejeitar valores claramente somados
     const limites: Record<string, number> = {
       "Tarifas Bancárias": 55,
-      "Seguros": 50,
-      "Capitalização": 300,
+      Seguros: 50,
+      Capitalização: 300,
       "Anuidade Cartão": 100,
       "TAC — Vedada": 2000,
       "TEC — Vedada": 500,
@@ -189,7 +211,7 @@ function parsearLinhas(texto: string): Lancamento[] {
   }
 
   console.log(`Lançamentos válidos: ${lancamentos.length}`);
-  lancamentos.forEach(l => console.log(`  ✓ ${l.data} | ${l.descricao} | R$${l.valor}`));
+  lancamentos.forEach((l) => console.log(`  ✓ ${l.data} | ${l.descricao} | R$${l.valor}`));
   return lancamentos;
 }
 
@@ -198,11 +220,16 @@ function classificar(descricao: string): Classificacao {
 
   if (
     d.match(/TARIFA\s*(DE\s*)?(MANUT|PACOTE|CESTA|SERV|ADM)/) ||
-    d.includes("CESTA") || d.includes("PACOTE DE SERV") ||
-    d.includes("MANUTENÇÃO DE CONTA") || d.includes("MANUTENCAO DE CONTA") ||
-    d.includes("TAXA DE MANUT") || d.includes("TAXA MANUT") ||
-    d.includes("MENSALIDADE CONTA") || d.includes("TARIFA BANCARIA") ||
-    d.includes("TARIFA BANCÁRIA") || d.includes("TAXA DE SERVICO") ||
+    d.includes("CESTA") ||
+    d.includes("PACOTE DE SERV") ||
+    d.includes("MANUTENÇÃO DE CONTA") ||
+    d.includes("MANUTENCAO DE CONTA") ||
+    d.includes("TAXA DE MANUT") ||
+    d.includes("TAXA MANUT") ||
+    d.includes("MENSALIDADE CONTA") ||
+    d.includes("TARIFA BANCARIA") ||
+    d.includes("TARIFA BANCÁRIA") ||
+    d.includes("TAXA DE SERVICO") ||
     d.includes("TAXA DE SERVIÇO")
   ) {
     return {
@@ -214,13 +241,24 @@ function classificar(descricao: string): Classificacao {
   }
 
   if (
-    d.includes("SEGURO") || d.includes("SEG.") || d.includes("PRESTAMISTA") ||
-    d.includes("PROTEÇÃO") || d.includes("PROTECAO") ||
-    d.includes("VIDA PREV") || d.includes("BRADESCO VIDA") ||
-    d.includes("HAP VIDA") || d.includes("HP VIDA") ||
-    d.includes("ITAUSEG") || d.includes("SANT SEG") || d.includes("BB SEG") ||
-    d.includes("BRASILSEG") || d.includes("CAIXA SEG") || d.includes("BMG SEG") ||
-    d.includes("SEGURO VIDA") || d.includes("SEG VIDA") || d.includes("SEG.VIDA")
+    d.includes("SEGURO") ||
+    d.includes("SEG.") ||
+    d.includes("PRESTAMISTA") ||
+    d.includes("PROTEÇÃO") ||
+    d.includes("PROTECAO") ||
+    d.includes("VIDA PREV") ||
+    d.includes("BRADESCO VIDA") ||
+    d.includes("HAP VIDA") ||
+    d.includes("HP VIDA") ||
+    d.includes("ITAUSEG") ||
+    d.includes("SANT SEG") ||
+    d.includes("BB SEG") ||
+    d.includes("BRASILSEG") ||
+    d.includes("CAIXA SEG") ||
+    d.includes("BMG SEG") ||
+    d.includes("SEGURO VIDA") ||
+    d.includes("SEG VIDA") ||
+    d.includes("SEG.VIDA")
   ) {
     return {
       categoria: "Seguros",
@@ -240,8 +278,11 @@ function classificar(descricao: string): Classificacao {
   }
 
   if (
-    d.includes("ANUIDADE") || d.includes("ADM CARTAO") || d.includes("ADM CARTÃO") ||
-    d.includes("ADMINISTRAÇÃO CARTÃO") || d.includes("MENSALIDADE CARTAO") ||
+    d.includes("ANUIDADE") ||
+    d.includes("ADM CARTAO") ||
+    d.includes("ADM CARTÃO") ||
+    d.includes("ADMINISTRAÇÃO CARTÃO") ||
+    d.includes("MENSALIDADE CARTAO") ||
     d.includes("MENSALIDADE CARTÃO")
   ) {
     return {
@@ -253,8 +294,10 @@ function classificar(descricao: string): Classificacao {
   }
 
   if (
-    d.includes("TAC") || d.includes("ABERTURA DE CREDITO") ||
-    d.includes("ABERTURA DE CRÉDITO") || d.includes("ABERTURA CREDITO")
+    d.includes("TAC") ||
+    d.includes("ABERTURA DE CREDITO") ||
+    d.includes("ABERTURA DE CRÉDITO") ||
+    d.includes("ABERTURA CREDITO")
   ) {
     return {
       categoria: "TAC — Vedada",
@@ -274,9 +317,15 @@ function classificar(descricao: string): Classificacao {
   }
 
   if (
-    d.includes("CLUBE") || d.includes("BENEFICIO") || d.includes("BENEFÍCIO") ||
-    d.includes("ASSISTÊNCIA") || d.includes("ASSISTENCIA") || d.includes("ASSINATURA") ||
-    d.includes("CONSORCIO") || d.includes("CONSÓRCIO") || d.includes("ODONTOL") ||
+    d.includes("CLUBE") ||
+    d.includes("BENEFICIO") ||
+    d.includes("BENEFÍCIO") ||
+    d.includes("ASSISTÊNCIA") ||
+    d.includes("ASSISTENCIA") ||
+    d.includes("ASSINATURA") ||
+    d.includes("CONSORCIO") ||
+    d.includes("CONSÓRCIO") ||
+    d.includes("ODONTOL") ||
     d.includes("PREVIDENCIA PRIV")
   ) {
     return {
@@ -306,8 +355,11 @@ function agrupar(lancamentos: Lancamento[]): GrupoCobranca[] {
       g.valorTotal = parseFloat((g.valorTotal + l.valor).toFixed(2));
     } else {
       mapa.set(chave, {
-        data: l.data, descricao: l.descricao,
-        valorUnitario: l.valor, ocorrencias: 1, valorTotal: l.valor,
+        data: l.data,
+        descricao: l.descricao,
+        valorUnitario: l.valor,
+        ocorrencias: 1,
+        valorTotal: l.valor,
       });
     }
   }
@@ -320,18 +372,22 @@ function agrupar(lancamentos: Lancamento[]): GrupoCobranca[] {
 }
 
 function gerarFundamentacao(grupos: GrupoCobranca[], banco: string, valorTotal: number): string {
-  const cats = new Set(grupos.map(g => classificar(g.descricao).categoria));
+  const cats = new Set(grupos.map((g) => classificar(g.descricao).categoria));
   const vFmt = valorTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   const dFmt = (valorTotal * 2).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   let t = `Foram identificadas cobranças indevidas no extrato bancário do ${banco}, totalizando ${vFmt}.`;
-  if (cats.has("Tarifas Bancárias")) t += ` Tarifas cobradas sem contratação expressa violam a Resolução CMN nº 3.919/2010.`;
-  if (cats.has("Seguros")) t += ` Seguros cobrados sem contrato assinado caracterizam venda casada proibida pelo CDC Art. 39, III e Resolução CNSP 382/2020.`;
-  if (cats.has("Capitalização")) t += ` Capitalização sem autorização expressa configura venda casada (CDC Art. 39, III).`;
+  if (cats.has("Tarifas Bancárias"))
+    t += ` Tarifas cobradas sem contratação expressa violam a Resolução CMN nº 3.919/2010.`;
+  if (cats.has("Seguros"))
+    t += ` Seguros cobrados sem contrato assinado caracterizam venda casada proibida pelo CDC Art. 39, III e Resolução CNSP 382/2020.`;
+  if (cats.has("Capitalização"))
+    t += ` Capitalização sem autorização expressa configura venda casada (CDC Art. 39, III).`;
   if (cats.has("Anuidade Cartão")) t += ` Anuidades sem contratação expressa violam a Resolução CMN nº 3.919/2010.`;
   if (cats.has("TAC — Vedada")) t += ` TAC vedada pelo Banco Central desde 30/04/2008 (Resolução BACEN 3.518/2007).`;
   if (cats.has("TEC — Vedada")) t += ` TEC vedada pelo Banco Central desde 30/04/2008 (Resolução BACEN 3.518/2007).`;
-  if (cats.has("Serviços Não Solicitados")) t += ` Serviços não solicitados configuram prática abusiva (CDC Art. 39, III).`;
+  if (cats.has("Serviços Não Solicitados"))
+    t += ` Serviços não solicitados configuram prática abusiva (CDC Art. 39, III).`;
   t += ` Direito à devolução em dobro: ${dFmt} (CDC Art. 42, parágrafo único). Recomenda-se notificação extrajudicial com prazo de 15 dias e, se não atendido, ação de repetição de indébito no Juizado Especial Cível com pedido de dano moral. Prazo: 5 anos para tarifas (CDC Art. 27) e 10 anos para seguros (CC Art. 205).`;
   return t;
 }
@@ -342,8 +398,15 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const {
-      banco, dataInicial, dataFinal, nomeCliente, cpf, numeroContrato,
-      textoExtraido, imagensBase64, arquivosBase64,
+      banco,
+      dataInicial,
+      dataFinal,
+      nomeCliente,
+      cpf,
+      numeroContrato,
+      textoExtraido,
+      imagensBase64,
+      arquivosBase64,
     } = body;
 
     console.log("=== NOVA ANÁLISE ===");
@@ -354,14 +417,13 @@ Deno.serve(async (req) => {
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "ANTHROPIC_API_KEY não configurada" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY não configurada" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const periodoAnalisado = dataInicial && dataFinal
-      ? `${dataInicial} a ${dataFinal}` : "Período não informado";
+    const periodoAnalisado = dataInicial && dataFinal ? `${dataInicial} a ${dataFinal}` : "Período não informado";
 
     let linhasAnalisadas = "";
 
@@ -369,32 +431,30 @@ Deno.serve(async (req) => {
     if (textoExtraido?.trim()) {
       console.log("CAMINHO 1: texto do pdf.js...");
       linhasAnalisadas = await analisarTextoPuro(textoExtraido, ANTHROPIC_API_KEY);
-      console.log("Linhas via texto:", linhasAnalisadas.split("\n").filter(l => l.includes("|")).length);
+      console.log("Linhas via texto:", linhasAnalisadas.split("\n").filter((l) => l.includes("|")).length);
     }
 
     // CAMINHO 2: PDFs via base64
     if (!linhasAnalisadas.trim()) {
-      const todosPdfs = [
-        ...(arquivosBase64 || []),
-        ...(imagensBase64 || []),
-      ].filter((f: any) => f.mimeType === "application/pdf");
+      const todosPdfs = [...(arquivosBase64 || []), ...(imagensBase64 || [])].filter(
+        (f: any) => f.mimeType === "application/pdf",
+      );
 
       if (todosPdfs.length > 0) {
         console.log(`CAMINHO 2: ${todosPdfs.length} PDF(s) via base64...`);
         for (const file of todosPdfs) {
           const resultado = await extrairDoPdf(file.base64, ANTHROPIC_API_KEY);
           linhasAnalisadas += resultado + "\n";
-          console.log("Linhas do PDF:", resultado.split("\n").filter(l => l.includes("|")).length);
+          console.log("Linhas do PDF:", resultado.split("\n").filter((l) => l.includes("|")).length);
         }
       }
     }
 
     // CAMINHO 3: Imagens
     if (!linhasAnalisadas.trim()) {
-      const imagens = [
-        ...(arquivosBase64 || []),
-        ...(imagensBase64 || []),
-      ].filter((f: any) => f.mimeType !== "application/pdf");
+      const imagens = [...(arquivosBase64 || []), ...(imagensBase64 || [])].filter(
+        (f: any) => f.mimeType !== "application/pdf",
+      );
 
       if (imagens.length > 0) {
         console.log(`CAMINHO 3: ${imagens.length} imagem(ns)...`);
@@ -409,13 +469,18 @@ Deno.serve(async (req) => {
             body: JSON.stringify({
               model: "claude-opus-4-6",
               max_tokens: 8000,
-              messages: [{
-                role: "user",
-                content: [
-                  { type: "image", source: { type: "base64", media_type: img.mimeType, data: img.base64 } },
-                  { type: "text", text: "Copie cada cobrança (TARIFA, SEGURO, CESTA) no formato: DATA | DESCRIÇÃO | VALOR. Uma linha por lançamento, valor individual." },
-                ],
-              }],
+              messages: [
+                {
+                  role: "user",
+                  content: [
+                    { type: "image", source: { type: "base64", media_type: img.mimeType, data: img.base64 } },
+                    {
+                      type: "text",
+                      text: "Copie cada cobrança (TARIFA, SEGURO, CESTA) no formato: DATA | DESCRIÇÃO | VALOR. Uma linha por lançamento, valor individual.",
+                    },
+                  ],
+                },
+              ],
             }),
           });
           if (response.ok) {
@@ -426,42 +491,64 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log("Total linhas brutas:", linhasAnalisadas.split("\n").filter(l => l.includes("|")).length);
+    console.log("Total linhas brutas:", linhasAnalisadas.split("\n").filter((l) => l.includes("|")).length);
 
     if (!linhasAnalisadas.trim()) {
       return new Response(
-        JSON.stringify({ error: "Não foi possível extrair lançamentos. Verifique se o arquivo é um extrato bancário válido." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          error: "Não foi possível extrair lançamentos. Verifique se o arquivo é um extrato bancário válido.",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     const lancamentos = parsearLinhas(linhasAnalisadas);
 
     if (lancamentos.length === 0) {
-      return new Response(JSON.stringify({
-        resumo: { total_lancamentos: 0, irregularidades_encontradas: 0, valor_total_indevido: 0, periodo_analisado: periodoAnalisado, banco: banco || "Não informado" },
-        cobrancas_indevidas: [], por_categoria: [],
-        recomendacao: { tipo_acao: "Nenhuma irregularidade identificada", fundamentacao: "Não foram encontradas cobranças indevidas.", estimativa_recuperacao: 0, prazo_prescricional: "N/A", prioridade: "baixa" },
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(
+        JSON.stringify({
+          resumo: {
+            total_lancamentos: 0,
+            irregularidades_encontradas: 0,
+            valor_total_indevido: 0,
+            periodo_analisado: periodoAnalisado,
+            banco: banco || "Não informado",
+          },
+          cobrancas_indevidas: [],
+          por_categoria: [],
+          recomendacao: {
+            tipo_acao: "Nenhuma irregularidade identificada",
+            fundamentacao: "Não foram encontradas cobranças indevidas.",
+            estimativa_recuperacao: 0,
+            prazo_prescricional: "N/A",
+            prioridade: "baixa",
+          },
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     const grupos = agrupar(lancamentos);
     console.log("=== GRUPOS FINAIS ===");
-    grupos.forEach(g => console.log(`  [${g.ocorrencias}x R$${g.valorUnitario}] ${g.descricao} = R$${g.valorTotal}`));
+    grupos.forEach((g) => console.log(`  [${g.ocorrencias}x R$${g.valorUnitario}] ${g.descricao} = R$${g.valorTotal}`));
 
-    const cobrancas_indevidas = grupos.map(g => {
+    const cobrancas_indevidas = grupos.map((g) => {
       const { categoria, baseLegal, justificativa } = classificar(g.descricao);
       return {
-        data: g.data, descricao: g.descricao,
-        valor_unitario: g.valorUnitario, quantidade_ocorrencias: g.ocorrencias,
-        valor_total: g.valorTotal, categoria, status: "confirmado",
-        base_legal: baseLegal, justificativa, recorrente: g.ocorrencias > 1,
+        data: g.data,
+        descricao: g.descricao,
+        valor_unitario: g.valorUnitario,
+        quantidade_ocorrencias: g.ocorrencias,
+        valor_total: g.valorTotal,
+        categoria,
+        status: "confirmado",
+        base_legal: baseLegal,
+        justificativa,
+        recorrente: g.ocorrencias > 1,
       };
     });
 
-    const valor_total_indevido = parseFloat(
-      cobrancas_indevidas.reduce((s, c) => s + c.valor_total, 0).toFixed(2)
-    );
+    const valor_total_indevido = parseFloat(cobrancas_indevidas.reduce((s, c) => s + c.valor_total, 0).toFixed(2));
     const estimativa_recuperacao = parseFloat((valor_total_indevido * 2).toFixed(2));
 
     const catMap = new Map<string, { total: number; ocorrencias: number }>();
@@ -473,17 +560,21 @@ Deno.serve(async (req) => {
       });
     }
     const por_categoria = Array.from(catMap.entries()).map(([categoria, v]) => ({
-      categoria, total: v.total, ocorrencias: v.ocorrencias,
+      categoria,
+      total: v.total,
+      ocorrencias: v.ocorrencias,
     }));
 
     const resultado = {
       resumo: {
         total_lancamentos: lancamentos.length,
         irregularidades_encontradas: cobrancas_indevidas.length,
-        valor_total_indevido, periodo_analisado: periodoAnalisado,
+        valor_total_indevido,
+        periodo_analisado: periodoAnalisado,
         banco: banco || "Não informado",
       },
-      cobrancas_indevidas, por_categoria,
+      cobrancas_indevidas,
+      por_categoria,
       recomendacao: {
         tipo_acao: "Requerimento administrativo e/ou Ação Judicial de repetição de indébito",
         fundamentacao: gerarFundamentacao(grupos, banco || "banco", valor_total_indevido),
@@ -502,12 +593,11 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify(resultado), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-
   } catch (e: any) {
     console.error("Erro geral:", e.message, e.stack);
-    return new Response(
-      JSON.stringify({ error: e.message || "Erro desconhecido" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: e.message || "Erro desconhecido" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
