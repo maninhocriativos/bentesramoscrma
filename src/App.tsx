@@ -30,7 +30,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const PoliticaPrivacidadePage = lazy(() => import("./pages/PoliticaPrivacidadePage"));
 const TermosServicoPage = lazy(() => import("./pages/TermosServicoPage"));
 const InstallPage = lazy(() => import("./pages/InstallPage"));
-const PeticoesIniciaisPage = lazy(() => import("./pages/PeticoesIniciaisPage"));
+const PeticoesPage = lazy(() => import("./pages/PeticoesPage")); // ← novo
 const PeticaoEditarPage = lazy(() => import("./pages/PeticaoEditarPage"));
 const PeticaoRevisaoPage = lazy(() => import("./pages/PeticaoRevisaoPage"));
 const PeticaoSaidaPage = lazy(() => import("./pages/PeticaoSaidaPage"));
@@ -94,7 +94,7 @@ const App = () => (
                 <Route path="/meta-leads" element={<MetaLeadsPage />} />
                 <Route path="/api-hub" element={<ApiHubPage />} />
                 <Route path="/api-docs" element={<ApiDocsPage />} />
-                <Route path="/peticoes" element={<PeticoesIniciaisPage />} />
+                <Route path="/peticoes" element={<PeticoesPage />} />  {/* ← apontando para o novo */}
                 <Route path="/peticoes/nova" element={<PeticaoEditarPage />} />
                 <Route path="/peticoes/:id/editar" element={<PeticaoEditarPage />} />
                 <Route path="/peticoes/:id/revisao" element={<PeticaoRevisaoPage />} />
