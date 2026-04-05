@@ -25,7 +25,6 @@ interface Classificacao {
   indevido: boolean;
 }
 
-// Analisa texto puro extraído pelo pdf.js
 async function analisarTextoPuro(texto: string, apiKey: string): Promise<string> {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -75,7 +74,6 @@ Responda APENAS as linhas DATA | DESCRIÇÃO | VALOR:`,
   return result.content?.[0]?.text || "";
 }
 
-// Extrai lançamentos diretamente do PDF via base64
 async function extrairDoPdf(base64: string, apiKey: string): Promise<string> {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -110,8 +108,8 @@ FORMATO — uma linha por lançamento:
 DD/MM/AAAA | DESCRIÇÃO EXATA | VALOR
 
 REGRAS ABSOLUTAS:
-- VALOR = valor EXATO da coluna débito daquela linha
-- NUNCA some ou multiplique
+- VALOR = valor EXATO da coluna débito daquela linha individual
+- NUNCA some, NUNCA multiplique
 - Mesma cobrança em 12 meses = 12 linhas separadas
 - NÃO inclua: IOF, saques, depósitos, transferências, compras, salário
 
@@ -149,6 +147,8 @@ function parsearLinhas(texto: string): Lancamento[] {
     if (!data.match(/\d{2}[\/\-]\d{2}[\/\-]\d{2,4}/)) continue;
 
     const d = descricao.toUpperCase();
+
+    // Exclui categorias claramente não indevidas
     if (
       d.includes("IOF") ||
       (d.includes("ENCARGO") && d.includes("LIMITE")) ||
@@ -159,12 +159,24 @@ function parsearLinhas(texto: string): Lancamento[] {
       d.includes("CONTA DE TELEFONE") || d.includes("RENDIMENTO")
     ) continue;
 
+    // Exclui anuidades de conselhos profissionais (não são cobranças indevidas)
+    if (
+      d.includes("CRC") || d.includes("CRM") || d.includes("OAB") ||
+      d.includes("CREA") || d.includes("CFO") || d.includes("CONSELHO") ||
+      d.includes("CFMV") || d.includes("COREN") || d.includes("CAU")
+    ) continue;
+
     const { indevido, categoria } = classificar(descricao);
     if (!indevido) continue;
 
+    // Limites por categoria para rejeitar valores claramente somados
     const limites: Record<string, number> = {
-      "Tarifas Bancárias": 200, "Seguros": 250, "Capitalização": 300,
-      "Anuidade Cartão": 300, "TAC — Vedada": 2000, "TEC — Vedada": 500,
+      "Tarifas Bancárias": 55,
+      "Seguros": 50,
+      "Capitalização": 300,
+      "Anuidade Cartão": 100,
+      "TAC — Vedada": 2000,
+      "TEC — Vedada": 500,
       "Serviços Não Solicitados": 300,
     };
 
@@ -337,8 +349,8 @@ Deno.serve(async (req) => {
     console.log("=== NOVA ANÁLISE ===");
     console.log("Banco:", banco, "| Período:", dataInicial, "a", dataFinal);
     console.log("textoExtraido:", textoExtraido?.length || 0, "chars");
-    console.log("imagensBase64:", imagensBase64?.length || 0);
     console.log("arquivosBase64:", arquivosBase64?.length || 0);
+    console.log("imagensBase64:", imagensBase64?.length || 0);
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
@@ -353,14 +365,14 @@ Deno.serve(async (req) => {
 
     let linhasAnalisadas = "";
 
-    // CAMINHO 1: Texto extraído pelo pdf.js no frontend (mais preciso)
+    // CAMINHO 1: Texto extraído pelo pdf.js no frontend
     if (textoExtraido?.trim()) {
-      console.log("CAMINHO 1: Analisando texto do pdf.js...");
+      console.log("CAMINHO 1: texto do pdf.js...");
       linhasAnalisadas = await analisarTextoPuro(textoExtraido, ANTHROPIC_API_KEY);
-      console.log("Linhas extraídas via texto:", linhasAnalisadas.split("\n").filter(l => l.includes("|")).length);
+      console.log("Linhas via texto:", linhasAnalisadas.split("\n").filter(l => l.includes("|")).length);
     }
 
-    // CAMINHO 2: PDFs via base64 (fallback quando pdf.js falha)
+    // CAMINHO 2: PDFs via base64
     if (!linhasAnalisadas.trim()) {
       const todosPdfs = [
         ...(arquivosBase64 || []),
@@ -368,16 +380,16 @@ Deno.serve(async (req) => {
       ].filter((f: any) => f.mimeType === "application/pdf");
 
       if (todosPdfs.length > 0) {
-        console.log(`CAMINHO 2: Extraindo de ${todosPdfs.length} PDF(s) via base64...`);
+        console.log(`CAMINHO 2: ${todosPdfs.length} PDF(s) via base64...`);
         for (const file of todosPdfs) {
           const resultado = await extrairDoPdf(file.base64, ANTHROPIC_API_KEY);
           linhasAnalisadas += resultado + "\n";
-          console.log("Linhas extraídas do PDF:", resultado.split("\n").filter(l => l.includes("|")).length);
+          console.log("Linhas do PDF:", resultado.split("\n").filter(l => l.includes("|")).length);
         }
       }
     }
 
-    // CAMINHO 3: Imagens (fallback final)
+    // CAMINHO 3: Imagens
     if (!linhasAnalisadas.trim()) {
       const imagens = [
         ...(arquivosBase64 || []),
@@ -385,7 +397,7 @@ Deno.serve(async (req) => {
       ].filter((f: any) => f.mimeType !== "application/pdf");
 
       if (imagens.length > 0) {
-        console.log(`CAMINHO 3: Analisando ${imagens.length} imagem(ns)...`);
+        console.log(`CAMINHO 3: ${imagens.length} imagem(ns)...`);
         for (const img of imagens) {
           const response = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
