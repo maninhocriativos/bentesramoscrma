@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Download, UserPlus, RefreshCw, TrendingDown, AlertTriangle, Search, CalendarDays, Scale } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { AnaliseConfig, AnaliseResultado } from '@/types/extratos';
 import { gerarLaudoPdf } from '@/lib/extratoLaudoPdf';
@@ -22,6 +21,8 @@ const statusBadge = (status: string) => {
     default: return <Badge variant="outline">Verificar</Badge>;
   }
 };
+
+const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 
 export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
   const { resumo, cobrancas_indevidas, por_categoria, recomendacao } = resultado;
@@ -66,7 +67,6 @@ export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
     toast.success('PDF gerado com sucesso!');
   };
 
-  // Build chart data from cobranças by month
   const chartData = (() => {
     const map = new Map<string, number>();
     (cobrancas_indevidas || []).forEach(c => {
@@ -78,12 +78,13 @@ export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
 
   return (
     <div className="space-y-6">
+
       {/* Resumo */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Lançamentos Analisados', value: resumo.total_lancamentos, icon: Search },
           { label: 'Irregularidades', value: resumo.irregularidades_encontradas, icon: AlertTriangle },
-          { label: 'Valor Total Indevido', value: `R$ ${(resumo.valor_total_indevido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, icon: TrendingDown, highlight: true },
+          { label: 'Valor Total Indevido', value: `R$ ${fmt(resumo.valor_total_indevido || 0)}`, icon: TrendingDown, highlight: true },
           { label: 'Período', value: resumo.periodo_analisado || `${config.dataInicial} a ${config.dataFinal}`, icon: CalendarDays },
         ].map((m, i) => (
           <Card key={i}>
@@ -98,7 +99,7 @@ export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
         ))}
       </div>
 
-      {/* Tabela */}
+      {/* Tabela detalhada */}
       {cobrancas_indevidas?.length > 0 && (
         <Card>
           <CardHeader><CardTitle>Detalhamento das Cobranças Indevidas</CardTitle></CardHeader>
@@ -108,7 +109,9 @@ export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
                 <TableRow>
                   <TableHead>Data</TableHead>
                   <TableHead>Descrição</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
+                  <TableHead className="text-right">Valor Unit.</TableHead>
+                  <TableHead className="text-center">Ocorr.</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
                   <TableHead>Categoria</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Base Legal</TableHead>
@@ -119,8 +122,16 @@ export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
                   <TableRow key={i}>
                     <TableCell className="whitespace-nowrap">{c.data}</TableCell>
                     <TableCell className="max-w-[200px] truncate">{c.descricao}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap text-destructive font-medium">
-                      R$ {(c.valor_total || c.valor_unitario || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    <TableCell className="text-right whitespace-nowrap text-muted-foreground">
+                      R$ {fmt(c.valor_unitario || 0)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="outline" className="text-xs">
+                        {c.quantidade_ocorrencias}×
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right whitespace-nowrap text-destructive font-bold">
+                      R$ {fmt(c.valor_total || 0)}
                     </TableCell>
                     <TableCell><Badge variant="outline">{c.categoria}</Badge></TableCell>
                     <TableCell>{statusBadge(c.status)}</TableCell>
@@ -141,7 +152,7 @@ export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
               <CardContent className="pt-4 pb-4">
                 <p className="text-xs text-muted-foreground font-medium">{cat.categoria}</p>
                 <p className="text-lg font-bold text-destructive">
-                  R$ {(cat.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  R$ {fmt(cat.total || 0)}
                 </p>
                 <p className="text-xs text-muted-foreground">{cat.ocorrencias} ocorrência(s)</p>
               </CardContent>
@@ -150,7 +161,7 @@ export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
         </div>
       )}
 
-      {/* Chart */}
+      {/* Gráfico */}
       {chartData.length > 0 && (
         <Card>
           <CardHeader><CardTitle>Linha do Tempo de Cobranças Indevidas</CardTitle></CardHeader>
@@ -160,7 +171,7 @@ export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(v: number) => [`R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Valor']} />
+                <Tooltip formatter={(v: number) => [`R$ ${fmt(v)}`, 'Valor']} />
                 <Bar dataKey="valor" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -172,7 +183,9 @@ export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
       {recomendacao && (
         <Card className="border-primary/30 bg-primary/5">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Scale className="h-5 w-5" /> Recomendação Jurídica</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Scale className="h-5 w-5" /> Recomendação Jurídica
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -183,7 +196,7 @@ export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
               <div>
                 <p className="text-muted-foreground text-xs">Estimativa de Recuperação</p>
                 <p className="font-bold text-destructive">
-                  R$ {(recomendacao.estimativa_recuperacao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  R$ {fmt(recomendacao.estimativa_recuperacao || 0)}
                 </p>
               </div>
               <div>
@@ -221,6 +234,7 @@ export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
           <RefreshCw className="h-4 w-4 mr-2" /> Nova Análise
         </Button>
       </div>
+
     </div>
   );
 }
