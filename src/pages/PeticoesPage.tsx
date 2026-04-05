@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Plus, Search, MoreHorizontal, Eye, Copy, FileText, Archive, Trash2,
-  Sparkles, FileCheck2, Clock, CheckCircle2, BarChart3, Wand2, Download,
-  Plane, CreditCard, TrendingUp, AlertTriangle, Ban, ShoppingCart, Package,
-  ArrowRight, Folder, Scale
+  Plus, Search, MoreHorizontal, Eye, Copy, Archive, Trash2,
+  FileCheck2, Clock, CheckCircle2, FileText, Scale,
+  Plane, CreditCard, TrendingUp, AlertTriangle, Ban,
+  ShoppingCart, Package, ArrowRight, X, ChevronRight,
+  LayoutTemplate, Layers,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
@@ -19,419 +20,629 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import { usePeticoesV2, type ActionType, type PetitionModelV2 } from '@/hooks/usePeticoesV2';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
 const ICON_MAP: Record<string, React.ReactNode> = {
-  Plane: <Plane className="h-5 w-5" />,
-  CreditCard: <CreditCard className="h-5 w-5" />,
-  TrendingUp: <TrendingUp className="h-5 w-5" />,
-  AlertTriangle: <AlertTriangle className="h-5 w-5" />,
-  Ban: <Ban className="h-5 w-5" />,
-  ShoppingCart: <ShoppingCart className="h-5 w-5" />,
-  Package: <Package className="h-5 w-5" />,
-  FileText: <FileText className="h-5 w-5" />,
-  Scale: <Scale className="h-5 w-5" />,
+  Plane:         <Plane className="h-4 w-4" />,
+  CreditCard:    <CreditCard className="h-4 w-4" />,
+  TrendingUp:    <TrendingUp className="h-4 w-4" />,
+  AlertTriangle: <AlertTriangle className="h-4 w-4" />,
+  Ban:           <Ban className="h-4 w-4" />,
+  ShoppingCart:  <ShoppingCart className="h-4 w-4" />,
+  Package:       <Package className="h-4 w-4" />,
+  FileText:      <FileText className="h-4 w-4" />,
+  Scale:         <Scale className="h-4 w-4" />,
 };
 
-const COLOR_MAP: Record<string, { gradient: string; bg: string; text: string }> = {
-  sky:     { gradient: 'from-sky-600 to-indigo-600',     bg: 'bg-sky-50 dark:bg-sky-950/30',     text: 'text-sky-700 dark:text-sky-400' },
-  blue:    { gradient: 'from-blue-600 to-indigo-600',    bg: 'bg-blue-50 dark:bg-blue-950/30',   text: 'text-blue-700 dark:text-blue-400' },
-  lime:    { gradient: 'from-lime-600 to-emerald-600',   bg: 'bg-lime-50 dark:bg-lime-950/30',   text: 'text-lime-700 dark:text-lime-400' },
-  red:     { gradient: 'from-red-600 to-rose-600',       bg: 'bg-red-50 dark:bg-red-950/30',     text: 'text-red-700 dark:text-red-400' },
-  emerald: { gradient: 'from-emerald-600 to-teal-600',   bg: 'bg-emerald-50 dark:bg-emerald-950/30', text: 'text-emerald-700 dark:text-emerald-400' },
-  rose:    { gradient: 'from-rose-600 to-pink-600',      bg: 'bg-rose-50 dark:bg-rose-950/30',   text: 'text-rose-700 dark:text-rose-400' },
-  violet:  { gradient: 'from-violet-600 to-purple-600',  bg: 'bg-violet-50 dark:bg-violet-950/30', text: 'text-violet-700 dark:text-violet-400' },
-  teal:    { gradient: 'from-teal-600 to-emerald-600',   bg: 'bg-teal-50 dark:bg-teal-950/30',   text: 'text-teal-700 dark:text-teal-400' },
-  fuchsia: { gradient: 'from-fuchsia-600 to-purple-600', bg: 'bg-fuchsia-50 dark:bg-fuchsia-950/30', text: 'text-fuchsia-700 dark:text-fuchsia-400' },
-  slate:   { gradient: 'from-slate-600 to-gray-600',     bg: 'bg-slate-50 dark:bg-slate-950/30', text: 'text-slate-700 dark:text-slate-400' },
-  amber:   { gradient: 'from-amber-500 to-orange-500',   bg: 'bg-amber-50 dark:bg-amber-950/30', text: 'text-amber-700 dark:text-amber-400' },
-  orange:  { gradient: 'from-orange-600 to-amber-600',   bg: 'bg-orange-50 dark:bg-orange-950/30', text: 'text-orange-700 dark:text-orange-400' },
-  cyan:    { gradient: 'from-cyan-600 to-sky-600',       bg: 'bg-cyan-50 dark:bg-cyan-950/30',   text: 'text-cyan-700 dark:text-cyan-400' },
-  pink:    { gradient: 'from-pink-600 to-fuchsia-600',   bg: 'bg-pink-50 dark:bg-pink-950/30',   text: 'text-pink-700 dark:text-pink-400' },
+const COLOR_MAP: Record<string, { grad: string }> = {
+  sky:     { grad: 'from-sky-500 to-indigo-500' },
+  blue:    { grad: 'from-blue-500 to-indigo-500' },
+  lime:    { grad: 'from-lime-500 to-emerald-500' },
+  red:     { grad: 'from-red-500 to-rose-500' },
+  emerald: { grad: 'from-emerald-500 to-teal-500' },
+  rose:    { grad: 'from-rose-500 to-pink-500' },
+  violet:  { grad: 'from-violet-500 to-purple-500' },
+  teal:    { grad: 'from-teal-500 to-emerald-500' },
+  amber:   { grad: 'from-amber-500 to-orange-500' },
+  orange:  { grad: 'from-orange-500 to-amber-500' },
+  slate:   { grad: 'from-slate-500 to-gray-500' },
+  fuchsia: { grad: 'from-fuchsia-500 to-purple-500' },
+  cyan:    { grad: 'from-cyan-500 to-sky-500' },
+  pink:    { grad: 'from-pink-500 to-fuchsia-500' },
 };
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  draft:     { label: 'Rascunho',   color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', icon: <FileText className="h-3.5 w-3.5" /> },
-  review:    { label: 'Em Revisão', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400', icon: <Clock className="h-3.5 w-3.5" /> },
-  generated: { label: 'Gerado',     color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400', icon: <FileCheck2 className="h-3.5 w-3.5" /> },
-  filed:     { label: 'Protocolado', color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400', icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
-  archived:  { label: 'Arquivado',  color: 'bg-gray-100 text-gray-600 dark:bg-gray-800/30 dark:text-gray-400', icon: <Archive className="h-3.5 w-3.5" /> },
+function getGrad(cor: string) {
+  return (COLOR_MAP[cor] ?? COLOR_MAP.slate).grad;
+}
+
+const STATUS_CFG: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
+  draft:     { label: 'Rascunho',    cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',         icon: <FileText className="h-3 w-3" /> },
+  review:    { label: 'Em Revisão',  cls: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',     icon: <Clock className="h-3 w-3" /> },
+  generated: { label: 'Gerado',      cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400', icon: <FileCheck2 className="h-3 w-3" /> },
+  filed:     { label: 'Protocolado', cls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',     icon: <CheckCircle2 className="h-3 w-3" /> },
+  archived:  { label: 'Arquivado',   cls: 'bg-gray-100 text-gray-600 dark:bg-gray-800/30 dark:text-gray-400',             icon: <Archive className="h-3 w-3" /> },
 };
 
-type ViewMode = 'dashboard' | 'action-select' | 'model-select';
+// ─── Modal Nova Petição ────────────────────────────────────────────────────────
+
+function NovaPeticaoModal({
+  open, onClose, actionTypes, getModelsForAction, onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  actionTypes: ActionType[];
+  getModelsForAction: (id: string) => PetitionModelV2[];
+  onConfirm: (actionId: string, modelId: string) => void;
+}) {
+  const [step, setStep]                       = useState<'action' | 'model'>('action');
+  const [selectedAction, setSelectedAction]   = useState<ActionType | null>(null);
+  const [search, setSearch]                   = useState('');
+
+  function reset() {
+    setStep('action');
+    setSelectedAction(null);
+    setSearch('');
+  }
+
+  function handleClose() { reset(); onClose(); }
+
+  function pickAction(action: ActionType) {
+    const mods = getModelsForAction(action.id);
+    if (mods.length === 0) return;
+    if (mods.length === 1) { onConfirm(action.id, mods[0].id); handleClose(); return; }
+    setSelectedAction(action);
+    setSearch('');
+    setStep('model');
+  }
+
+  function pickModel(model: PetitionModelV2) {
+    if (!selectedAction) return;
+    onConfirm(selectedAction.id, model.id);
+    handleClose();
+  }
+
+  const filteredActions = useMemo(() => {
+    const q = search.toLowerCase();
+    return q
+      ? actionTypes.filter(a => a.nome.toLowerCase().includes(q) || (a.descricao ?? '').toLowerCase().includes(q))
+      : actionTypes;
+  }, [actionTypes, search]);
+
+  const actionModels = selectedAction ? getModelsForAction(selectedAction.id) : [];
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && handleClose()}>
+      <DialogContent className="max-w-xl h-[78vh] flex flex-col p-0 gap-0 overflow-hidden">
+
+        {/* Header */}
+        <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
+          <div className="flex items-center gap-2">
+            {step === 'model' && (
+              <button
+                onClick={() => { setStep('action'); setSearch(''); }}
+                className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground shrink-0"
+              >
+                <ArrowRight className="h-4 w-4 rotate-180" />
+              </button>
+            )}
+            <div className="flex-1 min-w-0">
+              <DialogTitle className="text-base font-semibold flex items-center gap-2">
+                {step === 'action' ? (
+                  <><Scale className="h-4 w-4 text-primary shrink-0" /> Nova Petição</>
+                ) : (
+                  <>
+                    {selectedAction && (
+                      <span className={cn('p-1 rounded-md bg-gradient-to-br text-white inline-flex shrink-0', getGrad(selectedAction.cor))}>
+                        {ICON_MAP[selectedAction.icone] ?? <FileText className="h-3.5 w-3.5" />}
+                      </span>
+                    )}
+                    <span className="truncate">{selectedAction?.nome}</span>
+                  </>
+                )}
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {step === 'action' ? 'Selecione o tipo de ação jurídica' : 'Escolha o modelo'}
+              </p>
+            </div>
+            <button onClick={handleClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground shrink-0">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {step === 'action' && (
+            <div className="relative mt-3">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                autoFocus
+                placeholder="Buscar tipo de ação..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pl-9 h-9 text-sm"
+              />
+            </div>
+          )}
+        </DialogHeader>
+
+        {/* Body */}
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="p-4">
+
+            {/* Step 1 — tipos de ação */}
+            {step === 'action' && (
+              filteredActions.length === 0 ? (
+                <div className="text-center py-14 text-muted-foreground">
+                  <Scale className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                  <p className="text-sm">Nenhum tipo encontrado</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {filteredActions.map(action => {
+                    const count = getModelsForAction(action.id).length;
+                    return (
+                      <button
+                        key={action.id}
+                        disabled={count === 0}
+                        onClick={() => pickAction(action)}
+                        className="group w-full text-left rounded-xl border border-border/60 bg-card hover:border-primary/40 hover:shadow-md transition-all duration-150 overflow-hidden disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <div className={cn('h-1 bg-gradient-to-r', getGrad(action.cor))} />
+                        <div className="p-3.5">
+                          <div className="flex items-start justify-between mb-2">
+                            <span className={cn('p-2 rounded-lg bg-gradient-to-br text-white shadow-sm', getGrad(action.cor))}>
+                              {ICON_MAP[action.icone] ?? <FileText className="h-4 w-4" />}
+                            </span>
+                            <Badge variant="outline" className="text-[10px]">
+                              {count} {count === 1 ? 'modelo' : 'modelos'}
+                            </Badge>
+                          </div>
+                          <p className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors leading-snug">
+                            {action.nome}
+                          </p>
+                          {action.descricao && (
+                            <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
+                              {action.descricao}
+                            </p>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )
+            )}
+
+            {/* Step 2 — modelos */}
+            {step === 'model' && (
+              <div className="space-y-2">
+                {actionModels.length === 0 ? (
+                  <div className="text-center py-14 text-muted-foreground">
+                    <FileText className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                    <p className="text-sm">Nenhum modelo disponível</p>
+                  </div>
+                ) : actionModels.map(model => (
+                  <button
+                    key={model.id}
+                    onClick={() => pickModel(model)}
+                    className="group w-full text-left flex items-start gap-3 p-4 rounded-xl border border-border/60 bg-card hover:border-primary/40 hover:shadow-md transition-all duration-150"
+                  >
+                    <div className="p-2 rounded-lg bg-primary/5 text-primary group-hover:bg-primary/10 transition-colors shrink-0 mt-0.5">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors">
+                          {model.nome}
+                        </span>
+                        {model.is_default && (
+                          <Badge className="bg-primary/10 text-primary text-[10px] px-1.5 h-4">Padrão</Badge>
+                        )}
+                      </div>
+                      {model.descricao && (
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{model.descricao}</p>
+                      )}
+                      {model.tags?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {model.tags.map(tag => (
+                            <Badge key={tag} variant="outline" className="text-[9px] font-normal px-1.5 h-4">{tag}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary opacity-0 group-hover:opacity-100 transition-all shrink-0 mt-1" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+          </div>
+        </ScrollArea>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t bg-card shrink-0 flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">
+            {step === 'action'
+              ? `${filteredActions.length} tipo${filteredActions.length !== 1 ? 's' : ''} disponível${filteredActions.length !== 1 ? 'is' : ''}`
+              : `${actionModels.length} modelo${actionModels.length !== 1 ? 's' : ''}`}
+          </p>
+          <button onClick={handleClose} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            Cancelar
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Painel Lateral de Modelos ─────────────────────────────────────────────────
+
+function ModelsSidePanel({
+  actionTypes, getModelsForAction, onSelectModel,
+}: {
+  actionTypes: ActionType[];
+  getModelsForAction: (id: string) => PetitionModelV2[];
+  onSelectModel: (actionId: string, modelId: string) => void;
+}) {
+  const [sideSearch, setSideSearch] = useState('');
+  const [expanded, setExpanded]     = useState<string | null>(null);
+
+  const totalModels = useMemo(
+    () => actionTypes.reduce((acc, a) => acc + getModelsForAction(a.id).length, 0),
+    [actionTypes, getModelsForAction]
+  );
+
+  const visibleActions = useMemo(() => {
+    const q = sideSearch.toLowerCase();
+    if (!q) return actionTypes;
+    return actionTypes.filter(a =>
+      a.nome.toLowerCase().includes(q) ||
+      getModelsForAction(a.id).some(m => m.nome.toLowerCase().includes(q))
+    );
+  }, [actionTypes, sideSearch, getModelsForAction]);
+
+  return (
+    <div className="flex flex-col h-full border border-border/60 rounded-xl bg-card overflow-hidden">
+      {/* Header */}
+      <div className="px-4 pt-4 pb-3 border-b shrink-0">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <LayoutTemplate className="h-4 w-4 text-primary" />
+            Modelos
+          </p>
+          <Badge variant="secondary" className="text-[10px]">{totalModels}</Badge>
+        </div>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+          <Input
+            placeholder="Buscar..."
+            value={sideSearch}
+            onChange={e => setSideSearch(e.target.value)}
+            className="pl-8 h-8 text-xs"
+          />
+        </div>
+      </div>
+
+      {/* Lista */}
+      <ScrollArea className="flex-1">
+        <div className="p-2.5 space-y-0.5">
+          {visibleActions.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground">
+              <Layers className="h-7 w-7 mx-auto mb-2 opacity-20" />
+              <p className="text-xs">Nenhum resultado</p>
+            </div>
+          ) : visibleActions.map(action => {
+            const mods    = getModelsForAction(action.id);
+            const isOpen  = expanded === action.id;
+
+            return (
+              <div key={action.id}>
+                {/* Linha da ação */}
+                <button
+                  onClick={() => setExpanded(isOpen ? null : action.id)}
+                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-muted/50 transition-colors"
+                >
+                  <span className={cn('p-1 rounded-md bg-gradient-to-br text-white shrink-0', getGrad(action.cor))}>
+                    {ICON_MAP[action.icone] ?? <FileText className="h-3 w-3" />}
+                  </span>
+                  <span className="flex-1 text-xs font-medium text-foreground text-left truncate">
+                    {action.nome}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground font-mono shrink-0">{mods.length}</span>
+                  <ChevronRight className={cn('h-3 w-3 text-muted-foreground shrink-0 transition-transform', isOpen && 'rotate-90')} />
+                </button>
+
+                {/* Modelos */}
+                {isOpen && (
+                  <div className="ml-8 mt-0.5 mb-1 space-y-0.5">
+                    {mods.map(model => (
+                      <button
+                        key={model.id}
+                        onClick={() => onSelectModel(action.id, model.id)}
+                        className="group w-full text-left flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-primary/5 transition-colors"
+                      >
+                        <FileText className="h-3 w-3 text-muted-foreground group-hover:text-primary shrink-0" />
+                        <span className="text-[11px] flex-1 truncate group-hover:text-primary transition-colors">
+                          {model.nome}
+                        </span>
+                        {model.is_default && (
+                          <Badge className="bg-primary/10 text-primary text-[9px] px-1 h-3.5 shrink-0">P</Badge>
+                        )}
+                        <ArrowRight className="h-3 w-3 text-primary opacity-0 group-hover:opacity-100 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
+
+// ─── Página Principal ──────────────────────────────────────────────────────────
 
 export default function PeticoesPage() {
   const navigate = useNavigate();
-  const { actionTypes, models, petitions, loading, duplicatePetition, archivePetition, deletePetition, getModelsForAction } = usePeticoesV2();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
-  const [selectedAction, setSelectedAction] = useState<ActionType | null>(null);
+  const {
+    actionTypes, models, petitions, loading,
+    duplicatePetition, archivePetition, deletePetition, getModelsForAction,
+  } = usePeticoesV2();
 
-  // Stats
+  const [searchTerm, setSearchTerm]     = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [modalOpen, setModalOpen]       = useState(false);
+
   const stats = useMemo(() => ({
-    total: petitions.length,
-    draft: petitions.filter(p => p.status === 'draft').length,
-    review: petitions.filter(p => p.status === 'review').length,
+    total:     petitions.length,
+    draft:     petitions.filter(p => p.status === 'draft').length,
+    review:    petitions.filter(p => p.status === 'review').length,
     generated: petitions.filter(p => p.status === 'generated').length,
-    filed: petitions.filter(p => p.status === 'filed').length,
+    filed:     petitions.filter(p => p.status === 'filed').length,
   }), [petitions]);
 
-  // Models count per action type
-  const modelsPerAction = useMemo(() => {
-    const map: Record<string, number> = {};
-    models.forEach(m => {
-      map[m.action_type_id] = (map[m.action_type_id] || 0) + 1;
-    });
-    return map;
-  }, [models]);
-
-  const filteredPetitions = useMemo(() => {
+  const filtered = useMemo(() => {
     return petitions.filter(p => {
-      const formData = p.form_data_json as Record<string, unknown>;
-      const clientName = (formData?.cliente as Record<string, string>)?.nome_completo || '';
-      const actionName = p.action_types?.nome || '';
-      const matchesSearch = !searchTerm ||
-        clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        actionName.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
-      return matchesSearch && matchesStatus;
+      const fd     = p.form_data_json as Record<string, unknown>;
+      const nome   = (fd?.cliente as Record<string, string>)?.nome_completo ?? '';
+      const acao   = p.action_types?.nome ?? '';
+      const okSearch = !searchTerm ||
+        nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        acao.toLowerCase().includes(searchTerm.toLowerCase());
+      const okStatus = statusFilter === 'all' || p.status === statusFilter;
+      return okSearch && okStatus;
     });
   }, [petitions, searchTerm, statusFilter]);
 
-  const handleSelectAction = (action: ActionType) => {
-    const actionModels = getModelsForAction(action.id);
-    if (actionModels.length === 1) {
-      // Skip model selection, go straight to wizard
-      navigate(`/peticoes/nova?action=${action.id}&model=${actionModels[0].id}`);
-    } else {
-      setSelectedAction(action);
-      setViewMode('model-select');
-    }
-  };
+  function getClientName(p: typeof petitions[0]) {
+    const fd = p.form_data_json as Record<string, unknown>;
+    return (fd?.cliente as Record<string, string>)?.nome_completo ?? '—';
+  }
 
-  const handleSelectModel = (model: PetitionModelV2) => {
-    navigate(`/peticoes/nova?action=${model.action_type_id}&model=${model.id}`);
-  };
-
-  const handleOpenPetition = (id: string, status: string) => {
+  function handleOpen(id: string, status: string) {
     if (status === 'generated' || status === 'filed') {
       navigate(`/peticoes/${id}/revisao`);
     } else {
       navigate(`/peticoes/${id}/editar`);
     }
-  };
-
-  const getClientName = (p: typeof petitions[0]) => {
-    const fd = p.form_data_json as Record<string, unknown>;
-    return (fd?.cliente as Record<string, string>)?.nome_completo || '—';
-  };
-
-  // ─── VIEW: Action Type Selection ─────────────────
-  if (viewMode === 'action-select') {
-    return (
-      <AppLayout>
-        <AppHeader title="Nova Petição" />
-        <ScrollArea className="flex-1">
-          <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-6">
-            <div className="flex items-center gap-3">
-              <Button variant="ghost" size="sm" onClick={() => setViewMode('dashboard')} className="gap-2 rounded-xl">
-                <ArrowRight className="h-4 w-4 rotate-180" /> Voltar
-              </Button>
-              <div>
-                <h2 className="text-lg font-bold text-foreground">Escolha o Tipo de Ação</h2>
-                <p className="text-sm text-muted-foreground">Selecione a categoria jurídica da petição</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {actionTypes.map(action => {
-                const colors = COLOR_MAP[action.cor] || COLOR_MAP.slate;
-                const count = modelsPerAction[action.id] || 0;
-                return (
-                  <Card
-                    key={action.id}
-                    className={cn(
-                      "cursor-pointer border border-border/50 hover:border-border transition-all hover:shadow-md group rounded-xl overflow-hidden"
-                    )}
-                    onClick={() => handleSelectAction(action)}
-                  >
-                    <CardContent className="p-0">
-                      <div className={cn("h-1.5 bg-gradient-to-r", colors.gradient)} />
-                      <div className="p-5">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className={cn("p-2.5 rounded-xl bg-gradient-to-br", colors.gradient, "text-white shadow-sm")}>
-                            {ICON_MAP[action.icone] || <FileText className="h-5 w-5" />}
-                          </div>
-                          <Badge variant="outline" className="text-[10px] font-medium">
-                            {count} {count === 1 ? 'modelo' : 'modelos'}
-                          </Badge>
-                        </div>
-                        <h3 className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors mb-1">
-                          {action.nome}
-                        </h3>
-                        <p className="text-xs text-muted-foreground line-clamp-2">
-                          {action.descricao}
-                        </p>
-                        <div className="mt-3 flex items-center gap-1 text-xs text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                          Selecionar <ArrowRight className="h-3 w-3" />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          </div>
-        </ScrollArea>
-      </AppLayout>
-    );
   }
 
-  // ─── VIEW: Model Selection ─────────────────
-  if (viewMode === 'model-select' && selectedAction) {
-    const actionModels = getModelsForAction(selectedAction.id);
-    const colors = COLOR_MAP[selectedAction.cor] || COLOR_MAP.slate;
-
-    return (
-      <AppLayout>
-        <AppHeader title="Escolher Modelo" />
-        <ScrollArea className="flex-1">
-          <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-6">
-            <div className="flex items-center gap-3">
-              <Button variant="ghost" size="sm" onClick={() => setViewMode('action-select')} className="gap-2 rounded-xl">
-                <ArrowRight className="h-4 w-4 rotate-180" /> Voltar
-              </Button>
-              <div className={cn("p-2 rounded-lg bg-gradient-to-br text-white", colors.gradient)}>
-                {ICON_MAP[selectedAction.icone] || <FileText className="h-4 w-4" />}
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-foreground">{selectedAction.nome}</h2>
-                <p className="text-sm text-muted-foreground">Escolha o modelo para esta ação</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {actionModels.map(model => (
-                <Card
-                  key={model.id}
-                  className="cursor-pointer border border-border/50 hover:border-primary/30 transition-all hover:shadow-md group rounded-xl"
-                  onClick={() => handleSelectModel(model)}
-                >
-                  <CardContent className="p-5 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <h3 className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors">
-                        {model.nome}
-                      </h3>
-                      {model.is_default && (
-                        <Badge className="bg-primary/10 text-primary text-[10px]">Padrão</Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-2">{model.descricao}</p>
-                    <div className="flex flex-wrap gap-1">
-                      {model.tags?.map(tag => (
-                        <Badge key={tag} variant="outline" className="text-[10px] font-normal">{tag}</Badge>
-                      ))}
-                    </div>
-                    <div className="pt-2 flex items-center gap-1 text-xs text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                      Usar este modelo <ArrowRight className="h-3 w-3" />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </ScrollArea>
-      </AppLayout>
-    );
-  }
-
-  // ─── VIEW: Dashboard (default) ─────────────────
   return (
     <AppLayout>
       <AppHeader title="Gerador de Petições" />
+
       <ScrollArea className="flex-1">
-        <div className="p-4 md:p-6 space-y-6 max-w-[1400px] mx-auto">
-          {/* Hero Section */}
-          <div className="relative overflow-hidden rounded-2xl border border-border/50 bg-card shadow-lg">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
-            <div className="relative p-6 md:p-8">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-gradient-to-br from-primary to-primary/80 rounded-2xl text-primary-foreground shadow-md">
-                    <Scale className="h-7 w-7" />
+        <div className="p-4 md:p-6 space-y-5 max-w-[1600px] mx-auto">
+
+          {/* Topo */}
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <Scale className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold tracking-tight text-foreground leading-tight">
+                  Gerador de Petições
+                </h1>
+                <p className="text-xs text-muted-foreground">
+                  {models.length} modelos · {petitions.length} petições geradas
+                </p>
+              </div>
+            </div>
+            <Button onClick={() => setModalOpen(true)} className="gap-2 rounded-xl h-9 shadow-sm shrink-0">
+              <Plus className="h-4 w-4" />
+              Nova Petição
+            </Button>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            {[
+              { label: 'Total',        value: stats.total,     dot: 'bg-foreground/30' },
+              { label: 'Rascunhos',    value: stats.draft,     dot: 'bg-amber-500' },
+              { label: 'Em Revisão',   value: stats.review,    dot: 'bg-yellow-500' },
+              { label: 'Gerados',      value: stats.generated, dot: 'bg-emerald-500' },
+              { label: 'Protocolados', value: stats.filed,     dot: 'bg-violet-500' },
+            ].map(s => (
+              <Card key={s.label} className="border-border/50">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <div className={cn('h-2 w-2 rounded-full shrink-0', s.dot)} />
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium truncate">
+                      {s.label}
+                    </span>
                   </div>
-                  <div>
-                    <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">
-                      Gerador de Petições
-                    </h1>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      Crie petições profissionais preservando seus modelos do escritório
-                    </p>
-                  </div>
+                  <p className="text-2xl font-bold text-foreground">{s.value}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Layout 2 colunas */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+
+            {/* Tabela (2/3) */}
+            <div className="lg:col-span-2 space-y-3">
+
+              {/* Filtros */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                <div className="relative w-full sm:max-w-xs">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar cliente ou ação..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="pl-9 h-9 text-sm rounded-xl border-border/50"
+                  />
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <Button
-                    onClick={() => setViewMode('action-select')}
-                    className="gap-2 rounded-xl shadow-md h-11 px-5"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Nova Petição
-                  </Button>
+                <div className="flex gap-1.5 flex-wrap">
+                  {[
+                    { v: 'all',       l: 'Todos' },
+                    { v: 'draft',     l: 'Rascunho' },
+                    { v: 'review',    l: 'Revisão' },
+                    { v: 'generated', l: 'Gerado' },
+                    { v: 'filed',     l: 'Protocolado' },
+                  ].map(f => (
+                    <Button
+                      key={f.v}
+                      variant={statusFilter === f.v ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setStatusFilter(f.v)}
+                      className={cn('rounded-lg text-xs h-8 px-3', statusFilter !== f.v && 'border-border/50 hover:bg-muted/50')}
+                    >
+                      {f.l}
+                    </Button>
+                  ))}
                 </div>
               </div>
 
-              {/* KPI Strip */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-6">
-                {[
-                  { label: 'Total',       value: stats.total,     dotColor: 'bg-foreground/60' },
-                  { label: 'Rascunhos',   value: stats.draft,     dotColor: 'bg-amber-500' },
-                  { label: 'Em Revisão',  value: stats.review,    dotColor: 'bg-yellow-500' },
-                  { label: 'Gerados',     value: stats.generated, dotColor: 'bg-emerald-500' },
-                  { label: 'Protocolados', value: stats.filed,    dotColor: 'bg-violet-500' },
-                ].map(stat => (
-                  <div key={stat.label} className="bg-muted/40 rounded-xl p-4 border border-border/30 hover:border-border/60 transition-colors">
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className={cn("h-2 w-2 rounded-full", stat.dotColor)} />
-                      <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{stat.label}</span>
-                    </div>
-                    <div className="text-2xl font-bold text-foreground">{stat.value}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Filters */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            <div className="relative flex-1 w-full sm:max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por cliente ou tipo..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="pl-10 rounded-xl border-border/50 bg-card h-10"
-              />
-            </div>
-            <div className="flex gap-1.5 flex-wrap">
-              {[
-                { value: 'all', label: 'Todos' },
-                { value: 'draft', label: 'Rascunhos' },
-                { value: 'review', label: 'Em Revisão' },
-                { value: 'generated', label: 'Gerados' },
-                { value: 'filed', label: 'Protocolados' },
-              ].map(f => (
-                <Button
-                  key={f.value}
-                  variant={statusFilter === f.value ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setStatusFilter(f.value)}
-                  className={cn(
-                    "rounded-lg text-xs h-8 px-3",
-                    statusFilter !== f.value && "border-border/50 hover:bg-muted/50"
-                  )}
-                >
-                  {f.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          {/* Table */}
-          <Card className="border border-border/50 shadow-sm rounded-xl overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/30 hover:bg-muted/30 border-b border-border/50">
-                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Data</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Tipo</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Cliente</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Status</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Atualização</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-semibold text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      {Array.from({ length: 6 }).map((_, j) => (
-                        <TableCell key={j}><Skeleton className="h-5 w-24" /></TableCell>
+              {/* Tabela */}
+              <Card className="border-border/50 shadow-sm rounded-xl overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/30 hover:bg-muted/30 border-b border-border/50">
+                      {['Data', 'Tipo de Ação', 'Cliente', 'Status', 'Atualizado', ''].map((h, i) => (
+                        <TableHead
+                          key={i}
+                          className={cn('text-[11px] uppercase tracking-wider text-muted-foreground font-semibold', i === 5 && 'text-right')}
+                        >
+                          {h}
+                        </TableHead>
                       ))}
                     </TableRow>
-                  ))
-                ) : filteredPetitions.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-16">
-                      <div className="flex flex-col items-center gap-3">
-                        <Scale className="h-12 w-12 text-muted-foreground/30" />
-                        <p className="text-muted-foreground">Nenhuma petição encontrada</p>
-                        <Button size="sm" onClick={() => setViewMode('action-select')} className="gap-2 rounded-xl">
-                          <Plus className="h-4 w-4" /> Criar primeira petição
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredPetitions.map(p => {
-                    const statusCfg = STATUS_CONFIG[p.status] || STATUS_CONFIG.draft;
-                    return (
-                      <TableRow
-                        key={p.id}
-                        className="cursor-pointer hover:bg-muted/30 transition-colors"
-                        onClick={() => handleOpenPetition(p.id, p.status)}
-                      >
-                        <TableCell className="text-sm">
-                          {format(new Date(p.created_at), "dd/MM/yy", { locale: ptBR })}
-                        </TableCell>
-                        <TableCell className="text-sm font-medium">{p.action_types?.nome || '—'}</TableCell>
-                        <TableCell className="text-sm">{getClientName(p)}</TableCell>
-                        <TableCell>
-                          <Badge className={cn("gap-1 text-[11px] font-medium", statusCfg.color)}>
-                            {statusCfg.icon} {statusCfg.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {format(new Date(p.updated_at), "dd/MM HH:mm", { locale: ptBR })}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
-                                <MoreHorizontal className="h-4 w-4" />
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      Array.from({ length: 5 }).map((_, i) => (
+                        <TableRow key={i}>
+                          {Array.from({ length: 6 }).map((_, j) => (
+                            <TableCell key={j}><Skeleton className="h-4 w-20" /></TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    ) : filtered.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-16">
+                          <div className="flex flex-col items-center gap-3">
+                            <Scale className="h-12 w-12 text-muted-foreground/20" />
+                            <p className="text-sm text-muted-foreground">
+                              {petitions.length === 0 ? 'Nenhuma petição ainda' : 'Nenhuma petição encontrada'}
+                            </p>
+                            {petitions.length === 0 && (
+                              <Button size="sm" onClick={() => setModalOpen(true)} className="gap-2 rounded-xl">
+                                <Plus className="h-4 w-4" /> Criar primeira petição
                               </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="rounded-xl">
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleOpenPetition(p.id, p.status); }}>
-                                <Eye className="h-4 w-4 mr-2" /> Abrir
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); duplicatePetition(p.id); }}>
-                                <Copy className="h-4 w-4 mr-2" /> Duplicar
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); archivePetition(p.id); }}>
-                                <Archive className="h-4 w-4 mr-2" /> Arquivar
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={(e) => { e.stopPropagation(); deletePetition(p.id); }}
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" /> Excluir
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </Card>
+                    ) : (
+                      filtered.map(p => {
+                        const sc = STATUS_CFG[p.status] ?? STATUS_CFG.draft;
+                        return (
+                          <TableRow
+                            key={p.id}
+                            className="cursor-pointer hover:bg-muted/30 transition-colors"
+                            onClick={() => handleOpen(p.id, p.status)}
+                          >
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                              {format(new Date(p.created_at), 'dd/MM/yy', { locale: ptBR })}
+                            </TableCell>
+                            <TableCell className="text-sm font-medium">{p.action_types?.nome ?? '—'}</TableCell>
+                            <TableCell className="text-sm">{getClientName(p)}</TableCell>
+                            <TableCell>
+                              <Badge className={cn('gap-1 text-[11px] font-medium', sc.cls)}>
+                                {sc.icon}{sc.label}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                              {format(new Date(p.updated_at), 'dd/MM HH:mm', { locale: ptBR })}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg">
+                                    <MoreHorizontal className="h-3.5 w-3.5" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="rounded-xl">
+                                  <DropdownMenuItem onClick={e => { e.stopPropagation(); handleOpen(p.id, p.status); }}>
+                                    <Eye className="h-4 w-4 mr-2" /> Abrir
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={e => { e.stopPropagation(); duplicatePetition(p.id); }}>
+                                    <Copy className="h-4 w-4 mr-2" /> Duplicar
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={e => { e.stopPropagation(); archivePetition(p.id); }}>
+                                    <Archive className="h-4 w-4 mr-2" /> Arquivar
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={e => { e.stopPropagation(); deletePetition(p.id); }}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" /> Excluir
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </Card>
+            </div>
+
+            {/* Painel lateral (1/3) — só desktop */}
+            <div className="hidden lg:block lg:sticky lg:top-4" style={{ height: 'calc(100vh - 200px)' }}>
+              <ModelsSidePanel
+                actionTypes={actionTypes}
+                getModelsForAction={getModelsForAction}
+                onSelectModel={(actionId, modelId) => navigate(`/peticoes/nova?action=${actionId}&model=${modelId}`)}
+              />
+            </div>
+
+          </div>
         </div>
       </ScrollArea>
+
+      {/* Modal */}
+      <NovaPeticaoModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        actionTypes={actionTypes}
+        getModelsForAction={getModelsForAction}
+        onConfirm={(actionId, modelId) => navigate(`/peticoes/nova?action=${actionId}&model=${modelId}`)}
+      />
     </AppLayout>
   );
 }
