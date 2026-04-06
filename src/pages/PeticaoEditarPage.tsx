@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { DetailSkeleton } from '@/components/ui/PageSkeleton';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, ArrowRight, Save, Sparkles, Loader2, User, MapPin,
-  Building2, DollarSign, CheckCircle2, FileText,
+  ArrowLeft, ArrowRight, Save, Sparkles, Loader2,
+  User, MapPin, Building2, DollarSign, CheckCircle2,
+  FileText, Scale, AlertCircle,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
@@ -13,7 +14,6 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
@@ -28,46 +28,308 @@ import Docxtemplater from 'docxtemplater';
 import { saveAs } from 'file-saver';
 import type { PetitionModelV2 } from '@/hooks/usePeticoesV2';
 
+// ─── Constantes ────────────────────────────────────────────────────────────────
+
 const ESTADOS_CIVIS = ['Solteiro(a)', 'Casado(a)', 'Divorciado(a)', 'Viúvo(a)', 'União Estável'];
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const ANOS = Array.from({ length: 10 }, (_, i) => String(new Date().getFullYear() - i));
+
 const BANCOS = [
   'Banco do Brasil','Bradesco','Itaú Unibanco','Caixa Econômica Federal','Santander',
   'Banco Safra','Banco Inter','Nubank','C6 Bank','Banco PAN','Banco BMG','Banrisul',
   'Banco do Nordeste','Banco da Amazônia','Sicoob','Sicredi','Agibank','Banco Cetelem',
-  'Banco Crefisa','PicPay','Will Bank','Facta Financeira','Banco Itaú Consignado','Outro',
-];
-const PEDIDOS = [
-  { value: 'dano_moral',                label: 'Danos Morais' },
-  { value: 'repeticao_indebito',        label: 'Repetição de Indébito' },
-  { value: 'tutela_urgencia',           label: 'Tutela de Urgência' },
-  { value: 'revisao_contratual',        label: 'Revisão Contratual' },
-  { value: 'declaratoria_inexistencia', label: 'Declaratória de Inexistência' },
-  { value: 'restituicao_valores',       label: 'Restituição de Valores' },
-  { value: 'cancelamento_contrato',     label: 'Cancelamento de Contrato' },
-  { value: 'exclusao_cadastros',        label: 'Exclusão de Cadastros Restritivos' },
+  'Banco Crefisa','PicPay','Will Bank','Facta Financeira','Banco Itaú Consignado',
+  'Banco Daycoval','Banco Bmg','Banco Mercantil','Outro',
 ];
 
-interface FormData {
-  cliente:  { nome_completo: string; cpf: string; rg: string; estado_civil: string; profissao: string; email: string; telefone: string; nacionalidade: string; };
-  endereco: { cep: string; rua: string; numero: string; complemento: string; bairro: string; cidade: string; uf: string; };
-  banco:    { banco_nome: string; tipo_produto: string; agencia: string; conta: string; data_inicio: string; data_fim: string; };
-  valores:  { valor_cobrado: string; valor_total: string; periodo_inicio: string; periodo_fim: string; pedidos_selecionados: string[]; observacoes: string; };
+// ─── Tipos ─────────────────────────────────────────────────────────────────────
+
+type FormData = Record<string, string>;
+
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+function numberToWords(value: string): string {
+  // Simple helper — advogado preenche por extenso manualmente
+  return value;
 }
 
-const EMPTY_FORM: FormData = {
-  cliente:  { nome_completo: '', cpf: '', rg: '', estado_civil: '', profissao: '', email: '', telefone: '', nacionalidade: 'brasileiro(a)' },
-  endereco: { cep: '', rua: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '' },
-  banco:    { banco_nome: '', tipo_produto: '', agencia: '', conta: '', data_inicio: '', data_fim: '' },
-  valores:  { valor_cobrado: '', valor_total: '', periodo_inicio: '', periodo_fim: '', pedidos_selecionados: [], observacoes: '' },
-};
+function detectActionSlug(actionName: string): string {
+  const name = actionName.toLowerCase();
+  if (name.includes('venda casada')) return 'venda-casada';
+  if (name.includes('rmc') || name.includes('rcc') || name.includes('cartão consignado')) return 'rmc-rcc';
+  if (name.includes('cancelamento') && name.includes('voo')) return 'cancelamento-voo';
+  if (name.includes('empréstimo fraudulento') || name.includes('emprestimo fraudulento')) return 'emprestimo-fraudulento';
+  if (name.includes('diferença salarial') || name.includes('diferenca salarial')) return 'diferenca-salarial';
+  if (name.includes('negativação') || name.includes('negativacao')) return 'negativacao-indevida';
+  return 'generico';
+}
 
-const STEPS = [
-  { id: 1, title: 'Cliente',  icon: User },
-  { id: 2, title: 'Endereço', icon: MapPin },
-  { id: 3, title: 'Banco',    icon: Building2 },
-  { id: 4, title: 'Valores',  icon: DollarSign },
-  { id: 5, title: 'Revisão',  icon: CheckCircle2 },
-];
+// ─── Configuração de campos por tipo de ação ───────────────────────────────────
+
+interface FieldConfig {
+  key: string;
+  label: string;
+  placeholder?: string;
+  type?: 'text' | 'select' | 'textarea' | 'date';
+  options?: string[];
+  span?: 'full' | 'half';
+  hint?: string;
+}
+
+interface StepConfig {
+  id: number;
+  title: string;
+  icon: React.ElementType;
+  fields: FieldConfig[];
+}
+
+function getStepsConfig(actionSlug: string): StepConfig[] {
+
+  const clienteBase: FieldConfig[] = [
+    { key: 'nome_maiusculo',    label: 'Nome Completo (MAIÚSCULAS)',  placeholder: 'NOME CONFORME DOCUMENTOS',  span: 'full' },
+    { key: 'nome_completo',     label: 'Nome Completo (normal)',      placeholder: 'Nome conforme documentos',  span: 'full' },
+    { key: 'cpf',               label: 'CPF',                         placeholder: '000.000.000-00' },
+    { key: 'rg',                label: 'RG',                          placeholder: '0000000-0 SSP/AM' },
+    { key: 'estado_civil',      label: 'Estado Civil',                type: 'select', options: ESTADOS_CIVIS },
+    { key: 'profissao',         label: 'Profissão',                   placeholder: 'Ex: aposentado(a), servidor(a) público(a)' },
+    { key: 'nacionalidade',     label: 'Nacionalidade',               placeholder: 'brasileiro(a)' },
+    { key: 'naturalidade',      label: 'Naturalidade',                placeholder: 'amazonense' },
+  ];
+
+  const clienteIdoso: FieldConfig[] = [
+    ...clienteBase,
+    { key: 'idade_numerica', label: 'Idade (número)', placeholder: '68' },
+    { key: 'idade_extenso',  label: 'Idade (por extenso)', placeholder: 'SESSENTA E OITO' },
+  ];
+
+  const enderecoFields: FieldConfig[] = [
+    { key: 'endereco_rua',        label: 'Rua',        placeholder: 'Rua das Flores', span: 'full' },
+    { key: 'endereco_numero',     label: 'Número',     placeholder: '123' },
+    { key: 'endereco_complemento',label: 'Complemento',placeholder: 'Apto 10' },
+    { key: 'endereco_bairro',     label: 'Bairro',     placeholder: 'Centro' },
+    { key: 'endereco_cidade',     label: 'Cidade',     placeholder: 'Manaus' },
+    { key: 'endereco_uf',         label: 'UF', type: 'select', options: UFS },
+    { key: 'endereco_cep',        label: 'CEP',        placeholder: '69.000-000' },
+  ];
+
+  const bancoBase: FieldConfig[] = [
+    { key: 'banco_nome',     label: 'Banco Réu',  type: 'select', options: BANCOS, span: 'full' },
+    { key: 'banco_cnpj',     label: 'CNPJ do Banco', placeholder: '00.000.000/0001-00' },
+    { key: 'banco_endereco', label: 'Endereço do Banco', placeholder: 'Av. Paulista, nº 100, Centro, São Paulo/SP', span: 'full' },
+  ];
+
+  const dataFields: FieldConfig[] = [
+    { key: 'data_peticao', label: 'Data da Petição', placeholder: '06 de março de 2026', span: 'full',
+      hint: 'Ex: 06 de março de 2026' },
+  ];
+
+  // ── VENDA CASADA ─────────────────────────────────────────────────────────────
+  if (actionSlug === 'venda-casada') {
+    return [
+      {
+        id: 1, title: 'Cliente', icon: User,
+        fields: clienteIdoso,
+      },
+      {
+        id: 2, title: 'Endereço', icon: MapPin,
+        fields: enderecoFields,
+      },
+      {
+        id: 3, title: 'Banco', icon: Building2,
+        fields: bancoBase,
+      },
+      {
+        id: 4, title: 'Contrato', icon: FileText,
+        fields: [
+          { key: 'numero_contrato',              label: 'Número do Contrato',             placeholder: '6182708' },
+          { key: 'valor_emprestimo',             label: 'Valor do Empréstimo (R$)',        placeholder: '2.000,05' },
+          { key: 'valor_emprestimo_extenso',     label: 'Valor do Empréstimo (extenso)',   placeholder: 'dois mil reais e cinco centavos', span: 'full' },
+          { key: 'valor_seguro',                 label: 'Valor do Seguro Prestamista (R$)',placeholder: '122,27' },
+          { key: 'valor_seguro_extenso',         label: 'Valor do Seguro (extenso)',       placeholder: 'cento e vinte e dois reais e vinte e sete centavos', span: 'full' },
+          { key: 'valor_encargos',               label: 'Valor dos Encargos (R$)',         placeholder: '97,63' },
+          { key: 'valor_encargos_extenso',       label: 'Valor dos Encargos (extenso)',    placeholder: 'noventa e sete reais e sessenta e três centavos', span: 'full' },
+          { key: 'valor_total_contrato',         label: 'Valor Total do Contrato (R$)',    placeholder: '2.219,65' },
+          { key: 'valor_total_contrato_extenso', label: 'Valor Total (extenso)',           placeholder: 'dois mil, duzentos e dezenove reais e sessenta e cinco centavos', span: 'full' },
+        ],
+      },
+      {
+        id: 5, title: 'Pedidos', icon: DollarSign,
+        fields: [
+          { key: 'valor_seguro_dobro',          label: 'Valor do Seguro em Dobro (R$)',    placeholder: '244,54' },
+          { key: 'valor_seguro_dobro_extenso',  label: 'Valor em Dobro (extenso)',         placeholder: 'duzentos e quarenta e quatro reais e cinquenta e quatro centavos', span: 'full' },
+          { key: 'valor_danos_morais',          label: 'Valor Danos Morais (R$)',          placeholder: '10.000,00' },
+          { key: 'valor_danos_morais_extenso',  label: 'Danos Morais (extenso)',           placeholder: 'dez mil reais', span: 'full' },
+          { key: 'valor_causa',                 label: 'Valor da Causa (R$)',              placeholder: '10.244,54' },
+          { key: 'valor_causa_extenso',         label: 'Valor da Causa (extenso)',         placeholder: 'dez mil, duzentos e quarenta e quatro reais e cinquenta e quatro centavos', span: 'full' },
+          ...dataFields,
+        ],
+      },
+      {
+        id: 6, title: 'Revisão', icon: CheckCircle2,
+        fields: [],
+      },
+    ];
+  }
+
+  // ── RMC / RCC ────────────────────────────────────────────────────────────────
+  if (actionSlug === 'rmc-rcc') {
+    return [
+      {
+        id: 1, title: 'Cliente', icon: User,
+        fields: clienteIdoso,
+      },
+      {
+        id: 2, title: 'Endereço', icon: MapPin,
+        fields: enderecoFields,
+      },
+      {
+        id: 3, title: 'Banco', icon: Building2,
+        fields: bancoBase,
+      },
+      {
+        id: 4, title: 'Contrato', icon: FileText,
+        fields: [
+          { key: 'mes_contratacao',          label: 'Mês da Contratação',    type: 'select', options: MESES },
+          { key: 'ano_contratacao',          label: 'Ano da Contratação',    type: 'select', options: ANOS },
+          { key: 'num_parcelas',             label: 'Nº de Parcelas',        placeholder: '24' },
+          { key: 'num_parcelas_extenso',     label: 'Nº de Parcelas (extenso)', placeholder: 'vinte e quatro' },
+          { key: 'valor_emprestimo',         label: 'Valor do Empréstimo (R$)', placeholder: '1.515,00' },
+          { key: 'valor_emprestimo_extenso', label: 'Valor do Empréstimo (extenso)', placeholder: 'um mil, quinhentos e quinze reais', span: 'full' },
+          { key: 'valor_parcela',            label: 'Valor da Parcela (R$)', placeholder: '88,29' },
+          { key: 'valor_parcela_extenso',    label: 'Valor da Parcela (extenso)', placeholder: 'oitenta e oito reais e vinte e nove centavos', span: 'full' },
+          { key: 'valor_total_contrato',     label: 'Valor Total do Contrato (R$)', placeholder: '2.118,96' },
+          { key: 'valor_total_contrato_extenso', label: 'Valor Total (extenso)', placeholder: 'dois mil, cento e dezoito reais e noventa e seis centavos', span: 'full' },
+        ],
+      },
+      {
+        id: 5, title: 'Descontos', icon: Scale,
+        fields: [
+          { key: 'mes_inicio_desconto',      label: 'Mês Início Desconto',   type: 'select', options: MESES },
+          { key: 'ano_inicio_desconto',      label: 'Ano Início Desconto',   type: 'select', options: ANOS },
+          { key: 'mes_quitacao',             label: 'Mês Quitação',          type: 'select', options: MESES },
+          { key: 'ano_quitacao',             label: 'Ano Quitação',          type: 'select', options: ANOS },
+          { key: 'mes_ultimo_desconto',      label: 'Mês Último Desconto',   type: 'select', options: MESES },
+          { key: 'ano_ultimo_desconto',      label: 'Ano Último Desconto',   type: 'select', options: ANOS },
+          { key: 'periodo_descontos_indevidos', label: 'Período Descontos Indevidos', placeholder: 'dezembro de 2024 a fevereiro de 2026', span: 'full' },
+          { key: 'num_parcelas_descontadas', label: 'Nº Parcelas Descontadas', placeholder: '39' },
+          { key: 'num_parcelas_descontadas_extenso', label: 'Parcelas Descontadas (extenso)', placeholder: 'trinta e nove' },
+          { key: 'valor_total_descontado',   label: 'Total Descontado (R$)', placeholder: '3.436,86' },
+          { key: 'valor_total_descontado_extenso', label: 'Total Descontado (extenso)', placeholder: 'três mil, quatrocentos e trinta e seis reais e oitenta e seis centavos', span: 'full' },
+          { key: 'valor_descontos_indevidos', label: 'Descontos Indevidos (R$)', placeholder: '1.317,90' },
+          { key: 'valor_descontos_indevidos_extenso', label: 'Descontos Indevidos (extenso)', placeholder: 'um mil, trezentos e dezessete reais e noventa centavos', span: 'full' },
+        ],
+      },
+      {
+        id: 6, title: 'Pedidos', icon: DollarSign,
+        fields: [
+          { key: 'valor_devolucao',          label: 'Valor Devolução (R$)',   placeholder: '2.635,80' },
+          { key: 'valor_devolucao_extenso',  label: 'Devolução (extenso)',    placeholder: 'dois mil, seiscentos e trinta e cinco reais e oitenta centavos', span: 'full' },
+          { key: 'valor_danos_morais',       label: 'Danos Morais (R$)',      placeholder: '20.000,00' },
+          { key: 'valor_danos_morais_extenso', label: 'Danos Morais (extenso)', placeholder: 'vinte mil reais', span: 'full' },
+          { key: 'valor_causa',              label: 'Valor da Causa (R$)',    placeholder: '22.635,80' },
+          { key: 'valor_causa_extenso',      label: 'Valor da Causa (extenso)', placeholder: 'vinte e dois mil, seiscentos e trinta e cinco reais e oitenta centavos', span: 'full' },
+          ...dataFields,
+        ],
+      },
+      {
+        id: 7, title: 'Revisão', icon: CheckCircle2,
+        fields: [],
+      },
+    ];
+  }
+
+  // ── GENÉRICO (fallback para outros tipos) ─────────────────────────────────────
+  return [
+    {
+      id: 1, title: 'Cliente', icon: User,
+      fields: [
+        ...clienteBase,
+        { key: 'idade_numerica', label: 'Idade (número)', placeholder: '65' },
+        { key: 'idade_extenso',  label: 'Idade (extenso)', placeholder: 'SESSENTA E CINCO' },
+      ],
+    },
+    {
+      id: 2, title: 'Endereço', icon: MapPin,
+      fields: enderecoFields,
+    },
+    {
+      id: 3, title: 'Banco / Réu', icon: Building2,
+      fields: bancoBase,
+    },
+    {
+      id: 4, title: 'Valores', icon: DollarSign,
+      fields: [
+        { key: 'valor_emprestimo',         label: 'Valor Principal (R$)',    placeholder: '0,00' },
+        { key: 'valor_emprestimo_extenso', label: 'Valor Principal (extenso)', placeholder: 'zero reais', span: 'full' },
+        { key: 'valor_danos_morais',       label: 'Danos Morais (R$)',       placeholder: '10.000,00' },
+        { key: 'valor_danos_morais_extenso', label: 'Danos Morais (extenso)', placeholder: 'dez mil reais', span: 'full' },
+        { key: 'valor_causa',              label: 'Valor da Causa (R$)',     placeholder: '10.000,00' },
+        { key: 'valor_causa_extenso',      label: 'Valor da Causa (extenso)', placeholder: 'dez mil reais', span: 'full' },
+        ...dataFields,
+      ],
+    },
+    {
+      id: 5, title: 'Revisão', icon: CheckCircle2,
+      fields: [],
+    },
+  ];
+}
+
+// ─── Componente de Campo ────────────────────────────────────────────────────────
+
+function FieldInput({
+  config,
+  value,
+  onChange,
+  submitted,
+}: {
+  config: FieldConfig;
+  value: string;
+  onChange: (v: string) => void;
+  submitted: boolean;
+}) {
+  const isEmpty = submitted && !value?.trim();
+
+  return (
+    <div className={config.span === 'full' ? 'col-span-2' : ''}>
+      <Label className={cn('text-xs mb-1.5 flex items-center gap-1', isEmpty ? 'text-destructive' : 'text-muted-foreground')}>
+        {config.label}
+        {isEmpty && <AlertCircle className="h-3 w-3" />}
+      </Label>
+
+      {config.type === 'select' ? (
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger className={cn('rounded-xl mt-0', isEmpty && 'border-destructive')}>
+            <SelectValue placeholder="Selecione..." />
+          </SelectTrigger>
+          <SelectContent>
+            {config.options?.map(opt => (
+              <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : config.type === 'textarea' ? (
+        <Textarea
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={config.placeholder}
+          className={cn('rounded-xl mt-0 min-h-[80px]', isEmpty && 'border-destructive')}
+        />
+      ) : (
+        <Input
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={config.placeholder}
+          className={cn('rounded-xl mt-0', isEmpty && 'border-destructive')}
+        />
+      )}
+      {config.hint && <p className="text-[10px] text-muted-foreground mt-1">{config.hint}</p>}
+    </div>
+  );
+}
+
+// ─── Página Principal ───────────────────────────────────────────────────────────
 
 export default function PeticaoEditarPage() {
   const navigate       = useNavigate();
@@ -76,14 +338,22 @@ export default function PeticaoEditarPage() {
   const { toast }      = useToast();
 
   const [currentStep,    setCurrentStep]    = useState(1);
-  const [formData,       setFormData]       = useState<FormData>({ ...EMPTY_FORM });
+  const [formData,       setFormData]       = useState<FormData>({});
   const [petitionId,     setPetitionId]     = useState(id || '');
   const [model,          setModel]          = useState<PetitionModelV2 | null>(null);
   const [actionName,     setActionName]     = useState('');
+  const [actionSlug,     setActionSlug]     = useState('generico');
   const [saving,         setSaving]         = useState(false);
   const [generating,     setGenerating]     = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
+  const [submitted,      setSubmitted]      = useState(false);
   const autosaveTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const steps = getStepsConfig(actionSlug);
+  const reviewStep = steps[steps.length - 1];
+  const activeSteps = steps;
+
+  // ── Init ──────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const init = async () => {
@@ -91,24 +361,19 @@ export default function PeticaoEditarPage() {
       const actionId = searchParams.get('action');
       const modelId  = searchParams.get('model');
 
-      // ── Editar petição existente ──────────────────────────
       if (id) {
         const { data } = await supabase
           .from('petitions_v2')
-          .select('*, action_types(nome), petition_models_v2(*)')
+          .select('*, action_types(nome, slug), petition_models_v2(*)')
           .eq('id', id)
           .single();
 
         if (data) {
-          const d = data as unknown as {
-            form_data_json: FormData;
-            current_step: number;
-            action_types: { nome: string };
-            petition_models_v2: PetitionModelV2;
-          };
-          setFormData({ ...EMPTY_FORM, ...(d.form_data_json || {}) });
+          const d = data as any;
+          setFormData(d.form_data_json || {});
           setCurrentStep(d.current_step || 1);
           setActionName(d.action_types?.nome || '');
+          setActionSlug(d.action_types?.slug || detectActionSlug(d.action_types?.nome || ''));
           setModel(d.petition_models_v2 || null);
           setPetitionId(id);
         }
@@ -116,21 +381,20 @@ export default function PeticaoEditarPage() {
         return;
       }
 
-      // ── Nova petição via action + model params ────────────
       if (actionId && modelId) {
-        // Buscar dados do tipo de ação e modelo em paralelo
         const [{ data: actionData }, { data: modelData }] = await Promise.all([
-          supabase.from('action_types').select('nome').eq('id', actionId).single(),
+          supabase.from('action_types').select('nome, slug').eq('id', actionId).single(),
           supabase.from('petition_models_v2').select('*').eq('id', modelId).single(),
         ]);
 
-        setActionName((actionData as { nome: string })?.nome || '');
-        setModel((modelData as unknown as PetitionModelV2) || null);
+        const aName = (actionData as any)?.nome || '';
+        const aSlug = (actionData as any)?.slug || detectActionSlug(aName);
+        setActionName(aName);
+        setActionSlug(aSlug);
+        setModel((modelData as any) || null);
 
-        // Criar rascunho no banco
         try {
           const { data: { user } } = await supabase.auth.getUser();
-
           if (!user) {
             toast({ title: 'Erro', description: 'Usuário não autenticado.', variant: 'destructive' });
             navigate('/peticoes');
@@ -151,24 +415,17 @@ export default function PeticaoEditarPage() {
             .single();
 
           if (error) {
-            console.error('Erro ao criar petição:', error);
-            toast({
-              title: 'Erro ao criar petição',
-              description: error.message,
-              variant: 'destructive',
-            });
+            toast({ title: 'Erro ao criar petição', description: error.message, variant: 'destructive' });
             setLoadingInitial(false);
             return;
           }
 
           if (newPetition) {
-            const newId = (newPetition as { id: string }).id;
+            const newId = (newPetition as any).id;
             setPetitionId(newId);
-            // Atualiza a URL sem recarregar
             navigate(`/peticoes/${newId}/editar`, { replace: true });
           }
         } catch (err) {
-          console.error('Erro inesperado:', err);
           toast({ title: 'Erro inesperado', description: 'Tente novamente.', variant: 'destructive' });
         }
 
@@ -176,25 +433,20 @@ export default function PeticaoEditarPage() {
         return;
       }
 
-      // Sem parâmetros — volta para a lista
       navigate('/peticoes');
     };
-
     init();
   }, [id, searchParams, navigate, toast]);
 
-  // ── Autosave ──────────────────────────────────────────────
+  // ── Autosave ───────────────────────────────────────────────────────────────────
 
   const doAutosave = useCallback(async () => {
     if (!petitionId) return;
-    await supabase
-      .from('petitions_v2')
-      .update({
-        form_data_json: formData as unknown as Record<string, unknown>,
-        current_step:   currentStep,
-        updated_at:     new Date().toISOString(),
-      })
-      .eq('id', petitionId);
+    await supabase.from('petitions_v2').update({
+      form_data_json: formData as any,
+      current_step:   currentStep,
+      updated_at:     new Date().toISOString(),
+    }).eq('id', petitionId);
   }, [petitionId, formData, currentStep]);
 
   useEffect(() => {
@@ -204,7 +456,7 @@ export default function PeticaoEditarPage() {
     return () => { if (autosaveTimer.current) clearTimeout(autosaveTimer.current); };
   }, [formData, currentStep, doAutosave, petitionId, loadingInitial]);
 
-  // ── CEP ───────────────────────────────────────────────────
+  // ── CEP lookup ─────────────────────────────────────────────────────────────────
 
   const handleCepLookup = async (cep: string) => {
     const clean = cep.replace(/\D/g, '');
@@ -215,63 +467,68 @@ export default function PeticaoEditarPage() {
       if (!data.erro) {
         setFormData(prev => ({
           ...prev,
-          endereco: {
-            ...prev.endereco,
-            rua:    data.logradouro || prev.endereco.rua,
-            bairro: data.bairro     || prev.endereco.bairro,
-            cidade: data.localidade || prev.endereco.cidade,
-            uf:     data.uf         || prev.endereco.uf,
-          },
+          endereco_rua:    data.logradouro || prev.endereco_rua || '',
+          endereco_bairro: data.bairro     || prev.endereco_bairro || '',
+          endereco_cidade: data.localidade || prev.endereco_cidade || '',
+          endereco_uf:     data.uf         || prev.endereco_uf || '',
         }));
       }
     } catch { /* ignore */ }
   };
 
-  const updateField = (section: keyof FormData, field: string, value: unknown) => {
-    setFormData(prev => ({ ...prev, [section]: { ...prev[section], [field]: value } }));
+  const updateField = (key: string, value: string) => {
+    setFormData(prev => ({ ...prev, [key]: value }));
+    if (key === 'endereco_cep') handleCepLookup(value);
   };
 
-  // ── Salvar rascunho ───────────────────────────────────────
+  // ── Navegação ──────────────────────────────────────────────────────────────────
+
+  const currentStepConfig = activeSteps.find(s => s.id === currentStep) || activeSteps[0];
+  const currentIdx        = activeSteps.findIndex(s => s.id === currentStep);
+  const isLastStep        = currentIdx === activeSteps.length - 1;
+  const isReviewStep      = currentStepConfig.title === 'Revisão';
+  const progress          = ((currentIdx + 1) / activeSteps.length) * 100;
+
+  const goNext = () => {
+    if (currentIdx < activeSteps.length - 1) {
+      setCurrentStep(activeSteps[currentIdx + 1].id);
+    }
+  };
+
+  const goPrev = () => {
+    if (currentIdx === 0) navigate('/peticoes');
+    else setCurrentStep(activeSteps[currentIdx - 1].id);
+  };
+
+  // ── Salvar rascunho ────────────────────────────────────────────────────────────
 
   const handleSaveDraft = async () => {
     setSaving(true);
     await doAutosave();
-    toast({ title: 'Salvo', description: 'Rascunho salvo com sucesso' });
+    toast({ title: 'Salvo', description: 'Rascunho salvo com sucesso.' });
     setSaving(false);
   };
 
-  // ── Gerar petição ─────────────────────────────────────────
+  // ── Gerar petição ──────────────────────────────────────────────────────────────
 
   const handleGenerate = async () => {
+    setSubmitted(true);
     if (!petitionId || !model?.template_file_url) {
       toast({ title: 'Erro', description: 'Modelo sem arquivo vinculado.', variant: 'destructive' });
       return;
     }
+
     setGenerating(true);
     try {
-      await supabase
-        .from('petitions_v2')
-        .update({
-          form_data_json: formData as unknown as Record<string, unknown>,
-          status:         'review',
-          updated_at:     new Date().toISOString(),
-        })
-        .eq('id', petitionId);
+      await supabase.from('petitions_v2').update({
+        form_data_json: formData as any,
+        status:         'review',
+        updated_at:     new Date().toISOString(),
+      }).eq('id', petitionId);
 
-      // Reescrever fatos com IA (opcional)
-      let fatosJuridicos = formData.valores.observacoes || '';
-      if (fatosJuridicos.length > 20) {
-        try {
-          const { data: aiData } = await supabase.functions.invoke('petition-rewrite', {
-            body: { resumo: fatosJuridicos, tipo_acao: actionName },
-          });
-          if (aiData?.fatos_juridicos) fatosJuridicos = aiData.fatos_juridicos;
-        } catch { /* fallback: usa o texto original */ }
-      }
-
-      // Baixar template .docx
+      // Baixar template
       const response = await fetch(model.template_file_url);
-      if (!response.ok) throw new Error('Erro ao baixar o modelo .docx. Verifique a URL.');
+      if (!response.ok) throw new Error('Erro ao baixar o modelo .docx');
       const arrayBuffer = await response.arrayBuffer();
 
       const zip = new PizZip(arrayBuffer);
@@ -282,63 +539,8 @@ export default function PeticaoEditarPage() {
         nullGetter()  { return ''; },
       });
 
-      const pedidoTexts = formData.valores.pedidos_selecionados
-        .map(p => PEDIDOS.find(x => x.value === p)?.label || p);
-
-      const templateData: Record<string, string> = {
-        // Cliente
-        cliente_nome:  formData.cliente.nome_completo,
-        nome:          formData.cliente.nome_completo,
-        cpf:           formData.cliente.cpf,
-        cliente_cpf:   formData.cliente.cpf,
-        rg:            formData.cliente.rg,
-        cliente_rg:    formData.cliente.rg,
-        estado_civil:  formData.cliente.estado_civil,
-        profissao:     formData.cliente.profissao,
-        nacionalidade: formData.cliente.nacionalidade,
-        email:         formData.cliente.email,
-        telefone:      formData.cliente.telefone,
-        // Endereço
-        endereco:            `${formData.endereco.rua}, ${formData.endereco.numero}${formData.endereco.complemento ? ', ' + formData.endereco.complemento : ''}, ${formData.endereco.bairro}`,
-        endereco_completo:   `${formData.endereco.rua}, ${formData.endereco.numero}${formData.endereco.complemento ? ', ' + formData.endereco.complemento : ''}, ${formData.endereco.bairro}, ${formData.endereco.cidade}/${formData.endereco.uf}, CEP ${formData.endereco.cep}`,
-        endereco_cep:        formData.endereco.cep,
-        cep:                 formData.endereco.cep,
-        endereco_rua:        formData.endereco.rua,
-        endereco_numero:     formData.endereco.numero,
-        endereco_complemento:formData.endereco.complemento,
-        endereco_bairro:     formData.endereco.bairro,
-        endereco_cidade:     formData.endereco.cidade,
-        cidade:              formData.endereco.cidade,
-        endereco_uf:         formData.endereco.uf,
-        uf:                  formData.endereco.uf,
-        // Banco
-        banco_nome:            formData.banco.banco_nome,
-        tipo_produto:          formData.banco.tipo_produto,
-        agencia:               formData.banco.agencia,
-        conta:                 formData.banco.conta,
-        data_inicio_contrato:  formData.banco.data_inicio,
-        data_fim_contrato:     formData.banco.data_fim,
-        // Valores
-        valor_cobrado_indevidamente: formData.valores.valor_cobrado,
-        valor_total_causa:           formData.valores.valor_total,
-        periodo_inicio:              formData.valores.periodo_inicio,
-        periodo_fim:                 formData.valores.periodo_fim,
-        observacoes_adicionais:      formData.valores.observacoes,
-        fatos_juridicos:             fatosJuridicos,
-        // Pedidos
-        pedido_danos_morais:               pedidoTexts.includes('Danos Morais') ? 'Sim' : '',
-        pedido_repeticao_indebito:         pedidoTexts.includes('Repetição de Indébito') ? 'Sim' : '',
-        pedido_tutela_urgencia:            pedidoTexts.includes('Tutela de Urgência') ? 'Sim' : '',
-        pedido_revisao_contratual:         pedidoTexts.includes('Revisão Contratual') ? 'Sim' : '',
-        pedido_declaratoria_inexistencia:  pedidoTexts.includes('Declaratória de Inexistência') ? 'Sim' : '',
-        pedido_restituicao_valores:        pedidoTexts.includes('Restituição de Valores') ? 'Sim' : '',
-        pedido_cancelamento_contrato:      pedidoTexts.includes('Cancelamento de Contrato') ? 'Sim' : '',
-        pedido_exclusao_cadastros:         pedidoTexts.includes('Exclusão de Cadastros Restritivos') ? 'Sim' : '',
-        // Data
-        data_atual: new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }),
-      };
-
-      doc.render(templateData);
+      // Renderizar com todos os campos do formData
+      doc.render(formData);
 
       const blob = doc.getZip().generate({
         type:     'blob',
@@ -346,68 +548,45 @@ export default function PeticaoEditarPage() {
       });
 
       // Salvar no Storage
-      const fileName   = `peticao-${petitionId}-${Date.now()}.docx`;
+      const fileName    = `peticao-${petitionId}-${Date.now()}.docx`;
       const storagePath = `peticoes/geradas/${fileName}`;
 
-      await supabase.storage
-        .from('peticoes-modelos')
-        .upload(storagePath, blob, { cacheControl: '3600', upsert: true });
+      await supabase.storage.from('peticoes-modelos').upload(storagePath, blob, {
+        cacheControl: '3600', upsert: true,
+      });
 
       const { data: { publicUrl } } = supabase.storage
         .from('peticoes-modelos')
         .getPublicUrl(storagePath);
 
-      // Atualizar status no banco
-      await supabase
-        .from('petitions_v2')
-        .update({
-          status:             'generated',
-          generated_docx_url: publicUrl,
-          updated_at:         new Date().toISOString(),
-        })
-        .eq('id', petitionId);
+      await supabase.from('petitions_v2').update({
+        status:             'generated',
+        generated_docx_url: publicUrl,
+        updated_at:         new Date().toISOString(),
+      }).eq('id', petitionId);
 
-      // Salvar versão
       await supabase.from('petition_versions').insert({
         petition_id:        petitionId,
         version_number:     1,
-        form_data_json:     formData as unknown as Record<string, unknown>,
+        form_data_json:     formData as any,
         generated_docx_url: publicUrl,
       });
 
-      // Download automático
-      saveAs(blob, `Peticao_${formData.cliente.nome_completo.replace(/\s+/g, '_') || 'documento'}.docx`);
+      const clienteNome = formData.nome_completo || formData.nome_maiusculo || 'documento';
+      saveAs(blob, `Peticao_${clienteNome.replace(/\s+/g, '_')}.docx`);
 
-      toast({ title: '✅ Petição gerada!', description: 'O arquivo .docx foi baixado automaticamente.' });
+      toast({ title: '✅ Petição gerada!', description: 'O arquivo .docx foi baixado.' });
       navigate('/peticoes');
 
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Erro desconhecido';
-      console.error('Erro ao gerar:', err);
-      toast({ title: 'Erro na geração', description: message, variant: 'destructive' });
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: 'Erro na geração', description: err.message || 'Erro desconhecido', variant: 'destructive' });
     } finally {
       setGenerating(false);
     }
   };
 
-  // ── Steps ativos ──────────────────────────────────────────
-
-  const needsBankData = model?.requires_bank_data !== false;
-  const activeSteps   = STEPS.filter(s => !(s.id === 3 && !needsBankData));
-  const progress      = ((activeSteps.findIndex(s => s.id === currentStep) + 1) / activeSteps.length) * 100;
-
-  const goNext = () => {
-    const idx = activeSteps.findIndex(s => s.id === currentStep);
-    if (idx < activeSteps.length - 1) setCurrentStep(activeSteps[idx + 1].id);
-  };
-
-  const goPrev = () => {
-    const idx = activeSteps.findIndex(s => s.id === currentStep);
-    if (idx === 0) navigate('/peticoes');
-    else setCurrentStep(activeSteps[idx - 1].id);
-  };
-
-  // ── Loading ───────────────────────────────────────────────
+  // ── Loading ────────────────────────────────────────────────────────────────────
 
   if (loadingInitial) {
     return (
@@ -418,37 +597,37 @@ export default function PeticaoEditarPage() {
     );
   }
 
-  // ── Render ────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────────
 
   return (
     <AppLayout>
       <AppHeader title={actionName || 'Nova Petição'} />
       <ScrollArea className="flex-1">
-        <div className="p-4 md:p-6 max-w-[900px] mx-auto space-y-6">
+        <div className="p-4 md:p-6 max-w-[860px] mx-auto space-y-5">
 
           {/* Progress card */}
-          <Card className="rounded-xl border border-border/50 shadow-sm">
+          <Card className="rounded-2xl border border-border/50 shadow-sm overflow-hidden">
             <div className="p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="font-bold text-foreground">{model?.nome || 'Petição'}</h2>
+                  <h2 className="font-bold text-foreground leading-tight">{model?.nome || 'Petição'}</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">{actionName}</p>
                 </div>
                 <Badge variant="outline" className="text-xs">Rascunho</Badge>
               </div>
 
               {/* Steps */}
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {activeSteps.map((step, i) => {
-                  const Icon    = step.icon;
+                  const Icon     = step.icon;
                   const isActive = step.id === currentStep;
                   const isDone   = step.id < currentStep;
                   return (
-                    <div key={step.id} className="flex items-center gap-2">
+                    <div key={step.id} className="flex items-center gap-1.5">
                       <button
                         onClick={() => setCurrentStep(step.id)}
                         className={cn(
-                          'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
+                          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all',
                           isActive && 'bg-primary text-primary-foreground shadow-sm',
                           isDone   && 'bg-primary/10 text-primary',
                           !isActive && !isDone && 'bg-muted/50 text-muted-foreground hover:bg-muted'
@@ -461,282 +640,137 @@ export default function PeticaoEditarPage() {
                         <span className="hidden sm:inline">{step.title}</span>
                       </button>
                       {i < activeSteps.length - 1 && (
-                        <ArrowRight className="h-3 w-3 text-muted-foreground/40" />
+                        <ArrowRight className="h-3 w-3 text-muted-foreground/30 shrink-0" />
                       )}
                     </div>
                   );
                 })}
               </div>
 
-              <Progress value={progress} className="h-1" />
+              <Progress value={progress} className="h-1.5 rounded-full" />
             </div>
           </Card>
 
-          {/* Step content */}
-          <Card className="rounded-xl border border-border/50 shadow-sm">
+          {/* Step Content */}
+          <Card className="rounded-2xl border border-border/50 shadow-sm">
             <CardContent className="p-5 md:p-6">
 
-              {/* ── Step 1: Cliente ── */}
-              {currentStep === 1 && (
+              {/* Fields step */}
+              {!isReviewStep && currentStepConfig.fields.length > 0 && (
                 <div className="space-y-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <User className="h-5 w-5 text-primary" />
-                    <h3 className="font-semibold">Dados do Cliente</h3>
+                  <div className="flex items-center gap-2 mb-2">
+                    <currentStepConfig.icon className="h-5 w-5 text-primary" />
+                    <h3 className="font-bold text-foreground">{currentStepConfig.title}</h3>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="sm:col-span-2">
-                      <Label className="text-xs text-muted-foreground">Nome Completo *</Label>
-                      <Input value={formData.cliente.nome_completo} onChange={e => updateField('cliente', 'nome_completo', e.target.value)} className="rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">CPF *</Label>
-                      <Input value={formData.cliente.cpf} onChange={e => updateField('cliente', 'cpf', e.target.value)} className="rounded-xl mt-1" placeholder="000.000.000-00" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">RG</Label>
-                      <Input value={formData.cliente.rg} onChange={e => updateField('cliente', 'rg', e.target.value)} className="rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Estado Civil *</Label>
-                      <Select value={formData.cliente.estado_civil} onValueChange={v => updateField('cliente', 'estado_civil', v)}>
-                        <SelectTrigger className="rounded-xl mt-1"><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                        <SelectContent>{ESTADOS_CIVIS.map(ec => <SelectItem key={ec} value={ec}>{ec}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Profissão *</Label>
-                      <Input value={formData.cliente.profissao} onChange={e => updateField('cliente', 'profissao', e.target.value)} className="rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">E-mail</Label>
-                      <Input value={formData.cliente.email} onChange={e => updateField('cliente', 'email', e.target.value)} className="rounded-xl mt-1" type="email" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Telefone</Label>
-                      <Input value={formData.cliente.telefone} onChange={e => updateField('cliente', 'telefone', e.target.value)} className="rounded-xl mt-1" placeholder="(00) 00000-0000" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Nacionalidade</Label>
-                      <Input value={formData.cliente.nacionalidade} onChange={e => updateField('cliente', 'nacionalidade', e.target.value)} className="rounded-xl mt-1" />
-                    </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {currentStepConfig.fields.map(field => (
+                      <FieldInput
+                        key={field.key}
+                        config={field}
+                        value={formData[field.key] || ''}
+                        onChange={v => updateField(field.key, v)}
+                        submitted={submitted}
+                      />
+                    ))}
                   </div>
                 </div>
               )}
 
-              {/* ── Step 2: Endereço ── */}
-              {currentStep === 2 && (
+              {/* Review step */}
+              {isReviewStep && (
                 <div className="space-y-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <MapPin className="h-5 w-5 text-primary" />
-                    <h3 className="font-semibold">Endereço do Cliente</h3>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">CEP *</Label>
-                      <Input value={formData.endereco.cep} onChange={e => { updateField('endereco', 'cep', e.target.value); handleCepLookup(e.target.value); }} className="rounded-xl mt-1" placeholder="00000-000" />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <Label className="text-xs text-muted-foreground">Rua *</Label>
-                      <Input value={formData.endereco.rua} onChange={e => updateField('endereco', 'rua', e.target.value)} className="rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Número *</Label>
-                      <Input value={formData.endereco.numero} onChange={e => updateField('endereco', 'numero', e.target.value)} className="rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Complemento</Label>
-                      <Input value={formData.endereco.complemento} onChange={e => updateField('endereco', 'complemento', e.target.value)} className="rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Bairro *</Label>
-                      <Input value={formData.endereco.bairro} onChange={e => updateField('endereco', 'bairro', e.target.value)} className="rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Cidade *</Label>
-                      <Input value={formData.endereco.cidade} onChange={e => updateField('endereco', 'cidade', e.target.value)} className="rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">UF *</Label>
-                      <Select value={formData.endereco.uf} onValueChange={v => updateField('endereco', 'uf', v)}>
-                        <SelectTrigger className="rounded-xl mt-1"><SelectValue placeholder="UF" /></SelectTrigger>
-                        <SelectContent>{UFS.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Step 3: Banco ── */}
-              {currentStep === 3 && needsBankData && (
-                <div className="space-y-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Building2 className="h-5 w-5 text-primary" />
-                    <h3 className="font-semibold">Dados Bancários</h3>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="sm:col-span-2">
-                      <Label className="text-xs text-muted-foreground">Banco *</Label>
-                      <Select value={formData.banco.banco_nome} onValueChange={v => updateField('banco', 'banco_nome', v)}>
-                        <SelectTrigger className="rounded-xl mt-1"><SelectValue placeholder="Selecione o banco..." /></SelectTrigger>
-                        <SelectContent>{BANCOS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Tipo de Produto</Label>
-                      <Select value={formData.banco.tipo_produto} onValueChange={v => updateField('banco', 'tipo_produto', v)}>
-                        <SelectTrigger className="rounded-xl mt-1"><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="emprestimo">Empréstimo</SelectItem>
-                          <SelectItem value="financiamento">Financiamento</SelectItem>
-                          <SelectItem value="consignado">Consignado</SelectItem>
-                          <SelectItem value="cartao">Cartão de Crédito</SelectItem>
-                          <SelectItem value="rmc">RMC</SelectItem>
-                          <SelectItem value="rcc">RCC</SelectItem>
-                          <SelectItem value="pacote_servicos">Pacote de Serviços</SelectItem>
-                          <SelectItem value="outros">Outros</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Agência</Label>
-                      <Input value={formData.banco.agencia} onChange={e => updateField('banco', 'agencia', e.target.value)} className="rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Conta</Label>
-                      <Input value={formData.banco.conta} onChange={e => updateField('banco', 'conta', e.target.value)} className="rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Data Início Contrato</Label>
-                      <Input type="date" value={formData.banco.data_inicio} onChange={e => updateField('banco', 'data_inicio', e.target.value)} className="rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Data Fim Contrato</Label>
-                      <Input type="date" value={formData.banco.data_fim} onChange={e => updateField('banco', 'data_fim', e.target.value)} className="rounded-xl mt-1" />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Step 4: Valores ── */}
-              {currentStep === 4 && (
-                <div className="space-y-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <DollarSign className="h-5 w-5 text-primary" />
-                    <h3 className="font-semibold">Valores e Pedidos</h3>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Valor Cobrado Indevidamente</Label>
-                      <Input value={formData.valores.valor_cobrado} onChange={e => updateField('valores', 'valor_cobrado', e.target.value)} className="rounded-xl mt-1" placeholder="R$ 0,00" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Valor Total da Causa</Label>
-                      <Input value={formData.valores.valor_total} onChange={e => updateField('valores', 'valor_total', e.target.value)} className="rounded-xl mt-1" placeholder="R$ 0,00" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Período Início</Label>
-                      <Input type="date" value={formData.valores.periodo_inicio} onChange={e => updateField('valores', 'periodo_inicio', e.target.value)} className="rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Período Fim</Label>
-                      <Input type="date" value={formData.valores.periodo_fim} onChange={e => updateField('valores', 'periodo_fim', e.target.value)} className="rounded-xl mt-1" />
-                    </div>
-                  </div>
-                  <Separator />
-                  <div>
-                    <Label className="text-sm font-semibold mb-3 block">Pedidos</Label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {PEDIDOS.map(pedido => (
-                        <label key={pedido.value} className="flex items-center gap-3 p-3 rounded-xl border border-border/50 hover:border-primary/30 cursor-pointer transition-colors">
-                          <Checkbox
-                            checked={formData.valores.pedidos_selecionados.includes(pedido.value)}
-                            onCheckedChange={checked => {
-                              const current = formData.valores.pedidos_selecionados;
-                              updateField('valores', 'pedidos_selecionados',
-                                checked ? [...current, pedido.value] : current.filter(v => v !== pedido.value)
-                              );
-                            }}
-                          />
-                          <span className="text-sm">{pedido.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Resumo dos Fatos</Label>
-                    <Textarea
-                      value={formData.valores.observacoes}
-                      onChange={e => updateField('valores', 'observacoes', e.target.value)}
-                      className="rounded-xl mt-1 min-h-[120px]"
-                      placeholder="Descreva os fatos. A IA adaptará para linguagem jurídica formal..."
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* ── Step 5: Revisão ── */}
-              {currentStep === 5 && (
-                <div className="space-y-5">
-                  <div className="flex items-center gap-2 mb-4">
+                  <div className="flex items-center gap-2 mb-2">
                     <CheckCircle2 className="h-5 w-5 text-primary" />
-                    <h3 className="font-semibold">Revisão e Geração</h3>
+                    <h3 className="font-bold text-foreground">Revisão e Geração</h3>
                   </div>
 
+                  {/* Summary cards */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card className="rounded-xl border border-border/50">
+                    <Card className="rounded-xl border border-border/40">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-semibold flex items-center gap-2">
                           <User className="h-4 w-4 text-primary" /> Cliente
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="px-4 pb-4 space-y-1 text-sm">
-                        <p><span className="text-muted-foreground">Nome:</span> {formData.cliente.nome_completo || '—'}</p>
-                        <p><span className="text-muted-foreground">CPF:</span> {formData.cliente.cpf || '—'}</p>
-                        <p><span className="text-muted-foreground">Estado Civil:</span> {formData.cliente.estado_civil || '—'}</p>
-                        <p><span className="text-muted-foreground">Cidade:</span> {formData.endereco.cidade || '—'}/{formData.endereco.uf || '—'}</p>
+                        <p><span className="text-muted-foreground">Nome:</span> {formData.nome_completo || formData.nome_maiusculo || '—'}</p>
+                        <p><span className="text-muted-foreground">CPF:</span> {formData.cpf || '—'}</p>
+                        <p><span className="text-muted-foreground">RG:</span> {formData.rg || '—'}</p>
+                        <p><span className="text-muted-foreground">Profissão:</span> {formData.profissao || '—'}</p>
+                        {formData.idade_numerica && (
+                          <p><span className="text-muted-foreground">Idade:</span> {formData.idade_numerica} anos</p>
+                        )}
                       </CardContent>
                     </Card>
 
-                    <Card className="rounded-xl border border-border/50">
+                    <Card className="rounded-xl border border-border/40">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-primary" /> Modelo
+                          <Building2 className="h-4 w-4 text-primary" /> Banco Réu
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="px-4 pb-4 space-y-1 text-sm">
-                        <p><span className="text-muted-foreground">Ação:</span> {actionName}</p>
-                        <p><span className="text-muted-foreground">Modelo:</span> {model?.nome || '—'}</p>
-                        <p><span className="text-muted-foreground">Valor da Causa:</span> {formData.valores.valor_total || '—'}</p>
+                        <p><span className="text-muted-foreground">Banco:</span> {formData.banco_nome || '—'}</p>
+                        <p><span className="text-muted-foreground">CNPJ:</span> {formData.banco_cnpj || '—'}</p>
                       </CardContent>
                     </Card>
 
-                    <Card className="rounded-xl border border-border/50 md:col-span-2">
+                    <Card className="rounded-xl border border-border/40">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                          <DollarSign className="h-4 w-4 text-primary" /> Pedidos
+                          <MapPin className="h-4 w-4 text-primary" /> Endereço
                         </CardTitle>
                       </CardHeader>
-                      <CardContent className="px-4 pb-4">
-                        <div className="flex flex-wrap gap-2">
-                          {formData.valores.pedidos_selecionados.length > 0
-                            ? formData.valores.pedidos_selecionados.map(p => (
-                                <Badge key={p} variant="outline" className="text-xs">
-                                  {PEDIDOS.find(x => x.value === p)?.label || p}
-                                </Badge>
-                              ))
-                            : <span className="text-sm text-muted-foreground">Nenhum pedido selecionado</span>
-                          }
-                        </div>
+                      <CardContent className="px-4 pb-4 space-y-1 text-sm">
+                        <p>{formData.endereco_rua || '—'}, {formData.endereco_numero || '—'}</p>
+                        <p>{formData.endereco_bairro || '—'}, {formData.endereco_cidade || '—'}/{formData.endereco_uf || '—'}</p>
+                        <p>CEP: {formData.endereco_cep || '—'}</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="rounded-xl border border-border/40">
+                      <CardHeader className="pb-2 pt-4 px-4">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                          <DollarSign className="h-4 w-4 text-primary" /> Valores
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-4 space-y-1 text-sm">
+                        {formData.valor_emprestimo && <p><span className="text-muted-foreground">Empréstimo:</span> R$ {formData.valor_emprestimo}</p>}
+                        {formData.valor_seguro && <p><span className="text-muted-foreground">Seguro:</span> R$ {formData.valor_seguro}</p>}
+                        {formData.valor_descontos_indevidos && <p><span className="text-muted-foreground">Desc. indevidos:</span> R$ {formData.valor_descontos_indevidos}</p>}
+                        {formData.valor_danos_morais && <p><span className="text-muted-foreground">Danos Morais:</span> R$ {formData.valor_danos_morais}</p>}
+                        {formData.valor_causa && <p><span className="text-muted-foreground font-semibold">Valor da Causa:</span> R$ {formData.valor_causa}</p>}
                       </CardContent>
                     </Card>
                   </div>
 
                   <Separator />
 
+                  {/* Modelo info */}
+                  <div className="flex items-center gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
+                    <FileText className="h-5 w-5 text-primary shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{model?.nome || '—'}</p>
+                      <p className="text-xs text-muted-foreground">{actionName}</p>
+                    </div>
+                    {model?.template_file_url ? (
+                      <Badge className="ml-auto bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">
+                        ✓ Template vinculado
+                      </Badge>
+                    ) : (
+                      <Badge className="ml-auto bg-red-100 text-red-700 border-red-200 text-xs">
+                        ✗ Sem template
+                      </Badge>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  {/* Botões */}
                   <div className="flex flex-col sm:flex-row items-center gap-3 justify-center pt-2">
                     <Button
                       onClick={handleGenerate}
-                      disabled={generating || !formData.cliente.nome_completo}
+                      disabled={generating || !model?.template_file_url}
                       className="gap-2 rounded-xl h-12 px-8 shadow-md text-base font-bold"
                     >
                       {generating
@@ -763,10 +797,10 @@ export default function PeticaoEditarPage() {
           <div className="flex items-center justify-between">
             <Button variant="outline" onClick={goPrev} className="gap-2 rounded-xl">
               <ArrowLeft className="h-4 w-4" />
-              {currentStep === 1 ? 'Voltar' : 'Anterior'}
+              {currentIdx === 0 ? 'Voltar' : 'Anterior'}
             </Button>
-            {currentStep < activeSteps[activeSteps.length - 1].id && (
-              <Button onClick={goNext} className="gap-2 rounded-xl">
+            {!isLastStep && (
+              <Button onClick={goNext} className="gap-2 rounded-xl font-semibold">
                 Próximo <ArrowRight className="h-4 w-4" />
               </Button>
             )}
