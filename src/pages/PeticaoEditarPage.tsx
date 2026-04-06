@@ -1,831 +1,779 @@
-import { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { DetailSkeleton } from '@/components/ui/PageSkeleton';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import {
-  Plus,
-  Search,
-  MoreHorizontal,
-  Eye,
-  Copy,
-  Archive,
-  Trash2,
-  FileCheck2,
-  Clock,
-  CheckCircle2,
-  FileText,
-  Scale,
-  Plane,
-  CreditCard,
-  TrendingUp,
-  AlertTriangle,
-  Ban,
-  ShoppingCart,
-  Package,
-  ArrowRight,
-  X,
-  ChevronRight,
-  LayoutTemplate,
-  SlidersHorizontal,
-} from "lucide-react";
-import { AppLayout } from "@/components/layouts/AppLayout";
-import { AppHeader } from "@/components/AppHeader";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+  ArrowLeft, ArrowRight, Save, Sparkles, Loader2, User, MapPin,
+  Building2, DollarSign, CheckCircle2, FileText,
+} from 'lucide-react';
+import { AppLayout } from '@/components/layouts/AppLayout';
+import { AppHeader } from '@/components/AppHeader';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { Progress } from '@/components/ui/progress';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { usePeticoesV2, type ActionType, type PetitionModelV2 } from "@/hooks/usePeticoesV2";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { cn } from "@/lib/utils";
-import { Skeleton } from "@/components/ui/skeleton";
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import PizZip from 'pizzip';
+import Docxtemplater from 'docxtemplater';
+import { saveAs } from 'file-saver';
+import type { PetitionModelV2 } from '@/hooks/usePeticoesV2';
 
-// ─── Maps ──────────────────────────────────────────────────────────────────────
+const ESTADOS_CIVIS = ['Solteiro(a)', 'Casado(a)', 'Divorciado(a)', 'Viúvo(a)', 'União Estável'];
+const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+const BANCOS = [
+  'Banco do Brasil','Bradesco','Itaú Unibanco','Caixa Econômica Federal','Santander',
+  'Banco Safra','Banco Inter','Nubank','C6 Bank','Banco PAN','Banco BMG','Banrisul',
+  'Banco do Nordeste','Banco da Amazônia','Sicoob','Sicredi','Agibank','Banco Cetelem',
+  'Banco Crefisa','PicPay','Will Bank','Facta Financeira','Banco Itaú Consignado','Outro',
+];
+const PEDIDOS = [
+  { value: 'dano_moral',                label: 'Danos Morais' },
+  { value: 'repeticao_indebito',        label: 'Repetição de Indébito' },
+  { value: 'tutela_urgencia',           label: 'Tutela de Urgência' },
+  { value: 'revisao_contratual',        label: 'Revisão Contratual' },
+  { value: 'declaratoria_inexistencia', label: 'Declaratória de Inexistência' },
+  { value: 'restituicao_valores',       label: 'Restituição de Valores' },
+  { value: 'cancelamento_contrato',     label: 'Cancelamento de Contrato' },
+  { value: 'exclusao_cadastros',        label: 'Exclusão de Cadastros Restritivos' },
+];
 
-const ICON_MAP: Record<string, React.ReactNode> = {
-  Plane: <Plane className="h-4 w-4" />,
-  CreditCard: <CreditCard className="h-4 w-4" />,
-  TrendingUp: <TrendingUp className="h-4 w-4" />,
-  AlertTriangle: <AlertTriangle className="h-4 w-4" />,
-  Ban: <Ban className="h-4 w-4" />,
-  ShoppingCart: <ShoppingCart className="h-4 w-4" />,
-  Package: <Package className="h-4 w-4" />,
-  FileText: <FileText className="h-4 w-4" />,
-  Scale: <Scale className="h-4 w-4" />,
-};
-
-const COLOR_MAP: Record<string, { gradient: string; bg: string; text: string }> = {
-  sky: {
-    gradient: "from-sky-600 to-indigo-600",
-    bg: "bg-sky-50 dark:bg-sky-950/30",
-    text: "text-sky-700 dark:text-sky-400",
-  },
-  blue: {
-    gradient: "from-blue-600 to-indigo-600",
-    bg: "bg-blue-50 dark:bg-blue-950/30",
-    text: "text-blue-700 dark:text-blue-400",
-  },
-  lime: {
-    gradient: "from-lime-600 to-emerald-600",
-    bg: "bg-lime-50 dark:bg-lime-950/30",
-    text: "text-lime-700 dark:text-lime-400",
-  },
-  red: {
-    gradient: "from-red-600 to-rose-600",
-    bg: "bg-red-50 dark:bg-red-950/30",
-    text: "text-red-700 dark:text-red-400",
-  },
-  emerald: {
-    gradient: "from-emerald-600 to-teal-600",
-    bg: "bg-emerald-50 dark:bg-emerald-950/30",
-    text: "text-emerald-700 dark:text-emerald-400",
-  },
-  rose: {
-    gradient: "from-rose-600 to-pink-600",
-    bg: "bg-rose-50 dark:bg-rose-950/30",
-    text: "text-rose-700 dark:text-rose-400",
-  },
-  violet: {
-    gradient: "from-violet-600 to-purple-600",
-    bg: "bg-violet-50 dark:bg-violet-950/30",
-    text: "text-violet-700 dark:text-violet-400",
-  },
-  teal: {
-    gradient: "from-teal-600 to-emerald-600",
-    bg: "bg-teal-50 dark:bg-teal-950/30",
-    text: "text-teal-700 dark:text-teal-400",
-  },
-  fuchsia: {
-    gradient: "from-fuchsia-600 to-purple-600",
-    bg: "bg-fuchsia-50 dark:bg-fuchsia-950/30",
-    text: "text-fuchsia-700 dark:text-fuchsia-400",
-  },
-  slate: {
-    gradient: "from-slate-600 to-gray-600",
-    bg: "bg-slate-50 dark:bg-slate-950/30",
-    text: "text-slate-700 dark:text-slate-400",
-  },
-  amber: {
-    gradient: "from-amber-500 to-orange-500",
-    bg: "bg-amber-50 dark:bg-amber-950/30",
-    text: "text-amber-700 dark:text-amber-400",
-  },
-  orange: {
-    gradient: "from-orange-600 to-amber-600",
-    bg: "bg-orange-50 dark:bg-orange-950/30",
-    text: "text-orange-700 dark:text-orange-400",
-  },
-  cyan: {
-    gradient: "from-cyan-600 to-sky-600",
-    bg: "bg-cyan-50 dark:bg-cyan-950/30",
-    text: "text-cyan-700 dark:text-cyan-400",
-  },
-  pink: {
-    gradient: "from-pink-600 to-fuchsia-600",
-    bg: "bg-pink-50 dark:bg-pink-950/30",
-    text: "text-pink-700 dark:text-pink-400",
-  },
-};
-
-const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  draft: {
-    label: "Rascunho",
-    color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-    icon: <FileText className="h-3 w-3" />,
-  },
-  review: {
-    label: "Em Revisão",
-    color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-    icon: <Clock className="h-3 w-3" />,
-  },
-  generated: {
-    label: "Gerado",
-    color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-    icon: <FileCheck2 className="h-3 w-3" />,
-  },
-  filed: {
-    label: "Protocolado",
-    color: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
-    icon: <CheckCircle2 className="h-3 w-3" />,
-  },
-  archived: {
-    label: "Arquivado",
-    color: "bg-gray-100 text-gray-600 dark:bg-gray-800/30 dark:text-gray-400",
-    icon: <Archive className="h-3 w-3" />,
-  },
-};
-
-// ─── Modal de Seleção (Ação → Modelo) ─────────────────────────────────────────
-
-type ModalStep = "action" | "model";
-
-function NovaPeticaoModal({
-  open,
-  onClose,
-  actionTypes,
-  models,
-  modelsPerAction,
-  getModelsForAction,
-  onNavigate,
-}: {
-  open: boolean;
-  onClose: () => void;
-  actionTypes: ActionType[];
-  models: PetitionModelV2[];
-  modelsPerAction: Record<string, number>;
-  getModelsForAction: (id: string) => PetitionModelV2[];
-  onNavigate: (actionId: string, modelId: string) => void;
-}) {
-  const [step, setStep] = useState<ModalStep>("action");
-  const [selectedAction, setSelectedAction] = useState<ActionType | null>(null);
-  const [search, setSearch] = useState("");
-
-  const handleClose = () => {
-    setStep("action");
-    setSelectedAction(null);
-    setSearch("");
-    onClose();
-  };
-
-  const handleSelectAction = (action: ActionType) => {
-    const actionModels = getModelsForAction(action.id);
-    if (actionModels.length === 1) {
-      onNavigate(action.id, actionModels[0].id);
-      handleClose();
-    } else {
-      setSelectedAction(action);
-      setStep("model");
-    }
-  };
-
-  const handleSelectModel = (model: PetitionModelV2) => {
-    if (!selectedAction) return;
-    onNavigate(selectedAction.id, model.id);
-    handleClose();
-  };
-
-  const filteredActions = useMemo(() => {
-    if (!search) return actionTypes;
-    return actionTypes.filter(
-      (a) =>
-        a.nome.toLowerCase().includes(search.toLowerCase()) ||
-        (a.descricao || "").toLowerCase().includes(search.toLowerCase()),
-    );
-  }, [actionTypes, search]);
-
-  const actionModels = selectedAction ? getModelsForAction(selectedAction.id) : [];
-  const selectedColors = selectedAction ? COLOR_MAP[selectedAction.cor] || COLOR_MAP.slate : null;
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="max-w-2xl h-[80vh] flex flex-col p-0 gap-0 overflow-hidden">
-        {/* Header */}
-        <DialogHeader className="px-6 pt-5 pb-4 border-b bg-card shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {step === "model" && selectedAction && (
-                <button
-                  onClick={() => {
-                    setStep("action");
-                    setSearch("");
-                  }}
-                  className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-                >
-                  <ArrowRight className="h-4 w-4 rotate-180" />
-                </button>
-              )}
-              <div>
-                <DialogTitle className="font-semibold text-base flex items-center gap-2">
-                  {step === "action" ? (
-                    <>
-                      <Scale className="h-4 w-4 text-primary" /> Nova Petição
-                    </>
-                  ) : (
-                    <>
-                      {selectedAction && selectedColors && (
-                        <span
-                          className={cn(
-                            "p-1 rounded-md bg-gradient-to-br text-white inline-flex",
-                            selectedColors.gradient,
-                          )}
-                        >
-                          {ICON_MAP[selectedAction.icone] || <FileText className="h-4 w-4" />}
-                        </span>
-                      )}
-                      {selectedAction?.nome}
-                    </>
-                  )}
-                </DialogTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {step === "action" ? "Selecione o tipo de ação jurídica" : "Escolha o modelo para esta ação"}
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={handleClose}
-              className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          {step === "action" && (
-            <div className="relative mt-3">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                autoFocus
-                placeholder="Buscar tipo de ação..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 h-9 text-sm"
-              />
-            </div>
-          )}
-        </DialogHeader>
-
-        {/* Body */}
-        <ScrollArea className="flex-1 min-h-0">
-          <div className="p-5">
-            {/* Step: Ação */}
-            {step === "action" && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {filteredActions.length === 0 ? (
-                  <div className="col-span-2 text-center py-12 text-muted-foreground">
-                    <Scale className="h-10 w-10 mx-auto mb-2 opacity-20" />
-                    <p className="text-sm">Nenhum tipo de ação encontrado</p>
-                  </div>
-                ) : (
-                  filteredActions.map((action) => {
-                    const colors = COLOR_MAP[action.cor] || COLOR_MAP.slate;
-                    const count = modelsPerAction[action.id] || 0;
-                    return (
-                      <button
-                        key={action.id}
-                        onClick={() => handleSelectAction(action)}
-                        className="group w-full text-left rounded-xl border border-border/60 bg-card hover:border-primary/30 hover:shadow-md transition-all duration-200 overflow-hidden"
-                      >
-                        <div className={cn("h-1 bg-gradient-to-r", colors.gradient)} />
-                        <div className="p-4">
-                          <div className="flex items-start justify-between mb-2.5">
-                            <div
-                              className={cn("p-2 rounded-lg bg-gradient-to-br text-white shadow-sm", colors.gradient)}
-                            >
-                              {ICON_MAP[action.icone] || <FileText className="h-4 w-4" />}
-                            </div>
-                            <Badge variant="outline" className="text-[10px]">
-                              {count} {count === 1 ? "modelo" : "modelos"}
-                            </Badge>
-                          </div>
-                          <p className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors">
-                            {action.nome}
-                          </p>
-                          {action.descricao && (
-                            <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{action.descricao}</p>
-                          )}
-                          <div className="mt-2.5 flex items-center gap-1 text-[11px] text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                            Selecionar <ArrowRight className="h-3 w-3" />
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            )}
-
-            {/* Step: Modelo */}
-            {step === "model" && (
-              <div className="space-y-3">
-                {actionModels.map((model) => (
-                  <button
-                    key={model.id}
-                    onClick={() => handleSelectModel(model)}
-                    className="group w-full text-left flex items-start gap-3 p-4 rounded-xl border border-border/60 bg-card hover:border-primary/30 hover:shadow-md transition-all duration-200"
-                  >
-                    <div className="p-2 rounded-lg bg-primary/5 text-primary group-hover:bg-primary/10 transition-colors shrink-0 mt-0.5">
-                      <FileText className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors">
-                          {model.nome}
-                        </p>
-                        {model.is_default && (
-                          <Badge className="bg-primary/10 text-primary text-[10px] px-1.5 py-0">Padrão</Badge>
-                        )}
-                      </div>
-                      {model.descricao && (
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{model.descricao}</p>
-                      )}
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {model.tags?.map((tag) => (
-                          <Badge key={tag} variant="outline" className="text-[9px] font-normal px-1.5 py-0 h-4">
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary opacity-0 group-hover:opacity-100 transition-all shrink-0 mt-1" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </ScrollArea>
-
-        {/* Footer */}
-        <div className="px-6 py-3 border-t bg-card shrink-0 flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">
-            {step === "action"
-              ? `${filteredActions.length} tipo${filteredActions.length !== 1 ? "s" : ""} de ação`
-              : `${actionModels.length} modelo${actionModels.length !== 1 ? "s" : ""} disponível${actionModels.length !== 1 ? "is" : ""}`}
-          </p>
-          <button
-            onClick={handleClose}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Cancelar
-          </button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
+interface FormData {
+  cliente:  { nome_completo: string; cpf: string; rg: string; estado_civil: string; profissao: string; email: string; telefone: string; nacionalidade: string; };
+  endereco: { cep: string; rua: string; numero: string; complemento: string; bairro: string; cidade: string; uf: string; };
+  banco:    { banco_nome: string; tipo_produto: string; agencia: string; conta: string; data_inicio: string; data_fim: string; };
+  valores:  { valor_cobrado: string; valor_total: string; periodo_inicio: string; periodo_fim: string; pedidos_selecionados: string[]; observacoes: string; };
 }
 
-// ─── Painel lateral de modelos ─────────────────────────────────────────────────
+const EMPTY_FORM: FormData = {
+  cliente:  { nome_completo: '', cpf: '', rg: '', estado_civil: '', profissao: '', email: '', telefone: '', nacionalidade: 'brasileiro(a)' },
+  endereco: { cep: '', rua: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '' },
+  banco:    { banco_nome: '', tipo_produto: '', agencia: '', conta: '', data_inicio: '', data_fim: '' },
+  valores:  { valor_cobrado: '', valor_total: '', periodo_inicio: '', periodo_fim: '', pedidos_selecionados: [], observacoes: '' },
+};
 
-function ModelsSidePanel({
-  actionTypes,
-  models,
-  modelsPerAction,
-  getModelsForAction,
-  onSelectModel,
-}: {
-  actionTypes: ActionType[];
-  models: PetitionModelV2[];
-  modelsPerAction: Record<string, number>;
-  getModelsForAction: (id: string) => PetitionModelV2[];
-  onSelectModel: (actionId: string, modelId: string) => void;
-}) {
-  const [sideSearch, setSideSearch] = useState("");
-  const [expandedAction, setExpandedAction] = useState<string | null>(null);
+const STEPS = [
+  { id: 1, title: 'Cliente',  icon: User },
+  { id: 2, title: 'Endereço', icon: MapPin },
+  { id: 3, title: 'Banco',    icon: Building2 },
+  { id: 4, title: 'Valores',  icon: DollarSign },
+  { id: 5, title: 'Revisão',  icon: CheckCircle2 },
+];
 
-  const filteredActions = useMemo(() => {
-    if (!sideSearch) return actionTypes;
-    const q = sideSearch.toLowerCase();
-    return actionTypes.filter(
-      (a) => a.nome.toLowerCase().includes(q) || getModelsForAction(a.id).some((m) => m.nome.toLowerCase().includes(q)),
-    );
-  }, [actionTypes, sideSearch, getModelsForAction]);
+export default function PeticaoEditarPage() {
+  const navigate       = useNavigate();
+  const { id }         = useParams();
+  const [searchParams] = useSearchParams();
+  const { toast }      = useToast();
 
-  const totalModels = models.length;
+  const [currentStep,    setCurrentStep]    = useState(1);
+  const [formData,       setFormData]       = useState<FormData>({ ...EMPTY_FORM });
+  const [petitionId,     setPetitionId]     = useState(id || '');
+  const [model,          setModel]          = useState<PetitionModelV2 | null>(null);
+  const [actionName,     setActionName]     = useState('');
+  const [saving,         setSaving]         = useState(false);
+  const [generating,     setGenerating]     = useState(false);
+  const [loadingInitial, setLoadingInitial] = useState(true);
+  const autosaveTimer = useRef<NodeJS.Timeout | null>(null);
 
-  return (
-    <Card className="border-border/60 flex flex-col h-full">
-      {/* Header */}
-      <div className="px-4 pt-4 pb-3 border-b shrink-0">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <LayoutTemplate size={14} className="text-primary" />
-            Modelos Disponíveis
-          </h2>
-          <Badge variant="secondary" className="text-[10px] font-medium">
-            {totalModels}
-          </Badge>
-        </div>
-        <div className="relative">
-          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Buscar modelo..."
-            value={sideSearch}
-            onChange={(e) => setSideSearch(e.target.value)}
-            className="pl-8 h-8 text-xs"
-          />
-        </div>
-      </div>
+  useEffect(() => {
+    const init = async () => {
+      setLoadingInitial(true);
+      const actionId = searchParams.get('action');
+      const modelId  = searchParams.get('model');
 
-      {/* List */}
-      <ScrollArea className="flex-1">
-        <div className="p-3 space-y-1">
-          {filteredActions.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground">
-              <SlidersHorizontal size={26} className="mx-auto mb-2 opacity-20" />
-              <p className="text-xs">Nenhum resultado</p>
-            </div>
-          ) : (
-            filteredActions.map((action) => {
-              const actionModels = getModelsForAction(action.id);
-              const colors = COLOR_MAP[action.cor] || COLOR_MAP.slate;
-              const isExpanded = expandedAction === action.id;
+      // ── Editar petição existente ──────────────────────────
+      if (id) {
+        const { data } = await supabase
+          .from('petitions_v2')
+          .select('*, action_types(nome), petition_models_v2(*)')
+          .eq('id', id)
+          .single();
 
-              return (
-                <div key={action.id}>
-                  {/* Action row */}
-                  <button
-                    onClick={() => setExpandedAction(isExpanded ? null : action.id)}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-muted/50 transition-colors group"
-                  >
-                    <span className={cn("p-1.5 rounded-md bg-gradient-to-br text-white shrink-0", colors.gradient)}>
-                      {ICON_MAP[action.icone] || <FileText className="h-3 w-3" />}
-                    </span>
-                    <span className="flex-1 text-left text-xs font-medium text-foreground truncate">{action.nome}</span>
-                    <Badge variant="secondary" className="text-[9px] shrink-0 font-mono h-4 px-1">
-                      {actionModels.length}
-                    </Badge>
-                    <ChevronRight
-                      size={12}
-                      className={cn("text-muted-foreground shrink-0 transition-transform", isExpanded && "rotate-90")}
-                    />
-                  </button>
+        if (data) {
+          const d = data as unknown as {
+            form_data_json: FormData;
+            current_step: number;
+            action_types: { nome: string };
+            petition_models_v2: PetitionModelV2;
+          };
+          setFormData({ ...EMPTY_FORM, ...(d.form_data_json || {}) });
+          setCurrentStep(d.current_step || 1);
+          setActionName(d.action_types?.nome || '');
+          setModel(d.petition_models_v2 || null);
+          setPetitionId(id);
+        }
+        setLoadingInitial(false);
+        return;
+      }
 
-                  {/* Models under action */}
-                  {isExpanded && (
-                    <div className="ml-9 mt-0.5 space-y-0.5">
-                      {actionModels.map((model) => (
-                        <button
-                          key={model.id}
-                          onClick={() => onSelectModel(action.id, model.id)}
-                          className="group w-full text-left flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-primary/5 hover:text-primary transition-colors"
-                        >
-                          <FileText size={11} className="text-muted-foreground group-hover:text-primary shrink-0" />
-                          <span className="text-[11px] truncate flex-1">{model.nome}</span>
-                          {model.is_default && (
-                            <Badge className="bg-primary/10 text-primary text-[9px] px-1 py-0 h-3.5 shrink-0">
-                              Padrão
-                            </Badge>
-                          )}
-                          <ArrowRight size={10} className="text-primary opacity-0 group-hover:opacity-100 shrink-0" />
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
+      // ── Nova petição via action + model params ────────────
+      if (actionId && modelId) {
+        // Buscar dados do tipo de ação e modelo em paralelo
+        const [{ data: actionData }, { data: modelData }] = await Promise.all([
+          supabase.from('action_types').select('nome').eq('id', actionId).single(),
+          supabase.from('petition_models_v2').select('*').eq('id', modelId).single(),
+        ]);
+
+        setActionName((actionData as { nome: string })?.nome || '');
+        setModel((modelData as unknown as PetitionModelV2) || null);
+
+        // Criar rascunho no banco
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+
+          if (!user) {
+            toast({ title: 'Erro', description: 'Usuário não autenticado.', variant: 'destructive' });
+            navigate('/peticoes');
+            return;
+          }
+
+          const { data: newPetition, error } = await supabase
+            .from('petitions_v2')
+            .insert({
+              action_type_id: actionId,
+              model_id:       modelId,
+              status:         'draft',
+              current_step:   1,
+              form_data_json: {},
+              created_by:     user.id,
             })
-          )}
-        </div>
-      </ScrollArea>
-    </Card>
-  );
-}
+            .select('id')
+            .single();
 
-// ─── Page Principal ────────────────────────────────────────────────────────────
+          if (error) {
+            console.error('Erro ao criar petição:', error);
+            toast({
+              title: 'Erro ao criar petição',
+              description: error.message,
+              variant: 'destructive',
+            });
+            setLoadingInitial(false);
+            return;
+          }
 
-export default function PeticoesPage() {
-  const navigate = useNavigate();
-  const {
-    actionTypes,
-    models,
-    petitions,
-    loading,
-    duplicatePetition,
-    archivePetition,
-    deletePetition,
-    getModelsForAction,
-  } = usePeticoesV2();
+          if (newPetition) {
+            const newId = (newPetition as { id: string }).id;
+            setPetitionId(newId);
+            // Atualiza a URL sem recarregar
+            navigate(`/peticoes/${newId}/editar`, { replace: true });
+          }
+        } catch (err) {
+          console.error('Erro inesperado:', err);
+          toast({ title: 'Erro inesperado', description: 'Tente novamente.', variant: 'destructive' });
+        }
 
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [modalOpen, setModalOpen] = useState(false);
+        setLoadingInitial(false);
+        return;
+      }
 
-  // Stats
-  const stats = useMemo(
-    () => ({
-      total: petitions.length,
-      draft: petitions.filter((p) => p.status === "draft").length,
-      generated: petitions.filter((p) => p.status === "generated").length,
-      filed: petitions.filter((p) => p.status === "filed").length,
-      review: petitions.filter((p) => p.status === "review").length,
-    }),
-    [petitions],
-  );
+      // Sem parâmetros — volta para a lista
+      navigate('/peticoes');
+    };
 
-  // Models count per action
-  const modelsPerAction = useMemo(() => {
-    const map: Record<string, number> = {};
-    models.forEach((m) => {
-      map[m.action_type_id] = (map[m.action_type_id] || 0) + 1;
-    });
-    return map;
-  }, [models]);
+    init();
+  }, [id, searchParams, navigate, toast]);
 
-  // Filtered petitions
-  const filteredPetitions = useMemo(() => {
-    return petitions.filter((p) => {
-      const fd = p.form_data_json as Record<string, unknown>;
-      const clientName = (fd?.cliente as Record<string, string>)?.nome_completo || "";
-      const actionName = p.action_types?.nome || "";
-      const matchesSearch =
-        !searchTerm ||
-        clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        actionName.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
-  }, [petitions, searchTerm, statusFilter]);
+  // ── Autosave ──────────────────────────────────────────────
 
-  const getClientName = (p: (typeof petitions)[0]) => {
-    const fd = p.form_data_json as Record<string, unknown>;
-    return (fd?.cliente as Record<string, string>)?.nome_completo || "—";
+  const doAutosave = useCallback(async () => {
+    if (!petitionId) return;
+    await supabase
+      .from('petitions_v2')
+      .update({
+        form_data_json: formData as unknown as Record<string, unknown>,
+        current_step:   currentStep,
+        updated_at:     new Date().toISOString(),
+      })
+      .eq('id', petitionId);
+  }, [petitionId, formData, currentStep]);
+
+  useEffect(() => {
+    if (!petitionId || loadingInitial) return;
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = setTimeout(doAutosave, 2000);
+    return () => { if (autosaveTimer.current) clearTimeout(autosaveTimer.current); };
+  }, [formData, currentStep, doAutosave, petitionId, loadingInitial]);
+
+  // ── CEP ───────────────────────────────────────────────────
+
+  const handleCepLookup = async (cep: string) => {
+    const clean = cep.replace(/\D/g, '');
+    if (clean.length !== 8) return;
+    try {
+      const res  = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        setFormData(prev => ({
+          ...prev,
+          endereco: {
+            ...prev.endereco,
+            rua:    data.logradouro || prev.endereco.rua,
+            bairro: data.bairro     || prev.endereco.bairro,
+            cidade: data.localidade || prev.endereco.cidade,
+            uf:     data.uf         || prev.endereco.uf,
+          },
+        }));
+      }
+    } catch { /* ignore */ }
   };
 
-  const handleNavigate = (actionId: string, modelId: string) => {
-    navigate(`/peticoes/nova?action=${actionId}&model=${modelId}`);
+  const updateField = (section: keyof FormData, field: string, value: unknown) => {
+    setFormData(prev => ({ ...prev, [section]: { ...prev[section], [field]: value } }));
   };
 
-  const handleOpenPetition = (id: string, status: string) => {
-    if (status === "generated" || status === "filed") {
-      navigate(`/peticoes/${id}/revisao`);
-    } else {
-      navigate(`/peticoes/${id}/editar`);
+  // ── Salvar rascunho ───────────────────────────────────────
+
+  const handleSaveDraft = async () => {
+    setSaving(true);
+    await doAutosave();
+    toast({ title: 'Salvo', description: 'Rascunho salvo com sucesso' });
+    setSaving(false);
+  };
+
+  // ── Gerar petição ─────────────────────────────────────────
+
+  const handleGenerate = async () => {
+    if (!petitionId || !model?.template_file_url) {
+      toast({ title: 'Erro', description: 'Modelo sem arquivo vinculado.', variant: 'destructive' });
+      return;
+    }
+    setGenerating(true);
+    try {
+      await supabase
+        .from('petitions_v2')
+        .update({
+          form_data_json: formData as unknown as Record<string, unknown>,
+          status:         'review',
+          updated_at:     new Date().toISOString(),
+        })
+        .eq('id', petitionId);
+
+      // Reescrever fatos com IA (opcional)
+      let fatosJuridicos = formData.valores.observacoes || '';
+      if (fatosJuridicos.length > 20) {
+        try {
+          const { data: aiData } = await supabase.functions.invoke('petition-rewrite', {
+            body: { resumo: fatosJuridicos, tipo_acao: actionName },
+          });
+          if (aiData?.fatos_juridicos) fatosJuridicos = aiData.fatos_juridicos;
+        } catch { /* fallback: usa o texto original */ }
+      }
+
+      // Baixar template .docx
+      const response = await fetch(model.template_file_url);
+      if (!response.ok) throw new Error('Erro ao baixar o modelo .docx. Verifique a URL.');
+      const arrayBuffer = await response.arrayBuffer();
+
+      const zip = new PizZip(arrayBuffer);
+      const doc = new Docxtemplater(zip, {
+        paragraphLoop: true,
+        linebreaks:    true,
+        delimiters:    { start: '{{', end: '}}' },
+        nullGetter()  { return ''; },
+      });
+
+      const pedidoTexts = formData.valores.pedidos_selecionados
+        .map(p => PEDIDOS.find(x => x.value === p)?.label || p);
+
+      const templateData: Record<string, string> = {
+        // Cliente
+        cliente_nome:  formData.cliente.nome_completo,
+        nome:          formData.cliente.nome_completo,
+        cpf:           formData.cliente.cpf,
+        cliente_cpf:   formData.cliente.cpf,
+        rg:            formData.cliente.rg,
+        cliente_rg:    formData.cliente.rg,
+        estado_civil:  formData.cliente.estado_civil,
+        profissao:     formData.cliente.profissao,
+        nacionalidade: formData.cliente.nacionalidade,
+        email:         formData.cliente.email,
+        telefone:      formData.cliente.telefone,
+        // Endereço
+        endereco:            `${formData.endereco.rua}, ${formData.endereco.numero}${formData.endereco.complemento ? ', ' + formData.endereco.complemento : ''}, ${formData.endereco.bairro}`,
+        endereco_completo:   `${formData.endereco.rua}, ${formData.endereco.numero}${formData.endereco.complemento ? ', ' + formData.endereco.complemento : ''}, ${formData.endereco.bairro}, ${formData.endereco.cidade}/${formData.endereco.uf}, CEP ${formData.endereco.cep}`,
+        endereco_cep:        formData.endereco.cep,
+        cep:                 formData.endereco.cep,
+        endereco_rua:        formData.endereco.rua,
+        endereco_numero:     formData.endereco.numero,
+        endereco_complemento:formData.endereco.complemento,
+        endereco_bairro:     formData.endereco.bairro,
+        endereco_cidade:     formData.endereco.cidade,
+        cidade:              formData.endereco.cidade,
+        endereco_uf:         formData.endereco.uf,
+        uf:                  formData.endereco.uf,
+        // Banco
+        banco_nome:            formData.banco.banco_nome,
+        tipo_produto:          formData.banco.tipo_produto,
+        agencia:               formData.banco.agencia,
+        conta:                 formData.banco.conta,
+        data_inicio_contrato:  formData.banco.data_inicio,
+        data_fim_contrato:     formData.banco.data_fim,
+        // Valores
+        valor_cobrado_indevidamente: formData.valores.valor_cobrado,
+        valor_total_causa:           formData.valores.valor_total,
+        periodo_inicio:              formData.valores.periodo_inicio,
+        periodo_fim:                 formData.valores.periodo_fim,
+        observacoes_adicionais:      formData.valores.observacoes,
+        fatos_juridicos:             fatosJuridicos,
+        // Pedidos
+        pedido_danos_morais:               pedidoTexts.includes('Danos Morais') ? 'Sim' : '',
+        pedido_repeticao_indebito:         pedidoTexts.includes('Repetição de Indébito') ? 'Sim' : '',
+        pedido_tutela_urgencia:            pedidoTexts.includes('Tutela de Urgência') ? 'Sim' : '',
+        pedido_revisao_contratual:         pedidoTexts.includes('Revisão Contratual') ? 'Sim' : '',
+        pedido_declaratoria_inexistencia:  pedidoTexts.includes('Declaratória de Inexistência') ? 'Sim' : '',
+        pedido_restituicao_valores:        pedidoTexts.includes('Restituição de Valores') ? 'Sim' : '',
+        pedido_cancelamento_contrato:      pedidoTexts.includes('Cancelamento de Contrato') ? 'Sim' : '',
+        pedido_exclusao_cadastros:         pedidoTexts.includes('Exclusão de Cadastros Restritivos') ? 'Sim' : '',
+        // Data
+        data_atual: new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }),
+      };
+
+      doc.render(templateData);
+
+      const blob = doc.getZip().generate({
+        type:     'blob',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
+
+      // Salvar no Storage
+      const fileName   = `peticao-${petitionId}-${Date.now()}.docx`;
+      const storagePath = `peticoes/geradas/${fileName}`;
+
+      await supabase.storage
+        .from('peticoes-modelos')
+        .upload(storagePath, blob, { cacheControl: '3600', upsert: true });
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('peticoes-modelos')
+        .getPublicUrl(storagePath);
+
+      // Atualizar status no banco
+      await supabase
+        .from('petitions_v2')
+        .update({
+          status:             'generated',
+          generated_docx_url: publicUrl,
+          updated_at:         new Date().toISOString(),
+        })
+        .eq('id', petitionId);
+
+      // Salvar versão
+      await supabase.from('petition_versions').insert({
+        petition_id:        petitionId,
+        version_number:     1,
+        form_data_json:     formData as unknown as Record<string, unknown>,
+        generated_docx_url: publicUrl,
+      });
+
+      // Download automático
+      saveAs(blob, `Peticao_${formData.cliente.nome_completo.replace(/\s+/g, '_') || 'documento'}.docx`);
+
+      toast({ title: '✅ Petição gerada!', description: 'O arquivo .docx foi baixado automaticamente.' });
+      navigate('/peticoes');
+
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro desconhecido';
+      console.error('Erro ao gerar:', err);
+      toast({ title: 'Erro na geração', description: message, variant: 'destructive' });
+    } finally {
+      setGenerating(false);
     }
   };
 
-  // Quick-create from sidebar (same logic as modal)
-  const handleSidebarModel = (actionId: string, modelId: string) => {
-    navigate(`/peticoes/nova?action=${actionId}&model=${modelId}`);
+  // ── Steps ativos ──────────────────────────────────────────
+
+  const needsBankData = model?.requires_bank_data !== false;
+  const activeSteps   = STEPS.filter(s => !(s.id === 3 && !needsBankData));
+  const progress      = ((activeSteps.findIndex(s => s.id === currentStep) + 1) / activeSteps.length) * 100;
+
+  const goNext = () => {
+    const idx = activeSteps.findIndex(s => s.id === currentStep);
+    if (idx < activeSteps.length - 1) setCurrentStep(activeSteps[idx + 1].id);
   };
+
+  const goPrev = () => {
+    const idx = activeSteps.findIndex(s => s.id === currentStep);
+    if (idx === 0) navigate('/peticoes');
+    else setCurrentStep(activeSteps[idx - 1].id);
+  };
+
+  // ── Loading ───────────────────────────────────────────────
+
+  if (loadingInitial) {
+    return (
+      <AppLayout>
+        <AppHeader title="Carregando..." />
+        <DetailSkeleton />
+      </AppLayout>
+    );
+  }
+
+  // ── Render ────────────────────────────────────────────────
 
   return (
     <AppLayout>
-      <AppHeader title="Gerador de Petições" />
-
+      <AppHeader title={actionName || 'Nova Petição'} />
       <ScrollArea className="flex-1">
-        <div className="p-4 md:p-6 space-y-5 max-w-[1600px] mx-auto">
-          {/* ── Top bar ── */}
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-primary/10">
-                <Scale className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold tracking-tight text-foreground">Gerador de Petições</h1>
-                <p className="text-xs text-muted-foreground">
-                  {models.length} modelos · {petitions.length} petições geradas
-                </p>
-              </div>
-            </div>
-            <Button onClick={() => setModalOpen(true)} className="gap-2 rounded-xl h-9 shadow-sm">
-              <Plus className="h-4 w-4" />
-              Nova Petição
-            </Button>
-          </div>
+        <div className="p-4 md:p-6 max-w-[900px] mx-auto space-y-6">
 
-          {/* ── Stats cards ── */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            {[
-              { label: "Total", value: stats.total, dot: "bg-foreground/40" },
-              { label: "Rascunhos", value: stats.draft, dot: "bg-amber-500" },
-              { label: "Em Revisão", value: stats.review, dot: "bg-yellow-500" },
-              { label: "Gerados", value: stats.generated, dot: "bg-emerald-500" },
-              { label: "Protocolados", value: stats.filed, dot: "bg-violet-500" },
-            ].map((stat) => (
-              <Card key={stat.label} className="border-border/50">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <div className={cn("h-2 w-2 rounded-full shrink-0", stat.dot)} />
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium truncate">
-                      {stat.label}
-                    </span>
-                  </div>
-                  <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* ── Main 2-col layout ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            {/* Left: Petitions table (2/3) */}
-            <div className="lg:col-span-2 space-y-3">
-              {/* Filters */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                <div className="relative flex-1 w-full sm:max-w-xs">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar cliente ou ação..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-9 h-9 text-sm rounded-xl border-border/50"
-                  />
+          {/* Progress card */}
+          <Card className="rounded-xl border border-border/50 shadow-sm">
+            <div className="p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-bold text-foreground">{model?.nome || 'Petição'}</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">{actionName}</p>
                 </div>
-                <div className="flex gap-1.5 flex-wrap">
-                  {[
-                    { value: "all", label: "Todos" },
-                    { value: "draft", label: "Rascunho" },
-                    { value: "review", label: "Revisão" },
-                    { value: "generated", label: "Gerado" },
-                    { value: "filed", label: "Protocolado" },
-                  ].map((f) => (
-                    <Button
-                      key={f.value}
-                      variant={statusFilter === f.value ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setStatusFilter(f.value)}
-                      className={cn(
-                        "rounded-lg text-xs h-8 px-3",
-                        statusFilter !== f.value && "border-border/50 hover:bg-muted/50",
+                <Badge variant="outline" className="text-xs">Rascunho</Badge>
+              </div>
+
+              {/* Steps */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {activeSteps.map((step, i) => {
+                  const Icon    = step.icon;
+                  const isActive = step.id === currentStep;
+                  const isDone   = step.id < currentStep;
+                  return (
+                    <div key={step.id} className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCurrentStep(step.id)}
+                        className={cn(
+                          'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
+                          isActive && 'bg-primary text-primary-foreground shadow-sm',
+                          isDone   && 'bg-primary/10 text-primary',
+                          !isActive && !isDone && 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                        )}
+                      >
+                        {isDone
+                          ? <CheckCircle2 className="h-3.5 w-3.5" />
+                          : <Icon className="h-3.5 w-3.5" />
+                        }
+                        <span className="hidden sm:inline">{step.title}</span>
+                      </button>
+                      {i < activeSteps.length - 1 && (
+                        <ArrowRight className="h-3 w-3 text-muted-foreground/40" />
                       )}
-                    >
-                      {f.label}
-                    </Button>
-                  ))}
-                </div>
+                    </div>
+                  );
+                })}
               </div>
 
-              {/* Table */}
-              <Card className="border-border/50 shadow-sm rounded-xl overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/30 hover:bg-muted/30 border-b border-border/50">
-                      <TableHead className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-                        Data
-                      </TableHead>
-                      <TableHead className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-                        Tipo de Ação
-                      </TableHead>
-                      <TableHead className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-                        Cliente
-                      </TableHead>
-                      <TableHead className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-                        Status
-                      </TableHead>
-                      <TableHead className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-                        Atualização
-                      </TableHead>
-                      <TableHead className="text-right" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      Array.from({ length: 5 }).map((_, i) => (
-                        <TableRow key={i}>
-                          {Array.from({ length: 6 }).map((_, j) => (
-                            <TableCell key={j}>
-                              <Skeleton className="h-4 w-20" />
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))
-                    ) : filteredPetitions.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-16">
-                          <div className="flex flex-col items-center gap-3">
-                            <Scale className="h-12 w-12 text-muted-foreground/20" />
-                            <p className="text-sm text-muted-foreground">Nenhuma petição encontrada</p>
-                            <Button size="sm" onClick={() => setModalOpen(true)} className="gap-2 rounded-xl">
-                              <Plus className="h-4 w-4" /> Criar primeira petição
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredPetitions.map((p) => {
-                        const statusCfg = STATUS_CONFIG[p.status] || STATUS_CONFIG.draft;
-                        return (
-                          <TableRow
-                            key={p.id}
-                            className="cursor-pointer hover:bg-muted/30 transition-colors"
-                            onClick={() => handleOpenPetition(p.id, p.status)}
-                          >
-                            <TableCell className="text-xs text-muted-foreground">
-                              {format(new Date(p.created_at), "dd/MM/yy", { locale: ptBR })}
-                            </TableCell>
-                            <TableCell className="text-sm font-medium">{p.action_types?.nome || "—"}</TableCell>
-                            <TableCell className="text-sm">{getClientName(p)}</TableCell>
-                            <TableCell>
-                              <Badge className={cn("gap-1 text-[11px] font-medium", statusCfg.color)}>
-                                {statusCfg.icon} {statusCfg.label}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                              {format(new Date(p.updated_at), "dd/MM HH:mm", { locale: ptBR })}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg">
-                                    <MoreHorizontal className="h-3.5 w-3.5" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="rounded-xl">
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleOpenPetition(p.id, p.status);
-                                    }}
-                                  >
-                                    <Eye className="h-4 w-4 mr-2" /> Abrir
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      duplicatePetition(p.id);
-                                    }}
-                                  >
-                                    <Copy className="h-4 w-4 mr-2" /> Duplicar
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      archivePetition(p.id);
-                                    }}
-                                  >
-                                    <Archive className="h-4 w-4 mr-2" /> Arquivar
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-destructive"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      deletePetition(p.id);
-                                    }}
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" /> Excluir
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </Card>
+              <Progress value={progress} className="h-1" />
             </div>
+          </Card>
 
-            {/* Right: Models sidebar (1/3) */}
-            <div className="hidden lg:flex lg:flex-col" style={{ maxHeight: "calc(100vh - 220px)" }}>
-              <ModelsSidePanel
-                actionTypes={actionTypes}
-                models={models}
-                modelsPerAction={modelsPerAction}
-                getModelsForAction={getModelsForAction}
-                onSelectModel={handleSidebarModel}
-              />
-            </div>
+          {/* Step content */}
+          <Card className="rounded-xl border border-border/50 shadow-sm">
+            <CardContent className="p-5 md:p-6">
+
+              {/* ── Step 1: Cliente ── */}
+              {currentStep === 1 && (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <User className="h-5 w-5 text-primary" />
+                    <h3 className="font-semibold">Dados do Cliente</h3>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs text-muted-foreground">Nome Completo *</Label>
+                      <Input value={formData.cliente.nome_completo} onChange={e => updateField('cliente', 'nome_completo', e.target.value)} className="rounded-xl mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">CPF *</Label>
+                      <Input value={formData.cliente.cpf} onChange={e => updateField('cliente', 'cpf', e.target.value)} className="rounded-xl mt-1" placeholder="000.000.000-00" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">RG</Label>
+                      <Input value={formData.cliente.rg} onChange={e => updateField('cliente', 'rg', e.target.value)} className="rounded-xl mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Estado Civil *</Label>
+                      <Select value={formData.cliente.estado_civil} onValueChange={v => updateField('cliente', 'estado_civil', v)}>
+                        <SelectTrigger className="rounded-xl mt-1"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                        <SelectContent>{ESTADOS_CIVIS.map(ec => <SelectItem key={ec} value={ec}>{ec}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Profissão *</Label>
+                      <Input value={formData.cliente.profissao} onChange={e => updateField('cliente', 'profissao', e.target.value)} className="rounded-xl mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">E-mail</Label>
+                      <Input value={formData.cliente.email} onChange={e => updateField('cliente', 'email', e.target.value)} className="rounded-xl mt-1" type="email" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Telefone</Label>
+                      <Input value={formData.cliente.telefone} onChange={e => updateField('cliente', 'telefone', e.target.value)} className="rounded-xl mt-1" placeholder="(00) 00000-0000" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Nacionalidade</Label>
+                      <Input value={formData.cliente.nacionalidade} onChange={e => updateField('cliente', 'nacionalidade', e.target.value)} className="rounded-xl mt-1" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Step 2: Endereço ── */}
+              {currentStep === 2 && (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <MapPin className="h-5 w-5 text-primary" />
+                    <h3 className="font-semibold">Endereço do Cliente</h3>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">CEP *</Label>
+                      <Input value={formData.endereco.cep} onChange={e => { updateField('endereco', 'cep', e.target.value); handleCepLookup(e.target.value); }} className="rounded-xl mt-1" placeholder="00000-000" />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs text-muted-foreground">Rua *</Label>
+                      <Input value={formData.endereco.rua} onChange={e => updateField('endereco', 'rua', e.target.value)} className="rounded-xl mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Número *</Label>
+                      <Input value={formData.endereco.numero} onChange={e => updateField('endereco', 'numero', e.target.value)} className="rounded-xl mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Complemento</Label>
+                      <Input value={formData.endereco.complemento} onChange={e => updateField('endereco', 'complemento', e.target.value)} className="rounded-xl mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Bairro *</Label>
+                      <Input value={formData.endereco.bairro} onChange={e => updateField('endereco', 'bairro', e.target.value)} className="rounded-xl mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Cidade *</Label>
+                      <Input value={formData.endereco.cidade} onChange={e => updateField('endereco', 'cidade', e.target.value)} className="rounded-xl mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">UF *</Label>
+                      <Select value={formData.endereco.uf} onValueChange={v => updateField('endereco', 'uf', v)}>
+                        <SelectTrigger className="rounded-xl mt-1"><SelectValue placeholder="UF" /></SelectTrigger>
+                        <SelectContent>{UFS.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Step 3: Banco ── */}
+              {currentStep === 3 && needsBankData && (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Building2 className="h-5 w-5 text-primary" />
+                    <h3 className="font-semibold">Dados Bancários</h3>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs text-muted-foreground">Banco *</Label>
+                      <Select value={formData.banco.banco_nome} onValueChange={v => updateField('banco', 'banco_nome', v)}>
+                        <SelectTrigger className="rounded-xl mt-1"><SelectValue placeholder="Selecione o banco..." /></SelectTrigger>
+                        <SelectContent>{BANCOS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Tipo de Produto</Label>
+                      <Select value={formData.banco.tipo_produto} onValueChange={v => updateField('banco', 'tipo_produto', v)}>
+                        <SelectTrigger className="rounded-xl mt-1"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="emprestimo">Empréstimo</SelectItem>
+                          <SelectItem value="financiamento">Financiamento</SelectItem>
+                          <SelectItem value="consignado">Consignado</SelectItem>
+                          <SelectItem value="cartao">Cartão de Crédito</SelectItem>
+                          <SelectItem value="rmc">RMC</SelectItem>
+                          <SelectItem value="rcc">RCC</SelectItem>
+                          <SelectItem value="pacote_servicos">Pacote de Serviços</SelectItem>
+                          <SelectItem value="outros">Outros</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Agência</Label>
+                      <Input value={formData.banco.agencia} onChange={e => updateField('banco', 'agencia', e.target.value)} className="rounded-xl mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Conta</Label>
+                      <Input value={formData.banco.conta} onChange={e => updateField('banco', 'conta', e.target.value)} className="rounded-xl mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Data Início Contrato</Label>
+                      <Input type="date" value={formData.banco.data_inicio} onChange={e => updateField('banco', 'data_inicio', e.target.value)} className="rounded-xl mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Data Fim Contrato</Label>
+                      <Input type="date" value={formData.banco.data_fim} onChange={e => updateField('banco', 'data_fim', e.target.value)} className="rounded-xl mt-1" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Step 4: Valores ── */}
+              {currentStep === 4 && (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <DollarSign className="h-5 w-5 text-primary" />
+                    <h3 className="font-semibold">Valores e Pedidos</h3>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Valor Cobrado Indevidamente</Label>
+                      <Input value={formData.valores.valor_cobrado} onChange={e => updateField('valores', 'valor_cobrado', e.target.value)} className="rounded-xl mt-1" placeholder="R$ 0,00" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Valor Total da Causa</Label>
+                      <Input value={formData.valores.valor_total} onChange={e => updateField('valores', 'valor_total', e.target.value)} className="rounded-xl mt-1" placeholder="R$ 0,00" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Período Início</Label>
+                      <Input type="date" value={formData.valores.periodo_inicio} onChange={e => updateField('valores', 'periodo_inicio', e.target.value)} className="rounded-xl mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Período Fim</Label>
+                      <Input type="date" value={formData.valores.periodo_fim} onChange={e => updateField('valores', 'periodo_fim', e.target.value)} className="rounded-xl mt-1" />
+                    </div>
+                  </div>
+                  <Separator />
+                  <div>
+                    <Label className="text-sm font-semibold mb-3 block">Pedidos</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {PEDIDOS.map(pedido => (
+                        <label key={pedido.value} className="flex items-center gap-3 p-3 rounded-xl border border-border/50 hover:border-primary/30 cursor-pointer transition-colors">
+                          <Checkbox
+                            checked={formData.valores.pedidos_selecionados.includes(pedido.value)}
+                            onCheckedChange={checked => {
+                              const current = formData.valores.pedidos_selecionados;
+                              updateField('valores', 'pedidos_selecionados',
+                                checked ? [...current, pedido.value] : current.filter(v => v !== pedido.value)
+                              );
+                            }}
+                          />
+                          <span className="text-sm">{pedido.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Resumo dos Fatos</Label>
+                    <Textarea
+                      value={formData.valores.observacoes}
+                      onChange={e => updateField('valores', 'observacoes', e.target.value)}
+                      className="rounded-xl mt-1 min-h-[120px]"
+                      placeholder="Descreva os fatos. A IA adaptará para linguagem jurídica formal..."
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* ── Step 5: Revisão ── */}
+              {currentStep === 5 && (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <CheckCircle2 className="h-5 w-5 text-primary" />
+                    <h3 className="font-semibold">Revisão e Geração</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card className="rounded-xl border border-border/50">
+                      <CardHeader className="pb-2 pt-4 px-4">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                          <User className="h-4 w-4 text-primary" /> Cliente
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-4 space-y-1 text-sm">
+                        <p><span className="text-muted-foreground">Nome:</span> {formData.cliente.nome_completo || '—'}</p>
+                        <p><span className="text-muted-foreground">CPF:</span> {formData.cliente.cpf || '—'}</p>
+                        <p><span className="text-muted-foreground">Estado Civil:</span> {formData.cliente.estado_civil || '—'}</p>
+                        <p><span className="text-muted-foreground">Cidade:</span> {formData.endereco.cidade || '—'}/{formData.endereco.uf || '—'}</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="rounded-xl border border-border/50">
+                      <CardHeader className="pb-2 pt-4 px-4">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-primary" /> Modelo
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-4 space-y-1 text-sm">
+                        <p><span className="text-muted-foreground">Ação:</span> {actionName}</p>
+                        <p><span className="text-muted-foreground">Modelo:</span> {model?.nome || '—'}</p>
+                        <p><span className="text-muted-foreground">Valor da Causa:</span> {formData.valores.valor_total || '—'}</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="rounded-xl border border-border/50 md:col-span-2">
+                      <CardHeader className="pb-2 pt-4 px-4">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                          <DollarSign className="h-4 w-4 text-primary" /> Pedidos
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-4">
+                        <div className="flex flex-wrap gap-2">
+                          {formData.valores.pedidos_selecionados.length > 0
+                            ? formData.valores.pedidos_selecionados.map(p => (
+                                <Badge key={p} variant="outline" className="text-xs">
+                                  {PEDIDOS.find(x => x.value === p)?.label || p}
+                                </Badge>
+                              ))
+                            : <span className="text-sm text-muted-foreground">Nenhum pedido selecionado</span>
+                          }
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex flex-col sm:flex-row items-center gap-3 justify-center pt-2">
+                    <Button
+                      onClick={handleGenerate}
+                      disabled={generating || !formData.cliente.nome_completo}
+                      className="gap-2 rounded-xl h-12 px-8 shadow-md text-base font-bold"
+                    >
+                      {generating
+                        ? <><Loader2 className="h-5 w-5 animate-spin" /> Gerando...</>
+                        : <><Sparkles className="h-5 w-5" /> Gerar Petição Final</>
+                      }
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleSaveDraft}
+                      disabled={saving}
+                      className="gap-2 rounded-xl h-12 px-6"
+                    >
+                      <Save className="h-4 w-4" />
+                      {saving ? 'Salvando...' : 'Salvar Rascunho'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Navegação */}
+          <div className="flex items-center justify-between">
+            <Button variant="outline" onClick={goPrev} className="gap-2 rounded-xl">
+              <ArrowLeft className="h-4 w-4" />
+              {currentStep === 1 ? 'Voltar' : 'Anterior'}
+            </Button>
+            {currentStep < activeSteps[activeSteps.length - 1].id && (
+              <Button onClick={goNext} className="gap-2 rounded-xl">
+                Próximo <ArrowRight className="h-4 w-4" />
+              </Button>
+            )}
           </div>
+
         </div>
       </ScrollArea>
-
-      {/* Modal Nova Petição */}
-      <NovaPeticaoModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        actionTypes={actionTypes}
-        models={models}
-        modelsPerAction={modelsPerAction}
-        getModelsForAction={getModelsForAction}
-        onNavigate={handleNavigate}
-      />
     </AppLayout>
   );
 }
