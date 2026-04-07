@@ -179,6 +179,27 @@ export type Database = {
         }
         Relationships: []
       }
+      assuntos_processo: {
+        Row: {
+          categoria: string | null
+          created_at: string | null
+          id: string
+          nome: string
+        }
+        Insert: {
+          categoria?: string | null
+          created_at?: string | null
+          id?: string
+          nome: string
+        }
+        Update: {
+          categoria?: string | null
+          created_at?: string | null
+          id?: string
+          nome?: string
+        }
+        Relationships: []
+      }
       campaign_recipients: {
         Row: {
           accepted_at: string | null
