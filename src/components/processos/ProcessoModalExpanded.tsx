@@ -977,10 +977,10 @@ export function ProcessoModalExpanded({
 
             {/* ── TAB PROCESSO ── */}
             <TabsContent value="processo" className="flex-1 min-h-0 mt-0 overflow-hidden">
-              <div className="flex h-full min-h-0 gap-0">
+              <div className="flex gap-0" style={{ height: 'calc(94vh - 220px)' }}>
 
                 {/* Coluna esquerda */}
-                <ScrollArea className="flex-1 min-w-0">
+                <ScrollArea className="flex-1 min-w-0 h-full">
                   <div className="px-6 py-4 space-y-4">
 
                     {/* Numeração */}
@@ -1222,7 +1222,7 @@ export function ProcessoModalExpanded({
                 <div className="w-px bg-border/40 shrink-0" />
 
                 {/* Coluna direita — Partes */}
-                <div className="w-[340px] shrink-0 flex flex-col overflow-hidden">
+                <div className="w-[340px] shrink-0 flex flex-col overflow-hidden h-full">
                   <div className="px-4 pt-4 pb-3 border-b border-border/40 shrink-0">
                     <div className="flex items-center gap-2">
                       <div className="h-5 w-5 rounded-md bg-primary/10 flex items-center justify-center">
@@ -1232,7 +1232,7 @@ export function ProcessoModalExpanded({
                       {hasPartes && <Badge variant="secondary" className="text-[10px] h-4 px-1.5 ml-auto">{partes.length}</Badge>}
                     </div>
                   </div>
-                  <ScrollArea className="flex-1 min-h-0">
+                  <ScrollArea className="flex-1 min-h-0 h-full">
                     <div className="px-4 py-3 space-y-2">
                       {!hasPartes ? (
                         <div className="rounded-xl border border-dashed border-border/50 bg-muted/10 py-8 text-center">
