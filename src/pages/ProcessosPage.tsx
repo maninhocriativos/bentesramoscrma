@@ -32,6 +32,61 @@ const ConsultaProcessoExterno = lazy(() =>
   import('@/components/processos/ConsultaProcessoExterno').then(m => ({ default: m.ConsultaProcessoExterno }))
 );
 
+// ─── Mini Donut Chart ──────────────────────────────────────────────────────────
+
+function MiniDonut({ segments }: {
+  segments: { value: number; color: string }[];
+}) {
+  const total = segments.reduce((s, x) => s + x.value, 0);
+  if (total === 0) return <div className="h-10 w-10 rounded-full bg-muted/30" />;
+
+  const size = 40;
+  const cx   = size / 2;
+  const cy   = size / 2;
+  const r    = 14;
+  const strokeW = 7;
+
+  let cumAngle = -90;
+  const arcs = segments.map(seg => {
+    const pct   = seg.value / total;
+    const angle = pct * 360;
+    const start = cumAngle;
+    cumAngle   += angle;
+    return { ...seg, pct, startAngle: start, endAngle: cumAngle };
+  });
+
+  function polarToXY(deg: number, radius: number) {
+    const rad = (deg * Math.PI) / 180;
+    return { x: cx + radius * Math.cos(rad), y: cy + radius * Math.sin(rad) };
+  }
+
+  function arcPath(startDeg: number, endDeg: number, radius: number) {
+    const s   = polarToXY(startDeg, radius);
+    const e   = polarToXY(endDeg,   radius);
+    const lg  = endDeg - startDeg > 180 ? 1 : 0;
+    return `M ${s.x} ${s.y} A ${radius} ${radius} 0 ${lg} 1 ${e.x} ${e.y}`;
+  }
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      {arcs.map((arc, i) => (
+        arc.pct > 0 && (
+          <path
+            key={i}
+            d={arcPath(arc.startAngle, arc.endAngle - 0.5, r)}
+            fill="none"
+            stroke={arc.color}
+            strokeWidth={strokeW}
+            strokeLinecap="butt"
+          />
+        )
+      ))}
+    </svg>
+  );
+}
+
+// ─── KPI Card ──────────────────────────────────────────────────────────────────
+
 function KpiCard({
   label, value, icon: Icon, color, bg, active, onClick,
 }: {
@@ -53,6 +108,81 @@ function KpiCard({
     </button>
   );
 }
+
+// ─── Summary Bar (distribuição visual) ────────────────────────────────────────
+
+function SummaryBar({ kpis, statusFilter, setStatusFilter }: {
+  kpis: Record<string, number>;
+  statusFilter: string;
+  setStatusFilter: (s: string) => void;
+}) {
+  const segments = [
+    { key: 'Em Andamento', color: '#3b82f6', label: 'Em Andamento' },
+    { key: 'Suspenso',     color: '#f59e0b', label: 'Suspensos'    },
+    { key: 'Ganho',        color: '#10b981', label: 'Ganhos'       },
+    { key: 'Perdido',      color: '#ef4444', label: 'Perdidos'     },
+    { key: 'Arquivado',    color: '#94a3b8', label: 'Arquivados'   },
+  ];
+
+  const values = segments.map(s => ({ ...s, value: kpis[s.key] || 0 }));
+  const total  = kpis.total || 1;
+
+  return (
+    <div className="bg-card border border-border/40 rounded-2xl p-4 flex items-center gap-5">
+      {/* Donut */}
+      <div className="shrink-0">
+        <MiniDonut segments={values.map(v => ({ value: v.value, color: v.color }))} />
+      </div>
+
+      {/* Barras horizontais */}
+      <div className="flex-1 min-w-0 space-y-1.5">
+        {values.map(seg => (
+          <button
+            key={seg.key}
+            onClick={() => setStatusFilter(statusFilter === seg.key ? 'todos' : seg.key)}
+            className="w-full group flex items-center gap-2 hover:opacity-80 transition-opacity"
+          >
+            <div className="flex items-center gap-1.5 w-[100px] shrink-0">
+              <span className="h-2 w-2 rounded-full shrink-0" style={{ background: seg.color }} />
+              <span className={`text-[10px] font-medium truncate ${statusFilter === seg.key ? 'text-foreground' : 'text-muted-foreground'}`}>
+                {seg.label}
+              </span>
+            </div>
+            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${(seg.value / total) * 100}%`, background: seg.color }}
+              />
+            </div>
+            <span className="text-[10px] font-semibold text-muted-foreground w-6 text-right shrink-0">
+              {seg.value}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Totais extras */}
+      <div className="shrink-0 hidden lg:flex flex-col gap-2">
+        {[
+          { key: 'recursal', label: 'Recursal', color: '#7c3aed' },
+          { key: 'execucao', label: 'Execução',  color: '#ea580c' },
+        ].map(s => (
+          <button
+            key={s.key}
+            onClick={() => setStatusFilter(statusFilter === s.key ? 'todos' : s.key)}
+            className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+          >
+            <span className="h-2 w-2 rounded-full shrink-0" style={{ background: s.color }} />
+            <span className="text-[10px] text-muted-foreground">{s.label}</span>
+            <span className="text-[10px] font-bold text-foreground ml-1">{kpis[s.key] || 0}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Page ──────────────────────────────────────────────────────────────────────
 
 type ViewTab = 'internos' | 'consulta';
 
@@ -88,14 +218,14 @@ function ProcessosPage() {
   }, [perfilLoading, canAccessProcessos, navigate]);
 
   const kpis = useMemo(() => ({
-    total:       processos.length,
-    emAndamento: processos.filter(p => p.status === 'Em Andamento').length,
-    suspensos:   processos.filter(p => p.status === 'Suspenso').length,
-    arquivados:  processos.filter(p => p.status === 'Arquivado').length,
-    ganhos:      processos.filter(p => p.status === 'Ganho').length,
-    perdidos:    processos.filter(p => p.status === 'Perdido').length,
-    recursal:    processos.filter(p => p.fase?.toLowerCase() === 'recursal').length,
-    execucao:    processos.filter(p => ['execução','execucao'].includes(p.fase?.toLowerCase() || '')).length,
+    total:        processos.length,
+    'Em Andamento': processos.filter(p => p.status === 'Em Andamento').length,
+    'Suspenso':     processos.filter(p => p.status === 'Suspenso').length,
+    'Arquivado':    processos.filter(p => p.status === 'Arquivado').length,
+    'Ganho':        processos.filter(p => p.status === 'Ganho').length,
+    'Perdido':      processos.filter(p => p.status === 'Perdido').length,
+    recursal:       processos.filter(p => p.fase?.toLowerCase() === 'recursal').length,
+    execucao:       processos.filter(p => ['execução','execucao'].includes(p.fase?.toLowerCase() || '')).length,
   }), [processos]);
 
   const filteredProcessos = useMemo(() => processos.filter(p => {
@@ -115,17 +245,6 @@ function ProcessosPage() {
 
   if (perfilLoading) return <AppLayout><PageSkeleton cards={5} rows={8} /></AppLayout>;
   if (!canAccessProcessos) return null;
-
-  const kpiCards = [
-    { label: 'Total',        value: kpis.total,       icon: Scale,        color: 'text-foreground',       bg: 'bg-card',                              filterKey: 'todos'        },
-    { label: 'Em Andamento', value: kpis.emAndamento, icon: CheckCircle2, color: 'text-blue-600',         bg: 'bg-blue-50 dark:bg-blue-950/30',       filterKey: 'Em Andamento' },
-    { label: 'Suspensos',    value: kpis.suspensos,   icon: PauseCircle,  color: 'text-amber-600',        bg: 'bg-amber-50 dark:bg-amber-950/30',     filterKey: 'Suspenso'     },
-    { label: 'Arquivados',   value: kpis.arquivados,  icon: Archive,      color: 'text-muted-foreground', bg: 'bg-muted',                             filterKey: 'Arquivado'    },
-    { label: 'Ganhos',       value: kpis.ganhos,      icon: Trophy,       color: 'text-emerald-600',      bg: 'bg-emerald-50 dark:bg-emerald-950/30', filterKey: 'Ganho'        },
-    { label: 'Perdidos',     value: kpis.perdidos,    icon: XCircle,      color: 'text-red-600',          bg: 'bg-red-50 dark:bg-red-950/30',         filterKey: 'Perdido'      },
-    { label: 'Recursal',     value: kpis.recursal,    icon: Gavel,        color: 'text-purple-600',       bg: 'bg-purple-50 dark:bg-purple-950/30',   filterKey: 'recursal'     },
-    { label: 'Execução',     value: kpis.execucao,    icon: FileCheck,    color: 'text-orange-600',       bg: 'bg-orange-50 dark:bg-orange-950/30',   filterKey: 'execucao'     },
-  ];
 
   return (
     <AppLayout>
@@ -166,33 +285,47 @@ function ProcessosPage() {
 
       <div className="flex-1 p-4 md:p-6 space-y-4">
 
-        {/* ── KPI Cards ── */}
-        <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-          {kpiCards.map(kpi => (
-            <KpiCard
-              key={kpi.label}
-              label={kpi.label}
-              value={kpi.value}
-              icon={kpi.icon}
-              color={kpi.color}
-              bg={kpi.bg}
-              active={statusFilter === kpi.filterKey}
-              onClick={() => setStatusFilter(kpi.filterKey)}
-            />
-          ))}
+        {/* ── KPI Cards + Summary ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4 items-start">
+          {/* Cards */}
+          <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
+            {[
+              { label: 'Total',        value: kpis.total,              icon: Scale,        color: 'text-foreground',       bg: 'bg-card',                              key: 'todos'        },
+              { label: 'Andamento',    value: kpis['Em Andamento'],    icon: CheckCircle2, color: 'text-blue-600',         bg: 'bg-blue-50 dark:bg-blue-950/30',       key: 'Em Andamento' },
+              { label: 'Suspensos',    value: kpis['Suspenso'],        icon: PauseCircle,  color: 'text-amber-600',        bg: 'bg-amber-50 dark:bg-amber-950/30',     key: 'Suspenso'     },
+              { label: 'Arquivados',   value: kpis['Arquivado'],       icon: Archive,      color: 'text-muted-foreground', bg: 'bg-muted',                             key: 'Arquivado'    },
+              { label: 'Ganhos',       value: kpis['Ganho'],           icon: Trophy,       color: 'text-emerald-600',      bg: 'bg-emerald-50 dark:bg-emerald-950/30', key: 'Ganho'        },
+              { label: 'Perdidos',     value: kpis['Perdido'],         icon: XCircle,      color: 'text-red-600',          bg: 'bg-red-50 dark:bg-red-950/30',         key: 'Perdido'      },
+              { label: 'Recursal',     value: kpis.recursal,           icon: Gavel,        color: 'text-purple-600',       bg: 'bg-purple-50 dark:bg-purple-950/30',   key: 'recursal'     },
+              { label: 'Execução',     value: kpis.execucao,           icon: FileCheck,    color: 'text-orange-600',       bg: 'bg-orange-50 dark:bg-orange-950/30',   key: 'execucao'     },
+            ].map(kpi => (
+              <KpiCard
+                key={kpi.key}
+                label={kpi.label}
+                value={kpi.value}
+                icon={kpi.icon}
+                color={kpi.color}
+                bg={kpi.bg}
+                active={statusFilter === kpi.key}
+                onClick={() => setStatusFilter(statusFilter === kpi.key ? 'todos' : kpi.key)}
+              />
+            ))}
+          </div>
+
+          {/* Summary bar — só desktop */}
+          <div className="hidden lg:block w-[320px] shrink-0">
+            <SummaryBar kpis={kpis} statusFilter={statusFilter} setStatusFilter={setStatusFilter} />
+          </div>
         </div>
 
         {/* ── Barra de controles ── */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-
           {/* Switcher */}
           <div className="flex items-center bg-muted/50 rounded-xl p-1 shrink-0 border border-border/40">
             <button
               onClick={() => setActiveView('internos')}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeView === 'internos'
-                  ? 'bg-card shadow-sm text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
+                activeView === 'internos' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               Escritório
@@ -200,9 +333,7 @@ function ProcessosPage() {
             <button
               onClick={() => setActiveView('consulta')}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeView === 'consulta'
-                  ? 'bg-card shadow-sm text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
+                activeView === 'consulta' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               Consultar CNJ
