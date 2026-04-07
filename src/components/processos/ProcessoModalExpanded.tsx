@@ -161,7 +161,7 @@ function AssuntoPickerModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg rounded-2xl max-h-[80vh] flex flex-col p-0">
+      <DialogContent className="max-w-lg rounded-2xl flex flex-col p-0" style={{ maxHeight: '85vh', height: '85vh' }}>
         <DialogHeader className="px-5 pt-5 pb-0">
           <DialogTitle className="flex items-center gap-2 text-base">
             <Tag className="h-4 w-4 text-primary" /> Selecionar Assunto
@@ -181,7 +181,7 @@ function AssuntoPickerModal({
           </div>
         </div>
 
-        <ScrollArea className="flex-1 min-h-0 px-5">
+        <ScrollArea className="flex-1 min-h-0 px-5" style={{ height: 'calc(85vh - 240px)' }}>
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
           ) : Object.keys(grouped).length === 0 ? (
