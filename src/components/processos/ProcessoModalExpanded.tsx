@@ -43,38 +43,16 @@ interface ProcessoModalExpandedProps {
 }
 
 type ProcessoFormData = {
-  numero_processo: string;
-  numero_complementar: string;
-  titulo_acao: string;
-  status: ProcessoStatus;
-  advogado_responsavel: string;
-  cliente_id: string;
-  cpf_cliente: string;
-  tribunal: string;
-  vara_comarca: string;
-  assunto: string;
-  valor_causa: string;
-  orgao_julgador: string;
-  grau: string;
-  origem_cliente: string;
-  descricao: string;
-  marcadores: string;
-  area: string;
-  fase: string;
-  classe_cnj: string;
-  assunto_cnj: string;
-  segredo_justica: boolean;
-  data_distribuicao: string;
-  data_citacao: string;
-  data_recebimento: string;
-  data_arquivamento: string;
-  data_encerramento: string;
-  valor_provisionado: string;
-  probabilidade: string;
-  monitorar_push: boolean;
-  tipo_orgao_julgador: string;
-  sistema_judicial: string;
-  complemento_enderecamento: string;
+  numero_processo: string; numero_complementar: string; titulo_acao: string;
+  status: ProcessoStatus; advogado_responsavel: string; cliente_id: string;
+  cpf_cliente: string; tribunal: string; vara_comarca: string; assunto: string;
+  valor_causa: string; orgao_julgador: string; grau: string; origem_cliente: string;
+  descricao: string; marcadores: string; area: string; fase: string;
+  classe_cnj: string; assunto_cnj: string; segredo_justica: boolean;
+  data_distribuicao: string; data_citacao: string; data_recebimento: string;
+  data_arquivamento: string; data_encerramento: string; valor_provisionado: string;
+  probabilidade: string; monitorar_push: boolean; tipo_orgao_julgador: string;
+  sistema_judicial: string; complemento_enderecamento: string;
 };
 
 interface ProcessoModalDraft {
@@ -88,7 +66,7 @@ interface ProcessoModalDraft {
 
 const STATUSES: ProcessoStatus[] = ['Em Andamento', 'Suspenso', 'Arquivado', 'Ganho', 'Perdido'];
 const CNJ_REGEX = /^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$/;
-const DRAFT_PREFIX = 'processo_modal_draft_v1';
+const DRAFT_PREFIX  = 'processo_modal_draft_v1';
 const DRAFT_MAX_AGE = 1000 * 60 * 60 * 24;
 
 const createEmptyForm = (): ProcessoFormData => ({
@@ -105,14 +83,14 @@ const createEmptyForm = (): ProcessoFormData => ({
 });
 
 const STATUS_STYLE: Record<string, string> = {
-  'Em Andamento': 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800',
+  'Em Andamento': 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400',
   'Ganho':        'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400',
   'Perdido':      'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400',
   'Suspenso':     'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400',
   'Arquivado':    'bg-muted text-muted-foreground border-border',
 };
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
+// ─── Sub-components ─────────────────────────────────────────────────────────────
 
 function SectionTitle({ icon: Icon, label, color = 'text-primary', bg = 'bg-primary/10' }: {
   icon: React.ElementType; label: string; color?: string; bg?: string;
@@ -122,34 +100,28 @@ function SectionTitle({ icon: Icon, label, color = 'text-primary', bg = 'bg-prim
       <div className={`h-5 w-5 rounded-md ${bg} flex items-center justify-center shrink-0`}>
         <Icon className={`h-3 w-3 ${color}`} />
       </div>
-      <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">{label}</h3>
+      <h3 className="text-[11px] font-bold text-foreground uppercase tracking-wider">{label}</h3>
     </div>
   );
 }
 
 function FieldGroup({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-muted/20 rounded-xl p-3.5 space-y-3 border border-border/30">
-      {children}
-    </div>
-  );
+  return <div className="bg-muted/20 rounded-xl p-3.5 space-y-3 border border-border/30">{children}</div>;
 }
 
 function Row2({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-2 gap-3">{children}</div>;
 }
-
 function Row3({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-3 gap-3">{children}</div>;
 }
-
 function Row4({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-4 gap-2">{children}</div>;
 }
 
-function Field({ label, children, hint, full }: { label: string; children: React.ReactNode; hint?: string; full?: boolean }) {
+function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
-    <div className={full ? 'col-span-2' : ''}>
+    <div>
       <Label className="text-[11px] text-muted-foreground mb-1 block">{label}</Label>
       {children}
       {hint && <p className="text-[10px] text-muted-foreground mt-1">{hint}</p>}
@@ -157,11 +129,10 @@ function Field({ label, children, hint, full }: { label: string; children: React
   );
 }
 
-// ─── Parte Card ─────────────────────────────────────────────────────────────────
+// ─── Parte Card ──────────────────────────────────────────────────────────────────
 
 function ParteCard({ parte, index, onUpdate, onRemove }: {
-  parte: ProcessoParte;
-  index: number;
+  parte: ProcessoParte; index: number;
   onUpdate: (i: number, field: string, value: string) => void;
   onRemove: (i: number) => void;
 }) {
@@ -171,9 +142,8 @@ function ParteCard({ parte, index, onUpdate, onRemove }: {
   const borderCls = isAutor ? 'border-l-emerald-500' : isReu ? 'border-l-red-500' : 'border-l-muted-foreground/30';
   const badgeCls  = isAutor
     ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400'
-    : isReu
-      ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400'
-      : 'bg-muted text-muted-foreground border-border';
+    : isReu ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400'
+    : 'bg-muted text-muted-foreground border-border';
 
   return (
     <Collapsible>
@@ -208,7 +178,7 @@ function ParteCard({ parte, index, onUpdate, onRemove }: {
               <div>
                 <Label className="text-[10px] text-muted-foreground">Tipo</Label>
                 <select value={parte.tipo || ''} onChange={e => onUpdate(index, 'tipo', e.target.value)}
-                  className="flex h-7 w-full rounded-lg border border-input bg-background px-2 text-xs mt-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                  className="flex h-7 w-full rounded-lg border border-input bg-background px-2 text-xs mt-1">
                   <option value="Autor">Autor</option>
                   <option value="Réu">Réu</option>
                   <option value="Terceiro Interessado">Terceiro</option>
@@ -245,7 +215,7 @@ function ParteCard({ parte, index, onUpdate, onRemove }: {
   );
 }
 
-// ─── Add Parte Form ─────────────────────────────────────────────────────────────
+// ─── Add Parte Form ───────────────────────────────────────────────────────────────
 
 function AddParteForm({ onAdd }: { onAdd: (parte: ProcessoParte) => void }) {
   const [nome, setNome] = useState('');
@@ -255,13 +225,7 @@ function AddParteForm({ onAdd }: { onAdd: (parte: ProcessoParte) => void }) {
 
   const handleAdd = () => {
     if (!nome.trim() || !tipo) { toast.error('Preencha nome e tipo'); return; }
-    onAdd({
-      nome: nome.trim(), tipo,
-      polo: tipo === 'Autor' ? 'AT' : tipo === 'Réu' ? 'PA' : 'TC',
-      tipoPessoa: 'FISICA',
-      documento: doc || undefined,
-      celular:   cel || undefined,
-    });
+    onAdd({ nome: nome.trim(), tipo, polo: tipo === 'Autor' ? 'AT' : tipo === 'Réu' ? 'PA' : 'TC', tipoPessoa: 'FISICA', documento: doc || undefined, celular: cel || undefined });
     setNome(''); setTipo(''); setDoc(''); setCel('');
     toast.success(`"${nome.trim()}" adicionado`);
   };
@@ -279,7 +243,7 @@ function AddParteForm({ onAdd }: { onAdd: (parte: ProcessoParte) => void }) {
         <div>
           <Label className="text-[10px] text-muted-foreground">Tipo *</Label>
           <select value={tipo} onChange={e => setTipo(e.target.value)}
-            className="flex h-7 w-full rounded-lg border border-input bg-card px-2 text-xs mt-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+            className="flex h-7 w-full rounded-lg border border-input bg-card px-2 text-xs mt-1">
             <option value="">Selecione</option>
             <option value="Autor">Autor</option>
             <option value="Réu">Réu</option>
@@ -303,7 +267,7 @@ function AddParteForm({ onAdd }: { onAdd: (parte: ProcessoParte) => void }) {
   );
 }
 
-// ─── Main Component ─────────────────────────────────────────────────────────────
+// ─── Main Component ───────────────────────────────────────────────────────────────
 
 export function ProcessoModalExpanded({
   processo, isOpen, onClose, isNew = false, canDelete = false, leads,
@@ -343,8 +307,9 @@ export function ProcessoModalExpanded({
       if (!raw) return null;
       const parsed = JSON.parse(raw) as ProcessoModalDraft;
       if (!parsed?.formData) return null;
-      const age = Date.now() - new Date(parsed.updatedAt || 0).getTime();
-      if (age > DRAFT_MAX_AGE) { window.localStorage.removeItem(draftKey); return null; }
+      if (Date.now() - new Date(parsed.updatedAt || 0).getTime() > DRAFT_MAX_AGE) {
+        window.localStorage.removeItem(draftKey); return null;
+      }
       return parsed;
     } catch { return null; }
   }, [draftKey]);
@@ -452,13 +417,14 @@ export function ProcessoModalExpanded({
             })));
           } else if (processo.partes_json?.length) {
             setPartes(processo.partes_json);
-            const rows = processo.partes_json.map(p => ({
-              processo_id: processo.id, nome: p.nome, tipo: p.tipo,
-              polo: p.polo || null, tipo_pessoa: p.tipoPessoa || null,
-              documento: p.documento || null, celular: p.celular || null,
-              telefone_adicional: p.telefone_adicional || null, advogados: p.advogados || null,
-            }));
-            await supabase.from('processo_partes').insert(rows);
+            await supabase.from('processo_partes').insert(
+              processo.partes_json.map(p => ({
+                processo_id: processo.id, nome: p.nome, tipo: p.tipo,
+                polo: p.polo || null, tipo_pessoa: p.tipoPessoa || null,
+                documento: p.documento || null, celular: p.celular || null,
+                telefone_adicional: p.telefone_adicional || null, advogados: p.advogados || null,
+              }))
+            );
           }
 
           const { data: dbMov } = await supabase
@@ -467,8 +433,7 @@ export function ProcessoModalExpanded({
           if (dbMov?.length) {
             setMovimentos(dbMov.map((m: any) => ({
               dataHora:    m.data_movimento ? new Date(m.data_movimento).toLocaleDateString('pt-BR') : '',
-              dataHoraRaw: m.data_movimento,
-              nome:        m.movimento_titulo || 'Movimentação',
+              dataHoraRaw: m.data_movimento, nome: m.movimento_titulo || 'Movimentação',
               complemento: m.movimento_descricao || null,
               codigo:      m.movimento_cnj_codigo ? Number(m.movimento_cnj_codigo) : null,
             })));
@@ -523,18 +488,18 @@ export function ProcessoModalExpanded({
         const adv = autor?.advogados?.[0];
         setFormData(prev => ({
           ...prev,
-          titulo_acao:          proc.classe          || prev.titulo_acao,
+          titulo_acao:          proc.classe              || prev.titulo_acao,
           status:               mapStatus(proc.status),
-          cliente_id:           clienteId            || prev.cliente_id,
+          cliente_id:           clienteId               || prev.cliente_id,
           advogado_responsavel: adv ? (adv.oab ? `${adv.nome} (${adv.oab})` : adv.nome) : prev.advogado_responsavel,
-          tribunal:             proc.tribunal        || prev.tribunal,
-          orgao_julgador:       proc.orgaoJulgador   || prev.orgao_julgador,
-          grau:                 proc.grau            || prev.grau,
+          tribunal:             proc.tribunal            || prev.tribunal,
+          orgao_julgador:       proc.orgaoJulgador       || prev.orgao_julgador,
+          grau:                 proc.grau                || prev.grau,
           assunto:              proc.assuntos?.[0]?.nome || prev.assunto,
           valor_causa:          proc.valorCausa?.toString() || prev.valor_causa,
-          classe_cnj:           proc.classeCodigo    || prev.classe_cnj,
-          vara_comarca:         proc.orgaoJulgador   || prev.vara_comarca,
-          data_distribuicao:    proc.dataAjuizamento || prev.data_distribuicao,
+          classe_cnj:           proc.classeCodigo        || prev.classe_cnj,
+          vara_comarca:         proc.orgaoJulgador       || prev.vara_comarca,
+          data_distribuicao:    proc.dataAjuizamento     || prev.data_distribuicao,
         }));
         if (proc.partes?.length)     setPartes(proc.partes);
         if (proc.movimentos?.length) setMovimentos(proc.movimentos.slice(0, 50));
@@ -574,15 +539,15 @@ export function ProcessoModalExpanded({
         setMovimentos(newMovs);
         setFormData(prev => ({
           ...prev,
-          titulo_acao:       proc.classe          || prev.titulo_acao,
+          titulo_acao:       proc.classe              || prev.titulo_acao,
           status:            mapStatus(proc.status),
-          tribunal:          proc.tribunal        || prev.tribunal,
-          orgao_julgador:    proc.orgaoJulgador   || prev.orgao_julgador,
-          grau:              proc.grau            || prev.grau,
+          tribunal:          proc.tribunal            || prev.tribunal,
+          orgao_julgador:    proc.orgaoJulgador       || prev.orgao_julgador,
+          grau:              proc.grau                || prev.grau,
           assunto:           proc.assuntos?.[0]?.nome || prev.assunto,
           valor_causa:       proc.valorCausa?.toString() || prev.valor_causa,
-          classe_cnj:        proc.classe          || prev.classe_cnj,
-          vara_comarca:      proc.orgaoJulgador   || prev.vara_comarca,
+          classe_cnj:        proc.classe              || prev.classe_cnj,
+          vara_comarca:      proc.orgaoJulgador       || prev.vara_comarca,
           data_distribuicao: toDate(proc.dataAjuizamento) || prev.data_distribuicao,
         }));
 
@@ -610,52 +575,34 @@ export function ProcessoModalExpanded({
     try {
       const resolvedClienteId = formData.cliente_id === '__none__' ? null : formData.cliente_id || null;
       let nomeCliente: string | null = null;
-      if (resolvedClienteId) {
-        const l = leads.find(l => l.id === resolvedClienteId);
-        if (l?.nome) nomeCliente = l.nome;
-      }
+      if (resolvedClienteId) { const l = leads.find(l => l.id === resolvedClienteId); if (l?.nome) nomeCliente = l.nome; }
       if (!nomeCliente && partes.length > 0) {
         const autor = partes.find(p => p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT');
         if (autor?.nome) nomeCliente = autor.nome;
       }
 
       const data = {
-        numero_processo:           formData.numero_processo       || null,
-        numero_complementar:       formData.numero_complementar   || null,
-        titulo_acao:               formData.titulo_acao           || null,
-        status:                    formData.status,
-        advogado_responsavel:      formData.advogado_responsavel  || null,
-        cliente_id:                resolvedClienteId,
-        nome_cliente:              nomeCliente,
-        cpf_cliente:               formData.cpf_cliente ? formData.cpf_cliente.replace(/\D/g, '') : null,
-        tribunal:                  formData.tribunal              || null,
-        vara_comarca:              formData.vara_comarca          || null,
-        assunto:                   formData.assunto               || null,
-        valor_causa:               formData.valor_causa ? parseFloat(formData.valor_causa.replace(/\./g, '').replace(',', '.')) : null,
-        orgao_julgador:            formData.orgao_julgador        || null,
-        grau:                      formData.grau                  || null,
-        origem_cliente:            formData.origem_cliente        || null,
-        descricao:                 formData.descricao             || null,
-        marcadores:                formData.marcadores            || null,
-        area:                      formData.area                  || null,
-        fase:                      formData.fase                  || null,
-        classe_cnj:                formData.classe_cnj            || null,
-        assunto_cnj:               formData.assunto_cnj           || null,
-        segredo_justica:           formData.segredo_justica,
-        data_distribuicao:         formData.data_distribuicao     || null,
-        data_ajuizamento:          formData.data_distribuicao     || null,
-        data_citacao:              formData.data_citacao          || null,
-        data_recebimento:          formData.data_recebimento      || null,
-        data_arquivamento:         formData.data_arquivamento     || null,
-        data_encerramento:         formData.data_encerramento     || null,
-        valor_provisionado:        formData.valor_provisionado ? parseFloat(formData.valor_provisionado.replace(/\./g, '').replace(',', '.')) : null,
-        probabilidade:             formData.probabilidade         || null,
-        monitorar_push:            formData.monitorar_push,
-        tipo_orgao_julgador:       formData.tipo_orgao_julgador   || null,
-        sistema_judicial:          formData.sistema_judicial      || null,
+        numero_processo: formData.numero_processo || null, numero_complementar: formData.numero_complementar || null,
+        titulo_acao: formData.titulo_acao || null, status: formData.status,
+        advogado_responsavel: formData.advogado_responsavel || null,
+        cliente_id: resolvedClienteId, nome_cliente: nomeCliente,
+        cpf_cliente: formData.cpf_cliente ? formData.cpf_cliente.replace(/\D/g, '') : null,
+        tribunal: formData.tribunal || null, vara_comarca: formData.vara_comarca || null,
+        assunto: formData.assunto || null,
+        valor_causa: formData.valor_causa ? parseFloat(formData.valor_causa.replace(/\./g, '').replace(',', '.')) : null,
+        orgao_julgador: formData.orgao_julgador || null, grau: formData.grau || null,
+        origem_cliente: formData.origem_cliente || null, descricao: formData.descricao || null,
+        marcadores: formData.marcadores || null, area: formData.area || null, fase: formData.fase || null,
+        classe_cnj: formData.classe_cnj || null, assunto_cnj: formData.assunto_cnj || null,
+        segredo_justica: formData.segredo_justica,
+        data_distribuicao: formData.data_distribuicao || null, data_ajuizamento: formData.data_distribuicao || null,
+        data_citacao: formData.data_citacao || null, data_recebimento: formData.data_recebimento || null,
+        data_arquivamento: formData.data_arquivamento || null, data_encerramento: formData.data_encerramento || null,
+        valor_provisionado: formData.valor_provisionado ? parseFloat(formData.valor_provisionado.replace(/\./g, '').replace(',', '.')) : null,
+        probabilidade: formData.probabilidade || null, monitorar_push: formData.monitorar_push,
+        tipo_orgao_julgador: formData.tipo_orgao_julgador || null, sistema_judicial: formData.sistema_judicial || null,
         complemento_enderecamento: formData.complemento_enderecamento || null,
-        partes_json:               partes.length > 0 ? partes : null,
-        movimentos_json:           movimentos.length > 0 ? movimentos : null,
+        partes_json: partes.length > 0 ? partes : null, movimentos_json: movimentos.length > 0 ? movimentos : null,
       };
 
       let savedId: string | null = null;
@@ -673,10 +620,9 @@ export function ProcessoModalExpanded({
         await supabase.from('processo_partes').delete().eq('processo_id', savedId);
         if (partes.length > 0) {
           await supabase.from('processo_partes').insert(partes.map(p => ({
-            processo_id: savedId!, nome: p.nome, tipo: p.tipo,
-            polo: p.polo || null, tipo_pessoa: p.tipoPessoa || null,
-            documento: p.documento || null, celular: p.celular || null,
-            telefone_adicional: p.telefone_adicional || null, advogados: p.advogados || null,
+            processo_id: savedId!, nome: p.nome, tipo: p.tipo, polo: p.polo || null,
+            tipo_pessoa: p.tipoPessoa || null, documento: p.documento || null,
+            celular: p.celular || null, telefone_adicional: p.telefone_adicional || null, advogados: p.advogados || null,
           })));
         }
       }
@@ -709,21 +655,20 @@ export function ProcessoModalExpanded({
   const hasPartes          = partes.length > 0;
   const isValidCnj         = CNJ_REGEX.test((formData.numero_processo || '').trim());
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      {/* Modal bem largo para acomodar as 2 colunas */}
       <DialogContent className="w-[96vw] max-w-[1200px] rounded-2xl max-h-[94vh] overflow-hidden flex flex-col p-0">
         <DialogHeader className="sr-only">
           <DialogTitle>{isNew ? 'Novo Processo' : 'Detalhes do Processo'}</DialogTitle>
         </DialogHeader>
 
-        {/* ── Header ── */}
+        {/* Header */}
         <div className="flex items-center justify-between px-6 py-3.5 border-b bg-card shrink-0">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-              <Scale className="h-4.5 w-4.5 text-primary" />
+              <Scale className="h-4 w-4 text-primary" />
             </div>
             <div>
               <h2 className="text-sm font-bold text-foreground leading-tight">
@@ -750,7 +695,7 @@ export function ProcessoModalExpanded({
           </div>
         </div>
 
-        {/* ── Tabs ── */}
+        {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col overflow-hidden">
           <TabsList className="grid grid-cols-3 mx-6 mt-3 shrink-0 rounded-xl bg-muted/50 p-1 h-8">
             <TabsTrigger value="processo" className="rounded-lg text-xs h-6">
@@ -772,23 +717,17 @@ export function ProcessoModalExpanded({
           <TabsContent value="processo" className="flex-1 min-h-0 mt-0 overflow-hidden">
             <div className="flex h-full min-h-0 gap-0">
 
-              {/* Coluna esquerda — Dados com scroll */}
+              {/* Coluna esquerda — scroll */}
               <ScrollArea className="flex-1 min-w-0">
                 <div className="px-6 py-4 space-y-4">
 
-                  {/* Numeração */}
                   <div>
                     <SectionTitle icon={Hash} label="Numeração" />
                     <FieldGroup>
                       <Row2>
                         <Field label="Número CNJ">
                           <div className="relative">
-                            <Input
-                              value={formData.numero_processo}
-                              onChange={e => update('numero_processo', e.target.value)}
-                              className="rounded-xl bg-card font-mono text-sm pr-8 h-9"
-                              placeholder="0000000-00.0000.0.00.0000"
-                            />
+                            <Input value={formData.numero_processo} onChange={e => update('numero_processo', e.target.value)} className="rounded-xl bg-card font-mono text-sm pr-8 h-9" placeholder="0000000-00.0000.0.00.0000" />
                             {fetchingData  && <Loader2     className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-primary" />}
                             {!fetchingData && isValidCnj   && <CheckCircle2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-emerald-500" />}
                           </div>
@@ -801,7 +740,6 @@ export function ProcessoModalExpanded({
                     </FieldGroup>
                   </div>
 
-                  {/* Detalhes */}
                   <div>
                     <SectionTitle icon={FileText} label="Detalhes" />
                     <FieldGroup>
@@ -836,7 +774,6 @@ export function ProcessoModalExpanded({
                     </FieldGroup>
                   </div>
 
-                  {/* Responsável */}
                   <div>
                     <SectionTitle icon={Users} label="Responsável" bg="bg-accent/20" color="text-foreground" />
                     <FieldGroup>
@@ -871,7 +808,6 @@ export function ProcessoModalExpanded({
                     </FieldGroup>
                   </div>
 
-                  {/* Endereçamento */}
                   <div>
                     <SectionTitle icon={Building2} label="Endereçamento" bg="bg-blue-500/10" color="text-blue-600 dark:text-blue-400" />
                     <FieldGroup>
@@ -921,7 +857,6 @@ export function ProcessoModalExpanded({
                     </FieldGroup>
                   </div>
 
-                  {/* Autos */}
                   <div>
                     <SectionTitle icon={FolderOpen} label="Autos" bg="bg-amber-500/10" color="text-amber-600 dark:text-amber-400" />
                     <FieldGroup>
@@ -960,7 +895,6 @@ export function ProcessoModalExpanded({
                     </FieldGroup>
                   </div>
 
-                  {/* Pedidos */}
                   <div>
                     <SectionTitle icon={DollarSign} label="Pedidos" bg="bg-emerald-500/10" color="text-emerald-600 dark:text-emerald-400" />
                     <FieldGroup>
@@ -989,21 +923,20 @@ export function ProcessoModalExpanded({
                 </div>
               </ScrollArea>
 
-              {/* Divisor vertical */}
+              {/* Divisor */}
               <div className="w-px bg-border/40 shrink-0" />
 
-              {/* Coluna direita — Partes com scroll próprio */}
+              {/* Coluna direita — Partes */}
               <div className="w-[340px] shrink-0 flex flex-col overflow-hidden">
                 <div className="px-4 pt-4 pb-3 border-b border-border/40 shrink-0">
                   <div className="flex items-center gap-2">
                     <div className="h-5 w-5 rounded-md bg-primary/10 flex items-center justify-center">
                       <Users className="h-3 w-3 text-primary" />
                     </div>
-                    <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Partes</h3>
+                    <h3 className="text-[11px] font-bold text-foreground uppercase tracking-wider">Partes</h3>
                     {hasPartes && <Badge variant="secondary" className="text-[10px] h-4 px-1.5 ml-auto">{partes.length}</Badge>}
                   </div>
                 </div>
-
                 <ScrollArea className="flex-1 min-h-0">
                   <div className="px-4 py-3 space-y-2">
                     {!hasPartes ? (
@@ -1014,8 +947,7 @@ export function ProcessoModalExpanded({
                       </div>
                     ) : (
                       partes.map((parte, i) => (
-                        <ParteCard
-                          key={i} parte={parte} index={i}
+                        <ParteCard key={i} parte={parte} index={i}
                           onUpdate={(idx, field, val) => setPartes(prev => prev.map((p, j) => j === idx ? { ...p, [field]: val } : p))}
                           onRemove={idx => setPartes(prev => prev.filter((_, j) => j !== idx))}
                         />
@@ -1044,7 +976,7 @@ export function ProcessoModalExpanded({
                     </Button>
                   </div>
                 ) : (
-                  <div className="space-y-2 pb-4">
+                  <div className="space-y-2 pb-6">
                     <p className="text-xs text-muted-foreground mb-3">{movimentosEnriquecidos.length} movimentação(ões) · Clique para detalhes</p>
                     {movimentosEnriquecidos.map((mov, i) => (
                       <Card key={i} className="cursor-pointer hover:bg-accent/40 transition-colors group border-border/40" onClick={() => { setSelectedMovimento(mov); setMovModalOpen(true); }}>
@@ -1071,10 +1003,10 @@ export function ProcessoModalExpanded({
             </ScrollArea>
           </TabsContent>
 
-          {/* ── TAB NOTIFICAÇÕES ── */}
+          {/* ── TAB NOTIFICAÇÕES — scroll corrigido ── */}
           <TabsContent value="notificacoes" className="flex-1 min-h-0 mt-0 overflow-hidden">
             <ScrollArea className="h-full">
-              <div className="px-6 py-4">
+              <div className="px-6 py-4 pb-10">
                 {!isNew && processo ? (
                   <ProcessoNotificacoesTab
                     processo={processo}
@@ -1092,10 +1024,10 @@ export function ProcessoModalExpanded({
                     }
                     previewData={{
                       nomeCliente:       clienteSelecionado?.nome,
-                      numeroProcesso:    formData.numero_processo || processo.numero_processo,
-                      acao:              formData.titulo_acao     || processo.titulo_acao,
+                      numeroProcesso:    formData.numero_processo    || processo.numero_processo,
+                      acao:              formData.titulo_acao        || processo.titulo_acao,
                       status:            (formData.status as unknown as string) || (processo.status as unknown as string),
-                      tribunal:          formData.tribunal        || processo.tribunal,
+                      tribunal:          formData.tribunal           || processo.tribunal,
                       ultimaAtualizacao: processo.data_ultima_atualizacao,
                       movimentos:        movimentos.slice(0, 3),
                     }}
@@ -1113,7 +1045,7 @@ export function ProcessoModalExpanded({
 
         </Tabs>
 
-        {/* ── Footer ── */}
+        {/* Footer */}
         <div className="flex items-center justify-between px-6 py-3.5 border-t bg-muted/20 shrink-0">
           <div>
             {!isNew && canDelete && (
@@ -1137,10 +1069,7 @@ export function ProcessoModalExpanded({
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="rounded-xl gap-1.5 h-8"
-              onClick={() => handleRefreshStatus(false)}
-              disabled={fetchingData || !isValidCnj}
-            >
+            <Button variant="outline" size="sm" className="rounded-xl gap-1.5 h-8" onClick={() => handleRefreshStatus(false)} disabled={fetchingData || !isValidCnj}>
               {fetchingData ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
               {isNew ? 'Buscar DataJud' : 'Atualizar'}
             </Button>
@@ -1151,11 +1080,7 @@ export function ProcessoModalExpanded({
           </div>
         </div>
 
-        <MovimentoDetailModal
-          movimento={selectedMovimento}
-          isOpen={movModalOpen}
-          onClose={() => { setMovModalOpen(false); setSelectedMovimento(null); }}
-        />
+        <MovimentoDetailModal movimento={selectedMovimento} isOpen={movModalOpen} onClose={() => { setMovModalOpen(false); setSelectedMovimento(null); }} />
       </DialogContent>
     </Dialog>
   );
