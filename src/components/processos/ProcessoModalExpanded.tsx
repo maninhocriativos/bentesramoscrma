@@ -1300,8 +1300,8 @@ export function ProcessoModalExpanded({
 
             {/* ── TAB NOTIFICAÇÕES ── */}
             <TabsContent value="notificacoes" className="flex-1 min-h-0 mt-0 overflow-hidden">
-              <ScrollArea className="h-full">
-                <div className="px-6 py-4 pb-10">
+              <ScrollArea className="h-full" style={{ height: 'calc(94vh - 220px)' }}>
+                <div className="px-6 py-4 pb-16">
                   {!isNew && processo ? (
                     <ProcessoNotificacoesTab
                       processo={processo}
