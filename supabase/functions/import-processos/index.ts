@@ -190,7 +190,13 @@ serve(async (req) => {
         const extracted = escavadorData ? extrairDadosEscavador(escavadorData) : {
           status: 'Em Andamento',
           classe: proc.titulo || 'Processo Importado',
-          tribunal: proc.sigla_tribunal
+          tribunal: proc.sigla_tribunal,
+          advogado: undefined as string | undefined,
+          assunto: undefined as string | undefined,
+          valorCausa: undefined as number | undefined,
+          dataAjuizamento: undefined as string | undefined,
+          orgaoJulgador: undefined as string | undefined,
+          autorNome: undefined as string | undefined,
         };
 
         const baseData = {

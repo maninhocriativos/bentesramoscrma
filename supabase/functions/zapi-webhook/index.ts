@@ -1015,7 +1015,7 @@ serve(async (req: Request) => {
                 lead_id: leadId,
                 mensagem: mensagemEsc,
                 subscriber_id: gerarSubscriberId(normalized.phone),
-                subscriber_nome: normalized.name || lead.nome || normalized.phone,
+                subscriber_nome: normalized.name || lead?.nome || normalized.phone,
                 tipo_mensagem: normalized.messageType,
                 media_url: mediaUrlEsc
               }
