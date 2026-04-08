@@ -1594,6 +1594,7 @@ export type Database = {
           nacionalidade: string | null
           nome: string | null
           numero: string | null
+          openai_thread_id: string | null
           origem: string | null
           owner_tipo: string | null
           profissao: string | null
@@ -1639,6 +1640,7 @@ export type Database = {
           nacionalidade?: string | null
           nome?: string | null
           numero?: string | null
+          openai_thread_id?: string | null
           origem?: string | null
           owner_tipo?: string | null
           profissao?: string | null
@@ -1684,6 +1686,7 @@ export type Database = {
           nacionalidade?: string | null
           nome?: string | null
           numero?: string | null
+          openai_thread_id?: string | null
           origem?: string | null
           owner_tipo?: string | null
           profissao?: string | null
