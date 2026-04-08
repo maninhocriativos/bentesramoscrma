@@ -183,7 +183,7 @@ serve(async (req: Request) => {
       // Remover o evento processado
       await supabase.from('system_events').delete().eq('id', event.id);
 
-      return new Response(JSON.stringify({ batch_number: batchNumber, ...result }), {
+      return new Response(JSON.stringify({ ...result, batch_number: batchNumber }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -242,7 +242,7 @@ async function dispatchBatch(supabase: any, campaignName: string, batchNumber: n
 
   // Buscar instância de tráfego (Bentes Ramos-2)
   const instances = await getAllZapiInstances(supabase);
-  const trafficInstance = instances.find(i => !i.is_default) || instances[0];
+  const trafficInstance = instances.find((i: any) => !i.is_default) || instances[0];
 
   if (!trafficInstance) {
     throw new Error('Nenhuma instância Z-API ativa');
@@ -332,7 +332,7 @@ async function dispatchBatch(supabase: any, campaignName: string, batchNumber: n
 async function sendCampaignMessage(supabase: any, recipientId: string, telefone: string, nome: string) {
   // Buscar instância de tráfego
   const instances = await getAllZapiInstances(supabase);
-  const trafficInstance = instances.find(i => !i.is_default) || instances[0];
+  const trafficInstance = instances.find((i: any) => !i.is_default) || instances[0];
 
   if (!trafficInstance) {
     return { success: false, error: 'Sem instância Z-API' };
