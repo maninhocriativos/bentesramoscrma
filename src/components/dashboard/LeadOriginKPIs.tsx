@@ -7,20 +7,26 @@ import { cn } from '@/lib/utils';
 
 interface LeadOriginKPIsProps {
   leads: Lead[];
+  stats?: {
+    total_leads?: number;
+    leads_trafego?: number;
+  };
 }
 
-export function LeadOriginKPIs({ leads }: LeadOriginKPIsProps) {
+export function LeadOriginKPIs({ leads, stats }: LeadOriginKPIsProps) {
   const metrics = useMemo(() => {
-    const totalLeads = leads.length;
-    const leadsTrafego = leads.filter(l => l.tipo_origem === 'trafego').length;
+    // Prefer accurate RPC counts when available, fallback to array counting
+    const totalLeads = stats?.total_leads ?? leads.length;
+    const leadsTrafego = stats?.leads_trafego ?? leads.filter(l => l.tipo_origem === 'trafego').length;
     const leadsBentesRamos = leads.filter(l => 
       l.tipo_origem === 'whatsapp_direto' || l.tipo_origem === 'indefinido' || !l.tipo_origem
     ).length;
+    const bentesRamosAdjusted = stats?.total_leads ? totalLeads - leadsTrafego : leadsBentesRamos;
     const trafegoPercent = totalLeads > 0 ? Math.round((leadsTrafego / totalLeads) * 100) : 0;
-    const bentesRamosPercent = totalLeads > 0 ? Math.round((leadsBentesRamos / totalLeads) * 100) : 0;
+    const bentesRamosPercent = totalLeads > 0 ? Math.round((bentesRamosAdjusted / totalLeads) * 100) : 0;
     
-    return { totalLeads, leadsTrafego, leadsBentesRamos, trafegoPercent, bentesRamosPercent };
-  }, [leads]);
+    return { totalLeads, leadsTrafego, leadsBentesRamos: bentesRamosAdjusted, trafegoPercent, bentesRamosPercent };
+  }, [leads, stats]);
 
   const kpis = [
     {
