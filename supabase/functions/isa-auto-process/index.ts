@@ -11,7 +11,6 @@ import {
   validarAgendamento
 } from '../_shared/timezone-helpers.ts';
 
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -21,7 +20,6 @@ const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY');
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 
-// Mapeamento de ações para labels em português
 const ACAO_LABELS: Record<string, string> = {
   'criar_tarefa': 'Criar Tarefa',
   'criar_compromisso': 'Agendar Compromisso',
@@ -36,194 +34,47 @@ const URGENCIA_CORES: Record<string, string> = {
   'urgente': '#ef4444',
 };
 
-// Enviar email de notificação para equipe
-async function enviarNotificacaoEquipe(
-  supabase: any,
-  lead: any,
-  acoesPendentes: Array<{ acao: string; dados: any; motivo: string }>,
-  analise: { intencao: string; sentimento: string; urgencia: string },
-  mensagemOriginal: string
-): Promise<boolean> {
-  if (!RESEND_API_KEY) {
-    console.log('⚠️ RESEND_API_KEY não configurada, email não enviado');
-    return false;
-  }
-
-  try {
-    // Buscar emails dos usuários aprovados (admin e gerentes)
-    const { data: usuarios } = await supabase
-      .from('perfis')
-      .select('email, nome, cargo')
-      .eq('aprovado', true)
-      .in('cargo', ['Administrador', 'Gerente']);
-
-    if (!usuarios || usuarios.length === 0) {
-      console.log('⚠️ Nenhum usuário para notificar');
-      return false;
-    }
-
-    const destinatarios = usuarios.map((u: any) => u.email).filter(Boolean);
-    
-    if (destinatarios.length === 0) {
-      console.log('⚠️ Nenhum email válido encontrado');
-      return false;
-    }
-
-    const urgenciaCor = URGENCIA_CORES[analise.urgencia] || '#6b7280';
-    const acoesHtml = acoesPendentes.map(a => `
-      <div style="background: #f8fafc; border-left: 4px solid #3b82f6; padding: 12px 16px; margin: 8px 0; border-radius: 0 8px 8px 0;">
-        <strong style="color: #1e40af;">${ACAO_LABELS[a.acao] || a.acao}</strong>
-        <p style="margin: 4px 0 0 0; color: #64748b; font-size: 14px;">${a.motivo}</p>
-      </div>
-    `).join('');
-
-    const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    </head>
-    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 0; background-color: #f1f5f9;">
-      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); padding: 24px; border-radius: 12px 12px 0 0;">
-          <h1 style="color: white; margin: 0; font-size: 22px;">🤖 Isa - Ação Requer Aprovação</h1>
-        </div>
-        
-        <div style="background: white; padding: 24px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-          <div style="background: #f0f9ff; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
-            <h3 style="margin: 0 0 8px 0; color: #0369a1;">Lead: ${lead.nome || 'Sem nome'}</h3>
-            <p style="margin: 0; color: #64748b; font-size: 14px;">
-              ${lead.telefone || ''} ${lead.email ? `• ${lead.email}` : ''}<br>
-              Status: <strong>${lead.status || 'Não definido'}</strong>
-            </p>
-          </div>
-
-          <div style="margin-bottom: 20px;">
-            <h4 style="color: #334155; margin: 0 0 8px 0;">💬 Mensagem recebida:</h4>
-            <div style="background: #fefce8; padding: 12px 16px; border-radius: 8px; border-left: 4px solid #eab308;">
-              <p style="margin: 0; color: #713f12; font-style: italic;">"${mensagemOriginal}"</p>
-            </div>
-          </div>
-
-          <div style="margin-bottom: 20px;">
-            <h4 style="color: #334155; margin: 0 0 8px 0;">🧠 Análise da Isa:</h4>
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr>
-                <td style="padding: 8px 12px; background: #f8fafc; border-radius: 6px;">
-                  <strong>Intenção:</strong> ${analise.intencao}
-                </td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 12px;">
-                  <strong>Sentimento:</strong> ${analise.sentimento === 'positivo' ? '😊 Positivo' : analise.sentimento === 'negativo' ? '😟 Negativo' : '😐 Neutro'}
-                </td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 12px; background: #f8fafc; border-radius: 6px;">
-                  <strong>Urgência:</strong> 
-                  <span style="background: ${urgenciaCor}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; text-transform: uppercase;">
-                    ${analise.urgencia}
-                  </span>
-                </td>
-              </tr>
-            </table>
-          </div>
-
-          <div style="margin-bottom: 20px;">
-            <h4 style="color: #334155; margin: 0 0 12px 0;">📋 Ações sugeridas para aprovação:</h4>
-            ${acoesHtml}
-          </div>
-
-          <div style="text-align: center; margin-top: 24px;">
-            <a href="https://lovable.dev/projects/qgenaltkjtlvwfgykpxq" 
-               style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);">
-              Revisar no Sistema
-            </a>
-          </div>
-
-          <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 24px;">
-            Este email foi enviado automaticamente pela Isa, assistente do Bentes & Ramos Advocacia.
-          </p>
-        </div>
-      </div>
-    </body>
-    </html>
-    `;
-
-    // Enviar via API Resend diretamente
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from: 'Isa - Bentes & Ramos <onboarding@resend.dev>',
-        to: destinatarios,
-        subject: `🔔 Ação pendente: ${lead.nome || 'Lead'} - ${ACAO_LABELS[acoesPendentes[0]?.acao] || 'Nova ação'}`,
-        html,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('❌ Erro ao enviar email:', error);
-      return false;
-    }
-
-    console.log(`✅ Email de notificação enviado para ${destinatarios.length} destinatário(s)`);
-    return true;
-  } catch (error) {
-    console.error('❌ Erro ao enviar notificação por email:', error);
-    return false;
-  }
-}
-
-// Ações que a Isa pode executar automaticamente (sem confirmação)
+// ============================================================
+// ALTERAÇÃO 1: 'transicionar_agente' adicionado em ACOES_AUTOMATICAS
+// ============================================================
 const ACOES_AUTOMATICAS = [
   'classificar_lead',
   'criar_interacao', 
   'atualizar_resumo_lead',
   'buscar_lead',
   'buscar_historico',
-  'atualizar_dados_lead', // Atualizar nome/telefone do lead
-  'verificar_agenda', // Consultar agenda e horários disponíveis
-  'solicitar_agendamento', // Enviar opções de horário para lead confirmar
-  'confirmar_agendamento', // Confirmar agendamento após resposta do lead
-  'agendar_direto', // Agendar compromisso diretamente no sistema
-  'verificar_followup', // Verificar e executar follow-ups pendentes
-  'executar_followup', // Disparar follow-up manualmente
-  'pausar_followup', // Pausar automação
-  'retomar_followup', // Retomar automação
-  'analisar_documentos_conversa', // Analisar conversas para detectar documentos pendentes
-  // STATE MACHINE ACTIONS
-  'transicionar_estado', // Mover lead para próximo estado
-  'classificar_caso', // Classificar tipo do caso
-  'salvar_dados_contrato', // Salvar dados para contrato
-  'marcar_doc_recebido', // Marcar documento como recebido
-  'verificar_docs_pendentes', // Verificar documentos pendentes
-  // CONSULTA DE PROCESSOS
-  'consultar_processo', // Consultar status do processo do lead
-  // HANDOFF
-  'direcionar_atendimento_humano', // Direcionar para atendimento humano (Amanda)
+  'atualizar_dados_lead',
+  'verificar_agenda',
+  'solicitar_agendamento',
+  'confirmar_agendamento',
+  'agendar_direto',
+  'verificar_followup',
+  'executar_followup',
+  'pausar_followup',
+  'retomar_followup',
+  'analisar_documentos_conversa',
+  'transicionar_estado',
+  'classificar_caso',
+  'salvar_dados_contrato',
+  'marcar_doc_recebido',
+  'verificar_docs_pendentes',
+  'consultar_processo',
+  'transicionar_agente', // ← NOVO: roteamento entre agentes
+  'direcionar_atendimento_humano',
 ];
 
-// Ações que precisam de confirmação do USUÁRIO INTERNO (híbrido)
 const ACOES_CONFIRMACAO = [
   'criar_tarefa',
-  'criar_compromisso', // Quando criado manualmente pela equipe
+  'criar_compromisso',
   'atualizar_status_lead',
   'enviar_contrato',
-  'enviar_para_advogado', // Handoff para advogado
+  'enviar_para_advogado',
 ];
 
-// Status que permitem follow-up
 const STATUS_PERMITE_FAST = ['Lead Frio'];
 const STATUS_PERMITE_SLOW = ['Lead Frio', 'Em Atendimento', 'Em Negociação', 'Aguardando Contrato'];
 const STATUS_BLOQUEADOS = ['Contrato Assinado', 'Ganho'];
 
-// Estados da State Machine
 const LEAD_STATES = {
   NEW: 'NEW',
   TRIAGE: 'TRIAGE',
@@ -235,18 +86,14 @@ const LEAD_STATES = {
   READY_FOR_LAWYER: 'READY_FOR_LAWYER',
 };
 
-// Estados que permitem automação
 const ESTADOS_BLOQUEADOS = ['CONTRACT_SIGNED', 'READY_FOR_LAWYER'];
 
-// Configuração FAST (apenas Lead Frio)
 const FAST_CONFIG = {
   stage_1: { delay_minutos: 10, titulo: "Follow-up FAST 1 - 10 min" },
   stage_2: { delay_minutos: 240, titulo: "Follow-up FAST 2 - 4h" },
   stage_3: { delay_minutos: 900, titulo: "Follow-up FAST 3 - 15h" }
 };
 
-// Configuração SLOW — Cadência de Reativação (Fluxo Atendimento Direito Bancário)
-// 3 dias, 7 dias, 15 dias (30 dias é encerramento gentil, não automação)
 const SLOW_CONFIG = {
   stage_1: { delay_minutos: 4320, titulo: "Reativação 1 - 3 dias (check-in gentil)" },
   stage_2: { delay_minutos: 10080, titulo: "Reativação 2 - 7 dias (reforço de valor)" },
@@ -263,14 +110,12 @@ interface LeadContext {
   honorarios: any[];
   parcelas: any[];
   followup?: any;
-  // State Machine data
   classification?: any;
   contractData?: any;
   docsChecklist?: any[];
   stateHistory?: any[];
 }
 
-// Buscar contexto completo do lead INCLUINDO state machine data
 async function buscarContextoLead(supabase: any, leadId: string): Promise<LeadContext | null> {
   const [
     { data: lead },
@@ -306,7 +151,6 @@ async function buscarContextoLead(supabase: any, leadId: string): Promise<LeadCo
 
   const parcelas = honorarios?.flatMap((h: any) => h.parcelas || []) || [];
   
-  // Merge followup data from both tables (zapi_followups takes precedence)
   const mergedFollowup = zapiFollowup ? {
     ...followup,
     ...zapiFollowup,
@@ -332,19 +176,13 @@ async function buscarContextoLead(supabase: any, leadId: string): Promise<LeadCo
   };
 }
 
-// Verificar status do follow-up
 async function verificarFollowupStatus(supabase: any, leadId: string, followup: any) {
   const agora = new Date();
   
   if (!followup) {
-    return { 
-      status: 'sem_followup', 
-      pode_enviar: false, 
-      motivo: 'Lead não tem follow-up configurado' 
-    };
+    return { status: 'sem_followup', pode_enviar: false, motivo: 'Lead não tem follow-up configurado' };
   }
 
-  // Status bloqueados
   const { data: lead } = await supabase
     .from('leads_juridicos')
     .select('status')
@@ -352,14 +190,9 @@ async function verificarFollowupStatus(supabase: any, leadId: string, followup: 
     .single();
 
   if (STATUS_BLOQUEADOS.includes(lead?.status)) {
-    return { 
-      status: 'bloqueado', 
-      pode_enviar: false, 
-      motivo: `Lead com status ${lead?.status} - automações bloqueadas` 
-    };
+    return { status: 'bloqueado', pode_enviar: false, motivo: `Lead com status ${lead?.status} - automações bloqueadas` };
   }
 
-  // Verificar atendimento humano
   if (followup.subscriber_id) {
     const { data: subscriber } = await supabase
       .from('manychat_subscribers')
@@ -368,24 +201,14 @@ async function verificarFollowupStatus(supabase: any, leadId: string, followup: 
       .maybeSingle();
 
     if (subscriber?.atendimento_humano) {
-      return { 
-        status: 'atendimento_humano', 
-        pode_enviar: false, 
-        motivo: 'Atendimento humano ativo' 
-      };
+      return { status: 'atendimento_humano', pode_enviar: false, motivo: 'Atendimento humano ativo' };
     }
   }
 
-  // Verificar respondido
   if (followup.respondido) {
-    return { 
-      status: 'respondido', 
-      pode_enviar: false, 
-      motivo: 'Lead já respondeu' 
-    };
+    return { status: 'respondido', pode_enviar: false, motivo: 'Lead já respondeu' };
   }
 
-  // Verificar conversa ativa (últimos 30 min)
   const trintaMinAtras = new Date(agora.getTime() - 30 * 60 * 1000).toISOString();
   const { data: msgRecentes } = await supabase
     .from('manychat_mensagens')
@@ -396,14 +219,9 @@ async function verificarFollowupStatus(supabase: any, leadId: string, followup: 
     .limit(1);
 
   if (msgRecentes && msgRecentes.length > 0) {
-    return { 
-      status: 'conversa_ativa', 
-      pode_enviar: false, 
-      motivo: 'Lead tem mensagens recentes (últimos 30 min)' 
-    };
+    return { status: 'conversa_ativa', pode_enviar: false, motivo: 'Lead tem mensagens recentes (últimos 30 min)' };
   }
 
-  // Calcular próximo follow-up
   const stageFast = followup.followup_stage_fast || 0;
   const stageSlow = followup.followup_stage_slow || 0;
   const primeiroContato = new Date(followup.primeiro_contato_em);
@@ -411,7 +229,6 @@ async function verificarFollowupStatus(supabase: any, leadId: string, followup: 
 
   let proximo = { tipo: null as string | null, stage: 0, config: null as any };
 
-  // Verificar FAST
   if (STATUS_PERMITE_FAST.includes(lead?.status) && stageFast < 3) {
     const nextStage = stageFast + 1;
     const config = FAST_CONFIG[`stage_${nextStage}` as keyof typeof FAST_CONFIG];
@@ -420,7 +237,6 @@ async function verificarFollowupStatus(supabase: any, leadId: string, followup: 
     }
   }
 
-  // Verificar SLOW se FAST terminou
   if (!proximo.tipo && STATUS_PERMITE_SLOW.includes(lead?.status) && stageSlow < 3) {
     const fastCompleto = stageFast >= 3 || !STATUS_PERMITE_FAST.includes(lead?.status);
     if (fastCompleto) {
@@ -453,340 +269,212 @@ async function verificarFollowupStatus(supabase: any, leadId: string, followup: 
   };
 }
 
-// Executar ação no sistema
+// ============================================================
+// ALTERAÇÃO 2: Funções de roteamento de agentes
+// ============================================================
+
+async function getIsaAgent(supabase: any, leadId: string): Promise<string> {
+  const { data } = await supabase
+    .from('leads_juridicos')
+    .select('isa_agent')
+    .eq('id', leadId)
+    .single();
+  return data?.isa_agent || 'isa_triagem';
+}
+
+async function setIsaAgent(supabase: any, leadId: string, agent: string): Promise<void> {
+  await supabase
+    .from('leads_juridicos')
+    .update({ isa_agent: agent })
+    .eq('id', leadId);
+  await supabase.from('system_events').insert({
+    tipo: 'roteamento',
+    fonte: 'isa_auto',
+    acao: 'agente_alterado',
+    lead_id: leadId,
+    dados: { novo_agente: agent },
+    processado: true,
+  });
+  console.log(`[Isa Routing] Lead ${leadId} → agente: ${agent}`);
+}
+
+async function getPromptForAgent(supabaseClient: any, leadId: string): Promise<{ content: string; strict_mode: boolean } | null> {
+  const agent = await getIsaAgent(supabaseClient, leadId);
+  const promptName: Record<string, string> = {
+    'isa_triagem':  'isa_triagem',
+    'isa_bancario': 'isa_bancario',
+    'isa_aereo':    'isa_aereo',
+  };
+  const { data } = await supabaseClient
+    .from('ai_prompts')
+    .select('content, strict_mode')
+    .eq('name', promptName[agent] || 'isa_triagem')
+    .order('version', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) {
+    const { data: fallback } = await supabaseClient
+      .from('ai_prompts')
+      .select('content, strict_mode')
+      .eq('name', 'isa_system_prompt')
+      .maybeSingle();
+    return fallback;
+  }
+  console.log(`[Isa Routing] Usando prompt: ${promptName[agent] || 'isa_triagem'} para lead ${leadId}`);
+  return data;
+}
+
+async function enviarNotificacaoEquipe(
+  supabase: any,
+  lead: any,
+  acoesPendentes: Array<{ acao: string; dados: any; motivo: string }>,
+  analise: { intencao: string; sentimento: string; urgencia: string },
+  mensagemOriginal: string
+): Promise<boolean> {
+  if (!RESEND_API_KEY) {
+    console.log('⚠️ RESEND_API_KEY não configurada, email não enviado');
+    return false;
+  }
+
+  try {
+    const { data: usuarios } = await supabase
+      .from('perfis')
+      .select('email, nome, cargo')
+      .eq('aprovado', true)
+      .in('cargo', ['Administrador', 'Gerente']);
+
+    if (!usuarios || usuarios.length === 0) return false;
+
+    const destinatarios = usuarios.map((u: any) => u.email).filter(Boolean);
+    if (destinatarios.length === 0) return false;
+
+    const urgenciaCor = URGENCIA_CORES[analise.urgencia] || '#6b7280';
+    const acoesHtml = acoesPendentes.map(a => `
+      <div style="background: #f8fafc; border-left: 4px solid #3b82f6; padding: 12px 16px; margin: 8px 0; border-radius: 0 8px 8px 0;">
+        <strong style="color: #1e40af;">${ACAO_LABELS[a.acao] || a.acao}</strong>
+        <p style="margin: 4px 0 0 0; color: #64748b; font-size: 14px;">${a.motivo}</p>
+      </div>
+    `).join('');
+
+    const html = `<!DOCTYPE html><html><body style="font-family: sans-serif; background: #f1f5f9;">
+      <div style="max-width:600px;margin:0 auto;padding:20px;">
+        <div style="background:linear-gradient(135deg,#1e3a5f,#2d5a87);padding:24px;border-radius:12px 12px 0 0;">
+          <h1 style="color:white;margin:0;font-size:22px;">🤖 Isa - Ação Requer Aprovação</h1>
+        </div>
+        <div style="background:white;padding:24px;border-radius:0 0 12px 12px;">
+          <h3>${lead.nome || 'Sem nome'}</h3>
+          <p>${lead.telefone || ''} | Status: ${lead.status || 'Não definido'}</p>
+          <p><strong>Mensagem:</strong> "${mensagemOriginal}"</p>
+          <p><strong>Urgência:</strong> <span style="background:${urgenciaCor};color:white;padding:2px 8px;border-radius:12px;">${analise.urgencia}</span></p>
+          ${acoesHtml}
+          <div style="text-align:center;margin-top:24px;">
+            <a href="https://lovable.dev/projects/qgenaltkjtlvwfgykpxq" style="background:#3b82f6;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;">Revisar no Sistema</a>
+          </div>
+        </div>
+      </div>
+    </body></html>`;
+
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${RESEND_API_KEY}` },
+      body: JSON.stringify({
+        from: 'Isa - Bentes & Ramos <onboarding@resend.dev>',
+        to: destinatarios,
+        subject: `🔔 Ação pendente: ${lead.nome || 'Lead'} - ${ACAO_LABELS[acoesPendentes[0]?.acao] || 'Nova ação'}`,
+        html,
+      }),
+    });
+
+    if (!response.ok) { console.error('❌ Erro ao enviar email:', await response.text()); return false; }
+    console.log(`✅ Email enviado para ${destinatarios.length} destinatário(s)`);
+    return true;
+  } catch (error) {
+    console.error('❌ Erro ao enviar notificação:', error);
+    return false;
+  }
+}
+
 async function executarAcao(supabase: any, acao: string, dados: any, subscriberId?: string): Promise<{ success: boolean; message: string; data?: any }> {
   console.log(`🔧 Executando ação: ${acao}`, dados);
   
   try {
     switch (acao) {
       case 'classificar_lead': {
-        // A IA pode passar 'status' ou 'novo_status'
         const novoStatus = dados.novo_status || dados.status;
         const motivo = dados.motivo || dados.resumo || 'Classificação automática pela Isa';
         const lead_id = dados.lead_id;
-        
-        if (!novoStatus) {
-          return { success: false, message: 'Status não informado' };
-        }
-        
-        const { data, error } = await supabase
-          .from('leads_juridicos')
-          .update({ 
-            status: novoStatus,
-            resumo_ia: motivo 
-          })
-          .eq('id', lead_id)
-          .select();
-        
+        if (!novoStatus) return { success: false, message: 'Status não informado' };
+        const { data, error } = await supabase.from('leads_juridicos').update({ status: novoStatus, resumo_ia: motivo }).eq('id', lead_id).select();
         if (error) throw error;
-        if (!data || data.length === 0) {
-          return { success: false, message: 'Lead não encontrado' };
-        }
-        
-        // Registrar evento
-        await supabase.from('system_events').insert({
-          tipo: 'lead',
-          fonte: 'isa_auto',
-          acao: 'lead_classificado',
-          entidade_id: lead_id,
-          lead_id: lead_id,
-          dados: { status_anterior: dados.status_anterior, novo_status: novoStatus, motivo },
-          processado: true,
-        });
-        
+        if (!data || data.length === 0) return { success: false, message: 'Lead não encontrado' };
+        await supabase.from('system_events').insert({ tipo: 'lead', fonte: 'isa_auto', acao: 'lead_classificado', entidade_id: lead_id, lead_id, dados: { status_anterior: dados.status_anterior, novo_status: novoStatus, motivo }, processado: true });
         return { success: true, message: `Lead classificado como "${novoStatus}"`, data: data[0] };
       }
 
       case 'atualizar_dados_lead': {
-        // Atualizar nome e/ou telefone do lead
         const { lead_id, nome, telefone, email } = dados;
         const updateData: any = {};
-        
         if (nome) updateData.nome = nome;
         if (telefone) updateData.telefone = telefone;
         if (email) updateData.email = email;
-        
-        if (Object.keys(updateData).length === 0) {
-          return { success: false, message: 'Nenhum dado para atualizar' };
-        }
-        
-        const { data, error } = await supabase
-          .from('leads_juridicos')
-          .update(updateData)
-          .eq('id', lead_id)
-          .select()
-          .single();
-        
+        if (Object.keys(updateData).length === 0) return { success: false, message: 'Nenhum dado para atualizar' };
+        const { data, error } = await supabase.from('leads_juridicos').update(updateData).eq('id', lead_id).select().single();
         if (error) throw error;
-        
-        // Registrar evento
-        await supabase.from('system_events').insert({
-          tipo: 'lead',
-          fonte: 'isa_auto',
-          acao: 'dados_lead_atualizados',
-          entidade_id: lead_id,
-          lead_id: lead_id,
-          dados: { campos_atualizados: Object.keys(updateData), valores: updateData },
-          processado: true,
-        });
-        
-        console.log(`✅ Dados do lead atualizados: ${JSON.stringify(updateData)}`);
+        await supabase.from('system_events').insert({ tipo: 'lead', fonte: 'isa_auto', acao: 'dados_lead_atualizados', entidade_id: lead_id, lead_id, dados: { campos_atualizados: Object.keys(updateData), valores: updateData }, processado: true });
         return { success: true, message: `Dados atualizados: ${Object.keys(updateData).join(', ')}`, data };
-      }
-
-      case 'solicitar_agendamento': {
-        // Enviar mensagem pedindo para o lead confirmar/escolher horário
-        if (!subscriberId || !MANYCHAT_API_KEY) {
-          return { success: false, message: 'Subscriber ID ou ManyChat API não disponível' };
-        }
-        
-        const { lead_id, tipo_reuniao, mensagem_personalizada } = dados;
-        
-        // VERIFICAR SE JÁ EXISTE COMPROMISSO FUTURO PARA ESTE LEAD
-        const agora = new Date().toISOString();
-        const { data: compromissosExistentes } = await supabase
-          .from('compromissos')
-          .select('id, titulo, data_inicio, confirmacao_status')
-          .eq('lead_id', lead_id)
-          .gte('data_inicio', agora)
-          .order('data_inicio', { ascending: true })
-          .limit(1);
-
-        if (compromissosExistentes && compromissosExistentes.length > 0) {
-          const existente = compromissosExistentes[0];
-          console.log(`⚠️ Lead ${lead_id} já possui compromisso agendado: ${existente.titulo} em ${existente.data_inicio}`);
-          
-          // Se já existe, não solicitar novo agendamento
-          return { 
-            success: false, 
-            message: `Lead já possui compromisso agendado: "${existente.titulo}" para ${existente.data_inicio}`,
-            data: { compromisso_existente: existente }
-          };
-        }
-        
-        // Gerar opções de horários consultando agenda real
-        const opcoes = await gerarOpcoesHorario(supabase, lead_id);
-        
-        if (opcoes.length === 0) {
-          return { 
-            success: false, 
-            message: 'Não há horários disponíveis no momento. Tente novamente mais tarde.',
-            data: null
-          };
-        }
-        
-        const mensagem = mensagem_personalizada || `Ótimo! Vamos agendar sua consulta. 📅
-
-Por favor, escolha um dos horários disponíveis:
-
-${opcoes.map((o: { label: string }, i: number) => `${i + 1}️⃣ ${o.label}`).join('\n')}
-
-Ou acesse nosso link de agendamento: https://cal.com/bentes-ramos-advocacia-1ucmau/agendamentos-crm`;
-
-        // Enviar via ManyChat com botões
-        const response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            subscriber_id: parseInt(subscriberId),
-            data: {
-              version: 'v2',
-              content: {
-                messages: [{ type: 'text', text: mensagem }],
-                quick_replies: opcoes.slice(0, 3).map((o: { short: string }) => ({
-                  type: 'text',
-                  title: o.short
-                }))
-              }
-            }
-          }),
-        });
-
-        const result = await response.json();
-        console.log('📅 Solicitação de agendamento enviada:', result);
-
-        // Salvar no banco que estamos aguardando confirmação
-        await supabase.from('system_events').insert({
-          tipo: 'agendamento',
-          fonte: 'isa_auto',
-          acao: 'aguardando_confirmacao_lead',
-          entidade_id: lead_id,
-          lead_id: lead_id,
-          dados: { 
-            opcoes_oferecidas: opcoes,
-            tipo_reuniao: tipo_reuniao || 'Consulta',
-            subscriber_id: subscriberId,
-          },
-          processado: false, // Aguardando resposta do lead
-        });
-
-        // Registrar a mensagem enviada
-        await supabase.from('manychat_mensagens').insert({
-          subscriber_id: subscriberId,
-          subscriber_nome: 'Isa (Assistente)',
-          canal: 'whatsapp',
-          conteudo: mensagem,
-          tipo: 'text',
-          direcao: 'saida',
-          lead_id: lead_id,
-          metadata: { 
-            tipo: 'solicitacao_agendamento',
-            opcoes: opcoes 
-          },
-        });
-
-        return { success: true, message: 'Solicitação de agendamento enviada ao lead', data: { opcoes } };
       }
 
       case 'criar_interacao': {
         const cliente_id = dados.cliente_id || dados.lead_id;
-        // A IA pode passar 'resumo', 'mensagem' ou 'descricao'
         const resumo = dados.resumo || dados.mensagem || dados.descricao || 'Interação registrada pela Isa';
         const detalhes = dados.detalhes || dados.mensagem || null;
         const tipo = dados.tipo || 'WhatsApp';
         const direcao = dados.direcao || 'Entrada';
-        
-        const { data, error } = await supabase
-          .from('interacoes')
-          .insert({
-            cliente_id,
-            tipo,
-            resumo: resumo.substring(0, 500), // Limitar tamanho
-            detalhes,
-            direcao,
-            data_interacao: new Date().toISOString(),
-          })
-          .select()
-          .single();
-        
+        const { data, error } = await supabase.from('interacoes').insert({ cliente_id, tipo, resumo: resumo.substring(0, 500), detalhes, direcao, data_interacao: new Date().toISOString() }).select().single();
         if (error) throw error;
         return { success: true, message: 'Interação registrada', data };
       }
 
       case 'atualizar_resumo_lead': {
         const { lead_id, resumo } = dados;
-        const { data, error } = await supabase
-          .from('leads_juridicos')
-          .update({ resumo_ia: resumo })
-          .eq('id', lead_id)
-          .select()
-          .single();
-        
+        const { data, error } = await supabase.from('leads_juridicos').update({ resumo_ia: resumo }).eq('id', lead_id).select().single();
         if (error) throw error;
         return { success: true, message: 'Resumo do lead atualizado', data };
       }
 
       case 'criar_tarefa': {
         const { titulo, descricao, data_limite, prioridade, cliente_id, responsavel_id } = dados;
-        const { data, error } = await supabase
-          .from('tarefas')
-          .insert({
-            titulo,
-            descricao,
-            data_limite,
-            prioridade: prioridade || 'Media',
-            status: 'Pendente',
-            cliente_id,
-            responsavel_id,
-          })
-          .select()
-          .single();
-        
+        const { data, error } = await supabase.from('tarefas').insert({ titulo, descricao, data_limite, prioridade: prioridade || 'Media', status: 'Pendente', cliente_id, responsavel_id }).select().single();
         if (error) throw error;
-        
-        // Registrar evento
-        await supabase.from('system_events').insert({
-          tipo: 'tarefa',
-          fonte: 'isa_auto',
-          acao: 'tarefa_criada',
-          entidade_id: data.id,
-          lead_id: cliente_id,
-          dados: { titulo, prioridade },
-          processado: true,
-        });
-        
+        await supabase.from('system_events').insert({ tipo: 'tarefa', fonte: 'isa_auto', acao: 'tarefa_criada', entidade_id: data.id, lead_id: cliente_id, dados: { titulo, prioridade }, processado: true });
         return { success: true, message: `Tarefa "${titulo}" criada`, data };
       }
 
       case 'criar_compromisso': {
         const { titulo, tipo, data_inicio, data_fim, descricao, lead_id, responsavel_id } = dados;
-        
-        // VERIFICAR SE JÁ EXISTE COMPROMISSO FUTURO PARA ESTE LEAD
         if (lead_id) {
           const agora = new Date().toISOString();
-          const { data: compromissosExistentes } = await supabase
-            .from('compromissos')
-            .select('id, titulo, data_inicio')
-            .eq('lead_id', lead_id)
-            .gte('data_inicio', agora)
-            .order('data_inicio', { ascending: true })
-            .limit(1);
-
+          const { data: compromissosExistentes } = await supabase.from('compromissos').select('id, titulo, data_inicio').eq('lead_id', lead_id).gte('data_inicio', agora).order('data_inicio', { ascending: true }).limit(1);
           if (compromissosExistentes && compromissosExistentes.length > 0) {
             const existente = compromissosExistentes[0];
-            console.log(`⚠️ Lead ${lead_id} já possui compromisso: ${existente.titulo} em ${existente.data_inicio}`);
-            return { 
-              success: false, 
-              message: `Lead já possui compromisso agendado: "${existente.titulo}" para ${existente.data_inicio}`,
-              data: { compromisso_existente: existente }
-            };
+            return { success: false, message: `Lead já possui compromisso agendado: "${existente.titulo}" para ${existente.data_inicio}`, data: { compromisso_existente: existente } };
           }
         }
-        
-        const { data, error } = await supabase
-          .from('compromissos')
-          .insert({
-            titulo,
-            tipo: tipo || 'Reunião',
-            data_inicio,
-            data_fim,
-            descricao,
-            lead_id,
-            responsavel_id,
-          })
-          .select()
-          .single();
-        
+        const { data, error } = await supabase.from('compromissos').insert({ titulo, tipo: tipo || 'Reunião', data_inicio, data_fim, descricao, lead_id, responsavel_id }).select().single();
         if (error) throw error;
-        
-        // Registrar evento
-        await supabase.from('system_events').insert({
-          tipo: 'compromisso',
-          fonte: 'isa_auto',
-          acao: 'compromisso_criado',
-          entidade_id: data.id,
-          lead_id: lead_id,
-          dados: { titulo, tipo, data_inicio },
-          processado: true,
-        });
-        
+        await supabase.from('system_events').insert({ tipo: 'compromisso', fonte: 'isa_auto', acao: 'compromisso_criado', entidade_id: data.id, lead_id, dados: { titulo, tipo, data_inicio }, processado: true });
         return { success: true, message: `Compromisso "${titulo}" agendado`, data };
       }
 
-      // Nova ação: confirmar agendamento após resposta do lead
       case 'confirmar_agendamento': {
         const { lead_id, data_hora, hora_escolhida, titulo, tipo, modalidade } = dados;
-        
-        // A IA deve enviar a hora no formato "YYYY-MM-DDTHH:mm" já em horário de Manaus
-        // Precisamos converter para UTC
         let dataInicio: Date;
-        
         if (hora_escolhida && typeof hora_escolhida === 'string') {
-          // Se recebemos hora_escolhida separadamente (ex: "09:00" com data)
           const dataBase = data_hora ? new Date(data_hora) : new Date();
-          const [hora, minuto] = hora_escolhida.split(':').map(Number);
-          // Criar data em Manaus e converter para UTC
           const dataManaus = `${dataBase.toISOString().split('T')[0]}T${hora_escolhida}:00-04:00`;
           dataInicio = new Date(dataManaus);
         } else if (data_hora) {
-          // Se data_hora já contém a data completa
-          // Assumir que a IA está enviando em formato ISO ou horário de Manaus
           const dataStr = String(data_hora);
-          
-          // Se não tem timezone, assumir que é horário de Manaus
           if (!dataStr.includes('Z') && !dataStr.includes('+') && !dataStr.match(/-\d{2}:\d{2}$/)) {
             dataInicio = new Date(dataStr + '-04:00');
           } else {
@@ -795,607 +483,164 @@ Ou acesse nosso link de agendamento: https://cal.com/bentes-ramos-advocacia-1ucm
         } else {
           return { success: false, message: 'Data/hora não informada para agendamento' };
         }
-        
-        const dataFim = new Date(dataInicio.getTime() + 60 * 60 * 1000); // +1 hora
-        
-        // Determinar tipo de compromisso baseado na modalidade
-        const tipoCompromisso = modalidade === 'online' ? 'Reunião Online' : 
-                                modalidade === 'presencial' ? 'Reunião Presencial' : 
-                                tipo || 'Reunião';
-        
-        // Gerar descrição com a modalidade
-        const descricaoCompromisso = `Agendamento confirmado pelo cliente via chat.\n${
-          modalidade === 'online' ? '📹 Atendimento ONLINE (videoconferência)' :
-          modalidade === 'presencial' ? '🏢 Atendimento PRESENCIAL no escritório' :
-          ''
-        }`.trim();
-        
-        const { data, error } = await supabase
-          .from('compromissos')
-          .insert({
-            titulo: titulo || 'Consulta agendada',
-            tipo: tipoCompromisso,
-            data_inicio: dataInicio.toISOString(),
-            data_fim: dataFim.toISOString(),
-            descricao: descricaoCompromisso,
-            lead_id,
-          })
-          .select()
-          .single();
-        
+        const dataFim = new Date(dataInicio.getTime() + 60 * 60 * 1000);
+        const tipoCompromisso = modalidade === 'online' ? 'Reunião Online' : modalidade === 'presencial' ? 'Reunião Presencial' : tipo || 'Reunião';
+        const descricaoCompromisso = `Agendamento confirmado pelo cliente via chat.\n${modalidade === 'online' ? '📹 Atendimento ONLINE' : modalidade === 'presencial' ? '🏢 Atendimento PRESENCIAL' : ''}`.trim();
+        const { data, error } = await supabase.from('compromissos').insert({ titulo: titulo || 'Consulta agendada', tipo: tipoCompromisso, data_inicio: dataInicio.toISOString(), data_fim: dataFim.toISOString(), descricao: descricaoCompromisso, lead_id }).select().single();
         if (error) throw error;
-        
-        // Atualizar status do lead
-        await supabase
-          .from('leads_juridicos')
-          .update({ status: 'Em Negociação' })
-          .eq('id', lead_id);
-        
-        // Registrar evento
-        await supabase.from('system_events').insert({
-          tipo: 'compromisso',
-          fonte: 'isa_auto',
-          acao: 'agendamento_confirmado_lead',
-          entidade_id: data.id,
-          lead_id: lead_id,
-          dados: { titulo, tipo: tipoCompromisso, modalidade, data_inicio: dataInicio.toISOString() },
-          processado: true,
-        });
-        
-        // Formatar hora para Manaus
-        const horaManaus = dataInicio.toLocaleTimeString('pt-BR', { 
-          timeZone: 'America/Manaus',
-          hour: '2-digit', 
-          minute: '2-digit' 
-        });
-        const dataManaus = dataInicio.toLocaleDateString('pt-BR', { 
-          timeZone: 'America/Manaus' 
-        });
-        
+        await supabase.from('leads_juridicos').update({ status: 'Em Negociação' }).eq('id', lead_id);
+        await supabase.from('system_events').insert({ tipo: 'compromisso', fonte: 'isa_auto', acao: 'agendamento_confirmado_lead', entidade_id: data.id, lead_id, dados: { titulo, tipo: tipoCompromisso, modalidade, data_inicio: dataInicio.toISOString() }, processado: true });
+        const horaManaus = dataInicio.toLocaleTimeString('pt-BR', { timeZone: 'America/Manaus', hour: '2-digit', minute: '2-digit' });
+        const dataManaus = dataInicio.toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' });
         return { success: true, message: `${tipoCompromisso} agendada para ${dataManaus} às ${horaManaus}`, data };
       }
 
-      case 'consultar_processo': {
-        const { numero_processo, tribunal } = dados;
-        
-        if (!numero_processo) {
-          return { success: false, message: 'Número do processo não informado' };
-        }
-        
-        console.log('🔍 Consultando processo:', numero_processo);
-        
-        try {
-          const response = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/consulta-processos`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
-            },
-            body: JSON.stringify({ numeroProcesso: numero_processo, tribunal }),
-          });
-          
-          const resultado = await response.json();
-          
-          if (!resultado.encontrado) {
-            return { success: false, message: resultado.mensagem || 'Processo não encontrado' };
-          }
-          
-          const p = resultado.processo;
-          const ultimoMovimento = p.movimentos?.[0];
-          
-          // Formatar resposta amigável
-          const resumo = `📋 PROCESSO: ${p.numeroProcesso}\n` +
-            `📊 Classe: ${p.classe}\n` +
-            `🏛️ Tribunal: ${p.tribunal}\n` +
-            `📅 Ajuizado em: ${new Date(p.dataAjuizamento).toLocaleDateString('pt-BR')}\n` +
-            (ultimoMovimento ? `\n⚖️ Última movimentação (${new Date(ultimoMovimento.dataHora).toLocaleDateString('pt-BR')}):\n${ultimoMovimento.nome}${ultimoMovimento.complemento ? ` - ${ultimoMovimento.complemento}` : ''}` : '');
-          
-          return { success: true, message: resumo, data: resultado.processo };
-        } catch (error) {
-          console.error('❌ Erro ao consultar processo:', error);
-          return { success: false, message: 'Não foi possível consultar o processo no momento' };
-        }
-      }
-
-      // ============================================================
-      // AÇÕES DE AGENDA E AGENDAMENTO
-      // ============================================================
-      
       case 'verificar_agenda': {
         const { lead_id, data_especifica, horario_especifico } = dados;
-        
         try {
-          // Chamar API do Cal.com para buscar horários disponíveis
           const calcomResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/calcom-integration`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-            },
-            body: JSON.stringify({
-              action: data_especifica ? 'verificar_disponibilidade' : 'buscar_horarios',
-              datetime: data_especifica && horario_especifico ? `${data_especifica}T${horario_especifico}:00` : undefined,
-            }),
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
+            body: JSON.stringify({ action: data_especifica ? 'verificar_disponibilidade' : 'buscar_horarios', datetime: data_especifica && horario_especifico ? `${data_especifica}T${horario_especifico}:00` : undefined }),
           });
-
           const calcomData = await calcomResponse.json();
-          console.log('📅 Resposta Cal.com (verificar_agenda):', JSON.stringify(calcomData, null, 2));
-
           if (!calcomData.success) {
-            // Fallback para geração local
             const opcoes = await gerarOpcoesHorario(supabase, lead_id);
-            return {
-              success: true,
-              message: `${opcoes.length} horários disponíveis encontrados (local)`,
-              data: { 
-                horarios_disponiveis: opcoes.map((o: { label: string; datetime: string }) => ({ 
-                  label: o.label, 
-                  datetime: o.datetime 
-                })),
-                regras: {
-                  dias: 'Segunda, Quarta e Sexta',
-                  horarios: HORARIOS_DISPONIVEIS.join(', '),
-                  observacao: 'Agendamentos apenas para próxima semana'
-                }
-              }
-            };
+            return { success: true, message: `${opcoes.length} horários disponíveis encontrados`, data: { horarios_disponiveis: opcoes } };
           }
-
           if (data_especifica) {
-            // Verificação de disponibilidade específica
-            if (!calcomData.disponivel) {
-              return {
-                success: false,
-                message: 'Horário indisponível no Cal.com',
-                data: { 
-                  disponivel: false,
-                  alternativas: (calcomData.horarios_alternativos || []).map((a: { label: string }) => a.label)
-                }
-              };
-            }
-            
-            return {
-              success: true,
-              message: `Horário ${horario_especifico || '09:00'} em ${data_especifica} está DISPONÍVEL!`,
-              data: { disponivel: true, data: data_especifica, horario: horario_especifico }
-            };
+            if (!calcomData.disponivel) return { success: false, message: 'Horário indisponível no Cal.com', data: { disponivel: false } };
+            return { success: true, message: `Horário disponível!`, data: { disponivel: true, data: data_especifica, horario: horario_especifico } };
           }
-
-          // Lista de horários disponíveis
           const horarios = calcomData.horarios || [];
-          return {
-            success: true,
-            message: calcomData.mensagem || `${horarios.length} horários disponíveis encontrados`,
-            data: { 
-              horarios_disponiveis: horarios,
-              regras: {
-                dias: 'Segunda, Quarta e Sexta',
-                horarios: HORARIOS_DISPONIVEIS.join(', '),
-                observacao: 'Agendamentos apenas para próxima semana'
-              }
-            }
-          };
+          return { success: true, message: `${horarios.length} horários disponíveis`, data: { horarios_disponiveis: horarios } };
         } catch (error) {
-          console.error('❌ Erro ao verificar agenda Cal.com:', error);
-          // Fallback para geração local
           const opcoes = await gerarOpcoesHorario(supabase, lead_id);
-          return {
-            success: true,
-            message: `${opcoes.length} horários disponíveis (fallback)`,
-            data: { horarios_disponiveis: opcoes }
-          };
+          return { success: true, message: `${opcoes.length} horários disponíveis (fallback)`, data: { horarios_disponiveis: opcoes } };
         }
       }
-      
+
+      case 'solicitar_agendamento': {
+        if (!subscriberId || !MANYCHAT_API_KEY) return { success: false, message: 'Subscriber ID ou ManyChat API não disponível' };
+        const { lead_id, mensagem_personalizada } = dados;
+        const agora = new Date().toISOString();
+        const { data: compromissosExistentes } = await supabase.from('compromissos').select('id, titulo, data_inicio, confirmacao_status').eq('lead_id', lead_id).gte('data_inicio', agora).order('data_inicio', { ascending: true }).limit(1);
+        if (compromissosExistentes && compromissosExistentes.length > 0) {
+          const existente = compromissosExistentes[0];
+          return { success: false, message: `Lead já possui compromisso agendado: "${existente.titulo}"`, data: { compromisso_existente: existente } };
+        }
+        const opcoes = await gerarOpcoesHorario(supabase, lead_id);
+        if (opcoes.length === 0) return { success: false, message: 'Não há horários disponíveis no momento.' };
+        const mensagem = mensagem_personalizada || `Ótimo! Vamos agendar sua consulta. 📅\n\nEscolha um horário:\n\n${opcoes.map((o: { label: string }, i: number) => `${i + 1}️⃣ ${o.label}`).join('\n')}\n\nOu acesse: https://cal.com/bentes-ramos-advocacia-1ucmau/agendamentos-crm`;
+        await supabase.from('system_events').insert({ tipo: 'agendamento', fonte: 'isa_auto', acao: 'aguardando_confirmacao_lead', entidade_id: lead_id, lead_id, dados: { opcoes_oferecidas: opcoes, subscriber_id: subscriberId }, processado: false });
+        await supabase.from('manychat_mensagens').insert({ subscriber_id: subscriberId, subscriber_nome: 'Isa (Assistente)', canal: 'whatsapp', conteudo: mensagem, tipo: 'text', direcao: 'saida', lead_id, metadata: { tipo: 'solicitacao_agendamento', opcoes } });
+        return { success: true, message: 'Solicitação de agendamento enviada ao lead', data: { opcoes } };
+      }
+
       case 'agendar_direto': {
         const { lead_id, data_hora, titulo, modalidade } = dados;
-        
-        if (!data_hora) {
-          return { success: false, message: 'Data e hora são obrigatórios para agendar' };
-        }
-        
-        // Buscar dados do lead para agendar no Cal.com
-        const { data: lead } = await supabase
-          .from('leads_juridicos')
-          .select('nome, email, telefone')
-          .eq('id', lead_id)
-          .single();
-
-        if (!lead) {
-          return { success: false, message: 'Lead não encontrado' };
-        }
-
-        // Converter data para formato correto
+        if (!data_hora) return { success: false, message: 'Data e hora são obrigatórios para agendar' };
+        const { data: lead } = await supabase.from('leads_juridicos').select('nome, email, telefone').eq('id', lead_id).single();
+        if (!lead) return { success: false, message: 'Lead não encontrado' };
         let dataAgendamento: string = data_hora;
         const dataStr = String(data_hora);
-        
         if (!dataStr.includes('Z') && !dataStr.includes('+') && !dataStr.match(/-\d{2}:\d{2}$/)) {
-          // Assumir Manaus (UTC-4) e converter para ISO
-          const tempDate = new Date(dataStr + '-04:00');
-          dataAgendamento = tempDate.toISOString();
+          dataAgendamento = new Date(dataStr + '-04:00').toISOString();
         }
-
-        // Verificar se lead tem email (obrigatório para Cal.com)
         const email = lead.email || `${(lead.telefone || '').replace(/\D/g, '')}@placeholder.com`;
-        
         try {
-          // Chamar API do Cal.com para criar agendamento
           const calcomResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/calcom-integration`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-            },
-            body: JSON.stringify({
-              action: 'agendar',
-              datetime: dataAgendamento,
-              nome: lead.nome || 'Cliente',
-              email: email,
-              telefone: lead.telefone,
-              leadId: lead_id,
-              subscriberId: subscriberId,
-              notas: modalidade === 'online' ? 'Atendimento ONLINE' : 'Atendimento PRESENCIAL',
-            }),
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
+            body: JSON.stringify({ action: 'agendar', datetime: dataAgendamento, nome: lead.nome || 'Cliente', email, telefone: lead.telefone, leadId: lead_id, subscriberId, notas: modalidade === 'online' ? 'Atendimento ONLINE' : 'Atendimento PRESENCIAL' }),
           });
-
           const calcomData = await calcomResponse.json();
-          console.log('📅 Resposta Cal.com (agendar_direto):', JSON.stringify(calcomData, null, 2));
-
           if (!calcomData.success) {
-            // Se falhou no Cal.com, tentar criar localmente
-            console.log('⚠️ Falha no Cal.com, criando agendamento local...');
-            
             const dataFim = new Date(new Date(dataAgendamento).getTime() + 60 * 60 * 1000);
-            const tipoCompromisso = modalidade === 'online' ? 'Reunião Online' : 
-                                    modalidade === 'presencial' ? 'Reunião Presencial' : 'Consulta';
-            
-            const { data: compromisso, error } = await supabase
-              .from('compromissos')
-              .insert({
-                titulo: titulo || 'Consulta Jurídica',
-                tipo: tipoCompromisso,
-                data_inicio: dataAgendamento,
-                data_fim: dataFim.toISOString(),
-                descricao: `Agendamento feito pela Isa (local).\n${modalidade === 'online' ? '📹 ONLINE' : '🏢 PRESENCIAL'}`,
-                lead_id,
-                confirmacao_status: 'pendente',
-                origem: 'isa',
-              })
-              .select()
-              .single();
-            
+            const tipoCompromisso = modalidade === 'online' ? 'Reunião Online' : modalidade === 'presencial' ? 'Reunião Presencial' : 'Consulta';
+            const { data: compromisso, error } = await supabase.from('compromissos').insert({ titulo: titulo || 'Consulta Jurídica', tipo: tipoCompromisso, data_inicio: dataAgendamento, data_fim: dataFim.toISOString(), descricao: `Agendamento feito pela Isa (local).`, lead_id, confirmacao_status: 'pendente', origem: 'isa' }).select().single();
             if (error) throw error;
-            
-            await supabase
-              .from('leads_juridicos')
-              .update({ status: 'Em Negociação' })
-              .eq('id', lead_id);
-            
+            await supabase.from('leads_juridicos').update({ status: 'Em Negociação' }).eq('id', lead_id);
             const dataObj = new Date(dataAgendamento);
-            const horaManaus = dataObj.toLocaleTimeString('pt-BR', { 
-              timeZone: 'America/Manaus',
-              hour: '2-digit', 
-              minute: '2-digit' 
-            });
-            const dataManaus = dataObj.toLocaleDateString('pt-BR', { 
-              timeZone: 'America/Manaus',
-              weekday: 'long',
-              day: '2-digit',
-              month: '2-digit'
-            });
-            
-            return { 
-              success: true, 
-              message: `✅ Agendado (local): ${tipoCompromisso} para ${dataManaus} às ${horaManaus}`,
-              data: { 
-                compromisso_id: compromisso.id,
-                data_formatada: `${dataManaus} às ${horaManaus}`,
-                tipo: tipoCompromisso
-              }
-            };
+            const horaManaus = dataObj.toLocaleTimeString('pt-BR', { timeZone: 'America/Manaus', hour: '2-digit', minute: '2-digit' });
+            const dataManaus = dataObj.toLocaleDateString('pt-BR', { timeZone: 'America/Manaus', weekday: 'long', day: '2-digit', month: '2-digit' });
+            return { success: true, message: `✅ Agendado: ${tipoCompromisso} para ${dataManaus} às ${horaManaus}`, data: { compromisso_id: compromisso.id } };
           }
-
-          // Sucesso no Cal.com
-          return { 
-            success: true, 
-            message: calcomData.mensagem,
-            data: { 
-              booking: calcomData.booking,
-              compromisso_id: calcomData.compromisso_id,
-              data_formatada: calcomData.booking?.dataFormatada,
-            }
-          };
+          return { success: true, message: calcomData.mensagem, data: { booking: calcomData.booking, compromisso_id: calcomData.compromisso_id } };
         } catch (error) {
-          console.error('❌ Erro ao agendar no Cal.com:', error);
-          return { 
-            success: false, 
-            message: 'Erro ao criar agendamento. Tente novamente.',
-            data: null
-          };
+          return { success: false, message: 'Erro ao criar agendamento.', data: null };
         }
       }
 
-      // ============================================================
-      // AÇÕES DE FOLLOW-UP INTELIGENTE
-      // ============================================================
-      
       case 'verificar_followup': {
         const { lead_id } = dados;
-        
-        // Buscar follow-up do lead
-        const { data: followup } = await supabase
-          .from('lead_followups')
-          .select('*')
-          .eq('lead_id', lead_id)
-          .maybeSingle();
-        
+        const { data: followup } = await supabase.from('lead_followups').select('*').eq('lead_id', lead_id).maybeSingle();
         const status = await verificarFollowupStatus(supabase, lead_id, followup);
-        
-        console.log(`📊 Status follow-up lead ${lead_id}:`, status);
-        
-        return { 
-          success: true, 
-          message: status.motivo,
-          data: status
-        };
+        return { success: true, message: status.motivo, data: status };
       }
 
       case 'executar_followup': {
         const { lead_id, tipo_forcado } = dados;
-        
-        // Buscar dados do follow-up
-        const { data: followup } = await supabase
-          .from('lead_followups')
-          .select('*, leads_juridicos!inner(id, nome, telefone, status)')
-          .eq('lead_id', lead_id)
-          .maybeSingle();
-        
-        if (!followup) {
-          return { success: false, message: 'Follow-up não encontrado para este lead' };
-        }
-
-        if (!followup.subscriber_id) {
-          return { success: false, message: 'Lead sem subscriber vinculado' };
-        }
-
+        const { data: followup } = await supabase.from('lead_followups').select('*, leads_juridicos!inner(id, nome, telefone, status)').eq('lead_id', lead_id).maybeSingle();
+        if (!followup || !followup.subscriber_id) return { success: false, message: 'Follow-up não encontrado ou sem subscriber' };
         const lead = followup.leads_juridicos;
-        
-        // Verificar se pode enviar
         const status = await verificarFollowupStatus(supabase, lead_id, followup);
-        
-        if (!status.pode_enviar && !tipo_forcado) {
-          return { success: false, message: status.motivo };
-        }
-
-        // Determinar mensagem
-        const stageFast = followup.followup_stage_fast || 0;
-        const stageSlow = followup.followup_stage_slow || 0;
-        
-        // Mensagem simples de acompanhamento
-        const mensagem = `Olá ${lead.nome || 'cliente'}! 👋\n\nPassando para saber se posso ajudar com sua questão.\n\nEstamos à disposição para analisar seu caso!\n\n📅 Agende sua consulta: https://cal.com/bentes-ramos-advocacia-1ucmau/agendamentos-crm`;
-        
-        // Enviar via ManyChat
+        if (!status.pode_enviar && !tipo_forcado) return { success: false, message: status.motivo };
+        const mensagem = `Olá ${lead.nome || 'cliente'}! 👋\n\nPassando para saber se posso ajudar com sua questão.\n\nEstamos à disposição para analisar seu caso!\n\n📅 Agende: https://cal.com/bentes-ramos-advocacia-1ucmau/agendamentos-crm`;
         const enviado = await enviarRespostaManyChat(followup.subscriber_id, mensagem);
-        
         if (enviado) {
           const agora = new Date().toISOString();
-          
-          // Atualizar follow-up
-          await supabase
-            .from('lead_followups')
-            .update({
-              last_outbound_at: agora,
-              last_isa_outbound_at: agora,
-              waiting_reply: true
-            })
-            .eq('id', followup.id);
-          
-          // Registrar interação
-          await supabase.from('interacoes').insert({
-            cliente_id: lead_id,
-            tipo: 'WhatsApp',
-            direcao: 'Saída',
-            resumo: 'Follow-up enviado pela Isa (inteligente)',
-            detalhes: mensagem
-          });
-          
-          // Registrar evento
-          await supabase.from('system_events').insert({
-            tipo: 'followup',
-            fonte: 'isa_inteligente',
-            acao: 'followup_enviado_manual',
-            lead_id: lead_id,
-            dados: { stage_fast: stageFast, stage_slow: stageSlow },
-            processado: true
-          });
-          
+          await supabase.from('lead_followups').update({ last_outbound_at: agora, last_isa_outbound_at: agora, waiting_reply: true }).eq('id', followup.id);
+          await supabase.from('interacoes').insert({ cliente_id: lead_id, tipo: 'WhatsApp', direcao: 'Saída', resumo: 'Follow-up enviado pela Isa', detalhes: mensagem });
           return { success: true, message: `Follow-up enviado para ${lead.nome}` };
         }
-        
         return { success: false, message: 'Falha ao enviar follow-up' };
       }
 
       case 'pausar_followup': {
         const { lead_id, motivo } = dados;
-        
-        const { error } = await supabase
-          .from('lead_followups')
-          .update({
-            status: 'pausado',
-            followup_lock_reason: motivo || 'Pausado pela Isa'
-          })
-          .eq('lead_id', lead_id);
-        
-        if (error) throw error;
-        
-        // Ativar atendimento humano se tiver subscriber
-        const { data: followup } = await supabase
-          .from('lead_followups')
-          .select('subscriber_id')
-          .eq('lead_id', lead_id)
-          .maybeSingle();
-        
-        if (followup?.subscriber_id) {
-          await supabase
-            .from('manychat_subscribers')
-            .update({ atendimento_humano: true, atendimento_humano_desde: new Date().toISOString() })
-            .eq('subscriber_id', followup.subscriber_id);
-        }
-        
-        await supabase.from('system_events').insert({
-          tipo: 'followup',
-          fonte: 'isa_inteligente',
-          acao: 'followup_pausado',
-          lead_id: lead_id,
-          dados: { motivo },
-          processado: true
-        });
-        
+        await supabase.from('lead_followups').update({ status: 'pausado', followup_lock_reason: motivo || 'Pausado pela Isa' }).eq('lead_id', lead_id);
+        const { data: followup } = await supabase.from('lead_followups').select('subscriber_id').eq('lead_id', lead_id).maybeSingle();
+        if (followup?.subscriber_id) await supabase.from('manychat_subscribers').update({ atendimento_humano: true, atendimento_humano_desde: new Date().toISOString() }).eq('subscriber_id', followup.subscriber_id);
+        await supabase.from('system_events').insert({ tipo: 'followup', fonte: 'isa_inteligente', acao: 'followup_pausado', lead_id, dados: { motivo }, processado: true });
         return { success: true, message: 'Follow-up pausado com sucesso' };
       }
 
       case 'retomar_followup': {
         const { lead_id } = dados;
-        
-        const { error } = await supabase
-          .from('lead_followups')
-          .update({
-            status: 'em_andamento',
-            followup_lock_reason: null
-          })
-          .eq('lead_id', lead_id);
-        
-        if (error) throw error;
-        
-        // Desativar atendimento humano
-        const { data: followup } = await supabase
-          .from('lead_followups')
-          .select('subscriber_id')
-          .eq('lead_id', lead_id)
-          .maybeSingle();
-        
-        if (followup?.subscriber_id) {
-          await supabase
-            .from('manychat_subscribers')
-            .update({ atendimento_humano: false, atendimento_humano_desde: null })
-            .eq('subscriber_id', followup.subscriber_id);
-        }
-        
-        await supabase.from('system_events').insert({
-          tipo: 'followup',
-          fonte: 'isa_inteligente',
-          acao: 'followup_retomado',
-          lead_id: lead_id,
-          processado: true
-        });
-        
+        await supabase.from('lead_followups').update({ status: 'em_andamento', followup_lock_reason: null }).eq('lead_id', lead_id);
+        const { data: followup } = await supabase.from('lead_followups').select('subscriber_id').eq('lead_id', lead_id).maybeSingle();
+        if (followup?.subscriber_id) await supabase.from('manychat_subscribers').update({ atendimento_humano: false, atendimento_humano_desde: null }).eq('subscriber_id', followup.subscriber_id);
+        await supabase.from('system_events').insert({ tipo: 'followup', fonte: 'isa_inteligente', acao: 'followup_retomado', lead_id, processado: true });
         return { success: true, message: 'Follow-up retomado com sucesso' };
       }
 
-      // ============================================================
-      // STATE MACHINE ACTIONS
-      // ============================================================
-
       case 'transicionar_estado': {
         const { lead_id, to_state, reason } = dados;
-        
-        if (!to_state) {
-          return { success: false, message: 'Estado destino (to_state) não informado' };
-        }
-
-        // Usar a função do banco para validar e executar a transição
-        const { data: result, error } = await supabase.rpc('update_lead_state', {
-          p_lead_id: lead_id,
-          p_to_state: to_state,
-          p_changed_by: 'isa',
-          p_reason: reason || 'Transição automática pela Isa'
-        });
-
-        if (error) {
-          console.error('❌ Erro na transição de estado:', error);
-          return { success: false, message: `Transição inválida: ${error.message}` };
-        }
-
-        console.log(`✅ Lead ${lead_id} transitou para ${to_state}`);
-        return { 
-          success: true, 
-          message: `Lead movido para estado "${to_state}"`,
-          data: result
-        };
+        if (!to_state) return { success: false, message: 'Estado destino (to_state) não informado' };
+        const { data: result, error } = await supabase.rpc('update_lead_state', { p_lead_id: lead_id, p_to_state: to_state, p_changed_by: 'isa', p_reason: reason || 'Transição automática pela Isa' });
+        if (error) { console.error('❌ Erro na transição de estado:', error); return { success: false, message: `Transição inválida: ${error.message}` }; }
+        return { success: true, message: `Lead movido para estado "${to_state}"`, data: result };
       }
 
       case 'classificar_caso': {
         const { lead_id, case_type, sub_type, summary, recommended_docs, confidence_score } = dados;
-        
-        if (!case_type) {
-          return { success: false, message: 'Tipo do caso (case_type) é obrigatório' };
-        }
-
-        // Upsert classificação
-        const { data: classification, error } = await supabase
-          .from('lead_classifications')
-          .upsert({
-            lead_id,
-            case_type,
-            sub_type: sub_type || null,
-            summary: summary || null,
-            recommended_docs: recommended_docs || [],
-            confidence_score: confidence_score || null,
-            classified_by: 'isa',
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'lead_id' })
-          .select()
-          .single();
-
+        if (!case_type) return { success: false, message: 'Tipo do caso (case_type) é obrigatório' };
+        const { data: classification, error } = await supabase.from('lead_classifications').upsert({ lead_id, case_type, sub_type: sub_type || null, summary: summary || null, recommended_docs: recommended_docs || [], confidence_score: confidence_score || null, classified_by: 'isa', updated_at: new Date().toISOString() }, { onConflict: 'lead_id' }).select().single();
         if (error) throw error;
-
-        // Criar checklist de documentos se fornecido
         if (recommended_docs && recommended_docs.length > 0) {
-          const checklistItems = recommended_docs.map((doc: string) => ({
-            lead_id,
-            doc_type: doc.toLowerCase().replace(/\s+/g, '_'),
-            doc_label: doc,
-            is_required: true,
-            received: false
-          }));
-
-          // Upsert para não duplicar
-          for (const item of checklistItems) {
-            await supabase
-              .from('lead_docs_checklist')
-              .upsert(item, { onConflict: 'lead_id,doc_type' });
+          for (const doc of recommended_docs) {
+            await supabase.from('lead_docs_checklist').upsert({ lead_id, doc_type: doc.toLowerCase().replace(/\s+/g, '_'), doc_label: doc, is_required: true, received: false }, { onConflict: 'lead_id,doc_type' });
           }
         }
-
-        // Atualizar tipo_acao do lead
-        await supabase
-          .from('leads_juridicos')
-          .update({ tipo_acao: case_type })
-          .eq('id', lead_id);
-
-        // Registrar evento
-        await supabase.from('system_events').insert({
-          tipo: 'lead',
-          fonte: 'isa_auto',
-          acao: 'caso_classificado',
-          lead_id,
-          dados: { case_type, sub_type, summary },
-          processado: true
-        });
-
-        console.log(`✅ Caso classificado: ${case_type}`);
-        return { 
-          success: true, 
-          message: `Caso classificado como "${case_type}"${sub_type ? ` (${sub_type})` : ''}`,
-          data: classification
-        };
+        await supabase.from('leads_juridicos').update({ tipo_acao: case_type }).eq('id', lead_id);
+        await supabase.from('system_events').insert({ tipo: 'lead', fonte: 'isa_auto', acao: 'caso_classificado', lead_id, dados: { case_type, sub_type, summary }, processado: true });
+        return { success: true, message: `Caso classificado como "${case_type}"${sub_type ? ` (${sub_type})` : ''}`, data: classification };
       }
 
       case 'salvar_dados_contrato': {
         const { lead_id, cpf, rg, data_nascimento, endereco, cidade, uf, cep, estado_civil, profissao, nacionalidade, nome_mae, dados_extras } = dados;
-        
         const contractData: any = { lead_id, updated_at: new Date().toISOString() };
-        
         if (cpf) contractData.cpf = cpf;
         if (rg) contractData.rg = rg;
         if (data_nascimento) contractData.data_nascimento = data_nascimento;
@@ -1408,282 +653,87 @@ Ou acesse nosso link de agendamento: https://cal.com/bentes-ramos-advocacia-1ucm
         if (nacionalidade) contractData.nacionalidade = nacionalidade;
         if (nome_mae) contractData.nome_mae = nome_mae;
         if (dados_extras) contractData.dados_extras = dados_extras;
-
-        const { data, error } = await supabase
-          .from('lead_contract_data')
-          .upsert(contractData, { onConflict: 'lead_id' })
-          .select()
-          .single();
-
+        const { data, error } = await supabase.from('lead_contract_data').upsert(contractData, { onConflict: 'lead_id' }).select().single();
         if (error) throw error;
-
-        // Registrar evento
-        await supabase.from('system_events').insert({
-          tipo: 'lead',
-          fonte: 'isa_auto',
-          acao: 'dados_contrato_salvos',
-          lead_id,
-          dados: { campos: Object.keys(contractData).filter(k => k !== 'lead_id' && k !== 'updated_at') },
-          processado: true
-        });
-
-        console.log(`✅ Dados do contrato salvos para lead ${lead_id}`);
-        return { 
-          success: true, 
-          message: `Dados do contrato salvos: ${Object.keys(contractData).filter(k => k !== 'lead_id' && k !== 'updated_at').join(', ')}`,
-          data
-        };
+        await supabase.from('system_events').insert({ tipo: 'lead', fonte: 'isa_auto', acao: 'dados_contrato_salvos', lead_id, dados: { campos: Object.keys(contractData).filter(k => k !== 'lead_id' && k !== 'updated_at') }, processado: true });
+        return { success: true, message: `Dados do contrato salvos`, data };
       }
 
       case 'marcar_doc_recebido': {
         const { lead_id, doc_type, file_id, notes } = dados;
-        
-        if (!doc_type) {
-          return { success: false, message: 'Tipo do documento (doc_type) é obrigatório' };
-        }
-
-        const { data, error } = await supabase
-          .from('lead_docs_checklist')
-          .update({
-            received: true,
-            received_at: new Date().toISOString(),
-            file_id: file_id || null,
-            notes: notes || null,
-            updated_at: new Date().toISOString()
-          })
-          .eq('lead_id', lead_id)
-          .eq('doc_type', doc_type)
-          .select()
-          .single();
-
+        if (!doc_type) return { success: false, message: 'Tipo do documento (doc_type) é obrigatório' };
+        const { data, error } = await supabase.from('lead_docs_checklist').update({ received: true, received_at: new Date().toISOString(), file_id: file_id || null, notes: notes || null, updated_at: new Date().toISOString() }).eq('lead_id', lead_id).eq('doc_type', doc_type).select().single();
         if (error) throw error;
-
-        // Verificar se todos os docs obrigatórios foram recebidos
-        const { data: pending } = await supabase
-          .from('lead_docs_checklist')
-          .select('id')
-          .eq('lead_id', lead_id)
-          .eq('is_required', true)
-          .eq('received', false);
-
+        const { data: pending } = await supabase.from('lead_docs_checklist').select('id').eq('lead_id', lead_id).eq('is_required', true).eq('received', false);
         const allReceived = !pending || pending.length === 0;
-
-        // Registrar evento
-        await supabase.from('system_events').insert({
-          tipo: 'documento',
-          fonte: 'isa_auto',
-          acao: 'doc_recebido',
-          lead_id,
-          dados: { doc_type, all_docs_received: allReceived },
-          processado: true
-        });
-
-        console.log(`✅ Documento "${doc_type}" marcado como recebido`);
-        return { 
-          success: true, 
-          message: allReceived 
-            ? `Documento "${doc_type}" recebido. ✅ TODOS os documentos obrigatórios foram recebidos!`
-            : `Documento "${doc_type}" recebido. Ainda há documentos pendentes.`,
-          data: { ...data, all_docs_received: allReceived }
-        };
+        await supabase.from('system_events').insert({ tipo: 'documento', fonte: 'isa_auto', acao: 'doc_recebido', lead_id, dados: { doc_type, all_docs_received: allReceived }, processado: true });
+        return { success: true, message: allReceived ? `Documento "${doc_type}" recebido. ✅ TODOS os documentos recebidos!` : `Documento "${doc_type}" recebido. Ainda há pendentes.`, data: { ...data, all_docs_received: allReceived } };
       }
 
       case 'verificar_docs_pendentes': {
         const { lead_id } = dados;
-
-        const { data: checklist, error } = await supabase
-          .from('lead_docs_checklist')
-          .select('*')
-          .eq('lead_id', lead_id);
-
+        const { data: checklist, error } = await supabase.from('lead_docs_checklist').select('*').eq('lead_id', lead_id);
         if (error) throw error;
-
         const pendentes = (checklist || []).filter((d: any) => d.is_required && !d.received);
         const recebidos = (checklist || []).filter((d: any) => d.received);
-
-        return { 
-          success: true, 
-          message: pendentes.length === 0 
-            ? 'Todos os documentos obrigatórios foram recebidos!'
-            : `${pendentes.length} documento(s) pendente(s): ${pendentes.map((d: any) => d.doc_label).join(', ')}`,
-          data: { 
-            pendentes: pendentes.map((d: any) => ({ type: d.doc_type, label: d.doc_label })),
-            recebidos: recebidos.map((d: any) => ({ type: d.doc_type, label: d.doc_label })),
-            total: checklist?.length || 0,
-            all_received: pendentes.length === 0
-          }
-        };
+        return { success: true, message: pendentes.length === 0 ? 'Todos os documentos obrigatórios foram recebidos!' : `${pendentes.length} documento(s) pendente(s): ${pendentes.map((d: any) => d.doc_label).join(', ')}`, data: { pendentes: pendentes.map((d: any) => ({ type: d.doc_type, label: d.doc_label })), recebidos: recebidos.map((d: any) => ({ type: d.doc_type, label: d.doc_label })), total: checklist?.length || 0, all_received: pendentes.length === 0 } };
       }
 
       case 'consultar_processo': {
-        // Consultar status do processo via DataJud e retornar para o lead
         const { lead_id, numero_processo } = dados;
-        
         if (!numero_processo) {
-          // Buscar processos vinculados ao lead
-          const { data: processos } = await supabase
-            .from('processos')
-            .select('numero_processo, titulo_acao, status')
-            .eq('cliente_id', lead_id)
-            .not('numero_processo', 'is', null)
-            .limit(5);
-          
-          if (!processos || processos.length === 0) {
-            return { 
-              success: false, 
-              message: 'Não encontrei nenhum processo vinculado a você. Pode me informar o número do processo?',
-              data: null
-            };
-          }
-          
-          // Se tiver apenas um processo, consultar direto
-          if (processos.length === 1) {
-            const numeroUnico = processos[0].numero_processo;
-            // Fazer chamada recursiva com o número
-            return await executarAcao(supabase, 'consultar_processo', { 
-              lead_id, 
-              numero_processo: numeroUnico 
-            }, subscriberId);
-          }
-          
-          // Se tiver múltiplos, listar
-          const lista = processos.map((p: any, i: number) => 
-            `${i + 1}. ${p.numero_processo} - ${p.titulo_acao || 'Sem título'} (${p.status || 'Em Andamento'})`
-          ).join('\n');
-          
-          return { 
-            success: true, 
-            message: `Encontrei ${processos.length} processos vinculados:\n${lista}\n\nQual deles você gostaria de consultar?`,
-            data: { processos }
-          };
+          const { data: processos } = await supabase.from('processos').select('numero_processo, titulo_acao, status').eq('cliente_id', lead_id).not('numero_processo', 'is', null).limit(5);
+          if (!processos || processos.length === 0) return { success: false, message: 'Não encontrei nenhum processo vinculado a você.', data: null };
+          if (processos.length === 1) return await executarAcao(supabase, 'consultar_processo', { lead_id, numero_processo: processos[0].numero_processo }, subscriberId);
+          const lista = processos.map((p: any, i: number) => `${i + 1}. ${p.numero_processo} - ${p.titulo_acao || 'Sem título'} (${p.status || 'Em Andamento'})`).join('\n');
+          return { success: true, message: `Encontrei ${processos.length} processos:\n${lista}`, data: { processos } };
         }
-        
-        // Consultar processo específico via edge function
         try {
           const response = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/processo-status-monitor`, {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              action: 'consultar_para_lead',
-              lead_id,
-              numero_processo
-            }),
+            headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'consultar_para_lead', lead_id, numero_processo }),
           });
-          
           const result = await response.json();
-          
-          if (result.success) {
-            return { 
-              success: true, 
-              message: result.mensagem,
-              data: result.dados
-            };
-          } else {
-            return { 
-              success: false, 
-              message: result.mensagem || 'Não foi possível consultar o processo.',
-              data: null
-            };
-          }
+          return result.success ? { success: true, message: result.mensagem, data: result.dados } : { success: false, message: result.mensagem || 'Não foi possível consultar o processo.', data: null };
         } catch (err) {
-          console.error('❌ Erro ao consultar processo:', err);
-          return { 
-            success: false, 
-            message: 'Ocorreu um erro ao consultar o processo. Tente novamente em instantes.',
-            data: null
-          };
+          return { success: false, message: 'Ocorreu um erro ao consultar o processo.', data: null };
         }
+      }
+
+      // ============================================================
+      // ALTERAÇÃO 4: case 'transicionar_agente' NOVO
+      // ============================================================
+      case 'transicionar_agente': {
+        const { lead_id, isa_agent, motivo } = dados;
+        if (!isa_agent) return { success: false, message: 'isa_agent não informado' };
+        const agentesValidos = ['isa_triagem', 'isa_bancario', 'isa_aereo', 'humano'];
+        if (!agentesValidos.includes(isa_agent)) return { success: false, message: `Agente inválido: ${isa_agent}` };
+        const supabaseLocal = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+        await setIsaAgent(supabaseLocal, lead_id, isa_agent);
+        return { success: true, message: `Lead roteado para ${isa_agent}`, data: { isa_agent, motivo } };
       }
 
       case 'direcionar_atendimento_humano': {
         const lead_id = dados.lead_id;
         const motivo = dados.motivo || 'Lead qualificado para atendimento humano';
-        const tipo_handoff = dados.tipo || 'qualificado'; // 'qualificado' | 'complexo' | 'pediu_humano'
-        
-        // 1. Marcar atendimento_humano no subscriber
+        const tipo_handoff = dados.tipo || 'qualificado';
         if (subscriberId) {
-          await supabase
-            .from('manychat_subscribers')
-            .update({
-              atendimento_humano: true,
-              atendimento_humano_desde: new Date().toISOString()
-            })
-            .eq('subscriber_id', subscriberId);
+          await supabase.from('manychat_subscribers').update({ atendimento_humano: true, atendimento_humano_desde: new Date().toISOString() }).eq('subscriber_id', subscriberId);
         }
-        
-        // 2. Atualizar lead para status apropriado
-        await supabase
-          .from('leads_juridicos')
-          .update({
-            status: 'Em Atendimento',
-            isa_ativa: false, // Desativar ISA para este lead
-            resumo_ia: `[HANDOFF] ${motivo}`
-          })
-          .eq('id', lead_id);
-        
-        // 3. Registrar evento de handoff
-        await supabase.from('system_events').insert({
-          tipo: 'handoff',
-          fonte: 'isa',
-          acao: 'direcionar_atendimento_humano',
-          lead_id: lead_id,
-          dados: {
-            tipo_handoff,
-            motivo,
-            subscriber_id: subscriberId,
-            timestamp: new Date().toISOString()
-          },
-          processado: false // Pendente para equipe
-        });
-        
-        // 4. Enviar notificação por email para equipe
+        await supabase.from('leads_juridicos').update({ status: 'Em Atendimento', isa_ativa: false, resumo_ia: `[HANDOFF] ${motivo}` }).eq('id', lead_id);
+        await supabase.from('system_events').insert({ tipo: 'handoff', fonte: 'isa', acao: 'direcionar_atendimento_humano', lead_id, dados: { tipo_handoff, motivo, subscriber_id: subscriberId, timestamp: new Date().toISOString() }, processado: false });
         if (RESEND_API_KEY) {
           try {
-            const { data: lead } = await supabase
-              .from('leads_juridicos')
-              .select('nome, telefone, email, tipo_acao')
-              .eq('id', lead_id)
-              .single();
-            
-            const handoffLabels: Record<string, string> = {
-              'qualificado': '✅ Lead Qualificado',
-              'complexo': '🔍 Caso Complexo',
-              'pediu_humano': '🙋 Solicitou Humano'
-            };
-            
+            const { data: lead } = await supabase.from('leads_juridicos').select('nome, telefone, email, tipo_acao').eq('id', lead_id).single();
             await fetch('https://api.resend.com/emails', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${RESEND_API_KEY}`,
-              },
-              body: JSON.stringify({
-                from: 'Isa - Bentes & Ramos <onboarding@resend.dev>',
-                to: ['bentes@bentesramos.com.br'], // Amanda ou equipe
-                subject: `🔔 ${handoffLabels[tipo_handoff] || 'Handoff'}: ${lead?.nome || 'Lead'}`,
-                html: `
-                  <h2>🤖 Isa direcionou um lead para atendimento humano</h2>
-                  <p><strong>Lead:</strong> ${lead?.nome || 'Não informado'}</p>
-                  <p><strong>Telefone:</strong> ${lead?.telefone || 'Não informado'}</p>
-                  <p><strong>Tipo:</strong> ${lead?.tipo_acao || 'Não classificado'}</p>
-                  <p><strong>Motivo:</strong> ${motivo}</p>
-                  <p><a href="https://lovable.dev/projects/qgenaltkjtlvwfgykpxq/chat?lead_id=${lead_id}">Abrir Chat</a></p>
-                `,
-              }),
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${RESEND_API_KEY}` },
+              body: JSON.stringify({ from: 'Isa - Bentes & Ramos <onboarding@resend.dev>', to: ['bentes@bentesramos.com.br'], subject: `🔔 Handoff: ${lead?.nome || 'Lead'}`, html: `<h2>Lead direcionado para humano</h2><p><strong>Lead:</strong> ${lead?.nome}</p><p><strong>Motivo:</strong> ${motivo}</p>` }),
             });
-          } catch (err) {
-            console.error('Erro ao enviar email de handoff:', err);
-          }
+          } catch (err) { console.error('Erro ao enviar email de handoff:', err); }
         }
-        
-        return {
-          success: true,
-          message: `Lead direcionado para atendimento humano: ${motivo}`,
-          data: { tipo_handoff, motivo }
-        };
+        return { success: true, message: `Lead direcionado para atendimento humano: ${motivo}`, data: { tipo_handoff, motivo } };
       }
 
       default:
@@ -1696,242 +746,79 @@ Ou acesse nosso link de agendamento: https://cal.com/bentes-ramos-advocacia-1ucm
   }
 }
 
-// Gerar opções de horários para agendamento consultando a agenda real
 async function gerarOpcoesHorario(supabase: any, leadId?: string): Promise<Array<{ label: string; short: string; datetime: string; disponivel: boolean }>> {
   const opcoes: Array<{ label: string; short: string; datetime: string; disponivel: boolean }> = [];
-  
-  // Calcular período: próxima semana + 2 semanas
   const proximaSegunda = getProximaSegundaUtc();
-  const fimPeriodo = new Date(proximaSegunda.getTime() + 21 * 24 * 60 * 60 * 1000); // 3 semanas
-  
-  // Buscar compromissos existentes no período
-  const { data: compromissosExistentes } = await supabase
-    .from('compromissos')
-    .select('data_inicio, data_fim')
-    .gte('data_inicio', proximaSegunda.toISOString())
-    .lte('data_inicio', fimPeriodo.toISOString());
-  
-  // Criar set de horários ocupados (formato: "YYYY-MM-DD HH:mm")
+  const fimPeriodo = new Date(proximaSegunda.getTime() + 21 * 24 * 60 * 60 * 1000);
+  const { data: compromissosExistentes } = await supabase.from('compromissos').select('data_inicio, data_fim').gte('data_inicio', proximaSegunda.toISOString()).lte('data_inicio', fimPeriodo.toISOString());
   const horariosOcupados = new Set<string>();
   if (compromissosExistentes) {
     for (const c of compromissosExistentes) {
       const dataInicio = new Date(c.data_inicio);
-      // Formatar em horário de Manaus
       const dataStr = dataInicio.toISOString().split('T')[0];
-      const horaManaus = dataInicio.toLocaleTimeString('pt-BR', { 
-        timeZone: 'America/Manaus',
-        hour: '2-digit', 
-        minute: '2-digit' 
-      });
+      const horaManaus = dataInicio.toLocaleTimeString('pt-BR', { timeZone: 'America/Manaus', hour: '2-digit', minute: '2-digit' });
       horariosOcupados.add(`${dataStr} ${horaManaus}`);
     }
   }
-  
-  console.log('📅 Horários ocupados:', Array.from(horariosOcupados));
-  
-  // Iterar pelos dias permitidos da próxima semana
   let diaAtual = new Date(proximaSegunda);
   let diasProcessados = 0;
-  const maxDias = 9; // Processar até 9 dias (3 semanas de Seg/Qua/Sex)
-  
+  const maxDias = 9;
   while (diasProcessados < maxDias && opcoes.length < 6) {
     const diaSemana = diaAtual.getDay();
-    
-    // Verificar se é dia permitido (Seg=1, Qua=3, Sex=5)
     if (DIAS_PERMITIDOS.includes(diaSemana)) {
       diasProcessados++;
-      
       const dataStrISO = diaAtual.toISOString().split('T')[0];
       const nomeDia = NOMES_DIAS[diaSemana];
-      const dataFormatada = formatarDataCurta(diaAtual);
-      
-      // Verificar cada horário disponível
       for (const horario of HORARIOS_DISPONIVEIS) {
         const chave = `${dataStrISO} ${horario}`;
-        const ocupado = horariosOcupados.has(chave);
-        
-        if (!ocupado && opcoes.length < 6) {
-          // Criar datetime em UTC (Manaus = UTC-4)
-          const dataHoraManaus = `${dataStrISO}T${horario}:00-04:00`;
-          const dataHoraUtc = new Date(dataHoraManaus);
-          
-          opcoes.push({
-            label: `${nomeDia.charAt(0).toUpperCase() + nomeDia.slice(1)}, ${formatarData(diaAtual)} às ${horario}`,
-            short: `${diaAtual.getDate()}/${diaAtual.getMonth() + 1} ${horario}`,
-            datetime: dataHoraUtc.toISOString(),
-            disponivel: true
-          });
+        if (!horariosOcupados.has(chave) && opcoes.length < 6) {
+          const dataHoraUtc = new Date(`${dataStrISO}T${horario}:00-04:00`);
+          opcoes.push({ label: `${nomeDia.charAt(0).toUpperCase() + nomeDia.slice(1)}, ${formatarData(diaAtual)} às ${horario}`, short: `${diaAtual.getDate()}/${diaAtual.getMonth() + 1} ${horario}`, datetime: dataHoraUtc.toISOString(), disponivel: true });
         }
       }
     }
-    
-    // Avançar para o próximo dia
     diaAtual = new Date(diaAtual.getTime() + 24 * 60 * 60 * 1000);
   }
-  
-  console.log(`📅 Geradas ${opcoes.length} opções de horário disponíveis`);
   return opcoes;
 }
 
-// Verificar disponibilidade de um horário específico
-async function verificarDisponibilidadeHorario(supabase: any, dataHora: Date): Promise<{ disponivel: boolean; motivo?: string }> {
-  // Validar regras de agendamento
-  const horaManaus = dataHora.toLocaleTimeString('pt-BR', { 
-    timeZone: 'America/Manaus',
-    hour: '2-digit', 
-    minute: '2-digit' 
-  });
-  
-  const validacao = validarAgendamento(dataHora, horaManaus);
-  if (!validacao.valido) {
-    return { disponivel: false, motivo: validacao.motivo };
-  }
-  
-  // Verificar conflitos na agenda
-  const inicioSlot = dataHora.toISOString();
-  const fimSlot = new Date(dataHora.getTime() + 60 * 60 * 1000).toISOString(); // +1 hora
-  
-  const { data: conflitos } = await supabase
-    .from('compromissos')
-    .select('id, titulo')
-    .or(`and(data_inicio.lt.${fimSlot},data_fim.gt.${inicioSlot})`)
-    .limit(1);
-  
-  if (conflitos && conflitos.length > 0) {
-    return { disponivel: false, motivo: 'Horário já ocupado por outro compromisso' };
-  }
-  
-  return { disponivel: true };
-}
-
-// Enviar resposta via Z-API (retorna messageId para evitar duplicação)
-// IMPORTANTE: Roteia para instância CORRETA baseado na linha_whatsapp do subscriber
 async function enviarRespostaZapi(supabaseClient: any, subscriberId: string, mensagem: string): Promise<{ success: boolean; messageId?: string }> {
   try {
-    // Buscar telefone e linha_whatsapp do subscriber
-    const { data: subscriber } = await supabaseClient
-      .from('manychat_subscribers')
-      .select('telefone, linha_whatsapp, lead_id')
-      .eq('subscriber_id', subscriberId)
-      .maybeSingle();
-
-    if (!subscriber?.telefone) {
-      console.log('⚠️ Subscriber sem telefone:', subscriberId);
-      return { success: false };
-    }
-
-    // Determinar qual instância usar baseado na linha do subscriber
+    const { data: subscriber } = await supabaseClient.from('manychat_subscribers').select('telefone, linha_whatsapp, lead_id').eq('subscriber_id', subscriberId).maybeSingle();
+    if (!subscriber?.telefone) return { success: false };
     const isTrafficLine = subscriber.linha_whatsapp === 'trafego_isa';
-    
-    // Se não encontrar no subscriber, verificar no lead
     let useTrafficInstance = isTrafficLine;
     if (!useTrafficInstance && subscriber.lead_id) {
-      const { data: lead } = await supabaseClient
-        .from('leads_juridicos')
-        .select('linha_whatsapp, tipo_origem, fonte_trafego')
-        .eq('id', subscriber.lead_id)
-        .maybeSingle();
-      
-      useTrafficInstance = lead?.linha_whatsapp === 'trafego_isa' || 
-                           lead?.tipo_origem === 'trafego' ||
-                           lead?.fonte_trafego?.includes('facebook');
+      const { data: lead } = await supabaseClient.from('leads_juridicos').select('linha_whatsapp, tipo_origem, fonte_trafego').eq('id', subscriber.lead_id).maybeSingle();
+      useTrafficInstance = lead?.linha_whatsapp === 'trafego_isa' || lead?.tipo_origem === 'trafego' || lead?.fonte_trafego?.includes('facebook');
     }
-
     let instanceId: string | undefined;
     let token: string | undefined;
     let clientToken: string | undefined;
     let instanceName = 'default';
-
     if (useTrafficInstance) {
-      // Buscar instância de TRÁFEGO (pelo número 85888190)
-      const { data: trafficInstance } = await supabaseClient
-        .from('zapi_instances')
-        .select('instance_id, token, client_token, name')
-        .eq('is_active', true)
-        .ilike('phone_number', '%85888190%')
-        .maybeSingle();
-      
-      if (trafficInstance) {
-        instanceId = trafficInstance.instance_id;
-        token = trafficInstance.token;
-        clientToken = trafficInstance.client_token;
-        instanceName = trafficInstance.name || 'traffic';
-        console.log(`[Isa Z-API] 🚀 Usando instância de TRÁFEGO: ${instanceName}`);
-      }
+      const { data: trafficInstance } = await supabaseClient.from('zapi_instances').select('instance_id, token, client_token, name').eq('is_active', true).ilike('phone_number', '%85888190%').maybeSingle();
+      if (trafficInstance) { instanceId = trafficInstance.instance_id; token = trafficInstance.token; clientToken = trafficInstance.client_token; instanceName = trafficInstance.name || 'traffic'; }
     }
-
-    // Fallback: instância padrão
     if (!instanceId) {
-      const { data: zapiInstance } = await supabaseClient
-        .from('zapi_instances')
-        .select('instance_id, token, client_token, name')
-        .eq('is_active', true)
-        .eq('is_default', true)
-        .maybeSingle();
-
-      if (zapiInstance) {
-        instanceId = zapiInstance.instance_id;
-        token = zapiInstance.token;
-        clientToken = zapiInstance.client_token;
-        instanceName = zapiInstance.name || 'default';
-        console.log(`[Isa Z-API] Usando instância padrão: ${instanceName}`);
-      } else {
-        // Fallback para config legado
-        const { data: legacyConfig } = await supabaseClient
-          .from('integrations_config')
-          .select('config_json, is_active')
-          .eq('provider', 'zapi')
-          .single();
-
-        if (!legacyConfig?.is_active) {
-          console.log('⚠️ Z-API não está ativo');
-          return { success: false };
-        }
-
+      const { data: zapiInstance } = await supabaseClient.from('zapi_instances').select('instance_id, token, client_token, name').eq('is_active', true).eq('is_default', true).maybeSingle();
+      if (zapiInstance) { instanceId = zapiInstance.instance_id; token = zapiInstance.token; clientToken = zapiInstance.client_token; instanceName = zapiInstance.name || 'default'; }
+      else {
+        const { data: legacyConfig } = await supabaseClient.from('integrations_config').select('config_json, is_active').eq('provider', 'zapi').single();
+        if (!legacyConfig?.is_active) return { success: false };
         instanceId = legacyConfig.config_json?.instance_id;
         token = legacyConfig.config_json?.token;
         clientToken = legacyConfig.config_json?.client_token;
-        console.log('[Isa Z-API] Usando config legado');
       }
     }
-
-    if (!instanceId || !token) {
-      console.log('⚠️ Z-API não configurado (falta instance_id ou token)');
-      return { success: false };
-    }
-
-    // Normalizar telefone
+    if (!instanceId || !token) return { success: false };
     let cleanPhone = subscriber.telefone.replace(/\D/g, '');
-    if (cleanPhone.length === 10 || cleanPhone.length === 11) {
-      cleanPhone = '55' + cleanPhone;
-    }
-
-    // Headers com Client-Token se disponível
+    if (cleanPhone.length === 10 || cleanPhone.length === 11) cleanPhone = '55' + cleanPhone;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (clientToken) {
-      headers['Client-Token'] = clientToken;
-    }
-
-    console.log(`[Isa Z-API] Enviando para ${cleanPhone} via ${instanceName}, clientToken: ${clientToken ? 'presente' : 'ausente'}`);
-
-    // Enviar via Z-API
-    const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        phone: cleanPhone,
-        message: mensagem
-      })
-    });
-
+    if (clientToken) headers['Client-Token'] = clientToken;
+    const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, { method: 'POST', headers, body: JSON.stringify({ phone: cleanPhone, message: mensagem }) });
     const result = await response.json();
-
-    if (!response.ok || result.error) {
-      console.error('❌ Erro ao enviar via Z-API:', result);
-      return { success: false };
-    }
-
-    console.log('✅ Resposta enviada via Z-API para:', cleanPhone, 'messageId:', result.messageId);
+    if (!response.ok || result.error) return { success: false };
     return { success: true, messageId: result.messageId || result.id };
   } catch (error) {
     console.error('❌ Erro ao enviar via Z-API:', error);
@@ -1939,254 +826,155 @@ async function enviarRespostaZapi(supabaseClient: any, subscriberId: string, men
   }
 }
 
-// Alias para compatibilidade
 async function enviarRespostaManyChat(subscriberId: string, mensagem: string): Promise<boolean> {
-  const supabaseClient = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-  );
+  const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
   const result = await enviarRespostaZapi(supabaseClient, subscriberId, mensagem);
   return result.success;
 }
 
-// Processar mensagem com IA
+async function transcreverAudio(audioUrl: string): Promise<string | null> {
+  if (!OPENAI_API_KEY) return null;
+  try {
+    const audioResponse = await fetch(audioUrl);
+    if (!audioResponse.ok) return null;
+    const audioBlob = await audioResponse.blob();
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'audio.ogg');
+    formData.append('model', 'whisper-1');
+    formData.append('language', 'pt');
+    const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` }, body: formData });
+    if (!whisperResponse.ok) return null;
+    const result = await whisperResponse.json();
+    return result.text || null;
+  } catch (error) {
+    console.error('❌ Erro ao transcrever áudio:', error);
+    return null;
+  }
+}
+
+function isAudioUrl(content: string): boolean {
+  if (!content) return false;
+  const lowerContent = content.toLowerCase();
+  return lowerContent.match(/\.(ogg|mp3|wav|m4a|aac|opus)(\?|$)/) !== null || lowerContent.includes('voice') || lowerContent.includes('audio');
+}
+
+async function getLeadState(supabase: any, leadId: string): Promise<string | null> {
+  const { data: lead } = await supabase.from('leads_juridicos').select('lead_state, status, is_lost, tipo_origem, fonte_trafego, canal_origem, created_at, linha_whatsapp, isa_ativa, empresa_tag').eq('id', leadId).single();
+  if (!lead) return null;
+  if (lead.is_lost) return 'LOST';
+  if (['Contrato Assinado', 'Ganho'].includes(lead.status)) return 'BLOCKED';
+  if (lead.isa_ativa === false || lead.linha_whatsapp === 'bentes_ramos_antigo') return 'BENTES_RAMOS';
+  if (lead.linha_whatsapp === 'trafego_isa') return lead.lead_state || 'NEW';
+  const tipoOrigem = lead.tipo_origem || 'indefinido';
+  if (tipoOrigem === 'whatsapp_direto') return 'BENTES_RAMOS';
+  if (tipoOrigem === 'trafego') return lead.lead_state || 'NEW';
+  const isFromTraffic = Boolean(lead.fonte_trafego || lead.canal_origem === 'trafego_pago' || lead.canal_origem === 'instagram' || lead.canal_origem === 'facebook' || lead.canal_origem === 'google');
+  if (isFromTraffic) return lead.lead_state || 'NEW';
+  const createdAt = new Date(lead.created_at);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  if (createdAt <= thirtyDaysAgo) return 'BENTES_RAMOS';
+  return lead.lead_state || 'NEW';
+}
+
+// ============================================================
+// ALTERAÇÃO 3: processarComIA usa getPromptForAgent
+// ============================================================
 async function processarComIA(contexto: LeadContext, mensagem: string, subscriberId: string): Promise<{
   resposta: string;
   acoes: Array<{ acao: string; dados: any; motivo: string; automatica: boolean }>;
   analise: { intencao: string; sentimento: string; urgencia: string };
 }> {
-  const supabaseClient = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-  );
+  const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
-  // Buscar prompt customizado do banco
-  const { data: promptConfig } = await supabaseClient
-    .from('ai_prompts')
-    .select('content, strict_mode, greeting_message')
-    .eq('name', 'isa_system_prompt')
-    .order('version', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // ALTERAÇÃO 3: Substituído bloco de busca por getPromptForAgent
+  const promptConfig = await getPromptForAgent(supabaseClient, contexto.lead.id);
 
   const strictMode = promptConfig?.strict_mode ?? true;
 
-  // Verificar se há agendamento pendente de confirmação
-  const { data: agendamentoPendente } = await supabaseClient
-    .from('system_events')
-    .select('*')
-    .eq('lead_id', contexto.lead.id)
-    .eq('acao', 'aguardando_confirmacao_lead')
-    .eq('processado', false)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
+  const { data: agendamentoPendente } = await supabaseClient.from('system_events').select('*').eq('lead_id', contexto.lead.id).eq('acao', 'aguardando_confirmacao_lead').eq('processado', false).order('created_at', { ascending: false }).limit(1).maybeSingle();
   const temAgendamentoPendente = !!agendamentoPendente;
   const opcoesAgendamento = agendamentoPendente?.dados?.opcoes_oferecidas || [];
 
-  // Verificar status do follow-up
   let followupInfo = '';
   if (contexto.followup) {
     const statusFollowup = await verificarFollowupStatus(supabaseClient, contexto.lead.id, contexto.followup);
     const stageFast = contexto.followup.followup_stage_fast || 0;
     const stageSlow = contexto.followup.followup_stage_slow || 0;
-    
-    followupInfo = `
-📊 STATUS DO FOLLOW-UP:
-- Estágio FAST: ${stageFast}/3 ${stageFast >= 3 ? '(completo)' : ''}
-- Estágio SLOW: ${stageSlow}/3 ${stageSlow >= 3 ? '(completo)' : ''}
-- Respondeu: ${contexto.followup.respondido ? 'SIM ✅' : 'NÃO'}
-- Status: ${statusFollowup.status}
-`;
+    followupInfo = `\n📊 STATUS DO FOLLOW-UP:\n- Estágio FAST: ${stageFast}/3\n- Estágio SLOW: ${stageSlow}/3\n- Respondeu: ${contexto.followup.respondido ? 'SIM ✅' : 'NÃO'}\n- Status: ${statusFollowup.status}\n`;
   }
 
-  // Formatar histórico completo (bot + humano)
   const historicoCompleto = [
-    ...contexto.mensagens.slice(0, 20).map(m => ({
-      tipo: 'chat',
-      origem: m.direcao === 'inbound' ? 'cliente' : 'bot/equipe',
-      conteudo: m.conteudo,
-      data: m.created_at,
-    })),
-    ...contexto.interacoes.slice(0, 10).map(i => ({
-      tipo: 'interacao',
-      origem: i.direcao === 'entrada' ? 'cliente' : 'equipe',
-      conteudo: `[${i.tipo}] ${i.resumo}${i.detalhes ? ': ' + i.detalhes : ''}`,
-      data: i.data_interacao,
-    })),
+    ...contexto.mensagens.slice(0, 20).map(m => ({ tipo: 'chat', origem: m.direcao === 'inbound' ? 'cliente' : 'bot/equipe', conteudo: m.conteudo, data: m.created_at })),
+    ...contexto.interacoes.slice(0, 10).map(i => ({ tipo: 'interacao', origem: i.direcao === 'entrada' ? 'cliente' : 'equipe', conteudo: `[${i.tipo}] ${i.resumo}${i.detalhes ? ': ' + i.detalhes : ''}`, data: i.data_interacao })),
   ].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
 
-  const historicoFormatado = historicoCompleto.slice(-25).map(h => 
-    `[${h.origem.toUpperCase()}] ${h.conteudo}`
-  ).join('\n');
+  const historicoFormatado = historicoCompleto.slice(-25).map(h => `[${h.origem.toUpperCase()}] ${h.conteudo}`).join('\n');
 
-  // ============================================================
-  // STATE MACHINE CONTEXT
-  // ============================================================
   const leadState = contexto.lead.lead_state || 'NEW';
   const classification = contexto.classification;
   const contractData = contexto.contractData;
   const docsChecklist = contexto.docsChecklist || [];
-  const docsPending = docsChecklist.filter(d => d.is_required && !d.received);
-  const docsReceived = docsChecklist.filter(d => d.received);
+  const docsPending = docsChecklist.filter((d: any) => d.is_required && !d.received);
+  const docsReceived = docsChecklist.filter((d: any) => d.received);
 
-  const stateInfo = `
-🔄 ESTADO ATUAL DO LEAD: ${leadState}
+  // Buscar agente atual para info no prompt
+  const agentAtual = await getIsaAgent(supabaseClient, contexto.lead.id);
 
-📊 MÁQUINA DE ESTADOS (Lead Lifecycle):
-- NEW → TRIAGE → CLASSIFIED → DATA_CAPTURE → CONTRACT_SENT → CONTRACT_SIGNED → DOCS_PENDING → READY_FOR_LAWYER
-
-📍 ETAPAS E AÇÕES ESPERADAS:
-${leadState === 'NEW' ? `
-⭐ ESTADO ATUAL: NEW (Lead acabou de entrar)
-→ AÇÃO: Fazer perguntas de triagem para entender o caso
-→ Após entender o problema, use "transicionar_estado" para "TRIAGE"
-` : ''}
-${leadState === 'TRIAGE' ? `
-⭐ ESTADO ATUAL: TRIAGE (Triagem em andamento)
-→ AÇÃO: Identificar o tipo de caso (bancário/aéreo) e qualificar
-→ Use "classificar_caso" com o tipo identificado
-→ Após classificar, use "transicionar_estado" para "CLASSIFIED"
-` : ''}
-${leadState === 'CLASSIFIED' ? `
-⭐ ESTADO ATUAL: CLASSIFIED (Caso já identificado)
-→ Classificação: ${classification?.case_type || 'Não definida'} ${classification?.sub_type ? `(${classification.sub_type})` : ''}
-→ AÇÃO: Coletar dados para contrato (CPF, RG, endereço, etc.)
-→ Pergunte os dados faltantes de forma natural
-→ Use "salvar_dados_contrato" conforme receber os dados
-→ Quando tiver os dados mínimos, use "transicionar_estado" para "DATA_CAPTURE"
-` : ''}
-${leadState === 'DATA_CAPTURE' ? `
-⭐ ESTADO ATUAL: DATA_CAPTURE (Coletando dados)
-→ Dados já salvos: ${contractData ? Object.keys(contractData).filter(k => contractData[k] && !['id', 'lead_id', 'created_at', 'updated_at'].includes(k)).join(', ') || 'Nenhum' : 'Nenhum'}
-→ AÇÃO: Continuar coletando dados essenciais (CPF, endereço completo)
-→ Quando completo, informar que o contrato será enviado
-→ Use "transicionar_estado" para "CONTRACT_SENT" após enviar
-` : ''}
-${leadState === 'CONTRACT_SENT' ? `
-⭐ ESTADO ATUAL: CONTRACT_SENT (Contrato enviado)
-→ AÇÃO: Acompanhar assinatura do contrato
-→ Se cliente confirmar assinatura, use "transicionar_estado" para "CONTRACT_SIGNED"
-` : ''}
-${leadState === 'CONTRACT_SIGNED' ? `
-⭐ ESTADO ATUAL: CONTRACT_SIGNED (Contrato assinado!)
-→ AÇÃO: Solicitar documentos necessários
-→ Documentos requeridos: ${classification?.recommended_docs?.join(', ') || 'Definir conforme caso'}
-→ Use "transicionar_estado" para "DOCS_PENDING"
-` : ''}
-${leadState === 'DOCS_PENDING' ? `
-⭐ ESTADO ATUAL: DOCS_PENDING (Aguardando documentos)
-→ Documentos pendentes: ${docsPending.length > 0 ? docsPending.map(d => d.doc_label).join(', ') : 'Nenhum pendente!'}
-→ Documentos recebidos: ${docsReceived.length > 0 ? docsReceived.map(d => d.doc_label).join(', ') : 'Nenhum ainda'}
-→ AÇÃO: Cobrar documentos faltantes
-→ Use "marcar_doc_recebido" quando cliente enviar um documento
-→ Quando todos recebidos, use "transicionar_estado" para "READY_FOR_LAWYER"
-` : ''}
-${leadState === 'READY_FOR_LAWYER' ? `
-⭐ ESTADO ATUAL: READY_FOR_LAWYER (Pronto para advogado!)
-→ AÇÃO: Confirmar recebimento e informar que a equipe jurídica irá analisar
-→ ⚠️ BLOQUEADO: Não executar mais automações. Aguardar equipe.
-` : ''}
-`;
-
-  // Prompt base com state machine
-  const basePrompt = promptConfig?.content || `Você é Isa, a assistente inteligente do escritório de advocacia Bentes & Ramos.
-
-🎯 OBJETIVO: Conduzir leads pelo fluxo de conversão usando a MÁQUINA DE ESTADOS.
-
-⚠️ GUARDRAILS (OBRIGATÓRIO):
-- NUNCA afirme que algo é ilegal ou que o cliente VAI ganhar
-- Use linguagem condicional: "há indícios", "em tese", "depende de análise"
-- Toda classificação é TRIAGEM PRELIMINAR, não parecer jurídico
-- Ao final de classificações, informe: "Esta é uma análise preliminar e depende de validação pela equipe jurídica."
-
-⛔ ÁREAS QUE NÃO ATENDEMOS:
-- Direito Trabalhista, Previdenciário, Família, Criminal, Imobiliário
-- Se o cliente mencionar essas áreas, decline educadamente e redirecione
-
-✅ ÁREAS QUE ATENDEMOS:
-- Direito Bancário (juros abusivos, seguro prestamista, revisional, busca e apreensão)
-- Questões Aéreas (overbooking, cancelamento, atraso, extravio de bagagem)`;
+  const basePrompt = promptConfig?.content || 'Você é Isa, assistente do escritório Bentes & Ramos.';
 
   const systemPrompt = `${basePrompt}
 
-${strictMode ? `
-🔒 MODO RÍGIDO ATIVADO: Você DEVE operar exclusivamente pela máquina de estados.
-- Cada resposta deve considerar o estado atual e guiar para o próximo
-- Use as ações de transição obrigatoriamente
-` : ''}
+${strictMode ? '🔒 MODO RÍGIDO ATIVADO: Opere pela máquina de estados.\n' : ''}
 
-${stateInfo}
+AGENTE ATUAL: ${agentAtual}
 
 📅 REGRAS DE AGENDAMENTO:
 - Dias: Segunda, Quarta e Sexta
 - Horários: ${HORARIOS_DISPONIVEIS.join(', ')}
-- Link Cal.com: https://cal.com/bentes-ramos-advocacia-1ucmau/agendamentos-crm
+- Link: https://cal.com/bentes-ramos-advocacia-1ucmau/agendamentos-crm
 
-${temAgendamentoPendente ? `
-⚠️ AGENDAMENTO PENDENTE: ${JSON.stringify(opcoesAgendamento.map((o: { label: string }) => o.label))}
-` : ''}
+${temAgendamentoPendente ? `⚠️ AGENDAMENTO PENDENTE: ${JSON.stringify(opcoesAgendamento.map((o: { label: string }) => o.label))}\n` : ''}
 
 ${followupInfo}
 
 📊 CONTEXTO DO LEAD:
 Nome: ${contexto.lead.nome || 'Não informado'}
-Status Legado: ${contexto.lead.status || 'Lead Frio'}
+Status: ${contexto.lead.status || 'Lead Frio'}
 Estado: ${leadState}
 Telefone: ${contexto.lead.telefone || 'Não informado'}
-Email: ${contexto.lead.email || 'Não informado'}
-Origem: ${contexto.lead.origem || 'Não informada'}
 Tipo Ação: ${contexto.lead.tipo_acao || 'Não classificado'}
-Fonte Tráfego: ${contexto.lead.fonte_trafego || 'Não identificada'} ${contexto.lead.fonte_trafego === 'trafego_pago' ? '💰 (CLIENTE DE TRÁFEGO PAGO - PRIORIDADE!)' : contexto.lead.fonte_trafego === 'indicacao' ? '🤝 (INDICAÇÃO)' : ''}
-Canal Origem: ${contexto.lead.canal_origem || 'Não identificado'}
-Contratos Adicionais: ${contexto.lead.contratos_adicionais || 0} ${(contexto.lead.contratos_adicionais || 0) > 0 ? '⭐ (CLIENTE RECORRENTE!)' : ''}
 
-💡 MEMÓRIA DE FOLLOW-UP:
-${contexto.followup ? `
-- Este lead VEIO de follow-up? ${contexto.followup.total_followups_enviados > 0 ? 'SIM (' + contexto.followup.ultimo_tipo_enviado + ')' : 'NÃO'}
-- Total de follow-ups já enviados: ${contexto.followup.total_followups_enviados || 0}
-- Respondeu após follow-up? ${contexto.followup.respondido ? 'SIM ✅' : 'Ainda não'}
-` : '- Sem registro de follow-up'}
+🔄 ESTADO ATUAL: ${leadState}
+${leadState === 'NEW' ? '→ Identifique o problema e roteie para o especialista correto usando transicionar_agente.' : ''}
+${leadState === 'TRIAGE' ? '→ Classifique o caso e transfira para especialista.' : ''}
+${leadState === 'CLASSIFIED' ? `→ Classificação: ${classification?.case_type || 'Não definida'}. Colete dados para contrato.` : ''}
+${leadState === 'DATA_CAPTURE' ? `→ Dados salvos: ${contractData ? Object.keys(contractData).filter(k => contractData[k] && !['id', 'lead_id', 'created_at', 'updated_at'].includes(k)).join(', ') || 'Nenhum' : 'Nenhum'}. Continue coletando.` : ''}
+${leadState === 'DOCS_PENDING' ? `→ Docs pendentes: ${docsPending.length > 0 ? docsPending.map((d: any) => d.doc_label).join(', ') : 'Nenhum!'}` : ''}
+${leadState === 'READY_FOR_LAWYER' ? '→ BLOQUEADO. Aguardar equipe jurídica.' : ''}
 
-📜 HISTÓRICO DA CONVERSA:
+📜 HISTÓRICO:
 ${historicoFormatado || '(Sem histórico)'}
 
 ⚙️ AÇÕES DISPONÍVEIS:
+- transicionar_agente: { lead_id, isa_agent: "isa_bancario"|"isa_aereo"|"humano" } — ROTEAMENTO SILENCIOSO
+- transicionar_estado: { lead_id, to_state }
+- classificar_caso: { lead_id, case_type, sub_type?, recommended_docs? }
+- salvar_dados_contrato: { lead_id, cpf?, rg?, endereco?, cidade?, uf?, cep? }
+- marcar_doc_recebido: { lead_id, doc_type }
+- verificar_docs_pendentes: { lead_id }
+- classificar_lead: { lead_id, novo_status }
+- atualizar_dados_lead: { lead_id, nome?, telefone?, email? }
+- criar_interacao: { cliente_id, tipo, resumo }
+- verificar_agenda, agendar_direto: para agendamentos
+- pausar_followup / retomar_followup: { lead_id }
+- direcionar_atendimento_humano: { lead_id, motivo, tipo }
 
-🔄 STATE MACHINE:
-- transicionar_estado: Mover lead para próximo estado (dados: { lead_id, to_state, reason? })
-- classificar_caso: Classificar tipo do caso (dados: { lead_id, case_type, sub_type?, summary?, recommended_docs?: string[], confidence_score? })
-- salvar_dados_contrato: Salvar dados para contrato (dados: { lead_id, cpf?, rg?, endereco?, cidade?, uf?, cep?, estado_civil?, profissao? })
-- marcar_doc_recebido: Marcar documento como recebido (dados: { lead_id, doc_type })
-- verificar_docs_pendentes: Listar documentos pendentes (dados: { lead_id })
-
-📅 AGENDA:
-- verificar_agenda: Consultar horários disponíveis
-- agendar_direto: Criar compromisso
-
-📋 LEAD:
-- classificar_lead: Atualizar status legado do lead
-- atualizar_dados_lead: Atualizar nome, telefone ou email
-- criar_interacao: Registrar interação
-
-🔄 FOLLOW-UP:
-- pausar_followup / retomar_followup: Controlar automação
-
-🙋 HANDOFF PARA HUMANO (Amanda):
-- direcionar_atendimento_humano: Direcionar para atendimento humano (dados: { lead_id, motivo, tipo })
-  → tipo: 'qualificado' (lead passou triagem e está pronto), 'complexo' (caso precisa análise humana), 'pediu_humano' (cliente solicitou)
-  
-⚠️ CRITÉRIOS PARA DIRECIONAR PARA HUMANO:
-1. Lead QUALIFICADO: Após coletar dados básicos e classificar caso (estado DATA_CAPTURE ou superior)
-2. CASO COMPLEXO: Quando detectar situação que exige análise jurídica detalhada (valores altos, múltiplos contratos, situação atípica)
-3. PEDIU HUMANO: Quando cliente mencionar "falar com advogado", "falar com alguém", "atendente", "pessoa real"
-4. URGÊNCIA ALTA: Quando análise indicar urgência 'alta' ou 'urgente' E sentimento 'negativo'
-5. DÚVIDAS TÉCNICAS: Quando pergunta exigir conhecimento jurídico específico que você não pode responder
-
-Ao direcionar para humano:
-- Informe o cliente: "Vou transferir você para nossa equipe de atendimento especializada. Em instantes a Amanda ou outro membro vai continuar seu atendimento!"
-- Execute a ação direcionar_atendimento_humano
+ROTEAMENTO (apenas quando agente=isa_triagem):
+- Bancário → transicionar_agente com isa_agent: "isa_bancario"
+- Aéreo → transicionar_agente com isa_agent: "isa_aereo"
+- Outra área → direcionar_atendimento_humano com [TRANSFERIR_HUMANO]
+- Transferência SILENCIOSA — não avisar o cliente
 
 Responda em JSON:
 {
@@ -2195,19 +983,16 @@ Responda em JSON:
     "sentimento": "positivo|neutro|negativo",
     "urgencia": "baixa|media|alta|urgente",
     "area_juridica": "bancario|aereo|trabalhista|outro|indefinido",
-    "proximo_estado_sugerido": "${leadState}" ou próximo estado lógico,
-    "deve_direcionar_humano": true/false,
-    "motivo_handoff": "razão se deve_direcionar_humano for true"
+    "deve_direcionar_humano": false,
+    "motivo_handoff": ""
   },
-  "resposta": "Mensagem para o cliente (máximo 3-4 linhas)",
+  "resposta": "Mensagem para o cliente (máximo 4 linhas)",
   "acoes": [{ "acao": "nome", "dados": {}, "motivo": "razão" }]
 }`;
+
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'gpt-4o-mini',
       messages: [
@@ -2219,179 +1004,19 @@ Responda em JSON:
     }),
   });
 
-  if (!response.ok) {
-    const error = await response.text();
-    console.error('❌ Erro na API OpenAI:', error);
-    throw new Error('Erro ao processar com IA');
-  }
+  if (!response.ok) { const error = await response.text(); console.error('❌ Erro na API OpenAI:', error); throw new Error('Erro ao processar com IA'); }
 
   const data = await response.json();
   const resultado = JSON.parse(data.choices[0].message.content);
 
-  // Marcar ações como automáticas ou não
   const acoesProcessadas = (resultado.acoes || []).map((a: any) => ({
     acao: a.acao,
-    dados: {
-      ...a.dados,
-      lead_id: contexto.lead.id,
-      cliente_id: contexto.lead.id,
-      status_anterior: contexto.lead.status,
-    },
+    dados: { ...a.dados, lead_id: contexto.lead.id, cliente_id: contexto.lead.id, status_anterior: contexto.lead.status },
     motivo: a.motivo || '',
     automatica: ACOES_AUTOMATICAS.includes(a.acao),
   }));
 
-  return {
-    resposta: resultado.resposta || '',
-    acoes: acoesProcessadas,
-    analise: resultado.analise,
-  };
-}
-
-// Transcrever áudio usando Whisper
-async function transcreverAudio(audioUrl: string): Promise<string | null> {
-  if (!OPENAI_API_KEY) {
-    console.log('⚠️ OPENAI_API_KEY não configurada para transcrição');
-    return null;
-  }
-
-  try {
-    console.log('🎤 Baixando áudio para transcrição:', audioUrl.substring(0, 80));
-    
-    // Baixar o áudio
-    const audioResponse = await fetch(audioUrl);
-    if (!audioResponse.ok) {
-      console.error('❌ Erro ao baixar áudio:', audioResponse.status);
-      return null;
-    }
-    
-    const audioBlob = await audioResponse.blob();
-    console.log('🎤 Áudio baixado:', audioBlob.size, 'bytes');
-    
-    // Criar FormData para enviar ao Whisper
-    const formData = new FormData();
-    formData.append('file', audioBlob, 'audio.ogg');
-    formData.append('model', 'whisper-1');
-    formData.append('language', 'pt');
-    
-    // Enviar para Whisper
-    const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: formData,
-    });
-    
-    if (!whisperResponse.ok) {
-      const error = await whisperResponse.text();
-      console.error('❌ Erro no Whisper:', error);
-      return null;
-    }
-    
-    const result = await whisperResponse.json();
-    console.log('✅ Transcrição concluída:', result.text?.substring(0, 100));
-    return result.text || null;
-  } catch (error) {
-    console.error('❌ Erro ao transcrever áudio:', error);
-    return null;
-  }
-}
-
-// Detectar se é URL de áudio
-function isAudioUrl(content: string): boolean {
-  if (!content) return false;
-  const lowerContent = content.toLowerCase();
-  return lowerContent.match(/\.(ogg|mp3|wav|m4a|aac|opus)(\?|$)/) !== null ||
-         lowerContent.includes('voice') ||
-         lowerContent.includes('audio');
-}
-
-// CRÍTICO: Sempre buscar o lead_state mais recente ANTES de processar
-// Retorna: null (não existe), 'LOST', 'BLOCKED', 'BENTES_RAMOS' (cliente antigo/direto), ou o estado real
-async function getLeadState(supabase: any, leadId: string): Promise<string | null> {
-  const { data: lead } = await supabase
-    .from('leads_juridicos')
-    .select('lead_state, status, is_lost, tipo_origem, fonte_trafego, canal_origem, created_at, linha_whatsapp, isa_ativa, empresa_tag')
-    .eq('id', leadId)
-    .single();
-  
-  if (!lead) return null;
-  
-  // Se está perdido, sinalizar
-  if (lead.is_lost) {
-    console.log('⚠️ Lead está marcado como PERDIDO');
-    return 'LOST';
-  }
-  
-  // Se status bloqueado, sinalizar
-  if (['Contrato Assinado', 'Ganho'].includes(lead.status)) {
-    console.log('⚠️ Lead com status bloqueado:', lead.status);
-    return 'BLOCKED';
-  }
-  
-  // 🚨 NOVO FILTRO PRINCIPAL: Verificar campo isa_ativa e linha_whatsapp
-  // Se isa_ativa for explicitamente false OU linha_whatsapp for bentes_ramos_antigo → NÃO processar
-  if (lead.isa_ativa === false || lead.linha_whatsapp === 'bentes_ramos_antigo') {
-    console.log('🏢 Lead Bentes & Ramos (ISA desativada) - Isa NÃO vai processar');
-    console.log('   - linha_whatsapp:', lead.linha_whatsapp);
-    console.log('   - isa_ativa:', lead.isa_ativa);
-    console.log('   - empresa_tag:', lead.empresa_tag);
-    return 'BENTES_RAMOS';
-  }
-  
-  // Se linha_whatsapp é trafego_isa → processar normalmente
-  if (lead.linha_whatsapp === 'trafego_isa') {
-    console.log('✅ Lead de TRÁFEGO (trafego_isa) detectado - Isa vai processar');
-    return lead.lead_state || 'NEW';
-  }
-  
-  // 🔄 LÓGICA LEGADA: usando tipo_origem para leads antigos
-  const tipoOrigem = lead.tipo_origem || 'indefinido';
-  
-  // Se tipo_origem é explicitamente 'whatsapp_direto' → lead Bentes & Ramos (não automatizar)
-  if (tipoOrigem === 'whatsapp_direto') {
-    console.log('🏢 Lead Bentes & Ramos (whatsapp_direto via legado) - Isa NÃO vai processar');
-    return 'BENTES_RAMOS';
-  }
-  
-  // Se tipo_origem é 'trafego' → processar normalmente
-  if (tipoOrigem === 'trafego') {
-    console.log('✅ Lead de TRÁFEGO detectado via tipo_origem - Isa vai processar');
-    return lead.lead_state || 'NEW';
-  }
-  
-  // Se tipo_origem é 'indefinido', usar lógica legada de detecção
-  // Verificar se tem indicação de tráfego pelos campos antigos
-  const isFromTraffic = Boolean(
-    lead.fonte_trafego || 
-    lead.canal_origem === 'trafego_pago' || 
-    lead.canal_origem === 'instagram' ||
-    lead.canal_origem === 'facebook' ||
-    lead.canal_origem === 'google'
-  );
-  
-  if (isFromTraffic) {
-    console.log('✅ Lead de tráfego detectado via campos legados - Isa vai processar');
-    return lead.lead_state || 'NEW';
-  }
-  
-  // Se não tem indicação de tráfego e tipo_origem é indefinido, verificar se é lead recente
-  // Leads criados nos últimos 30 dias sem classificação ainda são processados
-  const createdAt = new Date(lead.created_at);
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const isRecentLead = createdAt > thirtyDaysAgo;
-  
-  if (!isRecentLead) {
-    console.log('🏢 Lead antigo sem classificação - assumindo Bentes & Ramos');
-    console.log('   - tipo_origem:', tipoOrigem);
-    console.log('   - created_at:', lead.created_at);
-    return 'BENTES_RAMOS';
-  }
-  
-  console.log('⚠️ Lead indefinido recente - processando provisoriamente');
-  return lead.lead_state || 'NEW';
+  return { resposta: resultado.resposta || '', acoes: acoesProcessadas, analise: resultado.analise };
 }
 
 serve(async (req) => {
@@ -2399,10 +1024,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-  );
+  const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
   try {
     const { lead_id, subscriber_id, mensagem, canal, tipo_mensagem } = await req.json();
@@ -2414,268 +1036,96 @@ serve(async (req) => {
     console.log('📎 Tipo:', tipo_mensagem);
 
     if (!lead_id || !mensagem) {
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: 'lead_id e mensagem são obrigatórios' 
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return new Response(JSON.stringify({ success: false, error: 'lead_id e mensagem são obrigatórios' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // ============================================================
-    // 🔒 LOCK DE PROCESSAMENTO - Evitar respostas duplicadas
-    // ============================================================
-    const lockKey = `isa_processing_${lead_id}`;
-    const lockExpiry = 30; // 30 segundos de lock
-    
-    // Verificar se já existe um processamento recente (últimos 30s)
-    const { data: recentProcessing } = await supabase
-      .from('system_events')
-      .select('id, created_at')
-      .eq('lead_id', lead_id)
-      .eq('acao', 'isa_processing_lock')
-      .eq('processado', false)
-      .gte('created_at', new Date(Date.now() - lockExpiry * 1000).toISOString())
-      .maybeSingle();
-    
+    // LOCK de processamento
+    const lockExpiry = 30;
+    const { data: recentProcessing } = await supabase.from('system_events').select('id, created_at').eq('lead_id', lead_id).eq('acao', 'isa_processing_lock').eq('processado', false).gte('created_at', new Date(Date.now() - lockExpiry * 1000).toISOString()).maybeSingle();
     if (recentProcessing) {
-      console.log('⏳ Processamento em andamento para este lead, ignorando duplicata');
-      return new Response(JSON.stringify({ 
-        success: true, 
-        skipped: true,
-        reason: 'processamento_concorrente' 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      console.log('⏳ Processamento em andamento, ignorando duplicata');
+      return new Response(JSON.stringify({ success: true, skipped: true, reason: 'processamento_concorrente' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     
-    // Criar lock de processamento
-    const { data: lockData } = await supabase
-      .from('system_events')
-      .insert({
-        tipo: 'lock',
-        fonte: 'isa_auto',
-        acao: 'isa_processing_lock',
-        lead_id: lead_id,
-        dados: { mensagem_hash: mensagem.substring(0, 50), subscriber_id },
-        processado: false
-      })
-      .select()
-      .single();
-    
+    const { data: lockData } = await supabase.from('system_events').insert({ tipo: 'lock', fonte: 'isa_auto', acao: 'isa_processing_lock', lead_id, dados: { mensagem_hash: mensagem.substring(0, 50), subscriber_id }, processado: false }).select().single();
     const lockId = lockData?.id;
-    
-    // Verificar se Isa já respondeu algo similar nos últimos 60 segundos
-    const { data: recentIsaMessages } = await supabase
-      .from('manychat_mensagens')
-      .select('id, conteudo, created_at')
-      .eq('lead_id', lead_id)
-      .eq('direcao', 'saida')
-      .eq('metadata->>source', 'isa')
-      .gte('created_at', new Date(Date.now() - 60 * 1000).toISOString())
-      .order('created_at', { ascending: false })
-      .limit(3);
-    
-    if (recentIsaMessages && recentIsaMessages.length > 0) {
-      console.log(`⚠️ Isa já enviou ${recentIsaMessages.length} mensagem(ns) nos últimos 60s`);
-      
-      // Se já enviou 2+ mensagens em 60s, pular
-      if (recentIsaMessages.length >= 2) {
-        console.log('🛑 Muitas respostas recentes, evitando spam');
-        // Liberar lock
-        if (lockId) {
-          await supabase.from('system_events').update({ processado: true }).eq('id', lockId);
-        }
-        return new Response(JSON.stringify({ 
-          success: true, 
-          skipped: true,
-          reason: 'rate_limit_respostas' 
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+
+    // Rate limit
+    const { data: recentIsaMessages } = await supabase.from('manychat_mensagens').select('id, conteudo, created_at').eq('lead_id', lead_id).eq('direcao', 'saida').eq('metadata->>source', 'isa').gte('created_at', new Date(Date.now() - 60 * 1000).toISOString()).order('created_at', { ascending: false }).limit(3);
+    if (recentIsaMessages && recentIsaMessages.length >= 2) {
+      console.log('🛑 Rate limit - muitas respostas recentes');
+      if (lockId) await supabase.from('system_events').update({ processado: true }).eq('id', lockId);
+      return new Response(JSON.stringify({ success: true, skipped: true, reason: 'rate_limit_respostas' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // IMPORTANTE: Sempre buscar o estado REAL do lead do banco ANTES de processar
+    // Verificar estado do lead
     const currentState = await getLeadState(supabase, lead_id);
-    
-    // Se null, lead não existe
     if (currentState === null) {
-      console.log('⚠️ Lead não encontrado:', lead_id);
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: 'Lead não encontrado' 
-      }), {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return new Response(JSON.stringify({ success: false, error: 'Lead não encontrado' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-    
-    // Se bloqueado, perdido, cliente legado OU Bentes & Ramos, NÃO processar
-    if (currentState === 'BLOCKED' || currentState === 'LOST' || currentState === 'LEGACY_CLIENT' || currentState === 'BENTES_RAMOS') {
-      const reasonMap: Record<string, string> = {
-        'BLOCKED': 'status_bloqueado',
-        'LOST': 'lead_perdido',
-        'LEGACY_CLIENT': 'cliente_legado_escritorio',
-        'BENTES_RAMOS': 'lead_bentes_ramos_nao_trafego'
-      };
-      console.log(`🚫 Lead ${currentState}, abortando processamento automático - ISA só atende leads de TRÁFEGO`);
-      return new Response(JSON.stringify({ 
-        success: false, 
-        skipped: true,
-        reason: reasonMap[currentState] || currentState,
-        message: 'Lead não é de tráfego pago - atendimento humano'
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (['BLOCKED', 'LOST', 'LEGACY_CLIENT', 'BENTES_RAMOS'].includes(currentState)) {
+      console.log(`🚫 Lead ${currentState}, abortando`);
+      return new Response(JSON.stringify({ success: false, skipped: true, reason: currentState }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // 🔒 IGNORAR MENSAGENS DO BOT - Evitar loop de processamento
+    // Ignorar mensagens do bot
     const mensagemLower = mensagem.toLowerCase().trim();
-    if (mensagemLower.startsWith('bot diz:') || 
-        mensagemLower.startsWith('isa diz:') ||
-        mensagemLower.startsWith('[bot]') ||
-        mensagemLower.startsWith('[isa]')) {
-      console.log('🔇 Mensagem do bot detectada, ignorando processamento');
-      return new Response(JSON.stringify({ 
-        success: true, 
-        skipped: true,
-        reason: 'mensagem_do_bot' 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (mensagemLower.startsWith('bot diz:') || mensagemLower.startsWith('isa diz:') || mensagemLower.startsWith('[bot]') || mensagemLower.startsWith('[isa]')) {
+      return new Response(JSON.stringify({ success: true, skipped: true, reason: 'mensagem_do_bot' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // 🛑 VERIFICAR ATENDIMENTO HUMANO - Isa para de processar
+    // Verificar atendimento humano
     if (subscriber_id) {
-      const { data: subscriberCheck } = await supabase
-        .from('manychat_subscribers')
-        .select('atendimento_humano')
-        .eq('subscriber_id', subscriber_id)
-        .maybeSingle();
-      
+      const { data: subscriberCheck } = await supabase.from('manychat_subscribers').select('atendimento_humano').eq('subscriber_id', subscriber_id).maybeSingle();
       if (subscriberCheck?.atendimento_humano) {
-        console.log('⏸️ Atendimento humano ativo, Isa não processa');
-        return new Response(JSON.stringify({ 
-          success: true, 
-          skipped: true,
-          reason: 'atendimento_humano_ativo' 
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        console.log('⏸️ Atendimento humano ativo');
+        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'atendimento_humano_ativo' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
     }
 
-    // Se for áudio, transcrever primeiro
+    // Transcrever áudio se necessário
     let mensagemProcessada = mensagem;
     let audioTranscrito = false;
-    
     if (tipo_mensagem === 'audio' || isAudioUrl(mensagem)) {
-      console.log('🎤 Detectado áudio, iniciando transcrição...');
       const transcricao = await transcreverAudio(mensagem);
-      
       if (transcricao) {
         mensagemProcessada = transcricao;
         audioTranscrito = true;
-        console.log('✅ Áudio transcrito com sucesso');
-        
-        // Salvar transcrição como interação
-        await supabase.from('interacoes').insert({
-          cliente_id: lead_id,
-          tipo: 'WhatsApp',
-          resumo: `Áudio transcrito: "${transcricao.substring(0, 200)}${transcricao.length > 200 ? '...' : ''}"`,
-          detalhes: `Transcrição completa: ${transcricao}`,
-          direcao: 'Entrada',
-        });
+        await supabase.from('interacoes').insert({ cliente_id: lead_id, tipo: 'WhatsApp', resumo: `Áudio transcrito: "${transcricao.substring(0, 200)}"`, detalhes: transcricao, direcao: 'Entrada' });
       } else {
         mensagemProcessada = '[Áudio recebido - transcrição não disponível]';
-        console.log('⚠️ Não foi possível transcrever o áudio');
       }
     }
 
-    // Buscar contexto completo do lead
+    // Buscar contexto do lead
     const contexto = await buscarContextoLead(supabase, lead_id);
-    
     if (!contexto) {
-      console.log('⚠️ Lead não encontrado:', lead_id);
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: 'Lead não encontrado' 
-      }), {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return new Response(JSON.stringify({ success: false, error: 'Lead não encontrado' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     console.log('📊 Contexto carregado para:', contexto.lead.nome);
 
-    // ============================================================
-    // 🔄 INTELIGÊNCIA DE FOLLOW-UP: Marcar como respondido
-    // ============================================================
+    // Marcar follow-up como respondido
     const agora = new Date().toISOString();
-    
     if (contexto.followup) {
-      // Lead respondeu! Marcar follow-up como respondido
       if (!contexto.followup.respondido) {
-        console.log('✅ Lead respondeu! Marcando follow-up como respondido');
-        
-        await supabase
-          .from('lead_followups')
-          .update({
-            respondido: true,
-            respondido_em: agora,
-            waiting_reply: false,
-            last_inbound_at: agora,
-            status: 'respondido'
-          })
-          .eq('id', contexto.followup.id);
-        
-        // Registrar evento de resposta
-        await supabase.from('system_events').insert({
-          tipo: 'followup',
-          fonte: 'isa_inteligente',
-          acao: 'lead_respondeu',
-          lead_id: lead_id,
-          dados: {
-            followup_id: contexto.followup.id,
-            stage_fast: contexto.followup.followup_stage_fast,
-            stage_slow: contexto.followup.followup_stage_slow
-          },
-          processado: true
-        });
-        
-        // Se era Lead Frio, atualizar para Em Atendimento
+        await supabase.from('lead_followups').update({ respondido: true, respondido_em: agora, waiting_reply: false, last_inbound_at: agora, status: 'respondido' }).eq('id', contexto.followup.id);
+        await supabase.from('system_events').insert({ tipo: 'followup', fonte: 'isa_inteligente', acao: 'lead_respondeu', lead_id, dados: { followup_id: contexto.followup.id }, processado: true });
         if (contexto.lead.status === 'Lead Frio') {
-          console.log('📈 Lead Frio respondeu - atualizando para Em Atendimento');
-          
-          await supabase
-            .from('leads_juridicos')
-            .update({ status: 'Em Atendimento' })
-            .eq('id', lead_id);
-          
-          // Atualizar contexto local
+          await supabase.from('leads_juridicos').update({ status: 'Em Atendimento' }).eq('id', lead_id);
           contexto.lead.status = 'Em Atendimento';
         }
       } else {
-        // Atualizar apenas o timestamp de última mensagem recebida
-        await supabase
-          .from('lead_followups')
-          .update({
-            last_inbound_at: agora,
-            waiting_reply: false
-          })
-          .eq('id', contexto.followup.id);
+        await supabase.from('lead_followups').update({ last_inbound_at: agora, waiting_reply: false }).eq('id', contexto.followup.id);
       }
     }
 
-    // Processar com IA (usando mensagem transcrita se for áudio)
+    // Processar com IA
     const resultado = await processarComIA(contexto, mensagemProcessada, subscriber_id);
-    
     console.log('🧠 Análise da IA:', resultado.analise);
     console.log('📋 Ações sugeridas:', resultado.acoes.length);
 
-    // Executar ações automáticas
+    // Executar ações
     const acoesExecutadas = [];
     const acoesNauto = [];
 
@@ -2683,127 +1133,45 @@ serve(async (req) => {
       if (acao.automatica) {
         console.log(`⚡ Executando ação automática: ${acao.acao}`);
         const resultadoAcao = await executarAcao(supabase, acao.acao, acao.dados, subscriber_id);
-        acoesExecutadas.push({
-          ...acao,
-          resultado: resultadoAcao,
-        });
-        
-        // Se confirmou agendamento, marcar evento pendente como processado
+        acoesExecutadas.push({ ...acao, resultado: resultadoAcao });
         if (acao.acao === 'confirmar_agendamento') {
-          await supabase
-            .from('system_events')
-            .update({ processado: true })
-            .eq('lead_id', lead_id)
-            .eq('acao', 'aguardando_confirmacao_lead')
-            .eq('processado', false);
+          await supabase.from('system_events').update({ processado: true }).eq('lead_id', lead_id).eq('acao', 'aguardando_confirmacao_lead').eq('processado', false);
         }
       } else {
-        // Ações que precisam de confirmação - salvar para notificar equipe
-        console.log(`⏳ Ação requer confirmação: ${acao.acao}`);
-        
-        // Criar notificação pendente
-        await supabase.from('system_events').insert({
-          tipo: 'acao_pendente',
-          fonte: 'isa_auto',
-          acao: 'acao_sugerida',
-          entidade_id: lead_id,
-          lead_id: lead_id,
-          dados: {
-            acao_sugerida: acao.acao,
-            dados_acao: acao.dados,
-            motivo: acao.motivo,
-            mensagem_original: mensagem,
-            mensagem_processada: mensagemProcessada,
-            audio_transcrito: audioTranscrito,
-            analise: resultado.analise,
-          },
-          processado: false,
-        });
-        
+        await supabase.from('system_events').insert({ tipo: 'acao_pendente', fonte: 'isa_auto', acao: 'acao_sugerida', entidade_id: lead_id, lead_id, dados: { acao_sugerida: acao.acao, dados_acao: acao.dados, motivo: acao.motivo, mensagem_original: mensagem, audio_transcrito: audioTranscrito, analise: resultado.analise }, processado: false });
         acoesNauto.push(acao);
       }
     }
 
-    // Enviar email de notificação se houver ações pendentes
     if (acoesNauto.length > 0) {
-      console.log('📧 Enviando notificação por email para equipe...');
-      await enviarNotificacaoEquipe(
-        supabase,
-        contexto.lead,
-        acoesNauto,
-        resultado.analise,
-        audioTranscrito ? `[🎤 Áudio transcrito]: ${mensagemProcessada}` : mensagem
-      );
+      await enviarNotificacaoEquipe(supabase, contexto.lead, acoesNauto, resultado.analise, audioTranscrito ? `[🎤 Áudio]: ${mensagemProcessada}` : mensagem);
     }
 
-    // Enviar resposta via Z-API se houver
+    // Enviar resposta
     let respostaEnviada = false;
     let respostaMsgId: string | null = null;
     if (resultado.resposta && subscriber_id) {
       const sendResult = await enviarRespostaZapi(supabase, subscriber_id, resultado.resposta);
       respostaEnviada = sendResult.success;
       respostaMsgId = sendResult.messageId || null;
-      
-      // Salvar resposta no banco (única vez, aqui) - usar upsert para evitar duplicatas
       if (respostaEnviada && respostaMsgId) {
-        // Usar RPC ou insert com ON CONFLICT via metadata->>'message_id'
-        // Como temos um índice único em (metadata->>'message_id'), usamos insert normal
-        // e deixamos o banco rejeitar duplicatas silenciosamente
         const { error: insertErr } = await supabase.from('manychat_mensagens').insert({
-          subscriber_id: subscriber_id,
-          subscriber_nome: 'Isa (Assistente)',
-          canal: canal || 'whatsapp',
-          conteudo: resultado.resposta,
-          tipo: 'text',
-          direcao: 'saida',
-          lead_id: lead_id,
-          metadata: { 
-            auto_gerada: true, 
-            source: 'isa',
-            message_id: respostaMsgId,
-            analise: resultado.analise 
-          },
+          subscriber_id, subscriber_nome: 'Isa (Assistente)', canal: canal || 'whatsapp', conteudo: resultado.resposta, tipo: 'text', direcao: 'saida', lead_id,
+          metadata: { auto_gerada: true, source: 'isa', message_id: respostaMsgId, analise: resultado.analise },
         });
-        
-        // Ignorar erro de duplicata (unique_violation = 23505)
         if (insertErr && !insertErr.message?.includes('duplicate') && !insertErr.code?.includes('23505')) {
           console.error('[Isa] Erro ao salvar resposta:', insertErr);
-        } else if (insertErr) {
-          console.log('[Isa] Mensagem já existe no banco, ignorando duplicata:', respostaMsgId);
         }
       }
     }
 
     // Registrar processamento
-    await supabase.from('system_events').insert({
-      tipo: 'processamento',
-      fonte: 'isa_auto',
-      acao: 'mensagem_processada',
-      entidade_id: lead_id,
-      lead_id: lead_id,
-      dados: {
-        mensagem_original: mensagem.substring(0, 200),
-        mensagem_processada: mensagemProcessada.substring(0, 200),
-        audio_transcrito: audioTranscrito,
-        analise: resultado.analise,
-        acoes_executadas: acoesExecutadas.length,
-        acoes_pendentes: acoesNauto.length,
-        resposta_enviada: respostaEnviada,
-      },
-      processado: true,
-    });
+    await supabase.from('system_events').insert({ tipo: 'processamento', fonte: 'isa_auto', acao: 'mensagem_processada', entidade_id: lead_id, lead_id, dados: { mensagem_original: mensagem.substring(0, 200), audio_transcrito: audioTranscrito, analise: resultado.analise, acoes_executadas: acoesExecutadas.length, acoes_pendentes: acoesNauto.length, resposta_enviada: respostaEnviada }, processado: true });
 
-    // 🔓 LIBERAR LOCK após processamento
-    if (lockId) {
-      await supabase.from('system_events').update({ processado: true }).eq('id', lockId);
-    }
+    // Liberar lock
+    if (lockId) await supabase.from('system_events').update({ processado: true }).eq('id', lockId);
 
     console.log('✅ Processamento concluído');
-    console.log(`   - Áudio transcrito: ${audioTranscrito}`);
-    console.log(`   - Ações executadas: ${acoesExecutadas.length}`);
-    console.log(`   - Ações pendentes: ${acoesNauto.length}`);
-    console.log(`   - Resposta enviada: ${respostaEnviada}`);
-
     return new Response(JSON.stringify({
       success: true,
       lead: { id: contexto.lead.id, nome: contexto.lead.nome },
@@ -2814,37 +1182,12 @@ serve(async (req) => {
       transcricao: audioTranscrito ? mensagemProcessada : null,
       acoes_executadas: acoesExecutadas,
       acoes_pendentes: acoesNauto,
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
     console.error('❌ Erro no processamento:', error);
-    
-    // 🔓 LIBERAR LOCK em caso de erro (lockId pode estar no escopo)
-    // Note: lockId is in try block scope, so we need a different approach
-    // Clean up stale locks older than 2 minutes
-    await supabase
-      .from('system_events')
-      .update({ processado: true })
-      .eq('acao', 'isa_processing_lock')
-      .eq('processado', false)
-      .lt('created_at', new Date(Date.now() - 120 * 1000).toISOString());
-    
-    await supabase.from('system_events').insert({
-      tipo: 'erro',
-      fonte: 'isa_auto',
-      acao: 'processamento_erro',
-      erro: error instanceof Error ? error.message : 'Erro desconhecido',
-      processado: false,
-    });
-
-    return new Response(JSON.stringify({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Erro desconhecido' 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    await supabase.from('system_events').update({ processado: true }).eq('acao', 'isa_processing_lock').eq('processado', false).lt('created_at', new Date(Date.now() - 120 * 1000).toISOString());
+    await supabase.from('system_events').insert({ tipo: 'erro', fonte: 'isa_auto', acao: 'processamento_erro', erro: error instanceof Error ? error.message : 'Erro desconhecido', processado: false });
+    return new Response(JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Erro desconhecido' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
