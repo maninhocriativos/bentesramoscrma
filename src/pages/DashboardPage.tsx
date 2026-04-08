@@ -173,7 +173,7 @@ function DashboardPage() {
               <>
                 <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
                   <div className="space-y-6">
-                    <LeadOriginKPIs leads={leads} />
+                    <LeadOriginKPIs leads={leads} stats={stats} />
                     <DashboardKPIs leads={filteredLeads} processos={processos} />
                   </div>
                   <AlertasWidget 
