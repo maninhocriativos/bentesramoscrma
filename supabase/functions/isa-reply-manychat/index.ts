@@ -809,7 +809,7 @@ serve(async (req: Request) => {
               html: `
                 <h2>Transferência de Atendimento</h2>
                 <p><strong>Cliente:</strong> ${leadNome}</p>
-                <p><strong>Telefone:</strong> ${phoneToSend || telefone || 'N/A'}</p>
+                <p><strong>Telefone:</strong> ${telefone || 'N/A'}</p>
                 <p><strong>Motivo:</strong> ISA não soube responder ou teve dúvidas sobre a questão.</p>
                 <hr/>
                 <p><strong>Última mensagem do cliente:</strong></p>
@@ -891,7 +891,7 @@ serve(async (req: Request) => {
       console.log('[ISA-REPLY] 🏥 Caso de aposentadoria detectado — encaminhando para Dra. Kariny Bianca');
       
       const leadNome = subscriber?.nome || nome || 'Cliente';
-      const leadTelefone = telefone || subData?.telefone || 'N/A';
+      const leadTelefone = telefone || 'N/A';
       
       // Montar resumo para a Dra. Kariny
       const mensagemKariny = `🔔 *Indicação do escritório Bentes & Ramos*\n\n` +
