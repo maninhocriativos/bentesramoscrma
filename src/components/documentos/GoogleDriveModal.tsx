@@ -12,25 +12,13 @@ import { useGoogleDrive } from '@/hooks/useGoogleDrive';
 import { useLeads } from '@/hooks/useLeads';
 import { useDocumentos } from '@/hooks/useDocumentos';
 import { 
-  Folder, 
-  File, 
-  Download, 
-  Upload, 
-  ArrowLeft, 
-  Search,
-  Loader2,
-  Plus,
-  User,
-  RefreshCw,
+  Folder, File, Download, Upload, ArrowLeft, Search,
+  Loader2, Plus, User, RefreshCw,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 
@@ -61,14 +49,12 @@ export function GoogleDriveModal({ open, onOpenChange }: GoogleDriveModalProps) 
   const [uploadingFile, setUploadingFile] = useState(false);
   const [autoLoadedClient, setAutoLoadedClient] = useState<string>('');
 
-  // Load files when modal opens
+  // Só carrega arquivos quando tiver uma pasta selecionada
   useEffect(() => {
-    if (open && isConnected) {
-      console.log('GoogleDriveModal: Loading files, connected:', isConnected, 'folderId:', currentFolderId);
+    if (open && isConnected && currentFolderId) {
       loadFiles();
-    } else if (open && !isConnected) {
-      console.log('GoogleDriveModal: Not connected to Google Drive');
-      setFiles([]);
+    } else if (open && !currentFolderId) {
+      setFiles([]); // Limpa lista quando na raiz
     }
   }, [open, isConnected, currentFolderId]);
 
@@ -80,14 +66,13 @@ export function GoogleDriveModal({ open, onOpenChange }: GoogleDriveModalProps) 
   }, [selectedClient, isConnected, open]);
 
   const loadFiles = async () => {
+    if (!currentFolderId) return; // Nunca carrega sem pasta definida
     setLoading(true);
-    console.log('GoogleDriveModal: Starting to load files...');
     try {
-      const result = await listFiles(currentFolderId);
-      console.log('GoogleDriveModal: Files loaded:', result.length);
+      const result = await listFiles(currentFolderId); // Sempre passa ID específico
       setFiles(result);
     } catch (error) {
-      console.error('GoogleDriveModal: Error loading files:', error);
+      console.error('Error loading files:', error);
       toast.error('Erro ao carregar arquivos do Drive');
     } finally {
       setLoading(false);
@@ -111,21 +96,14 @@ export function GoogleDriveModal({ open, onOpenChange }: GoogleDriveModalProps) 
     setCurrentFolderId(undefined);
     setSelectedClient('');
     setAutoLoadedClient('');
+    setFiles([]);
   };
 
   const handleOpenClientFolder = async (clientId?: string) => {
     const targetClientId = clientId || selectedClient;
-    
-    if (!targetClientId) {
-      toast.error('Selecione um cliente');
-      return;
-    }
-
+    if (!targetClientId) { toast.error('Selecione um cliente'); return; }
     const client = leads.find(l => l.id === targetClientId);
-    if (!client || !client.nome) {
-      toast.error('Cliente não encontrado');
-      return;
-    }
+    if (!client?.nome) { toast.error('Cliente não encontrado'); return; }
 
     setLoading(true);
     const result = await findOrCreateClientFolder(client.nome, client.id);
@@ -138,27 +116,16 @@ export function GoogleDriveModal({ open, onOpenChange }: GoogleDriveModalProps) 
     setLoading(false);
   };
 
-  const handleOpenClientFolderClick = () => {
-    handleOpenClientFolder();
-  };
-
   const handleUploadToDrive = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !currentFolderId) {
-      toast.error('Selecione uma pasta primeiro');
-      return;
-    }
-
+    if (!file || !currentFolderId) { toast.error('Selecione uma pasta primeiro'); return; }
     setUploadingFile(true);
     try {
-      // Convert file to base64
       const reader = new FileReader();
       reader.onload = async (e) => {
         const base64 = (e.target?.result as string).split(',')[1];
         const result = await uploadFile(currentFolderId, file.name, base64, file.type);
-        if (result) {
-          loadFiles();
-        }
+        if (result) loadFiles();
         setUploadingFile(false);
       };
       reader.readAsDataURL(file);
@@ -166,8 +133,6 @@ export function GoogleDriveModal({ open, onOpenChange }: GoogleDriveModalProps) 
       console.error('Error uploading:', error);
       setUploadingFile(false);
     }
-    
-    // Reset input
     event.target.value = '';
   };
 
@@ -175,27 +140,13 @@ export function GoogleDriveModal({ open, onOpenChange }: GoogleDriveModalProps) 
     try {
       const result = await downloadFile(driveFile.id);
       if (!result) return;
-
-      // Convert base64 to blob
       const binaryString = atob(result.content);
       const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
+      for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
       const blob = new Blob([bytes], { type: result.mimeType });
       const fileToUpload = new window.File([blob], result.name, { type: result.mimeType });
-
-      // Get current client if in a client folder
-      const currentClient = leads.find(l => 
-        folderStack.some(f => f.name.includes(l.nome || ''))
-      );
-
-      // Upload to local storage
-      await uploadDocumento(fileToUpload, {
-        nome: result.name,
-        tipo: 'Outros',
-        cliente_id: currentClient?.id,
-      });
+      const currentClient = leads.find(l => folderStack.some(f => f.name.includes(l.nome || '')));
+      await uploadDocumento(fileToUpload, { nome: result.name, tipo: 'Outros', cliente_id: currentClient?.id });
       toast.success('Arquivo importado para o sistema!');
     } catch (error) {
       console.error('Error downloading:', error);
@@ -203,17 +154,12 @@ export function GoogleDriveModal({ open, onOpenChange }: GoogleDriveModalProps) 
     }
   };
 
-  const filteredFiles = files.filter(file =>
-    file.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
+  const filteredFiles = files.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
   const folders = filteredFiles.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
   const documents = filteredFiles.filter(f => f.mimeType !== 'application/vnd.google-apps.folder');
 
   const getFileIcon = (mimeType: string) => {
-    if (mimeType === 'application/vnd.google-apps.folder') {
-      return <Folder className="h-5 w-5 text-amber-500" />;
-    }
+    if (mimeType === 'application/vnd.google-apps.folder') return <Folder className="h-5 w-5 text-amber-500" />;
     return <File className="h-5 w-5 text-blue-500" />;
   };
 
@@ -237,44 +183,30 @@ export function GoogleDriveModal({ open, onOpenChange }: GoogleDriveModalProps) 
               </SelectTrigger>
               <SelectContent>
                 {leads.filter(l => l.nome).map(lead => (
-                  <SelectItem key={lead.id} value={lead.id}>
-                    {lead.nome}
-                  </SelectItem>
+                  <SelectItem key={lead.id} value={lead.id}>{lead.nome}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Button onClick={handleOpenClientFolderClick} disabled={!selectedClient || isOperating || loading}>
-              {isOperating ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4" />
-              )}
+            <Button onClick={() => handleOpenClientFolder()} disabled={!selectedClient || isOperating || loading}>
+              {isOperating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               <span className="ml-2">Abrir/Criar Pasta</span>
             </Button>
           </div>
 
           {/* Navigation */}
           <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleGoToRoot}
-              disabled={folderStack.length === 0}
-            >
+            <Button variant="ghost" size="sm" onClick={handleGoToRoot} disabled={folderStack.length === 0}>
               Raiz
             </Button>
-            {folderStack.map((folder, index) => (
+            {folderStack.map((folder) => (
               <div key={folder.id} className="flex items-center">
                 <span className="text-muted-foreground">/</span>
-                <Badge variant="secondary" className="ml-1">
-                  {folder.name}
-                </Badge>
+                <Badge variant="secondary" className="ml-1">{folder.name}</Badge>
               </div>
             ))}
             {folderStack.length > 0 && (
               <Button variant="ghost" size="sm" onClick={handleBack}>
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                Voltar
+                <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
               </Button>
             )}
           </div>
@@ -283,34 +215,15 @@ export function GoogleDriveModal({ open, onOpenChange }: GoogleDriveModalProps) 
           <div className="flex gap-2 items-center">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar arquivos..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
+              <Input placeholder="Buscar arquivos..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
             </div>
-            <Button variant="outline" size="icon" onClick={loadFiles} disabled={loading}>
+            <Button variant="outline" size="icon" onClick={loadFiles} disabled={loading || !currentFolderId}>
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
             <div className="relative">
-              <input
-                type="file"
-                id="drive-upload"
-                className="hidden"
-                onChange={handleUploadToDrive}
-                disabled={!currentFolderId || uploadingFile}
-              />
-              <Button
-                variant="default"
-                onClick={() => document.getElementById('drive-upload')?.click()}
-                disabled={!currentFolderId || uploadingFile}
-              >
-                {uploadingFile ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Upload className="h-4 w-4 mr-2" />
-                )}
+              <input type="file" id="drive-upload" className="hidden" onChange={handleUploadToDrive} disabled={!currentFolderId || uploadingFile} />
+              <Button variant="default" onClick={() => document.getElementById('drive-upload')?.click()} disabled={!currentFolderId || uploadingFile}>
+                {uploadingFile ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
                 Enviar para Drive
               </Button>
             </div>
@@ -318,57 +231,40 @@ export function GoogleDriveModal({ open, onOpenChange }: GoogleDriveModalProps) 
 
           {/* File List */}
           <ScrollArea className="h-[400px] border rounded-lg">
-            {loading ? (
+            {!currentFolderId ? (
+              <div className="p-8 text-center text-muted-foreground">
+                <Folder className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Nenhum arquivo encontrado</p>
+                <p className="text-sm mt-2">Selecione um cliente para abrir/criar sua pasta</p>
+              </div>
+            ) : loading ? (
               <div className="p-4 space-y-3">
-                {[1, 2, 3, 4].map(i => (
-                  <Skeleton key={i} className="h-12 w-full" />
-                ))}
+                {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-12 w-full" />)}
               </div>
             ) : filteredFiles.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
                 <Folder className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Nenhum arquivo encontrado</p>
-                {!currentFolderId && (
-                  <p className="text-sm mt-2">
-                    Selecione um cliente para abrir/criar sua pasta
-                  </p>
-                )}
+                <p>Pasta vazia</p>
+                <p className="text-sm mt-2">Envie arquivos usando o botão acima</p>
               </div>
             ) : (
               <div className="divide-y">
                 {folders.map(folder => (
-                  <div
-                    key={folder.id}
-                    className="flex items-center gap-3 p-3 hover:bg-muted/50 cursor-pointer"
-                    onClick={() => handleFolderClick(folder)}
-                  >
+                  <div key={folder.id} className="flex items-center gap-3 p-3 hover:bg-muted/50 cursor-pointer" onClick={() => handleFolderClick(folder)}>
                     {getFileIcon(folder.mimeType)}
                     <span className="flex-1 font-medium">{folder.name}</span>
                     <Badge variant="outline">Pasta</Badge>
                   </div>
                 ))}
                 {documents.map(file => (
-                  <div
-                    key={file.id}
-                    className="flex items-center gap-3 p-3 hover:bg-muted/50"
-                  >
+                  <div key={file.id} className="flex items-center gap-3 p-3 hover:bg-muted/50">
                     {getFileIcon(file.mimeType)}
                     <span className="flex-1">{file.name}</span>
                     <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => window.open(file.webViewLink, '_blank')}
-                        title="Abrir no Drive"
-                      >
+                      <Button variant="ghost" size="icon" onClick={() => window.open(file.webViewLink, '_blank')} title="Abrir no Drive">
                         <File className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDownloadAndSave(file)}
-                        title="Importar para o sistema"
-                      >
+                      <Button variant="ghost" size="icon" onClick={() => handleDownloadAndSave(file)} title="Importar para o sistema">
                         <Download className="h-4 w-4" />
                       </Button>
                     </div>
