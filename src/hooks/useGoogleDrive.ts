@@ -166,6 +166,7 @@ export function useGoogleDrive() {
       const isExpired = expiresAt && expiresAt < new Date();
       if (isExpired && data.refresh_token) {
         const response = await supabase.functions.invoke('google-drive', {
+          headers: { 'apikey': 'sb_publishable__O6J3-8NscavVIOhuxsD4w_kZwkZ7pi' },
           body: { action: 'refresh', refresh_token: data.refresh_token }
         });
         if (response.data?.access_token) {
@@ -189,6 +190,7 @@ export function useGoogleDrive() {
     if (!accessToken) { toast.error('Reconecte sua conta do Google Drive'); setIsConnected(false); return []; }
     try {
       const { data, error } = await supabase.functions.invoke('google-drive', {
+        headers: { 'apikey': 'sb_publishable__O6J3-8NscavVIOhuxsD4w_kZwkZ7pi' },
         body: { action: 'list_files', access_token: accessToken, folder_id: folderId, query }
       });
       if (error || data?.error) throw new Error(data?.error || error?.message || 'Erro ao listar arquivos');
@@ -206,6 +208,7 @@ export function useGoogleDrive() {
     setIsOperating(true);
     try {
       const { data, error } = await supabase.functions.invoke('google-drive', {
+        headers: { 'apikey': 'sb_publishable__O6J3-8NscavVIOhuxsD4w_kZwkZ7pi' },
         body: { action: 'find_or_create_client_folder', access_token: accessToken, client_name: clientName, client_id: clientId }
       });
       if (error || data?.error) throw new Error(data?.error || 'Erro ao criar pasta do cliente');
@@ -225,6 +228,7 @@ export function useGoogleDrive() {
     setIsOperating(true);
     try {
       const { data, error } = await supabase.functions.invoke('google-drive', {
+        headers: { 'apikey': 'sb_publishable__O6J3-8NscavVIOhuxsD4w_kZwkZ7pi' },
         body: { action: 'upload_file', access_token: accessToken, folder_id: folderId, file_name: fileName, file_content: fileContent, mime_type: mimeType }
       });
       if (error || data?.error) throw new Error(data?.error || 'Erro ao fazer upload');
@@ -245,6 +249,7 @@ export function useGoogleDrive() {
     setIsOperating(true);
     try {
       const { data, error } = await supabase.functions.invoke('google-drive', {
+        headers: { 'apikey': 'sb_publishable__O6J3-8NscavVIOhuxsD4w_kZwkZ7pi' },
         body: { action: 'download_file', access_token: accessToken, file_id: fileId }
       });
       if (error || data?.error) throw new Error(data?.error || 'Erro ao baixar arquivo');
