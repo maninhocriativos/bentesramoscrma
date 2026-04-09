@@ -20,15 +20,69 @@ interface ContratosTableProps {
   contratos: ContratoComStatus[];
 }
 
-const statusConfig: Record<string, { label: string; color: string; bgColor: string; icon: React.ReactNode }> = {
-  'Documento Enviado': { label: 'Enviado', color: 'text-blue-700', bgColor: 'bg-blue-50', icon: <FileSignature className="h-3 w-3" /> },
-  'Aguardando Assinatura': { label: 'Aguardando', color: 'text-amber-700', bgColor: 'bg-amber-50', icon: <Clock className="h-3 w-3" /> },
-  'Assinatura Parcial': { label: 'Parcial', color: 'text-orange-700', bgColor: 'bg-orange-50', icon: <AlertCircle className="h-3 w-3" /> },
-  'Assinado': { label: 'Assinado', color: 'text-emerald-700', bgColor: 'bg-emerald-50', icon: <CheckCircle2 className="h-3 w-3" /> },
-  'Finalizado': { label: 'Finalizado', color: 'text-green-700', bgColor: 'bg-green-50', icon: <CheckCircle2 className="h-3 w-3" /> },
-  'Prazo Expirado': { label: 'Expirado', color: 'text-red-700', bgColor: 'bg-red-50', icon: <XCircle className="h-3 w-3" /> },
-  'Cancelado': { label: 'Cancelado', color: 'text-muted-foreground', bgColor: 'bg-muted', icon: <XCircle className="h-3 w-3" /> },
-  'Recusado': { label: 'Recusado', color: 'text-red-700', bgColor: 'bg-red-50', icon: <XCircle className="h-3 w-3" /> },
+const statusConfig: Record<string, {
+  label: string;
+  color: string;
+  bgColor: string;
+  dotColor: string;
+  icon: React.ReactNode;
+}> = {
+  'Documento Enviado': {
+    label: 'Enviado',
+    color: 'text-blue-700 dark:text-blue-400',
+    bgColor: 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800',
+    dotColor: 'bg-blue-500',
+    icon: <FileSignature className="h-3 w-3" />,
+  },
+  'Aguardando Assinatura': {
+    label: 'Aguardando',
+    color: 'text-amber-700 dark:text-amber-400',
+    bgColor: 'bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800',
+    dotColor: 'bg-amber-500',
+    icon: <Clock className="h-3 w-3" />,
+  },
+  'Assinatura Parcial': {
+    label: 'Parcial',
+    color: 'text-orange-700 dark:text-orange-400',
+    bgColor: 'bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800',
+    dotColor: 'bg-orange-500',
+    icon: <AlertCircle className="h-3 w-3" />,
+  },
+  'Assinado': {
+    label: 'Assinado',
+    color: 'text-emerald-700 dark:text-emerald-400',
+    bgColor: 'bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800',
+    dotColor: 'bg-emerald-500',
+    icon: <CheckCircle2 className="h-3 w-3" />,
+  },
+  'Finalizado': {
+    label: 'Finalizado',
+    color: 'text-emerald-700 dark:text-emerald-400',
+    bgColor: 'bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800',
+    dotColor: 'bg-emerald-500',
+    icon: <CheckCircle2 className="h-3 w-3" />,
+  },
+  'Prazo Expirado': {
+    label: 'Expirado',
+    color: 'text-red-700 dark:text-red-400',
+    bgColor: 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800',
+    dotColor: 'bg-red-500',
+    icon: <XCircle className="h-3 w-3" />,
+  },
+  'Cancelado': {
+    label: 'Cancelado',
+    color: 'text-zinc-500 dark:text-zinc-400',
+    bgColor: 'bg-zinc-100 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700',
+    dotColor: 'bg-zinc-400',
+    icon: <XCircle className="h-3 w-3" />,
+  },
+  'Recusado': {
+    label: 'Recusado',
+    color: 'text-red-700 dark:text-red-400',
+    bgColor: 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800',
+    dotColor: 'bg-red-500',
+    icon: <XCircle className="h-3 w-3" />,
+  },
 };
 
 const ITEMS_PER_PAGE = 30;
@@ -90,7 +144,6 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
   const safePage = Math.min(currentPage, totalPages);
   const paginatedContratos = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
 
-  // Reset page when search changes
   const handleSearchChange = (val: string) => {
     setSearch(val);
     setCurrentPage(1);
@@ -98,23 +151,25 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
 
   return (
     <>
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
+      <div className="rounded-xl border border-[#c9a96e]/20 bg-card overflow-hidden shadow-sm">
         {/* Search Bar */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-muted/30">
-          <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-[#c9a96e]/15 bg-[#3d2b1f]/3">
+          <Search className="h-4 w-4 text-[#c9a96e]/60 shrink-0" />
           <Input
-            placeholder="Busca rápida..."
+            placeholder="Busca rápida por nome, email, status..."
             value={search}
             onChange={(e) => handleSearchChange(e.target.value)}
-            className="border-0 bg-transparent shadow-none focus-visible:ring-0 h-8 px-0 text-sm"
+            className="border-0 bg-transparent shadow-none focus-visible:ring-0 h-8 px-0 text-sm placeholder:text-muted-foreground/50"
           />
-          <span className="text-xs text-muted-foreground whitespace-nowrap">{filtered.length} de {contratos.length}</span>
+          <span className="text-xs text-muted-foreground whitespace-nowrap font-medium">
+            {filtered.length} de {contratos.length}
+          </span>
         </div>
 
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16">
-            <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center mb-3">
-              <FileText className="h-7 w-7 text-muted-foreground/50" />
+            <div className="h-14 w-14 rounded-full bg-[#c9a96e]/10 flex items-center justify-center mb-3">
+              <FileText className="h-7 w-7 text-[#c9a96e]/40" />
             </div>
             <p className="text-sm font-medium text-foreground">Nenhum contrato encontrado</p>
             <p className="text-xs text-muted-foreground mt-1">
@@ -127,13 +182,13 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm table-fixed">
                 <thead>
-                  <tr className="border-b border-border bg-muted/40">
-                    <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wider w-[110px]">Status</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wider w-[30%]">Documento</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wider w-[20%]">Signatário</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wider w-[12%]">Categoria</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wider w-[15%]">Atualização</th>
-                    <th className="text-right px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wider w-[130px]">Ações</th>
+                  <tr className="border-b border-[#c9a96e]/20 bg-[#3d2b1f]">
+                    <th className="text-left px-4 py-3 font-medium text-xs text-[#c9a96e]/80 uppercase tracking-wider w-[115px]">Status</th>
+                    <th className="text-left px-4 py-3 font-medium text-xs text-[#c9a96e]/80 uppercase tracking-wider w-[30%]">Documento</th>
+                    <th className="text-left px-4 py-3 font-medium text-xs text-[#c9a96e]/80 uppercase tracking-wider w-[20%]">Signatário</th>
+                    <th className="text-left px-4 py-3 font-medium text-xs text-[#c9a96e]/80 uppercase tracking-wider w-[12%]">Categoria</th>
+                    <th className="text-left px-4 py-3 font-medium text-xs text-[#c9a96e]/80 uppercase tracking-wider w-[15%]">Atualização</th>
+                    <th className="text-right px-4 py-3 font-medium text-xs text-[#c9a96e]/80 uppercase tracking-wider w-[130px]">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -144,19 +199,25 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                         key={contrato.id}
                         onClick={() => setSelectedContrato(contrato)}
                         className={cn(
-                          'border-b border-border/50 hover:bg-muted/30 transition-colors group cursor-pointer',
-                          idx % 2 === 0 ? 'bg-card' : 'bg-muted/10'
+                          'border-b border-[#c9a96e]/8 transition-colors group cursor-pointer',
+                          idx % 2 === 0
+                            ? 'bg-card hover:bg-[#c9a96e]/5'
+                            : 'bg-[#3d2b1f]/[0.02] hover:bg-[#c9a96e]/5'
                         )}
                       >
                         <td className="px-4 py-2.5">
-                          <Badge variant="secondary" className={cn('gap-1 text-[11px] font-medium px-2 py-0.5', config.bgColor, config.color)}>
-                            {config.icon}
+                          <span className={cn(
+                            'inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-md',
+                            config.bgColor,
+                            config.color
+                          )}>
+                            <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', config.dotColor)} />
                             {config.label}
-                          </Badge>
+                          </span>
                         </td>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-foreground break-words leading-snug" title={contrato.leadNome}>
+                            <span className="font-medium text-foreground leading-snug break-words" title={contrato.leadNome}>
                               {contrato.leadNome}
                             </span>
                             {contrato.tipoOrigem === 'trafego' && (
@@ -169,40 +230,49 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                         </td>
                         <td className="px-4 py-2.5">
                           {contrato.signatarioNome ? (
-                            <span className="text-foreground text-xs block break-words leading-snug" title={contrato.signatarioNome}>
+                            <span className="text-foreground/70 text-xs block break-words leading-snug">
                               {contrato.signatarioNome}
                             </span>
                           ) : (
-                            <span className="text-muted-foreground/40">—</span>
+                            <span className="text-muted-foreground/30 text-xs">—</span>
                           )}
                         </td>
                         <td className="px-4 py-2.5">
                           {contrato.tipoAcao ? (
-                            <Badge variant="secondary" className="text-[10px] font-normal bg-muted text-muted-foreground">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-[#c9a96e]/10 text-[#3d2b1f] dark:text-[#c9a96e] border border-[#c9a96e]/20">
                               {contrato.tipoAcao}
-                            </Badge>
+                            </span>
                           ) : (
-                            <span className="text-muted-foreground/40">—</span>
+                            <span className="text-muted-foreground/30 text-xs">—</span>
                           )}
                         </td>
                         <td className="px-4 py-2.5">
                           {contrato.lastUpdate ? (
-                            <span className="text-muted-foreground text-xs">
+                            <span className="text-muted-foreground text-xs tabular-nums">
                               {new Date(contrato.lastUpdate).toLocaleDateString('pt-BR', {
-                                day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit',
+                                day: '2-digit', month: '2-digit', year: '2-digit',
+                                hour: '2-digit', minute: '2-digit',
                               })}
                             </span>
                           ) : (
-                            <span className="text-muted-foreground/40">—</span>
+                            <span className="text-muted-foreground/30 text-xs">—</span>
                           )}
                         </td>
                         <td className="px-4 py-2.5 text-right">
-                          <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                             {isPending(contrato.status) && (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" disabled={sendingReminder === contrato.id}>
-                                    {sendingReminder === contrato.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <MessageSquare className="h-3 w-3" />}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs gap-1 text-amber-700 hover:text-amber-800 hover:bg-amber-50"
+                                    disabled={sendingReminder === contrato.id}
+                                  >
+                                    {sendingReminder === contrato.id
+                                      ? <Loader2 className="h-3 w-3 animate-spin" />
+                                      : <MessageSquare className="h-3 w-3" />
+                                    }
                                     Cobrar
                                   </Button>
                                 </DropdownMenuTrigger>
@@ -216,9 +286,14 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             )}
-                            <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1">
+                            <Button
+                              asChild
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-[#c9a96e] hover:text-[#3d2b1f] hover:bg-[#c9a96e]/10"
+                            >
                               <a href={contrato.linkContrato} target="_blank" rel="noopener noreferrer">
-                                <ExternalLink className="h-3 w-3" />
+                                <ExternalLink className="h-3.5 w-3.5" />
                               </a>
                             </Button>
                           </div>
@@ -231,126 +306,11 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
             </div>
 
             {/* Mobile Cards */}
-            <div className="md:hidden divide-y divide-border">
+            <div className="md:hidden divide-y divide-[#c9a96e]/10">
               {paginatedContratos.map((contrato) => {
                 const config = statusConfig[contrato.status] || statusConfig['Aguardando Assinatura'];
                 return (
                   <div
                     key={contrato.id}
                     onClick={() => setSelectedContrato(contrato)}
-                    className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-muted/30 transition-colors"
-                  >
-                    <Badge variant="secondary" className={cn('gap-1 text-[10px] font-medium px-1.5 py-0.5 shrink-0', config.bgColor, config.color)}>
-                      {config.icon}
-                      {config.label}
-                    </Badge>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="text-sm font-medium break-words">{contrato.leadNome}</p>
-                        {contrato.tipoOrigem === 'trafego' && (
-                          <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400">
-                            <Megaphone className="h-2 w-2" />
-                            Tráfego
-                          </span>
-                        )}
-                      </div>
-                      {contrato.signatarioNome && (
-                        <p className="text-[11px] text-muted-foreground">{contrato.signatarioNome}</p>
-                      )}
-                      {contrato.lastUpdate && (
-                        <p className="text-[11px] text-muted-foreground">
-                          {new Date(contrato.lastUpdate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                      {isPending(contrato.status) && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={sendingReminder === contrato.id}>
-                              {sendingReminder === contrato.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <MessageSquare className="h-3.5 w-3.5" />}
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={() => sendContractReminder(contrato, 'soft')} className="gap-2 text-xs">
-                              <MessageSquare className="h-3.5 w-3.5" /> Lembrete
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => sendContractReminder(contrato, 'urgent')} className="gap-2 text-xs text-destructive">
-                              <AlertTriangle className="h-3.5 w-3.5" /> Urgente
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                      <Button asChild variant="ghost" size="sm" className="h-7 w-7 p-0">
-                        <a href={contrato.linkContrato} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/20">
-            <span className="text-xs text-muted-foreground">
-              Mostrando {((safePage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(safePage * ITEMS_PER_PAGE, filtered.length)} de {filtered.length}
-            </span>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                disabled={safePage <= 1}
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              >
-                Anterior
-              </Button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
-                .reduce<(number | 'ellipsis')[]>((acc, p, i, arr) => {
-                  if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('ellipsis');
-                  acc.push(p);
-                  return acc;
-                }, [])
-                .map((p, i) =>
-                  p === 'ellipsis' ? (
-                    <span key={`e${i}`} className="px-1 text-xs text-muted-foreground">…</span>
-                  ) : (
-                    <Button
-                      key={p}
-                      variant={p === safePage ? 'default' : 'ghost'}
-                      size="sm"
-                      className="h-7 w-7 p-0 text-xs"
-                      onClick={() => setCurrentPage(p)}
-                    >
-                      {p}
-                    </Button>
-                  )
-                )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                disabled={safePage >= totalPages}
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              >
-                Próxima
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <ContratoDetailModal
-        contrato={selectedContrato}
-        isOpen={!!selectedContrato}
-        onClose={() => setSelectedContrato(null)}
-      />
-    </>
-  );
-}
+                    className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-[#c9a96e]/5 transition-colors"
