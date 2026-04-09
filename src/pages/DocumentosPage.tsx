@@ -1,775 +1,445 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { AppLayout } from '@/components/layouts/AppLayout';
+import { useGoogleDrive } from '@/hooks/useGoogleDrive';
+import { useDocumentos } from '@/hooks/useDocumentos';
+import { useLeads } from '@/hooks/useLeads';
+import { useAuth } from '@/hooks/useAuth';
+import { GoogleDriveConnect } from '@/components/documentos/GoogleDriveConnect';
+import { DocumentoUploadModal } from '@/components/documentos/DocumentoUploadModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, FileText, Download, Trash2, Eye, Cloud, CloudOff, RefreshCw, Loader2, FolderSearch, Settings2, Timer, CheckCircle, Clock, AlertTriangle, ArrowUpFromLine, ArrowDownToLine, Play } from 'lucide-react';
-import { useDocumentos } from '@/hooks/useDocumentos';
-import { useDriveSync } from '@/hooks/useDriveSync';
-import { useGoogleDrive } from '@/hooks/useGoogleDrive';
-import { useAuth } from '@/hooks/useAuth';
-import { DocumentoUploadModal } from '@/components/documentos/DocumentoUploadModal';
-import { GoogleDriveConnect } from '@/components/documentos/GoogleDriveConnect';
-import { GoogleDriveModal } from '@/components/documentos/GoogleDriveModal';
 import { Badge } from '@/components/ui/badge';
-import { AppLayout } from '@/components/layouts/AppLayout';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+  Folder, File, FileText, Upload, ArrowLeft, Search,
+  Loader2, Plus, RefreshCw, ExternalLink, Download,
+  Cloud, HardDrive, ChevronRight, Home, FolderOpen,
+} from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
-const tipoColors: Record<string, string> = {
-  'Petição': 'bg-primary/10 text-primary border border-primary/20',
-  'Contrato': 'bg-success/10 text-success border border-success/20',
-  'Procuração': 'bg-secondary/30 text-secondary-foreground border border-secondary/40',
-  'Documento Pessoal': 'bg-accent/25 text-accent-foreground border border-accent/40',
-  'Comprovante': 'bg-muted text-muted-foreground border border-border',
-  'Outros': 'bg-muted/60 text-muted-foreground border border-border',
-};
-
-interface SyncJob {
+interface DriveFile {
   id: string;
-  direction: string;
-  kind: string;
-  status: string;
-  attempts: number;
-  max_attempts: number;
-  last_error: string | null;
-  started_at: string | null;
-  finished_at: string | null;
-  created_at: string;
-  document_id: string | null;
-  drive_file_id: string | null;
+  name: string;
+  mimeType: string;
+  size?: string;
+  createdTime?: string;
+  modifiedTime?: string;
+  webViewLink?: string;
 }
 
-interface SyncConfig {
-  auto_sync_enabled: boolean;
-  sync_interval_minutes: number;
-  last_auto_sync_at: string | null;
-}
-
-interface SyncStats {
-  total: number;
-  synced: number;
-  pending: number;
-  syncing: number;
-  error: number;
+interface BreadcrumbItem {
+  id: string;
+  name: string;
 }
 
 export default function DocumentosPage() {
-  const { toast: toastHook } = useToast();
   const { user } = useAuth();
-  const { documentos, loading, deleteDocumento, fetchDocumentos } = useDocumentos();
-  const { syncDocument, syncAll, isSyncing, syncStats, refreshStats } = useDriveSync();
-  const { isConnected: isDriveConnected, isLoading: driveLoading } = useGoogleDrive();
-  const [uploadModalOpen, setUploadModalOpen] = useState(false);
-  const [driveModalOpen, setDriveModalOpen] = useState(false);
+  const { toast: toastHook } = useToast();
+  const { documentos, loading: localLoading, deleteDocumento, fetchDocumentos, uploadDocumento } = useDocumentos();
+  const { isConnected, isLoading: driveLoading, listFiles, findOrCreateClientFolder, uploadFile, downloadFile, isOperating, connect } = useGoogleDrive();
+  const { leads } = useLeads();
+
+  // Drive state
+  const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
+  const [driveLoading2, setDriveLoading2] = useState(false);
+  const [currentFolderId, setCurrentFolderId] = useState<string | undefined>();
+  const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // Sync management state
-  const [jobs, setJobs] = useState<SyncJob[]>([]);
-  const [config, setConfig] = useState<SyncConfig | null>(null);
-  const [stats, setStats] = useState<SyncStats | null>(null);
-  const [jobsLoading, setJobsLoading] = useState(false);
-  const [scanning, setScanning] = useState(false);
-  const [savingConfig, setSavingConfig] = useState(false);
+  const [selectedClient, setSelectedClient] = useState('');
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [activeTab, setActiveTab] = useState<'drive' | 'local'>('drive');
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
 
-  // Fetch sync stats on mount
-  useEffect(() => {
-    if (isDriveConnected) {
-      refreshStats();
-    }
-  }, [isDriveConnected, refreshStats]);
-
-  const fetchJobs = useCallback(async () => {
-    if (!user) return;
-    setJobsLoading(true);
+  // Load Drive files
+  const loadDriveFiles = useCallback(async (folderId?: string) => {
+    if (!isConnected) return;
+    setDriveLoading2(true);
     try {
-      const { data, error } = await supabase
-        .from('drive_sync_jobs')
-        .select('id, direction, kind, status, attempts, max_attempts, last_error, started_at, finished_at, created_at, document_id, drive_file_id')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (error) throw error;
-      setJobs((data || []) as SyncJob[]);
+      const result = await listFiles(folderId || 'root');
+      setDriveFiles(result);
     } catch (err) {
-      console.error('Error fetching jobs:', err);
+      toast.error('Erro ao carregar arquivos do Drive');
     } finally {
-      setJobsLoading(false);
+      setDriveLoading2(false);
     }
-  }, [user]);
-
-  const fetchSyncStats = useCallback(async () => {
-    if (!user) return;
-    try {
-      const { data, error } = await supabase.functions.invoke('drive-sync', {
-        body: { action: 'get_status', user_id: user.id }
-      });
-
-      if (error) throw error;
-      if (data?.stats) {
-        setStats(data.stats as SyncStats);
-      }
-    } catch (err) {
-      console.error('Error fetching stats:', err);
-    }
-  }, [user]);
-
-  const fetchConfig = useCallback(async () => {
-    if (!user) return;
-    try {
-      const { data, error } = await supabase.functions.invoke('drive-sync', {
-        body: { action: 'get_config', user_id: user.id }
-      });
-
-      if (error) throw error;
-      if (data?.config) {
-        setConfig(data.config as SyncConfig);
-      } else {
-        // Criar configuração padrão automaticamente
-        const defaultConfig = { auto_sync_enabled: false, sync_interval_minutes: 30, last_auto_sync_at: null };
-        setConfig(defaultConfig);
-        
-        // Salvar configuração padrão no banco
-        await supabase.functions.invoke('drive-sync', {
-          body: { 
-            action: 'update_config', 
-            user_id: user.id,
-            auto_sync_enabled: false,
-            interval_minutes: 30
-          }
-        });
-        console.log('Configuração padrão criada automaticamente');
-      }
-    } catch (err) {
-      console.error('Error fetching config:', err);
-    }
-  }, [user]);
+  }, [isConnected, listFiles]);
 
   useEffect(() => {
-    if (isDriveConnected && user) {
-      fetchJobs();
-      fetchSyncStats();
-      fetchConfig();
-    }
-  }, [isDriveConnected, user, fetchJobs, fetchSyncStats, fetchConfig]);
+    if (isConnected) loadDriveFiles(currentFolderId);
+  }, [isConnected, currentFolderId]);
 
-  const handleUpdateConfig = async (autoEnabled: boolean, interval: number) => {
-    if (!user) return;
-    setSavingConfig(true);
+  const handleFolderClick = (folder: DriveFile) => {
+    setBreadcrumbs(prev => [...prev, { id: folder.id, name: folder.name }]);
+    setCurrentFolderId(folder.id);
+  };
+
+  const handleBreadcrumb = (index: number) => {
+    if (index === -1) {
+      setBreadcrumbs([]);
+      setCurrentFolderId(undefined);
+    } else {
+      const newCrumbs = breadcrumbs.slice(0, index + 1);
+      setBreadcrumbs(newCrumbs);
+      setCurrentFolderId(newCrumbs[newCrumbs.length - 1].id);
+    }
+  };
+
+  const handleOpenClientFolder = async () => {
+    if (!selectedClient) { toast.error('Selecione um cliente'); return; }
+    const client = leads.find(l => l.id === selectedClient);
+    if (!client?.nome) { toast.error('Cliente não encontrado'); return; }
+    const result = await findOrCreateClientFolder(client.nome, client.id);
+    if (result) {
+      setBreadcrumbs([{ id: result.folderId, name: result.folderName }]);
+      setCurrentFolderId(result.folderId);
+      toast.success(`Pasta "${result.folderName}" aberta`);
+    }
+  };
+
+  const handleUploadToDrive = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !currentFolderId) { toast.error('Navegue até uma pasta primeiro'); return; }
+    setUploadingFile(true);
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64 = (e.target?.result as string).split(',')[1];
+      const result = await uploadFile(currentFolderId, file.name, base64, file.type);
+      if (result) loadDriveFiles(currentFolderId);
+      setUploadingFile(false);
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  };
+
+  const handleImportFromDrive = async (driveFile: DriveFile) => {
     try {
-      const { data, error } = await supabase.functions.invoke('drive-sync', {
-        body: { 
-          action: 'update_config', 
-          user_id: user.id,
-          auto_sync_enabled: autoEnabled,
-          interval_minutes: interval
-        }
-      });
-
-      if (error) throw error;
-
-      if (data?.success) {
-        setConfig(prev => prev ? { ...prev, auto_sync_enabled: autoEnabled, sync_interval_minutes: interval } : null);
-        toast.success(autoEnabled ? 'Sync automático ativado!' : 'Sync automático desativado');
-      }
-    } catch (err) {
-      console.error('Config error:', err);
-      toast.error('Erro ao salvar configuração');
-    } finally {
-      setSavingConfig(false);
-    }
+      const result = await downloadFile(driveFile.id);
+      if (!result) return;
+      const bytes = new Uint8Array(atob(result.content).split('').map(c => c.charCodeAt(0)));
+      const blob = new Blob([bytes], { type: result.mimeType });
+      const fileObj = new window.File([blob], result.name, { type: result.mimeType });
+      await uploadDocumento(fileObj, { nome: result.name, tipo: 'Outros' });
+      toast.success('Arquivo importado!');
+    } catch { toast.error('Erro ao importar arquivo'); }
   };
 
-  const handleScanDrive = async () => {
-    if (!user) return;
-    setScanning(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('drive-sync', {
-        body: { action: 'scan_drive', user_id: user.id }
-      });
-
-      if (error) throw error;
-
-      if (data?.found > 0) {
-        toast.success(`${data.found} arquivo(s) encontrado(s) no Drive. ${data.imported} importado(s).`);
-      } else {
-        toast.info('Nenhum arquivo novo encontrado no Drive');
-      }
-
-      await fetchJobs();
-      await fetchSyncStats();
-      await fetchDocumentos();
-    } catch (err) {
-      console.error('Scan error:', err);
-      toast.error('Erro ao escanear o Drive');
-    } finally {
-      setScanning(false);
-    }
-  };
-
-  const handleRetryJob = async (jobId: string) => {
-    if (!user) return;
-    try {
-      const { error } = await supabase.functions.invoke('drive-sync', {
-        body: { action: 'retry_job', user_id: user.id, job_id: jobId }
-      });
-
-      if (error) throw error;
-      toast.success('Job reagendado');
-      await fetchJobs();
-    } catch (err) {
-      console.error('Retry error:', err);
-      toast.error('Erro ao reagendar job');
-    }
-  };
-
-  const getSyncStatusIcon = (status: string | null | undefined) => {
-    switch (status) {
-      case 'synced':
-        return <Cloud className="h-4 w-4 text-green-500" />;
-      case 'syncing':
-        return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
-      case 'error':
-        return <CloudOff className="h-4 w-4 text-destructive" />;
-      default:
-        return <CloudOff className="h-4 w-4 text-muted-foreground" />;
-    }
-  };
-
-  const getSyncStatusLabel = (status: string | null | undefined) => {
-    switch (status) {
-      case 'synced':
-        return 'Sincronizado';
-      case 'syncing':
-        return 'Sincronizando...';
-      case 'error':
-        return 'Erro no sync';
-      default:
-        return 'Pendente';
-    }
-  };
-
-  const getJobStatusBadge = (status: string) => {
-    switch (status) {
-      case 'success':
-        return <Badge className="bg-green-500/20 text-green-700 border-green-500/30"><CheckCircle className="h-3 w-3 mr-1" /> Sucesso</Badge>;
-      case 'processing':
-        return <Badge className="bg-blue-500/20 text-blue-700 border-blue-500/30"><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Processando</Badge>;
-      case 'error':
-        return <Badge className="bg-destructive/20 text-destructive border-destructive/30"><AlertTriangle className="h-3 w-3 mr-1" /> Erro</Badge>;
-      default:
-        return <Badge className="bg-muted text-muted-foreground border-border"><Clock className="h-3 w-3 mr-1" /> Pendente</Badge>;
-    }
-  };
-
-  const getDirectionIcon = (direction: string) => {
-    return direction === 'push' 
-      ? <ArrowUpFromLine className="h-4 w-4 text-primary" />
-      : <ArrowDownToLine className="h-4 w-4 text-success" />;
-  };
-
-  const handleSyncDocument = async (docId: string) => {
-    const success = await syncDocument(docId);
-    if (success) {
-      fetchDocumentos();
-    }
-  };
-
-  const handleSyncAll = async () => {
-    await syncAll();
-    fetchDocumentos();
-    fetchJobs();
-    fetchSyncStats();
-  };
-
-  const getStoragePath = (value: string) => {
-    if (!value) return '';
-    if (value.includes('/documentos/')) return value.split('/documentos/')[1].split('?')[0];
-    return value.split('?')[0];
-  };
-
-  const openDocumento = async (arquivoUrl: string) => {
-    const filePath = getStoragePath(arquivoUrl);
-    if (!filePath) return;
-
-    const { data, error } = await supabase.storage
-      .from('documentos')
-      .createSignedUrl(filePath, 60);
-
-    if (error || !data?.signedUrl) {
-      toastHook({
-        title: 'Não foi possível abrir o documento',
-        description: error?.message || 'Erro ao gerar link seguro',
-        variant: 'destructive',
-      });
-      return;
-    }
-
+  const openLocalDoc = async (arquivoUrl: string) => {
+    const filePath = arquivoUrl.includes('/documentos/')
+      ? arquivoUrl.split('/documentos/')[1].split('?')[0]
+      : arquivoUrl.split('?')[0];
+    const { data, error } = await supabase.storage.from('documentos').createSignedUrl(filePath, 60);
+    if (error || !data?.signedUrl) { toastHook({ title: 'Erro ao abrir documento', variant: 'destructive' }); return; }
     window.open(data.signedUrl, '_blank');
   };
 
-  const filteredDocumentos = documentos.filter((doc) =>
-    doc.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    doc.tipo.toLowerCase().includes(searchTerm.toLowerCase())
+  const formatSize = (size?: string) => {
+    if (!size) return '';
+    const bytes = parseInt(size);
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const filteredDriveFiles = driveFiles.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const driveFolders = filteredDriveFiles.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+  const driveDocuments = filteredDriveFiles.filter(f => f.mimeType !== 'application/vnd.google-apps.folder');
+  const filteredLocal = documentos.filter(d =>
+    d.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    d.tipo.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const formatFileSize = (bytes: number | null) => {
-    if (!bytes) return '-';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  const getMimeIcon = (mimeType: string) => {
+    if (mimeType === 'application/vnd.google-apps.folder') return <Folder className="h-5 w-5 text-amber-500" />;
+    if (mimeType.includes('pdf')) return <FileText className="h-5 w-5 text-red-500" />;
+    if (mimeType.includes('image')) return <File className="h-5 w-5 text-blue-500" />;
+    return <File className="h-5 w-5 text-muted-foreground" />;
   };
 
   return (
     <AppLayout>
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Documentos</h1>
-          <p className="text-muted-foreground">Gestão de documentos e sincronização com Google Drive</p>
+      <div className="flex flex-col h-full">
+        {/* ── Header ── */}
+        <div className="sticky top-0 z-20 bg-card/90 backdrop-blur-md border-b border-border px-6 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-bold text-foreground">Documentos</h1>
+              <p className="text-xs text-muted-foreground">Gestão de documentos e Google Drive</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <GoogleDriveConnect onOpenDriveModal={() => {}} />
+              <Button onClick={() => setUploadModalOpen(true)} size="sm" className="rounded-xl h-9 gap-1.5">
+                <Plus className="h-4 w-4" /> Novo Documento
+              </Button>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1 mt-4 bg-muted/40 rounded-xl p-1 w-fit">
+            <button
+              onClick={() => setActiveTab('drive')}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'drive' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              <Cloud className="h-4 w-4" />
+              Google Drive
+              {isConnected && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}
+            </button>
+            <button
+              onClick={() => setActiveTab('local')}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'local' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              <HardDrive className="h-4 w-4" />
+              Local
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">{documentos.length}</Badge>
+            </button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          {isDriveConnected && (
+
+        <div className="flex-1 overflow-auto p-6 space-y-4">
+
+          {/* ── DRIVE TAB ── */}
+          {activeTab === 'drive' && (
             <>
-              <Button 
-                variant="outline" 
-                onClick={handleScanDrive} 
-                disabled={scanning}
-              >
-                {scanning ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <FolderSearch className="h-4 w-4 mr-2" />
-                )}
-                Escanear Drive
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={handleSyncAll} 
-                disabled={isSyncing}
-              >
-                {isSyncing ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                )}
-                Sincronizar Tudo
-              </Button>
-            </>
-          )}
-          <GoogleDriveConnect onOpenDriveModal={() => setDriveModalOpen(true)} />
-          <Button onClick={() => setUploadModalOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Documento
-          </Button>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <FileText className="h-8 w-8 text-primary" />
-              <div>
-                <p className="text-2xl font-bold">{documentos.length}</p>
-                <p className="text-sm text-muted-foreground">Total</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <FileText className="h-8 w-8 text-primary" />
-              <div>
-                <p className="text-2xl font-bold">{documentos.filter(d => d.tipo === 'Petição').length}</p>
-                <p className="text-sm text-muted-foreground">Petições</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <FileText className="h-8 w-8 text-success" />
-              <div>
-                <p className="text-2xl font-bold">{documentos.filter(d => d.tipo === 'Contrato').length}</p>
-                <p className="text-sm text-muted-foreground">Contratos</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <FileText className="h-8 w-8 text-secondary" />
-              <div>
-                <p className="text-2xl font-bold">{documentos.filter(d => d.tipo === 'Procuração').length}</p>
-                <p className="text-sm text-muted-foreground">Procurações</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        {isDriveConnected && (
-          <Card className="border-primary/30 bg-primary/5">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <Cloud className="h-8 w-8 text-primary" />
-                <div>
-                  <p className="text-2xl font-bold">
-                    {documentos.filter((d: any) => d.sync_status === 'synced').length}/{documentos.length}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Sincronizados</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      <Tabs defaultValue="documentos" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="documentos">Documentos</TabsTrigger>
-          {isDriveConnected && <TabsTrigger value="sincronizacao">Sincronização Drive</TabsTrigger>}
-        </TabsList>
-
-        <TabsContent value="documentos" className="space-y-4">
-          {/* Search and Table */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Todos os Documentos</CardTitle>
-                <div className="relative w-64">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar documentos..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map(i => (
-                    <Skeleton key={i} className="h-12 w-full" />
-                  ))}
-                </div>
-              ) : filteredDocumentos.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Nenhum documento encontrado</p>
+              {!isConnected ? (
+                /* Not connected */
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
+                    <Cloud className="h-8 w-8 text-muted-foreground/40" />
+                  </div>
+                  <h3 className="font-semibold text-foreground mb-1">Google Drive não conectado</h3>
+                  <p className="text-sm text-muted-foreground mb-4 max-w-sm">Conecte sua conta para ver e gerenciar documentos dos clientes diretamente no Drive.</p>
+                  <Button onClick={connect} className="gap-2 rounded-xl">
+                    <Cloud className="h-4 w-4" /> Conectar Google Drive
+                  </Button>
                 </div>
               ) : (
-                <TooltipProvider>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Tamanho</TableHead>
-                      <TableHead>Data</TableHead>
-                      {isDriveConnected && <TableHead>Sync</TableHead>}
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredDocumentos.map((doc) => (
-                      <TableRow key={doc.id}>
-                        <TableCell className="font-medium">{doc.nome}</TableCell>
-                        <TableCell>
-                          <Badge className={tipoColors[doc.tipo] || tipoColors['Outros']}>
-                            {doc.tipo}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{formatFileSize(doc.arquivo_tamanho)}</TableCell>
-                        <TableCell>
-                          {format(new Date(doc.created_at), 'dd/MM/yyyy', { locale: ptBR })}
-                        </TableCell>
-                        {isDriveConnected && (
-                          <TableCell>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  onClick={() => (doc as any).sync_status !== 'synced' && handleSyncDocument(doc.id)}
-                                  disabled={isSyncing || (doc as any).sync_status === 'syncing'}
-                                >
-                                  {getSyncStatusIcon((doc as any).sync_status)}
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>{getSyncStatusLabel((doc as any).sync_status)}</p>
-                                {(doc as any).sync_status !== 'synced' && (
-                                  <p className="text-xs text-muted-foreground">Clique para sincronizar</p>
-                                )}
-                              </TooltipContent>
-                            </Tooltip>
-                          </TableCell>
-                        )}
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => openDocumento(doc.arquivo_url)}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={async () => {
-                                const filePath = getStoragePath(doc.arquivo_url);
-                                const { data, error } = await supabase.storage
-                                  .from('documentos')
-                                  .createSignedUrl(filePath, 60);
+                <>
+                  {/* Client folder selector + search */}
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex gap-2 flex-1">
+                      <Select value={selectedClient} onValueChange={setSelectedClient}>
+                        <SelectTrigger className="flex-1 h-9 rounded-xl bg-card border-border/50">
+                          <SelectValue placeholder="Buscar pasta de cliente..." />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-xl">
+                          {leads.filter(l => l.nome).map(lead => (
+                            <SelectItem key={lead.id} value={lead.id}>{lead.nome}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button onClick={handleOpenClientFolder} disabled={!selectedClient || isOperating} size="sm" className="h-9 rounded-xl gap-1.5 shrink-0">
+                        {isOperating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderOpen className="h-4 w-4" />}
+                        Abrir Pasta
+                      </Button>
+                    </div>
+                    <div className="relative flex-1 max-w-xs">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Buscar arquivos..." className="pl-9 h-9 rounded-xl bg-card border-border/50" />
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <Button variant="outline" size="sm" className="h-9 rounded-xl gap-1.5" onClick={() => loadDriveFiles(currentFolderId)} disabled={driveLoading2}>
+                        <RefreshCw className={`h-4 w-4 ${driveLoading2 ? 'animate-spin' : ''}`} />
+                      </Button>
+                      {currentFolderId && (
+                        <>
+                          <input type="file" id="drive-upload" className="hidden" onChange={handleUploadToDrive} disabled={uploadingFile} />
+                          <Button size="sm" variant="outline" className="h-9 rounded-xl gap-1.5" onClick={() => document.getElementById('drive-upload')?.click()} disabled={uploadingFile}>
+                            {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                            Enviar
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
 
-                                if (error || !data?.signedUrl) {
-                                  toastHook({
-                                    title: 'Não foi possível baixar o documento',
-                                    description: error?.message || 'Erro ao gerar link seguro',
-                                    variant: 'destructive',
-                                  });
-                                  return;
-                                }
-
-                                const link = document.createElement('a');
-                                link.href = data.signedUrl;
-                                link.download = doc.arquivo_nome;
-                                link.click();
-                              }}
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => deleteDocumento(doc.id, doc.arquivo_url)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                  {/* Breadcrumbs */}
+                  <div className="flex items-center gap-1 text-sm flex-wrap">
+                    <button onClick={() => handleBreadcrumb(-1)} className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors">
+                      <Home className="h-3.5 w-3.5" /> Meu Drive
+                    </button>
+                    {breadcrumbs.map((crumb, i) => (
+                      <span key={crumb.id} className="flex items-center gap-1">
+                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40" />
+                        <button
+                          onClick={() => handleBreadcrumb(i)}
+                          className={`${i === breadcrumbs.length - 1 ? 'text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'} transition-colors`}
+                        >
+                          {crumb.name}
+                        </button>
+                      </span>
                     ))}
-                  </TableBody>
-                </Table>
-                </TooltipProvider>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {isDriveConnected && (
-          <TabsContent value="sincronizacao" className="space-y-4">
-            {/* Auto-Sync Configuration */}
-            <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <Settings2 className="h-5 w-5 text-primary" />
-                  <div>
-                    <CardTitle className="text-lg">Sincronização Automática</CardTitle>
-                    <CardDescription>Configure o polling periódico para sincronizar automaticamente</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col md:flex-row md:items-center gap-6">
-                  <div className="flex items-center gap-3">
-                    <Switch
-                      id="auto-sync"
-                      checked={config?.auto_sync_enabled ?? false}
-                      onCheckedChange={(checked) => handleUpdateConfig(checked, config?.sync_interval_minutes ?? 30)}
-                      disabled={savingConfig}
-                    />
-                    <Label htmlFor="auto-sync" className="font-medium">
-                      {config?.auto_sync_enabled ? 'Ativado' : 'Desativado'}
-                    </Label>
-                    {savingConfig && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                    {breadcrumbs.length > 0 && (
+                      <button onClick={() => { const b = [...breadcrumbs]; b.pop(); setBreadcrumbs(b); setCurrentFolderId(b.length > 0 ? b[b.length - 1].id : undefined); }} className="ml-2 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+                        <ArrowLeft className="h-3 w-3" /> Voltar
+                      </button>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <Timer className="h-4 w-4 text-muted-foreground" />
-                    <Label className="text-sm text-muted-foreground">Intervalo:</Label>
-                    <Select
-                      value={String(config?.sync_interval_minutes ?? 30)}
-                      onValueChange={(val) => handleUpdateConfig(config?.auto_sync_enabled ?? false, parseInt(val))}
-                      disabled={savingConfig || !config?.auto_sync_enabled}
-                    >
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="15">15 min</SelectItem>
-                        <SelectItem value="30">30 min</SelectItem>
-                        <SelectItem value="60">1 hora</SelectItem>
-                        <SelectItem value="120">2 horas</SelectItem>
-                        <SelectItem value="360">6 horas</SelectItem>
-                        <SelectItem value="720">12 horas</SelectItem>
-                        <SelectItem value="1440">24 horas</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {config?.last_auto_sync_at && (
-                    <div className="text-sm text-muted-foreground">
-                      Último sync automático: {format(new Date(config.last_auto_sync_at), "dd/MM 'às' HH:mm", { locale: ptBR })}
+                  {/* Files grid */}
+                  {driveLoading2 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                      {[1,2,3,4,5,6].map(i => <Skeleton key={i} className="h-20 rounded-2xl" />)}
                     </div>
+                  ) : filteredDriveFiles.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                      <Folder className="h-12 w-12 text-muted-foreground/20 mb-3" />
+                      <p className="text-sm font-medium text-muted-foreground">
+                        {currentFolderId ? 'Pasta vazia' : 'Nenhum arquivo na raiz'}
+                      </p>
+                      <p className="text-xs text-muted-foreground/60 mt-1">
+                        {currentFolderId ? 'Envie arquivos usando o botão acima' : 'Selecione um cliente ou navegue pelas pastas'}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Folders */}
+                      {driveFolders.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Pastas</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+                            {driveFolders.map(folder => (
+                              <button
+                                key={folder.id}
+                                onClick={() => handleFolderClick(folder)}
+                                className="flex items-center gap-3 p-3 rounded-2xl bg-card border border-border/50 hover:border-amber-400/50 hover:bg-amber-50/30 dark:hover:bg-amber-950/20 transition-all text-left group"
+                              >
+                                <Folder className="h-8 w-8 text-amber-500 shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate leading-tight">{folder.name}</p>
+                                  <p className="text-[10px] text-muted-foreground/60">Pasta</p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Documents */}
+                      {driveDocuments.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Arquivos</p>
+                          <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
+                            <table className="w-full">
+                              <thead>
+                                <tr className="border-b border-border/30 bg-muted/20">
+                                  <th className="text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Nome</th>
+                                  <th className="text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Tamanho</th>
+                                  <th className="text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">Modificado</th>
+                                  <th className="text-right px-4 py-2.5"></th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border/20">
+                                {driveDocuments.map(file => (
+                                  <tr key={file.id} className="hover:bg-muted/20 transition-colors group">
+                                    <td className="px-4 py-3">
+                                      <div className="flex items-center gap-3">
+                                        {getMimeIcon(file.mimeType)}
+                                        <span className="text-sm font-medium truncate max-w-[200px]">{file.name}</span>
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3 hidden md:table-cell">
+                                      <span className="text-xs text-muted-foreground">{formatSize(file.size)}</span>
+                                    </td>
+                                    <td className="px-4 py-3 hidden lg:table-cell">
+                                      <span className="text-xs text-muted-foreground">
+                                        {file.modifiedTime ? format(new Date(file.modifiedTime), 'dd/MM/yy', { locale: ptBR }) : '—'}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg" onClick={() => window.open(file.webViewLink, '_blank')} title="Abrir no Drive">
+                                          <ExternalLink className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg" onClick={() => handleImportFromDrive(file)} title="Importar para o sistema">
+                                          <Download className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
+                </>
+              )}
+            </>
+          )}
+
+          {/* ── LOCAL TAB ── */}
+          {activeTab === 'local' && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Buscar documentos..." className="pl-9 h-9 rounded-xl bg-card border-border/50" />
                 </div>
-              </CardContent>
-            </Card>
+              </div>
 
-            {/* Sync Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <Cloud className="h-8 w-8 text-primary" />
-                    <div>
-                      <p className="text-2xl font-bold">{stats?.total || documentos.length}</p>
-                      <p className="text-xs text-muted-foreground">Total Docs</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-green-500/30 bg-green-500/5">
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <CheckCircle className="h-8 w-8 text-green-500" />
-                    <div>
-                      <p className="text-2xl font-bold">{stats?.synced || documentos.filter((d: any) => d.sync_status === 'synced').length}</p>
-                      <p className="text-xs text-muted-foreground">Sincronizados</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <Clock className="h-8 w-8 text-muted-foreground" />
-                    <div>
-                      <p className="text-2xl font-bold">{stats?.pending || documentos.filter((d: any) => d.sync_status === 'pending').length}</p>
-                      <p className="text-xs text-muted-foreground">Pendentes</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-blue-500/30 bg-blue-500/5">
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
-                    <div>
-                      <p className="text-2xl font-bold">{stats?.syncing || 0}</p>
-                      <p className="text-xs text-muted-foreground">Em Progresso</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-destructive/30 bg-destructive/5">
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <AlertTriangle className="h-8 w-8 text-destructive" />
-                    <div>
-                      <p className="text-2xl font-bold">{stats?.error || documentos.filter((d: any) => d.sync_status === 'error').length}</p>
-                      <p className="text-xs text-muted-foreground">Com Erro</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Jobs Table */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Fila de Sincronização</CardTitle>
-                <CardDescription>Histórico de jobs de sincronização com tentativas e erros detalhados</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {jobsLoading ? (
-                  <div className="space-y-3">
-                    {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
-                  </div>
-                ) : jobs.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <Cloud className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>Nenhum job de sincronização encontrado</p>
-                    <p className="text-sm">Faça upload de documentos ou escaneie o Drive</p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-10">Dir</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Tentativas</TableHead>
-                        <TableHead>Criado</TableHead>
-                        <TableHead>Erro</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {jobs.map((job) => (
-                        <TableRow key={job.id}>
-                          <TableCell>{getDirectionIcon(job.direction)}</TableCell>
-                          <TableCell className="font-medium">{job.kind}</TableCell>
-                          <TableCell>{getJobStatusBadge(job.status)}</TableCell>
-                          <TableCell>
-                            <span className={job.attempts >= job.max_attempts ? 'text-destructive font-medium' : ''}>
-                              {job.attempts}/{job.max_attempts}
+              {localLoading ? (
+                <div className="space-y-2">
+                  {[1,2,3].map(i => <Skeleton key={i} className="h-14 rounded-2xl" />)}
+                </div>
+              ) : filteredLocal.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <HardDrive className="h-12 w-12 text-muted-foreground/20 mb-3" />
+                  <p className="text-sm font-medium text-muted-foreground">Nenhum documento local</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">Clique em "Novo Documento" para adicionar</p>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border/30 bg-muted/20">
+                        <th className="text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Nome</th>
+                        <th className="text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden sm:table-cell">Tipo</th>
+                        <th className="text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Data</th>
+                        <th className="text-right px-4 py-2.5"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/20">
+                      {filteredLocal.map(doc => (
+                        <tr key={doc.id} className="hover:bg-muted/20 transition-colors group">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <FileText className="h-5 w-5 text-primary/60 shrink-0" />
+                              <span className="text-sm font-medium truncate max-w-[200px]">{doc.nome}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 hidden sm:table-cell">
+                            <Badge variant="outline" className="text-[10px] rounded-md">{doc.tipo}</Badge>
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell">
+                            <span className="text-xs text-muted-foreground">
+                              {format(new Date(doc.created_at), 'dd/MM/yy', { locale: ptBR })}
                             </span>
-                          </TableCell>
-                          <TableCell>
-                            {format(new Date(job.created_at), 'dd/MM HH:mm', { locale: ptBR })}
-                          </TableCell>
-                          <TableCell className="max-w-xs truncate text-sm text-muted-foreground" title={job.last_error || ''}>
-                            {job.last_error || '-'}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {job.status === 'error' && job.attempts < job.max_attempts && (
-                              <Button variant="ghost" size="sm" onClick={() => handleRetryJob(job.id)}>
-                                <Play className="h-4 w-4" />
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg" onClick={() => openLocalDoc(doc.arquivo_url)}>
+                                <ExternalLink className="h-3.5 w-3.5" />
                               </Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
+                            </div>
+                          </td>
+                        </tr>
                       ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
-      </Tabs>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
 
       <DocumentoUploadModal open={uploadModalOpen} onOpenChange={setUploadModalOpen} />
-      <GoogleDriveModal open={driveModalOpen} onOpenChange={setDriveModalOpen} />
-    </div>
     </AppLayout>
   );
 }
