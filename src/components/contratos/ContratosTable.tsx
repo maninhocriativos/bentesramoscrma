@@ -315,13 +315,13 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                     onClick={() => setSelectedContrato(contrato)}
                     className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-[#c9a96e]/5 transition-colors"
                   >
-                    <div className={cn("h-2 w-2 rounded-full shrink-0", config.dot)} />
+                    <div className={cn("h-2 w-2 rounded-full shrink-0", config.dotColor)} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{contrato.nomeDocumento}</p>
+                      <p className="text-sm font-medium truncate">{contrato.leadNome || contrato.key}</p>
                       <p className="text-xs text-muted-foreground">{contrato.signatarioNome || '—'}</p>
                     </div>
-                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium", config.bg, config.text)}>
-                      {contrato.status}
+                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium", config.bgColor, config.color)}>
+                      {config.label}
                     </span>
                   </div>
                 );
