@@ -374,7 +374,7 @@ export default function ContratosPage() {
             />
 
             {/* Tab Navigation */}
-            <div className="flex gap-1 p-1 bg-muted/50 rounded-lg overflow-x-auto">
+            <div className="flex gap-0.5 border-b border-[#c9a96e]/20 overflow-x-auto">
               {TABS.map((tab) => {
                 const Icon = tab.icon;
                 const count = getTabCount(tab.id);
@@ -384,18 +384,20 @@ export default function ContratosPage() {
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     className={cn(
-                      "flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-all",
+                      "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-all border-b-2 -mb-px",
                       isActive
-                        ? "bg-card text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground hover:bg-card/50"
+                        ? "border-[#c9a96e] text-[#3d2b1f] dark:text-[#c9a96e]"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-[#c9a96e]/30"
                     )}
                   >
-                    <Icon className="h-4 w-4" />
+                    <Icon className={cn("h-4 w-4", isActive && "text-[#c9a96e]")} />
                     <span className="hidden sm:inline">{tab.label}</span>
                     {count !== null && (
                       <span className={cn(
-                        "text-xs px-1.5 py-0.5 rounded-full",
-                        isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                        "text-xs px-1.5 py-0.5 rounded-full font-medium",
+                        isActive
+                          ? "bg-[#c9a96e]/20 text-[#3d2b1f] dark:text-[#c9a96e]"
+                          : "bg-muted text-muted-foreground"
                       )}>
                         {count}
                       </span>
