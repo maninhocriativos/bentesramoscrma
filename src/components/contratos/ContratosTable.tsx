@@ -314,3 +314,59 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
                     key={contrato.id}
                     onClick={() => setSelectedContrato(contrato)}
                     className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-[#c9a96e]/5 transition-colors"
+                  >
+                    <div className={cn("h-2 w-2 rounded-full shrink-0", config.dotColor)} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{contrato.leadNome || contrato.key}</p>
+                      <p className="text-xs text-muted-foreground">{contrato.signatarioNome || '—'}</p>
+                    </div>
+                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium", config.bgColor, config.color)}>
+                      {config.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-[#c9a96e]/15">
+                <span className="text-xs text-muted-foreground">
+                  Página {safePage} de {totalPages}
+                </span>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    disabled={safePage <= 1}
+                    onClick={() => setCurrentPage(safePage - 1)}
+                  >
+                    Anterior
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    disabled={safePage >= totalPages}
+                    onClick={() => setCurrentPage(safePage + 1)}
+                  >
+                    Próxima
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {selectedContrato && (
+        <ContratoDetailModal
+          contrato={selectedContrato}
+          isOpen={!!selectedContrato}
+          onClose={() => setSelectedContrato(null)}
+        />
+      )}
+    </>
+  );
+}

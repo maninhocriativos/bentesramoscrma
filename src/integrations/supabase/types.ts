@@ -1584,6 +1584,7 @@ export type Database = {
           fonte_trafego: string | null
           id: string
           is_lost: boolean | null
+          isa_agent: string | null
           isa_ativa: boolean | null
           last_contact_at: string | null
           lead_state: string | null
@@ -1630,6 +1631,7 @@ export type Database = {
           fonte_trafego?: string | null
           id?: string
           is_lost?: boolean | null
+          isa_agent?: string | null
           isa_ativa?: boolean | null
           last_contact_at?: string | null
           lead_state?: string | null
@@ -1676,6 +1678,7 @@ export type Database = {
           fonte_trafego?: string | null
           id?: string
           is_lost?: boolean | null
+          isa_agent?: string | null
           isa_ativa?: boolean | null
           last_contact_at?: string | null
           lead_state?: string | null
