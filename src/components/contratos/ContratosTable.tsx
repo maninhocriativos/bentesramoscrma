@@ -363,7 +363,7 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
       {selectedContrato && (
         <ContratoDetailModal
           contrato={selectedContrato}
-          open={!!selectedContrato}
+          isOpen={!!selectedContrato}
           onClose={() => setSelectedContrato(null)}
         />
       )}
