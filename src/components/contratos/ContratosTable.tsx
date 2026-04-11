@@ -17,6 +17,7 @@ import { ContratoDetailModal } from './ContratoDetailModal';
 
 interface ContratosTableProps {
   contratos: ContratoComStatus[];
+  onRefresh?: () => void;
 }
 
 // ─── Config de status ─────────────────────────────────────────────────────────
@@ -102,7 +103,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
-export function ContratosTable({ contratos }: ContratosTableProps) {
+export function ContratosTable({ contratos, onRefresh }: ContratosTableProps) {
   const { toast } = useToast();
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -442,6 +443,7 @@ export function ContratosTable({ contratos }: ContratosTableProps) {
         contrato={selectedContrato}
         isOpen={!!selectedContrato}
         onClose={() => setSelectedContrato(null)}
+        onRefresh={onRefresh}
       />
     </>
   );
