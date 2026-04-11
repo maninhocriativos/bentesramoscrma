@@ -4,7 +4,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { ContratosKPIs } from '@/components/contratos/ContratosKPIs';
 import { ContratosTable } from '@/components/contratos/ContratosTable';
 import { ModelosContratos } from '@/components/contratos/ModelosContratos';
-import { GerarContratoModal } from '@/components/contratos/GerarContratoModal';
+import { EnviarKitModal } from '@/components/contratos/EnviarKitModal';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, FileText, FolderOpen, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -39,7 +39,6 @@ export interface ContratoComStatus {
   tipoOrigem?: string | null;
 }
 
-// Map Clicksign status to our status
 const mapClicksignStatus = (doc: any): string => {
   if (doc.status === 'closed') return 'Finalizado';
   if (doc.status === 'canceled') return 'Cancelado';
@@ -55,11 +54,11 @@ const mapClicksignStatus = (doc: any): string => {
 };
 
 const TABS = [
-  { id: 'todos', label: 'Todos', icon: FileText },
-  { id: 'em-processo', label: 'Em Processo', icon: Clock },
-  { id: 'finalizados', label: 'Finalizados', icon: CheckCircle2 },
-  { id: 'cancelados', label: 'Cancelados', icon: XCircle },
-  { id: 'modelos', label: 'Modelos', icon: FolderOpen },
+  { id: 'todos',       label: 'Todos',        icon: FileText,      color: 'text-[#c9a96e]' },
+  { id: 'em-processo', label: 'Em Processo',  icon: Clock,         color: 'text-amber-500' },
+  { id: 'finalizados', label: 'Finalizados',  icon: CheckCircle2,  color: 'text-emerald-500' },
+  { id: 'cancelados',  label: 'Cancelados',   icon: XCircle,       color: 'text-zinc-400' },
+  { id: 'modelos',     label: 'Modelos',      icon: FolderOpen,    color: 'text-[#c9a96e]' },
 ];
 
 export default function ContratosPage() {
@@ -73,16 +72,11 @@ export default function ContratosPage() {
   const fetchContractsFromClicksign = useCallback(async (showLoading = true, showToast = false) => {
     if (showLoading) setLoading(true);
     setRefreshing(!showLoading);
-    
     try {
       const { data, error } = await supabase.functions.invoke('clicksign', {
         body: { action: 'list_documents', page: 1 },
       });
-
-      if (error) {
-        console.error('Error fetching from Clicksign:', error);
-        throw error;
-      }
+      if (error) throw error;
 
       const documents = data?.documents || [];
       const docKeys: string[] = documents.map((d: any) => d?.key).filter(Boolean);
@@ -91,31 +85,22 @@ export default function ContratosPage() {
       const leadIdByDocKey = new Map<string, string>();
 
       if (docKeys.length > 0) {
-        const { data: reminders, error: remindersError } = await supabase
+        const { data: reminders } = await supabase
           .from('contract_reminders')
           .select('document_key, contract_link, signer_name, document_name, lead_id')
           .in('document_key', docKeys);
-
-        if (remindersError) {
-          console.warn('Could not load contract data from DB:', remindersError);
-        } else {
-          for (const r of reminders || []) {
-            if (r?.document_key) {
-              if (r.contract_link && !linksByDocKey.has(r.document_key)) {
-                linksByDocKey.set(r.document_key, r.contract_link);
-              }
-              if (r.signer_name && !signerByDocKey.has(r.document_key)) {
-                signerByDocKey.set(r.document_key, r.signer_name);
-              }
-              if (r.lead_id && !leadIdByDocKey.has(r.document_key)) {
-                leadIdByDocKey.set(r.document_key, r.lead_id);
-              }
-            }
+        for (const r of reminders || []) {
+          if (r?.document_key) {
+            if (r.contract_link && !linksByDocKey.has(r.document_key))
+              linksByDocKey.set(r.document_key, r.contract_link);
+            if (r.signer_name && !signerByDocKey.has(r.document_key))
+              signerByDocKey.set(r.document_key, r.signer_name);
+            if (r.lead_id && !leadIdByDocKey.has(r.document_key))
+              leadIdByDocKey.set(r.document_key, r.lead_id);
           }
         }
       }
 
-      // Fetch tipo_origem for linked leads
       const leadIds = [...new Set(leadIdByDocKey.values())].filter(Boolean);
       const tipoOrigemByLeadId = new Map<string, string>();
       if (leadIds.length > 0) {
@@ -128,141 +113,11 @@ export default function ContratosPage() {
         }
       }
 
-      // Fallback: for documents without lead_id, try to match by signer phone/email
-      const unmatchedDocs = documents.filter((doc: any) => {
-        const key = doc?.key;
-        return key && !leadIdByDocKey.has(key);
-      });
-
-      if (unmatchedDocs.length > 0) {
-        // Collect signer emails and phones from unmatched docs
-        const signerEmails: string[] = [];
-        const signerPhones: string[] = [];
-        for (const doc of unmatchedDocs) {
-          for (const s of doc.signers || []) {
-            if (s.email) signerEmails.push(s.email.toLowerCase());
-            if (s.phone_number) {
-              const cleaned = String(s.phone_number).replace(/\D/g, '');
-              if (cleaned.length >= 10) signerPhones.push(cleaned);
-            }
-          }
-        }
-
-        // Search leads by email or phone
-        const fallbackLeads: Array<{ id: string; tipo_origem: string | null; email: string | null; telefone: string | null }> = [];
-        if (signerEmails.length > 0) {
-          const { data } = await supabase
-            .from('leads_juridicos')
-            .select('id, tipo_origem, email, telefone')
-            .in('email', signerEmails);
-          if (data) fallbackLeads.push(...data);
-        }
-        if (signerPhones.length > 0) {
-          // Try matching by phone suffix (last 8-9 digits)
-          const suffixes = signerPhones.map(p => p.slice(-9));
-          for (const suffix of suffixes) {
-            const { data } = await supabase
-              .from('leads_juridicos')
-              .select('id, tipo_origem, email, telefone')
-              .like('telefone', `%${suffix}`);
-            if (data) fallbackLeads.push(...data);
-          }
-        }
-
-        // Build lookup maps from fallback results
-        const tipoOrigemByEmail = new Map<string, { leadId: string; tipoOrigem: string }>();
-        const tipoOrigemByPhoneSuffix = new Map<string, { leadId: string; tipoOrigem: string }>();
-        for (const l of fallbackLeads) {
-          if (l.tipo_origem) {
-            if (l.email) tipoOrigemByEmail.set(l.email.toLowerCase(), { leadId: l.id, tipoOrigem: l.tipo_origem });
-            if (l.telefone) {
-              const suffix = l.telefone.replace(/\D/g, '').slice(-9);
-              tipoOrigemByPhoneSuffix.set(suffix, { leadId: l.id, tipoOrigem: l.tipo_origem });
-            }
-          }
-        }
-
-        // Assign to unmatched documents by email/phone
-        for (const doc of unmatchedDocs) {
-          const key = doc?.key;
-          if (!key || leadIdByDocKey.has(key)) continue;
-          for (const s of doc.signers || []) {
-            if (s.email) {
-              const match = tipoOrigemByEmail.get(s.email.toLowerCase());
-              if (match) {
-                leadIdByDocKey.set(key, match.leadId);
-                tipoOrigemByLeadId.set(match.leadId, match.tipoOrigem);
-                break;
-              }
-            }
-            if (s.phone_number) {
-              const suffix = String(s.phone_number).replace(/\D/g, '').slice(-9);
-              const match = tipoOrigemByPhoneSuffix.get(suffix);
-              if (match) {
-                leadIdByDocKey.set(key, match.leadId);
-                tipoOrigemByLeadId.set(match.leadId, match.tipoOrigem);
-                break;
-              }
-            }
-          }
-        }
-
-        // Final fallback: match by signer name from Clicksign API
-        const stillUnmatched = unmatchedDocs.filter((doc: any) => doc?.key && !leadIdByDocKey.has(doc.key));
-        if (stillUnmatched.length > 0) {
-          const signerNames = new Set<string>();
-          for (const doc of stillUnmatched) {
-            for (const s of doc.signers || []) {
-              if (s.name && s.name.trim().length > 2) signerNames.add(s.name.trim());
-            }
-            // Also extract name from filename (e.g. "Kit - Nome Completo")
-            const filename = doc.filename?.replace(/\.[^/.]+$/, '') || '';
-            const nameFromFile = filename.replace(/^(Kit|Contrato|Procuração)\s*-\s*/i, '').trim();
-            if (nameFromFile.length > 2) signerNames.add(nameFromFile);
-          }
-
-          if (signerNames.size > 0) {
-            // Search leads by name (ilike)
-            for (const name of signerNames) {
-              const firstName = name.split(' ')[0];
-              if (firstName.length < 3) continue;
-              const { data: nameMatches } = await supabase
-                .from('leads_juridicos')
-                .select('id, nome, tipo_origem, telefone')
-                .ilike('nome', `%${firstName}%`)
-                .not('tipo_origem', 'is', null)
-                .limit(5);
-
-              if (nameMatches && nameMatches.length > 0) {
-                // Find best match by checking if full name contains the lead name or vice-versa
-                for (const lead of nameMatches) {
-                  if (!lead.tipo_origem || !lead.nome) continue;
-                  const leadNameLower = lead.nome.toLowerCase();
-                  const signerNameLower = name.toLowerCase();
-                  // Check if signer name contains lead name or lead name contains signer first name
-                  if (signerNameLower.includes(leadNameLower) || leadNameLower.includes(firstName.toLowerCase())) {
-                    // Find docs that match this signer name
-                    for (const doc of stillUnmatched) {
-                      const key = doc?.key;
-                      if (!key || leadIdByDocKey.has(key)) continue;
-                      const docSignerNames = (doc.signers || []).map((s: any) => s.name?.toLowerCase() || '');
-                      const docFileName = (doc.filename?.replace(/\.[^/.]+$/, '') || '').toLowerCase();
-                      if (docSignerNames.includes(signerNameLower) || docFileName.includes(firstName.toLowerCase())) {
-                        leadIdByDocKey.set(key, lead.id);
-                        tipoOrigemByLeadId.set(lead.id, lead.tipo_origem);
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-
       const mappedContracts: ContratoComStatus[] = documents.map((doc: any) => {
         const key: string | undefined = doc?.key;
-        const linkContrato = (key && linksByDocKey.get(key)) || (key ? `https://app.clicksign.com/sign/${key}` : 'https://app.clicksign.com');
+        const linkContrato =
+          (key && linksByDocKey.get(key)) ||
+          (key ? `https://app.clicksign.com/sign/${key}` : 'https://app.clicksign.com');
         const dbSignerName = key ? signerByDocKey.get(key) : null;
         const apiSigners = doc.signers || [];
         const apiSignerNames = apiSigners.map((s: any) => s.name).filter(Boolean);
@@ -273,12 +128,9 @@ export default function ContratosPage() {
         const leadId = key ? leadIdByDocKey.get(key) : undefined;
         const tipoOrigem = leadId ? tipoOrigemByLeadId.get(leadId) || null : null;
         return {
-          id: key,
-          key,
-          leadId,
+          id: key, key, leadId,
           leadNome: doc.filename?.replace(/\.[^/.]+$/, '') || 'Documento',
-          leadEmail,
-          signatarioNome,
+          leadEmail, signatarioNome,
           tipoAcao: categoria,
           linkContrato,
           status: mapClicksignStatus(doc),
@@ -288,22 +140,17 @@ export default function ContratosPage() {
       });
 
       mappedContracts.sort((a, b) => {
-        if (a.lastUpdate && b.lastUpdate) {
+        if (a.lastUpdate && b.lastUpdate)
           return new Date(b.lastUpdate).getTime() - new Date(a.lastUpdate).getTime();
-        }
         return 0;
       });
 
       setContratos(mappedContracts);
-      
-      if (showToast) {
+      if (showToast)
         toast({ title: 'Contratos atualizados', description: `${mappedContracts.length} documentos encontrados.` });
-      }
     } catch (error: any) {
-      console.error('Error fetching contracts:', error);
-      if (showToast) {
-        toast({ title: 'Erro ao buscar contratos', description: error.message || 'Não foi possível conectar ao Clicksign.', variant: 'destructive' });
-      }
+      if (showToast)
+        toast({ title: 'Erro ao buscar contratos', description: error.message, variant: 'destructive' });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -312,43 +159,40 @@ export default function ContratosPage() {
 
   useEffect(() => {
     fetchContractsFromClicksign();
-    const interval = setInterval(() => { fetchContractsFromClicksign(false); }, 300000);
+    const interval = setInterval(() => fetchContractsFromClicksign(false), 300000);
     return () => clearInterval(interval);
   }, [fetchContractsFromClicksign]);
 
-  const handleRefresh = () => { fetchContractsFromClicksign(false, true); };
+  const handleRefresh = () => fetchContractsFromClicksign(false, true);
 
-  const filteredContratos = contratos.filter(contrato => {
+  const filteredContratos = contratos.filter(c => {
     switch (activeTab) {
-      case 'em-processo':
-        return ['Aguardando Assinatura', 'Assinatura Parcial', 'Documento Enviado'].includes(contrato.status);
-      case 'finalizados':
-        return ['Assinado', 'Finalizado'].includes(contrato.status);
-      case 'cancelados':
-        return ['Cancelado', 'Recusado', 'Prazo Expirado'].includes(contrato.status);
-      default:
-        return true;
+      case 'em-processo': return ['Aguardando Assinatura', 'Assinatura Parcial', 'Documento Enviado'].includes(c.status);
+      case 'finalizados':  return ['Assinado', 'Finalizado'].includes(c.status);
+      case 'cancelados':   return ['Cancelado', 'Recusado', 'Prazo Expirado'].includes(c.status);
+      default: return true;
     }
   });
 
-  const trafegoFinalizados = contratos.filter(c => c.tipoOrigem === 'trafego' && ['Assinado', 'Finalizado'].includes(c.status)).length;
+  const trafegoFinalizados = contratos.filter(
+    c => c.tipoOrigem === 'trafego' && ['Assinado', 'Finalizado'].includes(c.status)
+  ).length;
 
   const kpiData = {
     emProcesso: contratos.filter(c => ['Aguardando Assinatura', 'Assinatura Parcial', 'Documento Enviado'].includes(c.status)).length,
-    recusados: contratos.filter(c => c.status === 'Recusado').length,
+    recusados:  contratos.filter(c => c.status === 'Recusado').length,
     finalizados: contratos.filter(c => ['Assinado', 'Finalizado'].includes(c.status)).length,
-    cancelados: contratos.filter(c => ['Cancelado', 'Prazo Expirado'].includes(c.status)).length,
+    cancelados:  contratos.filter(c => ['Cancelado', 'Prazo Expirado'].includes(c.status)).length,
     total: contratos.length,
     trafegoFinalizados,
   };
 
   const getTabCount = (tabId: string) => {
     switch (tabId) {
-      case 'todos': return contratos.length;
-      case 'em-processo': return kpiData.emProcesso;
-      case 'finalizados': return kpiData.finalizados;
-      case 'cancelados': return kpiData.cancelados;
-      case 'modelos': return null;
+      case 'todos':        return contratos.length;
+      case 'em-processo':  return kpiData.emProcesso;
+      case 'finalizados':  return kpiData.finalizados;
+      case 'cancelados':   return kpiData.cancelados;
       default: return null;
     }
   };
@@ -356,16 +200,19 @@ export default function ContratosPage() {
   return (
     <AppLayout>
       <AppHeader title="Contratos" />
-      
-      <div className="flex-1 px-4 md:px-6 lg:px-8 py-4 space-y-4 animate-fade-in overflow-auto">
+
+      <div className="flex-1 px-4 md:px-6 lg:px-8 py-5 space-y-5 animate-fade-in overflow-auto">
+
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="flex flex-col items-center justify-center py-24 gap-4">
+            <div className="h-14 w-14 rounded-2xl bg-[#c9a96e]/10 flex items-center justify-center">
+              <Loader2 className="h-7 w-7 animate-spin text-[#c9a96e]" />
+            </div>
             <p className="text-sm text-muted-foreground">Carregando contratos...</p>
           </div>
         ) : (
           <>
-            {/* KPI Bar + Actions */}
+            {/* KPIs com gráfico */}
             <ContratosKPIs
               data={kpiData}
               onRefresh={handleRefresh}
@@ -373,9 +220,9 @@ export default function ContratosPage() {
               refreshing={refreshing}
             />
 
-            {/* Tab Navigation */}
-            <div className="flex gap-0.5 border-b border-[#c9a96e]/20 overflow-x-auto">
-              {TABS.map((tab) => {
+            {/* Tabs */}
+            <div className="flex gap-1 overflow-x-auto pb-0.5">
+              {TABS.map(tab => {
                 const Icon = tab.icon;
                 const count = getTabCount(tab.id);
                 const isActive = activeTab === tab.id;
@@ -384,20 +231,20 @@ export default function ContratosPage() {
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     className={cn(
-                      "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-all border-b-2 -mb-px",
+                      'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all',
                       isActive
-                        ? "border-[#c9a96e] text-[#3d2b1f] dark:text-[#c9a96e]"
-                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-[#c9a96e]/30"
+                        ? 'bg-[#3d2b1f] text-[#c9a96e] shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-[#c9a96e]/8'
                     )}
                   >
-                    <Icon className={cn("h-4 w-4", isActive && "text-[#c9a96e]")} />
+                    <Icon className={cn('h-4 w-4 shrink-0', isActive ? 'text-[#c9a96e]' : tab.color)} />
                     <span className="hidden sm:inline">{tab.label}</span>
                     {count !== null && (
                       <span className={cn(
-                        "text-xs px-1.5 py-0.5 rounded-full font-medium",
+                        'text-[11px] px-1.5 py-0.5 rounded-full font-semibold min-w-[20px] text-center',
                         isActive
-                          ? "bg-[#c9a96e]/20 text-[#3d2b1f] dark:text-[#c9a96e]"
-                          : "bg-muted text-muted-foreground"
+                          ? 'bg-[#c9a96e]/20 text-[#c9a96e]'
+                          : 'bg-muted text-muted-foreground'
                       )}>
                         {count}
                       </span>
@@ -407,17 +254,16 @@ export default function ContratosPage() {
               })}
             </div>
 
-            {/* Tab Content */}
-            {activeTab === 'modelos' ? (
-              <ModelosContratos />
-            ) : (
-              <ContratosTable contratos={filteredContratos} />
-            )}
+            {/* Conteúdo */}
+            {activeTab === 'modelos'
+              ? <ModelosContratos />
+              : <ContratosTable contratos={filteredContratos} />
+            }
           </>
         )}
       </div>
 
-      <GerarContratoModal
+      <EnviarKitModal
         isOpen={enviarModalOpen}
         onClose={() => setEnviarModalOpen(false)}
         onSuccess={handleRefresh}
