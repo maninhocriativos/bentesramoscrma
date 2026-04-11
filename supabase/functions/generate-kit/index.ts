@@ -39,21 +39,18 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = 3): P
   throw new Error("Max retries exceeded");
 }
 
-// ─── Preenchimento dos placeholders no DOCX (manipulação do ZIP/XML) ──────────
+// ─── Preenchimento dos placeholders no DOCX ───────────────────────────────────
 async function fillDocxTemplate(templateBase64: string, replacements: Record<string, string>): Promise<string> {
   const { ZipReader, ZipWriter, BlobReader, BlobWriter, TextReader, TextWriter } =
     await import("https://esm.sh/@zip.js/zip.js@2.7.32");
 
-  // Decodificar base64 -> bytes
   const binaryStr = atob(templateBase64);
   const bytes = new Uint8Array(binaryStr.length);
   for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
 
-  // Abrir o ZIP (DOCX é um ZIP)
   const zipReader = new ZipReader(new BlobReader(new Blob([bytes])));
   const entries = await zipReader.getEntries();
 
-  // Ler todos os arquivos do ZIP
   const files = new Map<string, string | Uint8Array>();
   for (const entry of entries) {
     if (!entry.getData) continue;
@@ -67,21 +64,15 @@ async function fillDocxTemplate(templateBase64: string, replacements: Record<str
   }
   await zipReader.close();
 
-  // Substituir placeholders no word/document.xml
   let docXml = files.get("word/document.xml") as string;
   if (docXml) {
     for (const [placeholder, value] of Object.entries(replacements)) {
-      // Escapar caracteres XML especiais no valor de substituição
-      const xmlSafe = value
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
+      const xmlSafe = value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       docXml = docXml.split(placeholder).join(xmlSafe);
     }
     files.set("word/document.xml", docXml);
   }
 
-  // Recriar o ZIP
   const zipWriter = new ZipWriter(new BlobWriter("application/vnd.openxmlformats-officedocument.wordprocessingml.document"));
   for (const [filename, content] of files) {
     if (typeof content === "string") {
@@ -92,8 +83,6 @@ async function fillDocxTemplate(templateBase64: string, replacements: Record<str
   }
   const resultBlob = await zipWriter.close();
   const resultBytes = new Uint8Array(await resultBlob.arrayBuffer());
-
-  // Retornar como base64
   let binary = "";
   for (let i = 0; i < resultBytes.length; i++) binary += String.fromCharCode(resultBytes[i]);
   return btoa(binary);
@@ -144,11 +133,13 @@ async function addClicksignSigner(signer: {
   );
   if (!res.ok) throw new Error(`Clicksign add signer: ${await res.text()}`);
   const data = await res.json();
-  return data.signer?.key;
+  const key = data.signer?.key;
+  if (!key) throw new Error(`Clicksign não retornou signer key`);
+  return key;
 }
 
-// ─── Clicksign: criar lista de assinatura ─────────────────────────────────────
-async function createSignatureList(documentKey: string, signerKey: string, message: string): Promise<string | null> {
+// ─── Clicksign: criar lista e capturar o link de assinatura ───────────────────
+async function createSignatureList(documentKey: string, signerKey: string, message: string): Promise<{ requestKey: string | null; signLink: string }> {
   const res = await fetchWithRetry(
     `${CLICKSIGN_BASE_URL}/lists?access_token=${CLICKSIGN_API_KEY}`,
     {
@@ -166,7 +157,22 @@ async function createSignatureList(documentKey: string, signerKey: string, messa
   );
   if (!res.ok) throw new Error(`Clicksign create list: ${await res.text()}`);
   const data = await res.json();
-  return data.list?.request_signature_key || null;
+  
+  // Log completo para debug
+  console.log(`[generate-kit] List response:`, JSON.stringify(data));
+  
+  const requestKey = data.list?.request_signature_key || null;
+  
+  // Formato correto do link de assinatura do Clicksign
+  // Se tiver request_signature_key: /sign/{request_signature_key}
+  // Se não tiver: link direto para o documento no painel
+  const signLink = requestKey
+    ? `https://app.clicksign.com/sign/${requestKey}`
+    : `https://app.clicksign.com/document/${documentKey}`;
+
+  console.log(`[generate-kit] requestKey: ${requestKey}, signLink: ${signLink}`);
+  
+  return { requestKey, signLink };
 }
 
 // ─── Handler principal ────────────────────────────────────────────────────────
@@ -185,20 +191,20 @@ serve(async (req: Request): Promise<Response> => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-    // ── Montar data por extenso ─────────────────────────────────────────────
+    // ── Data por extenso ────────────────────────────────────────────────────
     const meses = ["janeiro","fevereiro","março","abril","maio","junho",
                    "julho","agosto","setembro","outubro","novembro","dezembro"];
     const now = new Date();
     const dataExtenso = `${now.getDate()} de ${meses[now.getMonth()]} de ${now.getFullYear()}`;
 
-    // ── Montar qualificação ─────────────────────────────────────────────────
+    // ── Qualificação ────────────────────────────────────────────────────────
     const qualificacao = [
       lead.nacionalidade || "brasileiro(a)",
       lead.estado_civil || "",
       lead.profissao || "",
     ].filter(Boolean).join(", ");
 
-    // ── Mapeamento de placeholders → valores reais ──────────────────────────
+    // ── Replacements ────────────────────────────────────────────────────────
     const replacements: Record<string, string> = {
       "(nome completo)": lead.nome,
       "(NOME COMPLETO)": lead.nome.toUpperCase(),
@@ -217,19 +223,33 @@ serve(async (req: Request): Promise<Response> => {
       "(DDD) XXXXXX-XXXXXX": lead.telefone || "não informado",
     };
 
-    // ── Processar cada documento do kit ────────────────────────────────────
+    // ── Criar signatário UMA VEZ e reutilizar para todos os docs ───────────
+    // Isso é importante: criamos o signer uma vez e linkamos em todos os docs
     const primeiroNome = lead.nome.split(" ")[0];
+    
+    console.log(`[generate-kit] Criando signatário: ${signatario.email}`);
+    const signerKey = await addClicksignSigner({
+      email: signatario.email,
+      name: signatario.nome,
+      phone: signatario.telefone,
+      cpf: signatario.cpf || lead.cpf,
+      auth_type: signatario.auth_type || "email",
+    });
+    console.log(`[generate-kit] Signer criado: ${signerKey}`);
+
+    // ── Processar cada documento ────────────────────────────────────────────
     const documentosEnviados: Array<{
       nome: string;
       documentKey: string;
       signLink: string;
+      requestKey: string | null;
     }> = [];
 
     for (const [templateKey, templateB64] of Object.entries(TEMPLATES)) {
       const label = TEMPLATE_LABELS[templateKey];
       console.log(`[generate-kit] Processando: ${label}`);
 
-      // 1. Preencher placeholders no DOCX
+      // 1. Preencher DOCX
       const filledBase64 = await fillDocxTemplate(templateB64, replacements);
       const fileName = `${primeiroNome} - ${label}.docx`;
 
@@ -237,35 +257,28 @@ serve(async (req: Request): Promise<Response> => {
       const documentKey = await createClicksignDocument(filledBase64, fileName);
       console.log(`[generate-kit] Doc criado: ${documentKey}`);
 
-      // 3. Adicionar signatário
-      const signerKey = await addClicksignSigner({
-        email: signatario.email,
-        name: signatario.nome,
-        phone: signatario.telefone,
-        cpf: signatario.cpf || lead.cpf,
-        auth_type: signatario.auth_type || "email",
-      });
-
-      // 4. Criar lista de assinatura
+      // 3. Criar lista de assinatura (mesmo signer para todos os docs)
       const msg = `Olá ${primeiroNome}! Por favor, assine o documento: ${label}.`;
-      const requestSignatureKey = await createSignatureList(documentKey, signerKey, msg);
+      const { requestKey, signLink } = await createSignatureList(documentKey, signerKey, msg);
 
-      const signLink = requestSignatureKey
-        ? `https://app.clicksign.com/sign/${requestSignatureKey}`
-        : `https://app.clicksign.com/document/${documentKey}`;
-
-      documentosEnviados.push({ nome: label, documentKey, signLink });
+      documentosEnviados.push({ nome: label, documentKey, signLink, requestKey });
     }
+
+    // ── Link principal: pegar o primeiro requestKey válido ──────────────────
+    // O cliente recebe UM link e ao assinar, o Clicksign mostra todos os docs
+    // vinculados ao mesmo signer_key em sequência
+    const primeiroComLink = documentosEnviados.find(d => d.requestKey);
+    const linkPrincipal = primeiroComLink?.signLink || documentosEnviados[0]?.signLink;
+
+    console.log(`[generate-kit] Link principal: ${linkPrincipal}`);
 
     // ── Salvar no banco ─────────────────────────────────────────────────────
     if (lead.id) {
-      const contratoDoc = documentosEnviados[0];
-
       await supabase
         .from("leads_juridicos")
         .update({
-          link_contrato: contratoDoc.signLink,
-          contract_key: contratoDoc.documentKey,
+          link_contrato: linkPrincipal,
+          contract_key: documentosEnviados[0]?.documentKey,
           contract_sent_at: new Date().toISOString(),
         })
         .eq("id", lead.id);
@@ -286,17 +299,16 @@ serve(async (req: Request): Promise<Response> => {
         cliente_id: lead.id,
         tipo: "Documento",
         resumo: `Kit bancário enviado (${documentosEnviados.length} documentos)`,
-        detalhes: documentosEnviados.map(d => `${d.nome}: ${d.signLink}`).join("\n"),
+        detalhes: `Link principal: ${linkPrincipal}\n\n` + documentosEnviados.map(d => `${d.nome}: ${d.signLink}`).join("\n"),
       });
     }
 
     // ── Enviar WhatsApp ─────────────────────────────────────────────────────
     if (signatario.telefone && lead.id) {
       try {
-        const linkPrincipal = documentosEnviados[0]?.signLink;
         const msg =
           `Olá ${primeiroNome}! 👋\n\n` +
-          `Seu *Kit de Documentos* está pronto para assinatura digital.\n\n` +
+          `Seus documentos estão prontos para assinatura digital.\n\n` +
           `📋 *${documentosEnviados.length} documentos:*\n` +
           documentosEnviados.map((d, i) => `${i + 1}. ${d.nome}`).join("\n") +
           `\n\n✍️ *Assine aqui:*\n${linkPrincipal}\n\n` +
@@ -305,6 +317,7 @@ serve(async (req: Request): Promise<Response> => {
         await supabase.functions.invoke("zapi-send", {
           body: { to_phone: signatario.telefone, message: msg, lead_id: lead.id, type: "text" },
         });
+        console.log(`[generate-kit] WhatsApp enviado para ${signatario.telefone}`);
       } catch (e) {
         console.warn("[generate-kit] WhatsApp falhou (não crítico):", e);
       }
@@ -315,7 +328,7 @@ serve(async (req: Request): Promise<Response> => {
         success: true,
         documentos: documentosEnviados,
         total: documentosEnviados.length,
-        signLink: documentosEnviados[0]?.signLink,
+        signLink: linkPrincipal,
       }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
