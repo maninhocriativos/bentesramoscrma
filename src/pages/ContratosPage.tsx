@@ -54,11 +54,11 @@ const mapClicksignStatus = (doc: any): string => {
 };
 
 const TABS = [
-  { id: 'todos',       label: 'Todos',        icon: FileText,      color: 'text-[#c9a96e]' },
-  { id: 'em-processo', label: 'Em Processo',  icon: Clock,         color: 'text-amber-500' },
-  { id: 'finalizados', label: 'Finalizados',  icon: CheckCircle2,  color: 'text-emerald-500' },
-  { id: 'cancelados',  label: 'Cancelados',   icon: XCircle,       color: 'text-zinc-400' },
-  { id: 'modelos',     label: 'Modelos',      icon: FolderOpen,    color: 'text-[#c9a96e]' },
+  { id: 'todos',       label: 'Todos',       icon: FileText,     color: 'text-[#c9a96e]'  },
+  { id: 'em-processo', label: 'Em Processo', icon: Clock,        color: 'text-amber-500'  },
+  { id: 'finalizados', label: 'Finalizados', icon: CheckCircle2, color: 'text-emerald-500' },
+  { id: 'cancelados',  label: 'Cancelados',  icon: XCircle,      color: 'text-zinc-400'   },
+  { id: 'modelos',     label: 'Modelos',     icon: FolderOpen,   color: 'text-[#c9a96e]'  },
 ];
 
 export default function ContratosPage() {
@@ -128,9 +128,12 @@ export default function ContratosPage() {
         const leadId = key ? leadIdByDocKey.get(key) : undefined;
         const tipoOrigem = leadId ? tipoOrigemByLeadId.get(leadId) || null : null;
         return {
-          id: key, key, leadId,
+          id: key,
+          key,
+          leadId,
           leadNome: doc.filename?.replace(/\.[^/.]+$/, '') || 'Documento',
-          leadEmail, signatarioNome,
+          leadEmail,
+          signatarioNome,
           tipoAcao: categoria,
           linkContrato,
           status: mapClicksignStatus(doc),
@@ -179,8 +182,8 @@ export default function ContratosPage() {
   ).length;
 
   const kpiData = {
-    emProcesso: contratos.filter(c => ['Aguardando Assinatura', 'Assinatura Parcial', 'Documento Enviado'].includes(c.status)).length,
-    recusados:  contratos.filter(c => c.status === 'Recusado').length,
+    emProcesso:  contratos.filter(c => ['Aguardando Assinatura', 'Assinatura Parcial', 'Documento Enviado'].includes(c.status)).length,
+    recusados:   contratos.filter(c => c.status === 'Recusado').length,
     finalizados: contratos.filter(c => ['Assinado', 'Finalizado'].includes(c.status)).length,
     cancelados:  contratos.filter(c => ['Cancelado', 'Prazo Expirado'].includes(c.status)).length,
     total: contratos.length,
@@ -189,10 +192,10 @@ export default function ContratosPage() {
 
   const getTabCount = (tabId: string) => {
     switch (tabId) {
-      case 'todos':        return contratos.length;
-      case 'em-processo':  return kpiData.emProcesso;
-      case 'finalizados':  return kpiData.finalizados;
-      case 'cancelados':   return kpiData.cancelados;
+      case 'todos':       return contratos.length;
+      case 'em-processo': return kpiData.emProcesso;
+      case 'finalizados': return kpiData.finalizados;
+      case 'cancelados':  return kpiData.cancelados;
       default: return null;
     }
   };
@@ -202,7 +205,6 @@ export default function ContratosPage() {
       <AppHeader title="Contratos" />
 
       <div className="flex-1 px-4 md:px-6 lg:px-8 py-5 space-y-5 animate-fade-in overflow-auto">
-
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-4">
             <div className="h-14 w-14 rounded-2xl bg-[#c9a96e]/10 flex items-center justify-center">
@@ -254,7 +256,7 @@ export default function ContratosPage() {
               })}
             </div>
 
-            {/* Conteúdo */}
+            {/* Conteúdo da tab */}
             {activeTab === 'modelos'
               ? <ModelosContratos />
               : <ContratosTable contratos={filteredContratos} />
@@ -262,12 +264,12 @@ export default function ContratosPage() {
           </>
         )}
       </div>
-// COLOCA isso:
-<EnviarKitModal
-  isOpen={enviarModalOpen}
-  onClose={() => setEnviarModalOpen(false)}
-  onSuccess={handleRefresh}
-/>
+
+      <EnviarKitModal
+        isOpen={enviarModalOpen}
+        onClose={() => setEnviarModalOpen(false)}
+        onSuccess={handleRefresh}
+      />
     </AppLayout>
   );
 }
