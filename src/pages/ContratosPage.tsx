@@ -259,7 +259,7 @@ export default function ContratosPage() {
             {/* Conteúdo da tab */}
             {activeTab === 'modelos'
               ? <ModelosContratos />
-              : <ContratosTable contratos={filteredContratos} />
+              : <ContratosTable contratos={filteredContratos} onRefresh={handleRefresh} />
             }
           </>
         )}
