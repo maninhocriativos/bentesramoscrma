@@ -16,13 +16,13 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3,
     } catch (error: any) {
       lastError = error;
       const isRetryable =
-        error.message?.includes('http2 error') ||
-        error.message?.includes('connection error') ||
-        error.message?.includes('SendRequest') ||
-        error.message?.includes('ECONNRESET');
+        error.message?.includes("http2 error") ||
+        error.message?.includes("connection error") ||
+        error.message?.includes("SendRequest") ||
+        error.message?.includes("ECONNRESET");
       if (!isRetryable || attempt === maxRetries - 1) throw error;
       const delay = baseDelay * Math.pow(2, attempt);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
   throw lastError;
@@ -40,22 +40,18 @@ serve(async (req: Request): Promise<Response> => {
     let result;
 
     switch (body.action) {
-
       case "create_document": {
         if (!body.file_content || !body.file_name) throw new Error("file_content and file_name are required");
-        const response = await fetchWithRetry(
-          `${CLICKSIGN_BASE_URL}/documents?access_token=${CLICKSIGN_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              document: {
-                path: `/${body.file_name}`,
-                content_base64: `data:application/pdf;base64,${body.file_content}`,
-              }
-            }),
-          }
-        );
+        const response = await fetchWithRetry(`${CLICKSIGN_BASE_URL}/documents?access_token=${CLICKSIGN_API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            document: {
+              path: `/${body.file_name}`,
+              content_base64: `data:application/pdf;base64,${body.file_content}`,
+            },
+          }),
+        });
         if (!response.ok) throw new Error(`Failed to create document: ${await response.text()}`);
         result = await response.json();
         break;
@@ -63,23 +59,20 @@ serve(async (req: Request): Promise<Response> => {
 
       case "add_signer": {
         if (!body.signer) throw new Error("signer data is required");
-        const response = await fetchWithRetry(
-          `${CLICKSIGN_BASE_URL}/signers?access_token=${CLICKSIGN_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              signer: {
-                email: body.signer.email,
-                name: body.signer.name,
-                phone_number: body.signer.phone,
-                documentation: body.signer.documentation,
-                birthday: body.signer.birthday,
-                auths: [body.signer.auth_type || "email"],
-              }
-            }),
-          }
-        );
+        const response = await fetchWithRetry(`${CLICKSIGN_BASE_URL}/signers?access_token=${CLICKSIGN_API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            signer: {
+              email: body.signer.email,
+              name: body.signer.name,
+              phone_number: body.signer.phone,
+              documentation: body.signer.documentation,
+              birthday: body.signer.birthday,
+              auths: [body.signer.auth_type || "email"],
+            },
+          }),
+        });
         if (!response.ok) throw new Error(`Failed to add signer: ${await response.text()}`);
         result = await response.json();
         break;
@@ -87,21 +80,18 @@ serve(async (req: Request): Promise<Response> => {
 
       case "create_list": {
         if (!body.document_key || !body.signer_key) throw new Error("document_key and signer_key are required");
-        const response = await fetchWithRetry(
-          `${CLICKSIGN_BASE_URL}/lists?access_token=${CLICKSIGN_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              list: {
-                document_key: body.document_key,
-                signer_key: body.signer_key,
-                sign_as: "sign",
-                message: body.message || "Por favor, assine o documento.",
-              }
-            }),
-          }
-        );
+        const response = await fetchWithRetry(`${CLICKSIGN_BASE_URL}/lists?access_token=${CLICKSIGN_API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            list: {
+              document_key: body.document_key,
+              signer_key: body.signer_key,
+              sign_as: "sign",
+              message: body.message || "Por favor, assine o documento.",
+            },
+          }),
+        });
         if (!response.ok) throw new Error(`Failed to create signature list: ${await response.text()}`);
         result = await response.json();
         break;
@@ -111,7 +101,7 @@ serve(async (req: Request): Promise<Response> => {
         if (!body.document_key) throw new Error("document_key is required");
         const response = await fetchWithRetry(
           `${CLICKSIGN_BASE_URL}/documents/${body.document_key}?access_token=${CLICKSIGN_API_KEY}`,
-          { method: "GET" }
+          { method: "GET" },
         );
         if (!response.ok) throw new Error(`Failed to get document: ${await response.text()}`);
         result = await response.json();
@@ -127,7 +117,7 @@ serve(async (req: Request): Promise<Response> => {
         while (hasMore) {
           const response = await fetchWithRetry(
             `${CLICKSIGN_BASE_URL}/documents?access_token=${CLICKSIGN_API_KEY}&page=${page}`,
-            { method: "GET" }
+            { method: "GET" },
           );
           if (!response.ok) throw new Error(`Failed to list documents: ${await response.text()}`);
           const data = await response.json();
@@ -147,7 +137,7 @@ serve(async (req: Request): Promise<Response> => {
             try {
               const listsRes = await fetchWithRetry(
                 `${CLICKSIGN_BASE_URL}/documents/${doc.key}/lists?access_token=${CLICKSIGN_API_KEY}`,
-                { method: "GET" }
+                { method: "GET" },
               );
               if (listsRes.ok) {
                 const listsData = await listsRes.json();
@@ -163,7 +153,7 @@ serve(async (req: Request): Promise<Response> => {
               // Ignora erro individual — não bloqueia a listagem
             }
             return doc;
-          })
+          }),
         );
 
         console.log(`Total documents: ${documentsWithLinks.length}`);
@@ -175,7 +165,7 @@ serve(async (req: Request): Promise<Response> => {
         if (!body.document_key) throw new Error("document_key is required");
         const response = await fetchWithRetry(
           `${CLICKSIGN_BASE_URL}/documents/${body.document_key}/cancel?access_token=${CLICKSIGN_API_KEY}`,
-          { method: "PATCH" }
+          { method: "PATCH" },
         );
         if (!response.ok) throw new Error(`Failed to cancel document: ${await response.text()}`);
         result = await response.json();
@@ -190,12 +180,11 @@ serve(async (req: Request): Promise<Response> => {
       status: 200,
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });
-
   } catch (error: any) {
     console.error("Error in clicksign function:", error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-    );
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
   }
 });
