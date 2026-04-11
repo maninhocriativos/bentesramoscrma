@@ -33,22 +33,6 @@ interface Lead {
   nacionalidade: string | null;
 }
 
-interface DadosCliente {
-  id?: string;
-  nome: string;
-  email: string;
-  telefone: string;
-  cpf: string;
-  rg: string;
-  endereco: string;
-  numero: string;
-  bairro: string;
-  cep: string;
-  estado_civil: string;
-  profissao: string;
-  nacionalidade: string;
-}
-
 interface EnviarKitModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -74,17 +58,11 @@ const BANCOS = [
 ];
 
 const KIT_DOCS = [
-  { icon: Scale,         label: 'Contrato de Honorários',        desc: '40% sobre êxito' },
-  { icon: FileSignature, label: 'Procuração',                     desc: 'Ad Judicia et Extra' },
-  { icon: FileText,      label: 'Declaração de Hipossuficiência', desc: 'Gratuidade de justiça' },
-  { icon: AlertCircle,   label: 'Declaração Golpe Falso Advogado', desc: 'Orientação sobre fraudes' },
+  { icon: Scale,         label: 'Contrato de Honorários',          desc: '40% sobre êxito' },
+  { icon: FileSignature, label: 'Procuração',                       desc: 'Ad Judicia et Extra' },
+  { icon: FileText,      label: 'Declaração de Hipossuficiência',   desc: 'Gratuidade de justiça' },
+  { icon: AlertCircle,   label: 'Declaração Golpe Falso Advogado',  desc: 'Orientação sobre fraudes' },
 ];
-
-const DADOS_VAZIOS: DadosCliente = {
-  nome: '', email: '', telefone: '', cpf: '', rg: '',
-  endereco: '', numero: '', bairro: '', cep: '',
-  estado_civil: '', profissao: '', nacionalidade: 'brasileiro(a)',
-};
 
 type Step = 'cliente' | 'banco' | 'revisao' | 'enviando' | 'sucesso';
 type Origem = 'sistema' | 'manual';
@@ -93,18 +71,28 @@ type Origem = 'sistema' | 'manual';
 export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: EnviarKitModalProps) {
   const { toast } = useToast();
 
-  // Steps
   const [step, setStep] = useState<Step>('cliente');
   const [origem, setOrigem] = useState<Origem>('sistema');
 
-  // Dados do sistema
+  // Lead do sistema
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
 
   // Dados manuais
-  const [manual, setManual] = useState<DadosCliente>(DADOS_VAZIOS);
+  const [nomeManual, setNomeManual] = useState('');
+  const [emailManual, setEmailManual] = useState('');
+  const [telefoneManual, setTelefoneManual] = useState('');
+  const [cpfManual, setCpfManual] = useState('');
+  const [rgManual, setRgManual] = useState('');
+  const [enderecoManual, setEnderecoManual] = useState('');
+  const [numeroManual, setNumeroManual] = useState('');
+  const [bairroManual, setBairroManual] = useState('');
+  const [cepManual, setCepManual] = useState('');
+  const [estadoCivilManual, setEstadoCivilManual] = useState('');
+  const [profissaoManual, setProfissaoManual] = useState('');
+  const [nacionalidadeManual, setNacionalidadeManual] = useState('brasileiro(a)');
 
   // Banco e envio
   const [bancoReu, setBancoReu] = useState('');
@@ -138,40 +126,22 @@ export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: 
       setStep('cliente');
       setOrigem('sistema');
       setSelectedLead(null);
-      setManual(DADOS_VAZIOS);
-      setBancoReu('');
-      setBancoCustom('');
-      setSearch('');
-      setResultLinks([]);
+      setNomeManual(''); setEmailManual(''); setTelefoneManual('');
+      setCpfManual(''); setRgManual(''); setEnderecoManual('');
+      setNumeroManual(''); setBairroManual(''); setCepManual('');
+      setEstadoCivilManual(''); setProfissaoManual('');
+      setNacionalidadeManual('brasileiro(a)');
+      setBancoReu(''); setBancoCustom('');
+      setSearch(''); setResultLinks([]);
     }
   }, [isOpen]);
 
-  // ── Dados consolidados do cliente ───────────────────────────────────────────
-  const dadosCliente: DadosCliente = origem === 'sistema' && selectedLead
-    ? {
-        id: selectedLead.id,
-        nome: selectedLead.nome || '',
-        email: selectedLead.email || '',
-        telefone: selectedLead.telefone || '',
-        cpf: selectedLead.cpf || '',
-        rg: selectedLead.rg || '',
-        endereco: selectedLead.endereco || '',
-        numero: selectedLead.numero || '',
-        bairro: selectedLead.bairro || '',
-        cep: selectedLead.cep || '',
-        estado_civil: selectedLead.estado_civil || '',
-        profissao: selectedLead.profissao || '',
-        nacionalidade: selectedLead.nacionalidade || 'brasileiro(a)',
-      }
-    : manual;
-
   const bancoFinal = bancoReu === 'OUTRO' ? bancoCustom.trim() : bancoReu;
 
-  // ── Validações por step ─────────────────────────────────────────────────────
-  const clienteOk =
-    origem === 'sistema'
-      ? !!selectedLead
-      : !!manual.nome.trim() && !!manual.email.trim();
+  // ── Validação do step cliente ───────────────────────────────────────────────
+  const clienteOk = origem === 'sistema'
+    ? !!selectedLead
+    : !!nomeManual.trim() && !!emailManual.trim();
 
   const filteredLeads = leads.filter(l => {
     if (!search.trim()) return true;
@@ -183,34 +153,60 @@ export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: 
     );
   });
 
+  // ── Nome do cliente para exibição ───────────────────────────────────────────
+  const nomeCliente = origem === 'sistema' ? (selectedLead?.nome || '') : nomeManual;
+  const emailCliente = origem === 'sistema' ? (selectedLead?.email || '') : emailManual;
+  const telefoneCliente = origem === 'sistema' ? (selectedLead?.telefone || '') : telefoneManual;
+
   // ── Enviar o kit ────────────────────────────────────────────────────────────
   const handleEnviar = async () => {
-    if (!bancoFinal) return;
+    if (!bancoFinal || !clienteOk) return;
     setStep('enviando');
+
     try {
+      // Montar payload — lead.id só vem quando é do sistema
+      const leadPayload = origem === 'sistema' && selectedLead
+        ? {
+            id: selectedLead.id,                           // ← ID do banco
+            nome: selectedLead.nome || '',
+            email: selectedLead.email || '',
+            telefone: selectedLead.telefone || '',
+            cpf: selectedLead.cpf || '',
+            rg: selectedLead.rg || '',
+            endereco: selectedLead.endereco || '',
+            numero: selectedLead.numero || '',
+            bairro: selectedLead.bairro || '',
+            cep: selectedLead.cep || '',
+            estado_civil: selectedLead.estado_civil || '',
+            profissao: selectedLead.profissao || '',
+            nacionalidade: selectedLead.nacionalidade || 'brasileiro(a)',
+            banco_reu: bancoFinal,
+          }
+        : {
+            // Manual: sem ID (não está no sistema)
+            nome: nomeManual,
+            email: emailManual,
+            telefone: telefoneManual,
+            cpf: cpfManual,
+            rg: rgManual,
+            endereco: enderecoManual,
+            numero: numeroManual,
+            bairro: bairroManual,
+            cep: cepManual,
+            estado_civil: estadoCivilManual,
+            profissao: profissaoManual,
+            nacionalidade: nacionalidadeManual,
+            banco_reu: bancoFinal,
+          };
+
       const { data, error } = await supabase.functions.invoke('generate-kit', {
         body: {
-          lead: {
-            id: dadosCliente.id,
-            nome: dadosCliente.nome,
-            email: dadosCliente.email,
-            telefone: dadosCliente.telefone,
-            cpf: dadosCliente.cpf,
-            rg: dadosCliente.rg,
-            endereco: dadosCliente.endereco,
-            numero: dadosCliente.numero,
-            bairro: dadosCliente.bairro,
-            cep: dadosCliente.cep,
-            estado_civil: dadosCliente.estado_civil,
-            profissao: dadosCliente.profissao,
-            nacionalidade: dadosCliente.nacionalidade,
-            banco_reu: bancoFinal,
-          },
+          lead: leadPayload,
           signatario: {
-            nome: dadosCliente.nome,
-            email: dadosCliente.email,
-            telefone: dadosCliente.telefone,
-            cpf: dadosCliente.cpf,
+            nome: nomeCliente,
+            email: emailCliente,
+            telefone: telefoneCliente,
+            cpf: origem === 'sistema' ? (selectedLead?.cpf || '') : cpfManual,
             auth_type: authType,
           },
         },
@@ -266,9 +262,7 @@ export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: 
 
         <div className="min-h-[420px]">
 
-          {/* ═══════════════════════════════════════════════════════════════ */}
-          {/* STEP 1 — Cliente                                               */}
-          {/* ═══════════════════════════════════════════════════════════════ */}
+          {/* ═══ STEP 1 — Cliente ═══════════════════════════════════════════ */}
           {step === 'cliente' && (
             <div className="p-5 space-y-4">
 
@@ -278,25 +272,19 @@ export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: 
                   onClick={() => setOrigem('sistema')}
                   className={cn(
                     'flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all',
-                    origem === 'sistema'
-                      ? 'bg-[#3d2b1f] text-[#c9a96e] shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
+                    origem === 'sistema' ? 'bg-[#3d2b1f] text-[#c9a96e] shadow-sm' : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  <Users className="h-4 w-4" />
-                  Buscar no sistema
+                  <Users className="h-4 w-4" /> Buscar no sistema
                 </button>
                 <button
                   onClick={() => setOrigem('manual')}
                   className={cn(
                     'flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all',
-                    origem === 'manual'
-                      ? 'bg-[#3d2b1f] text-[#c9a96e] shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
+                    origem === 'manual' ? 'bg-[#3d2b1f] text-[#c9a96e] shadow-sm' : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  <PenLine className="h-4 w-4" />
-                  Preencher manual
+                  <PenLine className="h-4 w-4" /> Preencher manual
                 </button>
               </div>
 
@@ -334,9 +322,7 @@ export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: 
                             className={cn(
                               'w-full text-left px-3 py-2.5 rounded-lg border transition-all',
                               'hover:border-[#c9a96e]/40 hover:bg-[#c9a96e]/5',
-                              selectedLead?.id === lead.id
-                                ? 'border-[#c9a96e] bg-[#c9a96e]/10'
-                                : 'border-border'
+                              selectedLead?.id === lead.id ? 'border-[#c9a96e] bg-[#c9a96e]/10' : 'border-border'
                             )}
                           >
                             <div className="flex items-center gap-2.5">
@@ -365,140 +351,68 @@ export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: 
               {origem === 'manual' && (
                 <ScrollArea className="h-[280px]">
                   <div className="space-y-3 pr-2">
-                    {/* Nome e Email */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <Label className="text-xs">Nome completo *</Label>
-                        <Input
-                          placeholder="Nome do cliente"
-                          value={manual.nome}
-                          onChange={e => setManual(p => ({ ...p, nome: e.target.value }))}
-                          className="border-[#c9a96e]/20 h-9 text-sm"
-                        />
+                        <Input value={nomeManual} onChange={e => setNomeManual(e.target.value)} placeholder="Nome do cliente" className="border-[#c9a96e]/20 h-9 text-sm" />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs">Email *</Label>
-                        <Input
-                          type="email"
-                          placeholder="email@exemplo.com"
-                          value={manual.email}
-                          onChange={e => setManual(p => ({ ...p, email: e.target.value }))}
-                          className="border-[#c9a96e]/20 h-9 text-sm"
-                        />
+                        <Input type="email" value={emailManual} onChange={e => setEmailManual(e.target.value)} placeholder="email@exemplo.com" className="border-[#c9a96e]/20 h-9 text-sm" />
                       </div>
                     </div>
-
-                    {/* Telefone e CPF */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <Label className="text-xs">Telefone</Label>
-                        <Input
-                          placeholder="(92) 99999-9999"
-                          value={manual.telefone}
-                          onChange={e => setManual(p => ({ ...p, telefone: e.target.value }))}
-                          className="border-[#c9a96e]/20 h-9 text-sm"
-                        />
+                        <Input value={telefoneManual} onChange={e => setTelefoneManual(e.target.value)} placeholder="(92) 99999-9999" className="border-[#c9a96e]/20 h-9 text-sm" />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs">CPF</Label>
-                        <Input
-                          placeholder="000.000.000-00"
-                          value={manual.cpf}
-                          onChange={e => setManual(p => ({ ...p, cpf: e.target.value }))}
-                          className="border-[#c9a96e]/20 h-9 text-sm"
-                        />
+                        <Input value={cpfManual} onChange={e => setCpfManual(e.target.value)} placeholder="000.000.000-00" className="border-[#c9a96e]/20 h-9 text-sm" />
                       </div>
                     </div>
-
-                    {/* RG e Estado civil */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <Label className="text-xs">RG</Label>
-                        <Input
-                          placeholder="0000000-0"
-                          value={manual.rg}
-                          onChange={e => setManual(p => ({ ...p, rg: e.target.value }))}
-                          className="border-[#c9a96e]/20 h-9 text-sm"
-                        />
+                        <Input value={rgManual} onChange={e => setRgManual(e.target.value)} placeholder="0000000-0" className="border-[#c9a96e]/20 h-9 text-sm" />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs">Estado civil</Label>
-                        <Input
-                          placeholder="solteiro(a)"
-                          value={manual.estado_civil}
-                          onChange={e => setManual(p => ({ ...p, estado_civil: e.target.value }))}
-                          className="border-[#c9a96e]/20 h-9 text-sm"
-                        />
+                        <Input value={estadoCivilManual} onChange={e => setEstadoCivilManual(e.target.value)} placeholder="solteiro(a)" className="border-[#c9a96e]/20 h-9 text-sm" />
                       </div>
                     </div>
-
-                    {/* Profissão e Nacionalidade */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <Label className="text-xs">Profissão</Label>
-                        <Input
-                          placeholder="aposentado(a)"
-                          value={manual.profissao}
-                          onChange={e => setManual(p => ({ ...p, profissao: e.target.value }))}
-                          className="border-[#c9a96e]/20 h-9 text-sm"
-                        />
+                        <Input value={profissaoManual} onChange={e => setProfissaoManual(e.target.value)} placeholder="aposentado(a)" className="border-[#c9a96e]/20 h-9 text-sm" />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs">Nacionalidade</Label>
-                        <Input
-                          value={manual.nacionalidade}
-                          onChange={e => setManual(p => ({ ...p, nacionalidade: e.target.value }))}
-                          className="border-[#c9a96e]/20 h-9 text-sm"
-                        />
+                        <Input value={nacionalidadeManual} onChange={e => setNacionalidadeManual(e.target.value)} className="border-[#c9a96e]/20 h-9 text-sm" />
                       </div>
                     </div>
-
-                    {/* Endereço */}
                     <div className="space-y-1.5">
                       <Label className="text-xs">Endereço (rua)</Label>
-                      <Input
-                        placeholder="Rua das Flores"
-                        value={manual.endereco}
-                        onChange={e => setManual(p => ({ ...p, endereco: e.target.value }))}
-                        className="border-[#c9a96e]/20 h-9 text-sm"
-                      />
+                      <Input value={enderecoManual} onChange={e => setEnderecoManual(e.target.value)} placeholder="Rua das Flores" className="border-[#c9a96e]/20 h-9 text-sm" />
                     </div>
-
-                    {/* Número, Bairro, CEP */}
                     <div className="grid grid-cols-3 gap-3">
                       <div className="space-y-1.5">
                         <Label className="text-xs">Nº</Label>
-                        <Input
-                          placeholder="123"
-                          value={manual.numero}
-                          onChange={e => setManual(p => ({ ...p, numero: e.target.value }))}
-                          className="border-[#c9a96e]/20 h-9 text-sm"
-                        />
+                        <Input value={numeroManual} onChange={e => setNumeroManual(e.target.value)} placeholder="123" className="border-[#c9a96e]/20 h-9 text-sm" />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs">Bairro</Label>
-                        <Input
-                          placeholder="Centro"
-                          value={manual.bairro}
-                          onChange={e => setManual(p => ({ ...p, bairro: e.target.value }))}
-                          className="border-[#c9a96e]/20 h-9 text-sm"
-                        />
+                        <Input value={bairroManual} onChange={e => setBairroManual(e.target.value)} placeholder="Centro" className="border-[#c9a96e]/20 h-9 text-sm" />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs">CEP</Label>
-                        <Input
-                          placeholder="69000-000"
-                          value={manual.cep}
-                          onChange={e => setManual(p => ({ ...p, cep: e.target.value }))}
-                          className="border-[#c9a96e]/20 h-9 text-sm"
-                        />
+                        <Input value={cepManual} onChange={e => setCepManual(e.target.value)} placeholder="69000-000" className="border-[#c9a96e]/20 h-9 text-sm" />
                       </div>
                     </div>
                   </div>
                 </ScrollArea>
               )}
 
-              {/* Botão avançar */}
               <Button
                 className="w-full bg-[#3d2b1f] hover:bg-[#5c3d2e] text-[#c9a96e] border border-[#c9a96e]/30"
                 disabled={!clienteOk}
@@ -509,27 +423,20 @@ export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: 
             </div>
           )}
 
-          {/* ═══════════════════════════════════════════════════════════════ */}
-          {/* STEP 2 — Banco réu                                             */}
-          {/* ═══════════════════════════════════════════════════════════════ */}
+          {/* ═══ STEP 2 — Banco ═════════════════════════════════════════════ */}
           {step === 'banco' && (
             <div className="p-5 space-y-5">
-
-              {/* Card do cliente selecionado */}
               <div className="flex items-center gap-3 p-3 rounded-xl bg-[#c9a96e]/10 border border-[#c9a96e]/20">
                 <div className="h-9 w-9 rounded-full bg-[#3d2b1f]/10 flex items-center justify-center shrink-0">
                   <User className="h-4 w-4 text-[#3d2b1f]" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">{dadosCliente.nome}</p>
-                  <p className="text-xs text-muted-foreground truncate">{dadosCliente.email}</p>
+                  <p className="font-medium text-sm truncate">{nomeCliente}</p>
+                  <p className="text-xs text-muted-foreground truncate">{emailCliente}</p>
                 </div>
-                <button onClick={() => setStep('cliente')} className="text-xs text-[#c9a96e] hover:underline shrink-0">
-                  Trocar
-                </button>
+                <button onClick={() => setStep('cliente')} className="text-xs text-[#c9a96e] hover:underline shrink-0">Trocar</button>
               </div>
 
-              {/* Banco */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center gap-1.5">
                   <Building2 className="h-4 w-4 text-[#c9a96e]" />
@@ -553,7 +460,6 @@ export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: 
                 )}
               </div>
 
-              {/* Autenticação */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Como o cliente vai se autenticar?</Label>
                 <div className="grid grid-cols-3 gap-2">
@@ -567,9 +473,7 @@ export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: 
                       onClick={() => setAuthType(opt.value)}
                       className={cn(
                         'py-2.5 rounded-lg border text-xs font-medium transition-all',
-                        authType === opt.value
-                          ? 'border-[#c9a96e] bg-[#c9a96e]/10 text-[#3d2b1f]'
-                          : 'border-border text-muted-foreground hover:border-[#c9a96e]/30'
+                        authType === opt.value ? 'border-[#c9a96e] bg-[#c9a96e]/10 text-[#3d2b1f]' : 'border-border text-muted-foreground hover:border-[#c9a96e]/30'
                       )}
                     >
                       {opt.label}
@@ -588,9 +492,7 @@ export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: 
             </div>
           )}
 
-          {/* ═══════════════════════════════════════════════════════════════ */}
-          {/* STEP 3 — Revisão                                               */}
-          {/* ═══════════════════════════════════════════════════════════════ */}
+          {/* ═══ STEP 3 — Revisão ═══════════════════════════════════════════ */}
           {step === 'revisao' && (
             <div className="p-5 space-y-4">
               <div className="rounded-xl border border-[#c9a96e]/20 overflow-hidden">
@@ -599,12 +501,12 @@ export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: 
                 </div>
                 <div className="p-4 space-y-2">
                   {[
-                    { label: 'Cliente',      value: dadosCliente.nome },
-                    { label: 'Email',        value: dadosCliente.email },
-                    { label: 'Telefone',     value: dadosCliente.telefone || '—' },
-                    { label: 'CPF',          value: dadosCliente.cpf || '—' },
+                    { label: 'Cliente',      value: nomeCliente },
+                    { label: 'Email',        value: emailCliente },
+                    { label: 'Telefone',     value: telefoneCliente || '—' },
                     { label: 'Banco réu',    value: bancoFinal },
                     { label: 'Autenticação', value: authType },
+                    { label: 'Origem',       value: origem === 'sistema' ? `Sistema (ID: ${selectedLead?.id?.slice(0,8)}...)` : 'Manual' },
                   ].map(row => (
                     <div key={row.label} className="flex gap-2 text-sm">
                       <span className="text-muted-foreground w-24 shrink-0 text-xs pt-0.5">{row.label}</span>
@@ -615,9 +517,7 @@ export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: 
               </div>
 
               <div className="space-y-1.5">
-                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
-                  Documentos que serão gerados
-                </p>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Documentos que serão gerados</p>
                 {KIT_DOCS.map(({ icon: Icon, label, desc }) => (
                   <div key={label} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-[#c9a96e]/5 border border-[#c9a96e]/10">
                     <Icon className="h-4 w-4 text-[#c9a96e] shrink-0" />
@@ -639,9 +539,7 @@ export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: 
             </div>
           )}
 
-          {/* ═══════════════════════════════════════════════════════════════ */}
-          {/* STEP — Enviando                                                 */}
-          {/* ═══════════════════════════════════════════════════════════════ */}
+          {/* ═══ STEP — Enviando ════════════════════════════════════════════ */}
           {step === 'enviando' && (
             <div className="flex flex-col items-center justify-center py-16 gap-5">
               <div className="h-20 w-20 rounded-full bg-[#c9a96e]/10 flex items-center justify-center">
@@ -655,9 +553,7 @@ export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: 
             </div>
           )}
 
-          {/* ═══════════════════════════════════════════════════════════════ */}
-          {/* STEP — Sucesso                                                  */}
-          {/* ═══════════════════════════════════════════════════════════════ */}
+          {/* ═══ STEP — Sucesso ═════════════════════════════════════════════ */}
           {step === 'sucesso' && (
             <div className="p-5 space-y-4">
               <div className="flex flex-col items-center py-4 gap-3">
@@ -667,8 +563,7 @@ export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: 
                 <div className="text-center">
                   <p className="font-bold text-lg">Kit enviado com sucesso!</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {resultLinks.length} documentos criados para{' '}
-                    <strong>{dadosCliente.nome.split(' ')[0]}</strong>
+                    {resultLinks.length} documentos criados para <strong>{nomeCliente.split(' ')[0]}</strong>
                   </p>
                 </div>
               </div>
@@ -695,7 +590,11 @@ export function EnviarKitModal({ isOpen, onClose, onSuccess, preSelectedLead }: 
                 <Button
                   variant="outline"
                   className="flex-1 border-[#c9a96e]/20"
-                  onClick={() => { setStep('cliente'); setSelectedLead(null); setManual(DADOS_VAZIOS); setBancoReu(''); setResultLinks([]); }}
+                  onClick={() => {
+                    setStep('cliente'); setSelectedLead(null);
+                    setNomeManual(''); setEmailManual('');
+                    setBancoReu(''); setResultLinks([]);
+                  }}
                 >
                   Enviar outro kit
                 </Button>
