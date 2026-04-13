@@ -11,32 +11,28 @@ import { Compromisso, ConfirmacaoStatus } from '@/types/compromissos';
 import { Loader2, Plus, Filter, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuCheckboxItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
+  DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem,
+  DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 
 export type ColorMode = 'tipo' | 'situacao';
-export type ViewMode = 'mes' | 'semana' | 'dia';
+export type ViewMode  = 'mes' | 'semana' | 'dia';
 
 const TIPO_OPTIONS = [
-  { value: 'Audiência',  label: 'Audiências',  color: 'bg-[#f472b6]' },
-  { value: 'Reunião',    label: 'Reuniões',    color: 'bg-[#60a5fa]' },
-  { value: 'Prazo',      label: 'Prazos',      color: 'bg-[#fbbf24]' },
-  { value: 'Tarefa',     label: 'Tarefas',     color: 'bg-[#34d399]' },
-  { value: 'Outro',      label: 'Outros',      color: 'bg-[#94a3b8]' },
-  { value: 'Intimação',  label: 'Intimações',  color: 'bg-[#fb923c]' },
+  { value: 'Audiência', label: 'Audiências',  color: 'bg-[#be185d]' },
+  { value: 'Reunião',   label: 'Reuniões',    color: 'bg-[#b45309]' },
+  { value: 'Prazo',     label: 'Prazos',      color: 'bg-[#92400e]' },
+  { value: 'Tarefa',    label: 'Tarefas',     color: 'bg-[#065f46]' },
+  { value: 'Outro',     label: 'Outros',      color: 'bg-[#374151]' },
+  { value: 'Intimação', label: 'Intimações',  color: 'bg-[#7c3aed]' },
 ];
 
 const SITUACAO_OPTIONS = [
-  { value: 'pendente',   label: 'Pendente',   color: 'bg-[#fbbf24]' },
-  { value: 'confirmado', label: 'Confirmado', color: 'bg-[#34d399]' },
-  { value: 'cancelado',  label: 'Cancelado',  color: 'bg-[#f87171]' },
-  { value: 'remarcado',  label: 'Remarcado',  color: 'bg-[#60a5fa]' },
+  { value: 'pendente',   label: 'Pendente',   color: 'bg-[#78350f]' },
+  { value: 'confirmado', label: 'Confirmado', color: 'bg-[#065f46]' },
+  { value: 'cancelado',  label: 'Cancelado',  color: 'bg-[#7f1d1d]' },
+  { value: 'remarcado',  label: 'Remarcado',  color: 'bg-[#1e3a5f]' },
 ];
 
 function AgendaPage() {
@@ -53,72 +49,65 @@ function AgendaPage() {
 
   const filteredCompromissos = compromissos.filter(c => {
     if (!activeTipos.includes(c.tipo)) return false;
-    const status = c.confirmacao_status || 'pendente';
-    if (!activeSituacoes.includes(status)) return false;
+    if (!activeSituacoes.includes(c.confirmacao_status || 'pendente')) return false;
     return true;
   });
-
   const filteredIntimacoes = activeTipos.includes('Intimação') ? intimacoes : [];
 
-  const toggleTipo = (tipo: string) =>
-    setActiveTipos(prev => prev.includes(tipo) ? prev.filter(t => t !== tipo) : [...prev, tipo]);
+  const toggleTipo = (t: string) =>
+    setActiveTipos(p => p.includes(t) ? p.filter(x => x !== t) : [...p, t]);
+  const toggleSituacao = (s: string) =>
+    setActiveSituacoes(p => p.includes(s) ? p.filter(x => x !== s) : [...p, s]);
 
-  const toggleSituacao = (sit: string) =>
-    setActiveSituacoes(prev => prev.includes(sit) ? prev.filter(s => s !== sit) : [...prev, sit]);
+  const hasActiveFilters =
+    activeTipos.length !== TIPO_OPTIONS.length ||
+    activeSituacoes.length !== SITUACAO_OPTIONS.length;
 
   const handleDayClick = (date: Date) => {
     setSelectedDate(date);
     setIsDayEventsModalOpen(true);
   };
-
-  const handleEventClick = (compromisso: Compromisso) => {
-    setSelectedCompromisso(compromisso);
+  const handleEventClick = (c: Compromisso) => {
+    setSelectedCompromisso(c);
     setSelectedDate(null);
     setIsModalOpen(true);
   };
-
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedDate(null);
     setSelectedCompromisso(null);
   };
-
   const handleNewCompromisso = () => {
     setSelectedDate(new Date());
     setSelectedCompromisso(null);
     setIsModalOpen(true);
   };
-
   const handleStatusChange = async (id: string, newStatus: ConfirmacaoStatus) => {
     await updateCompromisso(id, { confirmacao_status: newStatus });
   };
 
-  const allTiposActive = activeTipos.length === TIPO_OPTIONS.length;
-  const allSituacoesActive = activeSituacoes.length === SITUACAO_OPTIONS.length;
-  const hasActiveFilters = !allTiposActive || !allSituacoesActive;
-
   return (
     <AppLayout>
-      {/* Header premium marrom/dourado */}
+      {/* Header */}
       <div className="sticky top-0 z-20 bg-card/95 backdrop-blur-md border-b border-[#c9a96e]/20">
         <div className="flex items-center justify-between px-5 py-3 md:px-8">
-          <h1 className="text-xl md:text-2xl font-bold text-[#3d2b1f] dark:text-[#c9a96e] tracking-tight">
+          <h1 className="text-xl font-bold text-[#3d2b1f] dark:text-[#c9a96e] tracking-tight">
             Agenda
           </h1>
 
           <div className="flex items-center gap-2">
-            {/* Toggle Tipo / Situação */}
-            <div className="hidden md:inline-flex items-center border border-[#c9a96e]/30 rounded-lg overflow-hidden bg-card">
+            {/* Toggle Tipo/Situação */}
+            <div className="hidden md:inline-flex items-center border border-[#c9a96e]/25 rounded-xl overflow-hidden bg-card">
               {(['tipo', 'situacao'] as const).map((tab, i) => (
                 <button
                   key={tab}
                   onClick={() => setColorMode(tab)}
                   className={cn(
-                    'px-3 py-1.5 text-xs font-medium transition-all',
-                    i === 0 && 'border-r border-[#c9a96e]/30',
+                    'px-3 py-1.5 text-xs font-semibold transition-all',
+                    i === 0 && 'border-r border-[#c9a96e]/20',
                     colorMode === tab
                       ? 'bg-[#3d2b1f] text-[#c9a96e]'
-                      : 'text-muted-foreground hover:bg-[#c9a96e]/8 hover:text-[#3d2b1f]'
+                      : 'text-muted-foreground hover:bg-[#c9a96e]/8'
                   )}
                 >
                   {tab === 'tipo' ? 'Tipo' : 'Situação'}
@@ -133,7 +122,7 @@ function AgendaPage() {
                   variant="outline"
                   size="sm"
                   className={cn(
-                    'gap-1.5 text-xs h-8 rounded-lg border-[#c9a96e]/30 relative',
+                    'gap-1.5 text-xs h-8 rounded-xl border-[#c9a96e]/25 relative',
                     hasActiveFilters && 'border-[#c9a96e] text-[#3d2b1f]'
                   )}
                 >
@@ -145,9 +134,7 @@ function AgendaPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Tipos de Evento
-                </DropdownMenuLabel>
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">Tipos</DropdownMenuLabel>
                 {TIPO_OPTIONS.map(opt => (
                   <DropdownMenuCheckboxItem
                     key={opt.value}
@@ -160,9 +147,7 @@ function AgendaPage() {
                   </DropdownMenuCheckboxItem>
                 ))}
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Situação
-                </DropdownMenuLabel>
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">Situação</DropdownMenuLabel>
                 {SITUACAO_OPTIONS.map(opt => (
                   <DropdownMenuCheckboxItem
                     key={opt.value}
@@ -183,7 +168,7 @@ function AgendaPage() {
                         setActiveTipos(TIPO_OPTIONS.map(o => o.value));
                         setActiveSituacoes(SITUACAO_OPTIONS.map(o => o.value));
                       }}
-                      className="text-xs text-[#c9a96e] font-medium"
+                      className="text-xs text-[#c9a96e] font-semibold"
                     >
                       Limpar filtros
                     </DropdownMenuCheckboxItem>
@@ -196,18 +181,18 @@ function AgendaPage() {
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8 rounded-lg border-[#c9a96e]/30 text-muted-foreground hover:text-[#3d2b1f] hover:border-[#c9a96e]"
+              className="h-8 w-8 rounded-xl border-[#c9a96e]/25"
             >
-              <Settings className="h-3.5 w-3.5" />
+              <Settings className="h-3.5 w-3.5 text-muted-foreground" />
             </Button>
 
             <GoogleCalendarConnect />
 
-            {/* Novo compromisso */}
+            {/* Novo */}
             <Button
               onClick={handleNewCompromisso}
               size="sm"
-              className="gap-1.5 text-xs h-8 rounded-lg bg-[#3d2b1f] hover:bg-[#5c3d2e] text-[#c9a96e] border border-[#c9a96e]/30"
+              className="gap-1.5 text-xs h-8 rounded-xl bg-[#3d2b1f] hover:bg-[#5c3d2e] text-[#c9a96e] border border-[#c9a96e]/30"
             >
               <Plus className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Novo</span>
@@ -216,7 +201,7 @@ function AgendaPage() {
         </div>
       </div>
 
-      {/* Content */}
+      {/* Conteúdo */}
       <div className="flex-1 p-4 md:p-6 animate-fade-in overflow-auto">
         {loading || loadingIntimacoes ? (
           <div className="flex flex-col items-center justify-center py-24 gap-4">
@@ -251,10 +236,7 @@ function AgendaPage() {
         compromissos={filteredCompromissos}
         intimacoes={filteredIntimacoes}
         onEventClick={handleEventClick}
-        onNewEvent={() => {
-          setIsDayEventsModalOpen(false);
-          setIsModalOpen(true);
-        }}
+        onNewEvent={() => { setIsDayEventsModalOpen(false); setIsModalOpen(true); }}
         onStatusChange={handleStatusChange}
       />
 
