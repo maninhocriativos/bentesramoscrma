@@ -1,91 +1,75 @@
 import { useState } from 'react';
-import { 
-  format, 
-  startOfMonth, 
-  endOfMonth, 
-  startOfWeek, 
-  endOfWeek, 
-  addDays, 
-  isSameMonth, 
-  isSameDay, 
-  isToday,
-  addMonths,
-  subMonths,
-  addWeeks,
-  subWeeks,
+import {
+  format,
+  startOfMonth, endOfMonth,
+  startOfWeek, endOfWeek,
+  addDays, isSameMonth, isSameDay, isToday,
+  addMonths, subMonths,
+  addWeeks, subWeeks,
   parseISO,
 } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  FileText,
-  CalendarDays,
-  CheckCircle2,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Compromisso, ConfirmacaoStatus } from '@/types/compromissos';
 import { IntimacaoEvent } from '@/hooks/useIntimacoes';
 
 const TIMEZONE = 'America/Manaus';
-const parseLocalDate = (dateString: string): Date => toZonedTime(parseISO(dateString), TIMEZONE);
+const parseLocalDate = (s: string) => toZonedTime(parseISO(s), TIMEZONE);
 
 type ColorMode = 'tipo' | 'situacao';
-type ViewMode = 'mes' | 'semana' | 'dia';
+type ViewMode  = 'mes' | 'semana' | 'dia';
 
 interface CalendarProps {
   compromissos: Compromisso[];
   intimacoes?: IntimacaoEvent[];
   colorMode?: ColorMode;
   viewMode?: ViewMode;
-  onViewModeChange?: (mode: ViewMode) => void;
-  onDayClick: (date: Date) => void;
-  onEventClick: (compromisso: Compromisso) => void;
-  onStatusChange?: (id: string, newStatus: ConfirmacaoStatus) => void;
+  onViewModeChange?: (m: ViewMode) => void;
+  onDayClick: (d: Date) => void;
+  onEventClick: (c: Compromisso) => void;
+  onStatusChange?: (id: string, s: ConfirmacaoStatus) => void;
 }
 
-const BAR_COLORS = {
-  green:   { background: '#22c55e', color: '#fff' },
-  orange:  { background: '#f97316', color: '#fff' },
-  pink:    { background: '#ec4899', color: '#fff' },
-  amber:   { background: '#f59e0b', color: '#78350f' },
-  red:     { background: '#ef4444', color: '#fff' },
-  blue:    { background: '#3b82f6', color: '#fff' },
-  gray:    { background: '#cbd5e1', color: '#334155' },
-  outline: { background: '#fffbeb', color: '#92400e', border: '1px solid #f59e0b' },
+// ─── Paleta de eventos ────────────────────────────────────────────────────────
+const PALETTE = {
+  audiencia:    { bg: '#be185d', text: '#fce7f3', dot: '#f472b6' },
+  reuniao:      { bg: '#b45309', text: '#fef3c7', dot: '#fbbf24' },
+  prazo:        { bg: '#92400e', text: '#fef3c7', dot: '#f59e0b' },
+  tarefa:       { bg: '#065f46', text: '#d1fae5', dot: '#34d399' },
+  outro:        { bg: '#374151', text: '#f3f4f6', dot: '#9ca3af' },
+  intimacao:    { bg: '#7c3aed', text: '#ede9fe', dot: '#a78bfa' },
+  int_prazo:    { bg: '#3d2b1f', text: '#c9a96e', dot: '#c9a96e', border: '1px solid #c9a96e40' },
+  confirmado:   { bg: '#065f46', text: '#d1fae5', dot: '#34d399' },
+  cancelado:    { bg: '#7f1d1d', text: '#fee2e2', dot: '#f87171' },
+  remarcado:    { bg: '#1e3a5f', text: '#dbeafe', dot: '#60a5fa' },
+  pendente:     { bg: '#78350f', text: '#fef3c7', dot: '#fbbf24' },
 } as const;
 
-type BarKey = keyof typeof BAR_COLORS;
+type PaletteKey = keyof typeof PALETTE;
 
-function getBarByTipo(c: Compromisso): BarKey {
+function getPaletteByTipo(c: Compromisso): PaletteKey {
   switch (c.tipo) {
-    case 'Audiência': return 'pink';
-    case 'Reunião':   return 'orange';
-    case 'Prazo':     return 'amber';
-    case 'Tarefa':    return 'green';
-    default:          return 'gray';
+    case 'Audiência': return 'audiencia';
+    case 'Reunião':   return 'reuniao';
+    case 'Prazo':     return 'prazo';
+    case 'Tarefa':    return 'tarefa';
+    default:          return 'outro';
   }
 }
 
-function getBarBySituacao(c: Compromisso): BarKey {
+function getPaletteBySituacao(c: Compromisso): PaletteKey {
   switch (c.confirmacao_status || 'pendente') {
-    case 'confirmado': return 'green';
-    case 'cancelado':  return 'red';
-    case 'remarcado':  return 'blue';
-    default:           return 'amber';
+    case 'confirmado': return 'confirmado';
+    case 'cancelado':  return 'cancelado';
+    case 'remarcado':  return 'remarcado';
+    default:           return 'pendente';
   }
 }
 
-function getIntimacaoBarKey(titulo: string): { key: BarKey; isOutline: boolean } {
+function getIntimacaoPalette(titulo: string): PaletteKey {
   const t = titulo.toLowerCase();
-  if (t.includes('alvará') || t.includes('alvara'))
-    return { key: 'green', isOutline: false };
-  if (t.includes('sessão de julgamento') || t.includes('sessao de julgamento'))
-    return { key: 'pink', isOutline: false };
-  if (t.includes('ciência da sentença') || t.includes('ciencia da sentenca'))
-    return { key: 'orange', isOutline: false };
   if (
     t.includes('manifestação') || t.includes('contestação') || t.includes('contrarrazões') ||
     t.includes('réplica') || t.includes('emenda') || t.includes('recurso') ||
@@ -93,227 +77,228 @@ function getIntimacaoBarKey(titulo: string): { key: BarKey; isOutline: boolean }
     t.includes('agravo') || t.includes('sine die') || t.includes('pagamento') ||
     t.includes('manifestacao') || t.includes('contestacao') || t.includes('contrarrazoes') ||
     t.includes('replica') || t.includes('alegacoes') || t.includes('apelacao')
-  ) return { key: 'outline', isOutline: true };
-  return { key: 'orange', isOutline: false };
+  ) return 'int_prazo';
+  if (t.includes('sessão') || t.includes('sessao') || t.includes('julgamento')) return 'audiencia';
+  if (t.includes('alvará') || t.includes('alvara') || t.includes('sentença') || t.includes('sentenca')) return 'tarefa';
+  return 'intimacao';
 }
 
-interface CalendarEvent {
+interface CalEvent {
   id: string;
   title: string;
   time?: string;
-  type: 'compromisso' | 'intimacao';
-  barKey: BarKey;
+  paletteKey: PaletteKey;
   count?: number;
-  isOutline?: boolean;
+  hasBorder?: boolean;
   original?: Compromisso;
-  hasCheckmark?: boolean;
+  isIntimacao?: boolean;
 }
 
-// ─── Cores premium marrom/dourado ─────────────────────────────────────────────
-const BORDER = '#c9a96e';
-const HEADER_BG = '#faf8f5';
-
+const WEEK_DAYS_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 7);
 
 export function Calendar({
-  compromissos,
-  intimacoes = [],
-  colorMode = 'tipo',
-  viewMode = 'mes',
-  onViewModeChange,
-  onDayClick,
-  onEventClick,
+  compromissos, intimacoes = [], colorMode = 'tipo',
+  viewMode = 'mes', onViewModeChange, onDayClick, onEventClick,
 }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  const weekDays = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+  // ── Eventos por dia ──────────────────────────────────────────────────────────
+  const getEventsForDay = (date: Date): CalEvent[] => {
+    const events: CalEvent[] = [];
 
-  const getEventsForDay = (date: Date): CalendarEvent[] => {
-    const events: CalendarEvent[] = [];
-
-    const dayComps = compromissos.filter(c => isSameDay(parseLocalDate(c.data_inicio), date));
-    dayComps.forEach(c => {
-      events.push({
+    compromissos
+      .filter(c => isSameDay(parseLocalDate(c.data_inicio), date))
+      .forEach(c => events.push({
         id: c.id,
         title: c.titulo,
         time: format(parseLocalDate(c.data_inicio), 'HH:mm'),
-        type: 'compromisso',
-        barKey: colorMode === 'situacao' ? getBarBySituacao(c) : getBarByTipo(c),
+        paletteKey: colorMode === 'situacao' ? getPaletteBySituacao(c) : getPaletteByTipo(c),
         original: c,
-      });
-    });
-
-    const dayInt = intimacoes.filter(i => {
-      const dt = i.data_intimacao || i.data_publicacao || i.data_disponibilizacao;
-      return dt && isSameDay(parseLocalDate(dt), date);
-    });
+      }));
 
     const groups: Record<string, IntimacaoEvent[]> = {};
-    dayInt.forEach(i => {
-      const k = i.tipo_intimacao || i.processo_titulo || 'Intimação';
-      if (!groups[k]) groups[k] = [];
-      groups[k].push(i);
-    });
+    intimacoes
+      .filter(i => {
+        const dt = i.data_intimacao || i.data_publicacao || i.data_disponibilizacao;
+        return dt && isSameDay(parseLocalDate(dt), date);
+      })
+      .forEach(i => {
+        const k = i.tipo_intimacao || i.processo_titulo || 'Intimação';
+        if (!groups[k]) groups[k] = [];
+        groups[k].push(i);
+      });
 
     Object.entries(groups).forEach(([tipo, items]) => {
-      const { key, isOutline } = getIntimacaoBarKey(tipo);
+      const pk = getIntimacaoPalette(tipo);
       events.push({
         id: items[0].id,
         title: tipo,
-        type: 'intimacao',
-        barKey: key,
-        isOutline,
+        paletteKey: pk,
         count: items.length,
-        hasCheckmark: items.some(i => i.lida),
+        hasBorder: pk === 'int_prazo',
+        isIntimacao: true,
       });
     });
 
     return events;
   };
 
-  const getEventsForHour = (date: Date, hour: number): CalendarEvent[] => {
-    return getEventsForDay(date).filter(ev => {
-      if (!ev.time) return hour === 7;
-      const h = parseInt(ev.time.split(':')[0], 10);
-      return h === hour;
-    });
-  };
-
-  const goToToday = () => setCurrentDate(new Date());
-
+  // ── Navegação ────────────────────────────────────────────────────────────────
   const goPrev = () => {
     if (viewMode === 'mes') setCurrentDate(subMonths(currentDate, 1));
     else if (viewMode === 'semana') setCurrentDate(subWeeks(currentDate, 1));
     else setCurrentDate(addDays(currentDate, -1));
   };
-
   const goNext = () => {
     if (viewMode === 'mes') setCurrentDate(addMonths(currentDate, 1));
     else if (viewMode === 'semana') setCurrentDate(addWeeks(currentDate, 1));
     else setCurrentDate(addDays(currentDate, 1));
   };
+  const goToToday = () => setCurrentDate(new Date());
 
   const getTitle = () => {
-    if (viewMode === 'dia')
-      return format(currentDate, "d 'de' MMMM 'de' yyyy", { locale: ptBR });
+    if (viewMode === 'dia') return format(currentDate, "d 'de' MMMM 'de' yyyy", { locale: ptBR });
     if (viewMode === 'semana') {
       const ws = startOfWeek(currentDate, { locale: ptBR });
       const we = endOfWeek(currentDate, { locale: ptBR });
-      return `${format(ws, 'd MMM', { locale: ptBR })} – ${format(we, "d MMM 'de' yyyy", { locale: ptBR })}`;
+      return `${format(ws, 'd MMM', { locale: ptBR })} – ${format(we, "d MMM yyyy", { locale: ptBR })}`;
     }
     return format(currentDate, "MMMM 'de' yyyy", { locale: ptBR });
   };
 
-  // ─── Event bar ───────────────────────────────────────────────────────────────
-  const renderEventBar = (ev: CalendarEvent, day: Date, compact = false) => {
-    const colors = BAR_COLORS[ev.barKey];
+  // ── Render de chip de evento ─────────────────────────────────────────────────
+  const renderChip = (ev: CalEvent, day: Date, size: 'sm' | 'md' = 'sm') => {
+    const pal = PALETTE[ev.paletteKey];
+    const isMd = size === 'md';
     return (
       <div
         key={ev.id}
-        className="flex items-center gap-1 rounded-[3px] cursor-pointer overflow-hidden whitespace-nowrap"
-        style={{
-          background: colors.background,
-          color: colors.color,
-          border: 'border' in colors ? (colors as any).border : 'none',
-          padding: compact ? '1px 4px' : '2px 5px',
-          fontSize: compact ? 10 : 11,
-          lineHeight: '16px',
-          fontWeight: 500,
-        }}
-        onClick={e => {
-          e.stopPropagation();
-          if (ev.original) onEventClick(ev.original);
-          else onDayClick(day);
-        }}
+        onClick={e => { e.stopPropagation(); ev.original ? onEventClick(ev.original) : onDayClick(day); }}
         title={ev.title}
+        className="flex items-center gap-1 rounded cursor-pointer overflow-hidden select-none"
+        style={{
+          background: pal.bg,
+          color: pal.text,
+          border: ev.hasBorder ? (pal as any).border || 'none' : 'none',
+          padding: isMd ? '3px 7px' : '2px 5px',
+          fontSize: isMd ? 11 : 10,
+          lineHeight: isMd ? '17px' : '15px',
+          fontWeight: 500,
+          letterSpacing: '0.01em',
+        }}
       >
-        {ev.count && ev.count > 0 && (
-          <span style={{ fontWeight: 700, fontSize: 10, opacity: ev.isOutline ? 1 : 0.85 }}>{ev.count}</span>
+        {/* Dot colorido */}
+        <span
+          className="shrink-0 rounded-full"
+          style={{ width: 5, height: 5, background: pal.dot, opacity: 0.9 }}
+        />
+        {/* Horário */}
+        {ev.time && (
+          <span style={{ fontWeight: 700, fontSize: isMd ? 10 : 9, opacity: 0.8, flexShrink: 0 }}>
+            {ev.time}
+          </span>
         )}
-        {ev.time && <span style={{ fontWeight: 700, fontSize: 10 }}>{ev.time}</span>}
-        {ev.isOutline && <FileText style={{ width: 10, height: 10, opacity: 0.6, flexShrink: 0 }} />}
-        {ev.time && !compact && <CalendarDays style={{ width: 10, height: 10, opacity: 0.7, flexShrink: 0 }} />}
-        {ev.hasCheckmark && <CheckCircle2 style={{ width: 10, height: 10, color: '#22c55e', flexShrink: 0 }} />}
+        {/* Ícone intimação */}
+        {ev.isIntimacao && (
+          <FileText style={{ width: 9, height: 9, opacity: 0.6, flexShrink: 0 }} />
+        )}
+        {/* Contagem */}
+        {ev.count && ev.count > 1 && (
+          <span style={{ fontWeight: 700, fontSize: 9, opacity: 0.8, flexShrink: 0 }}>
+            {ev.count}×
+          </span>
+        )}
         <span className="truncate">{ev.title}</span>
       </div>
     );
   };
 
-  // ─── Mês ─────────────────────────────────────────────────────────────────────
+  // ── VIEW MÊS ─────────────────────────────────────────────────────────────────
   const renderMonthView = () => {
     const monthStart = startOfMonth(currentDate);
-    const monthEnd = endOfMonth(currentDate);
-    const startDate = startOfWeek(monthStart, { locale: ptBR });
-    const endDate = endOfWeek(monthEnd, { locale: ptBR });
+    const monthEnd   = endOfMonth(currentDate);
+    const start = startOfWeek(monthStart, { locale: ptBR });
+    const end   = endOfWeek(monthEnd, { locale: ptBR });
     const days: Date[] = [];
-    let d = startDate;
-    while (d <= endDate) { days.push(d); d = addDays(d, 1); }
+    let d = start;
+    while (d <= end) { days.push(d); d = addDays(d, 1); }
     const rows = Math.ceil(days.length / 7);
 
     return (
-      <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${BORDER}` }}>
-        {/* Cabeçalho dias da semana */}
-        <div className="grid grid-cols-7" style={{ background: HEADER_BG, borderBottom: `1px solid ${BORDER}` }}>
-          {weekDays.map((wd, i) => (
+      <div className="rounded-2xl overflow-hidden border border-[#c9a96e]/25 shadow-sm">
+        {/* Header dos dias */}
+        <div className="grid grid-cols-7 bg-[#3d2b1f]">
+          {WEEK_DAYS_SHORT.map((wd, i) => (
             <div
               key={wd}
-              className="py-2.5 text-center text-[11px] font-semibold text-[#3d2b1f]/60 italic tracking-wide capitalize"
-              style={i < 6 ? { borderRight: `1px solid ${BORDER}` } : undefined}
+              className="py-2.5 text-center text-[11px] font-semibold text-[#c9a96e]/70 uppercase tracking-widest"
+              style={i < 6 ? { borderRight: '1px solid rgba(201,169,110,0.15)' } : undefined}
             >
               {wd}
             </div>
           ))}
         </div>
 
+        {/* Grid de dias */}
         {Array.from({ length: rows }).map((_, rowIdx) => (
           <div key={rowIdx} className="grid grid-cols-7">
             {days.slice(rowIdx * 7, rowIdx * 7 + 7).map((day, colIdx) => {
-              const isCurMonth = isSameMonth(day, currentDate);
-              const isCurDay = isToday(day);
-              const events = getEventsForDay(day);
-              const maxVis = 5;
+              const inMonth = isSameMonth(day, currentDate);
+              const isNow   = isToday(day);
+              const events  = getEventsForDay(day);
+              const maxVis  = 4;
               const visible = events.slice(0, maxVis);
-              const extra = events.length - maxVis;
+              const extra   = events.length - maxVis;
 
               return (
                 <div
                   key={colIdx}
+                  onClick={() => onDayClick(day)}
                   className={cn(
-                    'min-h-[108px] md:min-h-[130px] cursor-pointer transition-colors relative bg-card',
-                    !isCurMonth && 'opacity-30',
-                    isCurMonth && !isCurDay && 'hover:bg-[#c9a96e]/5',
-                    isCurDay && 'bg-emerald-50/50 dark:bg-emerald-500/5'
+                    'min-h-[110px] md:min-h-[128px] cursor-pointer transition-all relative',
+                    !inMonth && 'opacity-25',
+                    isNow
+                      ? 'bg-[#3d2b1f]/8 dark:bg-[#c9a96e]/5'
+                      : 'bg-card hover:bg-[#c9a96e]/4',
                   )}
                   style={{
-                    borderBottom: `1px solid ${BORDER}`,
-                    ...(colIdx < 6 ? { borderRight: `1px solid ${BORDER}` } : {}),
-                    padding: '3px 4px',
+                    borderBottom: '1px solid rgba(201,169,110,0.15)',
+                    borderRight: colIdx < 6 ? '1px solid rgba(201,169,110,0.15)' : 'none',
+                    padding: '4px 5px 4px 4px',
                   }}
-                  onClick={() => onDayClick(day)}
                 >
-                  {isCurDay && (
-                    <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: '#22c55e' }} />
+                  {/* Linha topo hoje */}
+                  {isNow && (
+                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-[#c9a96e] rounded-t" />
                   )}
-                  <div className="flex justify-end mb-[2px]">
-                    {isCurDay ? (
+
+                  {/* Número do dia */}
+                  <div className="flex justify-end mb-1">
+                    {isNow ? (
                       <span
-                        className="flex items-center justify-center text-[11px] font-bold rounded-full"
-                        style={{ background: '#22c55e', color: '#fff', width: 22, height: 22 }}
+                        className="flex items-center justify-center text-[11px] font-black rounded-full"
+                        style={{ background: '#3d2b1f', color: '#c9a96e', width: 22, height: 22 }}
                       >
                         {format(day, 'd')}
                       </span>
                     ) : (
-                      <span className={cn('text-[13px] font-semibold', isCurMonth ? 'text-foreground/70' : 'text-muted-foreground/30')}>
+                      <span className={cn(
+                        'text-[12px] font-semibold leading-none',
+                        inMonth ? 'text-foreground/60' : 'text-muted-foreground/20'
+                      )}>
                         {format(day, 'd')}
                       </span>
                     )}
                   </div>
+
+                  {/* Eventos */}
                   <div className="space-y-[2px]">
-                    {visible.map(ev => renderEventBar(ev, day))}
+                    {visible.map(ev => renderChip(ev, day))}
                     {extra > 0 && (
                       <div
-                        className="cursor-pointer hover:underline"
-                        style={{ fontSize: 9, fontWeight: 700, color: '#c9a96e', paddingLeft: 4 }}
+                        className="text-[9px] font-bold cursor-pointer hover:underline pl-1"
+                        style={{ color: '#c9a96e' }}
                       >
                         +{extra} mais
                       </div>
@@ -328,110 +313,65 @@ export function Calendar({
     );
   };
 
-  // ─── Semana ───────────────────────────────────────────────────────────────────
+  // ── VIEW SEMANA ───────────────────────────────────────────────────────────────
   const renderWeekView = () => {
     const ws = startOfWeek(currentDate, { locale: ptBR });
     const weekDates = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
 
     return (
-      <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${BORDER}` }}>
-        {/* Cabeçalho */}
-        <div className="grid grid-cols-7" style={{ background: HEADER_BG, borderBottom: `1px solid ${BORDER}` }}>
+      <div className="rounded-2xl overflow-hidden border border-[#c9a96e]/25 shadow-sm">
+        {/* Header */}
+        <div className="grid grid-cols-7 bg-[#3d2b1f]">
           {weekDates.map((d, i) => {
-            const isCurDay = isToday(d);
+            const isNow = isToday(d);
             return (
               <div
                 key={i}
-                className={cn(
-                  'py-3 text-center cursor-pointer transition-colors',
-                  isCurDay && 'bg-emerald-50/60 dark:bg-emerald-500/5'
-                )}
-                style={i < 6 ? { borderRight: `1px solid ${BORDER}` } : undefined}
                 onClick={() => onDayClick(d)}
+                className="py-3 text-center cursor-pointer hover:bg-[#c9a96e]/10 transition-colors"
+                style={i < 6 ? { borderRight: '1px solid rgba(201,169,110,0.15)' } : undefined}
               >
-                <div className="text-[10px] font-semibold text-[#3d2b1f]/50 italic uppercase tracking-wide">
-                  {weekDays[d.getDay()]}
+                <div className="text-[9px] font-semibold text-[#c9a96e]/50 uppercase tracking-widest">
+                  {WEEK_DAYS_SHORT[d.getDay()]}
                 </div>
-                {isCurDay ? (
+                {isNow ? (
                   <span
-                    className="inline-flex items-center justify-center text-sm font-bold rounded-full mt-1"
-                    style={{ background: '#22c55e', color: '#fff', width: 28, height: 28 }}
+                    className="inline-flex items-center justify-center text-sm font-black rounded-full mt-1"
+                    style={{ background: '#c9a96e', color: '#3d2b1f', width: 28, height: 28 }}
                   >
                     {format(d, 'd')}
                   </span>
                 ) : (
-                  <div className="text-lg font-bold mt-0.5 text-foreground/70">{format(d, 'd')}</div>
+                  <div className="text-lg font-bold mt-0.5 text-[#c9a96e]/70">{format(d, 'd')}</div>
                 )}
               </div>
             );
           })}
         </div>
 
-        {/* Colunas dos dias */}
+        {/* Colunas */}
         <div className="grid grid-cols-7">
           {weekDates.map((d, i) => {
-            const isCurDay = isToday(d);
+            const isNow = isToday(d);
             const events = getEventsForDay(d);
-            const maxVis = 8;
+            const maxVis = 10;
             const visible = events.slice(0, maxVis);
             const extra = events.length - maxVis;
 
             return (
               <div
                 key={i}
-                className={cn(
-                  'min-h-[320px] p-1.5 cursor-pointer transition-colors bg-card',
-                  isCurDay && 'bg-emerald-50/30 dark:bg-emerald-500/3',
-                  !isCurDay && 'hover:bg-[#c9a96e]/5',
-                )}
-                style={i < 6 ? { borderRight: `1px solid ${BORDER}` } : undefined}
                 onClick={() => onDayClick(d)}
+                className={cn(
+                  'min-h-[300px] p-1.5 cursor-pointer transition-colors',
+                  isNow ? 'bg-[#3d2b1f]/6' : 'bg-card hover:bg-[#c9a96e]/4',
+                )}
+                style={i < 6 ? { borderRight: '1px solid rgba(201,169,110,0.15)' } : undefined}
               >
                 <div className="space-y-[3px]">
-                  {visible.map(ev => {
-                    const colors = BAR_COLORS[ev.barKey];
-                    return (
-                      <div
-                        key={ev.id}
-                        className="flex items-start gap-1 rounded-md cursor-pointer overflow-hidden"
-                        style={{
-                          background: colors.background,
-                          color: colors.color,
-                          border: 'border' in colors ? (colors as any).border : 'none',
-                          padding: '4px 6px',
-                          fontSize: 11,
-                          lineHeight: '15px',
-                          fontWeight: 500,
-                        }}
-                        onClick={e => {
-                          e.stopPropagation();
-                          if (ev.original) onEventClick(ev.original);
-                          else onDayClick(d);
-                        }}
-                        title={ev.title}
-                      >
-                        <div className="flex flex-col min-w-0 flex-1">
-                          {ev.time && (
-                            <span style={{ fontWeight: 700, fontSize: 10, opacity: 0.9 }}>{ev.time}</span>
-                          )}
-                          <span className="truncate">{ev.title}</span>
-                        </div>
-                        {ev.count && ev.count > 1 && (
-                          <span
-                            className="shrink-0 rounded-full text-[9px] font-bold px-1.5 py-0.5"
-                            style={{ background: 'rgba(255,255,255,0.25)' }}
-                          >
-                            {ev.count}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {visible.map(ev => renderChip(ev, d, 'md'))}
                   {extra > 0 && (
-                    <div
-                      className="cursor-pointer hover:underline text-center pt-1"
-                      style={{ fontSize: 10, fontWeight: 700, color: '#c9a96e' }}
-                    >
+                    <div className="text-[10px] font-bold text-center pt-1" style={{ color: '#c9a96e' }}>
                       +{extra} mais
                     </div>
                   )}
@@ -444,51 +384,48 @@ export function Calendar({
     );
   };
 
-  // ─── Dia ─────────────────────────────────────────────────────────────────────
+  // ── VIEW DIA ──────────────────────────────────────────────────────────────────
   const renderDayView = () => {
-    const isCurDay = isToday(currentDate);
-
+    const isNow = isToday(currentDate);
     return (
-      <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${BORDER}` }}>
-        {/* Cabeçalho */}
-        <div className="grid grid-cols-[60px_1fr]" style={{ background: HEADER_BG, borderBottom: `1px solid ${BORDER}` }}>
-          <div
-            className="py-2 text-center text-[10px] text-[#3d2b1f]/50"
-            style={{ borderRight: `1px solid ${BORDER}` }}
-          >
-            Hora
-          </div>
-          <div className={cn('py-3 text-center', isCurDay && 'bg-emerald-50/50 dark:bg-emerald-500/5')}>
-            <div className="text-[11px] font-semibold text-[#3d2b1f]/50 italic capitalize">
+      <div className="rounded-2xl overflow-hidden border border-[#c9a96e]/25 shadow-sm">
+        {/* Header */}
+        <div className="grid grid-cols-[64px_1fr] bg-[#3d2b1f]">
+          <div className="py-3 text-center text-[10px] text-[#c9a96e]/40 border-r border-[#c9a96e]/15">Hora</div>
+          <div className="py-3 text-center">
+            <div className="text-[10px] font-semibold text-[#c9a96e]/50 uppercase tracking-widest capitalize">
               {format(currentDate, 'EEEE', { locale: ptBR })}
             </div>
-            <div className={cn('text-lg font-bold mt-0.5', isCurDay ? 'text-emerald-600' : 'text-foreground/70')}>
+            <div className={cn('text-lg font-bold mt-0.5', isNow ? 'text-[#c9a96e]' : 'text-[#c9a96e]/60')}>
               {format(currentDate, 'd')}
             </div>
           </div>
         </div>
-
         {/* Horários */}
         <div className="max-h-[600px] overflow-y-auto">
           {HOURS.map(hour => {
-            const hourEvents = getEventsForHour(currentDate, hour);
+            const hourEvents = getEventsForDay(currentDate).filter(ev => {
+              if (!ev.time) return hour === 7;
+              return parseInt(ev.time.split(':')[0], 10) === hour;
+            });
             return (
-              <div key={hour} className="grid grid-cols-[60px_1fr]" style={{ borderBottom: `1px solid ${BORDER}` }}>
+              <div
+                key={hour}
+                className="grid grid-cols-[64px_1fr]"
+                style={{ borderBottom: '1px solid rgba(201,169,110,0.12)' }}
+              >
                 <div
-                  className="py-3 px-1 text-[11px] text-[#3d2b1f]/40 text-right pr-2 font-medium"
-                  style={{ borderRight: `1px solid ${BORDER}` }}
+                  className="py-3 text-[11px] text-[#3d2b1f]/40 text-right pr-3 font-mono font-medium"
+                  style={{ borderRight: '1px solid rgba(201,169,110,0.12)' }}
                 >
                   {String(hour).padStart(2, '0')}:00
                 </div>
                 <div
-                  className={cn(
-                    'min-h-[56px] p-1 cursor-pointer transition-colors hover:bg-[#c9a96e]/5',
-                    isCurDay && 'bg-emerald-50/20 dark:bg-emerald-500/3'
-                  )}
+                  className="min-h-[52px] p-1.5 cursor-pointer hover:bg-[#c9a96e]/4 transition-colors"
                   onClick={() => onDayClick(currentDate)}
                 >
                   <div className="space-y-[2px]">
-                    {hourEvents.map(ev => renderEventBar(ev, currentDate))}
+                    {hourEvents.map(ev => renderChip(ev, currentDate, 'md'))}
                   </div>
                 </div>
               </div>
@@ -502,61 +439,51 @@ export function Calendar({
   return (
     <div className="space-y-3">
       {/* Barra de navegação */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
+
         {/* Setas + Hoje */}
         <div className="flex items-center gap-2">
-          <div
-            className="inline-flex items-center rounded-lg overflow-hidden bg-card"
-            style={{ border: `1px solid ${BORDER}` }}
-          >
+          <div className="inline-flex items-center rounded-xl overflow-hidden border border-[#c9a96e]/25 bg-card">
             <button
-              className="px-2.5 py-1.5 hover:bg-[#c9a96e]/10 transition-colors"
-              style={{ borderRight: `1px solid ${BORDER}` }}
               onClick={goPrev}
+              className="px-3 py-2 hover:bg-[#c9a96e]/10 transition-colors border-r border-[#c9a96e]/20"
             >
-              <ChevronLeft className="h-4 w-4 text-[#3d2b1f]/60" />
+              <ChevronLeft className="h-4 w-4 text-[#3d2b1f]/60 dark:text-[#c9a96e]/60" />
             </button>
-            <button
-              className="px-2.5 py-1.5 hover:bg-[#c9a96e]/10 transition-colors"
-              onClick={goNext}
-            >
-              <ChevronRight className="h-4 w-4 text-[#3d2b1f]/60" />
+            <button onClick={goNext} className="px-3 py-2 hover:bg-[#c9a96e]/10 transition-colors">
+              <ChevronRight className="h-4 w-4 text-[#3d2b1f]/60 dark:text-[#c9a96e]/60" />
             </button>
           </div>
-          <Button
-            size="sm"
+          <button
             onClick={goToToday}
-            className="text-xs font-bold px-4 h-8 rounded-lg bg-[#3d2b1f] hover:bg-[#5c3d2e] text-[#c9a96e] border border-[#c9a96e]/30"
+            className="px-4 py-2 text-xs font-bold rounded-xl bg-[#3d2b1f] text-[#c9a96e] border border-[#c9a96e]/30 hover:bg-[#5c3d2e] transition-colors"
           >
             Hoje
-          </Button>
+          </button>
         </div>
 
-        {/* Título do período */}
-        <h2 className="text-lg md:text-xl font-semibold text-[#3d2b1f] dark:text-[#c9a96e] capitalize tracking-tight">
+        {/* Título */}
+        <h2 className="text-base md:text-lg font-bold text-[#3d2b1f] dark:text-[#c9a96e] capitalize tracking-tight">
           {getTitle()}
         </h2>
 
-        {/* Toggle Mês / Semana / Dia */}
-        <div
-          className="inline-flex items-center rounded-lg overflow-hidden bg-card"
-          style={{ border: `1px solid ${BORDER}` }}
-        >
+        {/* Toggle view */}
+        <div className="inline-flex items-center rounded-xl overflow-hidden border border-[#c9a96e]/25 bg-card">
           {([
-            { label: 'Mês',    value: 'mes' as ViewMode },
+            { label: 'Mês',    value: 'mes'    as ViewMode },
             { label: 'Semana', value: 'semana' as ViewMode },
-            { label: 'Dia',    value: 'dia' as ViewMode },
+            { label: 'Dia',    value: 'dia'    as ViewMode },
           ]).map(({ label, value }, i) => (
             <button
               key={value}
               onClick={() => onViewModeChange?.(value)}
               className={cn(
-                'px-3 py-1.5 text-xs font-medium transition-all',
+                'px-3.5 py-2 text-xs font-semibold transition-all',
                 viewMode === value
                   ? 'bg-[#3d2b1f] text-[#c9a96e]'
-                  : 'text-muted-foreground hover:bg-[#c9a96e]/8 hover:text-[#3d2b1f]'
+                  : 'text-muted-foreground hover:bg-[#c9a96e]/8 hover:text-[#3d2b1f] dark:hover:text-[#c9a96e]'
               )}
-              style={i < 2 ? { borderRight: `1px solid ${BORDER}` } : undefined}
+              style={i < 2 ? { borderRight: '1px solid rgba(201,169,110,0.2)' } : undefined}
             >
               {label}
             </button>
@@ -564,7 +491,7 @@ export function Calendar({
         </div>
       </div>
 
-      {/* Conteúdo da view */}
+      {/* Conteúdo */}
       {viewMode === 'mes'    && renderMonthView()}
       {viewMode === 'semana' && renderWeekView()}
       {viewMode === 'dia'    && renderDayView()}
