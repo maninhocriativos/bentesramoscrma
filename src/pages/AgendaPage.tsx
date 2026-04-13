@@ -8,13 +8,7 @@ import { GoogleCalendarConnect } from '@/components/agenda/GoogleCalendarConnect
 import { useCompromissos } from '@/hooks/useCompromissos';
 import { useIntimacoes } from '@/hooks/useIntimacoes';
 import { Compromisso, ConfirmacaoStatus } from '@/types/compromissos';
-import { 
-  Loader2, 
-  Plus,
-  Filter,
-  Settings,
-  Check,
-} from 'lucide-react';
+import { Loader2, Plus, Filter, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -30,19 +24,19 @@ export type ColorMode = 'tipo' | 'situacao';
 export type ViewMode = 'mes' | 'semana' | 'dia';
 
 const TIPO_OPTIONS = [
-  { value: 'Audiência', label: 'Audiências', color: 'bg-[#f472b6]' },
-  { value: 'Reunião', label: 'Reuniões', color: 'bg-[#60a5fa]' },
-  { value: 'Prazo', label: 'Prazos', color: 'bg-[#fbbf24]' },
-  { value: 'Tarefa', label: 'Tarefas', color: 'bg-[#34d399]' },
-  { value: 'Outro', label: 'Outros', color: 'bg-[#94a3b8]' },
-  { value: 'Intimação', label: 'Intimações', color: 'bg-[#fb923c]' },
+  { value: 'Audiência',  label: 'Audiências',  color: 'bg-[#f472b6]' },
+  { value: 'Reunião',    label: 'Reuniões',    color: 'bg-[#60a5fa]' },
+  { value: 'Prazo',      label: 'Prazos',      color: 'bg-[#fbbf24]' },
+  { value: 'Tarefa',     label: 'Tarefas',     color: 'bg-[#34d399]' },
+  { value: 'Outro',      label: 'Outros',      color: 'bg-[#94a3b8]' },
+  { value: 'Intimação',  label: 'Intimações',  color: 'bg-[#fb923c]' },
 ];
 
 const SITUACAO_OPTIONS = [
-  { value: 'pendente', label: 'Pendente', color: 'bg-[#fbbf24]' },
+  { value: 'pendente',   label: 'Pendente',   color: 'bg-[#fbbf24]' },
   { value: 'confirmado', label: 'Confirmado', color: 'bg-[#34d399]' },
-  { value: 'cancelado', label: 'Cancelado', color: 'bg-[#f87171]' },
-  { value: 'remarcado', label: 'Remarcado', color: 'bg-[#60a5fa]' },
+  { value: 'cancelado',  label: 'Cancelado',  color: 'bg-[#f87171]' },
+  { value: 'remarcado',  label: 'Remarcado',  color: 'bg-[#60a5fa]' },
 ];
 
 function AgendaPage() {
@@ -57,7 +51,6 @@ function AgendaPage() {
   const [activeTipos, setActiveTipos] = useState<string[]>(TIPO_OPTIONS.map(o => o.value));
   const [activeSituacoes, setActiveSituacoes] = useState<string[]>(SITUACAO_OPTIONS.map(o => o.value));
 
-  // Filter compromissos based on active filters
   const filteredCompromissos = compromissos.filter(c => {
     if (!activeTipos.includes(c.tipo)) return false;
     const status = c.confirmacao_status || 'pendente';
@@ -65,20 +58,13 @@ function AgendaPage() {
     return true;
   });
 
-  // Filter intimações
   const filteredIntimacoes = activeTipos.includes('Intimação') ? intimacoes : [];
 
-  const toggleTipo = (tipo: string) => {
-    setActiveTipos(prev => 
-      prev.includes(tipo) ? prev.filter(t => t !== tipo) : [...prev, tipo]
-    );
-  };
+  const toggleTipo = (tipo: string) =>
+    setActiveTipos(prev => prev.includes(tipo) ? prev.filter(t => t !== tipo) : [...prev, tipo]);
 
-  const toggleSituacao = (sit: string) => {
-    setActiveSituacoes(prev =>
-      prev.includes(sit) ? prev.filter(s => s !== sit) : [...prev, sit]
-    );
-  };
+  const toggleSituacao = (sit: string) =>
+    setActiveSituacoes(prev => prev.includes(sit) ? prev.filter(s => s !== sit) : [...prev, sit]);
 
   const handleDayClick = (date: Date) => {
     setSelectedDate(date);
@@ -113,48 +99,48 @@ function AgendaPage() {
 
   return (
     <AppLayout>
-      {/* Header */}
-      <div className="sticky top-0 z-20 bg-card/95 backdrop-blur-md border-b border-border/60">
+      {/* Header premium marrom/dourado */}
+      <div className="sticky top-0 z-20 bg-card/95 backdrop-blur-md border-b border-[#c9a96e]/20">
         <div className="flex items-center justify-between px-5 py-3 md:px-8">
-          <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">
+          <h1 className="text-xl md:text-2xl font-bold text-[#3d2b1f] dark:text-[#c9a96e] tracking-tight">
             Agenda
           </h1>
-          
+
           <div className="flex items-center gap-2">
-            {/* Tipo / Situação color mode toggle */}
-            <div className="hidden md:inline-flex items-center border border-border/70 rounded-md overflow-hidden bg-card">
+            {/* Toggle Tipo / Situação */}
+            <div className="hidden md:inline-flex items-center border border-[#c9a96e]/30 rounded-lg overflow-hidden bg-card">
               {(['tipo', 'situacao'] as const).map((tab, i) => (
                 <button
                   key={tab}
                   onClick={() => setColorMode(tab)}
                   className={cn(
-                    "px-3 py-1.5 text-xs font-medium transition-all",
-                    i === 0 && "border-r border-border/70",
+                    'px-3 py-1.5 text-xs font-medium transition-all',
+                    i === 0 && 'border-r border-[#c9a96e]/30',
                     colorMode === tab
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                      ? 'bg-[#3d2b1f] text-[#c9a96e]'
+                      : 'text-muted-foreground hover:bg-[#c9a96e]/8 hover:text-[#3d2b1f]'
                   )}
                 >
                   {tab === 'tipo' ? 'Tipo' : 'Situação'}
                 </button>
               ))}
             </div>
-            
-            {/* Filtros dropdown */}
+
+            {/* Filtros */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className={cn(
-                    "gap-1.5 text-xs h-8 rounded-md relative",
-                    hasActiveFilters && "border-primary/50 text-primary"
+                    'gap-1.5 text-xs h-8 rounded-lg border-[#c9a96e]/30 relative',
+                    hasActiveFilters && 'border-[#c9a96e] text-[#3d2b1f]'
                   )}
                 >
                   <Filter className="h-3.5 w-3.5" />
                   Filtros
                   {hasActiveFilters && (
-                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full" />
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#c9a96e] rounded-full" />
                   )}
                 </Button>
               </DropdownMenuTrigger>
@@ -169,7 +155,7 @@ function AgendaPage() {
                     onCheckedChange={() => toggleTipo(opt.value)}
                     className="text-xs gap-2"
                   >
-                    <div className={cn("w-2.5 h-2.5 rounded-full shrink-0", opt.color)} />
+                    <div className={cn('w-2.5 h-2.5 rounded-full shrink-0', opt.color)} />
                     {opt.label}
                   </DropdownMenuCheckboxItem>
                 ))}
@@ -184,7 +170,7 @@ function AgendaPage() {
                     onCheckedChange={() => toggleSituacao(opt.value)}
                     className="text-xs gap-2"
                   >
-                    <div className={cn("w-2.5 h-2.5 rounded-full shrink-0", opt.color)} />
+                    <div className={cn('w-2.5 h-2.5 rounded-full shrink-0', opt.color)} />
                     {opt.label}
                   </DropdownMenuCheckboxItem>
                 ))}
@@ -197,7 +183,7 @@ function AgendaPage() {
                         setActiveTipos(TIPO_OPTIONS.map(o => o.value));
                         setActiveSituacoes(SITUACAO_OPTIONS.map(o => o.value));
                       }}
-                      className="text-xs text-primary font-medium"
+                      className="text-xs text-[#c9a96e] font-medium"
                     >
                       Limpar filtros
                     </DropdownMenuCheckboxItem>
@@ -205,18 +191,23 @@ function AgendaPage() {
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-            
-            {/* Settings gear */}
-            <Button variant="outline" size="icon" className="h-8 w-8 rounded-md">
+
+            {/* Settings */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-lg border-[#c9a96e]/30 text-muted-foreground hover:text-[#3d2b1f] hover:border-[#c9a96e]"
+            >
               <Settings className="h-3.5 w-3.5" />
             </Button>
 
             <GoogleCalendarConnect />
-            
-            <Button 
+
+            {/* Novo compromisso */}
+            <Button
               onClick={handleNewCompromisso}
               size="sm"
-              className="gap-1.5 text-xs h-8 rounded-md"
+              className="gap-1.5 text-xs h-8 rounded-lg bg-[#3d2b1f] hover:bg-[#5c3d2e] text-[#c9a96e] border border-[#c9a96e]/30"
             >
               <Plus className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Novo</span>
@@ -224,15 +215,15 @@ function AgendaPage() {
           </div>
         </div>
       </div>
-      
+
       {/* Content */}
       <div className="flex-1 p-4 md:p-6 animate-fade-in overflow-auto">
         {loading || loadingIntimacoes ? (
           <div className="flex flex-col items-center justify-center py-24 gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <div className="h-14 w-14 rounded-2xl bg-[#c9a96e]/10 flex items-center justify-center">
+              <Loader2 className="h-7 w-7 animate-spin text-[#c9a96e]" />
             </div>
-            <p className="text-sm text-muted-foreground font-medium">Carregando agenda...</p>
+            <p className="text-sm text-muted-foreground">Carregando agenda...</p>
           </div>
         ) : (
           <>
