@@ -1,4 +1,4 @@
-const serve = Deno.serve;
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -6,434 +6,433 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const ADVBOX_TOKEN = Deno.env.get('ADVBOX_TOKEN');
-const ADVBOX_API_URL = 'https://app.advbox.com.br/api/v1';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const MANAUS_TZ = 'America/Manaus';
 
-// Advbox uses /posts endpoint for tasks/agenda items - real structure from API
-interface AdvboxPost {
-  id: number;
-  task?: string;           // Title of the task
-  notes?: string;          // Description/notes
-  date?: string;           // Main date (e.g., "2019-03-08 00:00:00")
-  date_deadline?: string;  // Deadline date
-  reward?: string | null;
-  local?: string | null;
-  lawsuits_id?: number;
-  created_at?: string;
-  lawsuit?: {
-    id: number;
-    process_number?: string;
-    customers?: Array<{ name: string; customer_id: number }>;
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function mapTipoToColor(tipo: string): string {
+  const colors: Record<string, string> = {
+    'Audiência': '11', // Tomato
+    'Reunião':   '5',  // Banana
+    'Prazo':     '6',  // Tangerine
+    'Tarefa':    '2',  // Sage
+    'Outro':     '8',  // Graphite
   };
+  return colors[tipo] || '8';
 }
 
-interface GoogleCalendarEvent {
-  id: string;
-  summary: string;
-  description?: string;
-  start: { dateTime?: string; date?: string };
-  end: { dateTime?: string; date?: string };
+function mapColorToTipo(colorId?: string): string {
+  const tipos: Record<string, string> = {
+    '11': 'Audiência',
+    '5':  'Reunião',
+    '6':  'Prazo',
+    '2':  'Tarefa',
+    '8':  'Outro',
+  };
+  return tipos[colorId || '8'] || 'Reunião';
+}
+
+async function getValidAccessToken(supabase: any, userId: string): Promise<string | null> {
+  const { data: tokenData } = await supabase
+    .from('google_calendar_tokens')
+    .select('access_token, refresh_token, expires_at')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (!tokenData) return null;
+
+  const expiresAt = tokenData.expires_at ? new Date(tokenData.expires_at) : null;
+  const isExpired = expiresAt && expiresAt < new Date(Date.now() + 60000); // 1min de margem
+
+  if (isExpired && tokenData.refresh_token) {
+    // Buscar credenciais
+    const { data: settings } = await supabase
+      .from('app_settings')
+      .select('key, value')
+      .in('key', ['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET']);
+
+    const creds = (settings || []).reduce((acc: any, s: any) => { acc[s.key] = s.value; return acc; }, {});
+
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        refresh_token: tokenData.refresh_token,
+        client_id: creds['GOOGLE_OAUTH_CLIENT_ID'],
+        client_secret: creds['GOOGLE_OAUTH_CLIENT_SECRET'],
+        grant_type: 'refresh_token',
+      }),
+    });
+
+    const newTokens = await res.json();
+    if (newTokens.access_token) {
+      await supabase
+        .from('google_calendar_tokens')
+        .update({
+          access_token: newTokens.access_token,
+          expires_at: new Date(Date.now() + (newTokens.expires_in || 3600) * 1000).toISOString(),
+        })
+        .eq('user_id', userId);
+      return newTokens.access_token;
+    }
+    return null;
+  }
+
+  return tokenData.access_token;
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   try {
     const body = await req.json();
-    const { action, google_access_token, sync_from, sync_to, compromisso_id } = body;
+    const { action, user_id, compromisso_id, google_event_id } = body;
 
-    console.log('Calendar Sync - Action:', action);
+    console.log('[calendar-sync] Action:', action, '| user_id:', user_id);
 
-    // Sync from Advbox to local database
-    if (action === 'sync_advbox') {
-      if (!ADVBOX_TOKEN) {
-        return new Response(JSON.stringify({ 
-          error: 'ADVBOX_TOKEN não configurado' 
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      console.log('Fetching tasks/posts from Advbox with pagination...');
-      console.log('Using Advbox API URL:', ADVBOX_API_URL);
-      
-      let allPosts: AdvboxPost[] = [];
-      let offset = 0;
-      const limit = 500; // Fetch 500 at a time
-      let totalCount = 0;
-      let hasMore = true;
-      
-      // Paginate through all results
-      while (hasMore) {
-        const advboxUrl = `${ADVBOX_API_URL}/posts?offset=${offset}&limit=${limit}`;
-        console.log(`Fetching page: offset=${offset}, limit=${limit}`);
-        
-        const advboxResponse = await fetch(advboxUrl, {
-          headers: {
-            'Authorization': `Bearer ${ADVBOX_TOKEN}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-        });
-
-        if (!advboxResponse.ok) {
-          const errorText = await advboxResponse.text();
-          console.error('Advbox API error:', advboxResponse.status, errorText);
-          return new Response(JSON.stringify({ 
-            error: `Erro ao buscar tarefas do Advbox: ${advboxResponse.status}`,
-            details: errorText,
-            url_used: advboxUrl
-          }), {
-            status: advboxResponse.status,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-
-        const responseText = await advboxResponse.text();
-        
-        try {
-          const parsed = JSON.parse(responseText);
-          
-          // Get total count from first response
-          if (offset === 0) {
-            totalCount = parsed.totalCount || 0;
-            console.log(`Total records in Advbox: ${totalCount}`);
-          }
-          
-          // Handle different response formats
-          const posts = Array.isArray(parsed) ? parsed : (parsed.data || parsed.items || parsed.posts || []);
-          allPosts = allPosts.concat(posts);
-          
-          console.log(`Fetched ${posts.length} posts (total so far: ${allPosts.length})`);
-          
-          // Check if there are more records
-          if (posts.length < limit || allPosts.length >= totalCount) {
-            hasMore = false;
-          } else {
-            offset += limit;
-          }
-        } catch (parseError) {
-          console.error('Error parsing Advbox response:', parseError);
-          return new Response(JSON.stringify({ 
-            error: 'Erro ao processar resposta do Advbox',
-            details: responseText.substring(0, 200)
-          }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-      }
-      
-      console.log(`Total fetched from Advbox: ${allPosts.length} of ${totalCount}`);
-
-      // Prepare all compromissos for batch upsert
-      const compromissosToUpsert = allPosts.map(post => {
-        let titulo = post.task || 'Tarefa sem título';
-        if (post.lawsuit?.process_number) {
-          titulo = `${titulo} - ${post.lawsuit.process_number}`;
-        }
-        
-        return {
-          external_id: `advbox_${post.id}`,
-          titulo,
-          descricao: post.notes || null,
-          data_inicio: post.date || post.date_deadline || post.created_at || new Date().toISOString(),
-          data_fim: post.date_deadline || null,
-          tipo: 'Reunião',
-          origem: 'advbox',
-        };
-      });
-
-      // Batch upsert in chunks of 100
-      const chunkSize = 100;
-      let syncedCount = 0;
-      let errorCount = 0;
-      
-      for (let i = 0; i < compromissosToUpsert.length; i += chunkSize) {
-        const chunk = compromissosToUpsert.slice(i, i + chunkSize);
-        console.log(`Upserting batch ${Math.floor(i/chunkSize) + 1}/${Math.ceil(compromissosToUpsert.length/chunkSize)} (${chunk.length} items)`);
-        
-        const { error } = await supabase
-          .from('compromissos')
-          .upsert(chunk, { 
-            onConflict: 'external_id',
-            ignoreDuplicates: false 
-          });
-        
-        if (error) {
-          console.error('Error upserting batch:', error);
-          errorCount += chunk.length;
-        } else {
-          syncedCount += chunk.length;
-        }
-      }
-      
-      console.log(`Synced ${syncedCount} posts from Advbox, ${errorCount} errors`);
-
-      return new Response(JSON.stringify({ 
-        success: true, 
-        synced: syncedCount,
-        total_fetched: allPosts.length,
-        total_available: totalCount,
-        errors: errorCount,
-        message: `${syncedCount} tarefas sincronizadas do Advbox (${allPosts.length} de ${totalCount})${errorCount > 0 ? `, ${errorCount} erros` : ''}`
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Sync from Google Calendar
-    if (action === 'sync_google') {
-      if (!google_access_token) {
-        return new Response(JSON.stringify({ 
-          error: 'Token do Google não fornecido' 
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      console.log('Fetching events from Google Calendar...');
-
-      const now = new Date();
-      const timeMin = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const timeMax = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString();
-
-      const googleResponse = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
-        `timeMin=${encodeURIComponent(timeMin)}&` +
-        `timeMax=${encodeURIComponent(timeMax)}&` +
-        `singleEvents=true&orderBy=startTime`,
-        {
-          headers: {
-            'Authorization': `Bearer ${google_access_token}`,
-          },
-        }
-      );
-
-      if (!googleResponse.ok) {
-        const errorText = await googleResponse.text();
-        console.error('Google Calendar API error:', googleResponse.status, errorText);
-        return new Response(JSON.stringify({ 
-          error: `Erro ao buscar eventos do Google: ${googleResponse.status}`,
-          details: errorText
-        }), {
-          status: googleResponse.status,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      const googleData = await googleResponse.json();
-      const googleEvents: GoogleCalendarEvent[] = googleData.items || [];
-      console.log(`Found ${googleEvents.length} events from Google Calendar`);
-
-      // Upsert events to local database
-      const compromissos = googleEvents.map(event => ({
-        id: `google_${event.id}`,
-        titulo: event.summary || 'Sem título',
-        descricao: event.description || null,
-        data_inicio: event.start.dateTime || event.start.date,
-        data_fim: event.end.dateTime || event.end.date || null,
-        tipo: 'google',
-      }));
-
-      for (const compromisso of compromissos) {
-        const { error } = await supabase
-          .from('compromissos')
-          .upsert(compromisso, { onConflict: 'id' });
-        
-        if (error) {
-          console.error('Error upserting compromisso:', error);
-        }
-      }
-
-      return new Response(JSON.stringify({ 
-        success: true, 
-        synced: compromissos.length,
-        message: `${compromissos.length} eventos sincronizados do Google Calendar`
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Push local event to Google Calendar
+    // ═══════════════════════════════════════════════════════════════════════
+    // PUSH: CRM → Google Calendar (criar ou atualizar evento)
+    // ═══════════════════════════════════════════════════════════════════════
     if (action === 'push_to_google') {
-      if (!google_access_token) {
-        return new Response(JSON.stringify({ 
-          error: 'Token do Google não fornecido' 
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      if (!user_id || !compromisso_id) {
+        return new Response(JSON.stringify({ error: 'user_id e compromisso_id são obrigatórios' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      if (!compromisso_id) {
-        return new Response(JSON.stringify({ 
-          error: 'ID do compromisso não fornecido' 
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      const accessToken = await getValidAccessToken(supabase, user_id);
+      if (!accessToken) {
+        return new Response(JSON.stringify({ error: 'Token inválido ou expirado' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      console.log('Pushing compromisso to Google Calendar:', compromisso_id);
-
-      const { data: compromisso, error } = await supabase
+      const { data: comp, error } = await supabase
         .from('compromissos')
         .select('*')
         .eq('id', compromisso_id)
         .single();
 
-      if (error || !compromisso) {
+      if (error || !comp) {
         return new Response(JSON.stringify({ error: 'Compromisso não encontrado' }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+
+      const dataFim = comp.data_fim || new Date(new Date(comp.data_inicio).getTime() + 3600000).toISOString();
 
       const googleEvent = {
-        summary: compromisso.titulo,
-        description: compromisso.descricao,
-        start: {
-          dateTime: compromisso.data_inicio,
-          timeZone: 'America/Sao_Paulo',
-        },
-        end: {
-          dateTime: compromisso.data_fim || compromisso.data_inicio,
-          timeZone: 'America/Sao_Paulo',
-        },
+        summary: comp.titulo,
+        description: comp.descricao || '',
+        colorId: mapTipoToColor(comp.tipo),
+        start: { dateTime: comp.data_inicio, timeZone: MANAUS_TZ },
+        end:   { dateTime: dataFim,          timeZone: MANAUS_TZ },
+        extendedProperties: {
+          private: {
+            crm_id:   comp.id,
+            crm_tipo: comp.tipo,
+          }
+        }
       };
 
-      const googleResponse = await fetch(
-        'https://www.googleapis.com/calendar/v3/calendars/primary/events',
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${google_access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(googleEvent),
-        }
-      );
+      let googleRes: Response;
+      let method = 'POST';
+      let url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
 
-      if (!googleResponse.ok) {
-        const errorText = await googleResponse.text();
-        console.error('Error pushing to Google:', errorText);
-        return new Response(JSON.stringify({ 
-          error: 'Erro ao criar evento no Google Calendar',
-          details: errorText
-        }), {
-          status: googleResponse.status,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+      // Se já tem google_event_id, atualiza em vez de criar
+      if (comp.google_event_id) {
+        method = 'PUT';
+        url = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${comp.google_event_id}`;
       }
 
-      const createdEvent = await googleResponse.json();
-      console.log('Created Google event:', createdEvent.id);
+      googleRes = await fetch(url, {
+        method,
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(googleEvent),
+      });
 
-      return new Response(JSON.stringify({ 
-        success: true, 
-        google_event_id: createdEvent.id 
-      }), {
+      if (!googleRes.ok) {
+        const errText = await googleRes.text();
+        // Se o evento não existe mais no Google, cria um novo
+        if (googleRes.status === 404 && comp.google_event_id) {
+          googleRes = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(googleEvent),
+          });
+        }
+        if (!googleRes.ok) {
+          return new Response(JSON.stringify({ error: 'Erro ao criar/atualizar no Google', details: errText }), {
+            status: googleRes.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
+      const createdEvent = await googleRes.json();
+
+      // Salvar google_event_id no CRM
+      await supabase
+        .from('compromissos')
+        .update({ google_event_id: createdEvent.id })
+        .eq('id', comp.id);
+
+      console.log('[calendar-sync] Push OK:', createdEvent.id);
+      return new Response(JSON.stringify({ success: true, google_event_id: createdEvent.id }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Push local event to Advbox
-    if (action === 'push_to_advbox') {
-      if (!ADVBOX_TOKEN) {
-        return new Response(JSON.stringify({ 
-          error: 'ADVBOX_TOKEN não configurado' 
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    // ═══════════════════════════════════════════════════════════════════════
+    // PULL: Google Calendar → CRM (importar eventos)
+    // ═══════════════════════════════════════════════════════════════════════
+    if (action === 'pull_from_google') {
+      if (!user_id) {
+        return new Response(JSON.stringify({ error: 'user_id é obrigatório' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      if (!compromisso_id) {
-        return new Response(JSON.stringify({ 
-          error: 'ID do compromisso não fornecido' 
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      const accessToken = await getValidAccessToken(supabase, user_id);
+      if (!accessToken) {
+        return new Response(JSON.stringify({ error: 'Token inválido ou expirado' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      console.log('Pushing compromisso to Advbox:', compromisso_id);
+      // Buscar eventos do Google: 30 dias atrás até 90 dias à frente
+      const now = new Date();
+      const timeMin = new Date(now.getTime() - 30 * 24 * 3600000).toISOString();
+      const timeMax = new Date(now.getTime() + 90 * 24 * 3600000).toISOString();
 
-      const { data: compromisso, error } = await supabase
+      const googleRes = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+        `timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&` +
+        `singleEvents=true&orderBy=startTime&maxResults=500`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+
+      if (!googleRes.ok) {
+        const errText = await googleRes.text();
+        return new Response(JSON.stringify({ error: 'Erro ao buscar eventos do Google', details: errText }), {
+          status: googleRes.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const googleData = await googleRes.json();
+      const events = googleData.items || [];
+      console.log('[calendar-sync] Google events found:', events.length);
+
+      // Buscar google_event_ids já salvos no CRM para evitar duplicatas
+      const { data: existing } = await supabase
         .from('compromissos')
-        .select('*')
-        .eq('id', compromisso_id)
-        .single();
+        .select('google_event_id')
+        .not('google_event_id', 'is', null);
 
-      if (error || !compromisso) {
-        return new Response(JSON.stringify({ error: 'Compromisso não encontrado' }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+      const existingIds = new Set((existing || []).map((e: any) => e.google_event_id));
 
-      // Map to Advbox post format
-      const advboxPost = {
-        title: compromisso.titulo,
-        description: compromisso.descricao,
-        due_date: compromisso.data_inicio,
-        start_date: compromisso.data_inicio,
-        end_date: compromisso.data_fim,
-      };
-
-      const advboxResponse = await fetch(`${ADVBOX_API_URL}/posts`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${ADVBOX_TOKEN}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(advboxPost),
+      // Importar apenas eventos novos que não vieram do CRM
+      const toImport = events.filter((ev: any) => {
+        if (existingIds.has(ev.id)) return false; // já existe
+        // Ignorar eventos que o CRM criou (têm crm_id nas extendedProperties)
+        if (ev.extendedProperties?.private?.crm_id) return false;
+        return true;
       });
 
-      if (!advboxResponse.ok) {
-        const errorText = await advboxResponse.text();
-        console.error('Error pushing to Advbox:', errorText);
-        return new Response(JSON.stringify({ 
-          error: 'Erro ao criar evento no Advbox',
-          details: errorText
-        }), {
-          status: advboxResponse.status,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      console.log('[calendar-sync] New events to import:', toImport.length);
+
+      let imported = 0;
+      for (const ev of toImport) {
+        const dataInicio = ev.start.dateTime || ev.start.date;
+        const dataFim    = ev.end.dateTime   || ev.end.date || null;
+
+        const { error: insertErr } = await supabase
+          .from('compromissos')
+          .insert({
+            titulo:          ev.summary || 'Evento do Google',
+            descricao:       ev.description || null,
+            data_inicio:     dataInicio,
+            data_fim:        dataFim,
+            tipo:            mapColorToTipo(ev.colorId),
+            origem:          'google',
+            google_event_id: ev.id,
+          });
+
+        if (!insertErr) imported++;
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        total_google: events.length,
+        novos_importados: imported,
+        ja_existentes: existingIds.size,
+        mensagem: `${imported} novos eventos importados do Google Calendar`,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SYNC FULL: bidirecional completo
+    // ═══════════════════════════════════════════════════════════════════════
+    if (action === 'sync_full') {
+      if (!user_id) {
+        return new Response(JSON.stringify({ error: 'user_id é obrigatório' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      const createdEvent = await advboxResponse.json();
-      console.log('Created Advbox event:', createdEvent.id);
+      const accessToken = await getValidAccessToken(supabase, user_id);
+      if (!accessToken) {
+        return new Response(JSON.stringify({ error: 'Token inválido ou expirado' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
-      return new Response(JSON.stringify({ 
-        success: true, 
-        advbox_event_id: createdEvent.id 
-      }), {
+      // 1. Exportar compromissos locais que ainda não têm google_event_id
+      const { data: localComps } = await supabase
+        .from('compromissos')
+        .select('*')
+        .is('google_event_id', null)
+        .is('origem', null); // apenas os criados no CRM
+
+      let exportados = 0;
+      let exportErros = 0;
+
+      for (const comp of localComps || []) {
+        try {
+          const dataFim = comp.data_fim || new Date(new Date(comp.data_inicio).getTime() + 3600000).toISOString();
+          const googleEvent = {
+            summary: comp.titulo,
+            description: comp.descricao || '',
+            colorId: mapTipoToColor(comp.tipo),
+            start: { dateTime: comp.data_inicio, timeZone: MANAUS_TZ },
+            end:   { dateTime: dataFim,          timeZone: MANAUS_TZ },
+            extendedProperties: { private: { crm_id: comp.id, crm_tipo: comp.tipo } }
+          };
+
+          const res = await fetch(
+            'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+            {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(googleEvent),
+            }
+          );
+
+          if (res.ok) {
+            const created = await res.json();
+            await supabase
+              .from('compromissos')
+              .update({ google_event_id: created.id })
+              .eq('id', comp.id);
+            exportados++;
+          } else {
+            exportErros++;
+          }
+        } catch {
+          exportErros++;
+        }
+      }
+
+      // 2. Importar eventos do Google que não estão no CRM
+      const now = new Date();
+      const timeMin = new Date(now.getTime() - 30 * 24 * 3600000).toISOString();
+      const timeMax = new Date(now.getTime() + 90 * 24 * 3600000).toISOString();
+
+      const googleRes = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+        `timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&` +
+        `singleEvents=true&orderBy=startTime&maxResults=500`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+
+      let importados = 0;
+      if (googleRes.ok) {
+        const googleData = await googleRes.json();
+        const events = googleData.items || [];
+
+        const { data: existing } = await supabase
+          .from('compromissos')
+          .select('google_event_id')
+          .not('google_event_id', 'is', null);
+
+        const existingIds = new Set((existing || []).map((e: any) => e.google_event_id));
+
+        for (const ev of events) {
+          if (existingIds.has(ev.id)) continue;
+          if (ev.extendedProperties?.private?.crm_id) continue;
+
+          const { error } = await supabase
+            .from('compromissos')
+            .insert({
+              titulo:          ev.summary || 'Evento do Google',
+              descricao:       ev.description || null,
+              data_inicio:     ev.start.dateTime || ev.start.date,
+              data_fim:        ev.end.dateTime || ev.end.date || null,
+              tipo:            mapColorToTipo(ev.colorId),
+              origem:          'google',
+              google_event_id: ev.id,
+            });
+
+          if (!error) importados++;
+        }
+      }
+
+      console.log(`[calendar-sync] Sync full: ${exportados} exportados, ${importados} importados`);
+
+      return new Response(JSON.stringify({
+        success: true,
+        exportados,
+        exportErros,
+        importados,
+        mensagem: `Sincronização completa: ${exportados} enviados ao Google, ${importados} importados do Google`,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // DELETE: remover evento do Google quando deletado no CRM
+    // ═══════════════════════════════════════════════════════════════════════
+    if (action === 'delete_from_google') {
+      if (!user_id || !google_event_id) {
+        return new Response(JSON.stringify({ error: 'user_id e google_event_id são obrigatórios' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const accessToken = await getValidAccessToken(supabase, user_id);
+      if (!accessToken) {
+        return new Response(JSON.stringify({ error: 'Token inválido' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const res = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${google_event_id}`,
+        { method: 'DELETE', headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+
+      // 410 = já foi deletado, tudo bem
+      if (!res.ok && res.status !== 410) {
+        return new Response(JSON.stringify({ error: 'Erro ao deletar evento no Google' }), {
+          status: res.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     return new Response(JSON.stringify({ error: 'Ação inválida' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
-  } catch (error) {
-    console.error('Error in calendar-sync:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  } catch (err: any) {
+    console.error('[calendar-sync] Error:', err);
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });
