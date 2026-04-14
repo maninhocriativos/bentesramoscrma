@@ -46,17 +46,17 @@ serve(async (req) => {
 
       // ── Erro do Google ────────────────────────────────────────────────────
       if (error) {
-        const redirectUrl = `${CRM_URL}/agenda?google_auth=error&reason=${encodeURIComponent(error)}`;
+        const redirectUrl = `${CRM_URL}/google-auth-callback?google_auth=error&reason=${encodeURIComponent(error)}`;
         return Response.redirect(redirectUrl, 302);
       }
 
       if (!code) {
-        const redirectUrl = `${CRM_URL}/agenda?google_auth=error&reason=no_code`;
+        const redirectUrl = `${CRM_URL}/google-auth-callback?google_auth=error&reason=no_code`;
         return Response.redirect(redirectUrl, 302);
       }
 
       if (!clientId || !clientSecret) {
-        const redirectUrl = `${CRM_URL}/agenda?google_auth=error&reason=no_credentials`;
+        const redirectUrl = `${CRM_URL}/google-auth-callback?google_auth=error&reason=no_credentials`;
         return Response.redirect(redirectUrl, 302);
       }
 
@@ -78,7 +78,7 @@ serve(async (req) => {
       console.log('[callback] Token exchange:', tokenRes.ok ? 'success' : 'failed', tokens.error || '');
 
       if (!tokenRes.ok) {
-        const redirectUrl = `${CRM_URL}/agenda?google_auth=error&reason=${encodeURIComponent(tokens.error_description || tokens.error || 'token_exchange_failed')}`;
+        const redirectUrl = `${CRM_URL}/google-auth-callback?google_auth=error&reason=${encodeURIComponent(tokens.error_description || tokens.error || 'token_exchange_failed')}`;
         return Response.redirect(redirectUrl, 302);
       }
 
@@ -93,7 +93,7 @@ serve(async (req) => {
         scope:          tokens.scope || '',
       });
 
-      const redirectUrl = `${CRM_URL}/agenda?${params.toString()}`;
+      const redirectUrl = `${CRM_URL}/google-auth-callback?${params.toString()}`;
       console.log('[callback] Redirecting to CRM...');
       return Response.redirect(redirectUrl, 302);
     }
