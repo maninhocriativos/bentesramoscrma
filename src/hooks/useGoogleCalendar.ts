@@ -28,52 +28,60 @@ export function useGoogleCalendar() {
 
   useEffect(() => { checkConnection(); }, [checkConnection]);
 
-  // ── Capturar tokens da URL após redirect do Google ───────────────────────────
-  useEffect(() => {
+  // ── Salvar tokens (reutilizado em múltiplos lugares) ─────────────────────────
+  const saveTokens = useCallback(async (accessToken: string, refreshToken: string, expiresIn: number) => {
     if (!user) return;
-    const params = new URLSearchParams(window.location.search);
-    const googleAuth = params.get('google_auth');
-    if (!googleAuth) return;
+    const { error } = await supabase
+      .from('google_calendar_tokens')
+      .upsert({
+        user_id:       user.id,
+        access_token:  accessToken,
+        refresh_token: refreshToken || null,
+        expires_at:    new Date(Date.now() + expiresIn * 1000).toISOString(),
+      }, { onConflict: 'user_id' });
+    if (error) throw error;
+    setIsConnected(true);
+  }, [user]);
 
-    // Limpar URL imediatamente
-    window.history.replaceState({}, document.title, window.location.pathname);
-
-    if (googleAuth === 'error') {
-      const reason = params.get('reason') || 'Erro desconhecido';
-      toast.error(`Erro ao conectar Google Calendar: ${reason}`);
-      return;
-    }
-
-    if (googleAuth === 'success') {
-      const accessToken  = params.get('access_token');
-      const refreshToken = params.get('refresh_token');
-      const expiresIn    = parseInt(params.get('expires_in') || '3600', 10);
-
-      if (!accessToken) { toast.error('Token não recebido'); return; }
-
-      (async () => {
+  // ── Ouvir postMessage do popup /google-auth-callback ────────────────────────
+  useEffect(() => {
+    const handleMessage = async (event: MessageEvent) => {
+      if (event.data?.type === 'google-oauth-success' && user) {
         try {
-          const { error } = await supabase
-            .from('google_calendar_tokens')
-            .upsert({
-              user_id:       user.id,
-              access_token:  accessToken,
-              refresh_token: refreshToken || null,
-              expires_at:    new Date(Date.now() + expiresIn * 1000).toISOString(),
-            }, { onConflict: 'user_id' });
-
-          if (error) throw error;
-          setIsConnected(true);
+          const { access_token, refresh_token, expires_in } = event.data.tokens;
+          await saveTokens(access_token, refresh_token, expires_in || 3600);
           toast.success('Google Calendar conectado! Sincronizando...');
           setTimeout(() => syncFull(), 1500);
         } catch (err) {
           console.error(err);
           toast.error('Erro ao salvar conexão com Google Calendar');
         }
-      })();
-    }
-  }, [user]);
+      } else if (event.data?.type === 'google-oauth-error') {
+        toast.error(`Erro ao conectar: ${event.data.error}`);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [user, saveTokens]);
 
+  // ── Fallback: capturar tokens do sessionStorage (caso popup não funcione) ───
+  useEffect(() => {
+    if (!user) return;
+    const stored = sessionStorage.getItem('google_oauth_tokens');
+    if (!stored) return;
+    sessionStorage.removeItem('google_oauth_tokens');
+    try {
+      const { access_token, refresh_token, expires_in } = JSON.parse(stored);
+      saveTokens(access_token, refresh_token, expires_in || 3600)
+        .then(() => {
+          toast.success('Google Calendar conectado! Sincronizando...');
+          setTimeout(() => syncFull(), 1500);
+        })
+        .catch(() => toast.error('Erro ao salvar tokens do Google'));
+    } catch { /* ignore */ }
+  }, [user, saveTokens]);
+
+  // ── Iniciar OAuth — abre popup ───────────────────────────────────────────────
   const connect = async () => {
     try {
       const res = await fetch(
@@ -82,7 +90,15 @@ export function useGoogleCalendar() {
       );
       const result = await res.json();
       if (result.error) { toast.error(result.error); return; }
-      if (result.authUrl) window.location.href = result.authUrl;
+      if (result.authUrl) {
+        const w = 600, h = 700;
+        const popup = window.open(
+          result.authUrl,
+          'Google Calendar Auth',
+          `width=${w},height=${h},left=${window.screen.width/2 - w/2},top=${window.screen.height/2 - h/2}`
+        );
+        if (!popup) toast.warning('Popup bloqueado! Autorize popups para este site.');
+      }
     } catch {
       toast.error('Erro ao iniciar autenticação com Google');
     }
@@ -136,7 +152,7 @@ export function useGoogleCalendar() {
   };
 
   const syncFull = async () => {
-    if (!user || !isConnected) { toast.error('Conecte o Google Calendar primeiro'); return; }
+    if (!user || !isConnected) return;
     setIsSyncing(true);
     try {
       const { data, error } = await supabase.functions.invoke('calendar-sync', {
@@ -145,7 +161,7 @@ export function useGoogleCalendar() {
       if (error || data?.error) throw new Error(data?.error || error?.message);
       toast.success(data.mensagem || 'Sincronização completa!');
       setLastSync(new Date());
-    } catch (err: any) { toast.error(`Erro: ${err.message}`); } finally { setIsSyncing(false); }
+    } catch (err: any) { console.warn('syncFull:', err.message); } finally { setIsSyncing(false); }
   };
 
   const deleteFromGoogle = async (googleEventId: string) => {
