@@ -1,8 +1,5 @@
 import { useState, useMemo, useCallback, lazy, Suspense, memo } from 'react';
-import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { AppLayout } from '@/components/layouts/AppLayout';
-import { CardContent } from '@/components/ui/card';
-import { Users, DollarSign, Briefcase } from 'lucide-react';
 import { AppHeader } from '@/components/AppHeader';
 import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
 import { DashboardFiltersBar, DashboardFilters } from '@/components/dashboard/DashboardFilters';
@@ -13,19 +10,19 @@ import { useLeads } from '@/hooks/useLeads';
 import { useProcessos } from '@/hooks/useProcessos';
 import { useAlertas } from '@/hooks/useAlertas';
 import { useDashboardStats } from '@/hooks/useDashboardStats';
-import { Loader2 } from 'lucide-react';
+import { Users, DollarSign, Briefcase, Loader2, TrendingUp } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, isAfter } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
+import { cn } from '@/lib/utils';
 
-// Lazy-load heavy chart components (Recharts is large)
-const DashboardCharts = lazy(() => import('@/components/dashboard/DashboardCharts').then(m => ({ default: m.DashboardCharts })));
+const DashboardCharts   = lazy(() => import('@/components/dashboard/DashboardCharts').then(m => ({ default: m.DashboardCharts })));
 const ConversionMetrics = lazy(() => import('@/components/dashboard/ConversionMetrics').then(m => ({ default: m.ConversionMetrics })));
 const RealtimeLeadsMonitor = lazy(() => import('@/components/dashboard/RealtimeLeadsMonitor').then(m => ({ default: m.RealtimeLeadsMonitor })));
-const TeamStatusWidget = lazy(() => import('@/components/dashboard/TeamStatusWidget').then(m => ({ default: m.TeamStatusWidget })));
+const TeamStatusWidget  = lazy(() => import('@/components/dashboard/TeamStatusWidget').then(m => ({ default: m.TeamStatusWidget })));
 
 const ChartFallback = () => (
-  <div className="bg-card rounded-2xl border border-border/40 p-6 space-y-4 animate-pulse">
+  <div className="rounded-2xl border border-[#c9a96e]/15 bg-card p-6 space-y-4 animate-pulse">
     <div className="flex items-center justify-between">
       <Skeleton className="h-5 w-40" />
       <Skeleton className="h-8 w-28" />
@@ -38,6 +35,36 @@ const ChartFallback = () => (
   </div>
 );
 
+// ─── Hero KPI Card ────────────────────────────────────────────────────────────
+function HeroCard({
+  label, value, sub, icon: Icon, accent, iconBg, iconColor,
+}: {
+  label: string; value: string; sub: string;
+  icon: React.ElementType; accent: string; iconBg: string; iconColor: string;
+}) {
+  return (
+    <div className={cn(
+      'relative rounded-2xl overflow-hidden bg-card',
+      'border border-[#c9a96e]/15',
+      'shadow-[0_1px_4px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.08)]',
+      'transition-all duration-300 hover:-translate-y-0.5 group'
+    )}>
+      {/* Accent bar */}
+      <div className={cn('h-[3px] w-full', accent)} />
+      <div className="p-6">
+        <div className="flex items-start justify-between mb-4">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
+          <div className={cn('h-9 w-9 rounded-xl flex items-center justify-center', iconBg)}>
+            <Icon className={cn('h-4.5 w-4.5', iconColor)} style={{ width: 18, height: 18 }} />
+          </div>
+        </div>
+        <p className="text-4xl font-black text-foreground tracking-tight leading-none mb-2">{value}</p>
+        <p className="text-xs text-muted-foreground">{sub}</p>
+      </div>
+    </div>
+  );
+}
+
 function DashboardPage() {
   const { stats, loading: statsLoading } = useDashboardStats();
   const { leads, loading: leadsLoading, fetchLeads } = useLeads();
@@ -45,41 +72,32 @@ function DashboardPage() {
   const { alertas } = useAlertas(leads, processos);
   const navigate = useNavigate();
 
-  const handleRefreshLeads = useCallback(() => {
-    fetchLeads();
-  }, [fetchLeads]);
-  
+  const handleRefreshLeads = useCallback(() => fetchLeads(), [fetchLeads]);
+
   const [filters, setFilters] = useState<DashboardFilters>({
-    period: 'all',
-    origem: 'all',
-    status: 'all',
-    search: '',
+    period: 'all', origem: 'all', status: 'all', search: '',
   });
 
   const filteredLeads = useMemo(() => {
     return leads.filter(lead => {
       if (filters.search) {
-        const searchLower = filters.search.toLowerCase();
-        const nameMatch = lead.nome?.toLowerCase().includes(searchLower);
-        const emailMatch = lead.email?.toLowerCase().includes(searchLower);
-        if (!nameMatch && !emailMatch) return false;
+        const s = filters.search.toLowerCase();
+        if (!lead.nome?.toLowerCase().includes(s) && !lead.email?.toLowerCase().includes(s)) return false;
       }
-
       if (filters.period !== 'all') {
-        const leadDate = new Date(lead.created_at);
+        const d = new Date(lead.created_at);
         const now = new Date();
-        let startDate: Date;
+        let start: Date;
         switch (filters.period) {
-          case 'today': startDate = startOfDay(now); break;
-          case 'week': startDate = startOfWeek(now, { weekStartsOn: 1 }); break;
-          case 'month': startDate = startOfMonth(now); break;
-          case 'quarter': startDate = startOfQuarter(now); break;
-          case 'year': startDate = startOfYear(now); break;
-          default: startDate = new Date(0);
+          case 'today':   start = startOfDay(now); break;
+          case 'week':    start = startOfWeek(now, { weekStartsOn: 1 }); break;
+          case 'month':   start = startOfMonth(now); break;
+          case 'quarter': start = startOfQuarter(now); break;
+          case 'year':    start = startOfYear(now); break;
+          default:        start = new Date(0);
         }
-        if (!isAfter(leadDate, startDate)) return false;
+        if (!isAfter(d, start)) return false;
       }
-      
       if (filters.origem !== 'all' && lead.origem !== filters.origem) return false;
       if (filters.status !== 'all' && lead.status !== filters.status) return false;
       return true;
@@ -91,103 +109,78 @@ function DashboardPage() {
     else if (alerta.processoId) navigate('/processos');
   };
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency', currency: 'BRL', minimumFractionDigits: 2,
-    }).format(value);
-  };
+  const formatCurrency = (v: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(v);
 
-  // Show hero KPIs immediately from fast RPC, rest loads progressively
-  const heroReady = !statsLoading;
+  const heroReady  = !statsLoading;
   const chartsReady = !leadsLoading && !processosLoading;
 
   return (
     <AppLayout>
       <AppHeader title="Dashboard" />
-      
+
       <div className="flex-1 overflow-auto">
         {!heroReady ? (
-          <PageSkeleton cards={3} rows={4} />
+          <div className="px-4 md:px-6 lg:px-8 py-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {[1,2,3].map(i => <Skeleton key={i} className="h-36 rounded-2xl" />)}
+            </div>
+          </div>
         ) : (
           <div className="px-4 md:px-6 lg:px-8 py-6 space-y-6 page-enter">
-            
-            {/* ===== TOP: Hero KPIs (instant from RPC) ===== */}
+
+            {/* ── Hero KPIs ── */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-card rounded-2xl overflow-hidden shadow-md border border-border/40">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                        Qtd. de Leads
-                      </p>
-                      <p className="text-5xl font-bold text-foreground tracking-tight">{stats.total_leads}</p>
-                      <p className="text-xs text-muted-foreground mt-1.5">leads no CRM</p>
-                    </div>
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[hsl(217,91%,60%)] to-[hsl(221,83%,53%)] flex items-center justify-center shadow-md shadow-[hsl(217,91%,60%)]/20">
-                      <Users className="h-4 w-4 text-white" />
-                    </div>
-                  </div>
-                </CardContent>
-              </div>
-              
-              <div className="bg-card rounded-2xl overflow-hidden shadow-md border border-border/40">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                        Faturamento (Valor Causa)
-                      </p>
-                      <p className="text-4xl font-bold text-foreground tracking-tight">{formatCurrency(stats.total_valor_causa)}</p>
-                      <p className="text-xs text-muted-foreground mt-1.5">total em pipeline</p>
-                    </div>
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[hsl(38,92%,50%)] to-[hsl(45,93%,47%)] flex items-center justify-center shadow-md shadow-[hsl(38,92%,50%)]/20">
-                      <DollarSign className="h-4 w-4 text-white" />
-                    </div>
-                  </div>
-                </CardContent>
-              </div>
-              
-              <div className="bg-card rounded-2xl overflow-hidden shadow-md border border-border/40">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                        Processos Ativos
-                      </p>
-                      <p className="text-5xl font-bold text-foreground tracking-tight">{stats.total_processos}</p>
-                      <p className="text-xs text-muted-foreground mt-1.5">processos cadastrados</p>
-                    </div>
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[hsl(160,84%,39%)] to-[hsl(142,71%,45%)] flex items-center justify-center shadow-md shadow-[hsl(160,84%,39%)]/20">
-                      <Briefcase className="h-4 w-4 text-white" />
-                    </div>
-                  </div>
-                </CardContent>
-              </div>
+              <HeroCard
+                label="Qtd. de Leads"
+                value={stats.total_leads.toLocaleString('pt-BR')}
+                sub="leads no CRM"
+                icon={Users}
+                accent="bg-[#3d2b1f]"
+                iconBg="bg-[#3d2b1f]/8"
+                iconColor="text-[#3d2b1f]"
+              />
+              <HeroCard
+                label="Faturamento (Valor Causa)"
+                value={formatCurrency(stats.total_valor_causa)}
+                sub="total em pipeline"
+                icon={DollarSign}
+                accent="bg-[#c9a96e]"
+                iconBg="bg-[#c9a96e]/12"
+                iconColor="text-[#b8922a]"
+              />
+              <HeroCard
+                label="Processos Ativos"
+                value={stats.total_processos.toLocaleString('pt-BR')}
+                sub="processos cadastrados"
+                icon={Briefcase}
+                accent="bg-emerald-500"
+                iconBg="bg-emerald-50"
+                iconColor="text-emerald-600"
+              />
             </div>
 
-            {/* ===== FILTERS ===== */}
+            {/* ── Filtros ── */}
             <DashboardFiltersBar filters={filters} onFiltersChange={setFilters} />
 
-            {/* ===== ROW 2: Origem + KPIs (progressive load) ===== */}
+            {/* ── Conteúdo principal ── */}
             {chartsReady ? (
               <>
+                {/* Origem + Alertas */}
                 <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
                   <div className="space-y-6">
                     <LeadOriginKPIs leads={leads} stats={stats} />
                     <DashboardKPIs leads={filteredLeads} processos={processos} />
                   </div>
-                  <AlertasWidget 
-                    alertas={alertas} 
-                    onAlertClick={handleAlertClick}
-                  />
+                  <AlertasWidget alertas={alertas} onAlertClick={handleAlertClick} />
                 </div>
 
-                {/* ===== ROW 3: Conversão (lazy) ===== */}
+                {/* Conversão */}
                 <Suspense fallback={<ChartFallback />}>
                   <ConversionMetrics leads={leads} />
                 </Suspense>
 
-                {/* ===== ROW 4: Charts + Monitor (lazy) ===== */}
+                {/* Gráficos + Sidebar */}
                 <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
                   <Suspense fallback={<ChartFallback />}>
                     <DashboardCharts leads={filteredLeads} />
@@ -204,10 +197,10 @@ function DashboardPage() {
                 </div>
               </>
             ) : (
-              <div className="flex items-center justify-center py-12">
+              <div className="flex items-center justify-center py-16">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm">Carregando gráficos...</span>
+                  <span className="text-sm">Carregando dados...</span>
                 </div>
               </div>
             )}
