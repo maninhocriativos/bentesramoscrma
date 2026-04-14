@@ -76,7 +76,7 @@ export function AgendaPrazosWidget() {
 
   return (
     <div
-      className="rounded-2xl overflow-hidden bg-card"
+      className="rounded-2xl overflow-hidden bg-card flex flex-col"
       style={{ border: '0.5px solid rgba(201,169,110,0.25)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}
     >
       {/* Accent */}
@@ -148,7 +148,7 @@ export function AgendaPrazosWidget() {
       {/* Footer */}
       <div
         onClick={() => navigate('/agenda')}
-        className="px-5 py-2.5 text-center cursor-pointer transition-colors hover:bg-stone-50 dark:hover:bg-[#c9a96e]/4"
+        className="mt-auto px-5 py-3 text-center cursor-pointer transition-colors hover:bg-stone-50 dark:hover:bg-[#c9a96e]/4"
         style={{ borderTop: '0.5px solid rgba(201,169,110,0.12)' }}
       >
         <span className="text-xs font-semibold" style={{ color: '#c9a96e' }}>Ver todos →</span>
