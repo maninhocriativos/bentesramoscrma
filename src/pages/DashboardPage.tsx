@@ -180,20 +180,20 @@ function DashboardPage() {
                   <ConversionMetrics leads={leads} />
                 </Suspense>
 
-                {/* Gráficos + Sidebar */}
-                <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
+                {/* Gráficos — largura total */}
+                <Suspense fallback={<ChartFallback />}>
+                  <DashboardCharts leads={filteredLeads} />
+                </Suspense>
+
+                {/* Widgets inferiores — 3 colunas */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
+                  <AgendaPrazosWidget />
                   <Suspense fallback={<ChartFallback />}>
-                    <DashboardCharts leads={filteredLeads} />
+                    <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
                   </Suspense>
-                  <div className="space-y-6">
-                    <AgendaPrazosWidget />
-                    <Suspense fallback={<ChartFallback />}>
-                      <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
-                    </Suspense>
-                    <Suspense fallback={<ChartFallback />}>
-                      <TeamStatusWidget />
-                    </Suspense>
-                  </div>
+                  <Suspense fallback={<ChartFallback />}>
+                    <TeamStatusWidget />
+                  </Suspense>
                 </div>
               </>
             ) : (
