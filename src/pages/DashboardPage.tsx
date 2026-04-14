@@ -185,8 +185,8 @@ function DashboardPage() {
                   <DashboardCharts leads={filteredLeads} />
                 </Suspense>
 
-                {/* Widgets inferiores — 3 colunas */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
+                {/* Widgets inferiores — 3 colunas igualadas */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch pb-4">
                   <AgendaPrazosWidget />
                   <Suspense fallback={<ChartFallback />}>
                     <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
