@@ -1,7 +1,5 @@
 import { useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
 import { Calendar, Clock, AlertTriangle, FileText, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIntimacoes } from '@/hooks/useIntimacoes';
@@ -17,143 +15,144 @@ interface AgendaItem {
   title: string;
   date: Date;
   icon: typeof Calendar;
-  color: string;
-  bg: string;
+  dot: string;
+  iconBg: string;
+  iconColor: string;
   route: string;
 }
 
 export function AgendaPrazosWidget() {
-  const { intimacoes } = useIntimacoes();
+  const { intimacoes }   = useIntimacoes();
   const { compromissos } = useCompromissos();
-  const { tarefas } = useTarefas();
+  const { tarefas }      = useTarefas();
   const navigate = useNavigate();
 
   const items = useMemo(() => {
-    const now = startOfDay(new Date());
+    const now   = startOfDay(new Date());
     const limit = addDays(now, 7);
     const result: AgendaItem[] = [];
 
-    // Intimações próximos 7 dias
     intimacoes
       .filter(i => !i.lida && i.data_intimacao)
       .forEach(i => {
         const d = new Date(i.data_intimacao!);
         if (isAfter(d, now) && isBefore(d, limit)) {
           result.push({
-            id: i.id,
-            type: 'intimacao',
+            id: i.id, type: 'intimacao',
             title: i.processo_titulo || `Intimação ${i.processo_cnj || ''}`,
-            date: d,
-            icon: FileText,
-            color: 'text-destructive',
-            bg: 'bg-destructive/10',
+            date: d, icon: FileText,
+            dot: '#dc2626', iconBg: 'rgba(220,38,38,0.08)', iconColor: '#dc2626',
             route: '/intimacoes',
           });
         }
       });
 
-    // Compromissos de hoje
-    compromissos
-      .forEach(c => {
-        const d = new Date(c.data_inicio);
-        if (isToday(d)) {
-          result.push({
-            id: c.id,
-            type: 'compromisso',
-            title: c.titulo,
-            date: d,
-            icon: Calendar,
-            color: 'text-[hsl(217,91%,60%)]',
-            bg: 'bg-[hsl(217,91%,60%)]/10',
-            route: '/agenda',
-          });
-        }
-      });
+    compromissos.forEach(c => {
+      const d = new Date(c.data_inicio);
+      if (isToday(d)) {
+        result.push({
+          id: c.id, type: 'compromisso',
+          title: c.titulo, date: d, icon: Calendar,
+          dot: '#3d2b1f', iconBg: 'rgba(61,43,31,0.08)', iconColor: '#3d2b1f',
+          route: '/agenda',
+        });
+      }
+    });
 
-    // Tarefas urgentes pendentes
     tarefas
       .filter(t => t.prioridade === 'Urgente' && (t.status === 'Pendente' || t.status === 'Em Andamento'))
       .forEach(t => {
         const d = t.data_limite ? new Date(t.data_limite) : new Date();
         result.push({
-          id: t.id,
-          type: 'tarefa',
-          title: t.titulo,
-          date: d,
-          icon: AlertTriangle,
-          color: 'text-[hsl(38,92%,50%)]',
-          bg: 'bg-[hsl(38,92%,50%)]/10',
+          id: t.id, type: 'tarefa',
+          title: t.titulo, date: d, icon: AlertTriangle,
+          dot: '#c9a96e', iconBg: 'rgba(201,169,110,0.1)', iconColor: '#b8922a',
           route: '/tarefas',
         });
       });
 
-    return result
-      .sort((a, b) => a.date.getTime() - b.date.getTime())
-      .slice(0, 5);
+    return result.sort((a, b) => a.date.getTime() - b.date.getTime()).slice(0, 5);
   }, [intimacoes, compromissos, tarefas]);
 
   return (
-    <Card className="rounded-2xl border border-border/40 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)]">
-      <div className="h-1 w-full bg-[hsl(217,91%,60%)]" />
-      <CardHeader className="pb-2 pt-4 px-5">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-[hsl(217,91%,60%)]/10 flex items-center justify-center">
-            <Calendar className="h-4 w-4 text-[hsl(217,91%,60%)]" />
-          </div>
-          📅 Agenda & Prazos
-          {items.length > 0 && (
-            <Badge className="ml-auto bg-[hsl(217,91%,60%)] text-white text-[10px] px-1.5 py-0 h-5 border-0">
-              {items.length}
-            </Badge>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        {items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center px-5">
-            <div className="w-10 h-10 rounded-xl bg-[hsl(var(--success))]/10 flex items-center justify-center mb-2">
-              <Clock className="h-5 w-5 text-[hsl(var(--success))]" />
-            </div>
-            <p className="text-sm font-medium text-foreground">Tudo tranquilo!</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Sem prazos urgentes</p>
-          </div>
-        ) : (
-          <ScrollArea className="max-h-[280px]">
-            <div className="divide-y divide-border/40">
-              {items.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <div
-                    key={`${item.type}-${item.id}`}
-                    className="flex items-center gap-3 px-5 py-2.5 hover:bg-muted/30 transition-colors cursor-pointer"
-                    onClick={() => navigate(item.route)}
-                  >
-                    <div className={cn("p-1.5 rounded-lg shrink-0", item.bg)}>
-                      <Icon className={cn("h-3.5 w-3.5", item.color)} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-foreground truncate">{item.title}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {isToday(item.date) 
-                          ? `Hoje às ${format(item.date, 'HH:mm')}`
-                          : format(item.date, "dd MMM", { locale: ptBR })
-                        }
-                      </p>
-                    </div>
-                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
-                  </div>
-                );
-              })}
-            </div>
-          </ScrollArea>
-        )}
-        <div
-          className="p-2.5 border-t border-border/30 text-center cursor-pointer hover:bg-muted/20 transition-colors"
-          onClick={() => navigate('/agenda')}
-        >
-          <span className="text-xs font-medium text-primary">Ver todos →</span>
+    <div
+      className="rounded-2xl overflow-hidden bg-card"
+      style={{ border: '0.5px solid rgba(201,169,110,0.25)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}
+    >
+      {/* Accent */}
+      <div style={{ height: 3, background: '#3d2b1f' }} />
+
+      {/* Header */}
+      <div className="flex items-center gap-2.5 px-5 py-4 border-b" style={{ borderColor: 'rgba(201,169,110,0.12)' }}>
+        <div className="h-8 w-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(61,43,31,0.08)' }}>
+          <Calendar style={{ width: 16, height: 16, color: '#3d2b1f' }} />
         </div>
-      </CardContent>
-    </Card>
+        <span className="text-sm font-semibold text-foreground flex-1">📅 Agenda & Prazos</span>
+        {items.length > 0 && (
+          <span
+            className="text-[11px] font-bold px-2 py-0.5 rounded-lg"
+            style={{ background: '#3d2b1f', color: '#c9a96e' }}
+          >
+            {items.length}
+          </span>
+        )}
+      </div>
+
+      {/* Conteúdo */}
+      {items.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-10 text-center px-5">
+          <div className="h-10 w-10 rounded-xl flex items-center justify-center mb-3" style={{ background: 'rgba(22,163,74,0.08)' }}>
+            <Clock style={{ width: 20, height: 20, color: '#16a34a' }} />
+          </div>
+          <p className="text-sm font-semibold text-foreground">Tudo tranquilo!</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Sem prazos urgentes nos próximos 7 dias</p>
+        </div>
+      ) : (
+        <ScrollArea style={{ maxHeight: 280 }}>
+          <div>
+            {items.map((item, idx) => {
+              const Icon = item.icon;
+              return (
+                <div
+                  key={`${item.type}-${item.id}`}
+                  onClick={() => navigate(item.route)}
+                  className="flex items-center gap-3 px-5 py-3 cursor-pointer transition-colors hover:bg-stone-50 dark:hover:bg-[#c9a96e]/4"
+                  style={{ borderBottom: idx < items.length - 1 ? '0.5px solid rgba(201,169,110,0.1)' : 'none' }}
+                >
+                  {/* Dot + ícone */}
+                  <div
+                    className="h-8 w-8 rounded-xl flex items-center justify-center shrink-0"
+                    style={{ background: item.iconBg }}
+                  >
+                    <Icon style={{ width: 14, height: 14, color: item.iconColor }} />
+                  </div>
+
+                  {/* Texto */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{item.title}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {isToday(item.date)
+                        ? `Hoje às ${format(item.date, 'HH:mm')}`
+                        : format(item.date, "dd 'de' MMM", { locale: ptBR })}
+                    </p>
+                  </div>
+
+                  <ChevronRight style={{ width: 14, height: 14, color: 'rgba(201,169,110,0.4)', flexShrink: 0 }} />
+                </div>
+              );
+            })}
+          </div>
+        </ScrollArea>
+      )}
+
+      {/* Footer */}
+      <div
+        onClick={() => navigate('/agenda')}
+        className="px-5 py-2.5 text-center cursor-pointer transition-colors hover:bg-stone-50 dark:hover:bg-[#c9a96e]/4"
+        style={{ borderTop: '0.5px solid rgba(201,169,110,0.12)' }}
+      >
+        <span className="text-xs font-semibold" style={{ color: '#c9a96e' }}>Ver todos →</span>
+      </div>
+    </div>
   );
 }
