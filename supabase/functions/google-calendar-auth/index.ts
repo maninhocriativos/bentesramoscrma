@@ -1,4 +1,4 @@
-const serve = Deno.serve;
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -8,38 +8,21 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-// IMPORTANT: The redirect_uri MUST match exactly what's registered in Google Cloud Console
-// Register this URL in Google Cloud Console: https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/google-calendar-auth/callback
+const CRM_URL = 'https://bentesramoscrm.com.br';
 const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/google-calendar-auth/callback`;
 
-// Helper function to get Google credentials from app_settings
-async function getGoogleCredentials(supabase: any): Promise<{ clientId: string | null; clientSecret: string | null }> {
-  const { data, error } = await supabase
+async function getGoogleCredentials(supabase: any) {
+  const { data } = await supabase
     .from('app_settings')
     .select('key, value')
     .in('key', ['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET']);
 
-  if (error) {
-    console.error('Error fetching Google credentials:', error);
-    return { clientId: null, clientSecret: null };
-  }
-
-  const settings = data.reduce((acc: Record<string, string>, item: { key: string; value: string }) => {
-    acc[item.key] = item.value;
-    return acc;
-  }, {});
-
-  return {
-    clientId: settings['GOOGLE_OAUTH_CLIENT_ID'] || null,
-    clientSecret: settings['GOOGLE_OAUTH_CLIENT_SECRET'] || null,
-  };
+  const s = (data || []).reduce((acc: any, item: any) => { acc[item.key] = item.value; return acc; }, {});
+  return { clientId: s['GOOGLE_OAUTH_CLIENT_ID'] || null, clientSecret: s['GOOGLE_OAUTH_CLIENT_SECRET'] || null };
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -48,241 +31,133 @@ serve(async (req) => {
     const pathname = url.pathname;
     const action = url.searchParams.get('action');
 
-    console.log('Google Calendar Auth - Path:', pathname, 'Action:', action);
+    console.log('[google-calendar-auth] Path:', pathname, '| Action:', action);
 
-    // Get credentials from database
     const { clientId, clientSecret } = await getGoogleCredentials(supabase);
 
-    // Handle OAuth callback via path (Google redirects here)
-    // Path: /functions/v1/google-calendar-auth/callback
+    // ═══════════════════════════════════════════════════════════════════════
+    // CALLBACK — Google redireciona aqui após o usuário autorizar
+    // ═══════════════════════════════════════════════════════════════════════
     if (pathname.endsWith('/callback')) {
-      const code = url.searchParams.get('code');
+      const code  = url.searchParams.get('code');
       const error = url.searchParams.get('error');
 
-      console.log('OAuth callback - code:', code ? 'present' : 'missing', 'error:', error);
+      console.log('[callback] code:', code ? 'present' : 'missing', '| error:', error);
 
+      // ── Erro do Google ────────────────────────────────────────────────────
       if (error) {
-        console.error('OAuth error:', error);
-        return new Response(`<!DOCTYPE html>
-<html>
-  <head><meta charset="utf-8"><title>Erro</title></head>
-  <body>
-    <script>
-      window.opener?.postMessage({ type: 'google-oauth-error', error: '${error}' }, '*');
-      setTimeout(function() { window.close(); }, 1000);
-    </script>
-    <p>Erro na autenticação. Esta janela pode ser fechada.</p>
-  </body>
-</html>`, {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'no-store',
-          },
-        });
+        const redirectUrl = `${CRM_URL}/agenda?google_auth=error&reason=${encodeURIComponent(error)}`;
+        return Response.redirect(redirectUrl, 302);
       }
 
       if (!code) {
-        return new Response(`<!DOCTYPE html>
-<html>
-  <head><meta charset="utf-8"><title>Erro</title></head>
-  <body>
-    <script>
-      window.opener?.postMessage({ type: 'google-oauth-error', error: 'Código não encontrado' }, '*');
-      setTimeout(function() { window.close(); }, 1000);
-    </script>
-    <p>Código de autorização não encontrado.</p>
-  </body>
-</html>`, {
-          status: 400,
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'no-store',
-          },
-        });
+        const redirectUrl = `${CRM_URL}/agenda?google_auth=error&reason=no_code`;
+        return Response.redirect(redirectUrl, 302);
       }
 
       if (!clientId || !clientSecret) {
-        return new Response(`<!DOCTYPE html>
-<html>
-  <head><meta charset="utf-8"><title>Erro</title></head>
-  <body>
-    <script>
-      window.opener?.postMessage({ type: 'google-oauth-error', error: 'Credenciais não configuradas' }, '*');
-      setTimeout(function() { window.close(); }, 1000);
-    </script>
-    <p>Credenciais não configuradas.</p>
-  </body>
-</html>`, {
-          status: 400,
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'no-store',
-          },
-        });
+        const redirectUrl = `${CRM_URL}/agenda?google_auth=error&reason=no_credentials`;
+        return Response.redirect(redirectUrl, 302);
       }
 
-      // Exchange code for tokens - MUST use exact same redirect_uri
-      console.log('Exchanging code for tokens with redirect_uri:', REDIRECT_URI);
-      
-      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      // ── Trocar code por tokens ────────────────────────────────────────────
+      console.log('[callback] Exchanging code for tokens...');
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           code,
-          client_id: clientId,
+          client_id:     clientId,
           client_secret: clientSecret,
-          redirect_uri: REDIRECT_URI,
-          grant_type: 'authorization_code',
+          redirect_uri:  REDIRECT_URI,
+          grant_type:    'authorization_code',
         }),
       });
 
-      const tokens = await tokenResponse.json();
-      console.log('Token exchange result:', tokenResponse.ok ? 'success' : 'failed', tokens.error || '');
+      const tokens = await tokenRes.json();
+      console.log('[callback] Token exchange:', tokenRes.ok ? 'success' : 'failed', tokens.error || '');
 
-      if (!tokenResponse.ok) {
-        console.error('Token exchange error:', tokens);
-        return new Response(`<!DOCTYPE html>
-<html>
-  <head><meta charset="utf-8"><title>Erro</title></head>
-  <body>
-    <script>
-      window.opener?.postMessage({ type: 'google-oauth-error', error: 'Falha ao obter tokens: ${tokens.error_description || tokens.error || 'unknown'}' }, '*');
-      setTimeout(function() { window.close(); }, 1000);
-    </script>
-    <p>Falha ao obter tokens.</p>
-  </body>
-</html>`, {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'no-store',
-          },
-        });
+      if (!tokenRes.ok) {
+        const redirectUrl = `${CRM_URL}/agenda?google_auth=error&reason=${encodeURIComponent(tokens.error_description || tokens.error || 'token_exchange_failed')}`;
+        return Response.redirect(redirectUrl, 302);
       }
 
-      const successHtml = `<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <title>Google Calendar Conectado</title>
-    <style>
-      body { font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; }
-      .container { text-align: center; padding: 2rem; }
-      .icon { font-size: 4rem; margin-bottom: 1rem; }
-      h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
-      p { color: #94a3b8; font-size: 0.875rem; }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <div class="icon">✓</div>
-      <h1>Google Calendar Conectado!</h1>
-      <p>Esta janela será fechada automaticamente...</p>
-    </div>
-    <script>
-      (function() {
-        try {
-          if (window.opener) {
-            window.opener.postMessage({ 
-              type: 'google-oauth-success', 
-              tokens: ${JSON.stringify(tokens)}
-            }, '*');
-          }
-        } catch (e) {
-          console.error('PostMessage error:', e);
-        }
-        setTimeout(function() { window.close(); }, 1500);
-      })();
-    </script>
-  </body>
-</html>`;
-
-      return new Response(successHtml, {
-        status: 200,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'text/html; charset=utf-8',
-          'Cache-Control': 'no-store',
-        },
+      // ── Redirecionar de volta ao CRM com os tokens na URL ─────────────────
+      // Os tokens são passados como parâmetros para o CRM processar
+      const params = new URLSearchParams({
+        google_auth:    'success',
+        access_token:   tokens.access_token,
+        refresh_token:  tokens.refresh_token || '',
+        expires_in:     String(tokens.expires_in || 3600),
+        token_type:     tokens.token_type || 'Bearer',
+        scope:          tokens.scope || '',
       });
+
+      const redirectUrl = `${CRM_URL}/agenda?${params.toString()}`;
+      console.log('[callback] Redirecting to CRM...');
+      return Response.redirect(redirectUrl, 302);
     }
 
-    // Get authorization URL for OAuth flow
+    // ═══════════════════════════════════════════════════════════════════════
+    // GET AUTH URL
+    // ═══════════════════════════════════════════════════════════════════════
     if (action === 'get_auth_url') {
       if (!clientId) {
-        return new Response(JSON.stringify({ 
-          error: 'Google OAuth não configurado. Configure as credenciais em Configurações > Integrações.' 
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return new Response(JSON.stringify({
+          error: 'Google OAuth não configurado. Configure as credenciais em Configurações > Integrações.'
+        }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       const scope = 'https://www.googleapis.com/auth/calendar.events';
-      
-      console.log('Generating auth URL with redirect_uri:', REDIRECT_URI);
-      
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${clientId}` +
+      const authUrl =
+        `https://accounts.google.com/o/oauth2/v2/auth` +
+        `?client_id=${encodeURIComponent(clientId)}` +
         `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
         `&response_type=code` +
         `&scope=${encodeURIComponent(scope)}` +
         `&access_type=offline` +
         `&prompt=consent`;
 
+      console.log('[get_auth_url] redirect_uri:', REDIRECT_URI);
       return new Response(JSON.stringify({ authUrl, redirect_uri: REDIRECT_URI }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Refresh token - handle both GET query param and POST body
-    if (action === 'refresh' || req.method === 'POST') {
-      let refreshToken: string | null = null;
-      
-      if (req.method === 'POST') {
-        const body = await req.json();
-        if (body.action === 'refresh') {
-          refreshToken = body.refresh_token;
-        } else {
-          refreshToken = body.refresh_token;
-        }
-      }
+    // ═══════════════════════════════════════════════════════════════════════
+    // REFRESH TOKEN
+    // ═══════════════════════════════════════════════════════════════════════
+    if (req.method === 'POST') {
+      const body = await req.json();
+      const refreshToken = body.refresh_token;
 
       if (!refreshToken) {
         return new Response(JSON.stringify({ error: 'refresh_token não fornecido' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
       if (!clientId || !clientSecret) {
         return new Response(JSON.stringify({ error: 'Credenciais não configuradas' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           refresh_token: refreshToken,
-          client_id: clientId,
+          client_id:     clientId,
           client_secret: clientSecret,
-          grant_type: 'refresh_token',
+          grant_type:    'refresh_token',
         }),
       });
 
-      const tokens = await tokenResponse.json();
-
-      if (!tokenResponse.ok) {
-        console.error('Token refresh error:', tokens);
+      const tokens = await tokenRes.json();
+      if (!tokenRes.ok) {
         return new Response(JSON.stringify({ error: tokens.error_description || 'Falha ao renovar token' }), {
-          status: tokenResponse.status,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: tokenRes.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
@@ -292,16 +167,13 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ error: 'Ação inválida' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
-  } catch (error) {
-    console.error('Error in google-calendar-auth:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  } catch (err: any) {
+    console.error('[google-calendar-auth] Error:', err);
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });
