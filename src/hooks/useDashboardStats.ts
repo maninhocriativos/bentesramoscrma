@@ -13,6 +13,8 @@ export interface DashboardStats {
   leads_ready: number;
   leads_trafego: number;
   leads_trafego_convertidos: number;
+  contratos_trafego_total: number;
+  contratos_trafego_manual: number;
   leads_por_origem: Record<string, number>;
   leads_por_status: Record<string, number>;
 }
@@ -29,6 +31,8 @@ const EMPTY_STATS: DashboardStats = {
   leads_ready: 0,
   leads_trafego: 0,
   leads_trafego_convertidos: 0,
+  contratos_trafego_total: 0,
+  contratos_trafego_manual: 0,
   leads_por_origem: {},
   leads_por_status: {},
 };
@@ -42,19 +46,13 @@ export function useDashboardStats() {
       const { data, error } = await supabase.rpc('get_dashboard_stats');
       if (error) {
         console.error('[DashboardStats] RPC error:', error.message);
-        if (retry < 2) {
-          setTimeout(() => fetchStats(retry + 1), 3000);
-          return;
-        }
+        if (retry < 2) { setTimeout(() => fetchStats(retry + 1), 3000); return; }
       } else if (data) {
         setStats(data as unknown as DashboardStats);
       }
     } catch (err) {
       console.error('[DashboardStats] Unexpected error:', err);
-      if (retry < 2) {
-        setTimeout(() => fetchStats(retry + 1), 3000);
-        return;
-      }
+      if (retry < 2) { setTimeout(() => fetchStats(retry + 1), 3000); return; }
     } finally {
       setLoading(false);
     }
@@ -65,31 +63,24 @@ export function useDashboardStats() {
       setLoading(false);
       return;
     }
-
     fetchStats();
   }, [fetchStats]);
 
-  // Auto-refresh every 5 minutes
+  // Auto-refresh a cada 5 minutos
   useEffect(() => {
     const interval = setInterval(fetchStats, 300_000);
     return () => clearInterval(interval);
   }, [fetchStats]);
 
-  // Realtime: refresh stats when leads change
+  // Realtime — atualiza quando leads mudam
   useEffect(() => {
     const channel = supabase
       .channel('dashboard-stats-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'leads_juridicos' },
-        () => {
-          // Debounce: wait 2s after last change to avoid rapid re-fetches
-          clearTimeout((channel as any)._debounceTimer);
-          (channel as any)._debounceTimer = setTimeout(fetchStats, 2000);
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads_juridicos' }, () => {
+        clearTimeout((channel as any)._debounceTimer);
+        (channel as any)._debounceTimer = setTimeout(fetchStats, 2000);
+      })
       .subscribe();
-
     return () => {
       clearTimeout((channel as any)._debounceTimer);
       supabase.removeChannel(channel);
