@@ -362,6 +362,7 @@ export type Database = {
           data_inicio: string
           descricao: string | null
           external_id: string | null
+          google_event_id: string | null
           id: string
           lead_id: string | null
           origem: string | null
@@ -380,6 +381,7 @@ export type Database = {
           data_inicio: string
           descricao?: string | null
           external_id?: string | null
+          google_event_id?: string | null
           id?: string
           lead_id?: string | null
           origem?: string | null
@@ -398,6 +400,7 @@ export type Database = {
           data_inicio?: string
           descricao?: string | null
           external_id?: string | null
+          google_event_id?: string | null
           id?: string
           lead_id?: string | null
           origem?: string | null
