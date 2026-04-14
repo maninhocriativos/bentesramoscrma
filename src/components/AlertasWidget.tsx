@@ -1,6 +1,4 @@
 import { AlertTriangle, Clock, FileText, ChevronRight, ShieldCheck } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alerta } from '@/hooks/useAlertas';
 import { cn } from '@/lib/utils';
@@ -12,120 +10,118 @@ interface AlertasWidgetProps {
 }
 
 const TIPO_CONFIG = {
-  risco: { icon: AlertTriangle, color: 'text-destructive', bg: 'bg-destructive/10' },
-  prazo: { icon: Clock, color: 'text-[hsl(var(--gold))]', bg: 'bg-[hsl(var(--gold))]/10' },
-  tarefa: { icon: FileText, color: 'text-primary/70', bg: 'bg-primary/10' },
-  resposta: { icon: AlertTriangle, color: 'text-[hsl(var(--success))]', bg: 'bg-[hsl(var(--success))]/10' },
+  risco:    { icon: AlertTriangle, dot: '#dc2626', iconBg: 'rgba(220,38,38,0.08)',   iconColor: '#dc2626' },
+  prazo:    { icon: Clock,         dot: '#c9a96e', iconBg: 'rgba(201,169,110,0.1)',  iconColor: '#b8922a' },
+  tarefa:   { icon: FileText,      dot: '#3d2b1f', iconBg: 'rgba(61,43,31,0.08)',    iconColor: '#3d2b1f' },
+  resposta: { icon: AlertTriangle, dot: '#16a34a', iconBg: 'rgba(22,163,74,0.08)',   iconColor: '#16a34a' },
 };
 
-const PRIORIDADE_BADGE = {
-  alta: 'bg-red-100 text-red-700',
-  media: 'bg-amber-100 text-amber-700',
-  baixa: 'bg-blue-100 text-blue-700',
-};
-
-const PRIORIDADE_CARD = {
-  alta: 'border-l-4 border-l-red-500 bg-red-50 dark:bg-red-950/20',
-  media: 'border-l-4 border-l-amber-500 bg-amber-50 dark:bg-amber-950/20',
-  baixa: 'border-l-4 border-l-blue-500 bg-blue-50 dark:bg-blue-950/20',
+const PRIORIDADE_COLORS = {
+  alta:  { bg: '#fef2f2', text: '#dc2626', border: 'rgba(220,38,38,0.2)',   left: '#dc2626' },
+  media: { bg: '#fffbeb', text: '#b8922a', border: 'rgba(201,169,110,0.3)', left: '#c9a96e' },
+  baixa: { bg: '#eff6ff', text: '#2563eb', border: 'rgba(37,99,235,0.2)',   left: '#3b82f6' },
 };
 
 export function AlertasWidget({ alertas, compact = false, onAlertClick }: AlertasWidgetProps) {
+  const displayAlertas = compact ? alertas.slice(0, 5) : alertas;
+
   if (alertas.length === 0) {
     return (
-      <Card className="rounded-2xl border-0 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)]">
-        <div className="h-1 w-full bg-[hsl(var(--success))]" />
-        <CardHeader className="pb-2 pt-4 px-5">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[hsl(var(--success))]/10 flex items-center justify-center">
-              <ShieldCheck className="h-4 w-4 text-[hsl(var(--success))]" />
-            </div>
-            Alertas
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-5 pb-5">
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-[hsl(var(--success))]/10 flex items-center justify-center mb-3">
-              <ShieldCheck className="h-6 w-6 text-[hsl(var(--success))]" />
-            </div>
-            <p className="text-sm font-medium text-foreground">Tudo em dia!</p>
-            <p className="text-xs text-muted-foreground mt-1">Nenhum alerta no momento</p>
+      <div className="rounded-2xl overflow-hidden bg-card flex flex-col"
+        style={{ border: '0.5px solid rgba(201,169,110,0.25)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+        <div style={{ height: 3, background: '#16a34a' }} />
+        <div className="flex items-center gap-2.5 px-5 py-4" style={{ borderBottom: '0.5px solid rgba(201,169,110,0.12)' }}>
+          <div className="h-8 w-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(22,163,74,0.08)' }}>
+            <ShieldCheck style={{ width: 16, height: 16, color: '#16a34a' }} />
           </div>
-        </CardContent>
-      </Card>
+          <span className="text-sm font-semibold text-foreground">Alertas</span>
+        </div>
+        <div className="flex flex-col items-center justify-center py-12 px-5 text-center">
+          <div className="h-12 w-12 rounded-2xl flex items-center justify-center mb-3" style={{ background: 'rgba(22,163,74,0.08)' }}>
+            <ShieldCheck style={{ width: 24, height: 24, color: '#16a34a' }} />
+          </div>
+          <p className="text-sm font-semibold text-foreground">Tudo em dia!</p>
+          <p className="text-xs text-muted-foreground mt-1">Nenhum alerta no momento</p>
+        </div>
+      </div>
     );
   }
 
-  const displayAlertas = compact ? alertas.slice(0, 5) : alertas;
-
   return (
-    <Card className="rounded-2xl border-0 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)]">
-      <div className="h-1 w-full bg-primary" />
-      <CardHeader className="pb-2 pt-4 px-5">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-            <AlertTriangle className="h-4 w-4 text-primary" />
-          </div>
-          Alertas
-          <Badge className="ml-auto bg-primary text-primary-foreground text-[10px] px-1.5 py-0 h-5">
-            {alertas.length}
-          </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <ScrollArea className="h-[300px]">
-          <div className="divide-y divide-border/40">
-            {displayAlertas.map((alerta) => {
-              const config = TIPO_CONFIG[alerta.tipo];
-              const Icon = config.icon;
-              
-              return (
-                <div
-                  key={alerta.id}
-                  className={cn(
-                    "flex items-start gap-3 px-5 py-3 transition-colors rounded-lg mx-2 my-1",
-                    PRIORIDADE_CARD[alerta.prioridade],
-                    onAlertClick && "cursor-pointer hover:opacity-80"
-                  )}
-                  onClick={() => onAlertClick?.(alerta)}
-                >
-                  <div className={cn("p-1.5 rounded-lg shrink-0 mt-0.5", config.bg)}>
-                    <Icon className={cn(
-                      "h-3.5 w-3.5",
-                      config.color,
-                      alerta.prioridade === 'alta' && "animate-pulse"
-                    )} />
+    <div className="rounded-2xl overflow-hidden bg-card flex flex-col"
+      style={{ border: '0.5px solid rgba(201,169,110,0.25)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+      <div style={{ height: 3, background: '#dc2626' }} />
+
+      {/* Header */}
+      <div className="flex items-center gap-2.5 px-5 py-4" style={{ borderBottom: '0.5px solid rgba(201,169,110,0.12)' }}>
+        <div className="h-8 w-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(220,38,38,0.08)' }}>
+          <AlertTriangle style={{ width: 16, height: 16, color: '#dc2626' }} />
+        </div>
+        <span className="text-sm font-semibold text-foreground flex-1">Alertas</span>
+        <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg" style={{ background: '#fef2f2', color: '#dc2626', border: '0.5px solid rgba(220,38,38,0.2)' }}>
+          {alertas.length}
+        </span>
+      </div>
+
+      {/* Lista */}
+      <ScrollArea style={{ height: 300 }}>
+        <div className="p-3 space-y-2">
+          {displayAlertas.map((alerta) => {
+            const cfg = TIPO_CONFIG[alerta.tipo] || TIPO_CONFIG.risco;
+            const pCfg = PRIORIDADE_COLORS[alerta.prioridade] || PRIORIDADE_COLORS.media;
+            const Icon = cfg.icon;
+
+            return (
+              <div
+                key={alerta.id}
+                onClick={() => onAlertClick?.(alerta)}
+                className={cn('rounded-xl p-3 transition-all', onAlertClick && 'cursor-pointer hover:opacity-90')}
+                style={{
+                  background: pCfg.bg,
+                  border: `0.5px solid ${pCfg.border}`,
+                  borderLeft: `3px solid ${pCfg.left}`,
+                }}
+              >
+                <div className="flex items-start gap-2.5">
+                  {/* Ícone */}
+                  <div className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{ background: cfg.iconBg }}>
+                    <Icon style={{ width: 13, height: 13, color: cfg.iconColor }} className={alerta.prioridade === 'alta' ? 'animate-pulse' : ''} />
                   </div>
+
+                  {/* Texto — sem truncate, quebra linha */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-sm font-medium text-foreground truncate">
+                    <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'inherit' }}>
                         {alerta.titulo}
                       </span>
-                      <Badge className={cn("text-[9px] px-1.5 py-0 h-4 border-0", PRIORIDADE_BADGE[alerta.prioridade])}>
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 5,
+                        background: pCfg.border, color: pCfg.text, textTransform: 'uppercase', letterSpacing: '0.05em'
+                      }}>
                         {alerta.prioridade}
-                      </Badge>
+                      </span>
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">
+                    {/* Descrição sem truncate */}
+                    <p style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.4, wordBreak: 'break-word' }}>
                       {alerta.descricao}
                     </p>
                   </div>
+
                   {onAlertClick && (
-                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0 mt-1" />
+                    <ChevronRight style={{ width: 14, height: 14, color: '#d1d5db', flexShrink: 0, marginTop: 2 }} />
                   )}
                 </div>
-              );
-            })}
-          </div>
-        </ScrollArea>
-        
-        {compact && alertas.length > 5 && (
-          <div className="p-2 border-t border-border/30 text-center">
-            <span className="text-xs text-muted-foreground">
-              +{alertas.length - 5} alertas adicionais
-            </span>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              </div>
+            );
+          })}
+        </div>
+      </ScrollArea>
+
+      {compact && alertas.length > 5 && (
+        <div className="px-5 py-2.5 text-center" style={{ borderTop: '0.5px solid rgba(201,169,110,0.12)' }}>
+          <span style={{ fontSize: 11, color: '#9ca3af' }}>+{alertas.length - 5} alertas adicionais</span>
+        </div>
+      )}
+    </div>
   );
 }
