@@ -30,7 +30,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const PoliticaPrivacidadePage = lazy(() => import("./pages/PoliticaPrivacidadePage"));
 const TermosServicoPage = lazy(() => import("./pages/TermosServicoPage"));
 const InstallPage = lazy(() => import("./pages/InstallPage"));
-const PeticoesPage = lazy(() => import("./pages/PeticoesPage")); // ← novo
+const PeticoesPage = lazy(() => import("./pages/PeticoesPage"));
 const PeticaoEditarPage = lazy(() => import("./pages/PeticaoEditarPage"));
 const PeticaoRevisaoPage = lazy(() => import("./pages/PeticaoRevisaoPage"));
 const PeticaoSaidaPage = lazy(() => import("./pages/PeticaoSaidaPage"));
@@ -40,6 +40,7 @@ const HistoricoAcessosPage = lazy(() => import("./pages/HistoricoAcessosPage"));
 const IntimacoesPage = lazy(() => import("./pages/IntimacoesPage"));
 const BemVindoPage = lazy(() => import("./pages/BemVindoPage"));
 const ConferenciaExtratosPage = lazy(() => import("./pages/ConferenciaExtratosPage"));
+const GoogleAuthCallback = lazy(() => import("./pages/GoogleAuthCallback"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -75,6 +76,8 @@ const App = () => (
               <Route path="/politica-privacidade" element={<PoliticaPrivacidadePage />} />
               <Route path="/termos-servico" element={<TermosServicoPage />} />
               <Route path="/install" element={<InstallPage />} />
+              {/* Callback do OAuth Google — público pois roda no popup sem sessão */}
+              <Route path="/google-auth-callback" element={<GoogleAuthCallback />} />
 
               {/* Protected */}
               <Route element={<RequireAuth />}>
@@ -94,7 +97,7 @@ const App = () => (
                 <Route path="/meta-leads" element={<MetaLeadsPage />} />
                 <Route path="/api-hub" element={<ApiHubPage />} />
                 <Route path="/api-docs" element={<ApiDocsPage />} />
-                <Route path="/peticoes" element={<PeticoesPage />} />  {/* ← apontando para o novo */}
+                <Route path="/peticoes" element={<PeticoesPage />} />
                 <Route path="/peticoes/nova" element={<PeticaoEditarPage />} />
                 <Route path="/peticoes/:id/editar" element={<PeticaoEditarPage />} />
                 <Route path="/peticoes/:id/revisao" element={<PeticaoRevisaoPage />} />
