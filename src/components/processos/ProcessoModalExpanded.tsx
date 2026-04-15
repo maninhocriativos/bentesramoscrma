@@ -72,7 +72,7 @@ interface Assunto {
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const STATUSES: ProcessoStatus[] = ['Em Andamento', 'Suspenso', 'Arquivado', 'Ganho', 'Perdido'];
-const CNJ_REGEX  = /^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$/;
+const CNJ_REGEX     = /^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$/;
 const DRAFT_PREFIX  = 'processo_modal_draft_v1';
 const DRAFT_MAX_AGE = 1000 * 60 * 60 * 24;
 
@@ -97,6 +97,27 @@ const STATUS_STYLE: Record<string, string> = {
   'Arquivado':    'bg-muted text-muted-foreground border-border',
 };
 
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+const parseMoney = (v: string): number | null => {
+  if (!v || v.trim() === '') return null;
+  const clean = v.replace(/\./g, '').replace(',', '.');
+  const n = parseFloat(clean);
+  return isNaN(n) ? null : n;
+};
+
+const parseDate = (v: string): string | null => {
+  if (!v || v.trim() === '') return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const pt = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (pt) return `${pt[3]}-${pt[2]}-${pt[1]}`;
+  try {
+    const d = new Date(v);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  } catch { /* noop */ }
+  return null;
+};
+
 // ─── AssuntoPickerModal ────────────────────────────────────────────────────────
 
 function AssuntoPickerModal({
@@ -105,12 +126,12 @@ function AssuntoPickerModal({
   isOpen: boolean; onClose: () => void;
   currentValue: string; onSelect: (v: string) => void;
 }) {
-  const [assuntos,    setAssuntos]    = useState<Assunto[]>([]);
-  const [search,      setSearch]      = useState('');
-  const [novoNome,    setNovoNome]    = useState('');
-  const [novaCateg,   setNovaCateg]   = useState('');
-  const [loading,     setLoading]     = useState(false);
-  const [saving,      setSaving]      = useState(false);
+  const [assuntos, setAssuntos] = useState<Assunto[]>([]);
+  const [search,   setSearch]   = useState('');
+  const [novoNome, setNovoNome] = useState('');
+  const [novaCateg,setNovaCateg]= useState('');
+  const [loading,  setLoading]  = useState(false);
+  const [saving,   setSaving]   = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -167,20 +188,12 @@ function AssuntoPickerModal({
             <Tag className="h-4 w-4 text-primary" /> Selecionar Assunto
           </DialogTitle>
         </DialogHeader>
-
         <div className="px-5 pt-3 pb-2 shrink-0">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar assunto..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-9 h-9 rounded-xl"
-              autoFocus
-            />
+            <Input placeholder="Buscar assunto..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9 rounded-xl" autoFocus />
           </div>
         </div>
-
         <ScrollArea className="flex-1 min-h-0 px-5" style={{ height: 'calc(85vh - 240px)' }}>
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
@@ -196,19 +209,14 @@ function AssuntoPickerModal({
                       <div
                         key={a.id}
                         className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl cursor-pointer transition-all group ${
-                          currentValue === a.nome
-                            ? 'bg-primary/10 border border-primary/20 text-primary'
-                            : 'hover:bg-muted/50 border border-transparent'
+                          currentValue === a.nome ? 'bg-primary/10 border border-primary/20 text-primary' : 'hover:bg-muted/50 border border-transparent'
                         }`}
                         onClick={() => { onSelect(a.nome); onClose(); }}
                       >
                         <span className="text-sm font-medium">{a.nome}</span>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           {currentValue === a.nome && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
-                          <button
-                            onClick={e => { e.stopPropagation(); handleDelete(a.id); }}
-                            className="h-5 w-5 flex items-center justify-center rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground"
-                          >
+                          <button onClick={e => { e.stopPropagation(); handleDelete(a.id); }} className="h-5 w-5 flex items-center justify-center rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground">
                             <X className="h-3 w-3" />
                           </button>
                         </div>
@@ -221,7 +229,6 @@ function AssuntoPickerModal({
             </div>
           )}
         </ScrollArea>
-
         <div className="px-5 py-4 border-t shrink-0 space-y-3">
           <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
             <Plus className="h-3.5 w-3.5 text-primary" /> Cadastrar novo assunto
@@ -229,21 +236,11 @@ function AssuntoPickerModal({
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label className="text-[10px] text-muted-foreground">Nome *</Label>
-              <Input
-                value={novoNome} onChange={e => setNovoNome(e.target.value)}
-                className="h-8 text-sm rounded-xl mt-1"
-                placeholder="Ex: Bancários > Tarifas"
-                onKeyDown={e => e.key === 'Enter' && handleSaveNovo()}
-              />
+              <Input value={novoNome} onChange={e => setNovoNome(e.target.value)} className="h-8 text-sm rounded-xl mt-1" placeholder="Ex: Bancários > Tarifas" onKeyDown={e => e.key === 'Enter' && handleSaveNovo()} />
             </div>
             <div>
               <Label className="text-[10px] text-muted-foreground">Categoria</Label>
-              <Input
-                value={novaCateg} onChange={e => setNovaCateg(e.target.value)}
-                className="h-8 text-sm rounded-xl mt-1"
-                placeholder="Ex: Bancário"
-                onKeyDown={e => e.key === 'Enter' && handleSaveNovo()}
-              />
+              <Input value={novaCateg} onChange={e => setNovaCateg(e.target.value)} className="h-8 text-sm rounded-xl mt-1" placeholder="Ex: Bancário" onKeyDown={e => e.key === 'Enter' && handleSaveNovo()} />
             </div>
           </div>
           <Button className="w-full h-9 rounded-xl" onClick={handleSaveNovo} disabled={saving}>
@@ -258,11 +255,8 @@ function AssuntoPickerModal({
 
 // ─── NovoClienteModal ──────────────────────────────────────────────────────────
 
-function NovoClienteModal({
-  isOpen, onClose, onCreated,
-}: {
-  isOpen: boolean; onClose: () => void;
-  onCreated: (lead: LeadName) => void;
+function NovoClienteModal({ isOpen, onClose, onCreated }: {
+  isOpen: boolean; onClose: () => void; onCreated: (lead: LeadName) => void;
 }) {
   const [nome,     setNome]     = useState('');
   const [telefone, setTelefone] = useState('');
@@ -274,16 +268,8 @@ function NovoClienteModal({
     if (!nome.trim()) { toast.error('Informe o nome do cliente'); return; }
     setSaving(true);
     const { data, error } = await supabase.from('leads_juridicos')
-      .insert({
-        nome:     nome.trim(),
-        telefone: telefone.trim() || null,
-        cpf:      cpf.replace(/\D/g, '') || null,
-        email:    email.trim() || null,
-        origem:   'CRM',
-      })
-      .select('id, nome, telefone')
-      .single();
-
+      .insert({ nome: nome.trim(), telefone: telefone.trim() || null, cpf: cpf.replace(/\D/g, '') || null, email: email.trim() || null, origem: 'CRM' })
+      .select('id, nome, telefone').single();
     if (error) {
       toast.error('Erro ao criar cliente', { description: error.message });
     } else {
@@ -299,12 +285,9 @@ function NovoClienteModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md rounded-2xl p-0">
         <DialogHeader className="px-5 pt-5 pb-0">
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <UserPlus className="h-4 w-4 text-primary" /> Novo Cliente
-          </DialogTitle>
+          <DialogTitle className="flex items-center gap-2 text-base"><UserPlus className="h-4 w-4 text-primary" /> Novo Cliente</DialogTitle>
           <p className="text-xs text-muted-foreground mt-1">O cliente será criado e já vinculado a este processo.</p>
         </DialogHeader>
-
         <div className="px-5 py-4 space-y-3">
           <div>
             <Label className="text-xs text-muted-foreground">Nome completo *</Label>
@@ -313,10 +296,7 @@ function NovoClienteModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs text-muted-foreground">Telefone / WhatsApp</Label>
-              <Input
-                value={telefone} onChange={e => setTelefone(e.target.value)}
-                className="h-9 rounded-xl mt-1" placeholder="(00) 00000-0000"
-              />
+              <Input value={telefone} onChange={e => setTelefone(e.target.value)} className="h-9 rounded-xl mt-1" placeholder="(00) 00000-0000" />
             </div>
             <div>
               <Label className="text-xs text-muted-foreground">CPF</Label>
@@ -338,7 +318,6 @@ function NovoClienteModal({
             <Input value={email} onChange={e => setEmail(e.target.value)} className="h-9 rounded-xl mt-1" placeholder="email@exemplo.com" type="email" />
           </div>
         </div>
-
         <div className="flex gap-2 px-5 pb-5">
           <Button variant="outline" className="flex-1 rounded-xl" onClick={onClose}>Cancelar</Button>
           <Button className="flex-1 rounded-xl" onClick={handleSave} disabled={saving}>
@@ -351,7 +330,7 @@ function NovoClienteModal({
   );
 }
 
-// ─── Sub-components ─────────────────────────────────────────────────────────────
+// ─── Sub-components ────────────────────────────────────────────────────────────
 
 function SectionTitle({ icon: Icon, label, color = 'text-primary', bg = 'bg-primary/10' }: {
   icon: React.ElementType; label: string; color?: string; bg?: string;
@@ -369,16 +348,9 @@ function SectionTitle({ icon: Icon, label, color = 'text-primary', bg = 'bg-prim
 function FieldGroup({ children }: { children: React.ReactNode }) {
   return <div className="bg-muted/20 rounded-xl p-3.5 space-y-3 border border-border/30">{children}</div>;
 }
-
-function Row2({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-2 gap-3">{children}</div>;
-}
-function Row3({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-3 gap-3">{children}</div>;
-}
-function Row4({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-4 gap-2">{children}</div>;
-}
+function Row2({ children }: { children: React.ReactNode }) { return <div className="grid grid-cols-2 gap-3">{children}</div>; }
+function Row3({ children }: { children: React.ReactNode }) { return <div className="grid grid-cols-3 gap-3">{children}</div>; }
+function Row4({ children }: { children: React.ReactNode }) { return <div className="grid grid-cols-4 gap-2">{children}</div>; }
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
     <div>
@@ -389,7 +361,7 @@ function Field({ label, children, hint }: { label: string; children: React.React
   );
 }
 
-// ─── Parte Card ──────────────────────────────────────────────────────────────────
+// ─── ParteCard ─────────────────────────────────────────────────────────────────
 
 function ParteCard({ parte, index, onUpdate, onRemove }: {
   parte: ProcessoParte; index: number;
@@ -437,8 +409,7 @@ function ParteCard({ parte, index, onUpdate, onRemove }: {
               </div>
               <div>
                 <Label className="text-[10px] text-muted-foreground">Tipo</Label>
-                <select value={parte.tipo || ''} onChange={e => onUpdate(index, 'tipo', e.target.value)}
-                  className="flex h-7 w-full rounded-lg border border-input bg-background px-2 text-xs mt-1">
+                <select value={parte.tipo || ''} onChange={e => onUpdate(index, 'tipo', e.target.value)} className="flex h-7 w-full rounded-lg border border-input bg-background px-2 text-xs mt-1">
                   <option value="Autor">Autor</option>
                   <option value="Réu">Réu</option>
                   <option value="Terceiro Interessado">Terceiro</option>
@@ -500,8 +471,7 @@ function AddParteForm({ onAdd }: { onAdd: (parte: ProcessoParte) => void }) {
         </div>
         <div>
           <Label className="text-[10px] text-muted-foreground">Tipo *</Label>
-          <select value={tipo} onChange={e => setTipo(e.target.value)}
-            className="flex h-7 w-full rounded-lg border border-input bg-card px-2 text-xs mt-1">
+          <select value={tipo} onChange={e => setTipo(e.target.value)} className="flex h-7 w-full rounded-lg border border-input bg-card px-2 text-xs mt-1">
             <option value="">Selecione</option>
             <option value="Autor">Autor</option>
             <option value="Réu">Réu</option>
@@ -525,7 +495,7 @@ function AddParteForm({ onAdd }: { onAdd: (parte: ProcessoParte) => void }) {
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────────
+// ─── Main Component ────────────────────────────────────────────────────────────
 
 export function ProcessoModalExpanded({
   processo, isOpen, onClose, isNew = false, canDelete = false, leads: leadsInit,
@@ -545,14 +515,11 @@ export function ProcessoModalExpanded({
   const [draftHydrated,     setDraftHydrated]     = useState(false);
   const [lastLoadedId,      setLastLoadedId]      = useState<string | null>(null);
   const [wasNew,            setWasNew]            = useState(isNew);
+  const [leads,             setLeads]             = useState<LeadName[]>(leadsInit);
+  const [assuntoPickerOpen, setAssuntoPickerOpen] = useState(false);
+  const [novoClienteOpen,   setNovoClienteOpen]   = useState(false);
 
-  // ── Leads locais (pode crescer ao criar novo cliente inline) ──
-  const [leads, setLeads] = useState<LeadName[]>(leadsInit);
   useEffect(() => { setLeads(leadsInit); }, [leadsInit]);
-
-  // ── Modais auxiliares ──
-  const [assuntoPickerOpen,  setAssuntoPickerOpen]  = useState(false);
-  const [novoClienteOpen,    setNovoClienteOpen]    = useState(false);
 
   const movimentosEnriquecidos = useMemo(() => enrichMovements(movimentos), [movimentos]);
 
@@ -584,6 +551,7 @@ export function ProcessoModalExpanded({
     if (draftKey && typeof window !== 'undefined') window.localStorage.removeItem(draftKey);
   }, [draftKey]);
 
+  // Auto-save draft
   useEffect(() => {
     if (!isOpen || !draftKey || !draftHydrated) return;
     window.localStorage.setItem(draftKey, JSON.stringify({
@@ -592,6 +560,7 @@ export function ProcessoModalExpanded({
     }));
   }, [formData, partes, movimentos, draftKey, draftHydrated, isOpen, isNew]);
 
+  // Hydrate form when processo changes
   useEffect(() => {
     const currentKey  = isNew ? '__new__' : processoId;
     const previousKey = wasNew ? '__new__' : lastLoadedId;
@@ -668,6 +637,7 @@ export function ProcessoModalExpanded({
 
   useEffect(() => { setAutoFetchDone(false); }, [processoId]);
 
+  // Load partes/movimentos from DB on open
   useEffect(() => {
     if (!isNew && isOpen && processo?.id && !autoFetchDone) {
       setAutoFetchDone(true);
@@ -698,10 +668,11 @@ export function ProcessoModalExpanded({
             .order('data_movimento', { ascending: false }).limit(50);
           if (dbMov?.length) {
             setMovimentos(dbMov.map((m: any) => ({
-              dataHora: m.data_movimento ? new Date(m.data_movimento).toLocaleDateString('pt-BR') : '',
-              dataHoraRaw: m.data_movimento, nome: m.movimento_titulo || 'Movimentação',
+              dataHora:    m.data_movimento ? new Date(m.data_movimento).toLocaleDateString('pt-BR') : '',
+              dataHoraRaw: m.data_movimento,
+              nome:        m.movimento_titulo || 'Movimentação',
               complemento: m.movimento_descricao || null,
-              codigo: m.movimento_cnj_codigo ? Number(m.movimento_cnj_codigo) : null,
+              codigo:      m.movimento_cnj_codigo ? Number(m.movimento_cnj_codigo) : null,
             })));
           }
         } catch (err) { console.error('Erro ao carregar dados:', err); }
@@ -715,6 +686,7 @@ export function ProcessoModalExpanded({
     }
   }, [processo?.id, isOpen, draftHydrated, autoFetchDone, isNew]);
 
+  // Auto-fetch CNJ data on new processo
   useEffect(() => {
     const timer = setTimeout(() => {
       const num = (formData.numero_processo || '').trim();
@@ -787,10 +759,10 @@ export function ProcessoModalExpanded({
       });
       if (error) throw error;
       if (data?.encontrado && data?.processo) {
-        const proc      = data.processo;
+        const proc    = data.processo;
         const newPartes = proc.partes || [];
         const newMovs   = (proc.movimentos || []).slice(0, 50);
-        const toDate    = (v?: string | null): string => {
+        const toDate  = (v?: string | null): string => {
           if (!v) return '';
           if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
           if (/^\d{4}-\d{2}-\d{2}T/.test(v)) return v.slice(0, 10);
@@ -833,67 +805,130 @@ export function ProcessoModalExpanded({
     finally  { setFetchingData(false); }
   };
 
+  // ─── handleSave CORRIGIDO ────────────────────────────────────────────────────
   const handleSave = async () => {
     setSaving(true);
     try {
       const resolvedClienteId = formData.cliente_id === '__none__' ? null : formData.cliente_id || null;
+
       let nomeCliente: string | null = null;
-      if (resolvedClienteId) { const l = leads.find(l => l.id === resolvedClienteId); if (l?.nome) nomeCliente = l.nome; }
+      if (resolvedClienteId) {
+        const l = leads.find(l => l.id === resolvedClienteId);
+        if (l?.nome) nomeCliente = l.nome;
+      }
       if (!nomeCliente && partes.length > 0) {
         const autor = partes.find(p => p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT');
         if (autor?.nome) nomeCliente = autor.nome;
       }
 
+      // Mapeamento 1:1 com colunas reais do banco
       const data = {
-        numero_processo: formData.numero_processo || null, numero_complementar: formData.numero_complementar || null,
-        titulo_acao: formData.titulo_acao || null, status: formData.status,
-        advogado_responsavel: formData.advogado_responsavel || null,
-        cliente_id: resolvedClienteId, nome_cliente: nomeCliente,
-        cpf_cliente: formData.cpf_cliente ? formData.cpf_cliente.replace(/\D/g, '') : null,
-        tribunal: formData.tribunal || null, vara_comarca: formData.vara_comarca || null,
-        assunto: formData.assunto || null,
-        valor_causa: formData.valor_causa ? parseFloat(formData.valor_causa.replace(/\./g, '').replace(',', '.')) : null,
-        orgao_julgador: formData.orgao_julgador || null, grau: formData.grau || null,
-        origem_cliente: formData.origem_cliente || null, descricao: formData.descricao || null,
-        marcadores: formData.marcadores || null, area: formData.area || null, fase: formData.fase || null,
-        classe_cnj: formData.classe_cnj || null, assunto_cnj: formData.assunto_cnj || null,
-        segredo_justica: formData.segredo_justica,
-        data_distribuicao: formData.data_distribuicao || null, data_ajuizamento: formData.data_distribuicao || null,
-        data_citacao: formData.data_citacao || null, data_recebimento: formData.data_recebimento || null,
-        data_arquivamento: formData.data_arquivamento || null, data_encerramento: formData.data_encerramento || null,
-        valor_provisionado: formData.valor_provisionado ? parseFloat(formData.valor_provisionado.replace(/\./g, '').replace(',', '.')) : null,
-        probabilidade: formData.probabilidade || null, monitorar_push: formData.monitorar_push,
-        tipo_orgao_julgador: formData.tipo_orgao_julgador || null, sistema_judicial: formData.sistema_judicial || null,
+        // Numeração
+        numero_processo:           formData.numero_processo || null,
+        numero_complementar:       formData.numero_complementar || null,
+
+        // Dados principais
+        titulo_acao:               formData.titulo_acao || null,
+        status:                    formData.status,
+        advogado_responsavel:      formData.advogado_responsavel || null,
+
+        // Cliente
+        cliente_id:                resolvedClienteId,
+        nome_cliente:              nomeCliente,
+        cpf_cliente:               formData.cpf_cliente ? formData.cpf_cliente.replace(/\D/g, '') : null,
+        origem_cliente:            formData.origem_cliente || null,
+
+        // Endereçamento judicial
+        tribunal:                  formData.tribunal || null,
+        vara_comarca:              formData.vara_comarca || null,
+        orgao_julgador:            formData.orgao_julgador || null,
+        tipo_orgao_julgador:       formData.tipo_orgao_julgador || null,
+        grau:                      formData.grau || null,
+        sistema_judicial:          formData.sistema_judicial || null,
         complemento_enderecamento: formData.complemento_enderecamento || null,
-        partes_json: partes.length > 0 ? partes : null, movimentos_json: movimentos.length > 0 ? movimentos : null,
+
+        // Classificação CNJ
+        classe_cnj:                formData.classe_cnj || null,
+        assunto:                   formData.assunto || null,
+        assunto_cnj:               formData.assunto_cnj || null,
+
+        // Valores — parseMoney lida com vírgula/ponto corretamente
+        valor_causa:               parseMoney(formData.valor_causa),
+        valor_provisionado:        parseMoney(formData.valor_provisionado),
+        probabilidade:             formData.probabilidade || null,
+
+        // Datas — parseDate normaliza para YYYY-MM-DD
+        data_ajuizamento:          parseDate(formData.data_distribuicao),
+        data_distribuicao:         parseDate(formData.data_distribuicao),
+        data_citacao:              parseDate(formData.data_citacao),
+        data_recebimento:          parseDate(formData.data_recebimento),
+        data_arquivamento:         parseDate(formData.data_arquivamento),
+        data_encerramento:         parseDate(formData.data_encerramento),
+
+        // Extras
+        descricao:                 formData.descricao || null,
+        marcadores:                formData.marcadores || null,
+        area:                      formData.area || null,
+        fase:                      formData.fase || null,
+        segredo_justica:           formData.segredo_justica,
+        monitorar_push:            formData.monitorar_push,
+
+        // JSON columns
+        partes_json:               partes.length > 0 ? partes : null,
+        movimentos_json:           movimentos.length > 0 ? movimentos : null,
+
+        // Timestamp
+        updated_at:                new Date().toISOString(),
       };
 
       let savedId: string | null = null;
+
       if (isNew) {
         const result = await createProcesso(data);
-        if (result?.error) { toast.error('Erro ao criar processo'); return; }
+        if (result?.error) {
+          toast.error('Erro ao criar processo', { description: (result.error as any)?.message });
+          return;
+        }
         savedId = (result?.data as any)?.id || null;
+        toast.success('Processo criado com sucesso!');
       } else if (processo) {
         const result = await updateProcesso(processo.id, data);
-        if (result?.error) { toast.error('Erro ao salvar'); return; }
+        if (result?.error) {
+          toast.error('Erro ao salvar processo', { description: (result.error as any)?.message });
+          return;
+        }
         savedId = processo.id;
+        toast.success('Processo salvo!');
       }
 
+      // Sincroniza partes na tabela dedicada
       if (savedId) {
         await supabase.from('processo_partes').delete().eq('processo_id', savedId);
         if (partes.length > 0) {
-          await supabase.from('processo_partes').insert(partes.map(p => ({
-            processo_id: savedId!, nome: p.nome, tipo: p.tipo, polo: p.polo || null,
-            tipo_pessoa: p.tipoPessoa || null, documento: p.documento || null,
-            celular: p.celular || null, telefone_adicional: p.telefone_adicional || null, advogados: p.advogados || null,
-          })));
+          await supabase.from('processo_partes').insert(
+            partes.map(p => ({
+              processo_id:        savedId!,
+              nome:               p.nome,
+              tipo:               p.tipo,
+              polo:               p.polo || null,
+              tipo_pessoa:        p.tipoPessoa || null,
+              documento:          p.documento || null,
+              celular:            p.celular || null,
+              telefone_adicional: p.telefone_adicional || null,
+              advogados:          p.advogados || null,
+            }))
+          );
         }
       }
 
       clearDraft();
       onClose();
-    } catch { toast.error('Erro inesperado ao salvar'); }
-    finally { setSaving(false); }
+    } catch (err: any) {
+      console.error('[handleSave] Erro:', err);
+      toast.error('Erro inesperado ao salvar', { description: err?.message });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -918,7 +953,7 @@ export function ProcessoModalExpanded({
   const hasPartes          = partes.length > 0;
   const isValidCnj         = CNJ_REGEX.test((formData.numero_processo || '').trim());
 
-  // ── Render ────────────────────────────────────────────────────────────────────
+  // ─── Render ────────────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -991,8 +1026,8 @@ export function ProcessoModalExpanded({
                           <Field label="Número CNJ">
                             <div className="relative">
                               <Input value={formData.numero_processo} onChange={e => update('numero_processo', e.target.value)} className="rounded-xl bg-card font-mono text-sm pr-8 h-9" placeholder="0000000-00.0000.0.00.0000" />
-                              {fetchingData  && <Loader2     className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-primary" />}
-                              {!fetchingData && isValidCnj   && <CheckCircle2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-emerald-500" />}
+                              {fetchingData  && <Loader2      className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-primary" />}
+                              {!fetchingData && isValidCnj && <CheckCircle2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-emerald-500" />}
                             </div>
                             {isNew && <p className="text-[10px] text-muted-foreground mt-1">Digite para carregar automaticamente</p>}
                           </Field>
@@ -1014,16 +1049,12 @@ export function ProcessoModalExpanded({
                               <SelectContent>{STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                             </Select>
                           </Field>
-
-                          {/* ── ASSUNTO com picker ── */}
                           <Field label="Assunto">
                             <button
                               type="button"
                               onClick={() => setAssuntoPickerOpen(true)}
                               className={`flex items-center justify-between w-full h-9 px-3 rounded-xl border text-sm transition-all ${
-                                formData.assunto
-                                  ? 'bg-card border-border text-foreground'
-                                  : 'bg-card border-border text-muted-foreground'
+                                formData.assunto ? 'bg-card border-border text-foreground' : 'bg-card border-border text-muted-foreground'
                               } hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0`}
                             >
                               <span className="truncate">{formData.assunto || 'Selecionar assunto...'}</span>
@@ -1031,17 +1062,13 @@ export function ProcessoModalExpanded({
                             </button>
                           </Field>
                         </Row2>
-
                         <Field label="Descrição / Anotações">
                           <Textarea value={formData.descricao} onChange={e => update('descricao', e.target.value)} className="rounded-xl bg-card min-h-[60px] text-sm resize-none" placeholder="Anotações internas..." />
                         </Field>
-
                         <Row2>
                           <Field label="Marcadores">
                             <Input value={formData.marcadores} onChange={e => update('marcadores', e.target.value)} className="rounded-xl bg-card h-9" placeholder="Separados por vírgula" />
                           </Field>
-
-                          {/* ── PASTA DO CLIENTE com botão criar ── */}
                           <Field label="Pasta do Cliente">
                             <div className="space-y-1.5">
                               <Select value={formData.cliente_id || '__none__'} onValueChange={v => update('cliente_id', v === '__none__' ? '' : v)}>
@@ -1051,13 +1078,8 @@ export function ProcessoModalExpanded({
                                   {leads.map(l => <SelectItem key={l.id} value={l.id}>{l.nome}{l.telefone ? ` (${l.telefone})` : ''}</SelectItem>)}
                                 </SelectContent>
                               </Select>
-                              <button
-                                type="button"
-                                onClick={() => setNovoClienteOpen(true)}
-                                className="flex items-center gap-1.5 text-[11px] text-primary hover:text-primary/80 font-medium transition-colors"
-                              >
-                                <UserPlus className="h-3 w-3" />
-                                Criar novo cliente e vincular
+                              <button type="button" onClick={() => setNovoClienteOpen(true)} className="flex items-center gap-1.5 text-[11px] text-primary hover:text-primary/80 font-medium transition-colors">
+                                <UserPlus className="h-3 w-3" /> Criar novo cliente e vincular
                               </button>
                             </div>
                           </Field>
@@ -1379,7 +1401,6 @@ export function ProcessoModalExpanded({
         </DialogContent>
       </Dialog>
 
-      {/* Modais auxiliares — fora do Dialog principal para evitar z-index issues */}
       <AssuntoPickerModal
         isOpen={assuntoPickerOpen}
         onClose={() => setAssuntoPickerOpen(false)}
