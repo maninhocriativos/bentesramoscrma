@@ -1,9 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 30 20% 97%;
+    --foreground: 20 14% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 20 14% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 14% 10%;
+
+    --primary: 32 56% 60%;
+    --primary-foreground: 20 14% 10%;
+
+    --secondary: 30 20% 92%;
+    --secondary-foreground: 20 14% 10%;
+
+    --muted: 30 20% 92%;
+    --muted-foreground: 20 14% 45%;
+
+    --accent: 32 56% 60%;
+    --accent-foreground: 20 14% 10%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 30 20% 85%;
+    --input: 30 20% 85%;
+    --ring: 32 56% 60%;
+
+    --radius: 0.5rem;
+
+    /* Sidebar */
+    --sidebar-background: 20 25% 16%;
+    --sidebar-foreground: 32 30% 85%;
+    --sidebar-primary: 32 56% 60%;
+    --sidebar-primary-foreground: 20 14% 10%;
+    --sidebar-accent: 20 25% 22%;
+    --sidebar-accent-foreground: 32 30% 85%;
+    --sidebar-border: 20 25% 22%;
+    --sidebar-ring: 32 56% 60%;
+  }
+
+  .dark {
+    --background: 20 14% 8%;
+    --foreground: 30 20% 95%;
+
+    --card: 20 14% 11%;
+    --card-foreground: 30 20% 95%;
+
+    --popover: 20 14% 11%;
+    --popover-foreground: 30 20% 95%;
+
+    --primary: 32 56% 60%;
+    --primary-foreground: 20 14% 10%;
+
+    --secondary: 20 14% 16%;
+    --secondary-foreground: 30 20% 95%;
+
+    --muted: 20 14% 16%;
+    --muted-foreground: 30 20% 55%;
+
+    --accent: 20 14% 16%;
+    --accent-foreground: 30 20% 95%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 30 20% 95%;
+
+    --border: 20 14% 20%;
+    --input: 20 14% 20%;
+    --ring: 32 56% 60%;
+
+    /* Sidebar */
+    --sidebar-background: 20 25% 10%;
+    --sidebar-foreground: 32 30% 82%;
+    --sidebar-primary: 32 56% 60%;
+    --sidebar-primary-foreground: 20 14% 10%;
+    --sidebar-accent: 20 25% 16%;
+    --sidebar-accent-foreground: 32 30% 82%;
+    --sidebar-border: 20 25% 16%;
+    --sidebar-ring: 32 56% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
 /* ============================================
    KANBAN PREMIUM GRID SYSTEM
    - Scroll horizontal com colunas de largura fixa
    - Cada coluna: 240px fixo
    ============================================ */
-
 .kanban-grid-container {
   display: flex;
   flex-direction: row;
@@ -16,20 +113,16 @@
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--border)) transparent;
 }
-
 .kanban-grid-container::-webkit-scrollbar {
   height: 6px;
 }
-
 .kanban-grid-container::-webkit-scrollbar-track {
   background: transparent;
 }
-
 .kanban-grid-container::-webkit-scrollbar-thumb {
   background: hsl(var(--border));
   border-radius: 3px;
 }
-
 /* Column wrapper — largura fixa */
 .kanban-column-wrapper {
   flex: 0 0 240px;
@@ -38,18 +131,15 @@
   display: flex;
   flex-direction: column;
 }
-
 /* Column itself */
 .kanban-column {
   width: 100%;
   height: auto;
 }
-
 /* Lead card */
 .lead-card {
   min-height: 80px;
 }
-
 /* Telas grandes */
 @media (min-width: 1600px) {
   .kanban-column-wrapper {
@@ -58,7 +148,6 @@
     max-width: 260px;
   }
 }
-
 /* Telas médias */
 @media (max-width: 1280px) {
   .kanban-column-wrapper {
