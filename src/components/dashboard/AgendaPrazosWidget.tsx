@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Calendar, Clock, AlertTriangle, FileText, ChevronRight } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { useIntimacoes } from '@/hooks/useIntimacoes';
 import { useCompromissos } from '@/hooks/useCompromissos';
 import { useTarefas } from '@/hooks/useTarefas';
@@ -15,7 +14,6 @@ interface AgendaItem {
   title: string;
   date: Date;
   icon: typeof Calendar;
-  dot: string;
   iconBg: string;
   iconColor: string;
   route: string;
@@ -41,7 +39,7 @@ export function AgendaPrazosWidget() {
             id: i.id, type: 'intimacao',
             title: i.processo_titulo || `Intimação ${i.processo_cnj || ''}`,
             date: d, icon: FileText,
-            dot: '#dc2626', iconBg: 'rgba(220,38,38,0.08)', iconColor: '#dc2626',
+            iconBg: 'rgba(220,38,38,0.08)', iconColor: '#dc2626',
             route: '/intimacoes',
           });
         }
@@ -53,7 +51,7 @@ export function AgendaPrazosWidget() {
         result.push({
           id: c.id, type: 'compromisso',
           title: c.titulo, date: d, icon: Calendar,
-          dot: '#3d2b1f', iconBg: 'rgba(61,43,31,0.08)', iconColor: '#3d2b1f',
+          iconBg: 'rgba(61,43,31,0.08)', iconColor: '#3d2b1f',
           route: '/agenda',
         });
       }
@@ -66,7 +64,7 @@ export function AgendaPrazosWidget() {
         result.push({
           id: t.id, type: 'tarefa',
           title: t.titulo, date: d, icon: AlertTriangle,
-          dot: '#c9a96e', iconBg: 'rgba(201,169,110,0.1)', iconColor: '#b8922a',
+          iconBg: 'rgba(201,169,110,0.1)', iconColor: '#b8922a',
           route: '/tarefas',
         });
       });
@@ -79,20 +77,16 @@ export function AgendaPrazosWidget() {
       className="rounded-2xl overflow-hidden bg-card flex flex-col"
       style={{ border: '0.5px solid rgba(201,169,110,0.25)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}
     >
-      {/* Accent */}
       <div style={{ height: 3, background: '#3d2b1f' }} />
 
       {/* Header */}
-      <div className="flex items-center gap-2.5 px-5 py-4 border-b" style={{ borderColor: 'rgba(201,169,110,0.12)' }}>
+      <div className="flex items-center gap-2.5 px-5 py-4" style={{ borderBottom: '0.5px solid rgba(201,169,110,0.12)' }}>
         <div className="h-8 w-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(61,43,31,0.08)' }}>
           <Calendar style={{ width: 16, height: 16, color: '#3d2b1f' }} />
         </div>
         <span className="text-sm font-semibold text-foreground flex-1">📅 Agenda & Prazos</span>
         {items.length > 0 && (
-          <span
-            className="text-[11px] font-bold px-2 py-0.5 rounded-lg"
-            style={{ background: '#3d2b1f', color: '#c9a96e' }}
-          >
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg" style={{ background: '#3d2b1f', color: '#c9a96e' }}>
             {items.length}
           </span>
         )}
@@ -116,20 +110,22 @@ export function AgendaPrazosWidget() {
                 <div
                   key={`${item.type}-${item.id}`}
                   onClick={() => navigate(item.route)}
-                  className="flex items-center gap-3 px-5 py-3 cursor-pointer transition-colors hover:bg-stone-50 dark:hover:bg-[#c9a96e]/4"
+                  className="flex items-start gap-3 px-5 py-3 cursor-pointer transition-colors hover:bg-stone-50 dark:hover:bg-[#c9a96e]/4"
                   style={{ borderBottom: idx < items.length - 1 ? '0.5px solid rgba(201,169,110,0.1)' : 'none' }}
                 >
-                  {/* Dot + ícone */}
+                  {/* Ícone — items-start para alinhar ao topo quando título quebra linha */}
                   <div
-                    className="h-8 w-8 rounded-xl flex items-center justify-center shrink-0"
+                    className="h-8 w-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
                     style={{ background: item.iconBg }}
                   >
                     <Icon style={{ width: 14, height: 14, color: item.iconColor }} />
                   </div>
 
-                  {/* Texto */}
+                  {/* Texto — sem truncate, quebra linha normalmente */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{item.title}</p>
+                    <p className="text-sm font-medium text-foreground leading-snug" style={{ wordBreak: 'break-word' }}>
+                      {item.title}
+                    </p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
                       {isToday(item.date)
                         ? `Hoje às ${format(item.date, 'HH:mm')}`
@@ -137,7 +133,7 @@ export function AgendaPrazosWidget() {
                     </p>
                   </div>
 
-                  <ChevronRight style={{ width: 14, height: 14, color: 'rgba(201,169,110,0.4)', flexShrink: 0 }} />
+                  <ChevronRight style={{ width: 14, height: 14, color: 'rgba(201,169,110,0.4)', flexShrink: 0, marginTop: 4 }} />
                 </div>
               );
             })}
