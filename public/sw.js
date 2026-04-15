@@ -1,7 +1,8 @@
 // ─── VERSÃO DO CACHE ────────────────────────────────────────────────────────
-// Muda automaticamente a cada deploy via Vite (injeta __BUILD_DATE__)
-// Se não tiver o inject, usa o timestamp atual como fallback
-const BUILD_TS = self.__BUILD_DATE__ || Date.now();
+// __BUILD_DATE__ é injetado pelo Vite a cada deploy (vite.config.ts → define)
+// O fallback '20260415_FORCE' garante que browsers com SW antigo sejam forçados
+// a atualizar mesmo sem ter o Vite inject funcionando ainda
+const BUILD_TS = self.__BUILD_DATE__ || '20260415_FORCE';
 const CACHE_NAME = `bentes-ramos-crm-v${BUILD_TS}`;
 
 const STATIC_ASSETS = [
@@ -11,6 +12,7 @@ const STATIC_ASSETS = [
 
 // ─── INSTALL ────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
+  console.log('[SW] Instalando versão:', CACHE_NAME);
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS);
@@ -22,9 +24,10 @@ self.addEventListener('install', (event) => {
 
 // ─── ACTIVATE ───────────────────────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
+  console.log('[SW] Ativando versão:', CACHE_NAME);
   event.waitUntil(
     Promise.all([
-      // Apaga todos os caches antigos
+      // Apaga TODOS os caches antigos (qualquer nome diferente do atual)
       caches.keys().then((cacheNames) =>
         Promise.all(
           cacheNames
@@ -35,10 +38,10 @@ self.addEventListener('activate', (event) => {
             })
         )
       ),
-      // Assume controle de todas as abas imediatamente
+      // Assume controle de todas as abas abertas imediatamente
       self.clients.claim().then(() => {
-        // Envia mensagem para todas as abas para forçar reload
         return self.clients.matchAll({ type: 'window' }).then((clients) => {
+          console.log('[SW] Notificando', clients.length, 'aba(s) para recarregar');
           clients.forEach((client) => {
             client.postMessage({ type: 'SW_UPDATED', version: BUILD_TS });
           });
@@ -46,6 +49,13 @@ self.addEventListener('activate', (event) => {
       }),
     ])
   );
+});
+
+// ─── MENSAGENS DO APP ────────────────────────────────────────────────────────
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 // ─── FETCH ──────────────────────────────────────────────────────────────────
@@ -64,8 +74,9 @@ self.addEventListener('fetch', (event) => {
     event.request.url.includes('supabase.co')
   ) return;
 
-  // Assets com hash no nome (JS/CSS do Vite) — cache first, são imutáveis
   const url = new URL(event.request.url);
+
+  // Assets com hash no nome (JS/CSS gerados pelo Vite) — são imutáveis, cache first
   const isHashedAsset = /\.[a-f0-9]{8,}\.(js|css)$/.test(url.pathname);
 
   if (isHashedAsset) {
@@ -84,7 +95,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Tudo mais — network first, cache como fallback
+  // Tudo mais (HTML, manifest, etc.) — network first, cache como fallback offline
   event.respondWith(
     fetch(event.request)
       .then((response) => {
