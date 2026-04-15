@@ -3,16 +3,21 @@ import { supabase } from '@/integrations/supabase/client';
 import { Lead, LeadStatus } from '@/types/leads';
 import { useToast } from '@/hooks/use-toast';
 
-// Select only the columns actually used by dashboard/kanban/list views
 const LEADS_SELECT = 'id,created_at,updated_at,nome,telefone,email,status,origem,tipo_acao,lead_state,state_updated_at,valor_causa,resumo_ia,tipo_origem,fonte_trafego,linha_whatsapp,empresa_tag,owner_tipo,isa_ativa,is_lost,lost_reason,lost_at,link_contrato,contract_key,contract_sent_at,contract_signed_at,last_contact_at,cidade,uf,cpf,triage_started_at,canal_origem,facebook_lead_id,contratos_adicionais' as const;
 
 export function useLeads() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-  const lastRefetchRef = useRef(Date.now());
+  // Controla se já houve carga inicial — após isso, nunca mais mostra loading
+  const initialLoadDone = useRef(false);
 
   const fetchLeads = useCallback(async () => {
+    // Só mostra loading na primeira carga
+    if (!initialLoadDone.current) {
+      setLoading(true);
+    }
+
     const { data, error } = await supabase
       .from('leads_juridicos')
       .select(LEADS_SELECT)
@@ -28,28 +33,28 @@ export function useLeads() {
     } else {
       setLeads((data as Lead[]) || []);
     }
+
+    // Marca carga inicial como concluída e garante loading=false
+    initialLoadDone.current = true;
     setLoading(false);
   }, [toast]);
 
-  // Initial fetch
+  // Carga inicial — respeita visibilidade para não bloquear aba em background
   useEffect(() => {
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
       setLoading(false);
       return;
     }
-
     fetchLeads();
   }, [fetchLeads]);
 
-  // Fallback sync with proper debounce
+  // Refresh periódico silencioso a cada 5 minutos
   useEffect(() => {
-    // Periodic fallback only — no focus/visibility refetch
     const interval = setInterval(fetchLeads, 300_000);
-
     return () => clearInterval(interval);
   }, [fetchLeads]);
 
-  // Realtime subscription (single, stable)
+  // Realtime — atualizações incrementais, sem refetch completo
   useEffect(() => {
     const channel = supabase
       .channel('leads-realtime')
@@ -81,12 +86,17 @@ export function useLeads() {
           setLeads(prev => prev.filter(lead => lead.id !== (payload.old as Lead).id));
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Reconexão após queda do WebSocket — refetch silencioso se dados já carregados
+        if (status === 'SUBSCRIBED' && initialLoadDone.current) {
+          fetchLeads();
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [fetchLeads]);
 
   const createLead = async (lead: Omit<Lead, 'id' | 'created_at'>) => {
     const { data, error } = await supabase
@@ -132,7 +142,6 @@ export function useLeads() {
     return { error: null };
   };
 
-  // Optimistic update for drag and drop
   const updateLeadStatus = async (id: string, status: LeadStatus) => {
     const previousLeads = [...leads];
 
