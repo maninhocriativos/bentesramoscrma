@@ -27,7 +27,7 @@ export function TeamStatusWidget() {
   const { user } = useAuth();
   const { perfil, canAccessSettings } = usePerfil();
   const userName = [perfil?.nome, perfil?.sobrenome].filter(Boolean).join(' ') || user?.email || '';
-  const { getTeamWithStatus, getOnlineCount, refresh } = useTeamPresence(user?.id, userName);
+  const { getTeamWithStatus, getOnlineCount } = useTeamPresence(user?.id, userName);
   const { tarefas } = useTarefas();
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
   const [selectedTarefa, setSelectedTarefa] = useState<Tarefa | null>(null);
