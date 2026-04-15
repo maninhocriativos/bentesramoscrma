@@ -109,7 +109,7 @@ function KpiCard({
   );
 }
 
-// ─── Summary Bar (distribuição visual) ────────────────────────────────────────
+// ─── Summary Bar ──────────────────────────────────────────────────────────────
 
 function SummaryBar({ kpis, statusFilter, setStatusFilter }: {
   kpis: Record<string, number>;
@@ -129,12 +129,9 @@ function SummaryBar({ kpis, statusFilter, setStatusFilter }: {
 
   return (
     <div className="bg-card border border-border/40 rounded-2xl p-4 flex items-center gap-5">
-      {/* Donut */}
       <div className="shrink-0">
         <MiniDonut segments={values.map(v => ({ value: v.value, color: v.color }))} />
       </div>
-
-      {/* Barras horizontais */}
       <div className="flex-1 min-w-0 space-y-1.5">
         {values.map(seg => (
           <button
@@ -160,8 +157,6 @@ function SummaryBar({ kpis, statusFilter, setStatusFilter }: {
           </button>
         ))}
       </div>
-
-      {/* Totais extras */}
       <div className="shrink-0 hidden lg:flex flex-col gap-2">
         {[
           { key: 'recursal', label: 'Recursal', color: '#7c3aed' },
@@ -218,14 +213,14 @@ function ProcessosPage() {
   }, [perfilLoading, canAccessProcessos, navigate]);
 
   const kpis = useMemo(() => ({
-    total:        processos.length,
-    'Em Andamento': processos.filter(p => p.status === 'Em Andamento').length,
-    'Suspenso':     processos.filter(p => p.status === 'Suspenso').length,
-    'Arquivado':    processos.filter(p => p.status === 'Arquivado').length,
-    'Ganho':        processos.filter(p => p.status === 'Ganho').length,
-    'Perdido':      processos.filter(p => p.status === 'Perdido').length,
-    recursal:       processos.filter(p => p.fase?.toLowerCase() === 'recursal').length,
-    execucao:       processos.filter(p => ['execução','execucao'].includes(p.fase?.toLowerCase() || '')).length,
+    total:           processos.length,
+    'Em Andamento':  processos.filter(p => p.status === 'Em Andamento').length,
+    'Suspenso':      processos.filter(p => p.status === 'Suspenso').length,
+    'Arquivado':     processos.filter(p => p.status === 'Arquivado').length,
+    'Ganho':         processos.filter(p => p.status === 'Ganho').length,
+    'Perdido':       processos.filter(p => p.status === 'Perdido').length,
+    recursal:        processos.filter(p => p.fase?.toLowerCase() === 'recursal').length,
+    execucao:        processos.filter(p => ['execução','execucao'].includes(p.fase?.toLowerCase() || '')).length,
   }), [processos]);
 
   const filteredProcessos = useMemo(() => processos.filter(p => {
@@ -245,6 +240,9 @@ function ProcessosPage() {
 
   if (perfilLoading) return <AppLayout><PageSkeleton cards={5} rows={8} /></AppLayout>;
   if (!canAccessProcessos) return null;
+
+  // Spinner APENAS na carga inicial sem nenhum dado — trocar de aba nunca dispara isso
+  const showSpinner = loading && processos.length === 0;
 
   return (
     <AppLayout>
@@ -287,17 +285,16 @@ function ProcessosPage() {
 
         {/* ── KPI Cards + Summary ── */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4 items-start">
-          {/* Cards */}
           <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
             {[
-              { label: 'Total',        value: kpis.total,              icon: Scale,        color: 'text-foreground',       bg: 'bg-card',                              key: 'todos'        },
-              { label: 'Andamento',    value: kpis['Em Andamento'],    icon: CheckCircle2, color: 'text-blue-600',         bg: 'bg-blue-50 dark:bg-blue-950/30',       key: 'Em Andamento' },
-              { label: 'Suspensos',    value: kpis['Suspenso'],        icon: PauseCircle,  color: 'text-amber-600',        bg: 'bg-amber-50 dark:bg-amber-950/30',     key: 'Suspenso'     },
-              { label: 'Arquivados',   value: kpis['Arquivado'],       icon: Archive,      color: 'text-muted-foreground', bg: 'bg-muted',                             key: 'Arquivado'    },
-              { label: 'Ganhos',       value: kpis['Ganho'],           icon: Trophy,       color: 'text-emerald-600',      bg: 'bg-emerald-50 dark:bg-emerald-950/30', key: 'Ganho'        },
-              { label: 'Perdidos',     value: kpis['Perdido'],         icon: XCircle,      color: 'text-red-600',          bg: 'bg-red-50 dark:bg-red-950/30',         key: 'Perdido'      },
-              { label: 'Recursal',     value: kpis.recursal,           icon: Gavel,        color: 'text-purple-600',       bg: 'bg-purple-50 dark:bg-purple-950/30',   key: 'recursal'     },
-              { label: 'Execução',     value: kpis.execucao,           icon: FileCheck,    color: 'text-orange-600',       bg: 'bg-orange-50 dark:bg-orange-950/30',   key: 'execucao'     },
+              { label: 'Total',      value: kpis.total,            icon: Scale,        color: 'text-foreground',       bg: 'bg-card',                              key: 'todos'        },
+              { label: 'Andamento',  value: kpis['Em Andamento'],  icon: CheckCircle2, color: 'text-blue-600',         bg: 'bg-blue-50 dark:bg-blue-950/30',       key: 'Em Andamento' },
+              { label: 'Suspensos',  value: kpis['Suspenso'],      icon: PauseCircle,  color: 'text-amber-600',        bg: 'bg-amber-50 dark:bg-amber-950/30',     key: 'Suspenso'     },
+              { label: 'Arquivados', value: kpis['Arquivado'],     icon: Archive,      color: 'text-muted-foreground', bg: 'bg-muted',                             key: 'Arquivado'    },
+              { label: 'Ganhos',     value: kpis['Ganho'],         icon: Trophy,       color: 'text-emerald-600',      bg: 'bg-emerald-50 dark:bg-emerald-950/30', key: 'Ganho'        },
+              { label: 'Perdidos',   value: kpis['Perdido'],       icon: XCircle,      color: 'text-red-600',          bg: 'bg-red-50 dark:bg-red-950/30',         key: 'Perdido'      },
+              { label: 'Recursal',   value: kpis.recursal,         icon: Gavel,        color: 'text-purple-600',       bg: 'bg-purple-50 dark:bg-purple-950/30',   key: 'recursal'     },
+              { label: 'Execução',   value: kpis.execucao,         icon: FileCheck,    color: 'text-orange-600',       bg: 'bg-orange-50 dark:bg-orange-950/30',   key: 'execucao'     },
             ].map(kpi => (
               <KpiCard
                 key={kpi.key}
@@ -311,8 +308,6 @@ function ProcessosPage() {
               />
             ))}
           </div>
-
-          {/* Summary bar — só desktop */}
           <div className="hidden lg:block w-[320px] shrink-0">
             <SummaryBar kpis={kpis} statusFilter={statusFilter} setStatusFilter={setStatusFilter} />
           </div>
@@ -320,7 +315,6 @@ function ProcessosPage() {
 
         {/* ── Barra de controles ── */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          {/* Switcher */}
           <div className="flex items-center bg-muted/50 rounded-xl p-1 shrink-0 border border-border/40">
             <button
               onClick={() => setActiveView('internos')}
@@ -340,7 +334,6 @@ function ProcessosPage() {
             </button>
           </div>
 
-          {/* Busca + Filtro */}
           {activeView === 'internos' && (
             <div className="flex flex-1 items-center gap-2 w-full">
               <div className="relative flex-1 max-w-md">
@@ -392,7 +385,7 @@ function ProcessosPage() {
 
         {/* ── Conteúdo ── */}
         {activeView === 'internos' ? (
-          loading ? (
+          showSpinner ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
