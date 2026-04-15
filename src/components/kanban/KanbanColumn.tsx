@@ -1,10 +1,8 @@
 import { Lead, LeadStatus } from '@/types/leads';
-import { cn } from '@/lib/utils';
 import { LeadCard } from './LeadCard';
 import {
   Snowflake, MessageSquare, Handshake, FileSignature,
-  CheckCircle2, Trophy, XCircle, Building2, DollarSign,
-  Plus, GripVertical,
+  CheckCircle2, Trophy, XCircle, Building2, DollarSign, GripVertical,
 } from 'lucide-react';
 
 interface IsaInsight {
@@ -32,79 +30,20 @@ interface KanbanColumnProps {
   leadExtras?: Record<string, LeadExtra>;
 }
 
-// Paleta por estágio — cores sólidas e distintas
-const STATUS_CONFIG: Record<string, {
+const STATUS_CFG: Record<string, {
   icon: React.ElementType;
-  color: string;       // cor principal
-  bg: string;          // fundo do header
-  headerText: string;  // texto no header
-  dropBg: string;      // fundo ao fazer drop
-  badge: string;       // badge count
+  color: string;
+  headerBg: string;
+  badgeBg: string;
 }> = {
-  'Lead Frio': {
-    icon: Snowflake,
-    color: '#64748b',
-    bg: 'rgba(100,116,139,0.06)',
-    headerText: '#475569',
-    dropBg: 'rgba(100,116,139,0.08)',
-    badge: '#e2e8f0',
-  },
-  'Bentes Ramos': {
-    icon: Building2,
-    color: '#3d2b1f',
-    bg: 'rgba(61,43,31,0.06)',
-    headerText: '#3d2b1f',
-    dropBg: 'rgba(61,43,31,0.08)',
-    badge: 'rgba(61,43,31,0.12)',
-  },
-  'Em Atendimento': {
-    icon: MessageSquare,
-    color: '#f59e0b',
-    bg: 'rgba(245,158,11,0.06)',
-    headerText: '#b45309',
-    dropBg: 'rgba(245,158,11,0.1)',
-    badge: 'rgba(245,158,11,0.15)',
-  },
-  'Em Negociação': {
-    icon: Handshake,
-    color: '#8b5cf6',
-    bg: 'rgba(139,92,246,0.06)',
-    headerText: '#7c3aed',
-    dropBg: 'rgba(139,92,246,0.1)',
-    badge: 'rgba(139,92,246,0.12)',
-  },
-  'Aguardando Contrato': {
-    icon: FileSignature,
-    color: '#c9a96e',
-    bg: 'rgba(201,169,110,0.08)',
-    headerText: '#b8922a',
-    dropBg: 'rgba(201,169,110,0.12)',
-    badge: 'rgba(201,169,110,0.18)',
-  },
-  'Contrato Assinado': {
-    icon: CheckCircle2,
-    color: '#0d9488',
-    bg: 'rgba(13,148,136,0.06)',
-    headerText: '#0f766e',
-    dropBg: 'rgba(13,148,136,0.1)',
-    badge: 'rgba(13,148,136,0.12)',
-  },
-  'Ganho': {
-    icon: Trophy,
-    color: '#16a34a',
-    bg: 'rgba(22,163,74,0.06)',
-    headerText: '#15803d',
-    dropBg: 'rgba(22,163,74,0.1)',
-    badge: 'rgba(22,163,74,0.12)',
-  },
-  'Perdido': {
-    icon: XCircle,
-    color: '#dc2626',
-    bg: 'rgba(220,38,38,0.06)',
-    headerText: '#b91c1c',
-    dropBg: 'rgba(220,38,38,0.1)',
-    badge: 'rgba(220,38,38,0.12)',
-  },
+  'Lead Frio':           { icon: Snowflake,     color: '#64748b', headerBg: 'rgba(100,116,139,0.06)', badgeBg: '#e2e8f0' },
+  'Bentes Ramos':        { icon: Building2,     color: '#3d2b1f', headerBg: 'rgba(61,43,31,0.06)',    badgeBg: 'rgba(61,43,31,0.12)' },
+  'Em Atendimento':      { icon: MessageSquare, color: '#f59e0b', headerBg: 'rgba(245,158,11,0.06)',  badgeBg: 'rgba(245,158,11,0.15)' },
+  'Em Negociação':       { icon: Handshake,     color: '#8b5cf6', headerBg: 'rgba(139,92,246,0.06)', badgeBg: 'rgba(139,92,246,0.12)' },
+  'Aguardando Contrato': { icon: FileSignature, color: '#c9a96e', headerBg: 'rgba(201,169,110,0.08)', badgeBg: 'rgba(201,169,110,0.18)' },
+  'Contrato Assinado':   { icon: CheckCircle2,  color: '#0d9488', headerBg: 'rgba(13,148,136,0.06)',  badgeBg: 'rgba(13,148,136,0.12)' },
+  'Ganho':               { icon: Trophy,        color: '#16a34a', headerBg: 'rgba(22,163,74,0.06)',   badgeBg: 'rgba(22,163,74,0.12)' },
+  'Perdido':             { icon: XCircle,       color: '#dc2626', headerBg: 'rgba(220,38,38,0.06)',   badgeBg: 'rgba(220,38,38,0.12)' },
 };
 
 const fmtCompact = (v: number) => {
@@ -115,14 +54,14 @@ const fmtCompact = (v: number) => {
 };
 
 export function KanbanColumn({
-  status, leads, onLeadClick, onDragStart, onDragEnd,
-  onDragOver, onDrop, isDragOver, isaInsights = {}, leadExtras = {},
+  status, leads, onLeadClick,
+  onDragStart, onDragEnd, onDragOver, onDrop,
+  isDragOver, isaInsights = {}, leadExtras = {},
 }: KanbanColumnProps) {
-  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG['Lead Frio'];
+  const cfg = STATUS_CFG[status] || STATUS_CFG['Lead Frio'];
   const Icon = cfg.icon;
   const columnLeads = leads.filter(l => l.status === status);
   const totalValue = columnLeads.reduce((s, l) => s + (l.valor_causa || 0), 0);
-  const convertidos = columnLeads.filter(l => l.lead_state === 'CONTRACT_SIGNED' || l.status === 'Ganho').length;
 
   return (
     <div
@@ -131,63 +70,83 @@ export function KanbanColumn({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        borderRadius: 16,
+        borderRadius: 14,
         overflow: 'hidden',
-        background: isDragOver ? cfg.dropBg : '#f8f7f5',
-        border: `1px solid ${isDragOver ? cfg.color + '50' : 'rgba(201,169,110,0.18)'}`,
-        boxShadow: isDragOver ? `0 0 0 2px ${cfg.color}30` : '0 1px 4px rgba(0,0,0,0.04)',
-        transition: 'all 0.2s ease',
-        minHeight: 500,
+        background: isDragOver ? `${cfg.color}08` : '#f9f8f6',
+        border: `1px solid ${isDragOver ? cfg.color + '40' : 'rgba(201,169,110,0.2)'}`,
+        boxShadow: isDragOver
+          ? `0 0 0 2px ${cfg.color}25, 0 2px 8px rgba(0,0,0,0.06)`
+          : '0 1px 3px rgba(0,0,0,0.04)',
+        transition: 'all 0.18s ease',
+        minHeight: 480,
+        width: '100%',
       }}
     >
       {/* ── Header ── */}
-      <div style={{ background: cfg.bg, borderBottom: `1px solid ${cfg.color}20`, padding: '12px 14px 10px' }}>
-        {/* Accent top bar */}
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: cfg.color, borderRadius: '16px 16px 0 0' }} />
+      <div style={{
+        position: 'relative',
+        background: cfg.headerBg,
+        borderBottom: `1px solid ${cfg.color}18`,
+        padding: '10px 12px 9px',
+      }}>
+        {/* Accent top */}
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: cfg.color }} />
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: cfg.color + '15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Icon style={{ width: 14, height: 14, color: cfg.color }} />
-            </div>
-            <span style={{ fontSize: 12, fontWeight: 800, color: cfg.headerText, letterSpacing: '-0.01em' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: totalValue > 0 ? 5 : 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            <Icon style={{ width: 13, height: 13, color: cfg.color, flexShrink: 0 }} />
+            <span style={{
+              fontSize: 11, fontWeight: 800, color: cfg.color,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              letterSpacing: '-0.01em',
+            }}>
               {status}
             </span>
           </div>
           <span style={{
-            fontSize: 11, fontWeight: 800, padding: '2px 9px', borderRadius: 20,
-            background: cfg.badge, color: cfg.headerText,
-            border: `0.5px solid ${cfg.color}25`,
+            fontSize: 11, fontWeight: 800,
+            padding: '2px 8px', borderRadius: 20,
+            background: cfg.badgeBg, color: cfg.color,
+            border: `0.5px solid ${cfg.color}20`,
+            flexShrink: 0, marginLeft: 4,
           }}>
             {columnLeads.length}
           </span>
         </div>
 
-        {/* Valor total + convertidos */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {totalValue > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <DollarSign style={{ width: 10, height: 10, color: cfg.color }} />
-              <span style={{ fontSize: 11, fontWeight: 700, color: cfg.color }}>{fmtCompact(totalValue)}</span>
-            </div>
-          )}
-          {convertidos > 0 && (
-            <span style={{ fontSize: 10, color: '#16a34a', fontWeight: 600 }}>✓ {convertidos} convertido{convertidos > 1 ? 's' : ''}</span>
-          )}
-        </div>
+        {/* Valor total */}
+        {totalValue > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            <DollarSign style={{ width: 9, height: 9, color: cfg.color }} />
+            <span style={{ fontSize: 10, fontWeight: 700, color: cfg.color }}>{fmtCompact(totalValue)}</span>
+          </div>
+        )}
       </div>
 
       {/* ── Cards ── */}
-      <div style={{ flex: 1, padding: 10, display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
+      <div style={{
+        flex: 1,
+        padding: 8,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        overflowY: 'auto',
+        maxHeight: 'calc(100vh - 260px)',
+      }}>
         {columnLeads.length === 0 ? (
           <div style={{
-            flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            border: `1.5px dashed ${isDragOver ? cfg.color + '60' : 'rgba(201,169,110,0.25)'}`,
-            borderRadius: 12, padding: '32px 16px', color: isDragOver ? cfg.color : '#d1d5db',
-            background: isDragOver ? cfg.dropBg : 'transparent', transition: 'all 0.2s',
+            flex: 1, minHeight: 80,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            border: `1.5px dashed ${isDragOver ? cfg.color + '50' : 'rgba(201,169,110,0.2)'}`,
+            borderRadius: 10, padding: '20px 12px',
+            color: isDragOver ? cfg.color : '#d1d5db',
+            background: isDragOver ? `${cfg.color}06` : 'transparent',
+            transition: 'all 0.15s',
           }}>
-            <GripVertical style={{ width: 20, height: 20, marginBottom: 6, opacity: 0.5 }} />
-            <span style={{ fontSize: 11, fontWeight: 600 }}>{isDragOver ? 'Solte aqui!' : 'Sem leads'}</span>
+            <GripVertical style={{ width: 16, height: 16, marginBottom: 4, opacity: 0.5 }} />
+            <span style={{ fontSize: 10, fontWeight: 600 }}>
+              {isDragOver ? 'Solte aqui!' : 'Sem leads'}
+            </span>
           </div>
         ) : (
           columnLeads.map(lead => (
@@ -209,14 +168,14 @@ export function KanbanColumn({
         )}
       </div>
 
-      {/* ── Footer com drop zone ── */}
+      {/* Drop indicator */}
       {isDragOver && (
         <div style={{
-          padding: '8px 10px',
+          padding: '6px 12px',
           borderTop: `1px dashed ${cfg.color}40`,
           textAlign: 'center',
-          fontSize: 11, fontWeight: 700, color: cfg.color,
-          background: cfg.dropBg,
+          fontSize: 10, fontWeight: 700, color: cfg.color,
+          background: `${cfg.color}06`,
         }}>
           ↓ Mover para {status}
         </div>
