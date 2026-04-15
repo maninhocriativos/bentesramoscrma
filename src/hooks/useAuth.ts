@@ -7,9 +7,11 @@ export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const lastUserIdRef = useRef<string | null>(null);
+  // Controla se já houve carga inicial — após isso loading nunca mais vira true
+  const initialLoadDone = useRef(false);
 
   useEffect(() => {
-    // Check for existing session first
+    // Carrega sessão existente primeiro
     supabase.auth.getSession().then(async ({ data: { session: existingSession }, error }) => {
       if (error) {
         console.error('Session error:', error);
@@ -21,25 +23,38 @@ export function useAuth() {
         setSession(existingSession);
         setUser(existingSession?.user ?? null);
       }
+      initialLoadDone.current = true;
       setLoading(false);
     });
 
-    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, newSession) => {
         const newUserId = newSession?.user?.id ?? null;
-        
-        // For TOKEN_REFRESHED, only update session if same user (avoid re-render)
-        if (event === 'TOKEN_REFRESHED' && newUserId === lastUserIdRef.current) {
+
+        // TOKEN_REFRESHED — só atualiza sessão, sem re-render desnecessário
+        if (event === 'TOKEN_REFRESHED') {
           setSession(newSession);
           return;
         }
-        
-        // For actual auth changes, update everything
+
+        // SIGNED_IN com o MESMO usuário já autenticado — acontece quando o
+        // WebSocket reconecta ao voltar para a aba. Ignorar completamente.
+        if (event === 'SIGNED_IN' && newUserId === lastUserIdRef.current && initialLoadDone.current) {
+          setSession(newSession);
+          return;
+        }
+
+        // Mudança real de auth (novo login, logout, troca de usuário)
         lastUserIdRef.current = newUserId;
         setSession(newSession);
         setUser(newSession?.user ?? null);
-        setLoading(false);
+
+        // Só seta loading=false se ainda não finalizou a carga inicial
+        // (evita piscar a tela ao trocar de aba)
+        if (!initialLoadDone.current) {
+          initialLoadDone.current = true;
+          setLoading(false);
+        }
       }
     );
 
@@ -57,22 +72,21 @@ export function useAuth() {
 
   const signIn = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    
+
     if (error) return { error };
-    
-    // Check if user is approved
+
     if (data.user) {
       const isApproved = await checkUserApproval(data.user.id);
       if (!isApproved) {
         await supabase.auth.signOut();
-        return { 
-          error: { 
-            message: 'Sua conta ainda não foi aprovada. Aguarde a aprovação do administrador.' 
-          } as any 
+        return {
+          error: {
+            message: 'Sua conta ainda não foi aprovada. Aguarde a aprovação do administrador.',
+          } as any,
         };
       }
     }
-    
+
     return { error: null };
   };
 
@@ -81,9 +95,7 @@ export function useAuth() {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        emailRedirectTo: redirectUrl
-      }
+      options: { emailRedirectTo: redirectUrl },
     });
     return { error };
   };
@@ -91,9 +103,7 @@ export function useAuth() {
   const signInWithGoogle = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth`
-      }
+      options: { redirectTo: `${window.location.origin}/auth` },
     });
     return { error };
   };
