@@ -1,9 +1,9 @@
-// cache-bust: 2026-04-15T19:00:00Z
+// cache-bust: 2026-04-15T21:25:00Z
 // ─── VERSÃO DO CACHE ────────────────────────────────────────────────────────
-// __BUILD_DATE__ é injetado pelo Vite a cada deploy (vite.config.ts → define)
-// O fallback '20260415_FORCE' garante que browsers com SW antigo sejam forçados
-// a atualizar mesmo sem ter o Vite inject funcionando ainda
-const BUILD_TS = self.__BUILD_DATE__ || "20260415_FORCE";
+// Lê a versão do parâmetro ?v= usado no registro do SW; fallback manual
+// mantém a possibilidade de forçar troca em emergências.
+const SW_URL = new URL(self.location.href);
+const BUILD_TS = SW_URL.searchParams.get("v") || "20260415_FORCE";
 const CACHE_NAME = `bentes-ramos-crm-v${BUILD_TS}`;
 
 const STATIC_ASSETS = ["/", "/manifest.json"];
