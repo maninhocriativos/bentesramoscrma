@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -42,38 +42,25 @@ const PerfilContext = createContext<PerfilContextValue | null>(null);
 
 export function PerfilProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [perfil, setPerfil] = useState<Perfil | null>(null);
-  const [roles, setRoles] = useState<AppRole[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [perfil, setPerfil]               = useState<Perfil | null>(null);
+  const [roles, setRoles]                 = useState<AppRole[]>([]);
+  const [loading, setLoading]             = useState(true);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
-  useEffect(() => {
-    if (user) {
-      fetchData();
-    } else {
-      setPerfil(null);
-      setRoles([]);
-      setLoading(false);
-      setNeedsOnboarding(false);
-    }
-  }, [user]);
+  // Controla se já houve carga inicial — após isso loading nunca mais vira true
+  const initialLoadDone = useRef(false);
+  // Guarda o último userId carregado para não recarregar desnecessariamente
+  const lastUserIdRef = useRef<string | null>(null);
 
-  const fetchData = async () => {
-    if (!user) return;
-    
-    setLoading(true);
-    
-    // Fetch profile and roles in parallel
+  const fetchData = async (userId: string) => {
+    // Só mostra loading na primeira carga
+    if (!initialLoadDone.current) {
+      setLoading(true);
+    }
+
     const [perfilResult, rolesResult] = await Promise.all([
-      supabase
-        .from('perfis')
-        .select('*')
-        .eq('id', user.id)
-        .maybeSingle(),
-      supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
+      supabase.from('perfis').select('*').eq('id', userId).maybeSingle(),
+      supabase.from('user_roles').select('role').eq('user_id', userId),
     ]);
 
     let perfilData: Perfil | null = null;
@@ -82,94 +69,82 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
     if (!perfilResult.error && perfilResult.data) {
       perfilData = perfilResult.data as Perfil;
       setPerfil(perfilData);
-      // Check if user needs onboarding (nome is empty)
       setNeedsOnboarding(!perfilData.nome || perfilData.nome.trim() === '');
     }
-    
+
     if (!rolesResult.error && rolesResult.data && rolesResult.data.length > 0) {
       userRoles = rolesResult.data.map(r => r.role as AppRole);
     } else if (perfilData?.cargo) {
-      // Fallback: use cargo from perfis table if user_roles is empty
       const validRoles: AppRole[] = ['Administrador', 'Gerente', 'Advogado', 'Secretaria'];
       const cargoAsRole = perfilData.cargo as AppRole;
       if (validRoles.includes(cargoAsRole)) {
         userRoles = [cargoAsRole];
       }
     }
-    
+
     setRoles(userRoles);
+    initialLoadDone.current = true;
     setLoading(false);
   };
 
+  useEffect(() => {
+    const userId = user?.id ?? null;
+
+    if (!userId) {
+      // Logout real — limpa estado
+      setPerfil(null);
+      setRoles([]);
+      setNeedsOnboarding(false);
+      initialLoadDone.current = false;
+      lastUserIdRef.current = null;
+      setLoading(false);
+      return;
+    }
+
+    // ✅ Só busca se for um usuário diferente do último carregado
+    // Isso evita recarregar ao trocar de aba (quando o user object muda
+    // mas o ID é o mesmo)
+    if (userId === lastUserIdRef.current) return;
+
+    lastUserIdRef.current = userId;
+    fetchData(userId);
+  }, [user?.id]); // ✅ Depende do ID, não do objeto inteiro
+
   const updatePerfil = async (data: Partial<Perfil>) => {
     if (!user) return { error: new Error('User not authenticated') };
-    
-    const { error } = await supabase
-      .from('perfis')
-      .update(data)
-      .eq('id', user.id);
-    
-    if (!error) {
-      await fetchData();
-    }
-    
+    const { error } = await supabase.from('perfis').update(data).eq('id', user.id);
+    if (!error && user.id) await fetchData(user.id);
     return { error };
   };
 
-  // Permission helpers based on user_roles table (server-side enforced)
-  const isAdmin = roles.includes('Administrador');
-  const isGerente = roles.includes('Gerente');
-  const isAdvogado = roles.includes('Advogado');
+  const refetch = async () => {
+    if (user?.id) await fetchData(user.id);
+  };
+
+  const isAdmin      = roles.includes('Administrador');
+  const isGerente    = roles.includes('Gerente');
+  const isAdvogado   = roles.includes('Advogado');
   const isSecretaria = roles.includes('Secretaria');
-  
-  // These are for UI hints only - actual enforcement is via RLS
-  const canDelete = isAdmin || isGerente;
-  const canAccessSettings = isAdmin;
-  
-  // Permissões por módulo:
-  // - Processos: Admin, Gerente, Advogado, Secretaria
-  const canAccessProcessos = isAdmin || isGerente || isAdvogado || isSecretaria;
-  // - Leads/CRM: Admin, Gerente, Advogado, Secretaria
-  const canAccessLeads = isAdmin || isGerente || isAdvogado || isSecretaria;
-  // - Dashboard: Admin, Gerente, Advogado, Secretaria
-  const canAccessDashboard = isAdmin || isGerente || isAdvogado || isSecretaria;
-  // - Agenda: Todos
-  const canAccessAgenda = true;
-  // - Tarefas: Todos
-  const canAccessTarefas = true;
-  // - Financeiro: Admin, Gerente
+
+  const canDelete           = isAdmin || isGerente;
+  const canAccessSettings   = isAdmin;
+  const canAccessProcessos  = isAdmin || isGerente || isAdvogado || isSecretaria;
+  const canAccessLeads      = isAdmin || isGerente || isAdvogado || isSecretaria;
+  const canAccessDashboard  = isAdmin || isGerente || isAdvogado || isSecretaria;
+  const canAccessAgenda     = true;
+  const canAccessTarefas    = true;
   const canAccessFinanceiro = isAdmin || isGerente;
-  
-  // Legacy cargo field for compatibility
-  const cargo = perfil?.cargo || (roles[0] as string) || 'Secretaria';
-  
-  // Full name helper
-  const fullName = perfil?.nome 
-    ? `${perfil.nome}${perfil.sobrenome ? ' ' + perfil.sobrenome : ''}`
-    : null;
+
+  const cargo    = perfil?.cargo || (roles[0] as string) || 'Secretaria';
+  const fullName = perfil?.nome ? `${perfil.nome}${perfil.sobrenome ? ' ' + perfil.sobrenome : ''}` : null;
 
   return (
     <PerfilContext.Provider value={{
-      perfil,
-      loading,
-      cargo,
-      roles,
-      isAdmin,
-      isGerente,
-      isAdvogado,
-      isSecretaria,
-      canDelete,
-      canAccessSettings,
-      canAccessProcessos,
-      canAccessLeads,
-      canAccessDashboard,
-      canAccessAgenda,
-      canAccessTarefas,
-      canAccessFinanceiro,
-      needsOnboarding,
-      fullName,
-      updatePerfil,
-      refetch: fetchData,
+      perfil, loading, cargo, roles,
+      isAdmin, isGerente, isAdvogado, isSecretaria,
+      canDelete, canAccessSettings, canAccessProcessos, canAccessLeads,
+      canAccessDashboard, canAccessAgenda, canAccessTarefas, canAccessFinanceiro,
+      needsOnboarding, fullName, updatePerfil, refetch,
     }}>
       {children}
     </PerfilContext.Provider>
@@ -179,25 +154,12 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
 export function usePerfil(): PerfilContextValue {
   const context = useContext(PerfilContext);
   if (!context) {
-    // Return a safe default state when used outside provider (e.g., during initial render)
     return {
-      perfil: null,
-      loading: true,
-      cargo: 'Secretaria',
-      roles: [],
-      isAdmin: false,
-      isGerente: false,
-      isAdvogado: false,
-      isSecretaria: false,
-      canDelete: false,
-      canAccessSettings: false,
-      canAccessProcessos: false,
-      canAccessLeads: false,
-      canAccessDashboard: false,
-      canAccessAgenda: true,
-      canAccessTarefas: true,
-      canAccessFinanceiro: false,
-      needsOnboarding: false,
+      perfil: null, loading: true, cargo: 'Secretaria', roles: [],
+      isAdmin: false, isGerente: false, isAdvogado: false, isSecretaria: false,
+      canDelete: false, canAccessSettings: false, canAccessProcessos: false,
+      canAccessLeads: false, canAccessDashboard: false, canAccessAgenda: true,
+      canAccessTarefas: true, canAccessFinanceiro: false, needsOnboarding: false,
       fullName: null,
       updatePerfil: async () => ({ error: new Error('PerfilProvider not mounted') }),
       refetch: async () => {},
