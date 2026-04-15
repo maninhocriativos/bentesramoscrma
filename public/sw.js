@@ -1,3 +1,4 @@
+// cache-bust: 2026-04-15T19:00:00Z
 // ─── VERSÃO DO CACHE ────────────────────────────────────────────────────────
 // __BUILD_DATE__ é injetado pelo Vite a cada deploy (vite.config.ts → define)
 // O fallback '20260415_FORCE' garante que browsers com SW antigo sejam forçados
