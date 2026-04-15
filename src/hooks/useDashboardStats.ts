@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface DashboardStats {
@@ -40,24 +40,40 @@ const EMPTY_STATS: DashboardStats = {
 export function useDashboardStats() {
   const [stats, setStats] = useState<DashboardStats>(EMPTY_STATS);
   const [loading, setLoading] = useState(true);
+  // Controla se já houve carga inicial — após isso, nunca mais mostra loading
+  const initialLoadDone = useRef(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchStats = useCallback(async (retry = 0) => {
+    // Só mostra loading na primeira carga
+    if (!initialLoadDone.current) {
+      setLoading(true);
+    }
+
     try {
       const { data, error } = await supabase.rpc('get_dashboard_stats');
       if (error) {
         console.error('[DashboardStats] RPC error:', error.message);
-        if (retry < 2) { setTimeout(() => fetchStats(retry + 1), 3000); return; }
+        if (retry < 2) {
+          setTimeout(() => fetchStats(retry + 1), 3000);
+          return;
+        }
       } else if (data) {
         setStats(data as unknown as DashboardStats);
       }
     } catch (err) {
       console.error('[DashboardStats] Unexpected error:', err);
-      if (retry < 2) { setTimeout(() => fetchStats(retry + 1), 3000); return; }
+      if (retry < 2) {
+        setTimeout(() => fetchStats(retry + 1), 3000);
+        return;
+      }
     } finally {
+      initialLoadDone.current = true;
       setLoading(false);
     }
   }, []);
 
+  // Carga inicial
   useEffect(() => {
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
       setLoading(false);
@@ -66,23 +82,28 @@ export function useDashboardStats() {
     fetchStats();
   }, [fetchStats]);
 
-  // Auto-refresh a cada 5 minutos
+  // Auto-refresh silencioso a cada 5 minutos
   useEffect(() => {
     const interval = setInterval(fetchStats, 300_000);
     return () => clearInterval(interval);
   }, [fetchStats]);
 
-  // Realtime — atualiza quando leads mudam
+  // Realtime — debounce de 2s para não sobrecarregar a RPC
   useEffect(() => {
     const channel = supabase
       .channel('dashboard-stats-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads_juridicos' }, () => {
-        clearTimeout((channel as any)._debounceTimer);
-        (channel as any)._debounceTimer = setTimeout(fetchStats, 2000);
-      })
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'leads_juridicos' },
+        () => {
+          if (debounceRef.current) clearTimeout(debounceRef.current);
+          debounceRef.current = setTimeout(fetchStats, 2000);
+        }
+      )
       .subscribe();
+
     return () => {
-      clearTimeout((channel as any)._debounceTimer);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
       supabase.removeChannel(channel);
     };
   }, [fetchStats]);
