@@ -1,36 +1,41 @@
 import { useEffect } from 'react';
 
-const SW_VERSION = __BUILD_DATE__;
-const SW_URL = `/sw.js?v=${SW_VERSION}`;
-const UPDATE_CHECK_INTERVAL_MS = 60_000;
+const SW_CHECK_INTERVAL_MS = 60_000;
+const RELOAD_COOLDOWN_KEY = 'sw_reload_ts';
+const RELOAD_COOLDOWN_MS = 10_000;
 
 /**
- * Registra o Service Worker com cache-bust por build e força adoção imediata
- * da versão nova quando um deploy é publicado.
+ * Detecta quando um novo Service Worker é instalado após um deploy
+ * e recarrega a página uma única vez para adotar a versão nova.
  */
 export function useServiceWorkerUpdate() {
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
 
     let intervalId: number | null = null;
-    let reloadTriggered = false;
     let registration: ServiceWorkerRegistration | null = null;
 
-    const reloadOnce = () => {
-      if (reloadTriggered) return;
-      reloadTriggered = true;
+    const safeReload = () => {
+      const lastReload = Number(sessionStorage.getItem(RELOAD_COOLDOWN_KEY) || '0');
+      if (Date.now() - lastReload < RELOAD_COOLDOWN_MS) {
+        console.log('[SW] Reload ignorado — cooldown ativo');
+        return;
+      }
+      sessionStorage.setItem(RELOAD_COOLDOWN_KEY, String(Date.now()));
       window.location.reload();
     };
 
-    const skipWaiting = (worker?: ServiceWorker | null) => {
-      worker?.postMessage({ type: 'SKIP_WAITING' });
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'SW_UPDATED') {
+        console.log('[SW] Nova versão ativada, recarregando...');
+        setTimeout(safeReload, 500);
+      }
     };
 
-    const attachRegistrationListeners = (reg: ServiceWorkerRegistration) => {
-      registration = reg;
-
+    const listenForWaiting = (reg: ServiceWorkerRegistration) => {
       if (reg.waiting) {
-        skipWaiting(reg.waiting);
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        return;
       }
 
       reg.addEventListener('updatefound', () => {
@@ -38,71 +43,50 @@ export function useServiceWorkerUpdate() {
         if (!newWorker) return;
 
         newWorker.addEventListener('statechange', () => {
+          // Só age quando existe um controller anterior (= é um UPDATE, não primeiro registro)
           if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            skipWaiting(newWorker);
+            console.log('[SW] Novo worker instalado, solicitando ativação...');
+            newWorker.postMessage({ type: 'SKIP_WAITING' });
           }
         });
       });
     };
 
-    const registerOrUpdateServiceWorker = async () => {
+    const init = async () => {
       try {
-        const reg = await navigator.serviceWorker.register(SW_URL, {
-          scope: '/',
+        const reg = await navigator.serviceWorker.register('/sw.js', {
           updateViaCache: 'none',
         });
-
-        attachRegistrationListeners(reg);
-        await reg.update();
-      } catch (error) {
-        console.error('[SW] Falha ao registrar/atualizar o service worker', error);
-      }
-    };
-
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'SW_UPDATED') {
-        console.log('[SW] Nova versão detectada, recarregando...');
-        setTimeout(reloadOnce, 300);
-      }
-    };
-
-    const handleControllerChange = () => {
-      console.log('[SW] Controller trocado, recarregando...');
-      reloadOnce();
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        void registration?.update();
+        registration = reg;
+        listenForWaiting(reg);
+      } catch (err) {
+        console.error('[SW] Falha ao registrar service worker', err);
       }
     };
 
     navigator.serviceWorker.addEventListener('message', handleMessage);
-    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
 
+    // Registra após o load para não competir com o carregamento inicial
     if (document.readyState === 'complete') {
-      void registerOrUpdateServiceWorker();
+      void init();
     } else {
-      window.addEventListener('load', () => {
-        void registerOrUpdateServiceWorker();
-      }, { once: true });
+      window.addEventListener('load', () => void init(), { once: true });
     }
 
-    intervalId = window.setInterval(() => {
+    // Checa atualizações periodicamente e ao voltar o foco
+    const checkUpdate = () => {
       if (document.visibilityState === 'visible') {
         void registration?.update();
       }
-    }, UPDATE_CHECK_INTERVAL_MS);
+    };
+
+    intervalId = window.setInterval(checkUpdate, SW_CHECK_INTERVAL_MS);
+    document.addEventListener('visibilitychange', checkUpdate);
 
     return () => {
       navigator.serviceWorker.removeEventListener('message', handleMessage);
-      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-
-      if (intervalId !== null) {
-        window.clearInterval(intervalId);
-      }
+      document.removeEventListener('visibilitychange', checkUpdate);
+      if (intervalId !== null) window.clearInterval(intervalId);
     };
   }, []);
 }
