@@ -6,6 +6,8 @@ export default function RequireAuth() {
   const location = useLocation();
   const { user, loading } = useAuth();
 
+  // Só mostra loading screen na carga inicial (sem usuário ainda determinado)
+  // Após login, loading nunca mais vira true — evita recarregar ao trocar aba
   if (loading) {
     return <AppLoadingScreen />;
   }
