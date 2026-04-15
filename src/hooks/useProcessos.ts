@@ -1,13 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Processo, ProcessoStatus } from '@/types/processos';
+import { Processo } from '@/types/processos';
 import { useToast } from '@/hooks/use-toast';
 import { usePerfil } from './usePerfil';
 import { useAuth } from './useAuth';
 
-// Listing query: exclude heavy JSON columns (partes_json, movimentos_json)
 const PROCESSOS_LIST_SELECT = 'id,numero_processo,numero_complementar,titulo_acao,status,advogado_responsavel,cliente_id,cpf_cliente,nome_cliente,created_at,tribunal,vara_comarca,assunto,valor_causa,data_ajuizamento,data_ultima_atualizacao,orgao_julgador,grau,classe_cnj,status_detalhado,origem_cliente,ultima_consulta_api_at,frequencia_notificacao_dias,notificacao_ativa,ultima_notificacao_at,descricao,marcadores,area,fase,assunto_cnj,segredo_justica,data_distribuicao,data_citacao,data_recebimento,data_arquivamento,data_encerramento,valor_provisionado,probabilidade,monitorar_push,tipo_orgao_julgador,sistema_judicial,complemento_enderecamento';
-
 
 export function useProcessos() {
   const [processos, setProcessos] = useState<Processo[]>([]);
@@ -15,9 +13,14 @@ export function useProcessos() {
   const { toast } = useToast();
   const { perfil, isAdvogado } = usePerfil();
   const { user } = useAuth();
+  // Controla se já houve carga inicial — após isso nunca mais mostra loading
+  const initialLoadDone = useRef(false);
 
-  const fetchProcessos = useCallback(async (isInitial = false) => {
-    if (isInitial) setLoading(true);
+  const fetchProcessos = useCallback(async () => {
+    // Só mostra loading na primeira carga
+    if (!initialLoadDone.current) {
+      setLoading(true);
+    }
 
     let query = supabase
       .from('processos')
@@ -35,21 +38,22 @@ export function useProcessos() {
     } else {
       setProcessos((data as unknown as Processo[]) || []);
     }
+
+    initialLoadDone.current = true;
     setLoading(false);
   }, [isAdvogado, perfil?.nome, toast]);
 
+  // Carga inicial
   useEffect(() => {
-    if (user) {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-        setLoading(false);
-        return;
-      }
-
-      fetchProcessos(true);
+    if (!user) return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      setLoading(false);
+      return;
     }
+    fetchProcessos();
   }, [user, fetchProcessos]);
 
-  // Realtime subscription
+  // Realtime — atualizações incrementais sem refetch completo
   useEffect(() => {
     const channel = supabase
       .channel('processos-realtime')
@@ -105,7 +109,6 @@ export function useProcessos() {
     }
 
     toast({ title: 'Processo criado com sucesso!' });
-    // Realtime will handle the state update — no need to refetch
     return { data: data as Processo };
   };
 
@@ -121,7 +124,6 @@ export function useProcessos() {
     }
 
     toast({ title: 'Processo atualizado!' });
-    // Realtime will handle the state update — no need to refetch
     return { error: null };
   };
 
