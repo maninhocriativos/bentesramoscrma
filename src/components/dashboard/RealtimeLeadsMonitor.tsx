@@ -1,10 +1,9 @@
 import { useState, useMemo } from 'react';
 import { Lead } from '@/types/leads';
-import { RefreshCw, Users, UserPlus, Activity, Clock, TrendingUp, CheckCircle, Wifi, AlertCircle, Scale } from 'lucide-react';
+import { RefreshCw, Users, Activity, Clock, CheckCircle, Wifi, AlertCircle, Scale } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { AnimatedCounter } from '@/components/ui/animated-counter';
 
 interface RealtimeLeadsMonitorProps {
   leads: Lead[];
@@ -20,6 +19,7 @@ const STATUS_COLORS: Record<string, string> = {
   'Aguardando Contrato': '#f59e0b',
   'Contrato Assinado':   '#0d9488',
   'Ganho':               '#22c55e',
+  'Bentes Ramos':        '#3d2b1f',
 };
 
 export function RealtimeLeadsMonitor({ leads, onRefresh }: RealtimeLeadsMonitorProps) {
@@ -38,16 +38,9 @@ export function RealtimeLeadsMonitor({ leads, onRefresh }: RealtimeLeadsMonitorP
         (l.status === 'Lead Frio' || !l.lead_state || l.lead_state === 'NEW');
     });
 
-    const trafficLeads    = leads.filter(l => l.tipo_origem === 'trafego');
     const convertidosHoje = leadsHoje.filter(l => CONVERTED_STATES.includes(l.lead_state || ''));
-    const taxaHoje        = leadsHoje.length > 0 ? Math.round((convertidosHoje.length / leadsHoje.length) * 100) : 0;
+    const taxaHoje = leadsHoje.length > 0 ? Math.round((convertidosHoje.length / leadsHoje.length) * 100) : 0;
 
-    const sortedLeads = leads.length > 0
-      ? leads.reduce((a, b) => new Date(a.created_at) > new Date(b.created_at) ? a : b)
-      : null;
-    const ultimoLead = sortedLeads ? new Date(sortedLeads.created_at) : null;
-
-    // Status resumido
     const statusMap: Record<string, number> = {};
     leads.forEach(l => { statusMap[l.status] = (statusMap[l.status] || 0) + 1; });
     const statusResumo = Object.entries(statusMap)
@@ -59,7 +52,6 @@ export function RealtimeLeadsMonitor({ leads, onRefresh }: RealtimeLeadsMonitorP
       hoje: leadsHoje.length,
       semResposta24h: semResposta24h.length,
       taxaHoje,
-      ultimoLead,
       statusResumo,
     };
   }, [leads]);
@@ -91,14 +83,14 @@ export function RealtimeLeadsMonitor({ leads, onRefresh }: RealtimeLeadsMonitorP
 
       {/* Métricas principais */}
       <div className="grid grid-cols-2 gap-3 p-5 pb-3">
-        {/* Total */}
+        {/* Total — valor direto, sem AnimatedCounter */}
         <div className="col-span-2 flex items-center gap-3 p-3 rounded-xl" style={{ background: 'rgba(61,43,31,0.04)' }}>
           <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(61,43,31,0.08)' }}>
             <Users style={{ width: 18, height: 18, color: '#3d2b1f' }} />
           </div>
           <div className="flex-1 min-w-0">
             <p style={{ fontSize: 28, fontWeight: 800, lineHeight: 1, color: 'inherit' }}>
-              <AnimatedCounter value={stats.total} duration={800} />
+              {stats.total.toLocaleString('pt-BR')}
             </p>
             <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>Total de leads no CRM</p>
           </div>
@@ -115,7 +107,7 @@ export function RealtimeLeadsMonitor({ leads, onRefresh }: RealtimeLeadsMonitorP
             <span style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sem resposta +24h</span>
           </div>
           <p style={{ fontSize: 24, fontWeight: 800, color: stats.semResposta24h > 0 ? '#dc2626' : '#3d2b1f', lineHeight: 1 }}>
-            <AnimatedCounter value={stats.semResposta24h} duration={800} />
+            {stats.semResposta24h.toLocaleString('pt-BR')}
           </p>
           <p style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>leads aguardando</p>
         </div>
@@ -144,7 +136,7 @@ export function RealtimeLeadsMonitor({ leads, onRefresh }: RealtimeLeadsMonitorP
               <div key={status} className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
                 <span style={{ fontSize: 11, color: '#6b7280', flex: 1 }} className="truncate">{status}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'inherit', minWidth: 24, textAlign: 'right' }}>{count}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'inherit', minWidth: 30, textAlign: 'right' }}>{count.toLocaleString('pt-BR')}</span>
                 <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(201,169,110,0.1)' }}>
                   <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
                 </div>
