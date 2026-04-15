@@ -1,52 +1,108 @@
 import { useEffect } from 'react';
-import { toast } from 'sonner';
+
+const SW_VERSION = __BUILD_DATE__;
+const SW_URL = `/sw.js?v=${SW_VERSION}`;
+const UPDATE_CHECK_INTERVAL_MS = 60_000;
 
 /**
- * Escuta mensagens do Service Worker e força reload quando há uma nova versão.
- * Adicione este hook no App.tsx para que funcione em todas as páginas.
+ * Registra o Service Worker com cache-bust por build e força adoção imediata
+ * da versão nova quando um deploy é publicado.
  */
 export function useServiceWorkerUpdate() {
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
 
-    // Escuta mensagem do SW novo informando que foi ativado
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'SW_UPDATED') {
-        console.log('[SW] Nova versão detectada, recarregando...');
-        // Pequeno delay para o SW terminar de se instalar
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
-      }
+    let intervalId: number | null = null;
+    let reloadTriggered = false;
+    let registration: ServiceWorkerRegistration | null = null;
+
+    const reloadOnce = () => {
+      if (reloadTriggered) return;
+      reloadTriggered = true;
+      window.location.reload();
     };
 
-    navigator.serviceWorker.addEventListener('message', handleMessage);
+    const skipWaiting = (worker?: ServiceWorker | null) => {
+      worker?.postMessage({ type: 'SKIP_WAITING' });
+    };
 
-    // Verifica se já há um SW aguardando instalação (usuário que abriu a aba
-    // antes do deploy e só agora o SW novo foi detectado)
-    navigator.serviceWorker.getRegistration().then((reg) => {
-      if (!reg) return;
+    const attachRegistrationListeners = (reg: ServiceWorkerRegistration) => {
+      registration = reg;
 
-      // SW já está esperando — aciona imediatamente
       if (reg.waiting) {
-        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        skipWaiting(reg.waiting);
       }
 
-      // SW novo chegou enquanto a aba estava aberta
       reg.addEventListener('updatefound', () => {
         const newWorker = reg.installing;
         if (!newWorker) return;
 
         newWorker.addEventListener('statechange', () => {
           if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            newWorker.postMessage({ type: 'SKIP_WAITING' });
+            skipWaiting(newWorker);
           }
         });
       });
-    });
+    };
+
+    const registerOrUpdateServiceWorker = async () => {
+      try {
+        const reg = await navigator.serviceWorker.register(SW_URL, {
+          scope: '/',
+          updateViaCache: 'none',
+        });
+
+        attachRegistrationListeners(reg);
+        await reg.update();
+      } catch (error) {
+        console.error('[SW] Falha ao registrar/atualizar o service worker', error);
+      }
+    };
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'SW_UPDATED') {
+        console.log('[SW] Nova versão detectada, recarregando...');
+        setTimeout(reloadOnce, 300);
+      }
+    };
+
+    const handleControllerChange = () => {
+      console.log('[SW] Controller trocado, recarregando...');
+      reloadOnce();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void registration?.update();
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleMessage);
+    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    if (document.readyState === 'complete') {
+      void registerOrUpdateServiceWorker();
+    } else {
+      window.addEventListener('load', () => {
+        void registerOrUpdateServiceWorker();
+      }, { once: true });
+    }
+
+    intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void registration?.update();
+      }
+    }, UPDATE_CHECK_INTERVAL_MS);
 
     return () => {
       navigator.serviceWorker.removeEventListener('message', handleMessage);
+      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+      }
     };
   }, []);
 }
