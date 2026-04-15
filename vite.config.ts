@@ -14,6 +14,10 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // ✅ Injeta timestamp do build no SW — cada deploy gera um cache novo
+  define: {
+    __BUILD_DATE__: JSON.stringify(Date.now().toString()),
+  },
   optimizeDeps: {
     include: ['pdfjs-dist'],
   },
@@ -24,10 +28,10 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       output: {
         manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-react':    ['react', 'react-dom', 'react-router-dom'],
           'vendor-supabase': ['@supabase/supabase-js'],
-          'vendor-charts': ['recharts'],
-          'vendor-dates': ['date-fns', 'date-fns-tz'],
+          'vendor-charts':   ['recharts'],
+          'vendor-dates':    ['date-fns', 'date-fns-tz'],
           'vendor-ui': [
             '@radix-ui/react-dialog',
             '@radix-ui/react-dropdown-menu',
