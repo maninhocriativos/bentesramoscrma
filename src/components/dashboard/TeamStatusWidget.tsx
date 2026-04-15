@@ -36,20 +36,11 @@ export function TeamStatusWidget() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const isManager = canAccessSettings;
 
-  // Refresh automático a cada 30s para manter status online atualizado
-  useEffect(() => {
-    const interval = setInterval(() => {
-      refresh?.();
-    }, 30_000);
-    return () => clearInterval(interval);
-  }, [refresh]);
-
   const team = getTeamWithStatus();
   const onlineCount = getOnlineCount();
 
   const handleManualRefresh = () => {
     setIsRefreshing(true);
-    refresh?.();
     setTimeout(() => setIsRefreshing(false), 800);
   };
 
