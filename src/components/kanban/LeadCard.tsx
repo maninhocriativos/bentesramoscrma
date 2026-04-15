@@ -1,9 +1,30 @@
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Lead, TipoOrigem } from '@/types/leads';
-import { cn } from '@/lib/utils';
-import { User, Clock, Star, Flame, Sparkles, Target, MessageSquare, DollarSign } from 'lucide-react';
+import { Phone, Clock, Star, Flame, Sparkles, Target, MessageSquare, DollarSign, FileSignature, Building2, GripVertical } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+
+// ── Paleta ────────────────────────────────────────────────────────────────────
+const BROWN = '#3d2b1f';
+const GOLD  = '#c9a96e';
+
+const STATUS_BAR: Record<string, string> = {
+  'Lead Frio':           '#64748b',
+  'Bentes Ramos':        '#3d2b1f',
+  'Em Atendimento':      '#f59e0b',
+  'Em Negociação':       '#8b5cf6',
+  'Aguardando Contrato': '#c9a96e',
+  'Contrato Assinado':   '#0d9488',
+  'Ganho':               '#16a34a',
+  'Perdido':             '#dc2626',
+};
+
+const fmtCurrency = (v: number | null) => {
+  if (!v) return '';
+  if (v >= 1000000) return `R$ ${(v / 1000000).toFixed(1)}M`;
+  if (v >= 1000) return `R$ ${(v / 1000).toFixed(0)}K`;
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v);
+};
 
 interface LeadCardProps {
   lead: Lead;
@@ -15,126 +36,161 @@ interface LeadCardProps {
   };
   leadExtra?: {
     leadId: string;
-    ultimaInteracao: { resumo: string; data: string; } | null;
+    ultimaInteracao: { resumo: string; data: string } | null;
     temAgendamento: boolean;
-    proximoAgendamento: { titulo: string; data: string; } | null;
+    proximoAgendamento: { titulo: string; data: string } | null;
   };
 }
 
-function SentimentDot({ isaInsight }: { isaInsight?: LeadCardProps['isaInsight'] }) {
-  if (!isaInsight?.sentimento) return null;
-
-  const config = {
-    positivo: { icon: Star, color: 'text-stage-ganho' },
-    neutro: { icon: Sparkles, color: 'text-stage-bentes' },
-    negativo: { icon: Flame, color: 'text-stage-perdido' },
-  };
-
-  const { icon: Icon, color } = config[isaInsight.sentimento];
-  return <Icon className={cn("w-2.5 h-2.5", color)} />;
+function SentimentIcon({ sentimento }: { sentimento?: string | null }) {
+  if (!sentimento) return null;
+  if (sentimento === 'positivo') return <Star style={{ width: 11, height: 11, color: '#16a34a', fill: '#16a34a' }} />;
+  if (sentimento === 'negativo') return <Flame style={{ width: 11, height: 11, color: '#dc2626' }} />;
+  return <Sparkles style={{ width: 11, height: 11, color: '#c9a96e' }} />;
 }
 
-function OriginBadge({ tipoOrigem }: { tipoOrigem?: TipoOrigem | null }) {
-  if (!tipoOrigem || tipoOrigem === 'indefinido') return null;
-
-  const config = {
-    trafego: { icon: Target, label: 'Ads', bg: 'bg-origem-ads/8', text: 'text-origem-ads' },
-    whatsapp_direto: { icon: MessageSquare, label: 'Direto', bg: 'bg-linha-escritorio/8', text: 'text-linha-escritorio' },
-  };
-
-  const item = config[tipoOrigem];
-  if (!item) return null;
-  const { icon: Icon, label, bg, text } = item;
-
-  return (
-    <span className={cn("inline-flex items-center gap-0.5 px-1.5 py-px rounded text-[9px] font-medium", bg, text)}>
-      <Icon className="w-2.5 h-2.5" />
-      {label}
-    </span>
-  );
-}
-
-const formatCurrency = (value: number | null): string => {
-  if (!value) return '';
-  if (value >= 1000) return `R$ ${(value / 1000).toFixed(0)}K`;
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(value);
-};
-
-export function LeadCard({ lead, onClick, isDragging, isaInsight }: LeadCardProps) {
+export function LeadCard({ lead, onClick, isDragging, isaInsight, leadExtra }: LeadCardProps) {
   const navigate = useNavigate();
-  
-  const lastInteraction = lead.updated_at 
+
+  const lastInteraction = lead.updated_at
     ? formatDistanceToNow(new Date(lead.updated_at), { addSuffix: false, locale: ptBR })
     : formatDistanceToNow(new Date(lead.created_at), { addSuffix: false, locale: ptBR });
 
-  const hasContract = lead.status === 'Ganho' || lead.status === 'Contrato Assinado';
+  const hasContract   = lead.status === 'Ganho' || lead.status === 'Contrato Assinado';
+  const isTrafego     = lead.tipo_origem === 'trafego' || lead.origem === 'Tráfego Pago';
+  const isBR          = lead.linha_whatsapp === 'bentes_ramos_antigo' || lead.empresa_tag === 'BENTES_RAMOS';
+  const barColor      = STATUS_BAR[lead.status || 'Lead Frio'] || '#94a3b8';
+  const initials      = (lead.nome || 'L').split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
+  const urgente       = isaInsight?.urgencia === 'urgente' || isaInsight?.urgencia === 'alta';
 
-  const handleCardClick = () => {
+  const handleClick = () => {
     navigate(`/chat?lead_id=${lead.id}`);
   };
 
-  const initials = (lead.nome || 'L')
-    .split(' ')
-    .map(n => n[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-
   return (
     <div
-      onClick={handleCardClick}
-      className={cn(
-        "group bg-card rounded-lg border border-border/40",
-        "cursor-pointer transition-all duration-150",
-        "hover:shadow-soft hover:border-border/60",
-        hasContract && "border-stage-ganho/20",
-        isDragging && "opacity-70 shadow-soft-lg"
-      )}
+      onClick={handleClick}
+      style={{
+        background: 'white',
+        borderRadius: 12,
+        border: `1px solid ${hasContract ? 'rgba(22,163,74,0.25)' : 'rgba(201,169,110,0.2)'}`,
+        borderLeft: `3px solid ${barColor}`,
+        boxShadow: isDragging
+          ? '0 8px 24px rgba(0,0,0,0.15)'
+          : '0 1px 3px rgba(0,0,0,0.05)',
+        cursor: 'grab',
+        opacity: isDragging ? 0.85 : 1,
+        transition: 'box-shadow 0.15s, transform 0.15s',
+        overflow: 'hidden',
+      }}
+      onMouseEnter={e => {
+        (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+        (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)';
+      }}
+      onMouseLeave={e => {
+        (e.currentTarget as HTMLElement).style.boxShadow = isDragging ? '0 8px 24px rgba(0,0,0,0.15)' : '0 1px 3px rgba(0,0,0,0.05)';
+        (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
+      }}
     >
-      <div className="p-2.5">
-        {/* Row 1: Name + Sentiment */}
-        <div className="flex items-start gap-2 mb-1.5">
-          <div className={cn(
-            "w-6 h-6 rounded-md flex items-center justify-center shrink-0 text-[9px] font-bold",
-            hasContract ? "bg-stage-ganho/8 text-stage-ganho" : "bg-muted/60 text-muted-foreground"
-          )}>
+      <div style={{ padding: '10px 12px' }}>
+
+        {/* Linha 1: Avatar + Nome + Sentiment + Grip */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
+          {/* Avatar */}
+          <div style={{
+            width: 32, height: 32, borderRadius: 9, flexShrink: 0,
+            background: hasContract ? 'rgba(22,163,74,0.1)' : `${barColor}12`,
+            color: hasContract ? '#16a34a' : barColor,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11, fontWeight: 800, letterSpacing: '-0.02em',
+          }}>
             {initials}
           </div>
 
-          <div className="flex-1 min-w-0">
-            <h4 className="font-medium text-[12px] text-foreground truncate leading-tight">
+          {/* Nome */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{
+              fontSize: 12, fontWeight: 700, color: '#1c1917',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              lineHeight: 1.3,
+            }}>
               {lead.nome || 'Sem nome'}
-            </h4>
+            </p>
             {lead.tipo_acao && (
-              <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+              <p style={{ fontSize: 10, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
                 {lead.tipo_acao}
               </p>
             )}
           </div>
 
-          <SentimentDot isaInsight={isaInsight} />
+          {/* Sentiment + Grip */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+            <SentimentIcon sentimento={isaInsight?.sentimento} />
+            <GripVertical style={{ width: 12, height: 12, color: '#d1d5db' }} />
+          </div>
         </div>
 
-        {/* Row 2: Meta info */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1 flex-wrap">
-            <OriginBadge tipoOrigem={lead.tipo_origem as TipoOrigem} />
-            {lead.origem && !lead.tipo_origem && (
-              <span className="text-[9px] text-muted-foreground px-1.5 py-px rounded bg-muted/30">
-                {lead.origem}
+        {/* Linha 2: Telefone */}
+        {lead.telefone && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
+            <Phone style={{ width: 10, height: 10, color: '#9ca3af', flexShrink: 0 }} />
+            <span style={{ fontSize: 11, color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {lead.telefone}
+            </span>
+          </div>
+        )}
+
+        {/* Linha 3: Próximo agendamento */}
+        {leadExtra?.proximoAgendamento && (
+          <div style={{
+            fontSize: 10, color: '#b8922a', fontWeight: 600,
+            background: 'rgba(201,169,110,0.08)', borderRadius: 6, padding: '3px 7px',
+            marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            📅 {leadExtra.proximoAgendamento.titulo}
+          </div>
+        )}
+
+        {/* Linha 4: Footer */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 7, borderTop: '0.5px solid rgba(201,169,110,0.1)' }}>
+          {/* Badges origem */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+            {isTrafego && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: 'rgba(201,169,110,0.12)', color: '#b8922a' }}>
+                <Target style={{ width: 8, height: 8 }} /> Ads
+              </span>
+            )}
+            {isBR && (
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: 'rgba(61,43,31,0.08)', color: BROWN }}>
+                B&R
+              </span>
+            )}
+            {!isTrafego && !isBR && lead.origem && (
+              <span style={{ fontSize: 9, color: '#9ca3af', padding: '1px 5px', borderRadius: 20, background: '#f1f5f9' }}>
+                {lead.origem.length > 12 ? lead.origem.slice(0, 12) + '…' : lead.origem}
+              </span>
+            )}
+            {hasContract && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: '#f0fdf4', color: '#16a34a' }}>
+                <FileSignature style={{ width: 8, height: 8 }} />
+              </span>
+            )}
+            {urgente && (
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: '#fef2f2', color: '#dc2626', animation: 'pulse 2s infinite' }}>
+                ⚡
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Valor + Tempo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             {lead.valor_causa ? (
-              <span className="text-[10px] font-medium text-stage-ganho flex items-center gap-0.5">
-                <DollarSign className="h-2.5 w-2.5" />
-                {formatCurrency(lead.valor_causa)}
+              <span style={{ fontSize: 10, fontWeight: 800, color: '#16a34a' }}>
+                {fmtCurrency(lead.valor_causa)}
               </span>
             ) : null}
-            <span className="flex items-center gap-0.5 text-muted-foreground/50 text-[9px]">
-              <Clock className="w-2.5 h-2.5" />
+            <span style={{ fontSize: 9, color: '#d1d5db', display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Clock style={{ width: 9, height: 9 }} />
               {lastInteraction}
             </span>
           </div>
