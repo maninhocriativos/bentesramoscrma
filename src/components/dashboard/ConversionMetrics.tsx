@@ -138,7 +138,7 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
                 </div>
                 <div className="flex items-end justify-between">
                   <div>
-                    <p style={{ fontSize: 28, fontWeight: 800, color: 'inherit', lineHeight: 1, trackingTight: true }}>
+                    <p style={{ fontSize: 28, fontWeight: 800, color: 'inherit', lineHeight: 1, letterSpacing: '-0.025em' }}>
                       {p.showValue ? fmt(p.data.current.totalValue) : `${p.data.current.conversionRate.toFixed(0)}%`}
                     </p>
                     <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>

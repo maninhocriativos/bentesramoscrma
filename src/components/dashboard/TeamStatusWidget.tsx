@@ -27,7 +27,7 @@ export function TeamStatusWidget() {
   const { user } = useAuth();
   const { perfil, canAccessSettings } = usePerfil();
   const userName = [perfil?.nome, perfil?.sobrenome].filter(Boolean).join(' ') || user?.email || '';
-  const { getTeamWithStatus, getOnlineCount, refresh } = useTeamPresence(user?.id, userName);
+  const { getTeamWithStatus, getOnlineCount } = useTeamPresence(user?.id, userName);
   const { tarefas } = useTarefas();
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
   const [selectedTarefa, setSelectedTarefa] = useState<Tarefa | null>(null);
@@ -36,20 +36,11 @@ export function TeamStatusWidget() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const isManager = canAccessSettings;
 
-  // Refresh automático a cada 30s para manter status online atualizado
-  useEffect(() => {
-    const interval = setInterval(() => {
-      refresh?.();
-    }, 30_000);
-    return () => clearInterval(interval);
-  }, [refresh]);
-
   const team = getTeamWithStatus();
   const onlineCount = getOnlineCount();
 
   const handleManualRefresh = () => {
     setIsRefreshing(true);
-    refresh?.();
     setTimeout(() => setIsRefreshing(false), 800);
   };
 
