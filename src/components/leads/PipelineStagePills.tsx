@@ -1,14 +1,7 @@
 import { LeadStatus } from '@/types/leads';
-import { cn } from '@/lib/utils';
 import {
-  Snowflake,
-  Building2,
-  Flame,
-  Handshake,
-  Clock,
-  FileSignature,
-  Trophy,
-  XCircle,
+  Snowflake, Building2, Flame, Handshake,
+  Clock, FileSignature, Trophy, XCircle,
 } from 'lucide-react';
 
 interface PipelineStage {
@@ -23,123 +16,83 @@ interface PipelineStagePillsProps {
   onStageChange: (stage: string) => void;
 }
 
-const STAGE_CONFIG: Record<string, { icon: React.ElementType; color: string; activeBg: string; activeBorder: string; dotColor: string }> = {
-  'Lead Frio': { 
-    icon: Snowflake, 
-    color: 'text-stage-frio',
-    activeBg: 'bg-stage-frio/8',
-    activeBorder: 'border-stage-frio/30',
-    dotColor: 'bg-stage-frio',
-  },
-  'Bentes Ramos': { 
-    icon: Building2, 
-    color: 'text-stage-bentes',
-    activeBg: 'bg-stage-bentes/8',
-    activeBorder: 'border-stage-bentes/30',
-    dotColor: 'bg-stage-bentes',
-  },
-  'Em Atendimento': { 
-    icon: Flame, 
-    color: 'text-stage-atendimento',
-    activeBg: 'bg-stage-atendimento/8',
-    activeBorder: 'border-stage-atendimento/30',
-    dotColor: 'bg-stage-atendimento',
-  },
-  'Em Negociação': { 
-    icon: Handshake, 
-    color: 'text-stage-negociacao',
-    activeBg: 'bg-stage-negociacao/8',
-    activeBorder: 'border-stage-negociacao/30',
-    dotColor: 'bg-stage-negociacao',
-  },
-  'Aguardando Contrato': { 
-    icon: Clock, 
-    color: 'text-stage-aguardando',
-    activeBg: 'bg-stage-aguardando/8',
-    activeBorder: 'border-stage-aguardando/30',
-    dotColor: 'bg-stage-aguardando',
-  },
-  'Contrato Assinado': { 
-    icon: FileSignature, 
-    color: 'text-stage-assinado',
-    activeBg: 'bg-stage-assinado/8',
-    activeBorder: 'border-stage-assinado/30',
-    dotColor: 'bg-stage-assinado',
-  },
-  'Ganho': { 
-    icon: Trophy, 
-    color: 'text-stage-ganho',
-    activeBg: 'bg-stage-ganho/8',
-    activeBorder: 'border-stage-ganho/30',
-    dotColor: 'bg-stage-ganho',
-  },
-  'Perdido': { 
-    icon: XCircle, 
-    color: 'text-stage-perdido',
-    activeBg: 'bg-stage-perdido/8',
-    activeBorder: 'border-stage-perdido/30',
-    dotColor: 'bg-stage-perdido',
-  },
+const STAGE_CFG: Record<string, { icon: React.ElementType; color: string; bg: string; activeBg: string }> = {
+  'Lead Frio':           { icon: Snowflake,     color: '#64748b', bg: '#f1f5f9', activeBg: '#e2e8f0' },
+  'Bentes Ramos':        { icon: Building2,     color: '#3d2b1f', bg: 'rgba(61,43,31,0.08)', activeBg: 'rgba(61,43,31,0.14)' },
+  'Em Atendimento':      { icon: Flame,         color: '#f59e0b', bg: '#fffbeb', activeBg: '#fef3c7' },
+  'Em Negociação':       { icon: Handshake,     color: '#8b5cf6', bg: '#f5f3ff', activeBg: '#ede9fe' },
+  'Aguardando Contrato': { icon: Clock,         color: '#c9a96e', bg: 'rgba(201,169,110,0.1)', activeBg: 'rgba(201,169,110,0.2)' },
+  'Contrato Assinado':   { icon: FileSignature, color: '#0d9488', bg: '#f0fdfa', activeBg: '#ccfbf1' },
+  'Ganho':               { icon: Trophy,        color: '#16a34a', bg: '#f0fdf4', activeBg: '#dcfce7' },
+  'Perdido':             { icon: XCircle,       color: '#dc2626', bg: '#fef2f2', activeBg: '#fee2e2' },
 };
 
 export function PipelineStagePills({ stages, activeStage, onStageChange }: PipelineStagePillsProps) {
-  const totalCount = stages.reduce((sum, s) => sum + s.count, 0);
+  const total = stages.reduce((s, st) => s + st.count, 0);
 
   return (
-    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
-      {/* All Button */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', paddingBottom: 2 }} className="scrollbar-hide">
+
+      {/* Todos */}
       <button
         onClick={() => onStageChange('all')}
-        className={cn(
-          "flex items-center gap-1.5 h-8 px-3 rounded-lg text-[11px] font-medium transition-all duration-200 whitespace-nowrap border shrink-0",
-          activeStage === 'all'
-            ? "bg-primary text-primary-foreground border-primary"
-            : "bg-transparent text-muted-foreground border-border/50 hover:border-primary/20 hover:text-foreground"
-        )}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          height: 32, padding: '0 12px', borderRadius: 20, cursor: 'pointer',
+          fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0,
+          background: activeStage === 'all' ? '#3d2b1f' : 'rgba(61,43,31,0.06)',
+          color: activeStage === 'all' ? '#c9a96e' : '#9ca3af',
+          border: `1px solid ${activeStage === 'all' ? '#3d2b1f' : 'rgba(201,169,110,0.2)'}`,
+          transition: 'all 0.15s ease',
+        }}
       >
         Todos
-        <span className={cn(
-          "text-[10px] font-bold px-1.5 py-px rounded min-w-[18px] text-center",
-          activeStage === 'all' ? "bg-primary-foreground/20" : "bg-muted"
-        )}>
-          {totalCount}
+        <span style={{
+          fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 20,
+          background: activeStage === 'all' ? 'rgba(201,169,110,0.25)' : 'rgba(201,169,110,0.12)',
+          color: activeStage === 'all' ? '#c9a96e' : '#9ca3af',
+        }}>
+          {total}
         </span>
       </button>
 
-      {/* Connector line */}
-      <div className="w-4 h-px bg-border/60 shrink-0" />
+      {/* Divisor */}
+      <div style={{ width: 1, height: 20, background: 'rgba(201,169,110,0.2)', flexShrink: 0 }} />
 
-      {/* Stage Pills */}
-      {stages.map((stage, index) => {
-        const config = STAGE_CONFIG[stage.status] || {
-          icon: Flame, color: 'text-muted-foreground',
-          activeBg: 'bg-muted', activeBorder: 'border-border',
-          dotColor: 'bg-muted-foreground',
-        };
+      {/* Etapas */}
+      {stages.map((stage, idx) => {
+        const cfg = STAGE_CFG[stage.status] || STAGE_CFG['Lead Frio'];
         const isActive = activeStage === stage.status;
-        const isLast = index === stages.length - 1;
+        const Icon = cfg.icon;
 
         return (
-          <div key={stage.status} className="flex items-center gap-1.5 shrink-0">
+          <div key={stage.status} style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
             <button
               onClick={() => onStageChange(stage.status)}
-              className={cn(
-                "flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[11px] font-medium transition-all duration-200 whitespace-nowrap border",
-                isActive
-                  ? cn(config.activeBg, config.activeBorder, config.color)
-                  : "bg-transparent text-muted-foreground border-border/40 hover:border-border hover:text-foreground"
-              )}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                height: 32, padding: '0 10px', borderRadius: 20, cursor: 'pointer',
+                fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
+                background: isActive ? cfg.activeBg : cfg.bg,
+                color: isActive ? cfg.color : '#9ca3af',
+                border: `1px solid ${isActive ? cfg.color + '50' : 'rgba(201,169,110,0.15)'}`,
+                boxShadow: isActive ? `0 0 0 1px ${cfg.color}20` : 'none',
+                transition: 'all 0.15s ease',
+              }}
             >
-              <div className={cn("w-2 h-2 rounded-full shrink-0", isActive ? config.dotColor : "bg-muted-foreground/30")} />
+              <Icon style={{ width: 11, height: 11, flexShrink: 0, color: isActive ? cfg.color : '#d1d5db' }} />
               <span className="hidden sm:inline">{stage.label}</span>
-              <span className={cn(
-                "text-[10px] font-bold min-w-[16px] text-center",
-                isActive ? config.color : "text-muted-foreground/60"
-              )}>
+              <span style={{
+                fontSize: 10, fontWeight: 800, minWidth: 18, textAlign: 'center',
+                color: isActive ? cfg.color : '#9ca3af',
+              }}>
                 {stage.count}
               </span>
             </button>
-            {!isLast && <div className="w-2 h-px bg-border/40 shrink-0 hidden sm:block" />}
+
+            {idx < stages.length - 1 && (
+              <div style={{ width: 12, height: 1, background: 'rgba(201,169,110,0.2)', flexShrink: 0 }} className="hidden sm:block" />
+            )}
           </div>
         );
       })}
