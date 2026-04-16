@@ -2,11 +2,18 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <!-- ✅ Força o browser a NUNCA cachear o HTML — sempre busca versão nova do servidor -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <title>Bentes Ramos | CRM Jurídico</title>
-    <meta name="description" content="Sistema de Gestão Jurídica - Bentes Ramos Advocacia e Consultoria">
+    <meta name="description" content="Sistema de Gestão Jurídica - Bentes Ramos Advocacia e Consultoria" />
     <meta name="author" content="Bentes Ramos Advocacia" />
-    
+
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#1a365d" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,35 +23,54 @@
     <meta name="format-detection" content="telephone=yes" />
     <meta name="msapplication-TileColor" content="#1a365d" />
     <meta name="msapplication-tap-highlight" content="no" />
-    
+
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
-    
+
     <!-- Apple Touch Icons -->
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
     <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192x192.png" />
     <link rel="apple-touch-icon" sizes="167x167" href="/icons/icon-152x152.png" />
-    
+
     <!-- Splash Screens for iOS -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    
+
     <!-- OG Tags -->
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/Ot5Iv1GIa4VGxA0Yfdqk42frCoU2/social-images/social-1765292958796-Sem título-1.png">
-    <meta name="twitter:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/Ot5Iv1GIa4VGxA0Yfdqk42frCoU2/social-images/social-1765292958796-Sem título-1.png">
-    <meta name="twitter:card" content="summary_large_image">
-    <meta property="og:title" content="Bentes Ramos | CRM Jurídico">
-    <meta name="twitter:title" content="Bentes Ramos | CRM Jurídico">
-    <meta property="og:description" content="Sistema de Gestão Jurídica - Bentes Ramos Advocacia e Consultoria">
-    <meta name="twitter:description" content="Sistema de Gestão Jurídica - Bentes Ramos Advocacia e Consultoria">
-    <link rel="icon" type="image/x-icon" href="https://storage.googleapis.com/gpt-engineer-file-uploads/Ot5Iv1GIa4VGxA0Yfdqk42frCoU2/uploads/1765293079566-Layer 1.png">
+    <meta
+      property="og:image"
+      content="https://storage.googleapis.com/gpt-engineer-file-uploads/Ot5Iv1GIa4VGxA0Yfdqk42frCoU2/social-images/social-1765292958796-Sem título-1.png"
+    />
+    <meta
+      name="twitter:image"
+      content="https://storage.googleapis.com/gpt-engineer-file-uploads/Ot5Iv1GIa4VGxA0Yfdqk42frCoU2/social-images/social-1765292958796-Sem título-1.png"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta property="og:title" content="Bentes Ramos | CRM Jurídico" />
+    <meta name="twitter:title" content="Bentes Ramos | CRM Jurídico" />
+    <meta property="og:description" content="Sistema de Gestão Jurídica - Bentes Ramos Advocacia e Consultoria" />
+    <meta name="twitter:description" content="Sistema de Gestão Jurídica - Bentes Ramos Advocacia e Consultoria" />
+    <link
+      rel="icon"
+      type="image/x-icon"
+      href="https://storage.googleapis.com/gpt-engineer-file-uploads/Ot5Iv1GIa4VGxA0Yfdqk42frCoU2/uploads/1765293079566-Layer 1.png"
+    />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-    <noscript><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet"></noscript>
-    
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript
+      ><link
+        href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet"
+    /></noscript>
+
     <!-- PWA Styles for iOS safe areas -->
     <style>
       :root {
@@ -53,7 +79,7 @@
         --sab: env(safe-area-inset-bottom);
         --sal: env(safe-area-inset-left);
       }
-      
+
       body {
         padding-top: var(--sat);
         padding-right: var(--sar);
@@ -65,18 +91,18 @@
         user-select: none;
         overscroll-behavior: none;
       }
-      
+
       /* Allow text selection in inputs */
       input, textarea, [contenteditable="true"] {
         -webkit-user-select: text;
         user-select: text;
       }
-      
+
       /* Smooth scrolling */
       * {
         -webkit-overflow-scrolling: touch;
       }
-      
+
       /* Hide scrollbars on mobile */
       @media (max-width: 768px) {
         ::-webkit-scrollbar {
@@ -92,7 +118,45 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    
-    <!-- SW registration is handled by useServiceWorkerUpdate hook -->
+
+    <!-- ✅ Desregistra SW antigo e limpa cache antes de qualquer coisa -->
+    <script>
+      (async function() {
+        if (!('serviceWorker' in navigator)) return;
+        try {
+          // Desregistra todos os SWs antigos
+          const regs = await navigator.serviceWorker.getRegistrations();
+          let hadOld = false;
+          for (const reg of regs) {
+            const sw = reg.active || reg.waiting || reg.installing;
+            if (sw) {
+              await reg.unregister();
+              hadOld = true;
+              console.log('[Reset] SW desregistrado');
+            }
+          }
+          // Limpa todos os caches
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+          if (keys.length > 0) console.log('[Reset] Caches limpos:', keys);
+          // Recarrega se tinha SW antigo para pegar HTML novo
+          if (hadOld && keys.some(k => k === 'bentes-ramos-crm-v1')) {
+            console.log('[Reset] Recarregando para versão nova...');
+            window.location.reload(true);
+          }
+        } catch(e) {
+          console.error('[Reset] Erro:', e);
+        }
+      })();
+    </script>
+
+    <!-- Registra o SW novo após a limpeza -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>
