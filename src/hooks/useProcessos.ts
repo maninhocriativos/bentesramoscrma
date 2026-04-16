@@ -13,11 +13,17 @@ export function useProcessos() {
   const { toast } = useToast();
   const { perfil, isAdvogado } = usePerfil();
   const { user } = useAuth();
-  // Controla se já houve carga inicial — após isso nunca mais mostra loading
   const initialLoadDone = useRef(false);
 
+  // Refs para usar dentro do canal sem recriar o canal
+  const isAdvogadoRef = useRef(isAdvogado);
+  const perfilNomeRef = useRef(perfil?.nome);
+
+  // Mantém refs atualizadas
+  useEffect(() => { isAdvogadoRef.current = isAdvogado; }, [isAdvogado]);
+  useEffect(() => { perfilNomeRef.current = perfil?.nome; }, [perfil?.nome]);
+
   const fetchProcessos = useCallback(async () => {
-    // Só mostra loading na primeira carga
     if (!initialLoadDone.current) {
       setLoading(true);
     }
@@ -46,14 +52,10 @@ export function useProcessos() {
   // Carga inicial
   useEffect(() => {
     if (!user) return;
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-      setLoading(false);
-      return;
-    }
     fetchProcessos();
   }, [user, fetchProcessos]);
 
-  // Realtime — atualizações incrementais sem refetch completo
+  // Realtime — canal criado UMA vez com [], nunca recriado ao trocar de aba
   useEffect(() => {
     const channel = supabase
       .channel('processos-realtime')
@@ -62,7 +64,7 @@ export function useProcessos() {
         { event: 'INSERT', schema: 'public', table: 'processos' },
         (payload) => {
           const next = payload.new as Processo;
-          if (isAdvogado && perfil?.nome && next.advogado_responsavel !== perfil.nome) return;
+          if (isAdvogadoRef.current && perfilNomeRef.current && next.advogado_responsavel !== perfilNomeRef.current) return;
           setProcessos((prev) => {
             if (prev.some((p) => p.id === next.id)) return prev;
             return [next, ...prev];
@@ -74,7 +76,7 @@ export function useProcessos() {
         { event: 'UPDATE', schema: 'public', table: 'processos' },
         (payload) => {
           const next = payload.new as Processo;
-          if (isAdvogado && perfil?.nome && next.advogado_responsavel !== perfil.nome) return;
+          if (isAdvogadoRef.current && perfilNomeRef.current && next.advogado_responsavel !== perfilNomeRef.current) return;
           setProcessos((prev) => {
             const exists = prev.some((p) => p.id === next.id);
             if (!exists) return [next, ...prev];
@@ -94,7 +96,7 @@ export function useProcessos() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isAdvogado, perfil?.nome]);
+  }, []); // ✅ Dependência vazia — canal criado uma vez, nunca recriado
 
   const createProcesso = async (processo: Partial<Omit<Processo, 'id' | 'created_at'>>) => {
     const { data, error } = await supabase
