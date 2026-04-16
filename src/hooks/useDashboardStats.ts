@@ -40,16 +40,15 @@ const EMPTY_STATS: DashboardStats = {
 export function useDashboardStats() {
   const [stats, setStats] = useState<DashboardStats>(EMPTY_STATS);
   const [loading, setLoading] = useState(true);
-  // Controla se já houve carga inicial — após isso, nunca mais mostra loading
   const initialLoadDone = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ref para acessar fetchStats dentro do canal sem recriar o canal
+  const fetchStatsRef = useRef<(retry?: number) => Promise<void>>();
 
   const fetchStats = useCallback(async (retry = 0) => {
-    // Só mostra loading na primeira carga
     if (!initialLoadDone.current) {
       setLoading(true);
     }
-
     try {
       const { data, error } = await supabase.rpc('get_dashboard_stats');
       if (error) {
@@ -73,22 +72,23 @@ export function useDashboardStats() {
     }
   }, []);
 
+  // Mantém a ref sempre atualizada
+  useEffect(() => {
+    fetchStatsRef.current = fetchStats;
+  }, [fetchStats]);
+
   // Carga inicial
   useEffect(() => {
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-      setLoading(false);
-      return;
-    }
     fetchStats();
   }, [fetchStats]);
 
   // Auto-refresh silencioso a cada 5 minutos
   useEffect(() => {
-    const interval = setInterval(fetchStats, 300_000);
+    const interval = setInterval(() => fetchStats(), 300_000);
     return () => clearInterval(interval);
   }, [fetchStats]);
 
-  // Realtime — debounce de 2s para não sobrecarregar a RPC
+  // Realtime — canal criado UMA vez com [], nunca recriado ao trocar de aba
   useEffect(() => {
     const channel = supabase
       .channel('dashboard-stats-realtime')
@@ -97,7 +97,9 @@ export function useDashboardStats() {
         { event: '*', schema: 'public', table: 'leads_juridicos' },
         () => {
           if (debounceRef.current) clearTimeout(debounceRef.current);
-          debounceRef.current = setTimeout(fetchStats, 2000);
+          debounceRef.current = setTimeout(() => {
+            fetchStatsRef.current?.();
+          }, 2000);
         }
       )
       .subscribe();
@@ -106,7 +108,7 @@ export function useDashboardStats() {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       supabase.removeChannel(channel);
     };
-  }, [fetchStats]);
+  }, []); // ✅ Dependência vazia — canal criado uma vez, nunca recriado
 
   return { stats, loading, refetch: fetchStats };
 }
