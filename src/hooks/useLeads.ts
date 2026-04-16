@@ -9,11 +9,9 @@ export function useLeads() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-  // Controla se já houve carga inicial — após isso, nunca mais mostra loading
   const initialLoadDone = useRef(false);
 
   const fetchLeads = useCallback(async () => {
-    // Só mostra loading na primeira carga
     if (!initialLoadDone.current) {
       setLoading(true);
     }
@@ -34,27 +32,23 @@ export function useLeads() {
       setLeads((data as Lead[]) || []);
     }
 
-    // Marca carga inicial como concluída e garante loading=false
     initialLoadDone.current = true;
     setLoading(false);
   }, [toast]);
 
-  // Carga inicial — respeita visibilidade para não bloquear aba em background
+  // Carga inicial
   useEffect(() => {
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-      setLoading(false);
-      return;
-    }
     fetchLeads();
   }, [fetchLeads]);
 
-  // Refresh periódico silencioso a cada 5 minutos
+  // Refresh silencioso a cada 5 minutos
   useEffect(() => {
     const interval = setInterval(fetchLeads, 300_000);
     return () => clearInterval(interval);
   }, [fetchLeads]);
 
-  // Realtime — atualizações incrementais, sem refetch completo
+  // Realtime — só atualizações incrementais, SEM refetch na reconexão
+  // Canal criado uma vez com [] — nunca recriado ao trocar de aba
   useEffect(() => {
     const channel = supabase
       .channel('leads-realtime')
@@ -86,17 +80,12 @@ export function useLeads() {
           setLeads(prev => prev.filter(lead => lead.id !== (payload.old as Lead).id));
         }
       )
-      .subscribe((status) => {
-        // Reconexão após queda do WebSocket — refetch silencioso se dados já carregados
-        if (status === 'SUBSCRIBED' && initialLoadDone.current) {
-          fetchLeads();
-        }
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchLeads]);
+  }, []);
 
   const createLead = async (lead: Omit<Lead, 'id' | 'created_at'>) => {
     const { data, error } = await supabase
