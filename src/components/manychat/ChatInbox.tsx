@@ -1715,6 +1715,37 @@ const ManyChatInboxContent = () => {
             direcao: "saida",
             data_interacao: new Date().toISOString(),
           });
+          // Pausar ISA quando atendente humano enviar mensagem
+          try {
+            await supabase
+              .from('manychat_subscribers')
+              .update({
+                atendimento_humano: true,
+                atendimento_humano_desde: new Date().toISOString(),
+              })
+              .eq('subscriber_id', subscriberSnapshot.subscriber_id);
+
+            await supabase
+              .from('leads_juridicos')
+              .update({
+                isa_ativa: false,
+                owner_tipo: 'humano',
+              })
+              .eq('id', subscriberSnapshot.lead_id);
+
+            setSelectedSubscriber(prev =>
+              prev ? { ...prev, atendimento_humano: true } : null
+            );
+            setSubscribers(prev =>
+              prev.map(s =>
+                s.subscriber_id === subscriberSnapshot.subscriber_id
+                  ? { ...s, atendimento_humano: true }
+                  : s
+              )
+            );
+          } catch (err) {
+            console.error('[Chat] Erro ao pausar ISA:', err);
+          }
         }
       } catch (error: any) {
         console.error("[Chat] Erro ao enviar:", error);
