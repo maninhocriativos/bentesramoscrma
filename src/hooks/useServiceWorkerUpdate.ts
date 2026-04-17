@@ -5,7 +5,9 @@ const SW_URL = import.meta.env.PROD ? `/sw.js?v=${SW_VERSION}` : '/sw.js';
 const SW_CHECK_INTERVAL_MS = 60_000;
 const RELOAD_TS_KEY = 'sw-reload-ts';
 const RELOAD_VERSION_KEY = 'sw-reload-version';
-const RELOAD_COOLDOWN_MS = 10_000;
+const RELOAD_COUNT_KEY = 'sw-reload-count';
+const RELOAD_COOLDOWN_MS = 30_000;
+const MAX_RELOADS_PER_SESSION = 2;
 
 /**
  * Em produção, registra o SW com versão de build para furar cache/CDN
@@ -31,6 +33,13 @@ export function useServiceWorkerUpdate() {
     const safeReload = (version: string) => {
       const lastVersion = sessionStorage.getItem(RELOAD_VERSION_KEY);
       const lastTs = Number(sessionStorage.getItem(RELOAD_TS_KEY) || '0');
+      const reloadCount = Number(sessionStorage.getItem(RELOAD_COUNT_KEY) || '0');
+
+      // Trava de segurança: máximo de N reloads por sessão para quebrar loops
+      if (reloadCount >= MAX_RELOADS_PER_SESSION) {
+        console.warn('[SW] Limite de reloads atingido — abortando para evitar loop');
+        return;
+      }
 
       if (lastVersion === version && Date.now() - lastTs < RELOAD_COOLDOWN_MS) {
         console.log('[SW] Reload ignorado — mesma versão em cooldown');
@@ -39,6 +48,7 @@ export function useServiceWorkerUpdate() {
 
       sessionStorage.setItem(RELOAD_VERSION_KEY, version);
       sessionStorage.setItem(RELOAD_TS_KEY, String(Date.now()));
+      sessionStorage.setItem(RELOAD_COUNT_KEY, String(reloadCount + 1));
       window.location.reload();
     };
 
