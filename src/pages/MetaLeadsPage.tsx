@@ -1,116 +1,138 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { useMetaFormLeads, useMetaFormChat } from '@/hooks/useMetaFormLeads';
 import { MetaFormLead, MetaFormLeadStatus } from '@/types/metaFormLeads';
-import { 
-  Search, RefreshCw, Download, ChevronRight, Phone, Mail, 
+import {
+  Search, RefreshCw, Download, ChevronRight, Phone, Mail,
   Clock, CheckCircle, XCircle, Sparkles, Zap, Users, TrendingUp,
   MessageCircle, Send, ArrowLeft, Target, Megaphone, Bot,
-  Filter, Sheet, Loader2, AlertTriangle, Copy, Calendar,
-  Activity, Star
+  Sheet, Loader2, AlertTriangle, Copy, Calendar, Activity,
+  Star, Filter, Hash
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 
-// ─── PALETA ─────────────────────────────────────────────────────────────────
 const C = {
   marrom: '#3d2b1f',
+  marromMedio: '#5a3e2b',
+  marromClaro: '#7a5c43',
   dourado: '#c9a96e',
   douradoEscuro: '#b8922a',
-  marromClaro: '#5a3e2b',
-  bg: '#faf8f5',
-  card: '#ffffff',
-  border: '#e8e0d5',
-  textMuted: '#8a7560',
+  douradoClaro: '#e8c98a',
+  bg: '#f9f6f2',
+  bgCard: '#ffffff',
+  bgMuted: '#f3ede6',
+  border: '#e4d9cc',
+  borderLight: '#efe8df',
+  text: '#2c1810',
+  textMuted: '#8a7260',
+  textLight: '#b09880',
 };
 
-const STATUS_CONFIG: Record<MetaFormLeadStatus, { label: string; color: string; bg: string; icon: any }> = {
-  novo:          { label: 'Novo',          color: '#1d4ed8', bg: '#dbeafe', icon: Sparkles },
-  em_atendimento:{ label: 'Em Atendimento',color: '#b45309', bg: '#fef3c7', icon: Clock },
-  concluido:     { label: 'Concluído',     color: '#065f46', bg: '#d1fae5', icon: CheckCircle },
-  perdido:       { label: 'Perdido',       color: '#991b1b', bg: '#fee2e2', icon: XCircle },
+const STATUS_CFG: Record<MetaFormLeadStatus, { label: string; color: string; bg: string; border: string; icon: any }> = {
+  novo:           { label: 'Novo',           color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe', icon: Sparkles },
+  em_atendimento: { label: 'Em Atendimento', color: '#92400e', bg: '#fffbeb', border: '#fcd34d', icon: Clock },
+  concluido:      { label: 'Concluído',      color: '#065f46', bg: '#ecfdf5', border: '#6ee7b7', icon: CheckCircle },
+  perdido:        { label: 'Perdido',        color: '#991b1b', bg: '#fef2f2', border: '#fca5a5', icon: XCircle },
 };
 
-// ─── KPI CARD ────────────────────────────────────────────────────────────────
-function KpiCard({ label, value, icon: Icon, color, sub }: any) {
+// ─── KPI ─────────────────────────────────────────────────────────────────────
+function Kpi({ label, value, icon: Icon, accent, sub }: any) {
   return (
     <div style={{
-      background: C.card, border: `1px solid ${C.border}`, borderRadius: 16,
-      padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 16,
-      boxShadow: '0 1px 4px rgba(61,43,31,0.06)',
+      background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 14,
+      padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14,
+      boxShadow: '0 2px 8px rgba(61,43,31,0.05)',
+      position: 'relative', overflow: 'hidden',
     }}>
       <div style={{
-        width: 48, height: 48, borderRadius: 12,
-        background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+        background: `linear-gradient(90deg, ${accent}, ${accent}80)`,
+        borderRadius: '14px 14px 0 0',
+      }} />
+      <div style={{
+        width: 44, height: 44, borderRadius: 11,
+        background: `${accent}18`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
       }}>
-        <Icon size={22} style={{ color }} />
+        <Icon size={20} style={{ color: accent }} />
       </div>
       <div>
-        <div style={{ fontSize: 26, fontWeight: 700, color: C.marrom, lineHeight: 1 }}>{value}</div>
-        <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>{label}</div>
-        {sub && <div style={{ fontSize: 11, color: color, marginTop: 2, fontWeight: 600 }}>{sub}</div>}
+        <div style={{ fontSize: 24, fontWeight: 800, color: C.marrom, lineHeight: 1 }}>{value}</div>
+        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 3, fontWeight: 500 }}>{label}</div>
+        {sub && <div style={{ fontSize: 10, color: accent, marginTop: 1, fontWeight: 700 }}>{sub}</div>}
       </div>
     </div>
   );
 }
 
-// ─── LEAD CARD ───────────────────────────────────────────────────────────────
-function LeadCard({ lead, selected, onClick }: { lead: MetaFormLead; selected: boolean; onClick: () => void }) {
-  const cfg = STATUS_CONFIG[lead.status];
-  const Icon = cfg.icon;
-  const isTrafego = lead.source === 'meta' || lead.form_id;
+// ─── LEAD ROW ─────────────────────────────────────────────────────────────────
+function LeadRow({ lead, selected, onClick }: { lead: MetaFormLead; selected: boolean; onClick: () => void }) {
+  const cfg = STATUS_CFG[lead.status];
+  const isMeta = lead.source === 'meta' || !!lead.form_id;
+  const initials = (lead.nome || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase();
 
   return (
-    <div
-      onClick={onClick}
-      style={{
-        padding: '14px 16px',
-        cursor: 'pointer',
-        borderBottom: `1px solid ${C.border}`,
-        background: selected ? '#fdf6ec' : 'transparent',
-        borderLeft: selected ? `3px solid ${C.dourado}` : '3px solid transparent',
-        transition: 'all 0.15s',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+    <div onClick={onClick} style={{
+      padding: '12px 16px', cursor: 'pointer',
+      borderBottom: `1px solid ${C.borderLight}`,
+      background: selected
+        ? `linear-gradient(90deg, ${C.dourado}12, ${C.dourado}06)`
+        : 'transparent',
+      borderLeft: selected ? `3px solid ${C.dourado}` : '3px solid transparent',
+      transition: 'all 0.12s ease',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Avatar */}
         <div style={{
-          width: 36, height: 36, borderRadius: 10,
-          background: `${C.dourado}20`, display: 'flex', alignItems: 'center',
-          justifyContent: 'center', flexShrink: 0, marginTop: 2,
+          width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+          background: selected
+            ? `linear-gradient(135deg, ${C.marrom}, ${C.marromMedio})`
+            : `linear-gradient(135deg, ${C.bgMuted}, ${C.border})`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: C.douradoEscuro }}>
-            {(lead.nome || '?')[0].toUpperCase()}
+          <span style={{ fontSize: 13, fontWeight: 700, color: selected ? C.dourado : C.textMuted }}>
+            {initials}
           </span>
         </div>
+
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontWeight: 600, fontSize: 13, color: C.marrom, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+            <span style={{
+              fontWeight: 700, fontSize: 13, color: C.marrom,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
               {lead.nome || 'Sem nome'}
             </span>
             <span style={{
-              fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
-              color: cfg.color, background: cfg.bg, flexShrink: 0,
+              fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+              color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}`,
+              flexShrink: 0, whiteSpace: 'nowrap',
             }}>
               {cfg.label}
             </span>
           </div>
-          {lead.telefone && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3 }}>
-              <Phone size={11} style={{ color: C.textMuted }} />
-              <span style={{ fontSize: 12, color: C.textMuted }}>{lead.telefone}</span>
-            </div>
-          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+            {lead.telefone && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: C.textMuted }}>
+                <Phone size={10} /> {lead.telefone}
+              </span>
+            )}
+          </div>
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
             <span style={{
-              fontSize: 10, padding: '1px 7px', borderRadius: 20, fontWeight: 600,
-              background: isTrafego ? '#f3e8ff' : '#ecfdf5',
-              color: isTrafego ? '#7c3aed' : '#065f46',
+              fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99,
+              background: isMeta ? '#f5f3ff' : '#f0fdf4',
+              color: isMeta ? '#6d28d9' : '#166534',
+              border: `1px solid ${isMeta ? '#ddd6fe' : '#bbf7d0'}`,
             }}>
-              {isTrafego ? '📋 META' : '📊 Sheets'}
+              {isMeta ? '📋 META' : '📊 Sheets'}
             </span>
-            <span style={{ fontSize: 10, color: C.textMuted }}>
+            <span style={{ fontSize: 10, color: C.textLight }}>
               {formatDistanceToNow(new Date(lead.created_at), { addSuffix: true, locale: ptBR })}
             </span>
           </div>
@@ -120,33 +142,39 @@ function LeadCard({ lead, selected, onClick }: { lead: MetaFormLead; selected: b
   );
 }
 
-// ─── DETAIL PANEL ─────────────────────────────────────────────────────────────
-function DetailPanel({ lead, onUpdateStatus, onBack, dispararISA }: {
+// ─── DETALHE ──────────────────────────────────────────────────────────────────
+function Detalhe({ lead, onStatus, onBack, dispararISA }: {
   lead: MetaFormLead;
-  onUpdateStatus: (s: MetaFormLeadStatus) => void;
+  onStatus: (s: MetaFormLeadStatus) => void;
   onBack: () => void;
   dispararISA: (lead: MetaFormLead, msg?: string) => Promise<any>;
 }) {
   const { messages, loading: msgLoading } = useMetaFormChat(lead.id);
   const [disparando, setDisparando] = useState(false);
+  const [editando, setEditando] = useState(false);
   const [msgCustom, setMsgCustom] = useState('');
-  const [showMsgEditor, setShowMsgEditor] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const cfg = STATUS_CONFIG[lead.status];
-  const Icon = cfg.icon;
-  const isTrafego = lead.source === 'meta' || !!lead.form_id;
-  const primeiroNome = lead.nome?.split(' ')[0] || 'você';
 
-  const handleDisparo = async () => {
+  const cfg = STATUS_CFG[lead.status];
+  const primeiroNome = lead.nome?.split(' ')[0] || 'você';
+  const isMeta = lead.source === 'meta' || !!lead.form_id;
+
+  const msgPadrao = `Olá ${primeiroNome}! 👋 Recebi seu contato e estou aqui para te ajudar com suas dúvidas jurídicas. Me conta um pouco mais sobre o que você precisa! 😊`;
+
+  const handleDisparar = async () => {
+    if (!lead.telefone) {
+      toast({ title: 'Lead sem telefone', variant: 'destructive' });
+      return;
+    }
     setDisparando(true);
-    await dispararISA(lead, msgCustom || undefined);
+    await dispararISA(lead, editando && msgCustom ? msgCustom : msgPadrao);
     setDisparando(false);
-    setShowMsgEditor(false);
+    setEditando(false);
     setMsgCustom('');
   };
 
-  const copyToClipboard = (text: string, label: string) => {
+  const copy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast({ title: `${label} copiado!` });
   };
@@ -156,199 +184,198 @@ function DetailPanel({ lead, onUpdateStatus, onBack, dispararISA }: {
     : [];
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: C.bg }}>
-      {/* Header */}
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: C.bg, overflowY: 'auto' }}>
+
+      {/* Hero header */}
       <div style={{
-        padding: '16px 20px', borderBottom: `1px solid ${C.border}`,
-        background: `linear-gradient(135deg, ${C.marrom} 0%, ${C.marromClaro} 100%)`,
-        display: 'flex', alignItems: 'center', gap: 12,
+        background: `linear-gradient(135deg, ${C.marrom} 0%, ${C.marromMedio} 100%)`,
+        padding: '20px 24px 24px',
+        position: 'relative', overflow: 'hidden',
       }}>
-        <button onClick={onBack} style={{
-          background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8,
-          width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', color: '#fff', flexShrink: 0,
-        }}>
-          <ArrowLeft size={16} />
-        </button>
+        {/* Decorative circle */}
         <div style={{
-          width: 44, height: 44, borderRadius: 12, background: `${C.dourado}30`,
-          border: `2px solid ${C.dourado}50`, display: 'flex', alignItems: 'center',
-          justifyContent: 'center', flexShrink: 0,
+          position: 'absolute', top: -30, right: -30, width: 120, height: 120,
+          borderRadius: '50%', background: `${C.dourado}15`,
+        }} />
+
+        <button onClick={onBack} style={{
+          background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)',
+          borderRadius: 8, width: 32, height: 32, cursor: 'pointer', color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
         }}>
-          <span style={{ fontSize: 18, fontWeight: 700, color: C.dourado }}>
-            {(lead.nome || '?')[0].toUpperCase()}
-          </span>
+          <ArrowLeft size={15} />
+        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: 16,
+            background: `linear-gradient(135deg, ${C.dourado}40, ${C.dourado}20)`,
+            border: `2px solid ${C.dourado}50`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            <span style={{ fontSize: 22, fontWeight: 800, color: C.dourado }}>
+              {(lead.nome || '?').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
+            </span>
+          </div>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', lineHeight: 1.1 }}>
+              {lead.nome || 'Sem nome'}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99,
+                color: cfg.color, background: cfg.bg,
+              }}>
+                <cfg.icon size={10} style={{ display: 'inline', marginRight: 3 }} />
+                {cfg.label}
+              </span>
+              <span style={{
+                fontSize: 10, padding: '3px 10px', borderRadius: 99, fontWeight: 600,
+                background: isMeta ? 'rgba(109,40,217,0.2)' : 'rgba(22,101,52,0.2)',
+                color: isMeta ? '#c4b5fd' : '#86efac',
+                border: `1px solid ${isMeta ? 'rgba(167,139,250,0.3)' : 'rgba(134,239,172,0.3)'}`,
+              }}>
+                {isMeta ? '📋 META' : '📊 Sheets'}
+              </span>
+            </div>
+          </div>
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 16, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {lead.nome || 'Sem nome'}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
-            <span style={{
-              fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
-              color: cfg.color, background: cfg.bg,
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+          {lead.telefone && (
+            <div onClick={() => copy(lead.telefone!, 'Telefone')} style={{
+              flex: 1, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 10, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 7,
+              cursor: 'pointer',
             }}>
-              <Icon size={10} style={{ display: 'inline', marginRight: 3 }} />
-              {cfg.label}
-            </span>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)' }}>
-              {formatDistanceToNow(new Date(lead.created_at), { addSuffix: true, locale: ptBR })}
-            </span>
-          </div>
+              <Phone size={13} style={{ color: C.dourado, flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.telefone}</span>
+              <Copy size={10} style={{ color: 'rgba(255,255,255,0.4)', marginLeft: 'auto', flexShrink: 0 }} />
+            </div>
+          )}
+          {lead.email && (
+            <div onClick={() => copy(lead.email!, 'Email')} style={{
+              flex: 1, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 10, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 7,
+              cursor: 'pointer',
+            }}>
+              <Mail size={13} style={{ color: C.dourado, flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.email}</span>
+              <Copy size={10} style={{ color: 'rgba(255,255,255,0.4)', marginLeft: 'auto', flexShrink: 0 }} />
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Scrollable Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+      <div style={{ padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-        {/* Botão ISA — só para leads de tráfego */}
-        {isTrafego && (
-          <div style={{
-            background: `linear-gradient(135deg, ${C.marrom}10, ${C.dourado}15)`,
-            border: `1px solid ${C.dourado}40`,
-            borderRadius: 14, padding: 16, marginBottom: 16,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        {/* ── BLOCO ISA ── */}
+        <div style={{
+          background: `linear-gradient(135deg, ${C.marrom}08, ${C.dourado}10)`,
+          border: `1px solid ${C.dourado}35`,
+          borderRadius: 14, padding: 18,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: 8,
+              background: `linear-gradient(135deg, ${C.marrom}, ${C.marromMedio})`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
               <Bot size={16} style={{ color: C.dourado }} />
-              <span style={{ fontWeight: 700, fontSize: 13, color: C.marrom }}>Disparo ISA</span>
-              <span style={{
-                fontSize: 10, padding: '2px 8px', borderRadius: 20,
-                background: '#d1fae5', color: '#065f46', fontWeight: 600,
-              }}>WhatsApp Tráfego</span>
             </div>
-
-            {!showMsgEditor ? (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={handleDisparo}
-                  disabled={disparando || !lead.telefone}
-                  style={{
-                    flex: 1, padding: '10px 16px', borderRadius: 10,
-                    background: `linear-gradient(135deg, ${C.marrom}, ${C.marromClaro})`,
-                    border: 'none', color: '#fff', fontWeight: 700, fontSize: 13,
-                    cursor: disparando || !lead.telefone ? 'not-allowed' : 'pointer',
-                    opacity: disparando || !lead.telefone ? 0.6 : 1,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  }}
-                >
-                  {disparando ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Zap size={14} />}
-                  {disparando ? 'Enviando...' : 'Disparar ISA agora'}
-                </button>
-                <button
-                  onClick={() => setShowMsgEditor(true)}
-                  style={{
-                    padding: '10px 14px', borderRadius: 10,
-                    background: 'transparent', border: `1px solid ${C.dourado}60`,
-                    color: C.douradoEscuro, fontSize: 12, cursor: 'pointer', fontWeight: 600,
-                  }}
-                >
-                  Editar msg
-                </button>
-              </div>
-            ) : (
-              <div>
-                <textarea
-                  value={msgCustom}
-                  onChange={e => setMsgCustom(e.target.value)}
-                  placeholder={`Olá ${primeiroNome}! 👋 Vi seu contato e estou aqui para te ajudar...`}
-                  style={{
-                    width: '100%', minHeight: 80, padding: '10px 12px',
-                    borderRadius: 10, border: `1px solid ${C.border}`,
-                    fontSize: 13, resize: 'vertical', fontFamily: 'inherit',
-                    background: C.card, color: C.marrom, outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  <button
-                    onClick={handleDisparo}
-                    disabled={disparando}
-                    style={{
-                      flex: 1, padding: '9px 16px', borderRadius: 10,
-                      background: `linear-gradient(135deg, ${C.marrom}, ${C.marromClaro})`,
-                      border: 'none', color: '#fff', fontWeight: 700, fontSize: 13,
-                      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                    }}
-                  >
-                    <Send size={13} /> Enviar
-                  </button>
-                  <button
-                    onClick={() => { setShowMsgEditor(false); setMsgCustom(''); }}
-                    style={{
-                      padding: '9px 14px', borderRadius: 10,
-                      background: 'transparent', border: `1px solid ${C.border}`,
-                      color: C.textMuted, fontSize: 12, cursor: 'pointer',
-                    }}
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            )}
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: C.marrom }}>Disparo ISA</div>
+              <div style={{ fontSize: 11, color: C.textMuted }}>WhatsApp via instância tráfego</div>
+            </div>
             {!lead.telefone && (
-              <p style={{ fontSize: 11, color: '#dc2626', marginTop: 6 }}>⚠️ Lead sem telefone cadastrado</p>
+              <span style={{
+                marginLeft: 'auto', fontSize: 10, fontWeight: 700, padding: '3px 8px',
+                borderRadius: 99, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca',
+              }}>Sem telefone</span>
             )}
           </div>
-        )}
 
-        {/* Contato */}
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-            Contato
-          </div>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
-            {lead.telefone && (
-              <div
-                onClick={() => copyToClipboard(lead.telefone!, 'Telefone')}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '12px 16px', borderBottom: `1px solid ${C.border}`,
-                  cursor: 'pointer',
-                }}
-              >
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Phone size={15} style={{ color: '#16a34a' }} />
-                </div>
-                <span style={{ fontSize: 13, color: C.marrom, fontWeight: 500 }}>{lead.telefone}</span>
-                <Copy size={12} style={{ color: C.textMuted, marginLeft: 'auto' }} />
-              </div>
-            )}
-            {lead.email && (
-              <div
-                onClick={() => copyToClipboard(lead.email!, 'Email')}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer' }}
-              >
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Mail size={15} style={{ color: '#2563eb' }} />
-                </div>
-                <span style={{ fontSize: 13, color: C.marrom, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis' }}>{lead.email}</span>
-                <Copy size={12} style={{ color: C.textMuted, marginLeft: 'auto', flexShrink: 0 }} />
-              </div>
-            )}
+          {/* Preview da mensagem */}
+          {!editando && (
+            <div style={{
+              background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10,
+              padding: '10px 12px', marginBottom: 12, fontSize: 13, color: C.marromClaro,
+              lineHeight: 1.5, fontStyle: 'italic',
+            }}>
+              "{msgPadrao}"
+            </div>
+          )}
+
+          {editando && (
+            <textarea
+              value={msgCustom}
+              onChange={e => setMsgCustom(e.target.value)}
+              placeholder={msgPadrao}
+              autoFocus
+              style={{
+                width: '100%', minHeight: 90, padding: '10px 12px', marginBottom: 10,
+                borderRadius: 10, border: `1px solid ${C.dourado}50`,
+                fontSize: 13, resize: 'vertical', fontFamily: 'inherit',
+                background: C.bgCard, color: C.marrom, outline: 'none',
+                boxSizing: 'border-box', lineHeight: 1.5,
+              }}
+            />
+          )}
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={handleDisparar}
+              disabled={disparando || !lead.telefone}
+              style={{
+                flex: 1, padding: '11px 16px', borderRadius: 10,
+                background: disparando || !lead.telefone
+                  ? '#d1c4b8'
+                  : `linear-gradient(135deg, ${C.marrom}, ${C.marromMedio})`,
+                border: 'none', color: '#fff', fontWeight: 700, fontSize: 13,
+                cursor: disparando || !lead.telefone ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                boxShadow: disparando || !lead.telefone ? 'none' : `0 4px 12px ${C.marrom}40`,
+              }}
+            >
+              {disparando
+                ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Enviando...</>
+                : <><Zap size={14} /> {editando ? 'Enviar mensagem' : 'Disparar ISA'}</>
+              }
+            </button>
+            <button
+              onClick={() => { setEditando(!editando); setMsgCustom(''); }}
+              style={{
+                padding: '11px 14px', borderRadius: 10, cursor: 'pointer',
+                background: editando ? '#fef2f2' : C.bgCard,
+                border: `1px solid ${editando ? '#fca5a5' : C.border}`,
+                color: editando ? '#dc2626' : C.textMuted,
+                fontSize: 12, fontWeight: 600,
+              }}
+            >
+              {editando ? 'Cancelar' : 'Editar msg'}
+            </button>
           </div>
         </div>
 
-        {/* Status */}
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-            Status
+        {/* ── STATUS ── */}
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+            Alterar Status
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {(['novo', 'em_atendimento', 'concluido', 'perdido'] as MetaFormLeadStatus[]).map(s => {
-              const c = STATUS_CONFIG[s];
+            {(Object.entries(STATUS_CFG) as [MetaFormLeadStatus, typeof STATUS_CFG[MetaFormLeadStatus]][]).map(([s, c]) => {
               const active = lead.status === s;
               return (
-                <button
-                  key={s}
-                  onClick={() => onUpdateStatus(s)}
-                  style={{
-                    padding: '8px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                    border: active ? `2px solid ${c.color}` : `1px solid ${C.border}`,
-                    background: active ? c.bg : C.card,
-                    color: active ? c.color : C.textMuted,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                  }}
-                >
+                <button key={s} onClick={() => onStatus(s)} style={{
+                  padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                  border: active ? `2px solid ${c.color}40` : `1px solid ${C.border}`,
+                  background: active ? c.bg : C.bgCard,
+                  color: active ? c.color : C.textMuted,
+                  fontSize: 12, fontWeight: active ? 700 : 500,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  transition: 'all 0.12s',
+                  boxShadow: active ? `0 2px 8px ${c.color}20` : 'none',
+                }}>
                   <c.icon size={13} /> {c.label}
                 </button>
               );
@@ -356,100 +383,145 @@ function DetailPanel({ lead, onUpdateStatus, onBack, dispararISA }: {
           </div>
         </div>
 
-        {/* Ações */}
-        <div style={{ marginBottom: 16 }}>
-          <button
-            onClick={() => navigate(`/chat?lead_id=${lead.linked_lead_id || lead.id}`)}
-            style={{
-              width: '100%', padding: '11px 16px', borderRadius: 10,
-              background: C.card, border: `1px solid ${C.border}`,
-              color: C.marrom, fontSize: 13, fontWeight: 600,
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            }}
-          >
-            <MessageCircle size={15} style={{ color: C.dourado }} />
-            Abrir no Chat Principal
-            <ChevronRight size={15} style={{ marginLeft: 'auto', color: C.textMuted }} />
-          </button>
-        </div>
+        {/* ── AÇÃO PRINCIPAL ── */}
+        <button
+          onClick={() => navigate(`/chat?lead_id=${lead.linked_lead_id || lead.id}`)}
+          style={{
+            width: '100%', padding: '12px 16px', borderRadius: 12,
+            background: C.bgCard, border: `1px solid ${C.border}`,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
+            boxShadow: '0 2px 6px rgba(61,43,31,0.06)',
+          }}
+        >
+          <div style={{
+            width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+            background: `${C.dourado}20`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <MessageCircle size={16} style={{ color: C.douradoEscuro }} />
+          </div>
+          <div style={{ textAlign: 'left' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.marrom }}>Abrir no Chat Principal</div>
+            <div style={{ fontSize: 11, color: C.textMuted }}>Ver histórico completo</div>
+          </div>
+          <ChevronRight size={15} style={{ color: C.textLight, marginLeft: 'auto' }} />
+        </button>
 
-        {/* Campanha */}
-        {(lead.campaign_name || lead.ad_name) && (
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+        {/* ── CAMPANHA ── */}
+        {(lead.campaign_name || lead.ad_name || lead.adset_name) && (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
               Campanha
             </div>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
-              {lead.campaign_name && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: `1px solid ${C.border}` }}>
-                  <Target size={14} style={{ color: C.textMuted, flexShrink: 0 }} />
-                  <span style={{ fontSize: 11, color: C.textMuted, minWidth: 60 }}>Campanha</span>
-                  <span style={{ fontSize: 12, color: C.marrom, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis' }}>{lead.campaign_name}</span>
-                </div>
-              )}
-              {lead.ad_name && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
-                  <Megaphone size={14} style={{ color: C.textMuted, flexShrink: 0 }} />
-                  <span style={{ fontSize: 11, color: C.textMuted, minWidth: 60 }}>Anúncio</span>
-                  <span style={{ fontSize: 12, color: C.marrom, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis' }}>{lead.ad_name}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Histórico mensagens */}
-        {messages.length > 0 && (
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-              Histórico ({messages.length})
-            </div>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, maxHeight: 200, overflowY: 'auto' }}>
-              {messages.slice(-5).map(msg => (
-                <div key={msg.id} style={{ marginBottom: 8, display: 'flex', justifyContent: msg.sender_type === 'agent' ? 'flex-end' : 'flex-start' }}>
-                  <div style={{
-                    maxWidth: '80%', padding: '7px 11px', borderRadius: 12, fontSize: 12,
-                    background: msg.sender_type === 'agent' ? C.marrom : '#f3f4f6',
-                    color: msg.sender_type === 'agent' ? '#fff' : C.marrom,
-                  }}>
-                    {msg.message}
-                  </div>
+            <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+              {[
+                { icon: Target, label: 'Campanha', value: lead.campaign_name },
+                { icon: Megaphone, label: 'Anúncio', value: lead.ad_name },
+                { icon: Hash, label: 'Conjunto', value: lead.adset_name },
+              ].filter(x => x.value).map((item, idx, arr) => (
+                <div key={item.label} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 14px',
+                  borderBottom: idx < arr.length - 1 ? `1px solid ${C.borderLight}` : 'none',
+                }}>
+                  <item.icon size={13} style={{ color: C.textLight, flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: C.textMuted, minWidth: 60, fontWeight: 600 }}>{item.label}</span>
+                  <span style={{ fontSize: 12, color: C.marrom, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.value}</span>
                 </div>
               ))}
             </div>
           </div>
         )}
-      </div>
 
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+        {/* ── FORM FIELDS ── */}
+        {formFields.length > 0 && (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+              Dados do Formulário
+            </div>
+            <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+              {formFields.map(([key, value], idx) => (
+                <div key={key} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 10,
+                  padding: '9px 14px',
+                  borderBottom: idx < formFields.length - 1 ? `1px solid ${C.borderLight}` : 'none',
+                }}>
+                  <span style={{ fontSize: 11, color: C.textMuted, minWidth: 100, paddingTop: 1, fontWeight: 600 }}>
+                    {key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                  </span>
+                  <span style={{ fontSize: 12, color: C.marrom, fontWeight: 500, wordBreak: 'break-word' }}>
+                    {String(value)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── HISTÓRICO ── */}
+        {messages.length > 0 && (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+              Últimas mensagens ({messages.length})
+            </div>
+            <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {messages.slice(-4).map(msg => {
+                const isAgent = msg.sender_type === 'agent';
+                return (
+                  <div key={msg.id} style={{ display: 'flex', justifyContent: isAgent ? 'flex-end' : 'flex-start' }}>
+                    <div style={{
+                      maxWidth: '82%', padding: '8px 12px', borderRadius: 12, fontSize: 12,
+                      background: isAgent
+                        ? `linear-gradient(135deg, ${C.marrom}, ${C.marromMedio})`
+                        : C.bgMuted,
+                      color: isAgent ? '#fff' : C.marrom,
+                    }}>
+                      {msg.sender_name && (
+                        <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 3 }}>{msg.sender_name}</div>
+                      )}
+                      {msg.message}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Data */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', paddingBottom: 8 }}>
+          <Calendar size={11} style={{ color: C.textLight }} />
+          <span style={{ fontSize: 11, color: C.textLight }}>
+            {format(new Date(lead.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+          </span>
+        </div>
+      </div>
+      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }
 
-// ─── PAGE PRINCIPAL ───────────────────────────────────────────────────────────
+// ─── PAGE ─────────────────────────────────────────────────────────────────────
 export default function MetaLeadsPage() {
   const { leads, loading, syncing, syncError, formIds, fetchLeads, syncFromMeta, updateLeadStatus, dispararISAManual } = useMetaFormLeads();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<MetaFormLeadStatus | 'all'>('all');
-  const [filterFormId, setFilterFormId] = useState<string | 'all'>('all');
   const [selectedLead, setSelectedLead] = useState<MetaFormLead | null>(null);
-  const [showDetail, setShowDetail] = useState(false);
   const { toast } = useToast();
 
-  const filteredLeads = useMemo(() => {
-    let result = [...leads];
-    if (filterStatus !== 'all') result = result.filter(l => l.status === filterStatus);
-    if (filterFormId !== 'all') result = result.filter(l => l.form_id === filterFormId);
+  const filtered = useMemo(() => {
+    let r = [...leads];
+    if (filterStatus !== 'all') r = r.filter(l => l.status === filterStatus);
     if (search.trim()) {
       const s = search.toLowerCase();
-      result = result.filter(l =>
+      r = r.filter(l =>
         (l.nome?.toLowerCase() || '').includes(s) ||
         (l.email?.toLowerCase() || '').includes(s) ||
         (l.telefone || '').includes(search)
       );
     }
-    return result;
-  }, [leads, filterStatus, filterFormId, search]);
+    return r;
+  }, [leads, filterStatus, search]);
 
   const kpis = useMemo(() => ({
     total: leads.length,
@@ -459,102 +531,100 @@ export default function MetaLeadsPage() {
     trafego: leads.filter(l => l.source === 'meta' || !!l.form_id).length,
   }), [leads]);
 
-  const handleSelect = (lead: MetaFormLead) => {
-    setSelectedLead(lead);
-    setShowDetail(true);
-  };
-
-  const handleUpdateStatus = async (status: MetaFormLeadStatus) => {
-    if (selectedLead) {
-      await updateLeadStatus(selectedLead.id, status);
-      setSelectedLead(prev => prev ? { ...prev, status } : null);
-    }
+  const handleStatus = async (status: MetaFormLeadStatus) => {
+    if (!selectedLead) return;
+    await updateLeadStatus(selectedLead.id, status);
+    setSelectedLead(prev => prev ? { ...prev, status } : null);
   };
 
   const exportCSV = () => {
-    if (filteredLeads.length === 0) return;
-    const headers = ['Nome', 'Telefone', 'Email', 'Status', 'Fonte', 'Data'];
-    const rows = filteredLeads.map(l => [
+    if (!filtered.length) return;
+    const rows = filtered.map(l => [
       l.nome || '', l.telefone || '', l.email || '',
-      STATUS_CONFIG[l.status].label,
+      STATUS_CFG[l.status].label,
       l.source === 'meta' ? 'Meta' : 'Sheets',
       format(new Date(l.created_at), 'dd/MM/yyyy HH:mm'),
     ]);
-    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
+    const csv = [['Nome','Telefone','Email','Status','Fonte','Data'], ...rows]
+      .map(r => r.map(c => `"${c}"`).join(';')).join('\n');
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `meta-leads-${new Date().toISOString().split('T')[0]}.csv`;
+    a.href = url; a.download = `leads-${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast({ title: `${filteredLeads.length} leads exportados` });
+    toast({ title: `${filtered.length} leads exportados` });
   };
 
-  if (loading) {
-    return (
-      <AppLayout>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 400, gap: 12, flexDirection: 'column' }}>
-          <Loader2 size={28} style={{ color: C.dourado, animation: 'spin 1s linear infinite' }} />
-          <span style={{ color: C.textMuted, fontSize: 14 }}>Carregando leads...</span>
-          <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-        </div>
-      </AppLayout>
-    );
-  }
+  if (loading) return (
+    <AppLayout>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 400, gap: 10 }}>
+        <Loader2 size={28} style={{ color: C.dourado, animation: 'spin 1s linear infinite' }} />
+        <span style={{ color: C.textMuted, fontSize: 14 }}>Carregando leads...</span>
+        <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      </div>
+    </AppLayout>
+  );
 
   return (
     <AppLayout>
       <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', background: C.bg, overflow: 'hidden' }}>
 
         {/* ── HEADER ── */}
-        <div style={{ padding: '16px 24px', borderBottom: `1px solid ${C.border}`, background: C.card, flexShrink: 0 }}>
+        <div style={{
+          padding: '16px 24px', borderBottom: `1px solid ${C.border}`,
+          background: C.bgCard, flexShrink: 0,
+        }}>
           {syncError && (
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '10px 14px', borderRadius: 10, marginBottom: 12,
+              display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, marginBottom: 12,
               background: '#fef2f2', border: '1px solid #fecaca', fontSize: 13,
             }}>
-              <AlertTriangle size={15} style={{ color: '#dc2626' }} />
-              <span style={{ color: '#dc2626', fontWeight: 600 }}>Erro: </span>
-              <span style={{ color: '#7f1d1d' }}>{syncError}</span>
+              <AlertTriangle size={14} style={{ color: '#dc2626' }} />
+              <span style={{ color: '#991b1b' }}>{syncError}</span>
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Título + ações */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{
-                width: 36, height: 36, borderRadius: 10,
-                background: `linear-gradient(135deg, ${C.marrom}, ${C.marromClaro})`,
+                width: 40, height: 40, borderRadius: 11,
+                background: `linear-gradient(135deg, ${C.marrom}, ${C.marromMedio})`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 <Activity size={18} style={{ color: C.dourado }} />
               </div>
               <div>
-                <h1 style={{ fontSize: 18, fontWeight: 700, color: C.marrom, margin: 0 }}>Leads Meta & Tráfego</h1>
-                <span style={{ fontSize: 12, color: C.textMuted }}>{filteredLeads.length} leads</span>
+                <h1 style={{ fontSize: 18, fontWeight: 800, color: C.marrom, margin: 0, letterSpacing: '-0.02em' }}>
+                  Leads Meta & Tráfego
+                </h1>
+                <span style={{ fontSize: 12, color: C.textMuted }}>{filtered.length} de {leads.length} leads</span>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <button onClick={exportCSV} style={{
                 padding: '8px 14px', borderRadius: 8, border: `1px solid ${C.border}`,
-                background: C.card, color: C.marrom, fontSize: 12, fontWeight: 600,
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                background: C.bgCard, color: C.marromClaro, fontSize: 12, fontWeight: 600,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
               }}>
                 <Download size={13} /> CSV
               </button>
               <button onClick={syncFromMeta} disabled={syncing} style={{
-                padding: '8px 14px', borderRadius: 8, border: 'none',
-                background: `linear-gradient(135deg, #16a34a, #15803d)`,
+                padding: '8px 16px', borderRadius: 8, border: 'none',
+                background: syncing ? '#d1d5db' : 'linear-gradient(135deg, #16a34a, #15803d)',
                 color: '#fff', fontSize: 12, fontWeight: 700,
-                cursor: syncing ? 'not-allowed' : 'pointer', opacity: syncing ? 0.7 : 1,
-                display: 'flex', alignItems: 'center', gap: 6,
+                cursor: syncing ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: 5,
+                boxShadow: syncing ? 'none' : '0 2px 8px rgba(22,163,74,0.3)',
               }}>
                 {syncing ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Sheet size={13} />}
                 {syncing ? 'Sincronizando...' : 'Sincronizar'}
               </button>
               <button onClick={fetchLeads} style={{
                 padding: '8px 10px', borderRadius: 8, border: `1px solid ${C.border}`,
-                background: C.card, color: C.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center',
+                background: C.bgCard, color: C.textMuted, cursor: 'pointer',
+                display: 'flex', alignItems: 'center',
               }}>
                 <RefreshCw size={13} />
               </button>
@@ -562,39 +632,41 @@ export default function MetaLeadsPage() {
           </div>
 
           {/* KPIs */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 14 }}>
-            <KpiCard label="Total de Leads" value={kpis.total} icon={Users} color={C.marrom} />
-            <KpiCard label="Novos" value={kpis.novos} icon={Sparkles} color="#2563eb" sub="Aguardando contato" />
-            <KpiCard label="Em Atendimento" value={kpis.atendimento} icon={Clock} color="#b45309" />
-            <KpiCard label="Convertidos" value={kpis.concluidos} icon={Star} color="#16a34a" />
-            <KpiCard label="Leads Tráfego" value={kpis.trafego} icon={Target} color="#7c3aed" sub="Meta/Facebook" />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 14 }}>
+            <Kpi label="Total" value={kpis.total} icon={Users} accent={C.marrom} />
+            <Kpi label="Novos" value={kpis.novos} icon={Sparkles} accent="#2563eb" sub="Sem contato" />
+            <Kpi label="Em Atendimento" value={kpis.atendimento} icon={Clock} accent="#d97706" />
+            <Kpi label="Convertidos" value={kpis.concluidos} icon={Star} accent="#16a34a" />
+            <Kpi label="Leads Tráfego" value={kpis.trafego} icon={Target} accent="#7c3aed" sub="Meta/Facebook" />
           </div>
 
-          {/* Filtros */}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Busca + filtros */}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
               <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: C.textMuted }} />
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Buscar nome, telefone ou email..."
+                placeholder="Buscar por nome, telefone ou email..."
                 style={{
-                  width: '100%', padding: '8px 10px 8px 32px', borderRadius: 8,
+                  width: '100%', padding: '9px 10px 9px 32px', borderRadius: 9,
                   border: `1px solid ${C.border}`, background: C.bg, fontSize: 13,
                   color: C.marrom, outline: 'none', boxSizing: 'border-box',
                 }}
               />
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 5, background: C.bgMuted, borderRadius: 10, padding: 4 }}>
               {(['all', 'novo', 'em_atendimento', 'concluido', 'perdido'] as const).map(s => {
                 const active = filterStatus === s;
-                const cfg = s === 'all' ? null : STATUS_CONFIG[s];
+                const cfg = s !== 'all' ? STATUS_CFG[s] : null;
                 return (
                   <button key={s} onClick={() => setFilterStatus(s)} style={{
-                    padding: '6px 12px', borderRadius: 20, border: 'none',
+                    padding: '5px 12px', borderRadius: 7, border: 'none',
                     fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                    background: active ? (cfg ? cfg.bg : `${C.marrom}15`) : 'transparent',
+                    background: active ? C.bgCard : 'transparent',
                     color: active ? (cfg ? cfg.color : C.marrom) : C.textMuted,
+                    boxShadow: active ? '0 1px 4px rgba(61,43,31,0.1)' : 'none',
+                    transition: 'all 0.12s',
                   }}>
                     {s === 'all' ? 'Todos' : cfg!.label}
                   </button>
@@ -606,49 +678,49 @@ export default function MetaLeadsPage() {
 
         {/* ── BODY ── */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
           {/* Lista */}
           <div style={{
-            width: showDetail ? 380 : '100%',
-            borderRight: `1px solid ${C.border}`,
-            overflowY: 'auto',
-            display: showDetail ? undefined : 'block',
-            flexShrink: 0,
+            width: selectedLead ? 360 : '100%',
+            borderRight: selectedLead ? `1px solid ${C.border}` : 'none',
+            overflowY: 'auto', flexShrink: 0,
           }}>
-            {filteredLeads.length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 300, gap: 8 }}>
-                <Users size={36} style={{ color: C.border }} />
-                <span style={{ color: C.textMuted, fontSize: 14, fontWeight: 600 }}>Nenhum lead encontrado</span>
+            {filtered.length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 280, gap: 10 }}>
+                <div style={{ width: 56, height: 56, borderRadius: 16, background: C.bgMuted, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Users size={24} style={{ color: C.textLight }} />
+                </div>
+                <span style={{ fontWeight: 700, fontSize: 15, color: C.marrom }}>Nenhum lead encontrado</span>
+                <span style={{ fontSize: 13, color: C.textMuted }}>Tente ajustar os filtros</span>
               </div>
-            ) : (
-              filteredLeads.map(lead => (
-                <LeadCard
-                  key={lead.id}
-                  lead={lead}
-                  selected={selectedLead?.id === lead.id}
-                  onClick={() => handleSelect(lead)}
-                />
-              ))
-            )}
+            ) : filtered.map(lead => (
+              <LeadRow
+                key={lead.id}
+                lead={lead}
+                selected={selectedLead?.id === lead.id}
+                onClick={() => setSelectedLead(lead)}
+              />
+            ))}
           </div>
 
           {/* Detalhe */}
-          {showDetail && selectedLead && (
+          {selectedLead ? (
             <div style={{ flex: 1, overflow: 'hidden' }}>
-              <DetailPanel
+              <Detalhe
                 lead={selectedLead}
-                onUpdateStatus={handleUpdateStatus}
-                onBack={() => setShowDetail(false)}
+                onStatus={handleStatus}
+                onBack={() => setSelectedLead(null)}
                 dispararISA={dispararISAManual}
               />
             </div>
-          )}
-
-          {!showDetail && (
-            <div style={{ display: 'none' }} />
+          ) : (
+            <div style={{
+              flex: 1, display: 'none',
+            }} />
           )}
         </div>
       </div>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
     </AppLayout>
   );
 }
