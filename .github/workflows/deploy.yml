@@ -21,3 +21,8 @@ jobs:
         run: supabase functions deploy analyze-extrato --project-ref qgenaltkjtlvwfgykpxq
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy isa-meta-first-contact
+        run: supabase functions deploy isa-meta-first-contact --project-ref qgenaltkjtlvwfgykpxq
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
