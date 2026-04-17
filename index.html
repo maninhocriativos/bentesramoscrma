@@ -118,45 +118,5 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-
-    <!-- ✅ Desregistra SW antigo e limpa cache antes de qualquer coisa -->
-    <script>
-      (async function() {
-        if (!('serviceWorker' in navigator)) return;
-        try {
-          // Desregistra todos os SWs antigos
-          const regs = await navigator.serviceWorker.getRegistrations();
-          let hadOld = false;
-          for (const reg of regs) {
-            const sw = reg.active || reg.waiting || reg.installing;
-            if (sw) {
-              await reg.unregister();
-              hadOld = true;
-              console.log('[Reset] SW desregistrado');
-            }
-          }
-          // Limpa todos os caches
-          const keys = await caches.keys();
-          await Promise.all(keys.map(k => caches.delete(k)));
-          if (keys.length > 0) console.log('[Reset] Caches limpos:', keys);
-          // Recarrega se tinha SW antigo para pegar HTML novo
-          if (hadOld && keys.some(k => k === 'bentes-ramos-crm-v1')) {
-            console.log('[Reset] Recarregando para versão nova...');
-            window.location.reload(true);
-          }
-        } catch(e) {
-          console.error('[Reset] Erro:', e);
-        }
-      })();
-    </script>
-
-    <!-- Registra o SW novo após a limpeza -->
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(() => {});
-        });
-      }
-    </script>
   </body>
 </html>
