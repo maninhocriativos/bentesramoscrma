@@ -27,6 +27,43 @@
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
 
+    <!-- 🚨 KILL-SWITCH: detecta SW antigo travado e força reset automático -->
+    <script>
+      (function () {
+        try {
+          // Marca timestamp de início do carregamento
+          var loadStart = Date.now();
+          window.__APP_LOAD_START__ = loadStart;
+
+          // Se a página não montar em 15s, força limpeza total e reload
+          var watchdog = setTimeout(function () {
+            if (!window.__APP_MOUNTED__) {
+              console.warn("[KILL-SWITCH] App não carregou em 15s — limpando SW e caches");
+              try {
+                if ("serviceWorker" in navigator) {
+                  navigator.serviceWorker.getRegistrations().then(function (regs) {
+                    regs.forEach(function (r) { r.unregister(); });
+                  });
+                }
+                if (window.caches) {
+                  caches.keys().then(function (keys) {
+                    keys.forEach(function (k) { caches.delete(k); });
+                  });
+                }
+              } catch (e) {}
+              setTimeout(function () {
+                window.location.href = "/?reset=" + Date.now();
+              }, 800);
+            }
+          }, 15000);
+
+          window.__CLEAR_WATCHDOG__ = function () { clearTimeout(watchdog); };
+        } catch (e) {
+          console.error("[KILL-SWITCH] erro:", e);
+        }
+      })();
+    </script>
+
     <!-- Apple Touch Icons -->
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
     <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
