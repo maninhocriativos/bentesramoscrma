@@ -22,7 +22,6 @@ export interface UseChatMessagesOptions {
   onNewMessage?: (message: ChatMessage) => void;
 }
 
-// Build all possible subscriber ID variants for a given ID
 function buildPossibleIds(subscriberId: string): string[] {
   const ids = new Set<string>([subscriberId]);
   
@@ -32,7 +31,6 @@ function buildPossibleIds(subscriberId: string): string[] {
     const normalized = phone.startsWith('55') ? phone : '55' + phone;
     ids.add(`zapi_${normalized}`);
     ids.add(`zapi_${phone}`);
-    // Add 9th digit variant
     if (normalized.length === 12) {
       const with9 = normalized.slice(0, 4) + '9' + normalized.slice(4);
       ids.add(`zapi_${with9}`);
@@ -60,12 +58,10 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
   const onNewMessageRef = useRef(onNewMessage);
   const { toast } = useToast();
 
-  // Keep refs in sync
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
   useEffect(() => { activeSubscriberRef.current = subscriberId; }, [subscriberId]);
 
-  // Load messages for a subscriber
   const loadMessages = useCallback(async (loadAll = false) => {
     if (!subscriberId) {
       setMessages([]);
@@ -90,10 +86,8 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
       const { data, error } = await query;
       if (error) throw error;
       
-      // Verify this is still the active subscriber (guard against race conditions)
       if (activeSubscriberRef.current !== subscriberId) return;
       
-      // Deduplicate by ID
       const seen = new Set<string>();
       const uniqueMessages = ((data as ChatMessage[]) || []).filter(msg => {
         if (seen.has(msg.id)) return false;
@@ -109,32 +103,25 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
     }
   }, [subscriberId]);
 
-  // Clear and reload on subscriber change
   useEffect(() => {
     setMessages([]);
     loadMessages();
   }, [subscriberId, loadMessages]);
 
-  // Single realtime channel + fallback polling with auto-reconnect
   useEffect(() => {
     if (!subscriberId) return;
 
     const possibleIds = buildPossibleIds(subscriberId);
     const channelName = `chat-msgs-${subscriberId.replace(/[^a-zA-Z0-9_]/g, '_')}`;
 
-    // Use a SINGLE channel listening to the table (no filter) and filter client-side
-    // This avoids creating N channels per subscriber variant which hits Supabase limits
     const channel = supabase
       .channel(channelName)
       .on('postgres_changes', 
         { event: 'INSERT', schema: 'public', table: 'manychat_mensagens' },
         (payload) => {
           const newMsg = payload.new as ChatMessage;
-          // Client-side filter: only accept messages for this subscriber
           if (!newMsg.subscriber_id || !possibleIds.includes(newMsg.subscriber_id)) return;
-          // Guard: verify still active subscriber
           if (activeSubscriberRef.current !== subscriberId) return;
-          
           if (lastMessageIdRef.current === newMsg.id) return;
           lastMessageIdRef.current = newMsg.id;
           
@@ -147,14 +134,11 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
       )
       .subscribe((status, err) => {
         console.log(`[useChatMessages] Realtime ${channelName}: ${status}`, err || '');
-        
-        // Auto-reconnect on error/timeout
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.warn('[useChatMessages] Channel error, will reconnect via polling');
         }
       });
 
-    // Fallback polling every 15 seconds for near-realtime reliability
     let pollActive = true;
     const pollInterval = setInterval(async () => {
       if (!pollActive || activeSubscriberRef.current !== subscriberId) return;
@@ -192,7 +176,36 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
     };
   }, [subscriberId]);
 
-  // Send message via Z-API
+  // ── Reativar ISA ────────────────────────────────────────────────────────────
+  const reativarISA = useCallback(async (leadId: string): Promise<boolean> => {
+    try {
+      await supabase
+        .from('manychat_subscribers')
+        .update({ 
+          atendimento_humano: false,
+          atendimento_humano_desde: null,
+        })
+        .eq('lead_id', leadId);
+
+      await supabase
+        .from('leads_juridicos')
+        .update({ 
+          isa_ativa: true,
+          owner_tipo: 'isa',
+        })
+        .eq('id', leadId);
+
+      console.log('[useChatMessages] ISA reativada');
+      toast({ title: '🤖 ISA reativada', description: 'A ISA voltou a atender automaticamente.' });
+      return true;
+    } catch (err) {
+      console.error('[useChatMessages] Erro ao reativar ISA:', err);
+      toast({ title: 'Erro ao reativar ISA', variant: 'destructive' });
+      return false;
+    }
+  }, [toast]);
+
+  // ── Enviar mensagem ─────────────────────────────────────────────────────────
   const sendMessage = useCallback(async (
     content: string,
     options: {
@@ -236,7 +249,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
         throw new Error(zapiError.message || 'Erro ao enviar via Z-API');
       }
 
-      // Save message to database
+      // Salva mensagem no banco
       const { data: savedMsg, error: saveError } = await supabase
         .from('manychat_mensagens' as any)
         .insert({
@@ -260,12 +273,12 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
         console.error('[useChatMessages] Erro ao salvar mensagem:', saveError);
       }
 
-      // Replace optimistic message with real one
+      // Substitui mensagem otimista pela real
       if (savedMsg) {
         setMessages(prev => prev.map(m => m.id === tempId ? savedMsg as ChatMessage : m));
       }
 
-      // Register interaction if lead exists
+      // Registra interação e pausa ISA
       if (options.leadId) {
         await supabase.from('interacoes').insert({
           cliente_id: options.leadId,
@@ -275,6 +288,29 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
           direcao: 'saida',
           data_interacao: new Date().toISOString(),
         });
+
+        // ── Pausa ISA automaticamente quando atendente humano intervir ────────
+        try {
+          await supabase
+            .from('manychat_subscribers')
+            .update({ 
+              atendimento_humano: true,
+              atendimento_humano_desde: new Date().toISOString(),
+            })
+            .eq('lead_id', options.leadId);
+
+          await supabase
+            .from('leads_juridicos')
+            .update({ 
+              isa_ativa: false,
+              owner_tipo: 'humano',
+            })
+            .eq('id', options.leadId);
+
+          console.log('[useChatMessages] ISA pausada — atendente humano assumiu');
+        } catch (err) {
+          console.error('[useChatMessages] Erro ao pausar ISA:', err);
+        }
       }
 
       if (!zapiResult?.success) {
@@ -297,7 +333,6 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
     }
   }, [subscriberId]);
 
-  // Add message locally
   const addMessage = useCallback((message: ChatMessage) => {
     setMessages(prev => {
       if (prev.some(m => m.id === message.id)) return prev;
@@ -313,5 +348,6 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
     sendMessage,
     addMessage,
     setMessages,
+    reativarISA,
   };
 }
