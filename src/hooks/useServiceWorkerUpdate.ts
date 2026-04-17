@@ -5,7 +5,9 @@ const SW_URL = import.meta.env.PROD ? `/sw.js?v=${SW_VERSION}` : '/sw.js';
 const SW_CHECK_INTERVAL_MS = 60_000;
 const RELOAD_TS_KEY = 'sw-reload-ts';
 const RELOAD_VERSION_KEY = 'sw-reload-version';
-const RELOAD_COOLDOWN_MS = 10_000;
+const RELOAD_COUNT_KEY = 'sw-reload-count';
+const RELOAD_COOLDOWN_MS = 30_000;
+const MAX_RELOADS_PER_SESSION = 2;
 
 /**
  * Em produção, registra o SW com versão de build para furar cache/CDN
