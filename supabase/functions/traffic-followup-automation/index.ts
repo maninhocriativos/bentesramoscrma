@@ -29,7 +29,7 @@ const STAGES_CONFIG = {
 };
 
 const PROVA_SOCIAL_IMAGE_URL = 'https://bentesramoscrma.lovable.app/images/prova-social-bradesco.jpg';
-const DELAY_BETWEEN_MESSAGES = 5000;
+const DELAY_BETWEEN_MESSAGES = 7 * 60 * 1000; // 7 minutos entre mensagens
 
 // ============================================
 // AGENT LABELS
@@ -449,6 +449,25 @@ async function backfillTrafficLeads(supabase: any): Promise<any> {
 async function processFollowups(supabase: any, zapiConfig: any): Promise<any[]> {
   const now = new Date();
   const results: any[] = [];
+
+  // ── Verificação de horário permitido ─────────────────────────────────────────
+  // Disparos apenas entre 8h e 20h (horário de Manaus, UTC-4)
+  const horaManaus = new Date(now.getTime() - 4 * 60 * 60 * 1000).getUTCHours();
+  if (horaManaus < 8 || horaManaus >= 20) {
+    console.log(`[Traffic Followup] ⏰ Fora do horário permitido (${horaManaus}h Manaus). Aguardando 8h-20h.`);
+    return results;
+  }
+
+  // ── Disparos começam a partir de amanhã ──────────────────────────────────────
+  const amanha = new Date(now);
+  amanha.setDate(amanha.getDate() + 1);
+  amanha.setHours(0, 0, 0, 0);
+  // Remova este bloco após a data de início (18/04/2026)
+  const dataInicio = new Date('2026-04-18T08:00:00-04:00');
+  if (now < dataInicio) {
+    console.log(`[Traffic Followup] ⏳ Disparos iniciam em ${dataInicio.toISOString()}. Aguardando...`);
+    return results;
+  }
 
   const { data: pendingFollowups, error } = await supabase
     .from('traffic_followups')
