@@ -3091,12 +3091,26 @@ const ManyChatInboxContent = () => {
                   <div
                     key={subscriber.id}
                     onClick={() => {
-                      const isSameConversation = selectedSubscriber?.subscriber_id === subscriber.subscriber_id;
-                      setSelectedSubscriber(subscriber);
-                      if (isSameConversation) {
-                        loadMessages(subscriber.subscriber_id, true, subscriber);
-                      }
-                    }}
+              const isSameConversation = selectedSubscriber?.subscriber_id === subscriber.subscriber_id;
+              setSelectedSubscriber(subscriber);
+
+              // Zerar badge IMEDIATAMENTE ao clicar
+              const unreadKey = getConversationUnreadKey(subscriber);
+              setUnreadCounts(prev => {
+                const next = new Map(prev);
+                next.delete(unreadKey);
+                next.delete(subscriber.subscriber_id);
+                if (subscriber.lead_id) next.delete(`lead:${subscriber.lead_id}`);
+                const suffix = getSubscriberPhoneSuffix(subscriber);
+                if (suffix) next.delete(`phone:${suffix}`);
+                return next;
+              });
+              saveLastRead(subscriber);
+
+              if (isSameConversation) {
+                loadMessages(subscriber.subscriber_id, true, subscriber);
+              }
+            }}
                     className={`flex items-center gap-3 px-3 py-[10px] cursor-pointer transition-all duration-200 border-b border-opacity-50 ${themeClasses.border} ${themeClasses.hover} hover:translate-x-0.5 ${
                       isActive ? themeClasses.active : ""
                     }`}
