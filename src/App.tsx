@@ -42,6 +42,7 @@ const IntimacoesPage           = lazy(() => import("./pages/IntimacoesPage"));
 const BemVindoPage             = lazy(() => import("./pages/BemVindoPage"));
 const ConferenciaExtratosPage  = lazy(() => import("./pages/ConferenciaExtratosPage"));
 const GoogleAuthCallback       = lazy(() => import("./pages/GoogleAuthCallback"));
+const FollowupPage             = lazy(() => import("./pages/FollowupPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -61,9 +62,7 @@ const PageFallback = () => (
   </div>
 );
 
-// Componente interno para usar hooks dentro do BrowserRouter
 function AppRoutes() {
-  // ✅ Detecta novo deploy e recarrega automaticamente para todos os usuários
   useServiceWorkerUpdate();
 
   return (
@@ -108,6 +107,7 @@ function AppRoutes() {
             <Route path="/intimacoes"            element={<IntimacoesPage />} />
             <Route path="/bem-vindo"             element={<BemVindoPage />} />
             <Route path="/conferencia-extratos"  element={<ConferenciaExtratosPage />} />
+            <Route path="/followup"              element={<FollowupPage />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />
