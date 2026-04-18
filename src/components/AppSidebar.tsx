@@ -1,7 +1,7 @@
 import { 
   LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, 
   DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare, 
-  Sparkles, Webhook, Zap, BookOpen, FormInput, History, FileEdit, Gavel, GraduationCap, Calculator
+  Sparkles, Webhook, Zap, BookOpen, FormInput, History, FileEdit, Gavel, GraduationCap, Calculator, TrendingUp
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import {
@@ -64,6 +64,7 @@ const menuSections: MenuSection[] = [
     items: [
       { title: 'Assistentes IA', url: '/assistente', icon: Bot, visibility: 'all' },
       { title: 'Isa Autônoma', url: '/isa-autonoma', icon: Zap, visibility: 'all' },
+      { title: 'Follow-up', url: '/followup', icon: TrendingUp, visibility: 'all' },
       { title: 'Conferência de Extratos', url: '/conferencia-extratos', icon: Calculator, visibility: 'all' },
       { title: 'Chat', url: '/chat', icon: MessageSquare, visibility: 'all' },
     ],
