@@ -81,10 +81,10 @@ const createEmptyForm = (): ProcessoFormData => ({
 
 const STATUS_CONFIG: Record<string, { cls: string; dot: string }> = {
   'Em Andamento': { cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800/40', dot: 'bg-blue-500' },
-  'Ganho':   { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300', dot: 'bg-emerald-500' },
-  'Perdido': { cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-300', dot: 'bg-red-500' },
-  'Suspenso':  { cls: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300', dot: 'bg-amber-500' },
-  'Arquivado': { cls: 'bg-muted text-muted-foreground border-border', dot: 'bg-muted-foreground' },
+  'Ganho':        { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300', dot: 'bg-emerald-500' },
+  'Perdido':      { cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-300', dot: 'bg-red-500' },
+  'Suspenso':     { cls: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300', dot: 'bg-amber-500' },
+  'Arquivado':    { cls: 'bg-muted text-muted-foreground border-border', dot: 'bg-muted-foreground' },
 };
 
 const parseMoney = (v: string): number | null => {
@@ -102,7 +102,6 @@ const parseDate = (v: string): string | null => {
   return null;
 };
 
-// ✅ FIX — normaliza CNJ para deduplicação no banco
 const normalizarCNJ = (numero: string | null | undefined): string | null => {
   if (!numero) return null;
   const digits = numero.replace(/[^\d]/g, '');
@@ -290,30 +289,52 @@ function Field({ label, children, hint }: { label: string; children: React.React
   );
 }
 
-// ─── ParteCard ─────────────────────────────────────────────────────────────────
+// ─── ParteCard — badges truncados, sem overflow ────────────────────────────────
 
-function ParteCard({ parte, index, onUpdate, onRemove }: { parte: ProcessoParte; index: number; onUpdate: (i: number, field: string, value: string) => void; onRemove: (i: number) => void; }) {
+function ParteCard({ parte, index, onUpdate, onRemove }: {
+  parte: ProcessoParte; index: number;
+  onUpdate: (i: number, field: string, value: string) => void;
+  onRemove: (i: number) => void;
+}) {
   const tipoLower = (parte.tipo || '').toLowerCase();
   const isAutor = tipoLower.includes('autor');
   const isReu   = tipoLower.includes('réu') || tipoLower.includes('reu');
   const barColor = isAutor ? '#10b981' : isReu ? '#ef4444' : '#94a3b8';
-  const badgeCls = isAutor ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400' : isReu ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400' : 'bg-muted text-muted-foreground border-border';
+  const badgeCls = isAutor
+    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400'
+    : isReu
+    ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400'
+    : 'bg-muted text-muted-foreground border-border';
+
   return (
     <Collapsible>
       <div className="rounded-xl border border-border/40 bg-card overflow-hidden" style={{ borderLeftWidth: 3, borderLeftColor: barColor }}>
-        <div className="flex items-center justify-between gap-2 p-2.5 pl-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold truncate">{parte.nome}</p>
-            <div className="flex flex-wrap gap-1.5 mt-0.5">
-              {parte.documento && <span className="text-[10px] text-muted-foreground">Doc: {parte.documento}</span>}
-              {parte.celular   && <span className="text-[10px] text-muted-foreground">📱 {parte.celular}</span>}
+        <div className="p-2.5 pl-3">
+          {/* Nome + ações na linha de cima */}
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <p className="text-xs font-semibold truncate flex-1 min-w-0">{parte.nome}</p>
+            <div className="flex items-center gap-1 shrink-0 ml-1">
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/50 hover:text-primary shrink-0">
+                  <Pencil className="h-2.5 w-2.5" />
+                </Button>
+              </CollapsibleTrigger>
+              <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/50 hover:text-destructive shrink-0" onClick={() => onRemove(index)}>
+                <X className="h-2.5 w-2.5" />
+              </Button>
             </div>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <Badge variant="outline" className={`text-[9px] px-1.5 h-4 ${badgeCls}`}>{parte.tipo}</Badge>
-            <CollapsibleTrigger asChild><Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/50 hover:text-primary"><Pencil className="h-2.5 w-2.5" /></Button></CollapsibleTrigger>
-            <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/50 hover:text-destructive" onClick={() => onRemove(index)}><X className="h-2.5 w-2.5" /></Button>
-          </div>
+          {/* Tipo truncado na linha de baixo — evita overflow */}
+          <span className={`inline-block max-w-full truncate text-[9px] font-semibold px-1.5 py-0.5 rounded-md border ${badgeCls}`}>
+            {parte.tipo}
+          </span>
+          {/* Documento e celular */}
+          {(parte.documento || parte.celular) && (
+            <div className="flex flex-wrap gap-x-2 mt-1">
+              {parte.documento && <span className="text-[10px] text-muted-foreground truncate">Doc: {parte.documento}</span>}
+              {parte.celular   && <span className="text-[10px] text-muted-foreground">📱 {parte.celular}</span>}
+            </div>
+          )}
         </div>
         <CollapsibleContent>
           <div className="px-3 pb-3 pt-2 border-t border-border/30 space-y-2">
@@ -321,7 +342,15 @@ function ParteCard({ parte, index, onUpdate, onRemove }: { parte: ProcessoParte;
               <div><Label className="text-[10px] text-muted-foreground">Nome</Label><Input value={parte.nome || ''} onChange={e => onUpdate(index, 'nome', e.target.value)} className="h-7 text-xs rounded-lg mt-1" /></div>
               <div><Label className="text-[10px] text-muted-foreground">Tipo</Label>
                 <select value={parte.tipo || ''} onChange={e => onUpdate(index, 'tipo', e.target.value)} className="flex h-7 w-full rounded-lg border border-input bg-background px-2 text-xs mt-1">
-                  <option value="Autor">Autor</option><option value="Réu">Réu</option><option value="Terceiro Interessado">Terceiro</option><option value="Advogado">Advogado</option>
+                  <option value="Autor">Autor</option>
+                  <option value="Réu">Réu</option>
+                  <option value="Terceiro Interessado">Terceiro</option>
+                  <option value="Advogado">Advogado</option>
+                  <option value="Exequente">Exequente</option>
+                  <option value="Executado">Executado</option>
+                  <option value="Requerente">Requerente</option>
+                  <option value="Requerido">Requerido</option>
+                  <option value="Juiz">Juiz</option>
                 </select>
               </div>
               <div><Label className="text-[10px] text-muted-foreground">CPF/CNPJ</Label><Input value={parte.documento || ''} onChange={e => onUpdate(index, 'documento', e.target.value)} className="h-7 text-xs rounded-lg mt-1" placeholder="Opcional" /></div>
@@ -330,12 +359,18 @@ function ParteCard({ parte, index, onUpdate, onRemove }: { parte: ProcessoParte;
           </div>
         </CollapsibleContent>
       </div>
+      {/* Advogados */}
       {parte.advogados && parte.advogados.length > 0 && (
         <div className="ml-3 mt-0.5 mb-1 pl-2.5 border-l-2 border-border/30">
           {parte.advogados.map((adv: any, j: number) => (
-            <div key={j} className="flex items-center justify-between gap-2 py-0.5">
-              <p className="text-[10px] font-medium truncate flex-1">{adv.nome}</p>
-              {adv.oab && <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 shrink-0"><BadgeCheck className="h-2.5 w-2.5 text-primary" />{adv.oab}</span>}
+            <div key={j} className="flex items-center gap-2 py-0.5 min-w-0">
+              <p className="text-[10px] font-medium truncate flex-1 min-w-0">{adv.nome}</p>
+              {adv.oab && (
+                <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 shrink-0">
+                  <BadgeCheck className="h-2.5 w-2.5 text-primary" />
+                  <span className="truncate max-w-[80px]">{adv.oab}</span>
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -349,7 +384,7 @@ function AddParteForm({ onAdd }: { onAdd: (parte: ProcessoParte) => void }) {
   const [doc, setDoc]   = useState(''); const [cel, setCel]   = useState('');
   const handleAdd = () => {
     if (!nome.trim() || !tipo) { toast.error('Preencha nome e tipo'); return; }
-    onAdd({ nome: nome.trim(), tipo, polo: tipo === 'Autor' ? 'AT' : tipo === 'Réu' ? 'PA' : 'TC', tipoPessoa: 'FISICA', documento: doc || undefined, celular: cel || undefined });
+    onAdd({ nome: nome.trim(), tipo, polo: tipo === 'Autor' || tipo === 'Requerente' || tipo === 'Exequente' ? 'AT' : tipo === 'Réu' || tipo === 'Requerido' || tipo === 'Executado' ? 'PA' : 'TC', tipoPessoa: 'FISICA', documento: doc || undefined, celular: cel || undefined });
     setNome(''); setTipo(''); setDoc(''); setCel('');
     toast.success(`"${nome.trim()}" adicionado`);
   };
@@ -360,7 +395,15 @@ function AddParteForm({ onAdd }: { onAdd: (parte: ProcessoParte) => void }) {
         <div><Label className="text-[10px] text-muted-foreground">Nome *</Label><Input value={nome} onChange={e => setNome(e.target.value)} className="h-7 text-xs rounded-lg mt-1 bg-card" placeholder="Nome" /></div>
         <div><Label className="text-[10px] text-muted-foreground">Tipo *</Label>
           <select value={tipo} onChange={e => setTipo(e.target.value)} className="flex h-7 w-full rounded-lg border border-input bg-card px-2 text-xs mt-1">
-            <option value="">Selecione</option><option value="Autor">Autor</option><option value="Réu">Réu</option><option value="Terceiro Interessado">Terceiro</option><option value="Advogado">Advogado</option>
+            <option value="">Selecione</option>
+            <option value="Autor">Autor</option>
+            <option value="Réu">Réu</option>
+            <option value="Requerente">Requerente</option>
+            <option value="Requerido">Requerido</option>
+            <option value="Exequente">Exequente</option>
+            <option value="Executado">Executado</option>
+            <option value="Terceiro Interessado">Terceiro</option>
+            <option value="Advogado">Advogado</option>
           </select>
         </div>
         <div><Label className="text-[10px] text-muted-foreground">CPF/CNPJ</Label><Input value={doc} onChange={e => setDoc(e.target.value)} className="h-7 text-xs rounded-lg mt-1 bg-card" placeholder="Opcional" /></div>
@@ -552,7 +595,6 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
     finally { setFetchingData(false); }
   };
 
-  // ✅ handleSave — inclui cnj_normalizado para garantir deduplicação no banco
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -563,9 +605,6 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
 
       const data = {
         numero_processo:           formData.numero_processo        || null,
-        // ✅ FIX PRINCIPAL: preenche cnj_normalizado sempre
-        // Sem isso, processos criados manualmente ficam sem esse campo,
-        // causando duplicatas silenciosas no próximo sync automático
         cnj_normalizado:           normalizarCNJ(formData.numero_processo),
         numero_complementar:       formData.numero_complementar    || null,
         titulo_acao:               formData.titulo_acao            || null,
@@ -608,7 +647,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
       let savedId: string | null = null;
       if (isNew) {
         const result = await createProcesso(data);
-        if (result?.error) return; // erro já tratado no hook com toast específico
+        if (result?.error) return;
         savedId = (result?.data as any)?.id || null;
       } else if (processo) {
         const result = await updateProcesso(processo.id, data);
@@ -652,21 +691,28 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   const isValidCnj = CNJ_REGEX.test((formData.numero_processo || '').trim());
   const statusCfg  = STATUS_CONFIG[formData.status] || STATUS_CONFIG['Arquivado'];
 
+  // Alturas calculadas com base nos elementos fixos do modal:
+  // Header: ~73px | Tabs bar: ~53px | Footer: ~57px | Total chrome: ~183px
+  const MODAL_H    = '94vh';
+  const CONTENT_H  = 'calc(94vh - 183px)';
+
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent
           className="w-[96vw] max-w-[1200px] rounded-2xl overflow-hidden flex flex-col p-0 gap-0"
-          style={{ height: '94vh', maxHeight: '94vh', top: '50%', transform: 'translateX(-50%) translateY(-50%)' }}
+          style={{ height: MODAL_H, maxHeight: MODAL_H }}
         >
           <DialogHeader className="sr-only"><DialogTitle>{isNew ? 'Novo Processo' : 'Detalhes do Processo'}</DialogTitle></DialogHeader>
 
-          {/* Header */}
+          {/* ── Header ── */}
           <div className="relative overflow-hidden shrink-0">
             <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-primary via-primary/80 to-primary/40" />
             <div className="flex items-center justify-between px-6 py-4 bg-card border-b border-border/60">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-md shadow-primary/20 shrink-0"><Scale className="h-5 w-5 text-primary-foreground" /></div>
+                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-md shadow-primary/20 shrink-0">
+                  <Scale className="h-5 w-5 text-primary-foreground" />
+                </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2.5 flex-wrap">
                     <h2 className="text-sm font-black text-foreground leading-none">{isNew ? 'Novo Processo' : 'Detalhes do Processo'}</h2>
@@ -687,27 +733,40 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {fetchingData && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-                {formData.tribunal && <span className="hidden md:flex items-center gap-1.5 text-xs font-semibold text-muted-foreground bg-muted/60 px-2.5 py-1 rounded-lg border border-border/40"><Building2 className="h-3.5 w-3.5" />{formData.tribunal}</span>}
+                {formData.tribunal && (
+                  <span className="hidden md:flex items-center gap-1.5 text-xs font-semibold text-muted-foreground bg-muted/60 px-2.5 py-1 rounded-lg border border-border/40">
+                    <Building2 className="h-3.5 w-3.5" />{formData.tribunal}
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Tabs */}
+          {/* ── Tabs ── */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col overflow-hidden">
             <div className="px-6 pt-3 pb-0 shrink-0 bg-card border-b border-border/40">
               <TabsList className="h-9 bg-muted/50 rounded-xl p-1 gap-1">
-                <TabsTrigger value="processo" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm"><Scale className="h-3.5 w-3.5" /> Processo</TabsTrigger>
+                <TabsTrigger value="processo" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm">
+                  <Scale className="h-3.5 w-3.5" /> Processo
+                </TabsTrigger>
                 <TabsTrigger value="movimentos" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm">
                   <Calendar className="h-3.5 w-3.5" /> Movimentos
-                  {movimentos.length > 0 && <span className="ml-1 h-4 min-w-4 px-1 rounded-full bg-primary/15 text-primary text-[9px] font-black flex items-center justify-center">{movimentos.length}</span>}
+                  {movimentos.length > 0 && (
+                    <span className="ml-1 h-4 min-w-4 px-1 rounded-full bg-primary/15 text-primary text-[9px] font-black flex items-center justify-center">{movimentos.length}</span>
+                  )}
                 </TabsTrigger>
-                <TabsTrigger value="notificacoes" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm"><MessageSquare className="h-3.5 w-3.5" /> Notificações</TabsTrigger>
+                <TabsTrigger value="notificacoes" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm">
+                  <MessageSquare className="h-3.5 w-3.5" /> Notificações
+                </TabsTrigger>
               </TabsList>
             </div>
 
-            {/* Tab Processo */}
+            {/* ── TAB PROCESSO ── */}
             <TabsContent value="processo" className="flex-1 min-h-0 mt-0 overflow-hidden">
-              <div className="flex gap-0" style={{ height: 'calc(92vh - 185px)', minHeight: 0 }}>
+              {/* Layout: form à esquerda | divider | partes à direita */}
+              <div className="flex overflow-hidden" style={{ height: CONTENT_H }}>
+
+                {/* Form — scroll interno */}
                 <ScrollArea className="flex-1 min-w-0 h-full">
                   <div className="px-6 py-5 space-y-5">
 
@@ -718,12 +777,14 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                           <Field label="Número CNJ">
                             <div className="relative">
                               <Input value={formData.numero_processo} onChange={e => update('numero_processo', e.target.value)} className="rounded-xl bg-card font-mono text-sm pr-9 h-10" placeholder="0000000-00.0000.0.00.0000" />
-                              {fetchingData && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-primary" />}
+                              {fetchingData  && <Loader2      className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-primary" />}
                               {!fetchingData && isValidCnj && <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />}
                             </div>
                             {isNew && <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1"><AlertTriangle className="h-2.5 w-2.5" /> Digite para carregar automaticamente</p>}
                           </Field>
-                          <Field label="Número Complementar"><Input value={formData.numero_complementar} onChange={e => update('numero_complementar', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Opcional" /></Field>
+                          <Field label="Número Complementar">
+                            <Input value={formData.numero_complementar} onChange={e => update('numero_complementar', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Opcional" />
+                          </Field>
                         </Row2>
                       </FieldGroup>
                     </div>
@@ -745,16 +806,25 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                             </button>
                           </Field>
                         </Row2>
-                        <Field label="Descrição / Anotações"><Textarea value={formData.descricao} onChange={e => update('descricao', e.target.value)} className="rounded-xl bg-card min-h-[60px] text-sm resize-none" placeholder="Anotações internas..." /></Field>
+                        <Field label="Descrição / Anotações">
+                          <Textarea value={formData.descricao} onChange={e => update('descricao', e.target.value)} className="rounded-xl bg-card min-h-[60px] text-sm resize-none" placeholder="Anotações internas..." />
+                        </Field>
                         <Row2>
-                          <Field label="Marcadores"><Input value={formData.marcadores} onChange={e => update('marcadores', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Separados por vírgula" /></Field>
+                          <Field label="Marcadores">
+                            <Input value={formData.marcadores} onChange={e => update('marcadores', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Separados por vírgula" />
+                          </Field>
                           <Field label="Pasta do Cliente">
                             <div className="space-y-1.5">
                               <Select value={formData.cliente_id || '__none__'} onValueChange={v => update('cliente_id', v === '__none__' ? '' : v)}>
                                 <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                                <SelectContent><SelectItem value="__none__">Nenhum</SelectItem>{leads.map(l => <SelectItem key={l.id} value={l.id}>{l.nome}{l.telefone ? ` (${l.telefone})` : ''}</SelectItem>)}</SelectContent>
+                                <SelectContent>
+                                  <SelectItem value="__none__">Nenhum</SelectItem>
+                                  {leads.map(l => <SelectItem key={l.id} value={l.id}>{l.nome}{l.telefone ? ` (${l.telefone})` : ''}</SelectItem>)}
+                                </SelectContent>
                               </Select>
-                              <button type="button" onClick={() => setNovoClienteOpen(true)} className="flex items-center gap-1.5 text-[11px] text-primary hover:text-primary/80 font-semibold transition-colors"><UserPlus className="h-3 w-3" /> Criar novo cliente e vincular</button>
+                              <button type="button" onClick={() => setNovoClienteOpen(true)} className="flex items-center gap-1.5 text-[11px] text-primary hover:text-primary/80 font-semibold transition-colors">
+                                <UserPlus className="h-3 w-3" /> Criar novo cliente e vincular
+                              </button>
                             </div>
                           </Field>
                         </Row2>
@@ -765,11 +835,17 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                       <SectionTitle icon={Users} label="Responsável" bg="bg-secondary/15" color="text-foreground" />
                       <FieldGroup>
                         <Row2>
-                          <Field label="Advogado Responsável"><Input value={formData.advogado_responsavel} onChange={e => update('advogado_responsavel', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Nome do advogado" /></Field>
+                          <Field label="Advogado Responsável">
+                            <Input value={formData.advogado_responsavel} onChange={e => update('advogado_responsavel', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Nome do advogado" />
+                          </Field>
                           <Field label="Origem do Cliente">
                             <Select value={formData.origem_cliente || '__none__'} onValueChange={v => update('origem_cliente', v === '__none__' ? '' : v)}>
                               <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                              <SelectContent><SelectItem value="__none__">Não informado</SelectItem><SelectItem value="Marketing">Marketing</SelectItem><SelectItem value="Bentes e Ramos">Bentes e Ramos</SelectItem></SelectContent>
+                              <SelectContent>
+                                <SelectItem value="__none__">Não informado</SelectItem>
+                                <SelectItem value="Marketing">Marketing</SelectItem>
+                                <SelectItem value="Bentes e Ramos">Bentes e Ramos</SelectItem>
+                              </SelectContent>
                             </Select>
                           </Field>
                         </Row2>
@@ -787,7 +863,11 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                           <Field label="Instância">
                             <Select value={formData.grau || 'G1'} onValueChange={v => update('grau', v)}>
                               <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue /></SelectTrigger>
-                              <SelectContent><SelectItem value="G1">1º Grau</SelectItem><SelectItem value="G2">2º Grau</SelectItem><SelectItem value="SUP">Superior</SelectItem><SelectItem value="JE">Juizado Especial</SelectItem><SelectItem value="TR">Turma Recursal</SelectItem></SelectContent>
+                              <SelectContent>
+                                <SelectItem value="G1">1º Grau</SelectItem><SelectItem value="G2">2º Grau</SelectItem>
+                                <SelectItem value="SUP">Superior</SelectItem><SelectItem value="JE">Juizado Especial</SelectItem>
+                                <SelectItem value="TR">Turma Recursal</SelectItem>
+                              </SelectContent>
                             </Select>
                           </Field>
                         </Row2>
@@ -796,7 +876,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                           <Field label="Órgão Julgador"><Input value={formData.orgao_julgador} onChange={e => update('orgao_julgador', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Ex: 2ª Vara Cível" /></Field>
                         </Row2>
                         <Row2>
-                          <Field label="Sistema Judicial"><Input value={formData.sistema_judicial} onChange={e => update('sistema_judicial', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Ex: PJe, e-SAJ, PROJUDI" /></Field>
+                          <Field label="Sistema Judicial"><Input value={formData.sistema_judicial} onChange={e => update('sistema_judicial', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Ex: PJe, e-SAJ" /></Field>
                           <Field label="Complemento"><Input value={formData.complemento_enderecamento} onChange={e => update('complemento_enderecamento', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Complemento" /></Field>
                         </Row2>
                         <Row4>
@@ -859,21 +939,31 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                   </div>
                 </ScrollArea>
 
+                {/* Divider */}
                 <div className="w-px bg-border/40 shrink-0" />
 
-                <div className="w-[340px] shrink-0 flex flex-col overflow-hidden h-full bg-muted/10">
+                {/* Partes — largura responsiva, sem overflow */}
+                <div className="w-[300px] xl:w-[340px] shrink-0 flex flex-col overflow-hidden h-full bg-muted/10">
                   <div className="px-4 pt-4 pb-3 border-b border-border/40 shrink-0 bg-card">
                     <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-lg bg-primary/10 flex items-center justify-center"><Users className="h-3.5 w-3.5 text-primary" /></div>
+                      <div className="h-6 w-6 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <Users className="h-3.5 w-3.5 text-primary" />
+                      </div>
                       <h3 className="text-[11px] font-black text-foreground uppercase tracking-widest">Partes</h3>
-                      {hasPartes && <span className="ml-auto h-5 min-w-5 px-1.5 rounded-full bg-primary/10 text-primary text-[10px] font-black flex items-center justify-center border border-primary/15">{partes.length}</span>}
+                      {hasPartes && (
+                        <span className="ml-auto h-5 min-w-5 px-1.5 rounded-full bg-primary/10 text-primary text-[10px] font-black flex items-center justify-center border border-primary/15">
+                          {partes.length}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <ScrollArea className="flex-1 min-h-0 h-full">
-                    <div className="px-4 py-3 space-y-2">
+                    <div className="px-3 py-3 space-y-2">
                       {!hasPartes ? (
                         <div className="rounded-2xl border border-dashed border-border/50 bg-card py-10 text-center">
-                          <div className="h-12 w-12 rounded-2xl bg-muted/60 flex items-center justify-center mx-auto mb-3"><Users className="h-6 w-6 text-muted-foreground/20" /></div>
+                          <div className="h-12 w-12 rounded-2xl bg-muted/60 flex items-center justify-center mx-auto mb-3">
+                            <Users className="h-6 w-6 text-muted-foreground/20" />
+                          </div>
                           <p className="text-xs font-semibold text-foreground">Nenhuma parte</p>
                           <p className="text-[10px] text-muted-foreground mt-1">Use "Atualizar" ou adicione abaixo</p>
                         </div>
@@ -890,7 +980,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
               </div>
             </TabsContent>
 
-            {/* Tab Movimentos */}
+            {/* ── TAB MOVIMENTOS ── */}
             <TabsContent value="movimentos" className="flex-1 min-h-0 mt-0 overflow-hidden">
               <ScrollArea className="h-full">
                 <div className="px-6 py-5">
@@ -907,8 +997,11 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                     <div className="space-y-2 pb-6">
                       <p className="text-xs text-muted-foreground mb-4 font-medium">{movimentosEnriquecidos.length} movimentação(ões) · clique para detalhes</p>
                       {movimentosEnriquecidos.map((mov, i) => (
-                        <div key={i} className="group flex items-start gap-3 p-3.5 rounded-2xl border border-border/40 bg-card hover:bg-accent/30 hover:border-border cursor-pointer transition-all duration-150 hover:shadow-sm" onClick={() => { setSelectedMovimento(mov); setMovModalOpen(true); }}>
-                          <div className="shrink-0 mt-0.5"><span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-bold border ${getCategoriaColor(mov.categoria)}`}>{mov.badge}</span></div>
+                        <div key={i} className="group flex items-start gap-3 p-3.5 rounded-2xl border border-border/40 bg-card hover:bg-accent/30 hover:border-border cursor-pointer transition-all duration-150 hover:shadow-sm"
+                          onClick={() => { setSelectedMovimento(mov); setMovModalOpen(true); }}>
+                          <div className="shrink-0 mt-0.5">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-bold border ${getCategoriaColor(mov.categoria)}`}>{mov.badge}</span>
+                          </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-foreground leading-snug">{mov.titulo_humano}</p>
                             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{mov.descricao_humana}</p>
@@ -925,7 +1018,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
               </ScrollArea>
             </TabsContent>
 
-            {/* Tab Notificações */}
+            {/* ── TAB NOTIFICAÇÕES ── */}
             <TabsContent value="notificacoes" className="flex-1 min-h-0 mt-0 overflow-hidden">
               <ScrollArea className="h-full">
                 <div className="px-6 py-5 pb-16">
@@ -947,17 +1040,22 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
             </TabsContent>
           </Tabs>
 
-          {/* Footer */}
+          {/* ── Footer ── */}
           <div className="flex items-center justify-between px-6 py-3.5 border-t border-border/60 bg-card shrink-0">
             <div>
               {!isNew && canDelete && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="sm" className="rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10 h-9 gap-1.5"><Trash2 className="h-3.5 w-3.5" /> Excluir</Button>
+                    <Button variant="ghost" size="sm" className="rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10 h-9 gap-1.5">
+                      <Trash2 className="h-3.5 w-3.5" /> Excluir
+                    </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent className="rounded-2xl">
                     <AlertDialogHeader><AlertDialogTitle>Confirmar exclusão</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader>
-                    <AlertDialogFooter><AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDelete} className="rounded-xl bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction></AlertDialogFooter>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDelete} className="rounded-xl bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction>
+                    </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
               )}
