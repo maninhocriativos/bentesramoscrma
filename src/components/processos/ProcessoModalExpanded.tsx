@@ -3,7 +3,7 @@ import {
   Trash2, Loader2, Users, BadgeCheck, RefreshCw, MessageSquare,
   Building2, Scale, Calendar, DollarSign, Plus, X,
   FileText, Bell, Hash, FolderOpen, Shield, Pencil, ChevronRight,
-  CheckCircle2, Search, Tag, UserPlus,
+  CheckCircle2, Search, Tag, UserPlus, AlertTriangle,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import { Processo, ProcessoStatus, ProcessoParte, ProcessoMovimento } from '@/types/processos';
 import { LeadName } from '@/hooks/useLeadNames';
 import { useProcessos } from '@/hooks/useProcessos';
@@ -72,8 +71,8 @@ interface Assunto {
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const STATUSES: ProcessoStatus[] = ['Em Andamento', 'Suspenso', 'Arquivado', 'Ganho', 'Perdido'];
-const CNJ_REGEX     = /^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$/;
-const DRAFT_PREFIX  = 'processo_modal_draft_v1';
+const CNJ_REGEX    = /^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$/;
+const DRAFT_PREFIX = 'processo_modal_draft_v1';
 const DRAFT_MAX_AGE = 1000 * 60 * 60 * 24;
 
 const createEmptyForm = (): ProcessoFormData => ({
@@ -89,12 +88,12 @@ const createEmptyForm = (): ProcessoFormData => ({
   complemento_enderecamento: '',
 });
 
-const STATUS_STYLE: Record<string, string> = {
-  'Em Andamento': 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400',
-  'Ganho':        'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400',
-  'Perdido':      'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400',
-  'Suspenso':     'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400',
-  'Arquivado':    'bg-muted text-muted-foreground border-border',
+const STATUS_CONFIG: Record<string, { cls: string; dot: string }> = {
+  'Em Andamento': { cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800/40',   dot: 'bg-blue-500'    },
+  'Ganho':        { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300',             dot: 'bg-emerald-500' },
+  'Perdido':      { cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-300',                                dot: 'bg-red-500'     },
+  'Suspenso':     { cls: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300',                      dot: 'bg-amber-500'   },
+  'Arquivado':    { cls: 'bg-muted text-muted-foreground border-border',                                                               dot: 'bg-muted-foreground' },
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -111,12 +110,25 @@ const parseDate = (v: string): string | null => {
   if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
   const pt = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (pt) return `${pt[3]}-${pt[2]}-${pt[1]}`;
-  try {
-    const d = new Date(v);
-    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-  } catch { /* noop */ }
+  try { const d = new Date(v); if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10); } catch { /**/ }
   return null;
 };
+
+// ✅ FIX — extrai campos do processo normalizado de forma robusta
+// O Escavador retorna campos em diferentes locais dependendo da versão da API
+const extractFromProc = (proc: any) => ({
+  classe:        proc.classe        || proc.titulo_acao   || proc.classeNome   || '',
+  tribunal:      proc.tribunal      || proc.sigla_tribunal || '',
+  orgaoJulgador: proc.orgaoJulgador || proc.orgao_julgador || proc.vara_comarca || proc.orgao || '',
+  grau:          proc.grau          || proc.grauFormatado  || '',
+  assunto:       proc.assuntos?.[0]?.nome || proc.assunto || '',
+  assuntoCnj:    proc.assuntos?.[0]?.codigo?.toString() || proc.assunto_cnj || '',
+  // ✅ classe_cnj deve ser o NOME legível, não o código numérico
+  classeCnj:     proc.classe        || proc.classeCodigo   || '',
+  valorCausa:    proc.valorCausa    || proc.valor_causa    || null,
+  dataAjuiz:     proc.dataAjuizamento    || proc.data_ajuizamento    || proc.data_distribuicao || '',
+  dataDistrib:   proc.dataDistribuicao   || proc.data_distribuicao   || proc.dataAjuizamento   || '',
+});
 
 // ─── AssuntoPickerModal ────────────────────────────────────────────────────────
 
@@ -184,32 +196,35 @@ function AssuntoPickerModal({ isOpen, onClose, currentValue, onSelect }: {
           </div>
         </div>
         <ScrollArea className="flex-1 min-h-0 px-5" style={{ height: 'calc(85vh - 240px)' }}>
-          {loading ? <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
-          : Object.keys(grouped).length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">Nenhum assunto encontrado</p>
-          : (
-            <div className="space-y-4 pb-4">
-              {Object.entries(grouped).map(([cat, items]) => (
-                <div key={cat}>
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">{cat}</p>
-                  <div className="space-y-1">
-                    {items.map(a => (
-                      <div key={a.id}
-                        className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl cursor-pointer transition-all group ${currentValue === a.nome ? 'bg-primary/10 border border-primary/20 text-primary' : 'hover:bg-muted/50 border border-transparent'}`}
-                        onClick={() => { onSelect(a.nome); onClose(); }}
-                      >
-                        <span className="text-sm font-medium">{a.nome}</span>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {currentValue === a.nome && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
-                          <button onClick={e => { e.stopPropagation(); handleDelete(a.id); }} className="h-5 w-5 flex items-center justify-center rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground"><X className="h-3 w-3" /></button>
-                        </div>
-                        {currentValue === a.nome && <CheckCircle2 className="h-4 w-4 text-primary shrink-0 group-hover:hidden" />}
+          {loading
+            ? <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
+            : Object.keys(grouped).length === 0
+              ? <p className="text-sm text-muted-foreground text-center py-8">Nenhum assunto encontrado</p>
+              : (
+                <div className="space-y-4 pb-4">
+                  {Object.entries(grouped).map(([cat, items]) => (
+                    <div key={cat}>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">{cat}</p>
+                      <div className="space-y-1">
+                        {items.map(a => (
+                          <div key={a.id}
+                            className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl cursor-pointer transition-all group ${currentValue === a.nome ? 'bg-primary/10 border border-primary/20 text-primary' : 'hover:bg-muted/50 border border-transparent'}`}
+                            onClick={() => { onSelect(a.nome); onClose(); }}
+                          >
+                            <span className="text-sm font-medium">{a.nome}</span>
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {currentValue === a.nome && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
+                              <button onClick={e => { e.stopPropagation(); handleDelete(a.id); }} className="h-5 w-5 flex items-center justify-center rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground"><X className="h-3 w-3" /></button>
+                            </div>
+                            {currentValue === a.nome && <CheckCircle2 className="h-4 w-4 text-primary shrink-0 group-hover:hidden" />}
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              )
+          }
         </ScrollArea>
         <div className="px-5 py-4 border-t shrink-0 space-y-3">
           <p className="text-xs font-semibold text-foreground flex items-center gap-1.5"><Plus className="h-3.5 w-3.5 text-primary" /> Cadastrar novo assunto</p>
@@ -232,7 +247,7 @@ function NovoClienteModal({ isOpen, onClose, onCreated }: {
   isOpen: boolean; onClose: () => void; onCreated: (lead: LeadName) => void;
 }) {
   const [nome, setNome] = useState(''); const [telefone, setTelefone] = useState('');
-  const [cpf, setCpf] = useState(''); const [email, setEmail] = useState('');
+  const [cpf, setCpf]   = useState(''); const [email, setEmail]       = useState('');
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -242,7 +257,7 @@ function NovoClienteModal({ isOpen, onClose, onCreated }: {
       .insert({ nome: nome.trim(), telefone: telefone.trim() || null, cpf: cpf.replace(/\D/g, '') || null, email: email.trim() || null, origem: 'CRM' })
       .select('id, nome, telefone').single();
     if (error) { toast.error('Erro ao criar cliente', { description: error.message }); }
-    else { toast.success(`Cliente "${nome}" criado e vinculado!`); onCreated(data as LeadName); setNome(''); setTelefone(''); setCpf(''); setEmail(''); onClose(); }
+    else { toast.success(`Cliente "${nome}" criado!`); onCreated(data as LeadName); setNome(''); setTelefone(''); setCpf(''); setEmail(''); onClose(); }
     setSaving(false);
   };
 
@@ -251,7 +266,7 @@ function NovoClienteModal({ isOpen, onClose, onCreated }: {
       <DialogContent className="max-w-md rounded-2xl p-0">
         <DialogHeader className="px-5 pt-5 pb-0">
           <DialogTitle className="flex items-center gap-2 text-base"><UserPlus className="h-4 w-4 text-primary" /> Novo Cliente</DialogTitle>
-          <p className="text-xs text-muted-foreground mt-1">O cliente será criado e já vinculado a este processo.</p>
+          <p className="text-xs text-muted-foreground mt-1">Será criado e vinculado a este processo.</p>
         </DialogHeader>
         <div className="px-5 py-4 space-y-3">
           <div><Label className="text-xs text-muted-foreground">Nome completo *</Label><Input value={nome} onChange={e => setNome(e.target.value)} className="h-9 rounded-xl mt-1" placeholder="Nome do cliente" autoFocus /></div>
@@ -274,47 +289,70 @@ function NovoClienteModal({ isOpen, onClose, onCreated }: {
   );
 }
 
-// ─── Sub-components ────────────────────────────────────────────────────────────
+// ─── UI helpers ────────────────────────────────────────────────────────────────
 
 function SectionTitle({ icon: Icon, label, color = 'text-primary', bg = 'bg-primary/10' }: { icon: React.ElementType; label: string; color?: string; bg?: string }) {
   return (
-    <div className="flex items-center gap-2 mb-2.5">
-      <div className={`h-5 w-5 rounded-md ${bg} flex items-center justify-center shrink-0`}><Icon className={`h-3 w-3 ${color}`} /></div>
-      <h3 className="text-[11px] font-bold text-foreground uppercase tracking-wider">{label}</h3>
+    <div className="flex items-center gap-2 mb-3">
+      <div className={`h-6 w-6 rounded-lg ${bg} flex items-center justify-center shrink-0`}><Icon className={`h-3.5 w-3.5 ${color}`} /></div>
+      <h3 className="text-[11px] font-black text-foreground uppercase tracking-widest">{label}</h3>
     </div>
   );
 }
-function FieldGroup({ children }: { children: React.ReactNode }) { return <div className="bg-muted/20 rounded-xl p-3.5 space-y-3 border border-border/30">{children}</div>; }
+
+function FieldGroup({ children }: { children: React.ReactNode }) {
+  return <div className="bg-muted/20 rounded-2xl p-4 space-y-3 border border-border/30">{children}</div>;
+}
 function Row2({ children }: { children: React.ReactNode }) { return <div className="grid grid-cols-2 gap-3">{children}</div>; }
 function Row3({ children }: { children: React.ReactNode }) { return <div className="grid grid-cols-3 gap-3">{children}</div>; }
 function Row4({ children }: { children: React.ReactNode }) { return <div className="grid grid-cols-4 gap-2">{children}</div>; }
+
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
-  return <div><Label className="text-[11px] text-muted-foreground mb-1 block">{label}</Label>{children}{hint && <p className="text-[10px] text-muted-foreground mt-1">{hint}</p>}</div>;
+  return (
+    <div>
+      <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">{label}</Label>
+      {children}
+      {hint && <p className="text-[10px] text-muted-foreground mt-1">{hint}</p>}
+    </div>
+  );
 }
 
 // ─── ParteCard ─────────────────────────────────────────────────────────────────
 
-function ParteCard({ parte, index, onUpdate, onRemove }: { parte: ProcessoParte; index: number; onUpdate: (i: number, field: string, value: string) => void; onRemove: (i: number) => void }) {
+function ParteCard({ parte, index, onUpdate, onRemove }: {
+  parte: ProcessoParte; index: number;
+  onUpdate: (i: number, field: string, value: string) => void;
+  onRemove: (i: number) => void;
+}) {
   const tipoLower = (parte.tipo || '').toLowerCase();
-  const isAutor = tipoLower.includes('autor');
-  const isReu   = tipoLower.includes('réu') || tipoLower.includes('reu');
-  const borderCls = isAutor ? 'border-l-emerald-500' : isReu ? 'border-l-red-500' : 'border-l-muted-foreground/30';
-  const badgeCls  = isAutor ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400' : isReu ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400' : 'bg-muted text-muted-foreground border-border';
+  const isAutor   = tipoLower.includes('autor');
+  const isReu     = tipoLower.includes('réu') || tipoLower.includes('reu');
+  const barColor  = isAutor ? '#10b981' : isReu ? '#ef4444' : '#94a3b8';
+  const badgeCls  = isAutor
+    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400'
+    : isReu
+    ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400'
+    : 'bg-muted text-muted-foreground border-border';
+
   return (
     <Collapsible>
-      <div className={`rounded-xl border border-border/40 bg-card border-l-[3px] ${borderCls}`}>
+      <div className="rounded-xl border border-border/40 bg-card overflow-hidden" style={{ borderLeftWidth: 3, borderLeftColor: barColor }}>
         <div className="flex items-center justify-between gap-2 p-2.5 pl-3">
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold truncate">{parte.nome}</p>
             <div className="flex flex-wrap gap-1.5 mt-0.5">
               {parte.documento && <span className="text-[10px] text-muted-foreground">Doc: {parte.documento}</span>}
-              {parte.celular    && <span className="text-[10px] text-muted-foreground">📱 {parte.celular}</span>}
+              {parte.celular   && <span className="text-[10px] text-muted-foreground">📱 {parte.celular}</span>}
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <Badge variant="outline" className={`text-[9px] px-1 h-4 ${badgeCls}`}>{parte.tipo}</Badge>
-            <CollapsibleTrigger asChild><Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/50 hover:text-primary"><Pencil className="h-2.5 w-2.5" /></Button></CollapsibleTrigger>
-            <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/50 hover:text-destructive" onClick={() => onRemove(index)}><X className="h-2.5 w-2.5" /></Button>
+            <Badge variant="outline" className={`text-[9px] px-1.5 h-4 ${badgeCls}`}>{parte.tipo}</Badge>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/50 hover:text-primary"><Pencil className="h-2.5 w-2.5" /></Button>
+            </CollapsibleTrigger>
+            <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/50 hover:text-destructive" onClick={() => onRemove(index)}>
+              <X className="h-2.5 w-2.5" />
+            </Button>
           </div>
         </div>
         <CollapsibleContent>
@@ -334,7 +372,7 @@ function ParteCard({ parte, index, onUpdate, onRemove }: { parte: ProcessoParte;
       </div>
       {parte.advogados && parte.advogados.length > 0 && (
         <div className="ml-3 mt-0.5 mb-1 pl-2.5 border-l-2 border-border/30">
-          {parte.advogados.map((adv, j) => (
+          {parte.advogados.map((adv: any, j: number) => (
             <div key={j} className="flex items-center justify-between gap-2 py-0.5">
               <p className="text-[10px] font-medium truncate flex-1">{adv.nome}</p>
               {adv.oab && <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 shrink-0"><BadgeCheck className="h-2.5 w-2.5 text-primary" />{adv.oab}</span>}
@@ -348,7 +386,7 @@ function ParteCard({ parte, index, onUpdate, onRemove }: { parte: ProcessoParte;
 
 function AddParteForm({ onAdd }: { onAdd: (parte: ProcessoParte) => void }) {
   const [nome, setNome] = useState(''); const [tipo, setTipo] = useState('');
-  const [doc, setDoc]   = useState(''); const [cel, setCel]   = useState('');
+  const [doc,  setDoc]  = useState(''); const [cel,  setCel]  = useState('');
   const handleAdd = () => {
     if (!nome.trim() || !tipo) { toast.error('Preencha nome e tipo'); return; }
     onAdd({ nome: nome.trim(), tipo, polo: tipo === 'Autor' ? 'AT' : tipo === 'Réu' ? 'PA' : 'TC', tipoPessoa: 'FISICA', documento: doc || undefined, celular: cel || undefined });
@@ -356,8 +394,8 @@ function AddParteForm({ onAdd }: { onAdd: (parte: ProcessoParte) => void }) {
     toast.success(`"${nome.trim()}" adicionado`);
   };
   return (
-    <div className="rounded-xl border border-dashed border-primary/30 bg-primary/[0.02] p-2.5 space-y-2">
-      <p className="text-[11px] font-semibold text-foreground flex items-center gap-1"><Plus className="h-3 w-3 text-primary" /> Adicionar Parte</p>
+    <div className="rounded-xl border border-dashed border-primary/30 bg-primary/[0.02] p-3 space-y-2">
+      <p className="text-[11px] font-bold text-foreground flex items-center gap-1"><Plus className="h-3 w-3 text-primary" /> Adicionar Parte</p>
       <div className="grid grid-cols-2 gap-2">
         <div><Label className="text-[10px] text-muted-foreground">Nome *</Label><Input value={nome} onChange={e => setNome(e.target.value)} className="h-7 text-xs rounded-lg mt-1 bg-card" placeholder="Nome" /></div>
         <div><Label className="text-[10px] text-muted-foreground">Tipo *</Label>
@@ -368,7 +406,7 @@ function AddParteForm({ onAdd }: { onAdd: (parte: ProcessoParte) => void }) {
         <div><Label className="text-[10px] text-muted-foreground">CPF/CNPJ</Label><Input value={doc} onChange={e => setDoc(e.target.value)} className="h-7 text-xs rounded-lg mt-1 bg-card" placeholder="Opcional" /></div>
         <div><Label className="text-[10px] text-muted-foreground">Celular</Label><Input value={cel} onChange={e => setCel(e.target.value)} className="h-7 text-xs rounded-lg mt-1 bg-card" placeholder="(00) 00000-0000" /></div>
       </div>
-      <Button type="button" size="sm" className="w-full h-7 rounded-xl text-xs" onClick={handleAdd}><Plus className="h-3 w-3 mr-1" /> Adicionar</Button>
+      <Button type="button" size="sm" className="w-full h-7 rounded-xl text-xs gap-1" onClick={handleAdd}><Plus className="h-3 w-3" /> Adicionar</Button>
     </div>
   );
 }
@@ -406,7 +444,7 @@ export function ProcessoModalExpanded({
   }, []);
 
   const processoId = processo?.id ?? null;
-  const draftKey   = useMemo(() => {
+  const draftKey = useMemo(() => {
     const k = isNew ? '__new__' : processoId;
     return k ? `${DRAFT_PREFIX}:${k}` : null;
   }, [isNew, processoId]);
@@ -427,35 +465,55 @@ export function ProcessoModalExpanded({
     if (draftKey && typeof window !== 'undefined') window.localStorage.removeItem(draftKey);
   }, [draftKey]);
 
+  // Auto-save draft
   useEffect(() => {
     if (!isOpen || !draftKey || !draftHydrated) return;
     window.localStorage.setItem(draftKey, JSON.stringify({ formData, partes: isNew ? partes : [], movimentos: isNew ? movimentos : [], updatedAt: new Date().toISOString() }));
   }, [formData, partes, movimentos, draftKey, draftHydrated, isOpen, isNew]);
 
+  // Load data when processo changes
   useEffect(() => {
     const currentKey  = isNew ? '__new__' : processoId;
     const previousKey = wasNew ? '__new__' : lastLoadedId;
     if (currentKey === previousKey) return;
     setDraftHydrated(false); setActiveTab('processo');
+
     if (processo) {
       const p = processo as any;
       setFormData({
-        numero_processo: processo.numero_processo || '', numero_complementar: p.numero_complementar || '',
-        titulo_acao: processo.titulo_acao || '', status: (processo.status as ProcessoStatus) || 'Em Andamento',
-        advogado_responsavel: processo.advogado_responsavel || '', cliente_id: processo.cliente_id || '',
-        cpf_cliente: processo.cpf_cliente || '', tribunal: processo.tribunal || '',
-        vara_comarca: processo.vara_comarca || '', assunto: processo.assunto || '',
-        valor_causa: processo.valor_causa ? processo.valor_causa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '',
-        orgao_julgador: processo.orgao_julgador || '', grau: processo.grau || '',
-        origem_cliente: p.origem_cliente || '', descricao: p.descricao || '',
-        marcadores: p.marcadores || '', area: p.area || '', fase: p.fase || '',
-        classe_cnj: processo.classe_cnj || '', assunto_cnj: p.assunto_cnj || '',
-        segredo_justica: p.segredo_justica || false, data_distribuicao: p.data_distribuicao || '',
-        data_citacao: p.data_citacao || '', data_recebimento: p.data_recebimento || '',
-        data_arquivamento: p.data_arquivamento || '', data_encerramento: p.data_encerramento || '',
-        valor_provisionado: p.valor_provisionado ? String(p.valor_provisionado) : '',
-        probabilidade: p.probabilidade || '', monitorar_push: p.monitorar_push ?? true,
-        tipo_orgao_julgador: p.tipo_orgao_julgador || '', sistema_judicial: p.sistema_judicial || '',
+        numero_processo:           processo.numero_processo || '',
+        numero_complementar:       p.numero_complementar || '',
+        titulo_acao:               processo.titulo_acao || '',
+        status:                    (processo.status as ProcessoStatus) || 'Em Andamento',
+        advogado_responsavel:      processo.advogado_responsavel || '',
+        cliente_id:                processo.cliente_id || '',
+        cpf_cliente:               processo.cpf_cliente || '',
+        tribunal:                  processo.tribunal || '',
+        vara_comarca:              processo.vara_comarca || processo.orgao_julgador || '',
+        assunto:                   processo.assunto || '',
+        valor_causa:               processo.valor_causa ? processo.valor_causa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '',
+        orgao_julgador:            processo.orgao_julgador || processo.vara_comarca || '',
+        grau:                      processo.grau || '',
+        origem_cliente:            p.origem_cliente || '',
+        descricao:                 p.descricao || '',
+        marcadores:                p.marcadores || '',
+        area:                      p.area || '',
+        fase:                      p.fase || '',
+        // ✅ FIX — classe_cnj usa o nome legível, não o código
+        classe_cnj:                processo.classe_cnj || processo.titulo_acao || '',
+        assunto_cnj:               p.assunto_cnj || '',
+        segredo_justica:           p.segredo_justica || false,
+        // ✅ FIX — normaliza datas do banco (pode vir como YYYY-MM-DD ou ISO)
+        data_distribuicao:         p.data_distribuicao ? (p.data_distribuicao.slice(0, 10)) : '',
+        data_citacao:              p.data_citacao      ? (p.data_citacao.slice(0, 10))      : '',
+        data_recebimento:          p.data_recebimento  ? (p.data_recebimento.slice(0, 10))  : '',
+        data_arquivamento:         p.data_arquivamento ? (p.data_arquivamento.slice(0, 10)) : '',
+        data_encerramento:         p.data_encerramento ? (p.data_encerramento.slice(0, 10)) : '',
+        valor_provisionado:        p.valor_provisionado ? String(p.valor_provisionado) : '',
+        probabilidade:             p.probabilidade || '',
+        monitorar_push:            p.monitorar_push ?? true,
+        tipo_orgao_julgador:       p.tipo_orgao_julgador || '',
+        sistema_judicial:          p.sistema_judicial || '',
         complemento_enderecamento: p.complemento_enderecamento || '',
       });
       setPartes(processo.partes_json || []);
@@ -463,6 +521,7 @@ export function ProcessoModalExpanded({
     } else {
       setFormData(createEmptyForm()); setPartes([]); setMovimentos([]);
     }
+
     const draft = readDraft();
     if (draft?.formData) {
       setFormData(prev => {
@@ -481,24 +540,55 @@ export function ProcessoModalExpanded({
 
   useEffect(() => { setAutoFetchDone(false); }, [processoId]);
 
+  // ✅ FIX — carrega partes do banco relacional com fallback para partes_json
   useEffect(() => {
-    if (!isNew && isOpen && processo?.id && !autoFetchDone) {
+    if (!isNew && isOpen && processo?.id && !autoFetchDone && draftHydrated) {
       setAutoFetchDone(true);
       (async () => {
         try {
-          const { data: dbPartes } = await supabase.from('processo_partes').select('*').eq('processo_id', processo.id);
+          // Carregar partes da tabela relacional
+          const { data: dbPartes } = await supabase
+            .from('processo_partes').select('*').eq('processo_id', processo.id);
+
           if (dbPartes && dbPartes.length > 0) {
-            setPartes(dbPartes.map((p: any) => ({ nome: p.nome, tipo: p.tipo, polo: p.polo || '', tipoPessoa: p.tipo_pessoa || '', documento: p.documento || '', celular: p.celular || '', telefone_adicional: p.telefone_adicional || '', advogados: Array.isArray(p.advogados) ? p.advogados : [] })));
+            setPartes(dbPartes.map((p: any) => ({
+              nome: p.nome, tipo: p.tipo, polo: p.polo || '',
+              tipoPessoa: p.tipo_pessoa || '', documento: p.documento || '',
+              celular: p.celular || '', telefone_adicional: p.telefone_adicional || '',
+              advogados: Array.isArray(p.advogados) ? p.advogados : [],
+            })));
           } else if (processo.partes_json?.length) {
+            // Fallback: usa partes_json e persiste na tabela relacional
             setPartes(processo.partes_json);
-            await supabase.from('processo_partes').insert(processo.partes_json.map(p => ({ processo_id: processo.id, nome: p.nome, tipo: p.tipo, polo: p.polo || null, tipo_pessoa: p.tipoPessoa || null, documento: p.documento || null, celular: p.celular || null, telefone_adicional: p.telefone_adicional || null, advogados: p.advogados || null })));
+            await supabase.from('processo_partes').insert(
+              processo.partes_json.map((p: any) => ({
+                processo_id: processo.id, nome: p.nome, tipo: p.tipo,
+                polo: p.polo || null, tipo_pessoa: p.tipoPessoa || null,
+                documento: p.documento || null, celular: p.celular || null,
+                advogados: p.advogados || null,
+              }))
+            );
           }
-          const { data: dbMov } = await supabase.from('processo_movimentacoes').select('*').eq('processo_id', processo.id).order('data_movimento', { ascending: false }).limit(50);
+
+          // Carregar movimentos da tabela relacional
+          const { data: dbMov } = await supabase
+            .from('processo_movimentacoes').select('*')
+            .eq('processo_id', processo.id)
+            .order('data_movimento', { ascending: false }).limit(100);
+
           if (dbMov?.length) {
-            setMovimentos(dbMov.map((m: any) => ({ dataHora: m.data_movimento ? new Date(m.data_movimento).toLocaleDateString('pt-BR') : '', dataHoraRaw: m.data_movimento, nome: m.movimento_titulo || 'Movimentação', complemento: m.movimento_descricao || null, codigo: m.movimento_cnj_codigo ? Number(m.movimento_cnj_codigo) : null })));
+            setMovimentos(dbMov.map((m: any) => ({
+              dataHora:    m.data_movimento ? new Date(m.data_movimento).toLocaleDateString('pt-BR') : '',
+              dataHoraRaw: m.data_movimento,
+              nome:        m.movimento_titulo || 'Movimentação',
+              complemento: m.movimento_descricao || null,
+              codigo:      m.movimento_cnj_codigo ? Number(m.movimento_cnj_codigo) : null,
+            })));
           }
         } catch (err) { console.error('Erro ao carregar dados:', err); }
       })();
+
+      // Auto-refresh se dados incompletos ou stale
       const hasValidCnj   = processo.numero_processo && CNJ_REGEX.test(processo.numero_processo.trim());
       const isMissingData = !processo.classe_cnj || !processo.orgao_julgador || !processo.assunto_cnj;
       const lastCheck     = processo.ultima_consulta_api_at ? new Date(processo.ultima_consulta_api_at).getTime() : 0;
@@ -507,28 +597,36 @@ export function ProcessoModalExpanded({
     }
   }, [processo?.id, isOpen, draftHydrated, autoFetchDone, isNew]);
 
+  // Auto-fetch para processos novos ao digitar CNJ
   useEffect(() => {
     const timer = setTimeout(() => {
       const num = (formData.numero_processo || '').trim();
-      if (isNew && CNJ_REGEX.test(num)) fetchProcessoData(num, formData.tribunal);
-    }, 500);
+      if (isNew && CNJ_REGEX.test(num)) fetchProcessoData(num);
+    }, 600);
     return () => clearTimeout(timer);
-  }, [formData.numero_processo, formData.tribunal, isNew]);
+  }, [formData.numero_processo, isNew]);
 
   const mapStatus = (s: string): ProcessoStatus => {
-    const map: Record<string, ProcessoStatus> = { 'Em Andamento': 'Em Andamento', 'Arquivado': 'Arquivado', 'Suspenso': 'Suspenso', 'Transitado em Julgado': 'Arquivado', 'Com Sentença': 'Em Andamento', 'Em Grau Recursal': 'Em Andamento' };
+    const map: Record<string, ProcessoStatus> = {
+      'Em Andamento': 'Em Andamento', 'Arquivado': 'Arquivado', 'Suspenso': 'Suspenso',
+      'Transitado em Julgado': 'Arquivado', 'Com Sentença': 'Em Andamento', 'Em Grau Recursal': 'Em Andamento',
+    };
     return map[s] || 'Em Andamento';
   };
 
-  const fetchProcessoData = async (num: string, tribunalOverride?: string) => {
+  // ✅ FIX — fetchProcessoData usa extractFromProc para mapear campos corretamente
+  const fetchProcessoData = async (num: string) => {
     if (!CNJ_REGEX.test(num)) return;
     setFetchingData(true);
     try {
-      const { data, error } = await supabase.functions.invoke('consulta-processos', { body: { numeroProcesso: num, tribunal: tribunalOverride || undefined } });
+      const { data, error } = await supabase.functions.invoke('consulta-processos', {
+        body: { numeroProcesso: num },
+      });
       if (error) throw error;
       if (data?.encontrado && data?.processo) {
-        const proc  = data.processo;
-        const autor = proc.partes?.find((p: any) => p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT' || p.polo?.toUpperCase() === 'PA');
+        const proc   = data.processo;
+        const fields = extractFromProc(proc);
+        const autor  = proc.partes?.find((p: any) => p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT');
         let clienteId = '';
         if (autor?.nome) {
           const norm  = autor.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -537,22 +635,32 @@ export function ProcessoModalExpanded({
         }
         const adv = autor?.advogados?.[0];
         setFormData(prev => ({
-          ...prev, titulo_acao: proc.classe || prev.titulo_acao, status: mapStatus(proc.status),
-          cliente_id: clienteId || prev.cliente_id, advogado_responsavel: adv ? (adv.oab ? `${adv.nome} (${adv.oab})` : adv.nome) : prev.advogado_responsavel,
-          tribunal: proc.tribunal || prev.tribunal, orgao_julgador: proc.orgaoJulgador || prev.orgao_julgador,
-          grau: proc.grau || prev.grau, assunto: proc.assuntos?.[0]?.nome || prev.assunto,
-          valor_causa: proc.valorCausa?.toString() || prev.valor_causa, classe_cnj: proc.classeCodigo || prev.classe_cnj,
-          vara_comarca: proc.orgaoJulgador || prev.vara_comarca, data_distribuicao: proc.dataAjuizamento || prev.data_distribuicao,
+          ...prev,
+          titulo_acao:       fields.classe      || prev.titulo_acao,
+          status:            mapStatus(proc.status),
+          cliente_id:        clienteId          || prev.cliente_id,
+          advogado_responsavel: adv ? (adv.oab ? `${adv.nome} (${adv.oab})` : adv.nome) : prev.advogado_responsavel,
+          tribunal:          fields.tribunal    || prev.tribunal,
+          orgao_julgador:    fields.orgaoJulgador || prev.orgao_julgador,
+          vara_comarca:      fields.orgaoJulgador || prev.vara_comarca,
+          grau:              fields.grau        || prev.grau,
+          assunto:           fields.assunto     || prev.assunto,
+          assunto_cnj:       fields.assuntoCnj  || prev.assunto_cnj,
+          classe_cnj:        fields.classeCnj   || prev.classe_cnj,
+          valor_causa:       fields.valorCausa?.toString() || prev.valor_causa,
+          data_distribuicao: fields.dataDistrib ? fields.dataDistrib.slice(0, 10) : prev.data_distribuicao,
         }));
         if (proc.partes?.length)     setPartes(proc.partes);
-        if (proc.movimentos?.length) setMovimentos(proc.movimentos.slice(0, 50));
-        toast.success('Dados carregados!', { description: proc.classe });
-      } else { toast.error('Processo não encontrado', { description: data?.mensagem }); }
+        if (proc.movimentos?.length) setMovimentos(proc.movimentos.slice(0, 100));
+        toast.success('Dados carregados!', { description: fields.classe || proc.tribunal });
+      } else {
+        toast.error('Processo não encontrado', { description: data?.mensagem });
+      }
     } catch { toast.error('Erro ao buscar no DataJud'); }
-    finally  { setFetchingData(false); }
+    finally { setFetchingData(false); }
   };
 
-  // ─── handleRefreshStatus CORRIGIDO ─────────────────────────────────────────
+  // ✅ FIX — handleRefreshStatus também usa extractFromProc
   const handleRefreshStatus = async (silent = false) => {
     const num = (formData.numero_processo || '').trim();
     if (!num || !CNJ_REGEX.test(num)) { if (!silent) toast.error('Número CNJ inválido'); return; }
@@ -560,55 +668,56 @@ export function ProcessoModalExpanded({
     try {
       const { data, error } = await supabase.functions.invoke('consulta-processos', {
         body: {
-          numeroProcesso:    num,
-          tribunal:          formData.tribunal || undefined,
-          force_refresh:     true,
-          // ✅ Sempre persiste — tanto auto-refresh silencioso quanto manual
-          persistir:         true,
-          // ✅ Passa o ID existente para UPDATE direto, evitando duplicar
-          processo_id:       processo?.id || null,
+          numeroProcesso: num,
+          force_refresh:  true,
+          persistir:      true,
+          processo_id:    processo?.id || null,
         },
       });
       if (error) throw error;
       if (data?.encontrado && data?.processo) {
-        const proc      = data.processo;
-        const newPartes = proc.partes || [];
-        const newMovs   = (proc.movimentos || []).slice(0, 50);
-        const toDate    = (v?: string | null): string => {
+        const proc   = data.processo;
+        const fields = extractFromProc(proc);
+        const toDate = (v?: string | null): string => {
           if (!v) return '';
-          if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
-          if (/^\d{4}-\d{2}-\d{2}T/.test(v)) return v.slice(0, 10);
+          if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
           const pt = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
           if (pt) return `${pt[3]}-${pt[2]}-${pt[1]}`;
           try { const d = new Date(v); if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10); } catch { /**/ }
           return '';
         };
+        const newPartes = proc.partes  || [];
+        const newMovs   = (proc.movimentos || []).slice(0, 100);
         setPartes(newPartes);
         setMovimentos(newMovs);
         setFormData(prev => ({
           ...prev,
-          titulo_acao:       proc.classe              || prev.titulo_acao,
+          titulo_acao:       fields.classe         || prev.titulo_acao,
           status:            mapStatus(proc.status),
-          tribunal:          proc.tribunal            || prev.tribunal,
-          orgao_julgador:    proc.orgaoJulgador       || prev.orgao_julgador,
-          grau:              proc.grau                || prev.grau,
-          assunto:           proc.assuntos?.[0]?.nome || prev.assunto,
-          valor_causa:       proc.valorCausa?.toString() || prev.valor_causa,
-          classe_cnj:        proc.classe              || prev.classe_cnj,
-          vara_comarca:      proc.orgaoJulgador       || prev.vara_comarca,
-          data_distribuicao: toDate(proc.dataAjuizamento) || prev.data_distribuicao,
+          tribunal:          fields.tribunal        || prev.tribunal,
+          orgao_julgador:    fields.orgaoJulgador   || prev.orgao_julgador,
+          vara_comarca:      fields.orgaoJulgador   || prev.vara_comarca,
+          grau:              fields.grau            || prev.grau,
+          assunto:           fields.assunto         || prev.assunto,
+          assunto_cnj:       fields.assuntoCnj      || prev.assunto_cnj,
+          classe_cnj:        fields.classeCnj       || prev.classe_cnj,
+          valor_causa:       fields.valorCausa?.toString() || prev.valor_causa,
+          data_distribuicao: toDate(fields.dataDistrib) || prev.data_distribuicao,
         }));
-        // ✅ Backup: atualiza diretamente no banco também (campos corretos)
+        // Direct DB update as backup
         if (processo?.id) {
           await supabase.from('processos').update({
-            titulo_acao:             proc.classe || null,
+            titulo_acao:             fields.classe || null,
             status:                  mapStatus(proc.status),
-            tribunal:                proc.tribunal || null,
-            orgao_julgador:          proc.orgaoJulgador || null,
-            assunto:                 proc.assuntos?.[0]?.nome || null,
-            valor_causa:             proc.valorCausa || null,
+            tribunal:                fields.tribunal || null,
+            orgao_julgador:          fields.orgaoJulgador || null,
+            vara_comarca:            fields.orgaoJulgador || null,
+            assunto:                 fields.assunto || null,
+            assunto_cnj:             fields.assuntoCnj || null,
+            classe_cnj:              fields.classeCnj || null,
+            valor_causa:             fields.valorCausa || null,
             partes_json:             newPartes.length > 0 ? newPartes : null,
-            movimentos_json:         newMovs.length > 0 ? newMovs : null,
+            movimentos_json:         newMovs.length > 0   ? newMovs   : null,
             ultima_consulta_api_at:  new Date().toISOString(),
             data_ultima_atualizacao: new Date().toISOString(),
           }).eq('id', processo.id);
@@ -624,7 +733,6 @@ export function ProcessoModalExpanded({
     } finally { setFetchingData(false); }
   };
 
-  // ─── handleSave CORRIGIDO ───────────────────────────────────────────────────
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -634,42 +742,41 @@ export function ProcessoModalExpanded({
       if (!nomeCliente && partes.length > 0) { const autor = partes.find(p => p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT'); if (autor?.nome) nomeCliente = autor.nome; }
 
       const data = {
-        numero_processo:           formData.numero_processo || null,
+        numero_processo:           formData.numero_processo   || null,
         numero_complementar:       formData.numero_complementar || null,
-        titulo_acao:               formData.titulo_acao || null,
+        titulo_acao:               formData.titulo_acao        || null,
         status:                    formData.status,
         advogado_responsavel:      formData.advogado_responsavel || null,
         cliente_id:                resolvedClienteId,
         nome_cliente:              nomeCliente,
         cpf_cliente:               formData.cpf_cliente ? formData.cpf_cliente.replace(/\D/g, '') : null,
-        origem_cliente:            formData.origem_cliente || null,
-        tribunal:                  formData.tribunal || null,
-        vara_comarca:              formData.vara_comarca || null,
-        orgao_julgador:            formData.orgao_julgador || null,
+        origem_cliente:            formData.origem_cliente     || null,
+        tribunal:                  formData.tribunal           || null,
+        vara_comarca:              formData.vara_comarca       || null,
+        orgao_julgador:            formData.orgao_julgador     || null,
         tipo_orgao_julgador:       formData.tipo_orgao_julgador || null,
-        grau:                      formData.grau || null,
-        sistema_judicial:          formData.sistema_judicial || null,
+        grau:                      formData.grau               || null,
+        sistema_judicial:          formData.sistema_judicial   || null,
         complemento_enderecamento: formData.complemento_enderecamento || null,
-        classe_cnj:                formData.classe_cnj || null,
-        assunto:                   formData.assunto || null,
-        assunto_cnj:               formData.assunto_cnj || null,
+        classe_cnj:                formData.classe_cnj         || null,
+        assunto:                   formData.assunto            || null,
+        assunto_cnj:               formData.assunto_cnj        || null,
         valor_causa:               parseMoney(formData.valor_causa),
         valor_provisionado:        parseMoney(formData.valor_provisionado),
-        probabilidade:             formData.probabilidade || null,
-        // ✅ Datas normalizadas para YYYY-MM-DD
+        probabilidade:             formData.probabilidade      || null,
         data_ajuizamento:          parseDate(formData.data_distribuicao),
         data_distribuicao:         parseDate(formData.data_distribuicao),
         data_citacao:              parseDate(formData.data_citacao),
         data_recebimento:          parseDate(formData.data_recebimento),
         data_arquivamento:         parseDate(formData.data_arquivamento),
         data_encerramento:         parseDate(formData.data_encerramento),
-        descricao:                 formData.descricao || null,
-        marcadores:                formData.marcadores || null,
-        area:                      formData.area || null,
-        fase:                      formData.fase || null,
+        descricao:                 formData.descricao          || null,
+        marcadores:                formData.marcadores         || null,
+        area:                      formData.area               || null,
+        fase:                      formData.fase               || null,
         segredo_justica:           formData.segredo_justica,
         monitorar_push:            formData.monitorar_push,
-        partes_json:               partes.length > 0 ? partes : null,
+        partes_json:               partes.length > 0   ? partes   : null,
         movimentos_json:           movimentos.length > 0 ? movimentos : null,
         updated_at:                new Date().toISOString(),
       };
@@ -679,10 +786,10 @@ export function ProcessoModalExpanded({
         const result = await createProcesso(data);
         if (result?.error) { toast.error('Erro ao criar processo', { description: (result.error as any)?.message }); return; }
         savedId = (result?.data as any)?.id || null;
-        toast.success('Processo criado com sucesso!');
+        toast.success('Processo criado!');
       } else if (processo) {
         const result = await updateProcesso(processo.id, data);
-        if (result?.error) { toast.error('Erro ao salvar processo', { description: (result.error as any)?.message }); return; }
+        if (result?.error) { toast.error('Erro ao salvar', { description: (result.error as any)?.message }); return; }
         savedId = processo.id;
         toast.success('Processo salvo!');
       }
@@ -693,16 +800,15 @@ export function ProcessoModalExpanded({
           await supabase.from('processo_partes').insert(partes.map(p => ({
             processo_id: savedId!, nome: p.nome, tipo: p.tipo, polo: p.polo || null,
             tipo_pessoa: p.tipoPessoa || null, documento: p.documento || null,
-            celular: p.celular || null, telefone_adicional: p.telefone_adicional || null, advogados: p.advogados || null,
+            celular: p.celular || null, telefone_adicional: (p as any).telefone_adicional || null,
+            advogados: p.advogados || null,
           })));
         }
       }
-
       clearDraft();
       onClose();
     } catch (err: any) {
-      console.error('[handleSave] Erro:', err);
-      toast.error('Erro inesperado ao salvar', { description: err?.message });
+      toast.error('Erro inesperado', { description: err?.message });
     } finally { setSaving(false); }
   };
 
@@ -727,246 +833,379 @@ export function ProcessoModalExpanded({
   const clienteSelecionado = leads.find(l => l.id === formData.cliente_id);
   const hasPartes          = partes.length > 0;
   const isValidCnj         = CNJ_REGEX.test((formData.numero_processo || '').trim());
+  const statusCfg          = STATUS_CONFIG[formData.status] || STATUS_CONFIG['Arquivado'];
 
-  // ─── Render ────────────────────────────────────────────────────────────────────
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="w-[96vw] max-w-[1200px] rounded-2xl max-h-[94vh] overflow-hidden flex flex-col p-0">
+        <DialogContent className="w-[96vw] max-w-[1200px] rounded-2xl max-h-[94vh] overflow-hidden flex flex-col p-0 gap-0">
           <DialogHeader className="sr-only"><DialogTitle>{isNew ? 'Novo Processo' : 'Detalhes do Processo'}</DialogTitle></DialogHeader>
 
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-3.5 border-b bg-card shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"><Scale className="h-4 w-4 text-primary" /></div>
-              <div>
-                <h2 className="text-sm font-bold text-foreground leading-tight">{isNew ? 'Novo Processo' : 'Detalhes do Processo'}</h2>
-                {formData.numero_processo && <p className="text-[11px] font-mono text-muted-foreground">{formData.numero_processo}</p>}
-                {!isNew && processo?.ultima_consulta_api_at && (
-                  <p className="text-[10px] text-muted-foreground/60">
-                    Sync: {new Date(processo.ultima_consulta_api_at).toLocaleString('pt-BR', { day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit' })}
-                    {fetchingData && ' · Atualizando...'}
-                  </p>
+          {/* ── Header Premium ── */}
+          <div className="relative overflow-hidden shrink-0">
+            {/* gradient bar top */}
+            <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-primary via-primary/80 to-primary/40" />
+            <div className="flex items-center justify-between px-6 py-4 bg-card border-b border-border/60">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-md shadow-primary/20 shrink-0">
+                  <Scale className="h-5 w-5 text-primary-foreground" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h2 className="text-sm font-black text-foreground leading-none">
+                      {isNew ? 'Novo Processo' : 'Detalhes do Processo'}
+                    </h2>
+                    {!isNew && formData.status && (
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${statusCfg.cls}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${statusCfg.dot}`} />
+                        {formData.status}
+                      </span>
+                    )}
+                  </div>
+                  {formData.numero_processo && (
+                    <p className="text-[11px] font-mono text-muted-foreground mt-0.5">{formData.numero_processo}</p>
+                  )}
+                  {!isNew && processo?.ultima_consulta_api_at && (
+                    <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                      Sync: {new Date(processo.ultima_consulta_api_at).toLocaleString('pt-BR', { day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit' })}
+                      {fetchingData && ' · Atualizando...'}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {fetchingData && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                {formData.tribunal && (
+                  <span className="hidden md:flex items-center gap-1.5 text-xs font-semibold text-muted-foreground bg-muted/60 px-2.5 py-1 rounded-lg border border-border/40">
+                    <Building2 className="h-3.5 w-3.5" />
+                    {formData.tribunal}
+                  </span>
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              {fetchingData && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-              {!isNew && formData.status && <Badge variant="outline" className={`text-xs font-semibold ${STATUS_STYLE[formData.status] || STATUS_STYLE['Arquivado']}`}>{formData.status}</Badge>}
-            </div>
           </div>
 
-          {/* Tabs */}
+          {/* ── Tabs ── */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            <TabsList className="grid grid-cols-3 mx-6 mt-3 shrink-0 rounded-xl bg-muted/50 p-1 h-8">
-              <TabsTrigger value="processo" className="rounded-lg text-xs h-6"><Scale className="h-3 w-3 mr-1" />Processo</TabsTrigger>
-              <TabsTrigger value="movimentos" className="rounded-lg text-xs h-6">
-                <Calendar className="h-3 w-3 mr-1" />Movimentos
-                {movimentos.length > 0 && <Badge variant="secondary" className="ml-1 text-[9px] h-3.5 px-1">{movimentos.length}</Badge>}
-              </TabsTrigger>
-              <TabsTrigger value="notificacoes" className="rounded-lg text-xs h-6"><MessageSquare className="h-3 w-3 mr-1" />Notificações</TabsTrigger>
-            </TabsList>
+            <div className="px-6 pt-3 pb-0 shrink-0 bg-card border-b border-border/40">
+              <TabsList className="h-9 bg-muted/50 rounded-xl p-1 gap-1">
+                <TabsTrigger value="processo" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm">
+                  <Scale className="h-3.5 w-3.5" /> Processo
+                </TabsTrigger>
+                <TabsTrigger value="movimentos" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm">
+                  <Calendar className="h-3.5 w-3.5" /> Movimentos
+                  {movimentos.length > 0 && (
+                    <span className="ml-1 h-4 min-w-4 px-1 rounded-full bg-primary/15 text-primary text-[9px] font-black flex items-center justify-center">
+                      {movimentos.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="notificacoes" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm">
+                  <MessageSquare className="h-3.5 w-3.5" /> Notificações
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             {/* ── TAB PROCESSO ── */}
             <TabsContent value="processo" className="flex-1 min-h-0 mt-0 overflow-hidden">
-              <div className="flex gap-0" style={{ height: 'calc(94vh - 220px)' }}>
+              <div className="flex gap-0" style={{ height: 'calc(94vh - 230px)' }}>
+
+                {/* Left — form */}
                 <ScrollArea className="flex-1 min-w-0 h-full">
-                  <div className="px-6 py-4 space-y-4">
+                  <div className="px-6 py-5 space-y-5">
 
-                    <div><SectionTitle icon={Hash} label="Numeração" /><FieldGroup><Row2>
-                      <Field label="Número CNJ">
-                        <div className="relative">
-                          <Input value={formData.numero_processo} onChange={e => update('numero_processo', e.target.value)} className="rounded-xl bg-card font-mono text-sm pr-8 h-9" placeholder="0000000-00.0000.0.00.0000" />
-                          {fetchingData  && <Loader2      className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-primary" />}
-                          {!fetchingData && isValidCnj && <CheckCircle2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-emerald-500" />}
-                        </div>
-                        {isNew && <p className="text-[10px] text-muted-foreground mt-1">Digite para carregar automaticamente</p>}
-                      </Field>
-                      <Field label="Número Complementar"><Input value={formData.numero_complementar} onChange={e => update('numero_complementar', e.target.value)} className="rounded-xl bg-card h-9" placeholder="Opcional" /></Field>
-                    </Row2></FieldGroup></div>
+                    {/* Numeração */}
+                    <div>
+                      <SectionTitle icon={Hash} label="Numeração" />
+                      <FieldGroup>
+                        <Row2>
+                          <Field label="Número CNJ">
+                            <div className="relative">
+                              <Input value={formData.numero_processo} onChange={e => update('numero_processo', e.target.value)} className="rounded-xl bg-card font-mono text-sm pr-9 h-10" placeholder="0000000-00.0000.0.00.0000" />
+                              {fetchingData   && <Loader2      className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-primary" />}
+                              {!fetchingData && isValidCnj && <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />}
+                            </div>
+                            {isNew && <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1"><AlertTriangle className="h-2.5 w-2.5" /> Digite para carregar automaticamente</p>}
+                          </Field>
+                          <Field label="Número Complementar">
+                            <Input value={formData.numero_complementar} onChange={e => update('numero_complementar', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Opcional" />
+                          </Field>
+                        </Row2>
+                      </FieldGroup>
+                    </div>
 
-                    <div><SectionTitle icon={FileText} label="Detalhes" /><FieldGroup>
-                      <Row2>
-                        <Field label="Situação">
-                          <Select value={formData.status} onValueChange={v => update('status', v as ProcessoStatus)}>
-                            <SelectTrigger className="rounded-xl bg-card h-9"><SelectValue /></SelectTrigger>
-                            <SelectContent>{STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                          </Select>
-                        </Field>
-                        <Field label="Assunto">
-                          <button type="button" onClick={() => setAssuntoPickerOpen(true)} className={`flex items-center justify-between w-full h-9 px-3 rounded-xl border text-sm transition-all ${formData.assunto ? 'bg-card border-border text-foreground' : 'bg-card border-border text-muted-foreground'} hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0`}>
-                            <span className="truncate">{formData.assunto || 'Selecionar assunto...'}</span>
-                            <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0 ml-2" />
-                          </button>
-                        </Field>
-                      </Row2>
-                      <Field label="Descrição / Anotações"><Textarea value={formData.descricao} onChange={e => update('descricao', e.target.value)} className="rounded-xl bg-card min-h-[60px] text-sm resize-none" placeholder="Anotações internas..." /></Field>
-                      <Row2>
-                        <Field label="Marcadores"><Input value={formData.marcadores} onChange={e => update('marcadores', e.target.value)} className="rounded-xl bg-card h-9" placeholder="Separados por vírgula" /></Field>
-                        <Field label="Pasta do Cliente">
-                          <div className="space-y-1.5">
-                            <Select value={formData.cliente_id || '__none__'} onValueChange={v => update('cliente_id', v === '__none__' ? '' : v)}>
-                              <SelectTrigger className="rounded-xl bg-card h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                              <SelectContent><SelectItem value="__none__">Nenhum</SelectItem>{leads.map(l => <SelectItem key={l.id} value={l.id}>{l.nome}{l.telefone ? ` (${l.telefone})` : ''}</SelectItem>)}</SelectContent>
+                    {/* Detalhes */}
+                    <div>
+                      <SectionTitle icon={FileText} label="Detalhes" />
+                      <FieldGroup>
+                        <Row2>
+                          <Field label="Situação">
+                            <Select value={formData.status} onValueChange={v => update('status', v as ProcessoStatus)}>
+                              <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue /></SelectTrigger>
+                              <SelectContent>{STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                             </Select>
-                            <button type="button" onClick={() => setNovoClienteOpen(true)} className="flex items-center gap-1.5 text-[11px] text-primary hover:text-primary/80 font-medium transition-colors"><UserPlus className="h-3 w-3" />Criar novo cliente e vincular</button>
-                          </div>
+                          </Field>
+                          <Field label="Assunto">
+                            <button type="button" onClick={() => setAssuntoPickerOpen(true)}
+                              className={`flex items-center justify-between w-full h-10 px-3 rounded-xl border text-sm transition-all ${formData.assunto ? 'bg-card border-border text-foreground' : 'bg-card border-border text-muted-foreground'} hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-ring`}>
+                              <span className="truncate">{formData.assunto || 'Selecionar assunto...'}</span>
+                              <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0 ml-2" />
+                            </button>
+                          </Field>
+                        </Row2>
+                        <Field label="Descrição / Anotações">
+                          <Textarea value={formData.descricao} onChange={e => update('descricao', e.target.value)} className="rounded-xl bg-card min-h-[60px] text-sm resize-none" placeholder="Anotações internas..." />
                         </Field>
-                      </Row2>
-                    </FieldGroup></div>
+                        <Row2>
+                          <Field label="Marcadores">
+                            <Input value={formData.marcadores} onChange={e => update('marcadores', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Separados por vírgula" />
+                          </Field>
+                          <Field label="Pasta do Cliente">
+                            <div className="space-y-1.5">
+                              <Select value={formData.cliente_id || '__none__'} onValueChange={v => update('cliente_id', v === '__none__' ? '' : v)}>
+                                <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">Nenhum</SelectItem>
+                                  {leads.map(l => <SelectItem key={l.id} value={l.id}>{l.nome}{l.telefone ? ` (${l.telefone})` : ''}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                              <button type="button" onClick={() => setNovoClienteOpen(true)} className="flex items-center gap-1.5 text-[11px] text-primary hover:text-primary/80 font-semibold transition-colors">
+                                <UserPlus className="h-3 w-3" /> Criar novo cliente e vincular
+                              </button>
+                            </div>
+                          </Field>
+                        </Row2>
+                      </FieldGroup>
+                    </div>
 
-                    <div><SectionTitle icon={Users} label="Responsável" bg="bg-accent/20" color="text-foreground" /><FieldGroup>
-                      <Row2>
-                        <Field label="Advogado Responsável"><Input value={formData.advogado_responsavel} onChange={e => update('advogado_responsavel', e.target.value)} className="rounded-xl bg-card h-9" placeholder="Nome do advogado" /></Field>
-                        <Field label="Origem do Cliente">
-                          <Select value={formData.origem_cliente || '__none__'} onValueChange={v => update('origem_cliente', v === '__none__' ? '' : v)}>
-                            <SelectTrigger className="rounded-xl bg-card h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                            <SelectContent><SelectItem value="__none__">Não informado</SelectItem><SelectItem value="Marketing">Marketing</SelectItem><SelectItem value="Bentes e Ramos">Bentes e Ramos</SelectItem></SelectContent>
-                          </Select>
+                    {/* Responsável */}
+                    <div>
+                      <SectionTitle icon={Users} label="Responsável" bg="bg-secondary/15" color="text-foreground" />
+                      <FieldGroup>
+                        <Row2>
+                          <Field label="Advogado Responsável">
+                            <Input value={formData.advogado_responsavel} onChange={e => update('advogado_responsavel', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Nome do advogado" />
+                          </Field>
+                          <Field label="Origem do Cliente">
+                            <Select value={formData.origem_cliente || '__none__'} onValueChange={v => update('origem_cliente', v === '__none__' ? '' : v)}>
+                              <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">Não informado</SelectItem>
+                                <SelectItem value="Marketing">Marketing</SelectItem>
+                                <SelectItem value="Bentes e Ramos">Bentes e Ramos</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                        </Row2>
+                        <Field label="CPF do Cliente" hint="Usado pela Isa para localizar processos">
+                          <Input value={formData.cpf_cliente} onChange={e => { let v = e.target.value.replace(/\D/g, '').slice(0, 11); if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4'); else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3'); else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2'); update('cpf_cliente', v); }} className="rounded-xl bg-card h-10" placeholder="000.000.000-00" maxLength={14} />
                         </Field>
-                      </Row2>
-                      <Field label="CPF do Cliente" hint="Usado pela Isa para localizar processos">
-                        <Input value={formData.cpf_cliente} onChange={e => { let v = e.target.value.replace(/\D/g, '').slice(0, 11); if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4'); else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3'); else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2'); update('cpf_cliente', v); }} className="rounded-xl bg-card h-9" placeholder="000.000.000-00" maxLength={14} />
-                      </Field>
-                    </FieldGroup></div>
+                      </FieldGroup>
+                    </div>
 
-                    <div><SectionTitle icon={Building2} label="Endereçamento" bg="bg-blue-500/10" color="text-blue-600 dark:text-blue-400" /><FieldGroup>
-                      <Row2>
-                        <Field label="Justiça / Tribunal"><Input value={formData.tribunal} onChange={e => update('tribunal', e.target.value)} className="rounded-xl bg-card h-9" placeholder="Ex: TJAM" /></Field>
-                        <Field label="Instância">
-                          <Select value={formData.grau || 'G1'} onValueChange={v => update('grau', v)}>
-                            <SelectTrigger className="rounded-xl bg-card h-9"><SelectValue /></SelectTrigger>
-                            <SelectContent><SelectItem value="G1">1º Grau</SelectItem><SelectItem value="G2">2º Grau</SelectItem><SelectItem value="SUP">Superior</SelectItem><SelectItem value="JE">Juizado Especial</SelectItem><SelectItem value="TR">Turma Recursal</SelectItem></SelectContent>
-                          </Select>
-                        </Field>
-                      </Row2>
-                      <Row2>
-                        <Field label="Vara / Comarca"><Input value={formData.vara_comarca} onChange={e => update('vara_comarca', e.target.value)} className="rounded-xl bg-card h-9" placeholder="Vara" /></Field>
-                        <Field label="Órgão Julgador"><Input value={formData.orgao_julgador} onChange={e => update('orgao_julgador', e.target.value)} className="rounded-xl bg-card h-9" placeholder="Ex: 2ª Vara Cível" /></Field>
-                      </Row2>
-                      <Row2>
-                        <Field label="Sistema Judicial"><Input value={formData.sistema_judicial} onChange={e => update('sistema_judicial', e.target.value)} className="rounded-xl bg-card h-9" placeholder="Ex: PJe, e-SAJ" /></Field>
-                        <Field label="Complemento"><Input value={formData.complemento_enderecamento} onChange={e => update('complemento_enderecamento', e.target.value)} className="rounded-xl bg-card h-9" placeholder="Complemento" /></Field>
-                      </Row2>
-                      <Row4>
-                        <Field label="Distribuição"><Input type="date" value={formData.data_distribuicao} onChange={e => update('data_distribuicao', e.target.value)} className="rounded-xl bg-card h-9 text-xs" /></Field>
-                        <Field label="Citação"><Input type="date" value={formData.data_citacao} onChange={e => update('data_citacao', e.target.value)} className="rounded-xl bg-card h-9 text-xs" /></Field>
-                        <Field label="Arquivamento"><Input type="date" value={formData.data_arquivamento} onChange={e => update('data_arquivamento', e.target.value)} className="rounded-xl bg-card h-9 text-xs" /></Field>
-                        <Field label="Encerramento"><Input type="date" value={formData.data_encerramento} onChange={e => update('data_encerramento', e.target.value)} className="rounded-xl bg-card h-9 text-xs" /></Field>
-                      </Row4>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={formData.monitorar_push} onChange={e => update('monitorar_push', e.target.checked)} className="rounded border-border" />
-                        <span className="text-xs flex items-center gap-1.5"><Bell className="h-3.5 w-3.5 text-primary" />Monitorar (Push)</span>
-                      </label>
-                    </FieldGroup></div>
+                    {/* Endereçamento */}
+                    <div>
+                      <SectionTitle icon={Building2} label="Endereçamento" bg="bg-blue-500/10" color="text-blue-600 dark:text-blue-400" />
+                      <FieldGroup>
+                        <Row2>
+                          <Field label="Justiça / Tribunal">
+                            <Input value={formData.tribunal} onChange={e => update('tribunal', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Ex: TJAM" />
+                          </Field>
+                          <Field label="Instância">
+                            <Select value={formData.grau || 'G1'} onValueChange={v => update('grau', v)}>
+                              <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="G1">1º Grau</SelectItem>
+                                <SelectItem value="G2">2º Grau</SelectItem>
+                                <SelectItem value="SUP">Superior</SelectItem>
+                                <SelectItem value="JE">Juizado Especial</SelectItem>
+                                <SelectItem value="TR">Turma Recursal</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                        </Row2>
+                        <Row2>
+                          <Field label="Vara / Comarca">
+                            <Input value={formData.vara_comarca} onChange={e => update('vara_comarca', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Vara" />
+                          </Field>
+                          <Field label="Órgão Julgador">
+                            <Input value={formData.orgao_julgador} onChange={e => update('orgao_julgador', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Ex: 2ª Vara Cível" />
+                          </Field>
+                        </Row2>
+                        <Row2>
+                          <Field label="Sistema Judicial">
+                            <Input value={formData.sistema_judicial} onChange={e => update('sistema_judicial', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Ex: PJe, e-SAJ, PROJUDI" />
+                          </Field>
+                          <Field label="Complemento">
+                            <Input value={formData.complemento_enderecamento} onChange={e => update('complemento_enderecamento', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Complemento" />
+                          </Field>
+                        </Row2>
+                        <Row4>
+                          <Field label="Distribuição"><Input type="date" value={formData.data_distribuicao} onChange={e => update('data_distribuicao', e.target.value)} className="rounded-xl bg-card h-9 text-xs" /></Field>
+                          <Field label="Citação"><Input type="date" value={formData.data_citacao} onChange={e => update('data_citacao', e.target.value)} className="rounded-xl bg-card h-9 text-xs" /></Field>
+                          <Field label="Arquivamento"><Input type="date" value={formData.data_arquivamento} onChange={e => update('data_arquivamento', e.target.value)} className="rounded-xl bg-card h-9 text-xs" /></Field>
+                          <Field label="Encerramento"><Input type="date" value={formData.data_encerramento} onChange={e => update('data_encerramento', e.target.value)} className="rounded-xl bg-card h-9 text-xs" /></Field>
+                        </Row4>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={formData.monitorar_push} onChange={e => update('monitorar_push', e.target.checked)} className="rounded border-border" />
+                          <span className="text-xs font-medium flex items-center gap-1.5"><Bell className="h-3.5 w-3.5 text-primary" /> Monitorar (Push)</span>
+                        </label>
+                      </FieldGroup>
+                    </div>
 
-                    <div><SectionTitle icon={FolderOpen} label="Autos" bg="bg-amber-500/10" color="text-amber-600 dark:text-amber-400" /><FieldGroup>
-                      <Row2>
-                        <Field label="Área">
-                          <Select value={formData.area || '__none__'} onValueChange={v => update('area', v === '__none__' ? '' : v)}>
-                            <SelectTrigger className="rounded-xl bg-card h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                            <SelectContent><SelectItem value="__none__">Selecione</SelectItem>{['Cível','Trabalhista','Criminal','Tributário','Previdenciário','Administrativo','Consumidor','Família'].map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent>
-                          </Select>
-                        </Field>
-                        <Field label="Fase">
-                          <Select value={formData.fase || '__none__'} onValueChange={v => update('fase', v === '__none__' ? '' : v)}>
-                            <SelectTrigger className="rounded-xl bg-card h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                            <SelectContent><SelectItem value="__none__">Selecione</SelectItem>{['Conhecimento','Execução','Recursal','Cumprimento de Sentença','Liquidação'].map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
-                          </Select>
-                        </Field>
-                      </Row2>
-                      <Row2>
-                        <Field label="Classe CNJ"><Input value={formData.classe_cnj} onChange={e => update('classe_cnj', e.target.value)} className="rounded-xl bg-card h-9" placeholder="Ex: Procedimento Comum" /></Field>
-                        <Field label="Assunto CNJ"><Input value={formData.assunto_cnj} onChange={e => update('assunto_cnj', e.target.value)} className="rounded-xl bg-card h-9" placeholder="Assunto CNJ" /></Field>
-                      </Row2>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={formData.segredo_justica} onChange={e => update('segredo_justica', e.target.checked)} className="rounded border-border" />
-                        <span className="text-xs flex items-center gap-1.5"><Shield className="h-3.5 w-3.5 text-muted-foreground" />Segredo de Justiça</span>
-                      </label>
-                    </FieldGroup></div>
+                    {/* Autos */}
+                    <div>
+                      <SectionTitle icon={FolderOpen} label="Autos" bg="bg-amber-500/10" color="text-amber-600 dark:text-amber-400" />
+                      <FieldGroup>
+                        <Row2>
+                          <Field label="Área">
+                            <Select value={formData.area || '__none__'} onValueChange={v => update('area', v === '__none__' ? '' : v)}>
+                              <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">Selecione</SelectItem>
+                                {['Cível','Trabalhista','Criminal','Tributário','Previdenciário','Administrativo','Consumidor','Família'].map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                          <Field label="Fase">
+                            <Select value={formData.fase || '__none__'} onValueChange={v => update('fase', v === '__none__' ? '' : v)}>
+                              <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">Selecione</SelectItem>
+                                {['Conhecimento','Execução','Recursal','Cumprimento de Sentença','Liquidação'].map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                        </Row2>
+                        <Row2>
+                          <Field label="Classe CNJ">
+                            <Input value={formData.classe_cnj} onChange={e => update('classe_cnj', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Ex: Procedimento Comum Cível" />
+                          </Field>
+                          <Field label="Assunto CNJ">
+                            <Input value={formData.assunto_cnj} onChange={e => update('assunto_cnj', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Código ou nome CNJ" />
+                          </Field>
+                        </Row2>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={formData.segredo_justica} onChange={e => update('segredo_justica', e.target.checked)} className="rounded border-border" />
+                          <span className="text-xs font-medium flex items-center gap-1.5"><Shield className="h-3.5 w-3.5 text-muted-foreground" /> Segredo de Justiça</span>
+                        </label>
+                      </FieldGroup>
+                    </div>
 
-                    <div><SectionTitle icon={DollarSign} label="Pedidos" bg="bg-emerald-500/10" color="text-emerald-600 dark:text-emerald-400" /><FieldGroup><Row3>
-                      <Field label="Valor da Ação (R$)"><Input value={formData.valor_causa} onChange={e => update('valor_causa', e.target.value.replace(/[^0-9.,]/g, ''))} className="rounded-xl bg-card h-9" placeholder="0,00" inputMode="decimal" /></Field>
-                      <Field label="Valor Provisionado (R$)"><Input value={formData.valor_provisionado} onChange={e => update('valor_provisionado', e.target.value.replace(/[^0-9.,]/g, ''))} className="rounded-xl bg-card h-9" placeholder="0,00" inputMode="decimal" /></Field>
-                      <Field label="Probabilidade">
-                        <Select value={formData.probabilidade || '__none__'} onValueChange={v => update('probabilidade', v === '__none__' ? '' : v)}>
-                          <SelectTrigger className="rounded-xl bg-card h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                          <SelectContent><SelectItem value="__none__">Selecione</SelectItem><SelectItem value="Provável">Provável</SelectItem><SelectItem value="Possível">Possível</SelectItem><SelectItem value="Remota">Remota</SelectItem></SelectContent>
-                        </Select>
-                      </Field>
-                    </Row3></FieldGroup></div>
+                    {/* Pedidos */}
+                    <div>
+                      <SectionTitle icon={DollarSign} label="Pedidos" bg="bg-emerald-500/10" color="text-emerald-600 dark:text-emerald-400" />
+                      <FieldGroup>
+                        <Row3>
+                          <Field label="Valor da Ação (R$)">
+                            <Input value={formData.valor_causa} onChange={e => update('valor_causa', e.target.value.replace(/[^0-9.,]/g, ''))} className="rounded-xl bg-card h-10" placeholder="0,00" inputMode="decimal" />
+                          </Field>
+                          <Field label="Valor Provisionado (R$)">
+                            <Input value={formData.valor_provisionado} onChange={e => update('valor_provisionado', e.target.value.replace(/[^0-9.,]/g, ''))} className="rounded-xl bg-card h-10" placeholder="0,00" inputMode="decimal" />
+                          </Field>
+                          <Field label="Probabilidade">
+                            <Select value={formData.probabilidade || '__none__'} onValueChange={v => update('probabilidade', v === '__none__' ? '' : v)}>
+                              <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">Selecione</SelectItem>
+                                <SelectItem value="Provável">Provável</SelectItem>
+                                <SelectItem value="Possível">Possível</SelectItem>
+                                <SelectItem value="Remota">Remota</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                        </Row3>
+                      </FieldGroup>
+                    </div>
 
                   </div>
                 </ScrollArea>
 
+                {/* Divider */}
                 <div className="w-px bg-border/40 shrink-0" />
 
-                <div className="w-[340px] shrink-0 flex flex-col overflow-hidden h-full">
-                  <div className="px-4 pt-4 pb-3 border-b border-border/40 shrink-0">
+                {/* Right — Partes */}
+                <div className="w-[340px] shrink-0 flex flex-col overflow-hidden h-full bg-muted/10">
+                  <div className="px-4 pt-4 pb-3 border-b border-border/40 shrink-0 bg-card">
                     <div className="flex items-center gap-2">
-                      <div className="h-5 w-5 rounded-md bg-primary/10 flex items-center justify-center"><Users className="h-3 w-3 text-primary" /></div>
-                      <h3 className="text-[11px] font-bold text-foreground uppercase tracking-wider">Partes</h3>
-                      {hasPartes && <Badge variant="secondary" className="text-[10px] h-4 px-1.5 ml-auto">{partes.length}</Badge>}
+                      <div className="h-6 w-6 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Users className="h-3.5 w-3.5 text-primary" />
+                      </div>
+                      <h3 className="text-[11px] font-black text-foreground uppercase tracking-widest">Partes</h3>
+                      {hasPartes && (
+                        <span className="ml-auto h-5 min-w-5 px-1.5 rounded-full bg-primary/10 text-primary text-[10px] font-black flex items-center justify-center border border-primary/15">
+                          {partes.length}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <ScrollArea className="flex-1 min-h-0 h-full">
                     <div className="px-4 py-3 space-y-2">
                       {!hasPartes ? (
-                        <div className="rounded-xl border border-dashed border-border/50 bg-muted/10 py-8 text-center">
-                          <Users className="h-7 w-7 mx-auto text-muted-foreground/20 mb-2" />
-                          <p className="text-xs text-muted-foreground">Nenhuma parte</p>
-                          <p className="text-[10px] text-muted-foreground/60 mt-0.5">Use "Atualizar" ou adicione abaixo</p>
+                        <div className="rounded-2xl border border-dashed border-border/50 bg-card py-10 text-center">
+                          <div className="h-12 w-12 rounded-2xl bg-muted/60 flex items-center justify-center mx-auto mb-3">
+                            <Users className="h-6 w-6 text-muted-foreground/20" />
+                          </div>
+                          <p className="text-xs font-semibold text-foreground">Nenhuma parte</p>
+                          <p className="text-[10px] text-muted-foreground mt-1">Use "Atualizar" ou adicione abaixo</p>
                         </div>
-                      ) : (
-                        partes.map((parte, i) => (
-                          <ParteCard key={i} parte={parte} index={i}
-                            onUpdate={(idx, field, val) => setPartes(prev => prev.map((p, j) => j === idx ? { ...p, [field]: val } : p))}
-                            onRemove={idx => setPartes(prev => prev.filter((_, j) => j !== idx))}
-                          />
-                        ))
-                      )}
+                      ) : partes.map((parte, i) => (
+                        <ParteCard key={i} parte={parte} index={i}
+                          onUpdate={(idx, field, val) => setPartes(prev => prev.map((p, j) => j === idx ? { ...p, [field]: val } : p))}
+                          onRemove={idx => setPartes(prev => prev.filter((_, j) => j !== idx))}
+                        />
+                      ))}
                       <AddParteForm onAdd={parte => setPartes(prev => [...prev, parte])} />
                     </div>
                   </ScrollArea>
                 </div>
+
               </div>
             </TabsContent>
 
             {/* ── TAB MOVIMENTOS ── */}
             <TabsContent value="movimentos" className="flex-1 min-h-0 mt-0 overflow-hidden">
               <ScrollArea className="h-full">
-                <div className="px-6 py-4">
+                <div className="px-6 py-5">
                   {movimentosEnriquecidos.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                      <Calendar className="h-12 w-12 mb-3 opacity-10" />
-                      <p className="text-sm font-semibold">Nenhuma movimentação</p>
-                      <p className="text-xs mt-1 opacity-60">Clique em "Atualizar" para carregar do DataJud</p>
-                      <Button variant="outline" size="sm" className="mt-4 gap-2 rounded-xl" onClick={() => handleRefreshStatus(false)} disabled={fetchingData || !isValidCnj}>
-                        {fetchingData ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Buscar Movimentações
+                    <div className="flex flex-col items-center justify-center py-24 gap-3 border-2 border-dashed border-border/40 rounded-2xl">
+                      <div className="h-14 w-14 rounded-2xl bg-muted/60 flex items-center justify-center">
+                        <Calendar className="h-7 w-7 text-muted-foreground/20" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">Nenhuma movimentação</p>
+                      <p className="text-xs text-muted-foreground">Clique em "Atualizar" para carregar do DataJud</p>
+                      <Button variant="outline" size="sm" className="mt-1 gap-2 rounded-xl h-9"
+                        onClick={() => handleRefreshStatus(false)} disabled={fetchingData || !isValidCnj}>
+                        {fetchingData ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                        Buscar Movimentações
                       </Button>
                     </div>
                   ) : (
                     <div className="space-y-2 pb-6">
-                      <p className="text-xs text-muted-foreground mb-3">{movimentosEnriquecidos.length} movimentação(ões) · Clique para detalhes</p>
+                      <p className="text-xs text-muted-foreground mb-4 font-medium">
+                        {movimentosEnriquecidos.length} movimentação(ões) · clique para detalhes
+                      </p>
                       {movimentosEnriquecidos.map((mov, i) => (
-                        <Card key={i} className="cursor-pointer hover:bg-accent/40 transition-colors group border-border/40" onClick={() => { setSelectedMovimento(mov); setMovModalOpen(true); }}>
-                          <CardContent className="p-3">
-                            <div className="flex justify-between items-start gap-3">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="text-sm font-semibold">{mov.titulo_humano}</p>
-                                  <Badge variant="outline" className={`text-[10px] h-4 px-1.5 ${getCategoriaColor(mov.categoria)}`}>{mov.badge}</Badge>
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{mov.descricao_humana}</p>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <span className="text-xs text-muted-foreground whitespace-nowrap">{mov.dataHora}</span>
-                                <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
+                        <div key={i}
+                          className="group flex items-start gap-3 p-3.5 rounded-2xl border border-border/40 bg-card hover:bg-accent/30 hover:border-border cursor-pointer transition-all duration-150 hover:shadow-sm"
+                          onClick={() => { setSelectedMovimento(mov); setMovModalOpen(true); }}
+                        >
+                          <div className="shrink-0 mt-0.5">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-bold border ${getCategoriaColor(mov.categoria)}`}>
+                              {mov.badge}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-foreground leading-snug">{mov.titulo_humano}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{mov.descricao_humana}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 self-start">
+                            <span className="text-[11px] text-muted-foreground whitespace-nowrap">{mov.dataHora}</span>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                          </div>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -976,8 +1215,8 @@ export function ProcessoModalExpanded({
 
             {/* ── TAB NOTIFICAÇÕES ── */}
             <TabsContent value="notificacoes" className="flex-1 min-h-0 mt-0 overflow-hidden">
-              <ScrollArea className="h-full" style={{ height: 'calc(94vh - 220px)' }}>
-                <div className="px-6 py-4 pb-16">
+              <ScrollArea className="h-full">
+                <div className="px-6 py-5 pb-16">
                   {!isNew && processo ? (
                     <ProcessoNotificacoesTab
                       processo={processo} cliente={clienteSelecionado} sending={sendingNotif} onSendManual={handleSendNotif}
@@ -985,10 +1224,12 @@ export function ProcessoModalExpanded({
                       previewData={{ nomeCliente: clienteSelecionado?.nome, numeroProcesso: formData.numero_processo || processo.numero_processo, acao: formData.titulo_acao || processo.titulo_acao, status: (formData.status as unknown as string) || (processo.status as unknown as string), tribunal: formData.tribunal || processo.tribunal, ultimaAtualizacao: processo.data_ultima_atualizacao, movimentos: movimentos.slice(0, 3) }}
                     />
                   ) : (
-                    <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                      <MessageSquare className="h-12 w-12 mb-3 opacity-10" />
-                      <p className="text-sm font-semibold">Salve o processo primeiro</p>
-                      <p className="text-xs mt-1 opacity-60">Notificações disponíveis após criar</p>
+                    <div className="flex flex-col items-center justify-center py-24 gap-3 border-2 border-dashed border-border/40 rounded-2xl">
+                      <div className="h-14 w-14 rounded-2xl bg-muted/60 flex items-center justify-center">
+                        <MessageSquare className="h-7 w-7 text-muted-foreground/20" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">Salve o processo primeiro</p>
+                      <p className="text-xs text-muted-foreground">Notificações disponíveis após criar</p>
                     </div>
                   )}
                 </div>
@@ -996,29 +1237,38 @@ export function ProcessoModalExpanded({
             </TabsContent>
           </Tabs>
 
-          {/* Footer */}
-          <div className="flex items-center justify-between px-6 py-3.5 border-t bg-muted/20 shrink-0">
+          {/* ── Footer ── */}
+          <div className="flex items-center justify-between px-6 py-3.5 border-t border-border/60 bg-card shrink-0">
             <div>
               {!isNew && canDelete && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="sm" className="rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10 h-8"><Trash2 className="h-3.5 w-3.5 mr-1.5" /> Excluir</Button>
+                    <Button variant="ghost" size="sm" className="rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10 h-9 gap-1.5">
+                      <Trash2 className="h-3.5 w-3.5" /> Excluir
+                    </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent className="rounded-2xl">
-                    <AlertDialogHeader><AlertDialogTitle>Confirmar exclusão</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader>
-                    <AlertDialogFooter><AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDelete} className="rounded-xl bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction></AlertDialogFooter>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                      <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDelete} className="rounded-xl bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction>
+                    </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="rounded-xl gap-1.5 h-8" onClick={() => handleRefreshStatus(false)} disabled={fetchingData || !isValidCnj}>
+              <Button variant="outline" size="sm" className="rounded-xl gap-1.5 h-9 border-border/60"
+                onClick={() => handleRefreshStatus(false)} disabled={fetchingData || !isValidCnj}>
                 {fetchingData ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                 {isNew ? 'Buscar DataJud' : 'Atualizar'}
               </Button>
-              <Button variant="ghost" size="sm" className="rounded-xl h-8" onClick={onClose}>Cancelar</Button>
-              <Button size="sm" className="rounded-xl px-5 h-8 shadow-sm font-semibold" onClick={handleSave} disabled={saving}>
-                {saving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Salvando...</> : isNew ? 'Criar Processo' : 'Salvar'}
+              <Button variant="ghost" size="sm" className="rounded-xl h-9" onClick={onClose}>Cancelar</Button>
+              <Button size="sm" className="rounded-xl px-6 h-9 shadow-sm font-bold gap-1.5" onClick={handleSave} disabled={saving}>
+                {saving ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Salvando...</> : isNew ? 'Criar Processo' : 'Salvar'}
               </Button>
             </div>
           </div>
