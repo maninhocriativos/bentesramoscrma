@@ -1,10 +1,8 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
-import { Calendar, FileText, Info, Hash, Code } from 'lucide-react';
+import { Calendar, FileText, Info, Hash, Code, Scale } from 'lucide-react';
 import { enrichMovements, MovimentoEnriquecido, getCategoriaColor } from '@/lib/cnjMovimentosMap';
 import { useMemo } from 'react';
 
-// Movimento bruto do DataJud/banco
 interface MovimentoBruto {
   dataHora: string;
   dataHoraRaw?: string;
@@ -20,118 +18,115 @@ interface MovimentoDetailModalProps {
   onClose: () => void;
 }
 
-// Type guard para verificar se já está enriquecido
 function isEnriquecido(mov: MovimentoBruto | MovimentoEnriquecido): mov is MovimentoEnriquecido {
   return 'titulo_humano' in mov && 'descricao_humana' in mov;
 }
 
 export function MovimentoDetailModal({ movimento, isOpen, onClose }: MovimentoDetailModalProps) {
-  // Enriquecer movimento se necessário
-  const movimentoEnriquecido = useMemo<MovimentoEnriquecido | null>(() => {
+  const mov = useMemo<MovimentoEnriquecido | null>(() => {
     if (!movimento) return null;
     if (isEnriquecido(movimento)) return movimento;
-    
-    // Enriquecer movimento bruto
     const enriched = enrichMovements([movimento]);
     return enriched[0] || null;
   }, [movimento]);
-  
-  if (!movimentoEnriquecido) return null;
+
+  if (!mov) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            Detalhes da Movimentação
-          </DialogTitle>
+      <DialogContent className="max-w-lg p-0 gap-0 rounded-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Detalhes da Movimentação</DialogTitle>
         </DialogHeader>
-        
-        <div className="space-y-4">
-          {/* Título humano (grande) */}
-          <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
-            <p className="font-semibold text-lg">{movimentoEnriquecido.titulo_humano}</p>
-            <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <Badge 
-                variant="outline" 
-                className={`text-xs ${getCategoriaColor(movimentoEnriquecido.categoria)}`}
-              >
-                {movimentoEnriquecido.badge}
-              </Badge>
-              <span className="text-sm text-muted-foreground flex items-center gap-1">
+
+        {/* Header gradient */}
+        <div className="relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary via-primary/85 to-primary/60" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_20%,rgba(255,255,255,0.10),transparent_55%)]" />
+          <div className="relative px-6 py-5">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <span className={`inline-flex items-center text-[10px] font-black px-2.5 py-1 rounded-lg bg-white/20 text-white border border-white/20 backdrop-blur-sm uppercase tracking-wider ${getCategoriaColor(mov.categoria)}`}>
+                {mov.badge}
+              </span>
+              <span className="inline-flex items-center gap-1 text-[11px] text-white/80">
                 <Calendar className="h-3 w-3" />
-                {movimentoEnriquecido.dataHora}
+                {mov.dataHora}
               </span>
             </div>
+            <h2 className="text-lg font-black text-white leading-snug">
+              {mov.titulo_humano}
+            </h2>
           </div>
+        </div>
 
-          {/* Descrição humana (principal) */}
-          <div className="p-4 bg-muted/30 rounded-lg border">
-            <div className="flex items-center gap-2 mb-2">
-              <Info className="h-4 w-4 text-muted-foreground" />
-              <p className="text-sm font-medium">Descrição</p>
-            </div>
-            <p className="text-sm text-foreground leading-relaxed">
-              {movimentoEnriquecido.descricao_humana}
-            </p>
-          </div>
+        <div className="px-6 py-5 space-y-4">
 
-          {/* Complemento original (se existir) */}
-          {movimentoEnriquecido.complemento && (
-            <div className="p-4 bg-muted/20 rounded-lg border">
-              <div className="flex items-center gap-2 mb-2">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-                <p className="text-sm font-medium">Complemento do Tribunal</p>
+          {/* Descrição humana */}
+          <div className="p-4 rounded-xl bg-muted/20 border border-border/40">
+            <div className="flex items-center gap-2 mb-2.5">
+              <div className="h-5 w-5 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Info className="h-3 w-3 text-primary" />
               </div>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {movimentoEnriquecido.complemento}
+              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">O que significa</p>
+            </div>
+            <p className="text-sm text-foreground leading-relaxed">{mov.descricao_humana}</p>
+          </div>
+
+          {/* Complemento original */}
+          {mov.complemento && (
+            <div className="p-4 rounded-xl bg-muted/10 border border-border/40">
+              <div className="flex items-center gap-2 mb-2.5">
+                <div className="h-5 w-5 rounded-lg bg-muted flex items-center justify-center">
+                  <FileText className="h-3 w-3 text-muted-foreground" />
+                </div>
+                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Complemento do Tribunal</p>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">{mov.complemento}</p>
+            </div>
+          )}
+
+          {/* Código CNJ */}
+          {mov.codigo && (
+            <div className="p-4 rounded-xl bg-primary/[0.03] border border-primary/15">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-5 w-5 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Hash className="h-3 w-3 text-primary" />
+                </div>
+                <p className="text-[10px] font-black text-primary uppercase tracking-widest">Código CNJ {mov.codigo}</p>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                O código <span className="font-bold text-foreground">{mov.codigo}</span> identifica este tipo de movimentação no sistema unificado do Conselho Nacional de Justiça.
               </p>
             </div>
           )}
 
-          {/* Detalhe técnico (rodapé) */}
-          <div className="p-3 bg-muted/50 rounded-lg border">
-            <div className="flex items-start gap-2">
-              <Code className="h-4 w-4 text-muted-foreground mt-0.5" />
-              <div className="flex-1">
-                <p className="text-xs font-medium text-muted-foreground">Detalhe técnico</p>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
-                  {movimentoEnriquecido.codigo && (
-                    <span className="text-xs text-muted-foreground font-mono">
-                      código_cnj: {movimentoEnriquecido.codigo}
-                    </span>
-                  )}
-                  {movimentoEnriquecido.tipo && (
-                    <span className="text-xs text-muted-foreground font-mono">
-                      tipo: {movimentoEnriquecido.tipo}
-                    </span>
-                  )}
-                  {movimentoEnriquecido.nome && movimentoEnriquecido.nome !== movimentoEnriquecido.titulo_humano && (
-                    <span className="text-xs text-muted-foreground font-mono">
-                      nome_original: {movimentoEnriquecido.nome}
-                    </span>
-                  )}
-                </div>
+          {/* Detalhe técnico */}
+          {(mov.nome && mov.nome !== mov.titulo_humano || mov.tipo || mov.codigo) && (
+            <div className="p-3.5 rounded-xl bg-muted/20 border border-border/30">
+              <div className="flex items-center gap-2 mb-2">
+                <Code className="h-3.5 w-3.5 text-muted-foreground" />
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Detalhe técnico</p>
               </div>
-            </div>
-          </div>
-
-          {/* Informação sobre código CNJ */}
-          {movimentoEnriquecido.codigo && (
-            <div className="p-3 bg-primary/10 rounded-lg border border-primary/20">
-              <div className="flex items-start gap-2">
-                <Hash className="h-4 w-4 text-primary mt-0.5" />
-                <div>
-                  <p className="text-xs font-medium text-primary">Sobre o Código CNJ</p>
-                  <p className="text-xs text-primary/80">
-                    O código {movimentoEnriquecido.codigo} identifica este tipo de movimentação no sistema 
-                    unificado do CNJ (Conselho Nacional de Justiça).
+              <div className="space-y-1">
+                {mov.codigo && (
+                  <p className="text-[10px] font-mono text-muted-foreground">
+                    <span className="text-muted-foreground/50">codigo_cnj:</span> {mov.codigo}
                   </p>
-                </div>
+                )}
+                {mov.tipo && (
+                  <p className="text-[10px] font-mono text-muted-foreground">
+                    <span className="text-muted-foreground/50">tipo:</span> {mov.tipo}
+                  </p>
+                )}
+                {mov.nome && mov.nome !== mov.titulo_humano && (
+                  <p className="text-[10px] font-mono text-muted-foreground">
+                    <span className="text-muted-foreground/50">nome_original:</span> {mov.nome}
+                  </p>
+                )}
               </div>
             </div>
           )}
+
         </div>
       </DialogContent>
     </Dialog>
