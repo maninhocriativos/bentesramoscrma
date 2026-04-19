@@ -5,10 +5,10 @@ import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   Scale, ChevronRight, Building2, User, Calendar,
-  DollarSign, Gavel, ArrowUpDown,
+  DollarSign, ArrowUpDown, CheckCircle2, PauseCircle,
+  Archive, Trophy, XCircle, Gavel, FileCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 
 const ITEMS_PER_PAGE = 30;
 
@@ -18,20 +18,38 @@ interface ProcessosTableProps {
   leads: LeadName[];
 }
 
-const statusConfig: Record<string, { bg: string; text: string; dot: string }> = {
-  'Em Andamento': { bg: 'bg-blue-50 dark:bg-blue-950/30',    text: 'text-blue-700 dark:text-blue-400',    dot: 'bg-blue-500'    },
-  'Suspenso':     { bg: 'bg-amber-50 dark:bg-amber-950/30',  text: 'text-amber-700 dark:text-amber-400',  dot: 'bg-amber-500'   },
-  'Arquivado':    { bg: 'bg-muted',                           text: 'text-muted-foreground',               dot: 'bg-muted-foreground' },
-  'Ganho':        { bg: 'bg-emerald-50 dark:bg-emerald-950/30', text: 'text-emerald-700 dark:text-emerald-400', dot: 'bg-emerald-500' },
-  'Perdido':      { bg: 'bg-red-50 dark:bg-red-950/30',      text: 'text-red-700 dark:text-red-400',      dot: 'bg-red-500'     },
+// ── Status config with inline colors for reliability ──────────────────────────
+const statusConfig: Record<string, {
+  cls: string; dot: string; icon: React.ElementType; barColor: string;
+}> = {
+  'Em Andamento': {
+    cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800/40',
+    dot: 'bg-blue-500', icon: CheckCircle2, barColor: '#3b82f6',
+  },
+  'Suspenso': {
+    cls: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800/40',
+    dot: 'bg-amber-500', icon: PauseCircle, barColor: '#f59e0b',
+  },
+  'Arquivado': {
+    cls: 'bg-muted text-muted-foreground border-border',
+    dot: 'bg-muted-foreground', icon: Archive, barColor: '#94a3b8',
+  },
+  'Ganho': {
+    cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800/40',
+    dot: 'bg-emerald-500', icon: Trophy, barColor: '#10b981',
+  },
+  'Perdido': {
+    cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-300 dark:border-red-800/40',
+    dot: 'bg-red-500', icon: XCircle, barColor: '#ef4444',
+  },
 };
 
-const faseConfig: Record<string, { bg: string; text: string }> = {
-  'Recursal':              { bg: 'bg-purple-50 dark:bg-purple-950/30', text: 'text-purple-700 dark:text-purple-400' },
-  'Execução':              { bg: 'bg-orange-50 dark:bg-orange-950/30', text: 'text-orange-700 dark:text-orange-400' },
-  'Cumprimento de Sentença':{ bg: 'bg-teal-50 dark:bg-teal-950/30',   text: 'text-teal-700 dark:text-teal-400'   },
-  'Conhecimento':          { bg: 'bg-sky-50 dark:bg-sky-950/30',      text: 'text-sky-700 dark:text-sky-400'     },
-  'Liquidação':            { bg: 'bg-indigo-50 dark:bg-indigo-950/30',text: 'text-indigo-700 dark:text-indigo-400'},
+const faseConfig: Record<string, { cls: string }> = {
+  'Recursal':               { cls: 'bg-purple-100 text-purple-700 dark:bg-purple-950/30 dark:text-purple-400' },
+  'Execução':               { cls: 'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400' },
+  'Cumprimento de Sentença':{ cls: 'bg-teal-100 text-teal-700 dark:bg-teal-950/30 dark:text-teal-400' },
+  'Conhecimento':           { cls: 'bg-sky-100 text-sky-700 dark:bg-sky-950/30 dark:text-sky-400' },
+  'Liquidação':             { cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400' },
 };
 
 function formatCurrency(value: number | null | undefined): string | null {
@@ -43,11 +61,15 @@ function formatDate(dateStr: string | null | undefined): string | null {
   if (!dateStr) return null;
   try {
     const d = typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateStr)
-      ? parseISO(dateStr)
-      : new Date(dateStr);
+      ? parseISO(dateStr) : new Date(dateStr);
     return isValid(d) ? format(d, 'dd/MM/yy', { locale: ptBR }) : null;
   } catch { return null; }
 }
+
+const grauLabel = (g: string) => ({
+  G1: '1º Grau', G2: '2º Grau', SUP: 'Superior',
+  JE: 'Juz. Esp.', TR: 'Tur. Rec.',
+}[g] || g);
 
 type SortKey = 'cliente' | 'numero' | 'tribunal' | 'data' | 'valor' | 'status';
 
@@ -63,33 +85,35 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
       if (lead?.nome) return lead.nome;
     }
     const partes = processo.partes_json || [];
-    const parteAtiva = partes.find(p =>
+    const ativo = partes.find(p =>
       p.polo?.toLowerCase() === 'ativo' || p.polo === 'AT' ||
       p.tipo?.toLowerCase()?.includes('autor') || p.tipo?.toLowerCase()?.includes('requerente')
     );
-    return parteAtiva?.nome || null;
+    return ativo?.nome || null;
   };
 
   const sorted = [...processos].sort((a, b) => {
-    let va = '', vb = '';
-    if (sortKey === 'cliente') { va = getClienteName(a) || ''; vb = getClienteName(b) || ''; }
-    else if (sortKey === 'numero')   { va = a.numero_processo || ''; vb = b.numero_processo || ''; }
-    else if (sortKey === 'tribunal') { va = a.tribunal || ''; vb = b.tribunal || ''; }
-    else if (sortKey === 'status')   { va = a.status || ''; vb = b.status || ''; }
-    else if (sortKey === 'data') {
+    if (sortKey === 'data') {
       const da = new Date(a.data_distribuicao || a.created_at || 0).getTime();
       const db = new Date(b.data_distribuicao || b.created_at || 0).getTime();
       return sortAsc ? da - db : db - da;
-    } else if (sortKey === 'valor') {
-      const va2 = a.valor_causa || 0;
-      const vb2 = b.valor_causa || 0;
-      return sortAsc ? va2 - vb2 : vb2 - va2;
     }
+    if (sortKey === 'valor') {
+      return sortAsc ? (a.valor_causa || 0) - (b.valor_causa || 0) : (b.valor_causa || 0) - (a.valor_causa || 0);
+    }
+    const va = sortKey === 'cliente' ? getClienteName(a) || ''
+             : sortKey === 'numero'   ? a.numero_processo || ''
+             : sortKey === 'tribunal' ? a.tribunal || ''
+             : a.status || '';
+    const vb = sortKey === 'cliente' ? getClienteName(b) || ''
+             : sortKey === 'numero'   ? b.numero_processo || ''
+             : sortKey === 'tribunal' ? b.tribunal || ''
+             : b.status || '';
     return sortAsc ? va.localeCompare(vb, 'pt-BR') : vb.localeCompare(va, 'pt-BR');
   });
 
-  const totalPages       = Math.ceil(sorted.length / ITEMS_PER_PAGE);
-  const paginatedProcessos = sorted.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(sorted.length / ITEMS_PER_PAGE);
+  const paginated  = sorted.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortAsc(v => !v);
@@ -97,16 +121,29 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
     setCurrentPage(1);
   };
 
-  const SortIcon = ({ col }: { col: SortKey }) => (
-    <ArrowUpDown className={`h-3 w-3 ml-1 inline-block transition-opacity ${sortKey === col ? 'opacity-100 text-primary' : 'opacity-30'}`} />
-  );
+  function SortBtn({ col, label }: { col: SortKey; label: string }) {
+    const active = sortKey === col;
+    return (
+      <button
+        onClick={() => toggleSort(col)}
+        className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest transition-colors ${active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+      >
+        {label}
+        <ArrowUpDown className={`h-3 w-3 transition-opacity ${active ? 'opacity-100' : 'opacity-30'}`} />
+      </button>
+    );
+  }
 
   if (processos.length === 0) {
     return (
-      <div className="text-center py-20 bg-card rounded-2xl border border-border/50">
-        <Scale className="h-12 w-12 mx-auto text-muted-foreground/20 mb-4" />
-        <p className="text-sm font-semibold text-muted-foreground">Nenhum processo encontrado</p>
-        <p className="text-xs text-muted-foreground/60 mt-1">Clique em "Novo" para adicionar.</p>
+      <div className="flex flex-col items-center justify-center py-24 gap-4 rounded-2xl border-2 border-dashed border-border/40">
+        <div className="h-16 w-16 rounded-2xl bg-muted/60 flex items-center justify-center">
+          <Scale className="h-8 w-8 text-muted-foreground/20" />
+        </div>
+        <div className="text-center">
+          <p className="text-sm font-semibold text-foreground">Nenhum processo encontrado</p>
+          <p className="text-xs text-muted-foreground mt-1">Clique em "Novo" para adicionar.</p>
+        </div>
       </div>
     );
   }
@@ -118,161 +155,137 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
       <div className="hidden md:block rounded-2xl border border-border/50 bg-card overflow-hidden shadow-sm">
         <table className="w-full">
           <thead>
-            <tr className="bg-muted/30 border-b border-border/50">
-              <th className="text-left px-4 py-2.5 w-[22%]">
-                <button onClick={() => toggleSort('cliente')} className="flex items-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors">
-                  Cliente <SortIcon col="cliente" />
-                </button>
-              </th>
-              <th className="text-left px-3 py-2.5 w-[22%]">
-                <button onClick={() => toggleSort('numero')} className="flex items-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors">
-                  Processo <SortIcon col="numero" />
-                </button>
-              </th>
-              <th className="text-left px-3 py-2.5 w-[9%]">
-                <button onClick={() => toggleSort('tribunal')} className="flex items-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors">
-                  Tribunal <SortIcon col="tribunal" />
-                </button>
-              </th>
-              <th className="text-left px-3 py-2.5 w-[12%]">
-                <button onClick={() => toggleSort('data')} className="flex items-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors">
-                  Distribuição <SortIcon col="data" />
-                </button>
-              </th>
-              <th className="text-left px-3 py-2.5 w-[11%]">
-                <button onClick={() => toggleSort('valor')} className="flex items-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors">
-                  Valor <SortIcon col="valor" />
-                </button>
-              </th>
-              <th className="text-right px-4 py-2.5 w-[24%]">
-                <button onClick={() => toggleSort('status')} className="flex items-center ml-auto text-[10px] font-bold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors">
-                  Situação <SortIcon col="status" />
-                </button>
-              </th>
+            <tr className="border-b border-border/50 bg-muted/30">
+              <th className="text-left px-5 py-3 w-[22%]"><SortBtn col="cliente"  label="Cliente" /></th>
+              <th className="text-left px-4 py-3 w-[22%]"><SortBtn col="numero"   label="Processo" /></th>
+              <th className="text-left px-3 py-3 w-[9%]"> <SortBtn col="tribunal" label="Tribunal" /></th>
+              <th className="text-left px-3 py-3 w-[11%]"><SortBtn col="data"     label="Distribuição" /></th>
+              <th className="text-left px-3 py-3 w-[10%]"><SortBtn col="valor"    label="Valor" /></th>
+              <th className="text-right px-5 py-3 w-[26%]"><SortBtn col="status"  label="Situação" /></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/30">
-            {paginatedProcessos.map((processo) => {
-              const style        = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
-              const faseStyle    = faseConfig[(processo.fase || '').trim()] || null;
-              const clienteName  = getClienteName(processo);
-              const ultimaMov    = processo.movimentos_json?.[0];
-              const statusReal   = processo.status_detalhado || ultimaMov?.nome || null;
-              const dataDistrib  = formatDate(processo.data_distribuicao || (processo as any).data_ajuizamento);
-              const dataSync     = formatDate(processo.data_ultima_atualizacao || ultimaMov?.dataHora);
-              const valor        = formatCurrency(processo.valor_causa);
-              const advogado     = processo.advogado_responsavel;
-              const movCount     = processo.movimentos_json?.length || 0;
+          <tbody className="divide-y divide-border/25">
+            {paginated.map((processo) => {
+              const status      = processo.status || 'Em Andamento';
+              const cfg         = statusConfig[status] || statusConfig['Em Andamento'];
+              const faseCfg     = faseConfig[(processo.fase || '').trim()];
+              const clienteName = getClienteName(processo);
+              const ultimaMov   = processo.movimentos_json?.[0];
+              const dataDistrib = formatDate(processo.data_distribuicao || (processo as any).data_ajuizamento);
+              const dataSync    = formatDate(processo.data_ultima_atualizacao || ultimaMov?.dataHora);
+              const valor       = formatCurrency(processo.valor_causa);
+              const movCount    = processo.movimentos_json?.length || 0;
 
               return (
                 <tr
                   key={processo.id}
-                  className="cursor-pointer hover:bg-accent/20 transition-colors group"
                   onClick={() => onProcessoClick(processo)}
+                  className="group cursor-pointer hover:bg-accent/20 transition-colors relative"
                 >
+                  {/* Left accent bar via pseudo — use a td trick */}
+                  <td className="px-0 py-0 w-[3px] p-0 relative">
+                    <div
+                      className="absolute left-0 top-0 bottom-0 w-[3px] opacity-0 group-hover:opacity-100 transition-opacity rounded-r-sm"
+                      style={{ background: cfg.barColor }}
+                    />
+                  </td>
+
                   {/* Cliente */}
-                  <td className="px-4 py-3 align-top">
-                    <p className="text-sm font-semibold text-foreground truncate max-w-[200px] leading-tight">
-                      {clienteName || <span className="text-muted-foreground/40 font-normal">Sem identificação</span>}
+                  <td className="px-5 py-3.5 align-top">
+                    <p className={`text-sm font-bold leading-tight truncate max-w-[190px] ${clienteName ? 'text-foreground' : 'text-muted-foreground/40 font-normal'}`}>
+                      {clienteName || 'Sem identificação'}
                     </p>
                     {processo.classe_cnj && (
-                      <p className="text-[10px] text-muted-foreground/70 truncate max-w-[200px] mt-0.5 leading-tight">
+                      <p className="text-[10px] text-muted-foreground/60 truncate max-w-[190px] mt-0.5 leading-tight">
                         {processo.classe_cnj}
                       </p>
                     )}
-                    {advogado && (
-                      <p className="text-[10px] text-muted-foreground/50 truncate max-w-[200px] mt-0.5 flex items-center gap-1 leading-tight">
+                    {processo.advogado_responsavel && (
+                      <p className="text-[10px] text-muted-foreground/40 truncate max-w-[190px] mt-0.5 flex items-center gap-1 leading-tight">
                         <User className="h-2.5 w-2.5 shrink-0" />
-                        {advogado.replace(/\s*\(OAB.*\)/i, '')}
+                        {processo.advogado_responsavel.replace(/\s*\(OAB.*\)/i, '')}
                       </p>
                     )}
                   </td>
 
                   {/* Processo */}
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-4 py-3.5 align-top">
                     <p className="font-mono text-[12px] font-semibold text-foreground leading-tight">
                       {processo.numero_processo || '—'}
                     </p>
                     {processo.assunto && (
-                      <p className="text-[10px] text-muted-foreground truncate max-w-[220px] mt-0.5 leading-tight">
+                      <p className="text-[10px] text-muted-foreground truncate max-w-[200px] mt-0.5 leading-tight">
                         {processo.assunto}
                       </p>
                     )}
-                    {processo.fase && (
-                      <div className="mt-1">
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-semibold ${faseStyle?.bg || 'bg-muted'} ${faseStyle?.text || 'text-muted-foreground'}`}>
-                          {processo.fase}
-                        </span>
-                      </div>
+                    {processo.fase && faseCfg && (
+                      <span className={`inline-flex items-center mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold ${faseCfg.cls}`}>
+                        {processo.fase}
+                      </span>
                     )}
                   </td>
 
                   {/* Tribunal */}
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-3 py-3.5 align-top">
                     {processo.tribunal ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/60 text-[10px] font-semibold text-foreground">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/60 border border-border/40 text-[10px] font-bold text-foreground">
                         <Building2 className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
                         {processo.tribunal}
                       </span>
                     ) : (
-                      <span className="text-muted-foreground/30 text-xs">—</span>
+                      <span className="text-muted-foreground/20 text-xs">—</span>
                     )}
                     {processo.grau && (
-                      <p className="text-[9px] text-muted-foreground/50 mt-1 ml-0.5">{
-                        processo.grau === 'G1' ? '1º Grau' :
-                        processo.grau === 'G2' ? '2º Grau' :
-                        processo.grau === 'JE' ? 'Juz. Esp.' :
-                        processo.grau === 'TR' ? 'Tur. Rec.' : processo.grau
-                      }</p>
+                      <p className="text-[9px] text-muted-foreground/40 mt-1 ml-0.5">
+                        {grauLabel(processo.grau)}
+                      </p>
                     )}
                   </td>
 
-                  {/* Data distribuição */}
-                  <td className="px-3 py-3 align-top">
+                  {/* Data */}
+                  <td className="px-3 py-3.5 align-top">
                     {dataDistrib ? (
-                      <div className="flex items-center gap-1 text-[11px] text-foreground font-medium">
+                      <div className="flex items-center gap-1 text-[11px] text-foreground font-semibold">
                         <Calendar className="h-3 w-3 text-muted-foreground shrink-0" />
                         {dataDistrib}
                       </div>
                     ) : (
-                      <span className="text-muted-foreground/30 text-xs">—</span>
+                      <span className="text-muted-foreground/20 text-xs">—</span>
                     )}
                     {dataSync && dataDistrib !== dataSync && (
-                      <p className="text-[9px] text-muted-foreground/40 mt-1">
-                        Sync: {dataSync}
-                      </p>
+                      <p className="text-[9px] text-muted-foreground/35 mt-1">Sync: {dataSync}</p>
                     )}
                     {movCount > 0 && (
-                      <p className="text-[9px] text-muted-foreground/40 mt-0.5">{movCount} mov.</p>
+                      <p className="text-[9px] text-muted-foreground/35 mt-0.5">{movCount} mov.</p>
                     )}
                   </td>
 
                   {/* Valor */}
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-3 py-3.5 align-top">
                     {valor ? (
-                      <div className="flex items-center gap-1 text-[11px] font-semibold text-foreground">
+                      <div className="flex items-center gap-1 text-[11px] font-bold text-foreground">
                         <DollarSign className="h-3 w-3 text-muted-foreground shrink-0" />
                         {valor}
                       </div>
                     ) : (
-                      <span className="text-muted-foreground/30 text-xs">—</span>
+                      <span className="text-muted-foreground/20 text-xs">—</span>
                     )}
                   </td>
 
                   {/* Status */}
-                  <td className="px-4 py-3 align-top">
+                  <td className="px-5 py-3.5 align-top">
                     <div className="flex flex-col items-end gap-1.5">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold whitespace-nowrap ${style.bg} ${style.text}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${style.dot}`} />
-                        {processo.status || '—'}
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${cfg.cls}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${cfg.dot}`} />
+                        {status}
                       </span>
-                      {statusReal && (
-                        <p className="text-[10px] text-muted-foreground/60 text-right truncate max-w-[180px]" title={statusReal}>
-                          {statusReal.length > 38 ? statusReal.slice(0, 38) + '…' : statusReal}
+                      {(ultimaMov?.nome) && (
+                        <p className="text-[9px] text-muted-foreground/50 text-right truncate max-w-[180px]" title={ultimaMov.nome}>
+                          {ultimaMov.nome.length > 40 ? ultimaMov.nome.slice(0, 40) + '…' : ultimaMov.nome}
                         </p>
                       )}
                     </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground/20 opacity-0 group-hover:opacity-100 transition-opacity float-right mt-1 ml-2 shrink-0" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/15 opacity-0 group-hover:opacity-100 group-hover:text-primary transition-all float-right mt-1 ml-2 shrink-0" />
                   </td>
                 </tr>
               );
@@ -282,54 +295,54 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
       </div>
 
       {/* ── Mobile Cards ── */}
-      <div className="md:hidden rounded-2xl border border-border/50 bg-card overflow-hidden divide-y divide-border/30">
-        {paginatedProcessos.map((processo) => {
-          const style       = statusConfig[processo.status || ''] || statusConfig['Em Andamento'];
+      <div className="md:hidden space-y-2">
+        {paginated.map((processo) => {
+          const status      = processo.status || 'Em Andamento';
+          const cfg         = statusConfig[status] || statusConfig['Em Andamento'];
+          const faseCfg     = faseConfig[(processo.fase || '').trim()];
           const clienteName = getClienteName(processo);
-          const faseStyle   = faseConfig[(processo.fase || '').trim()] || null;
           const dataDistrib = formatDate(processo.data_distribuicao || (processo as any).data_ajuizamento);
           const valor       = formatCurrency(processo.valor_causa);
 
           return (
             <div
               key={processo.id}
-              className="p-4 active:bg-muted/30 transition-colors cursor-pointer"
               onClick={() => onProcessoClick(processo)}
+              className="group flex items-start gap-3 p-4 rounded-2xl border border-border/50 bg-card hover:bg-accent/20 hover:border-border cursor-pointer transition-all"
+              style={{ borderLeftWidth: 3, borderLeftColor: cfg.barColor }}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0 space-y-1.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${style.bg} ${style.text}`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-                      {processo.status || '—'}
-                    </span>
-                    {processo.tribunal && (
-                      <span className="text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded-md">{processo.tribunal}</span>
-                    )}
-                    {processo.fase && faseStyle && (
-                      <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-md ${faseStyle.bg} ${faseStyle.text}`}>{processo.fase}</span>
-                    )}
-                  </div>
-                  <p className="font-semibold text-sm truncate">{clienteName || 'Sem identificação'}</p>
-                  <p className="font-mono text-xs text-muted-foreground">{processo.numero_processo || '—'}</p>
-                  {processo.assunto && (
-                    <p className="text-[11px] text-muted-foreground truncate">{processo.assunto}</p>
+              <div className="flex-1 min-w-0 space-y-2">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.cls}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+                    {status}
+                  </span>
+                  {processo.tribunal && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-muted/60 text-muted-foreground border border-border/40">{processo.tribunal}</span>
                   )}
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {dataDistrib && (
-                      <span className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
-                        <Calendar className="h-2.5 w-2.5" />{dataDistrib}
-                      </span>
-                    )}
-                    {valor && (
-                      <span className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
-                        <DollarSign className="h-2.5 w-2.5" />{valor}
-                      </span>
-                    )}
-                  </div>
+                  {processo.fase && faseCfg && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${faseCfg.cls}`}>{processo.fase}</span>
+                  )}
                 </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground/40 mt-1 shrink-0" />
+                <p className="text-sm font-bold text-foreground truncate">{clienteName || 'Sem identificação'}</p>
+                <p className="font-mono text-xs text-muted-foreground">{processo.numero_processo || '—'}</p>
+                {processo.assunto && (
+                  <p className="text-[11px] text-muted-foreground truncate">{processo.assunto}</p>
+                )}
+                <div className="flex items-center gap-3 flex-wrap">
+                  {dataDistrib && (
+                    <span className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
+                      <Calendar className="h-2.5 w-2.5" />{dataDistrib}
+                    </span>
+                  )}
+                  {valor && (
+                    <span className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
+                      <DollarSign className="h-2.5 w-2.5" />{valor}
+                    </span>
+                  )}
+                </div>
               </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-primary group-hover:translate-x-0.5 transition-all self-center shrink-0" />
             </div>
           );
         })}
@@ -338,17 +351,16 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
       {/* ── Pagination ── */}
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-1 py-2">
-          <Button variant="ghost" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="text-xs h-8 px-3 rounded-xl">
+          <Button variant="ghost" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="h-8 px-3 rounded-xl text-xs">
             ← Anterior
           </Button>
           {Array.from({ length: totalPages }, (_, i) => i + 1)
-            .filter(page => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 2)
+            .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
             .map((page, idx, arr) => {
-              const prev          = arr[idx - 1];
-              const showEllipsis  = prev && page - prev > 1;
+              const prev = arr[idx - 1];
               return (
                 <span key={page} className="flex items-center gap-1">
-                  {showEllipsis && <span className="text-xs text-muted-foreground px-1">…</span>}
+                  {prev && page - prev > 1 && <span className="text-xs text-muted-foreground px-1">…</span>}
                   <Button
                     variant={page === currentPage ? 'default' : 'ghost'}
                     size="sm"
@@ -360,7 +372,7 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
                 </span>
               );
             })}
-          <Button variant="ghost" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="text-xs h-8 px-3 rounded-xl">
+          <Button variant="ghost" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="h-8 px-3 rounded-xl text-xs">
             Próxima →
           </Button>
         </div>
@@ -368,13 +380,11 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
 
       {/* ── Footer ── */}
       <div className="flex items-center justify-between px-1 py-1">
-        <span className="text-xs text-muted-foreground">
+        <span className="text-xs text-muted-foreground font-medium">
           {processos.length} processo{processos.length !== 1 ? 's' : ''}
           {processos.length !== sorted.length && ` · ${sorted.length} filtrado${sorted.length !== 1 ? 's' : ''}`}
         </span>
-        <span className="text-xs text-muted-foreground/50">
-          Sincronização semanal automática
-        </span>
+        <span className="text-[10px] text-muted-foreground/40">Sincronização automática ativa</span>
       </div>
     </div>
   );
