@@ -655,7 +655,10 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="w-[96vw] max-w-[1200px] rounded-2xl max-h-[94vh] overflow-hidden flex flex-col p-0 gap-0">
+        <DialogContent
+          className="w-[96vw] max-w-[1200px] rounded-2xl overflow-hidden flex flex-col p-0 gap-0"
+          style={{ height: '94vh', maxHeight: '94vh' }}
+        >
           <DialogHeader className="sr-only"><DialogTitle>{isNew ? 'Novo Processo' : 'Detalhes do Processo'}</DialogTitle></DialogHeader>
 
           {/* Header */}
@@ -704,7 +707,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
 
             {/* Tab Processo */}
             <TabsContent value="processo" className="flex-1 min-h-0 mt-0 overflow-hidden">
-              <div className="flex gap-0" style={{ height: 'calc(94vh - 230px)' }}>
+              <div className="flex gap-0" style={{ height: 'calc(94vh - 200px)', minHeight: 0 }}>
                 <ScrollArea className="flex-1 min-w-0 h-full">
                   <div className="px-6 py-5 space-y-5">
 
