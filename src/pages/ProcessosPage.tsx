@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -32,178 +31,165 @@ const ConsultaProcessoExterno = lazy(() =>
   import('@/components/processos/ConsultaProcessoExterno').then(m => ({ default: m.ConsultaProcessoExterno }))
 );
 
-// ─── Mini Donut Chart ──────────────────────────────────────────────────────────
-
-function MiniDonut({ segments }: {
-  segments: { value: number; color: string }[];
-}) {
+// ── Mini Donut ────────────────────────────────────────────────────────────────
+function MiniDonut({ segments }: { segments: { value: number; color: string }[] }) {
   const total = segments.reduce((s, x) => s + x.value, 0);
-  if (total === 0) return <div className="h-10 w-10 rounded-full bg-muted/30" />;
-
-  const size = 40;
-  const cx   = size / 2;
-  const cy   = size / 2;
-  const r    = 14;
-  const strokeW = 7;
-
-  let cumAngle = -90;
+  if (total === 0) return <div className="h-12 w-12 rounded-full bg-muted/30" />;
+  const size = 48; const cx = 24; const cy = 24; const r = 16; const sw = 8;
+  let cum = -90;
   const arcs = segments.map(seg => {
-    const pct   = seg.value / total;
-    const angle = pct * 360;
-    const start = cumAngle;
-    cumAngle   += angle;
-    return { ...seg, pct, startAngle: start, endAngle: cumAngle };
+    const pct = seg.value / total; const angle = pct * 360;
+    const start = cum; cum += angle;
+    return { ...seg, pct, start, end: cum };
   });
-
-  function polarToXY(deg: number, radius: number) {
+  function xy(deg: number) {
     const rad = (deg * Math.PI) / 180;
-    return { x: cx + radius * Math.cos(rad), y: cy + radius * Math.sin(rad) };
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
   }
-
-  function arcPath(startDeg: number, endDeg: number, radius: number) {
-    const s   = polarToXY(startDeg, radius);
-    const e   = polarToXY(endDeg,   radius);
-    const lg  = endDeg - startDeg > 180 ? 1 : 0;
-    return `M ${s.x} ${s.y} A ${radius} ${radius} 0 ${lg} 1 ${e.x} ${e.y}`;
+  function arc(s: number, e: number) {
+    const a = xy(s); const b = xy(e); const lg = e - s > 180 ? 1 : 0;
+    return `M ${a.x} ${a.y} A ${r} ${r} 0 ${lg} 1 ${b.x} ${b.y}`;
   }
-
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      {arcs.map((arc, i) => (
-        arc.pct > 0 && (
-          <path
-            key={i}
-            d={arcPath(arc.startAngle, arc.endAngle - 0.5, r)}
-            fill="none"
-            stroke={arc.color}
-            strokeWidth={strokeW}
-            strokeLinecap="butt"
-          />
-        )
+      {arcs.map((a, i) => a.pct > 0 && (
+        <path key={i} d={arc(a.start, a.end - 0.3)} fill="none" stroke={a.color} strokeWidth={sw} strokeLinecap="butt" />
       ))}
     </svg>
   );
 }
 
-// ─── KPI Card ──────────────────────────────────────────────────────────────────
-
-function KpiCard({
-  label, value, icon: Icon, color, bg, active, onClick,
-}: {
+// ── KPI Card ─────────────────────────────────────────────────────────────────
+function KpiCard({ label, value, icon: Icon, numColor, barColor, iconBg, active, onClick }: {
   label: string; value: number; icon: React.ElementType;
-  color: string; bg: string; active: boolean; onClick: () => void;
+  numColor: string; barColor: string; iconBg: string;
+  active: boolean; onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-all cursor-pointer ${
-        active
-          ? 'ring-2 ring-primary/40 shadow-md bg-card border-primary/20'
-          : `${bg} border-border/40 hover:shadow-sm hover:border-border`
-      }`}
+      className={`group relative overflow-hidden flex flex-col items-center gap-1.5 p-3 rounded-2xl border transition-all duration-200 cursor-pointer
+        hover:-translate-y-0.5 hover:shadow-lg
+        ${active
+          ? 'border-primary/30 shadow-md bg-card ring-2 ring-primary/20'
+          : 'border-border/50 bg-card hover:border-border'
+        }`}
     >
-      <Icon className={`h-4 w-4 ${color}`} />
-      <span className={`text-xl font-bold leading-none ${color}`}>{value}</span>
-      <span className="text-[10px] text-muted-foreground font-medium text-center leading-tight">{label}</span>
+      {/* top accent bar via inline style for reliable color */}
+      <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl transition-opacity duration-200"
+        style={{ background: barColor, opacity: active ? 1 : 0.4 }} />
+      {/* decorative blob */}
+      <div className="absolute -bottom-4 -right-4 w-14 h-14 rounded-full opacity-[0.06] group-hover:opacity-[0.12] transition-opacity"
+        style={{ background: barColor }} />
+      <div className="relative h-8 w-8 rounded-xl flex items-center justify-center mt-1" style={{ background: iconBg }}>
+        <Icon className="h-4 w-4" style={{ color: numColor }} />
+      </div>
+      <span className="relative text-2xl font-black leading-none tabular-nums" style={{ color: numColor }}>
+        {value.toLocaleString('pt-BR')}
+      </span>
+      <span className="relative text-[9px] font-bold text-muted-foreground uppercase tracking-widest text-center leading-tight px-1">
+        {label}
+      </span>
     </button>
   );
 }
 
-// ─── Summary Bar ──────────────────────────────────────────────────────────────
-
-function SummaryBar({ kpis, statusFilter, setStatusFilter }: {
+// ── Summary Panel ─────────────────────────────────────────────────────────────
+function SummaryPanel({ kpis, statusFilter, setStatusFilter }: {
   kpis: Record<string, number>;
   statusFilter: string;
   setStatusFilter: (s: string) => void;
 }) {
-  const segments = [
-    { key: 'Em Andamento', color: '#3b82f6', label: 'Em Andamento' },
-    { key: 'Suspenso',     color: '#f59e0b', label: 'Suspensos'    },
-    { key: 'Ganho',        color: '#10b981', label: 'Ganhos'       },
-    { key: 'Perdido',      color: '#ef4444', label: 'Perdidos'     },
-    { key: 'Arquivado',    color: '#94a3b8', label: 'Arquivados'   },
+  const rows = [
+    { key: 'Em Andamento', label: 'Em Andamento', color: '#3b82f6' },
+    { key: 'Suspenso',     label: 'Suspensos',    color: '#f59e0b' },
+    { key: 'Ganho',        label: 'Ganhos',       color: '#10b981' },
+    { key: 'Perdido',      label: 'Perdidos',     color: '#ef4444' },
+    { key: 'Arquivado',    label: 'Arquivados',   color: '#94a3b8' },
   ];
-
-  const values = segments.map(s => ({ ...s, value: kpis[s.key] || 0 }));
-  const total  = kpis.total || 1;
+  const extra = [
+    { key: 'recursal', label: 'Recursal', color: '#7c3aed' },
+    { key: 'execucao', label: 'Execução',  color: '#ea580c' },
+  ];
+  const total = kpis.total || 1;
+  const donutSegs = rows.map(r => ({ value: kpis[r.key] || 0, color: r.color }));
 
   return (
-    <div className="bg-card border border-border/40 rounded-2xl p-4 flex items-center gap-5">
+    <div className="rounded-2xl border border-border/50 bg-card p-4 flex items-center gap-5 shadow-sm">
       <div className="shrink-0">
-        <MiniDonut segments={values.map(v => ({ value: v.value, color: v.color }))} />
+        <MiniDonut segments={donutSegs} />
       </div>
       <div className="flex-1 min-w-0 space-y-1.5">
-        {values.map(seg => (
-          <button
-            key={seg.key}
-            onClick={() => setStatusFilter(statusFilter === seg.key ? 'todos' : seg.key)}
-            className="w-full group flex items-center gap-2 hover:opacity-80 transition-opacity"
-          >
-            <div className="flex items-center gap-1.5 w-[100px] shrink-0">
-              <span className="h-2 w-2 rounded-full shrink-0" style={{ background: seg.color }} />
-              <span className={`text-[10px] font-medium truncate ${statusFilter === seg.key ? 'text-foreground' : 'text-muted-foreground'}`}>
-                {seg.label}
+        {rows.map(row => {
+          const val = kpis[row.key] || 0;
+          const pct = (val / total) * 100;
+          const isActive = statusFilter === row.key;
+          return (
+            <button
+              key={row.key}
+              onClick={() => setStatusFilter(isActive ? 'todos' : row.key)}
+              className="w-full flex items-center gap-2 group hover:opacity-90 transition-opacity"
+            >
+              <div className="flex items-center gap-1.5 w-[106px] shrink-0">
+                <span className="h-2 w-2 rounded-full shrink-0" style={{ background: row.color }} />
+                <span className={`text-[10px] font-semibold truncate ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}>
+                  {row.label}
+                </span>
+              </div>
+              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: row.color }} />
+              </div>
+              <span className="text-[10px] font-black w-6 text-right shrink-0" style={{ color: isActive ? row.color : undefined }}>
+                {val}
               </span>
-            </div>
-            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all"
-                style={{ width: `${(seg.value / total) * 100}%`, background: seg.color }}
-              />
-            </div>
-            <span className="text-[10px] font-semibold text-muted-foreground w-6 text-right shrink-0">
-              {seg.value}
-            </span>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
-      <div className="shrink-0 hidden lg:flex flex-col gap-2">
-        {[
-          { key: 'recursal', label: 'Recursal', color: '#7c3aed' },
-          { key: 'execucao', label: 'Execução',  color: '#ea580c' },
-        ].map(s => (
-          <button
-            key={s.key}
-            onClick={() => setStatusFilter(statusFilter === s.key ? 'todos' : s.key)}
-            className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
-          >
-            <span className="h-2 w-2 rounded-full shrink-0" style={{ background: s.color }} />
-            <span className="text-[10px] text-muted-foreground">{s.label}</span>
-            <span className="text-[10px] font-bold text-foreground ml-1">{kpis[s.key] || 0}</span>
-          </button>
-        ))}
+      <div className="shrink-0 hidden lg:flex flex-col gap-2.5">
+        {extra.map(e => {
+          const val = kpis[e.key] || 0;
+          return (
+            <button
+              key={e.key}
+              onClick={() => setStatusFilter(statusFilter === e.key ? 'todos' : e.key)}
+              className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+            >
+              <span className="h-2 w-2 rounded-full shrink-0" style={{ background: e.color }} />
+              <span className="text-[10px] text-muted-foreground">{e.label}</span>
+              <span className="text-[10px] font-black ml-1" style={{ color: e.color }}>{val}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-// ─── Page ──────────────────────────────────────────────────────────────────────
-
+// ── Page ─────────────────────────────────────────────────────────────────────
 type ViewTab = 'internos' | 'consulta';
 
 function ProcessosPage() {
   const navigate = useNavigate();
   const { processos, loading } = useProcessos();
-  const { leadNames }          = useLeadNames();
+  const { leadNames } = useLeadNames();
   const { canDelete, canAccessProcessos, loading: perfilLoading } = usePerfil();
 
   const [selectedProcesso, setSelectedProcesso] = useState<Processo | null>(null);
-  const [isModalOpen,       setIsModalOpen]       = useState(false);
-  const [isNew,             setIsNew]             = useState(false);
-  const [searchTerm,        setSearchTerm]        = useState('');
-  const [statusFilter,      setStatusFilter]      = useState('todos');
-  const [activeView,        setActiveView]        = useState<ViewTab>('internos');
-  const [showImportCsv,     setShowImportCsv]     = useState(false);
-  const [showSyncModal,     setShowSyncModal]     = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isNew, setIsNew] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('todos');
+  const [activeView, setActiveView] = useState<ViewTab>('internos');
+  const [showImportCsv, setShowImportCsv] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
   const handleProcessoClick = useCallback((p: Processo) => {
     setSelectedProcesso(p); setIsNew(false); setIsModalOpen(true);
   }, []);
-
   const handleNewProcesso = useCallback(() => {
     setSelectedProcesso(null); setIsNew(true); setIsModalOpen(true);
   }, []);
-
   const handleCloseModal = useCallback(() => {
     setIsModalOpen(false); setSelectedProcesso(null); setIsNew(false);
   }, []);
@@ -220,7 +206,7 @@ function ProcessosPage() {
     'Ganho':         processos.filter(p => p.status === 'Ganho').length,
     'Perdido':       processos.filter(p => p.status === 'Perdido').length,
     recursal:        processos.filter(p => p.fase?.toLowerCase() === 'recursal').length,
-    execucao:        processos.filter(p => ['execução','execucao'].includes(p.fase?.toLowerCase() || '')).length,
+    execucao:        processos.filter(p => ['execução', 'execucao'].includes(p.fase?.toLowerCase() || '')).length,
   }), [processos]);
 
   const filteredProcessos = useMemo(() => processos.filter(p => {
@@ -229,51 +215,80 @@ function ProcessosPage() {
       p.numero_processo, p.titulo_acao, p.advogado_responsavel,
       p.assunto, p.orgao_julgador, p.nome_cliente, p.cpf_cliente, p.classe_cnj,
     ].some(v => v?.toLowerCase().includes(s));
-
     let matchStatus = true;
-    if (statusFilter === 'recursal')      matchStatus = p.fase?.toLowerCase() === 'recursal';
-    else if (statusFilter === 'execucao') matchStatus = ['execução','execucao'].includes(p.fase?.toLowerCase() || '');
-    else if (statusFilter !== 'todos')    matchStatus = p.status === statusFilter;
-
+    if (statusFilter === 'recursal') matchStatus = p.fase?.toLowerCase() === 'recursal';
+    else if (statusFilter === 'execucao') matchStatus = ['execução', 'execucao'].includes(p.fase?.toLowerCase() || '');
+    else if (statusFilter !== 'todos') matchStatus = p.status === statusFilter;
     return matchSearch && matchStatus;
   }), [processos, searchTerm, statusFilter]);
 
   if (perfilLoading) return <AppLayout><PageSkeleton cards={5} rows={8} /></AppLayout>;
   if (!canAccessProcessos) return null;
 
-  // Spinner APENAS na carga inicial sem nenhum dado — trocar de aba nunca dispara isso
   const showSpinner = loading && processos.length === 0;
+
+  // KPI config with reliable inline colors
+  const kpiItems = [
+    { key: 'todos',        label: 'Total',      icon: Scale,        num: 'hsl(var(--foreground))',  bar: 'hsl(var(--primary))',  bg: 'rgba(var(--primary-rgb),0.08)' },
+    { key: 'Em Andamento', label: 'Andamento',  icon: CheckCircle2, num: '#2563eb', bar: '#3b82f6', bg: 'rgba(59,130,246,0.10)' },
+    { key: 'Suspenso',     label: 'Suspensos',  icon: PauseCircle,  num: '#d97706', bar: '#f59e0b', bg: 'rgba(245,158,11,0.10)' },
+    { key: 'Arquivado',    label: 'Arquivados', icon: Archive,      num: '#64748b', bar: '#94a3b8', bg: 'rgba(148,163,184,0.10)' },
+    { key: 'Ganho',        label: 'Ganhos',     icon: Trophy,       num: '#059669', bar: '#10b981', bg: 'rgba(16,185,129,0.10)' },
+    { key: 'Perdido',      label: 'Perdidos',   icon: XCircle,      num: '#dc2626', bar: '#ef4444', bg: 'rgba(239,68,68,0.10)' },
+    { key: 'recursal',     label: 'Recursal',   icon: Gavel,        num: '#7c3aed', bar: '#8b5cf6', bg: 'rgba(139,92,246,0.10)' },
+    { key: 'execucao',     label: 'Execução',   icon: FileCheck,    num: '#c2410c', bar: '#f97316', bg: 'rgba(249,115,22,0.10)' },
+  ];
+
+  const kpiValue = (key: string) => key === 'todos' ? kpis.total : (kpis as any)[key] || 0;
 
   return (
     <AppLayout>
-      {/* ── Header ── */}
-      <header className="sticky top-0 z-40 w-full bg-card/90 backdrop-blur-md border-b border-border">
-        <div className="flex h-14 items-center justify-between px-4 md:px-6 gap-3">
-          <div className="flex items-center gap-2 min-w-0">
+      {/* HEADER */}
+      <header className="sticky top-0 z-40 w-full bg-card/95 backdrop-blur-md border-b border-border/60">
+        <div className="flex h-[72px] items-center justify-between px-4 md:px-8 gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <SidebarTrigger className="md:hidden shrink-0" />
-            <Scale className="h-5 w-5 text-primary shrink-0 hidden md:block" />
-            <h1 className="text-base md:text-lg font-bold text-foreground truncate">Processos</h1>
-            <Badge variant="outline" className="rounded-lg text-xs shrink-0">{processos.length}</Badge>
+            <div className="relative shrink-0">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
+                <Scale className="h-5 w-5 text-primary-foreground" />
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-lg md:text-xl font-bold text-foreground leading-none">Processos</h1>
+                <span className="h-5 min-w-5 px-1.5 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] font-black text-primary">
+                  {processos.length}
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground hidden md:block mt-0.5">
+                Gestão de processos jurídicos
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <Button variant="outline" size="sm" onClick={() => setShowSyncModal(true)} className="rounded-xl h-9 gap-1.5 text-xs">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSyncModal(true)}
+              className="rounded-xl h-9 gap-1.5 text-xs border-border/60"
+            >
               <RefreshCw className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Sincronizar</span>
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="sm" className="rounded-xl h-9 gap-1.5 px-3 md:px-4">
+                <Button size="sm" className="rounded-xl h-9 gap-1.5 px-4 shadow-sm shadow-primary/20">
                   <Plus className="h-4 w-4" />
-                  <span className="hidden sm:inline">Novo</span>
+                  <span className="hidden sm:inline font-bold">Novo</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="rounded-xl">
-                <DropdownMenuItem onClick={handleNewProcesso}>
-                  <Plus className="h-4 w-4 mr-2" /> Novo Processo
+              <DropdownMenuContent align="end" className="rounded-xl shadow-xl border-border/60 w-44">
+                <DropdownMenuItem onClick={handleNewProcesso} className="rounded-lg gap-2 font-medium">
+                  <Plus className="h-4 w-4" /> Novo Processo
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setShowImportCsv(true)}>
-                  <Upload className="h-4 w-4 mr-2" /> Importar CSV
+                <DropdownMenuItem onClick={() => setShowImportCsv(true)} className="rounded-lg gap-2 font-medium">
+                  <Upload className="h-4 w-4" /> Importar CSV
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -281,53 +296,50 @@ function ProcessosPage() {
         </div>
       </header>
 
-      <div className="flex-1 p-4 md:p-6 space-y-4">
+      <div className="flex-1 p-4 md:p-8 space-y-5">
 
-        {/* ── KPI Cards + Summary ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4 items-start">
-          <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-            {[
-              { label: 'Total',      value: kpis.total,            icon: Scale,        color: 'text-foreground',       bg: 'bg-card',                              key: 'todos'        },
-              { label: 'Andamento',  value: kpis['Em Andamento'],  icon: CheckCircle2, color: 'text-blue-600',         bg: 'bg-blue-50 dark:bg-blue-950/30',       key: 'Em Andamento' },
-              { label: 'Suspensos',  value: kpis['Suspenso'],      icon: PauseCircle,  color: 'text-amber-600',        bg: 'bg-amber-50 dark:bg-amber-950/30',     key: 'Suspenso'     },
-              { label: 'Arquivados', value: kpis['Arquivado'],     icon: Archive,      color: 'text-muted-foreground', bg: 'bg-muted',                             key: 'Arquivado'    },
-              { label: 'Ganhos',     value: kpis['Ganho'],         icon: Trophy,       color: 'text-emerald-600',      bg: 'bg-emerald-50 dark:bg-emerald-950/30', key: 'Ganho'        },
-              { label: 'Perdidos',   value: kpis['Perdido'],       icon: XCircle,      color: 'text-red-600',          bg: 'bg-red-50 dark:bg-red-950/30',         key: 'Perdido'      },
-              { label: 'Recursal',   value: kpis.recursal,         icon: Gavel,        color: 'text-purple-600',       bg: 'bg-purple-50 dark:bg-purple-950/30',   key: 'recursal'     },
-              { label: 'Execução',   value: kpis.execucao,         icon: FileCheck,    color: 'text-orange-600',       bg: 'bg-orange-50 dark:bg-orange-950/30',   key: 'execucao'     },
-            ].map(kpi => (
+        {/* KPI CARDS + SUMMARY */}
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-5 items-start">
+          <div className="grid grid-cols-4 md:grid-cols-8 gap-2.5">
+            {kpiItems.map(k => (
               <KpiCard
-                key={kpi.key}
-                label={kpi.label}
-                value={kpi.value}
-                icon={kpi.icon}
-                color={kpi.color}
-                bg={kpi.bg}
-                active={statusFilter === kpi.key}
-                onClick={() => setStatusFilter(statusFilter === kpi.key ? 'todos' : kpi.key)}
+                key={k.key}
+                label={k.label}
+                value={kpiValue(k.key)}
+                icon={k.icon}
+                numColor={k.num}
+                barColor={k.bar}
+                iconBg={k.bg}
+                active={statusFilter === k.key}
+                onClick={() => setStatusFilter(statusFilter === k.key ? 'todos' : k.key)}
               />
             ))}
           </div>
-          <div className="hidden lg:block w-[320px] shrink-0">
-            <SummaryBar kpis={kpis} statusFilter={statusFilter} setStatusFilter={setStatusFilter} />
+          <div className="hidden xl:block">
+            <SummaryPanel kpis={kpis} statusFilter={statusFilter} setStatusFilter={setStatusFilter} />
           </div>
         </div>
 
-        {/* ── Barra de controles ── */}
+        {/* CONTROLS BAR */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          <div className="flex items-center bg-muted/50 rounded-xl p-1 shrink-0 border border-border/40">
+          {/* Tab toggle */}
+          <div className="flex items-center bg-muted/50 rounded-xl p-1 border border-border/40 shrink-0">
             <button
               onClick={() => setActiveView('internos')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeView === 'internos' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${
+                activeView === 'internos'
+                  ? 'bg-card shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               Escritório
             </button>
             <button
               onClick={() => setActiveView('consulta')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeView === 'consulta' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${
+                activeView === 'consulta'
+                  ? 'bg-card shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               Consultar CNJ
@@ -336,27 +348,32 @@ function ProcessosPage() {
 
           {activeView === 'internos' && (
             <div className="flex flex-1 items-center gap-2 w-full">
+              {/* Search */}
               <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <Input
                   placeholder="Número, cliente, advogado, assunto..."
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className="pl-10 h-9 rounded-xl bg-card border-border/50"
+                  className="pl-10 pr-9 h-10 rounded-xl bg-card border-border/60 shadow-sm focus:shadow-md transition-shadow"
                 />
                 {searchTerm && (
-                  <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                    <X className="h-3.5 w-3.5" />
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 rounded-full bg-muted hover:bg-muted-foreground/20 flex items-center justify-center transition-colors"
+                  >
+                    <X className="h-3 w-3 text-muted-foreground" />
                   </button>
                 )}
               </div>
 
+              {/* Status select */}
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[160px] h-9 rounded-xl bg-card border-border/50 shrink-0">
+                <SelectTrigger className="w-[160px] h-10 rounded-xl bg-card border-border/60 shrink-0 shadow-sm">
                   <SlidersHorizontal className="h-3.5 w-3.5 mr-2 text-muted-foreground shrink-0" />
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
-                <SelectContent className="rounded-xl">
+                <SelectContent className="rounded-xl shadow-xl">
                   <SelectItem value="todos">Todos os status</SelectItem>
                   <SelectItem value="Em Andamento">Em Andamento</SelectItem>
                   <SelectItem value="Suspenso">Suspenso</SelectItem>
@@ -369,13 +386,17 @@ function ProcessosPage() {
               </Select>
 
               {statusFilter !== 'todos' && (
-                <Button variant="ghost" size="sm" onClick={() => setStatusFilter('todos')} className="h-9 px-2.5 rounded-xl text-xs text-muted-foreground hover:text-foreground shrink-0">
+                <Button
+                  variant="ghost" size="sm"
+                  onClick={() => setStatusFilter('todos')}
+                  className="h-10 px-3 rounded-xl text-xs text-muted-foreground hover:text-foreground shrink-0"
+                >
                   <X className="h-3.5 w-3.5 mr-1" /> Limpar
                 </Button>
               )}
 
               {(searchTerm || statusFilter !== 'todos') && (
-                <span className="text-xs text-muted-foreground shrink-0 hidden md:inline">
+                <span className="text-xs text-muted-foreground shrink-0 hidden md:inline font-medium">
                   {filteredProcessos.length} resultado{filteredProcessos.length !== 1 ? 's' : ''}
                 </span>
               )}
@@ -383,17 +404,29 @@ function ProcessosPage() {
           )}
         </div>
 
-        {/* ── Conteúdo ── */}
+        {/* CONTENT */}
         {activeView === 'internos' ? (
           showSpinner ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <div className="flex flex-col items-center justify-center py-28 gap-4">
+              <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center relative">
+                <Scale className="h-8 w-8 text-primary/20" />
+                <Loader2 className="absolute h-6 w-6 animate-spin text-primary" />
+              </div>
+              <p className="text-sm text-muted-foreground">Carregando processos...</p>
             </div>
           ) : (
-            <ProcessosTable processos={filteredProcessos} onProcessoClick={handleProcessoClick} leads={leadNames} />
+            <ProcessosTable
+              processos={filteredProcessos}
+              onProcessoClick={handleProcessoClick}
+              leads={leadNames}
+            />
           )
         ) : (
-          <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>}>
+          <Suspense fallback={
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          }>
             <ConsultaProcessoExterno />
           </Suspense>
         )}
