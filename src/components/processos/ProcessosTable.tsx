@@ -79,17 +79,30 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
   const [sortAsc,     setSortAsc]     = useState(true);
 
   const getClienteName = (processo: Processo) => {
+    // 1. nome_cliente salvo diretamente
     if (processo.nome_cliente) return processo.nome_cliente;
+    // 2. lead vinculado pelo cliente_id
     if (processo.cliente_id) {
       const lead = leads.find(l => l.id === processo.cliente_id);
       if (lead?.nome) return lead.nome;
     }
+    // 3. parte ativa/autor no partes_json
     const partes = processo.partes_json || [];
     const ativo = partes.find(p =>
       p.polo?.toLowerCase() === 'ativo' || p.polo === 'AT' ||
       p.tipo?.toLowerCase()?.includes('autor') || p.tipo?.toLowerCase()?.includes('requerente')
     );
-    return ativo?.nome || null;
+    if (ativo?.nome) return ativo.nome;
+    // 4. qualquer parte que nao seja advogado/juiz
+    const qualquerParte = partes.find(p =>
+      !['advogado', 'juiz', 'promotor', 'perito'].some(t =>
+        p.tipo?.toLowerCase()?.includes(t)
+      )
+    );
+    if (qualquerParte?.nome) return qualquerParte.nome;
+    // 5. cpf como ultimo identificador
+    if (processo.cpf_cliente) return `CPF: ${processo.cpf_cliente}`;
+    return null;
   };
 
   const sorted = [...processos].sort((a, b) => {
