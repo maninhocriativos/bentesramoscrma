@@ -59,19 +59,16 @@ function formatarData(dataStr: string | null | undefined): string {
 }
 
 // =====================================================
-// NORMALIZAÇÃO DE DATAS — garante formato correto para o banco
+// NORMALIZAÇÃO DE DATAS
 // =====================================================
 
 function toDbDate(val: any): string | null {
   if (!val || val === 'Não informado') return null;
   if (typeof val === 'string') {
     const s = val.trim();
-    // Já ISO: 2026-02-06 ou 2026-02-06T...
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-    // Formato pt-BR: DD/MM/YYYY
     const ptBr = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
     if (ptBr) return `${ptBr[3]}-${ptBr[2]}-${ptBr[1]}`;
-    // Formato compacto 14 dígitos: YYYYMMDDHHmmss
     if (/^\d{14}$/.test(s)) return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
   }
   try {
@@ -138,7 +135,7 @@ async function buscarEscavador(cnj: string): Promise<{ data: any; error: string 
 
   if (error || !response) return { data: null, error: error || 'Request failed', httpCode, durationMs };
   if (!response.ok) {
-    const errorText = await response.text();
+    await response.text();
     return { data: null, error: `HTTP ${response.status}`, httpCode: response.status, durationMs };
   }
 
@@ -280,6 +277,7 @@ function normalizarEscavador(data: any, cnj: string): any {
   });
 
   const rawMovs = data._movimentacoes || fonteTribunal?.movimentacoes || data?.movimentacoes || [];
+  // ✅ FIX 3 — limitado a 100 aqui (sem segundo slice no persistirProcesso)
   const movimentos = rawMovs.slice(0, 100).map((m: any) => {
     let rawDate = m.data || m.data_hora || new Date().toISOString();
     if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate.trim())) {
@@ -312,15 +310,19 @@ function normalizarEscavador(data: any, cnj: string): any {
   const classe = capa.classe || fonteTribunal?.classe?.nome || data?.titulo_classe || data?.classe || 'Processo';
   const classeCodigo = fonteTribunal?.classe?.codigo ? String(fonteTribunal.classe.codigo) : undefined;
   const tribunalSigla = fonteTribunal?.tribunal?.sigla || fonteTribunal?.sigla || fonteTribunal?.nome?.match(/TJ\w+|TRT\d+|TRF\d+|STJ|STF/)?.[0] || 'Não informado';
-  const dataAjuiz = capa.data_distribuicao || fonteTribunal?.data_inicio || data?.data_inicio || null;
   const orgaoJulgador = capa.orgao_julgador || capa.orgao_julgador_normatizado?.nome || fonteTribunal?.orgao_julgador?.nome || fonteTribunal?.vara || 'Não informado';
   const valorCausa = capa.valor_causa?.valor ? parseFloat(capa.valor_causa.valor) : (fonteTribunal?.valor_causa || data?.valor_causa || null);
+
+  // ✅ FIX 2 — dataAjuizamento e dataDistribuicao com fontes distintas
+  const dataAjuizamento = fonteTribunal?.data_inicio || data?.data_inicio || null;
+  const dataDistribuicao = capa.data_distribuicao || fonteTribunal?.data_distribuicao || null;
 
   return {
     cnj: normalizarCNJ(cnj), cnjFormatado: formatarCNJ(cnj),
     numeroProcesso: data.numero_cnj || fonteTribunal?.numero_processo,
     classe, classeCodigo, assuntos, tribunal: tribunalSigla,
-    dataAjuizamento: dataAjuiz,
+    dataAjuizamento,
+    dataDistribuicao, // ← novo campo exposto
     grau: fonteTribunal?.grau_formatado || fonteTribunal?.grau || '1º Grau',
     nivelSigilo: data?.segredo_justica || fonteTribunal?.segredo_justica ? 'Segredo de Justiça' : 'Público',
     formato: 'Eletrônico', sistemaProcessual: fonteTribunal?.sistema || 'Escavador',
@@ -387,6 +389,7 @@ function normalizarDataJud(data: any, cnj: string): any {
   }).filter(Boolean);
 
   const rawMovimentos = asArray<any>(data?.movimentos).length ? asArray<any>(data.movimentos) : asArray<any>(data?.movimentacoes);
+  // ✅ FIX 3 — limitado a 100 aqui, sem segundo slice
   const movimentos = rawMovimentos.slice(0, 100).map((m: any) => {
     const dataHoraRaw = toIsoIfPossible(m?.dataHora ?? m?.data ?? m?.data_movimento);
     const comp = m?.complemento || (() => {
@@ -412,7 +415,8 @@ function normalizarDataJud(data: any, cnj: string): any {
     cnj: normalizarCNJ(cnj), cnjFormatado: formatarCNJ(cnj), numeroProcesso: data.numeroProcesso,
     classe: classeNome, classeCodigo: classeCodigo ? String(classeCodigo) : undefined, assuntos,
     tribunal: data.tribunal || data.siglaTribunal || 'Não informado',
-    dataAjuizamento: toIsoIfPossible(data.dataAjuizamento),
+    dataAjuizamento:   toIsoIfPossible(data.dataAjuizamento),
+    dataDistribuicao:  data.dataDistribuicao ? toIsoIfPossible(data.dataDistribuicao) : null, // ← novo
     grau: data.grau || data.grauProcesso || '1º Grau',
     nivelSigilo: data.nivelSigilo === 0 || data.nivelSigilo === '0' ? 'Público' : 'Segredo de Justiça',
     formato: data.formato?.nome || 'Eletrônico', sistemaProcessual: 'DataJud',
@@ -448,7 +452,7 @@ async function verificarCache(cnj: string): Promise<{ cached: boolean; processo:
 }
 
 // =====================================================
-// PERSISTÊNCIA — campos corrigidos para o banco real
+// PERSISTÊNCIA — todas as correções aplicadas
 // =====================================================
 
 async function persistirProcesso(processo: any, processoIdExistente?: string | null, advogadoResponsavel?: string): Promise<{ id: string; movimentacoesNovas: number }> {
@@ -456,7 +460,6 @@ async function persistirProcesso(processo: any, processoIdExistente?: string | n
   const cacheValidUntil = new Date(Date.now() + 30 * 60 * 1000).toISOString();
   const nowIso = new Date().toISOString();
 
-  // Dados para salvar — mapeados 1:1 com as colunas reais da tabela `processos`
   const dadosProcesso: Record<string, any> = {
     numero_processo:          processo.cnjFormatado,
     cnj_normalizado:          cnjNorm,
@@ -471,8 +474,9 @@ async function persistirProcesso(processo: any, processoIdExistente?: string | n
     status:                   processo.status || 'Em Andamento',
     status_detalhado:         processo.statusDetalhado || null,
 
-    // ✅ CORRIGIDO: nome correto da coluna no banco
+    // ✅ FIX 2 — datas com fontes distintas
     data_ajuizamento:         toDbDate(processo.dataAjuizamento),
+    data_distribuicao:        toDbDate(processo.dataDistribuicao) || toDbDate(processo.dataAjuizamento),
     data_ultima_atualizacao:  toDbDate(processo.ultimaAtualizacao) || nowIso,
 
     fonte_preferida:          processo.fonte || null,
@@ -480,40 +484,73 @@ async function persistirProcesso(processo: any, processoIdExistente?: string | n
     dados_datajud:            processo.fonteRaw || null,
     ultima_consulta_api_at:   nowIso,
     partes_json:              Array.isArray(processo.partes) && processo.partes.length > 0 ? processo.partes : null,
-    movimentos_json:          Array.isArray(processo.movimentos) && processo.movimentos.length > 0 ? processo.movimentos.slice(0, 50) : null,
+
+    // ✅ FIX 3 — sem slice extra (movimentos já limitados a 100 na normalização)
+    movimentos_json:          Array.isArray(processo.movimentos) && processo.movimentos.length > 0 ? processo.movimentos : null,
+
     cache_valid_until:        cacheValidUntil,
     updated_at:               nowIso,
+
+    // ✅ FIX 5 — sempre zera erro ao ter sucesso
+    sync_error_count:         0,
+    last_sync_error:          null,
   };
 
   if (advogadoResponsavel) dadosProcesso.advogado_responsavel = advogadoResponsavel;
 
+  // ✅ FIX 4 — nome_cliente populado automaticamente das partes na criação
+  if (!dadosProcesso.nome_cliente && Array.isArray(processo.partes)) {
+    const autor = processo.partes.find((p: any) => p.polo === 'AT' || p.tipo === 'Autor');
+    if (autor?.nome && autor.nome !== 'Desconhecido') {
+      dadosProcesso.nome_cliente = autor.nome.toUpperCase();
+    }
+    if (autor?.documento) {
+      const digits = String(autor.documento).replace(/\D/g, '');
+      if (digits.length >= 11) dadosProcesso.cpf_cliente = digits;
+    }
+  }
+
   let processoId: string;
 
   if (processoIdExistente) {
-    // UPDATE direto no processo existente
-    const { error } = await supabase
+    // UPDATE — ao atualizar, preservar nome_cliente se já existir
+    const { data: existing } = await supabase
       .from('processos')
-      .update(dadosProcesso)
-      .eq('id', processoIdExistente);
+      .select('nome_cliente, cpf_cliente')
+      .eq('id', processoIdExistente)
+      .single();
 
-    if (error) {
-      console.error('❌ Erro ao atualizar processo:', error);
-      throw error;
+    if (existing?.nome_cliente) {
+      // Já tem nome, não sobrescreve
+      delete dadosProcesso.nome_cliente;
+      delete dadosProcesso.cpf_cliente;
     }
+
+    const { error } = await supabase.from('processos').update(dadosProcesso).eq('id', processoIdExistente);
+    if (error) { console.error('❌ Erro ao atualizar processo:', error); throw error; }
     processoId = processoIdExistente;
     console.log(`✅ Processo atualizado: ${processoId}`);
   } else {
-    // UPSERT por cnj_normalizado (coluna única real)
+    // UPSERT — verifica se já existe pelo cnj_normalizado para preservar nome_cliente
+    const { data: existing } = await supabase
+      .from('processos')
+      .select('id, nome_cliente, cpf_cliente')
+      .eq('cnj_normalizado', cnjNorm)
+      .maybeSingle();
+
+    if (existing?.nome_cliente) {
+      // Processo já existia com nome — preserva, não sobrescreve
+      delete dadosProcesso.nome_cliente;
+      delete dadosProcesso.cpf_cliente;
+    }
+
     const { data: processoDb, error: processoError } = await supabase
       .from('processos')
       .upsert(dadosProcesso, { onConflict: 'cnj_normalizado', ignoreDuplicates: false })
       .select('id')
       .single();
 
-    if (processoError) {
-      console.error('❌ Erro ao persistir processo:', processoError);
-      throw processoError;
-    }
+    if (processoError) { console.error('❌ Erro ao persistir processo:', processoError); throw processoError; }
     processoId = processoDb.id;
     console.log(`✅ Processo criado/atualizado: ${processoId}`);
   }
@@ -525,13 +562,13 @@ async function persistirProcesso(processo: any, processoIdExistente?: string | n
     const { error: movError } = await supabase
       .from('processo_movimentacoes')
       .upsert({
-        processo_id:            processoId,
-        data_movimento:         mov.dataHoraRaw,
-        movimento_titulo:       mov.nome,
-        movimento_descricao:    mov.complemento,
-        movimento_cnj_codigo:   mov.codigo ? String(mov.codigo) : null,
-        origem:                 processo.fonte,
-        hash_unico:             hashUnico
+        processo_id:          processoId,
+        data_movimento:       mov.dataHoraRaw,
+        movimento_titulo:     mov.nome,
+        movimento_descricao:  mov.complemento,
+        movimento_cnj_codigo: mov.codigo ? String(mov.codigo) : null,
+        origem:               processo.fonte,
+        hash_unico:           hashUnico
       }, { onConflict: 'hash_unico' });
 
     if (!movError) movimentacoesNovas++;
@@ -543,14 +580,14 @@ async function persistirProcesso(processo: any, processoIdExistente?: string | n
     await supabase
       .from('processo_partes')
       .upsert({
-        processo_id:  processoId,
-        tipo:         parte.tipo,
-        nome:         parte.nome,
-        polo:         parte.polo,
-        tipo_pessoa:  parte.tipoPessoa,
-        documento:    parte.documento,
-        advogados:    parte.advogados,
-        hash_unico:   hashParte
+        processo_id: processoId,
+        tipo:        parte.tipo,
+        nome:        parte.nome,
+        polo:        parte.polo,
+        tipo_pessoa: parte.tipoPessoa,
+        documento:   parte.documento,
+        advogados:   parte.advogados,
+        hash_unico:  hashParte
       }, { onConflict: 'hash_unico', ignoreDuplicates: true });
   }
 
@@ -574,12 +611,11 @@ serve(async (req) => {
   try {
     const body = await req.json();
 
-    const numeroProcesso    = body.numero_processo || body.numeroProcesso;
-    const cpf               = body.cpf;
-    const action            = body.action;
-    const forceRefresh      = body.force_refresh || body.forceRefresh || false;
-    const persistir         = body.persistir || false;
-    // ✅ ID do processo existente para UPDATE direto (evita criar duplicado)
+    const numeroProcesso      = body.numero_processo || body.numeroProcesso;
+    const cpf                 = body.cpf;
+    const action              = body.action;
+    const forceRefresh        = body.force_refresh || body.forceRefresh || false;
+    const persistir           = body.persistir || false;
     const processoIdExistente = body.processo_id || body.processoId || null;
     const advogadoResponsavel = body.advogadoResponsavel || body.advogado_responsavel;
 
@@ -653,7 +689,6 @@ serve(async (req) => {
       }
       await registrarSyncLog(null, cnjNormalizado, 'escavador', 'OK', escavadorResult.httpCode, 'Sucesso', escavadorResult.durationMs);
     } else {
-      // FALLBACK DATAJUD
       console.log(`⚠️ Escavador falhou, tentando DataJud...`);
       warnings.push(`Escavador indisponível: ${escavadorResult.error}`);
       await registrarSyncLog(null, cnjNormalizado, 'escavador', 'ERROR', escavadorResult.httpCode, escavadorResult.error || 'Erro desconhecido', escavadorResult.durationMs);
