@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   format,
   startOfMonth, endOfMonth,
@@ -14,31 +14,43 @@ import { cn } from '@/lib/utils';
 import { Compromisso, ConfirmacaoStatus } from '@/types/compromissos';
 import { IntimacaoEvent } from '@/hooks/useIntimacoes';
 
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+
 const TIMEZONE = 'America/Manaus';
 
-// ─── FIX: Comparação de data baseada em STRING yyyy-MM-dd no fuso de Manaus ──
-// Antes: toZonedTime + isSameDay falhava por causa de mismatch de fuso entre browser e Manaus
-// Agora: extrai a data como string no fuso correto e compara strings (mais confiável)
-const getDateKeyManaus = (d: Date | string): string => {
+/**
+ * Gera uma chave de data no formato 'yyyy-MM-dd' no fuso de Manaus.
+ * Aceita Date ou string ISO. Retorna string vazia em caso de erro.
+ *
+ * Esse método é mais robusto que `isSameDay` + `toZonedTime` porque
+ * compara strings, evitando ambiguidades de fuso entre browser e Manaus.
+ */
+const dateKey = (input: Date | string | null | undefined): string => {
+  if (!input) return '';
   try {
-    const date = typeof d === 'string' ? new Date(d) : d;
-    if (isNaN(date.getTime())) return '';
-    return formatInTimeZone(date, TIMEZONE, 'yyyy-MM-dd');
+    const d = typeof input === 'string' ? new Date(input) : input;
+    if (isNaN(d.getTime())) return '';
+    return formatInTimeZone(d, TIMEZONE, 'yyyy-MM-dd');
   } catch {
     return '';
   }
 };
 
-const getTimeManaus = (s: string): string => {
+const timeManaus = (input: Date | string | null | undefined): string => {
+  if (!input) return '';
   try {
-    return formatInTimeZone(new Date(s), TIMEZONE, 'HH:mm');
+    const d = typeof input === 'string' ? new Date(input) : input;
+    if (isNaN(d.getTime())) return '';
+    return formatInTimeZone(d, TIMEZONE, 'HH:mm');
   } catch {
     return '';
   }
 };
+
+// ─── TYPES ───────────────────────────────────────────────────────────────────
 
 type ColorMode = 'tipo' | 'situacao';
-type ViewMode  = 'mes' | 'semana' | 'dia';
+type ViewMode = 'mes' | 'semana' | 'dia';
 
 interface CalendarProps {
   compromissos: Compromisso[];
@@ -51,55 +63,6 @@ interface CalendarProps {
   onStatusChange?: (id: string, s: ConfirmacaoStatus) => void;
 }
 
-// ─── Paleta de eventos ─────────────────────────────────────────────────────────
-const PALETTE: Record<string, { bg: string; dot: string; text: string }> = {
-  audiencia:  { bg: '#fdf2f8', dot: '#db2777', text: '#9d174d' },
-  reuniao:    { bg: '#fff7ed', dot: '#d97706', text: '#92400e' },
-  prazo:      { bg: '#fefce8', dot: '#ca8a04', text: '#713f12' },
-  tarefa:     { bg: '#f0fdf4', dot: '#16a34a', text: '#166534' },
-  outro:      { bg: '#f8fafc', dot: '#64748b', text: '#475569' },
-  intim:      { bg: '#f1f5f9', dot: '#64748b', text: '#475569' },
-  intim_prazo:{ bg: '#f8fafc', dot: '#94a3b8', text: '#64748b' },
-  confirmado: { bg: '#f0fdf4', dot: '#16a34a', text: '#166534' },
-  cancelado:  { bg: '#fef2f2', dot: '#dc2626', text: '#991b1b' },
-  remarcado:  { bg: '#eff6ff', dot: '#2563eb', text: '#1e40af' },
-  pendente:   { bg: '#fffbeb', dot: '#d97706', text: '#92400e' },
-};
-
-type PaletteKey = keyof typeof PALETTE;
-
-function getPaletteByTipo(c: Compromisso): PaletteKey {
-  switch (c.tipo) {
-    case 'Audiência': return 'audiencia';
-    case 'Reunião':   return 'reuniao';
-    case 'Prazo':     return 'prazo';
-    case 'Tarefa':    return 'tarefa';
-    default:          return 'outro';
-  }
-}
-
-function getPaletteBySituacao(c: Compromisso): PaletteKey {
-  switch (c.confirmacao_status || 'pendente') {
-    case 'confirmado': return 'confirmado';
-    case 'cancelado':  return 'cancelado';
-    case 'remarcado':  return 'remarcado';
-    default:           return 'pendente';
-  }
-}
-
-function getIntimacaoPalette(titulo: string): PaletteKey {
-  const t = titulo.toLowerCase();
-  if (
-    t.includes('manifestação') || t.includes('contestação') || t.includes('contrarrazões') ||
-    t.includes('réplica') || t.includes('emenda') || t.includes('recurso') ||
-    t.includes('embargos') || t.includes('alegações') || t.includes('apelação') ||
-    t.includes('agravo') || t.includes('sine die') || t.includes('pagamento') ||
-    t.includes('manifestacao') || t.includes('contestacao') || t.includes('contrarrazoes') ||
-    t.includes('replica') || t.includes('alegacoes') || t.includes('apelacao')
-  ) return 'intim_prazo';
-  return 'intim';
-}
-
 interface CalEvent {
   id: string;
   title: string;
@@ -110,8 +73,61 @@ interface CalEvent {
   isIntimacao?: boolean;
 }
 
+// ─── PALETA ──────────────────────────────────────────────────────────────────
+
+const PALETTE: Record<string, { bg: string; dot: string; text: string }> = {
+  audiencia:   { bg: '#fdf2f8', dot: '#db2777', text: '#9d174d' },
+  reuniao:     { bg: '#fff7ed', dot: '#d97706', text: '#92400e' },
+  prazo:       { bg: '#fefce8', dot: '#ca8a04', text: '#713f12' },
+  tarefa:      { bg: '#f0fdf4', dot: '#16a34a', text: '#166534' },
+  outro:       { bg: '#f8fafc', dot: '#64748b', text: '#475569' },
+  intim:       { bg: '#f1f5f9', dot: '#64748b', text: '#475569' },
+  intim_prazo: { bg: '#f8fafc', dot: '#94a3b8', text: '#64748b' },
+  confirmado:  { bg: '#f0fdf4', dot: '#16a34a', text: '#166534' },
+  cancelado:   { bg: '#fef2f2', dot: '#dc2626', text: '#991b1b' },
+  remarcado:   { bg: '#eff6ff', dot: '#2563eb', text: '#1e40af' },
+  pendente:    { bg: '#fffbeb', dot: '#d97706', text: '#92400e' },
+};
+
+type PaletteKey = keyof typeof PALETTE;
+
+const paletteByTipo = (c: Compromisso): PaletteKey => {
+  switch (c.tipo) {
+    case 'Audiência': return 'audiencia';
+    case 'Reunião':   return 'reuniao';
+    case 'Prazo':     return 'prazo';
+    case 'Tarefa':    return 'tarefa';
+    default:          return 'outro';
+  }
+};
+
+const paletteBySituacao = (c: Compromisso): PaletteKey => {
+  switch (c.confirmacao_status || 'pendente') {
+    case 'confirmado': return 'confirmado';
+    case 'cancelado':  return 'cancelado';
+    case 'remarcado':  return 'remarcado';
+    default:           return 'pendente';
+  }
+};
+
+const paletteIntimacao = (titulo: string): PaletteKey => {
+  const t = titulo.toLowerCase();
+  const prazoKeywords = [
+    'manifestação', 'contestação', 'contrarrazões', 'réplica',
+    'emenda', 'recurso', 'embargos', 'alegações', 'apelação',
+    'agravo', 'sine die', 'pagamento',
+    'manifestacao', 'contestacao', 'contrarrazoes', 'replica',
+    'alegacoes', 'apelacao',
+  ];
+  return prazoKeywords.some(k => t.includes(k)) ? 'intim_prazo' : 'intim';
+};
+
 const WEEK_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 7);
+
+// =============================================================================
+// COMPONENTE
+// =============================================================================
 
 export function Calendar({
   compromissos, intimacoes = [], colorMode = 'tipo',
@@ -119,60 +135,74 @@ export function Calendar({
 }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  // ✅ FIX: Compara usando string yyyy-MM-dd no fuso de Manaus
-  const getEventsForDay = (date: Date): CalEvent[] => {
-    const dayKey = getDateKeyManaus(date);
-    if (!dayKey) return [];
+  // ─── INDEX: agrupa eventos por chave de data Manaus ────────────────────────
+  // Pré-calcula um Map para evitar O(n*m) no render do mês inteiro
+  const eventsByDay = useMemo(() => {
+    const map = new Map<string, CalEvent[]>();
 
-    const events: CalEvent[] = [];
-
-    // Compromissos do dia
-    compromissos
-      .filter(c => getDateKeyManaus(c.data_inicio) === dayKey)
-      .forEach(c => events.push({
+    // Compromissos
+    for (const c of compromissos) {
+      const key = dateKey(c.data_inicio);
+      if (!key) continue;
+      const ev: CalEvent = {
         id: c.id,
-        title: c.titulo,
-        time: getTimeManaus(c.data_inicio),
-        pk: colorMode === 'situacao' ? getPaletteBySituacao(c) : getPaletteByTipo(c),
+        title: c.titulo || '(sem título)',
+        time: timeManaus(c.data_inicio),
+        pk: colorMode === 'situacao' ? paletteBySituacao(c) : paletteByTipo(c),
         original: c,
-      }));
+      };
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(ev);
+    }
 
     // Intimações agrupadas por tipo
-    const groups: Record<string, IntimacaoEvent[]> = {};
-    intimacoes
-      .filter(i => {
-        const dt = i.data_intimacao || i.data_publicacao || i.data_disponibilizacao;
-        if (!dt) return false;
-        return getDateKeyManaus(dt) === dayKey;
-      })
-      .forEach(i => {
-        const k = i.tipo_intimacao || i.processo_titulo || 'Intimação';
-        if (!groups[k]) groups[k] = [];
-        groups[k].push(i);
-      });
+    const intimByDay: Record<string, Record<string, IntimacaoEvent[]>> = {};
+    for (const i of intimacoes) {
+      const dt = i.data_intimacao || i.data_publicacao || i.data_disponibilizacao;
+      const key = dateKey(dt);
+      if (!key) continue;
+      const tipoKey = i.tipo_intimacao || i.processo_titulo || 'Intimação';
+      if (!intimByDay[key]) intimByDay[key] = {};
+      if (!intimByDay[key][tipoKey]) intimByDay[key][tipoKey] = [];
+      intimByDay[key][tipoKey].push(i);
+    }
 
-    Object.entries(groups).forEach(([tipo, items]) => {
-      events.push({
-        id: items[0].id,
-        title: tipo,
-        pk: getIntimacaoPalette(tipo),
-        count: items.length,
-        isIntimacao: true,
-      });
-    });
+    for (const [dayK, groups] of Object.entries(intimByDay)) {
+      if (!map.has(dayK)) map.set(dayK, []);
+      for (const [tipo, items] of Object.entries(groups)) {
+        map.get(dayK)!.push({
+          id: items[0].id,
+          title: tipo,
+          pk: paletteIntimacao(tipo),
+          count: items.length,
+          isIntimacao: true,
+        });
+      }
+    }
 
-    return events;
+    // Ordena os eventos de cada dia por horário
+    for (const [, list] of map.entries()) {
+      list.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+    }
+
+    return map;
+  }, [compromissos, intimacoes, colorMode]);
+
+  const getEventsForDay = (date: Date): CalEvent[] => {
+    const key = dateKey(date);
+    return eventsByDay.get(key) || [];
   };
 
+  // ─── NAVEGAÇÃO ─────────────────────────────────────────────────────────────
   const goPrev = () => {
-    if (viewMode === 'mes') setCurrentDate(subMonths(currentDate, 1));
-    else if (viewMode === 'semana') setCurrentDate(subWeeks(currentDate, 1));
-    else setCurrentDate(addDays(currentDate, -1));
+    if (viewMode === 'mes') setCurrentDate(d => subMonths(d, 1));
+    else if (viewMode === 'semana') setCurrentDate(d => subWeeks(d, 1));
+    else setCurrentDate(d => addDays(d, -1));
   };
   const goNext = () => {
-    if (viewMode === 'mes') setCurrentDate(addMonths(currentDate, 1));
-    else if (viewMode === 'semana') setCurrentDate(addWeeks(currentDate, 1));
-    else setCurrentDate(addDays(currentDate, 1));
+    if (viewMode === 'mes') setCurrentDate(d => addMonths(d, 1));
+    else if (viewMode === 'semana') setCurrentDate(d => addWeeks(d, 1));
+    else setCurrentDate(d => addDays(d, 1));
   };
   const goToToday = () => setCurrentDate(new Date());
 
@@ -186,7 +216,7 @@ export function Calendar({
     return format(currentDate, "MMMM 'de' yyyy", { locale: ptBR });
   };
 
-  // ─── Chip de evento ─────────────────────────────────────────────────────────
+  // ─── CHIP ──────────────────────────────────────────────────────────────────
   const renderChip = (ev: CalEvent, day: Date) => {
     const p = PALETTE[ev.pk];
     return (
@@ -217,7 +247,7 @@ export function Calendar({
     );
   };
 
-  // ─── View mês ────────────────────────────────────────────────────────────────
+  // ─── VIEW MÊS ──────────────────────────────────────────────────────────────
   const renderMonthView = () => {
     const monthStart = startOfMonth(currentDate);
     const monthEnd   = endOfMonth(currentDate);
@@ -230,7 +260,6 @@ export function Calendar({
 
     return (
       <div className="rounded-2xl overflow-hidden" style={{ border: '0.5px solid rgba(201,169,110,0.3)', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-        {/* Cabeçalho */}
         <div className="grid grid-cols-7" style={{ background: '#3d2b1f' }}>
           {WEEK_SHORT.map((wd, i) => (
             <div
@@ -249,16 +278,15 @@ export function Calendar({
           ))}
         </div>
 
-        {/* Dias */}
         {Array.from({ length: rows }).map((_, rowIdx) => (
           <div key={rowIdx} className="grid grid-cols-7">
             {days.slice(rowIdx * 7, rowIdx * 7 + 7).map((day, colIdx) => {
               const inMonth = isSameMonth(day, currentDate);
-              const isNow   = isToday(day);
-              const events  = getEventsForDay(day);
-              const maxVis  = 4;
+              const isNow = isToday(day);
+              const events = getEventsForDay(day);
+              const maxVis = 4;
               const visible = events.slice(0, maxVis);
-              const extra   = events.length - maxVis;
+              const extra = events.length - maxVis;
 
               return (
                 <div
@@ -312,7 +340,7 @@ export function Calendar({
     );
   };
 
-  // ─── View semana ─────────────────────────────────────────────────────────────
+  // ─── VIEW SEMANA ───────────────────────────────────────────────────────────
   const renderWeekView = () => {
     const ws = startOfWeek(currentDate, { locale: ptBR });
     const weekDates = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
@@ -382,9 +410,11 @@ export function Calendar({
     );
   };
 
-  // ─── View dia ────────────────────────────────────────────────────────────────
+  // ─── VIEW DIA ──────────────────────────────────────────────────────────────
   const renderDayView = () => {
     const isNow = isToday(currentDate);
+    const dayEvents = getEventsForDay(currentDate);
+
     return (
       <div className="rounded-2xl overflow-hidden" style={{ border: '0.5px solid rgba(201,169,110,0.3)', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
         <div className="grid" style={{ gridTemplateColumns: '64px 1fr', background: '#3d2b1f' }}>
@@ -402,7 +432,7 @@ export function Calendar({
         </div>
         <div style={{ maxHeight: 580, overflowY: 'auto' }}>
           {HOURS.map(hour => {
-            const hourEvents = getEventsForDay(currentDate).filter(ev => {
+            const hourEvents = dayEvents.filter(ev => {
               if (!ev.time) return hour === 7;
               return parseInt(ev.time.split(':')[0], 10) === hour;
             });
@@ -426,6 +456,7 @@ export function Calendar({
     );
   };
 
+  // ─── RENDER ────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-3">
       {/* Barra de navegação */}
@@ -436,20 +467,25 @@ export function Calendar({
             style={{ border: '0.5px solid rgba(201,169,110,0.3)' }}
           >
             <button
+              type="button"
               onClick={goPrev}
               className="px-3 py-2 transition-colors hover:bg-stone-50 dark:hover:bg-[#c9a96e]/8"
               style={{ borderRight: '0.5px solid rgba(201,169,110,0.2)' }}
+              aria-label="Anterior"
             >
               <ChevronLeft className="h-4 w-4" style={{ color: '#6b7280' }} />
             </button>
             <button
+              type="button"
               onClick={goNext}
               className="px-3 py-2 transition-colors hover:bg-stone-50 dark:hover:bg-[#c9a96e]/8"
+              aria-label="Próximo"
             >
               <ChevronRight className="h-4 w-4" style={{ color: '#6b7280' }} />
             </button>
           </div>
           <button
+            type="button"
             onClick={goToToday}
             className="px-4 py-2 rounded-xl transition-colors"
             style={{
@@ -476,6 +512,7 @@ export function Calendar({
             { label: 'Dia',    value: 'dia'    as ViewMode },
           ]).map(({ label, value }, i) => (
             <button
+              type="button"
               key={value}
               onClick={() => onViewModeChange?.(value)}
               className="transition-colors"
