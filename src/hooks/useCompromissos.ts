@@ -1,9 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Compromisso } from '@/types/compromissos';
 import { useToast } from '@/hooks/use-toast';
 
-// ─── Sync automático ao criar/editar ─────────────────────────────────────────
+// =============================================================================
+// SYNC AUTOMÁTICO COM GOOGLE CALENDAR (não-bloqueante)
+// =============================================================================
+
 async function autoSyncToGoogle(compromissoId: string): Promise<void> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -15,23 +18,20 @@ async function autoSyncToGoogle(compromissoId: string): Promise<void> {
       .eq('user_id', user.id)
       .maybeSingle();
 
-    if (!tokenData) return; // Google não conectado
+    if (!tokenData) return;
 
     await supabase.functions.invoke('calendar-sync', {
       body: {
         action: 'push_to_google',
         user_id: user.id,
         compromisso_id: compromissoId,
-      }
+      },
     });
-
-    console.log('[useCompromissos] Auto-sync OK:', compromissoId);
   } catch (err) {
-    console.warn('[useCompromissos] Auto-sync falhou (não crítico):', err);
+    console.warn('[useCompromissos] Google sync failed (non-critical):', err);
   }
 }
 
-// ─── Deletar do Google ao deletar do CRM ─────────────────────────────────────
 async function autoDeleteFromGoogle(googleEventId: string): Promise<void> {
   if (!googleEventId) return;
   try {
@@ -51,106 +51,188 @@ async function autoDeleteFromGoogle(googleEventId: string): Promise<void> {
         action: 'delete_from_google',
         user_id: user.id,
         google_event_id: googleEventId,
-      }
+      },
     });
   } catch (err) {
-    console.warn('[useCompromissos] Delete do Google falhou (não crítico):', err);
+    console.warn('[useCompromissos] Google delete failed (non-critical):', err);
   }
 }
+
+// =============================================================================
+// HOOK PRINCIPAL
+// =============================================================================
 
 export function useCompromissos() {
   const [compromissos, setCompromissos] = useState<Compromisso[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const channelRef = useRef<any>(null);
 
+  // ─── Buscar todos os compromissos ───────────────────────────────────────────
   const fetchCompromissos = useCallback(async () => {
+    console.log('[useCompromissos] Fetching compromissos...');
+
     const { data, error } = await supabase
       .from('compromissos')
       .select('*')
       .order('data_inicio', { ascending: true });
 
     if (error) {
-      toast({ title: 'Erro ao carregar compromissos', description: error.message, variant: 'destructive' });
-    } else {
-      setCompromissos((data as Compromisso[]) || []);
+      console.error('[useCompromissos] Fetch error:', error);
+      toast({
+        title: 'Erro ao carregar compromissos',
+        description: error.message,
+        variant: 'destructive',
+      });
+      setLoading(false);
+      return;
     }
+
+    const list = (data as Compromisso[]) || [];
+    console.log(`[useCompromissos] Loaded ${list.length} compromissos`);
+    setCompromissos(list);
     setLoading(false);
   }, [toast]);
 
+  // ─── Inicializa: fetch + realtime ───────────────────────────────────────────
   useEffect(() => {
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-      setLoading(false);
-    } else {
-      fetchCompromissos();
+    fetchCompromissos();
+
+    // Cleanup canal anterior (defensivo)
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
     }
 
+    // Subscreve realtime
     const channel = supabase
-      .channel('compromissos-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'compromissos' }, () => {
+      .channel(`compromissos-realtime-${Date.now()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'compromissos' }, (payload) => {
+        console.log('[useCompromissos] Realtime event:', payload.eventType, (payload.new as any)?.id || (payload.old as any)?.id);
         fetchCompromissos();
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[useCompromissos] Realtime SUBSCRIBED');
+        }
+      });
 
-    return () => { supabase.removeChannel(channel); };
+    channelRef.current = channel;
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
   }, [fetchCompromissos]);
 
-  const createCompromisso = async (compromisso: Omit<Compromisso, 'id' | 'created_at' | 'updated_at'>) => {
-    console.log('[useCompromissos] createCompromisso payload:', compromisso);
+  // ─── Criar compromisso ──────────────────────────────────────────────────────
+  const createCompromisso = async (
+    payload: Omit<Compromisso, 'id' | 'created_at' | 'updated_at'>
+  ): Promise<{ data?: Compromisso; error?: any }> => {
+    console.log('[useCompromissos] Creating:', payload);
+
+    // Tentar pegar o usuário atual e setar como responsável (caso esteja vazio)
+    let finalPayload: any = { ...payload };
+    if (!finalPayload.responsavel_id) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.id) finalPayload.responsavel_id = user.id;
+      } catch {}
+    }
 
     const { data, error } = await supabase
       .from('compromissos')
-      .insert(compromisso)
+      .insert(finalPayload)
       .select()
       .single();
 
     if (error) {
-      console.error('[useCompromissos] Erro no INSERT:', error);
-      toast({ title: 'Erro ao criar compromisso', description: error.message, variant: 'destructive' });
+      console.error('[useCompromissos] Create error:', error);
+      toast({
+        title: 'Erro ao criar compromisso',
+        description: error.message,
+        variant: 'destructive',
+      });
       return { error };
     }
 
-    console.log('[useCompromissos] INSERT OK:', data);
-    toast({ title: 'Compromisso criado!' });
+    console.log('[useCompromissos] Created:', data?.id);
+
+    // ✅ FIX importante: ATUALIZA o estado local imediatamente
+    // Não espera o realtime — adiciona direto na lista
+    if (data) {
+      const newComp = data as Compromisso;
+      setCompromissos(prev => {
+        // Evita duplicatas (caso realtime chegue antes)
+        if (prev.some(c => c.id === newComp.id)) return prev;
+        return [...prev, newComp].sort(
+          (a, b) => new Date(a.data_inicio).getTime() - new Date(b.data_inicio).getTime()
+        );
+      });
+    }
+
+    toast({ title: '✅ Compromisso criado!' });
 
     if (data?.id) {
-      // Auto-sync Google Calendar (non-blocking)
+      // Sync com Google (não bloqueia)
       autoSyncToGoogle(data.id);
 
-      // Confirmação WhatsApp se tem lead vinculado
-      if (compromisso.lead_id) {
+      // WhatsApp confirmação se tem lead
+      if (payload.lead_id) {
         supabase.functions.invoke('isa-scheduler', {
-          body: { task: 'confirmacao_imediata', compromissoId: data.id }
-        }).catch(err => console.log('Confirmação WhatsApp:', err));
+          body: { task: 'confirmacao_imediata', compromissoId: data.id },
+        }).catch(() => {});
       }
     }
 
     return { data: data as Compromisso };
   };
 
-  const updateCompromisso = async (id: string, updates: Partial<Compromisso>) => {
-    console.log('[useCompromissos] updateCompromisso:', id, updates);
+  // ─── Atualizar compromisso ──────────────────────────────────────────────────
+  const updateCompromisso = async (
+    id: string,
+    updates: Partial<Compromisso>
+  ): Promise<{ error: any }> => {
+    console.log('[useCompromissos] Updating:', id, updates);
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('compromissos')
       .update(updates)
-      .eq('id', id);
+      .eq('id', id)
+      .select()
+      .single();
 
     if (error) {
-      console.error('[useCompromissos] Erro no UPDATE:', error);
-      toast({ title: 'Erro ao atualizar compromisso', description: error.message, variant: 'destructive' });
+      console.error('[useCompromissos] Update error:', error);
+      toast({
+        title: 'Erro ao atualizar compromisso',
+        description: error.message,
+        variant: 'destructive',
+      });
       return { error };
     }
 
-    toast({ title: 'Compromisso atualizado!' });
+    // ✅ Atualiza estado local imediatamente
+    if (data) {
+      const updated = data as Compromisso;
+      setCompromissos(prev =>
+        prev.map(c => (c.id === id ? { ...c, ...updated } : c))
+          .sort((a, b) => new Date(a.data_inicio).getTime() - new Date(b.data_inicio).getTime())
+      );
+    }
 
-    // Auto-sync Google Calendar (non-blocking)
+    toast({ title: '✅ Compromisso atualizado!' });
     autoSyncToGoogle(id);
 
     return { error: null };
   };
 
-  const deleteCompromisso = async (id: string) => {
-    // Buscar google_event_id antes de deletar
+  // ─── Deletar compromisso ────────────────────────────────────────────────────
+  const deleteCompromisso = async (id: string): Promise<{ error: any }> => {
+    console.log('[useCompromissos] Deleting:', id);
+
     const comp = compromissos.find(c => c.id === id);
     const googleEventId = (comp as any)?.google_event_id;
 
@@ -160,13 +242,20 @@ export function useCompromissos() {
       .eq('id', id);
 
     if (error) {
-      toast({ title: 'Erro ao excluir compromisso', description: error.message, variant: 'destructive' });
+      console.error('[useCompromissos] Delete error:', error);
+      toast({
+        title: 'Erro ao excluir compromisso',
+        description: error.message,
+        variant: 'destructive',
+      });
       return { error };
     }
 
-    toast({ title: 'Compromisso excluído!' });
+    // ✅ Remove do estado imediatamente
+    setCompromissos(prev => prev.filter(c => c.id !== id));
 
-    // Deletar do Google também (non-blocking)
+    toast({ title: '🗑️ Compromisso excluído!' });
+
     if (googleEventId) autoDeleteFromGoogle(googleEventId);
 
     return { error: null };
