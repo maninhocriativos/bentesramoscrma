@@ -3,12 +3,11 @@ import {
   format,
   startOfMonth, endOfMonth,
   startOfWeek, endOfWeek,
-  addDays, isSameMonth, isSameDay, isToday,
+  addDays, isSameMonth, isToday,
   addMonths, subMonths,
   addWeeks, subWeeks,
-  parseISO,
 } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
+import { formatInTimeZone } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -16,7 +15,27 @@ import { Compromisso, ConfirmacaoStatus } from '@/types/compromissos';
 import { IntimacaoEvent } from '@/hooks/useIntimacoes';
 
 const TIMEZONE = 'America/Manaus';
-const parseLocalDate = (s: string) => toZonedTime(parseISO(s), TIMEZONE);
+
+// ─── FIX: Comparação de data baseada em STRING yyyy-MM-dd no fuso de Manaus ──
+// Antes: toZonedTime + isSameDay falhava por causa de mismatch de fuso entre browser e Manaus
+// Agora: extrai a data como string no fuso correto e compara strings (mais confiável)
+const getDateKeyManaus = (d: Date | string): string => {
+  try {
+    const date = typeof d === 'string' ? new Date(d) : d;
+    if (isNaN(date.getTime())) return '';
+    return formatInTimeZone(date, TIMEZONE, 'yyyy-MM-dd');
+  } catch {
+    return '';
+  }
+};
+
+const getTimeManaus = (s: string): string => {
+  try {
+    return formatInTimeZone(new Date(s), TIMEZONE, 'HH:mm');
+  } catch {
+    return '';
+  }
+};
 
 type ColorMode = 'tipo' | 'situacao';
 type ViewMode  = 'mes' | 'semana' | 'dia';
@@ -33,17 +52,14 @@ interface CalendarProps {
 }
 
 // ─── Paleta de eventos ─────────────────────────────────────────────────────────
-// Fundo claro + dot + texto escuro — legível sobre fundo branco
 const PALETTE: Record<string, { bg: string; dot: string; text: string }> = {
   audiencia:  { bg: '#fdf2f8', dot: '#db2777', text: '#9d174d' },
   reuniao:    { bg: '#fff7ed', dot: '#d97706', text: '#92400e' },
   prazo:      { bg: '#fefce8', dot: '#ca8a04', text: '#713f12' },
   tarefa:     { bg: '#f0fdf4', dot: '#16a34a', text: '#166534' },
   outro:      { bg: '#f8fafc', dot: '#64748b', text: '#475569' },
-  // Intimações — cinza
   intim:      { bg: '#f1f5f9', dot: '#64748b', text: '#475569' },
   intim_prazo:{ bg: '#f8fafc', dot: '#94a3b8', text: '#64748b' },
-  // Situação
   confirmado: { bg: '#f0fdf4', dot: '#16a34a', text: '#166534' },
   cancelado:  { bg: '#fef2f2', dot: '#dc2626', text: '#991b1b' },
   remarcado:  { bg: '#eff6ff', dot: '#2563eb', text: '#1e40af' },
@@ -103,24 +119,31 @@ export function Calendar({
 }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
+  // ✅ FIX: Compara usando string yyyy-MM-dd no fuso de Manaus
   const getEventsForDay = (date: Date): CalEvent[] => {
+    const dayKey = getDateKeyManaus(date);
+    if (!dayKey) return [];
+
     const events: CalEvent[] = [];
 
+    // Compromissos do dia
     compromissos
-      .filter(c => isSameDay(parseLocalDate(c.data_inicio), date))
+      .filter(c => getDateKeyManaus(c.data_inicio) === dayKey)
       .forEach(c => events.push({
         id: c.id,
         title: c.titulo,
-        time: format(parseLocalDate(c.data_inicio), 'HH:mm'),
+        time: getTimeManaus(c.data_inicio),
         pk: colorMode === 'situacao' ? getPaletteBySituacao(c) : getPaletteByTipo(c),
         original: c,
       }));
 
+    // Intimações agrupadas por tipo
     const groups: Record<string, IntimacaoEvent[]> = {};
     intimacoes
       .filter(i => {
         const dt = i.data_intimacao || i.data_publicacao || i.data_disponibilizacao;
-        return dt && isSameDay(parseLocalDate(dt), date);
+        if (!dt) return false;
+        return getDateKeyManaus(dt) === dayKey;
       })
       .forEach(i => {
         const k = i.tipo_intimacao || i.processo_titulo || 'Intimação';
@@ -253,11 +276,9 @@ export function Calendar({
                     borderRight: colIdx < 6 ? '0.5px solid rgba(201,169,110,0.15)' : 'none',
                   }}
                 >
-                  {/* Indicador dia atual */}
                   {isNow && (
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: '#3d2b1f', borderRadius: '2px 2px 0 0' }} />
                   )}
-                  {/* Número */}
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 3 }}>
                     {isNow ? (
                       <span style={{
@@ -274,7 +295,6 @@ export function Calendar({
                       </span>
                     )}
                   </div>
-                  {/* Eventos */}
                   <div>
                     {visible.map(ev => renderChip(ev, day))}
                     {extra > 0 && (
@@ -299,7 +319,6 @@ export function Calendar({
 
     return (
       <div className="rounded-2xl overflow-hidden" style={{ border: '0.5px solid rgba(201,169,110,0.3)', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-        {/* Cabeçalho */}
         <div className="grid grid-cols-7" style={{ background: '#3d2b1f' }}>
           {weekDates.map((d, i) => {
             const isNow = isToday(d);
@@ -331,7 +350,6 @@ export function Calendar({
             );
           })}
         </div>
-        {/* Células */}
         <div className="grid grid-cols-7">
           {weekDates.map((d, i) => {
             const isNow = isToday(d);
