@@ -544,7 +544,7 @@ Responda de forma natural, curta (máximo 3-4 linhas) e sempre termine com uma p
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: LOVABLE_API_KEY ? 'google/gemini-3-flash-preview' : 'gpt-4o',
+        model: LOVABLE_API_KEY ? 'google/gemini-2.5-flash' : 'gpt-4o',
         messages: [
           { role: 'system', content: ISA_SYSTEM_PROMPT },
           { role: 'user', content: `${context}\n\n[NOVA MENSAGEM DO CLIENTE]\n${message}` }

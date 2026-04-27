@@ -779,7 +779,7 @@ async function generateResponse(message: string, context: string): Promise<strin
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: LOVABLE_API_KEY ? 'google/gemini-3-flash-preview' : 'gpt-4o',
+      model: LOVABLE_API_KEY ? 'google/gemini-2.5-flash' : 'gpt-4o',
       messages: [
         { role: 'system', content: ISA_ESCRITORIO_PROMPT },
         { role: 'user', content: `${context}\n\n[NOVA MENSAGEM DO CLIENTE]\n${message}` }

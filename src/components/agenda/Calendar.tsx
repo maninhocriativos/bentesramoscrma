@@ -302,7 +302,7 @@ export function Calendar({
                   className="cursor-pointer relative"
                   style={{
                     minHeight: 118,
-                    padding: '7px 7px 5px',
+                    padding: '7px 7px 10px',
                     background: isNow ? 'rgba(201,169,110,0.05)' : '#ffffff',
                     opacity: !inMonth ? 0.32 : 1,
                     borderBottom: rowIdx < rows - 1 ? '0.5px solid rgba(201,169,110,0.1)' : 'none',
