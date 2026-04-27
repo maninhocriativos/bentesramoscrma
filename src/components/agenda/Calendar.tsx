@@ -19,18 +19,25 @@ import { IntimacaoEvent } from '@/hooks/useIntimacoes';
 const TIMEZONE = 'America/Manaus';
 
 /**
- * Gera uma chave de data no formato 'yyyy-MM-dd' no fuso de Manaus.
- * Aceita Date ou string ISO. Retorna string vazia em caso de erro.
+ * Gera uma chave de data no formato 'yyyy-MM-dd'.
  *
- * Esse método é mais robusto que `isSameDay` + `toZonedTime` porque
- * compara strings, evitando ambiguidades de fuso entre browser e Manaus.
+ * - string ISO (eventos do banco): converte para Manaus via formatInTimeZone,
+ *   garantindo que o evento apareça no dia correto independente do fuso do navegador.
+ * - Date object (células do grid): usa format() no fuso local do navegador,
+ *   pois as células são construídas com date-fns no fuso local — aplicar
+ *   formatInTimeZone aqui deslocaria as células 1 dia para trás em fusos à frente
+ *   de Manaus (ex: BRT UTC-3 vs Manaus UTC-4).
  */
 const dateKey = (input: Date | string | null | undefined): string => {
   if (!input) return '';
   try {
-    const d = typeof input === 'string' ? new Date(input) : input;
-    if (isNaN(d.getTime())) return '';
-    return formatInTimeZone(d, TIMEZONE, 'yyyy-MM-dd');
+    if (typeof input === 'string') {
+      const d = new Date(input);
+      if (isNaN(d.getTime())) return '';
+      return formatInTimeZone(d, TIMEZONE, 'yyyy-MM-dd');
+    }
+    if (isNaN(input.getTime())) return '';
+    return format(input, 'yyyy-MM-dd');
   } catch {
     return '';
   }
