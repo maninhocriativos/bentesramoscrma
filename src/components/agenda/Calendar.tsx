@@ -16,10 +16,6 @@ import { IntimacaoEvent } from '@/hooks/useIntimacoes';
 
 const TZ = 'America/Manaus';
 
-/**
- * Retorna a data do evento em Manaus (yyyy-MM-dd).
- * Recebe a string ISO do banco — sempre UTC.
- */
 const eventDateStr = (isoStr: string | null | undefined): string => {
   if (!isoStr) return '';
   try {
@@ -29,11 +25,6 @@ const eventDateStr = (isoStr: string | null | undefined): string => {
   } catch { return ''; }
 };
 
-/**
- * Retorna a data da célula do grid (yyyy-MM-dd) no fuso local do navegador.
- * As células são construídas com date-fns no fuso local, então usamos format()
- * para obter exatamente o dia exibido ao usuário — sem conversão de fuso.
- */
 const cellDateStr = (d: Date): string => {
   try {
     if (isNaN(d.getTime())) return '';
@@ -41,7 +32,6 @@ const cellDateStr = (d: Date): string => {
   } catch { return ''; }
 };
 
-/** Horário do evento em Manaus (HH:mm). */
 const eventTimeStr = (isoStr: string | null | undefined): string => {
   if (!isoStr) return '';
   try {
@@ -77,21 +67,23 @@ interface CalEvent {
   isIntimacao?: boolean;
 }
 
-// ─── PALETA ──────────────────────────────────────────────────────────────────
+// ─── PALETA PREMIUM ──────────────────────────────────────────────────────────
+// Identidade: marrom escuro #3d2b1f + dourado #c9a96e
+// Chips com borda colorida lateral + fundo ultra-suave
 
-const PALETTE: Record<string, { bg: string; dot: string; text: string }> = {
-  audiencia:   { bg: '#fdf2f8', dot: '#db2777', text: '#9d174d' },
-  reuniao:     { bg: '#fff7ed', dot: '#d97706', text: '#92400e' },
-  prazo:       { bg: '#fefce8', dot: '#ca8a04', text: '#713f12' },
-  tarefa:      { bg: '#f0fdf4', dot: '#16a34a', text: '#166534' },
-  outro:       { bg: '#f8fafc', dot: '#64748b', text: '#475569' },
-  intim:       { bg: '#f1f5f9', dot: '#64748b', text: '#475569' },
-  intim_prazo: { bg: '#f8fafc', dot: '#94a3b8', text: '#64748b' },
-  confirmado:  { bg: '#f0fdf4', dot: '#16a34a', text: '#166534' },
-  cancelado:   { bg: '#fef2f2', dot: '#dc2626', text: '#991b1b' },
-  remarcado:   { bg: '#eff6ff', dot: '#2563eb', text: '#1e40af' },
-  pendente:    { bg: '#fffbeb', dot: '#d97706', text: '#92400e' },
-};
+const PALETTE = {
+  audiencia:   { bar: '#e11d48', bg: 'rgba(225,29,72,0.07)',   text: '#9f1239' },
+  reuniao:     { bar: '#f59e0b', bg: 'rgba(245,158,11,0.07)',  text: '#78350f' },
+  prazo:       { bar: '#ca8a04', bg: 'rgba(202,138,4,0.07)',   text: '#713f12' },
+  tarefa:      { bar: '#16a34a', bg: 'rgba(22,163,74,0.07)',   text: '#14532d' },
+  outro:       { bar: '#64748b', bg: 'rgba(100,116,139,0.07)', text: '#334155' },
+  intim:       { bar: '#7c3aed', bg: 'rgba(124,58,237,0.07)',  text: '#4c1d95' },
+  intim_prazo: { bar: '#9333ea', bg: 'rgba(147,51,234,0.07)',  text: '#581c87' },
+  confirmado:  { bar: '#059669', bg: 'rgba(5,150,105,0.07)',   text: '#064e3b' },
+  cancelado:   { bar: '#dc2626', bg: 'rgba(220,38,38,0.07)',   text: '#7f1d1d' },
+  remarcado:   { bar: '#2563eb', bg: 'rgba(37,99,235,0.07)',   text: '#1e3a8a' },
+  pendente:    { bar: '#d97706', bg: 'rgba(217,119,6,0.07)',   text: '#78350f' },
+} as const;
 
 type PaletteKey = keyof typeof PALETTE;
 
@@ -115,17 +107,30 @@ const pkBySituacao = (c: Compromisso): PaletteKey => {
 };
 
 const pkIntimacao = (titulo: string): PaletteKey => {
-  const prazoKw = [
+  const kw = [
     'manifestação','contestação','contrarrazões','réplica','emenda',
     'recurso','embargos','alegações','apelação','agravo','sine die',
     'pagamento','manifestacao','contestacao','contrarrazoes','replica',
     'alegacoes','apelacao',
   ];
-  return prazoKw.some(k => titulo.toLowerCase().includes(k)) ? 'intim_prazo' : 'intim';
+  return kw.some(k => titulo.toLowerCase().includes(k)) ? 'intim_prazo' : 'intim';
 };
 
 const WEEK_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 7);
+
+// ─── ESTILOS COMPARTILHADOS ───────────────────────────────────────────────────
+
+const CARD_STYLE = {
+  border: '0.5px solid rgba(201,169,110,0.22)',
+  boxShadow: '0 4px 20px rgba(61,43,31,0.07), 0 1px 4px rgba(61,43,31,0.04)',
+  borderRadius: 16,
+  overflow: 'hidden',
+} as const;
+
+const HEADER_CELL_STYLE = {
+  background: '#3d2b1f',
+} as const;
 
 // =============================================================================
 // COMPONENTE
@@ -137,10 +142,7 @@ export function Calendar({
 }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  // ─── INDEX: eventos agrupados por data ────────────────────────────────────
-  // Chave do evento  = data Manaus (formatInTimeZone)
-  // Chave da célula  = data local do browser (format) — ambas yyyy-MM-dd
-  // Para BRT (UTC-3): célula 29/04 local == evento 29/04 Manaus ✓
+  // ─── INDEX ────────────────────────────────────────────────────────────────
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalEvent[]>();
 
@@ -158,7 +160,6 @@ export function Calendar({
       map.get(key)!.push(ev);
     }
 
-    // Intimações agrupadas por tipo dentro do mesmo dia
     const intimByDay: Record<string, Record<string, IntimacaoEvent[]>> = {};
     for (const i of intimacoes) {
       const raw = i.data_intimacao || i.data_publicacao || i.data_disponibilizacao;
@@ -182,7 +183,6 @@ export function Calendar({
       }
     }
 
-    // Ordena por horário dentro do dia
     for (const list of map.values()) {
       list.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
     }
@@ -195,14 +195,14 @@ export function Calendar({
 
   // ─── NAVEGAÇÃO ─────────────────────────────────────────────────────────────
   const goPrev = () => {
-    if (viewMode === 'mes')    setCurrentDate(d => subMonths(d, 1));
+    if (viewMode === 'mes')         setCurrentDate(d => subMonths(d, 1));
     else if (viewMode === 'semana') setCurrentDate(d => subWeeks(d, 1));
-    else setCurrentDate(d => addDays(d, -1));
+    else                            setCurrentDate(d => addDays(d, -1));
   };
   const goNext = () => {
-    if (viewMode === 'mes')    setCurrentDate(d => addMonths(d, 1));
+    if (viewMode === 'mes')         setCurrentDate(d => addMonths(d, 1));
     else if (viewMode === 'semana') setCurrentDate(d => addWeeks(d, 1));
-    else setCurrentDate(d => addDays(d, 1));
+    else                            setCurrentDate(d => addDays(d, 1));
   };
   const goToday = () => setCurrentDate(new Date());
 
@@ -216,20 +216,39 @@ export function Calendar({
     return format(currentDate, "MMMM 'de' yyyy", { locale: ptBR });
   };
 
-  // ─── CHIP ──────────────────────────────────────────────────────────────────
+  // ─── CHIP PREMIUM ──────────────────────────────────────────────────────────
   const renderChip = (ev: CalEvent, day: Date) => {
-    const p = PALETTE[ev.pk];
+    const p = PALETTE[ev.pk] ?? PALETTE.outro;
     return (
       <div
         key={ev.id}
         onClick={e => { e.stopPropagation(); ev.original ? onEventClick(ev.original) : onDayClick(day); }}
         title={ev.title}
-        className="flex items-center gap-1 rounded overflow-hidden cursor-pointer select-none w-full"
-        style={{ background: p.bg, color: p.text, padding: '2px 5px', fontSize: 10, lineHeight: '15px', fontWeight: 500, marginBottom: 2 }}
+        className={cn('flex items-center w-full overflow-hidden cursor-pointer select-none')}
+        style={{
+          gap: 4,
+          borderRadius: 3,
+          background: p.bg,
+          borderLeft: `2.5px solid ${p.bar}`,
+          color: p.text,
+          padding: '2.5px 5px 2.5px 4px',
+          fontSize: 10.5,
+          lineHeight: '15px',
+          fontWeight: 500,
+          marginBottom: 2,
+          transition: 'opacity 0.12s',
+        }}
+        onMouseEnter={e => (e.currentTarget.style.opacity = '0.72')}
+        onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
       >
-        <span className="shrink-0 rounded-full" style={{ width: 6, height: 6, background: p.dot, flexShrink: 0 }} />
-        {ev.time && <span style={{ fontSize: 9, fontWeight: 700, opacity: 0.8, flexShrink: 0 }}>{ev.time}</span>}
-        {ev.count && ev.count > 1 && <span style={{ fontSize: 9, fontWeight: 700, opacity: 0.75, flexShrink: 0 }}>{ev.count}×</span>}
+        {ev.time && (
+          <span className="shrink-0" style={{ fontSize: 9, fontWeight: 700, opacity: 0.62, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+            {ev.time}
+          </span>
+        )}
+        {ev.count && ev.count > 1 && (
+          <span className="shrink-0" style={{ fontSize: 9, fontWeight: 600, opacity: 0.6 }}>{ev.count}×</span>
+        )}
         <span className="truncate min-w-0">{ev.title}</span>
       </div>
     );
@@ -247,25 +266,32 @@ export function Calendar({
     const rows = Math.ceil(days.length / 7);
 
     return (
-      <div className="rounded-2xl overflow-hidden" style={{ border: '0.5px solid rgba(201,169,110,0.3)', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+      <div style={CARD_STYLE}>
         {/* Cabeçalho dias da semana */}
-        <div className="grid grid-cols-7" style={{ background: '#3d2b1f' }}>
+        <div className="grid grid-cols-7" style={HEADER_CELL_STYLE}>
           {WEEK_SHORT.map((wd, i) => (
-            <div key={wd} className="py-2.5 text-center"
-              style={{ fontSize: 11, fontWeight: 500, color: 'rgba(201,169,110,0.65)', letterSpacing: '0.08em', textTransform: 'uppercase', borderRight: i < 6 ? '0.5px solid rgba(201,169,110,0.12)' : 'none' }}>
+            <div key={wd} className="py-3 text-center"
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                color: 'rgba(201,169,110,0.5)',
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                borderRight: i < 6 ? '0.5px solid rgba(201,169,110,0.08)' : 'none',
+              }}>
               {wd}
             </div>
           ))}
         </div>
 
-        {/* Células */}
+        {/* Grid de células */}
         {Array.from({ length: rows }).map((_, rowIdx) => (
           <div key={rowIdx} className="grid grid-cols-7">
             {days.slice(rowIdx * 7, rowIdx * 7 + 7).map((day, colIdx) => {
               const inMonth = isSameMonth(day, currentDate);
               const isNow   = isToday(day);
               const events  = getDayEvents(day);
-              const maxVis  = 4;
+              const maxVis  = 3;
               const visible = events.slice(0, maxVis);
               const extra   = events.length - maxVis;
 
@@ -273,29 +299,65 @@ export function Calendar({
                 <div
                   key={colIdx}
                   onClick={() => onDayClick(day)}
-                  className={cn(
-                    'cursor-pointer transition-colors relative',
-                    !inMonth && 'opacity-25',
-                    isNow ? 'bg-amber-50/40' : 'bg-white dark:bg-card hover:bg-stone-50 dark:hover:bg-[#c9a96e]/4',
-                  )}
-                  style={{ minHeight: 110, padding: '5px 5px 4px 5px', borderBottom: '0.5px solid rgba(201,169,110,0.15)', borderRight: colIdx < 6 ? '0.5px solid rgba(201,169,110,0.15)' : 'none' }}
+                  className="cursor-pointer relative"
+                  style={{
+                    minHeight: 118,
+                    padding: '7px 7px 5px',
+                    background: isNow ? 'rgba(201,169,110,0.05)' : '#ffffff',
+                    opacity: !inMonth ? 0.32 : 1,
+                    borderBottom: rowIdx < rows - 1 ? '0.5px solid rgba(201,169,110,0.1)' : 'none',
+                    borderRight: colIdx < 6 ? '0.5px solid rgba(201,169,110,0.1)' : 'none',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => {
+                    if (!isNow) e.currentTarget.style.background = 'rgba(201,169,110,0.03)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = isNow ? 'rgba(201,169,110,0.05)' : '#ffffff';
+                  }}
                 >
-                  {isNow && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: '#3d2b1f', borderRadius: '2px 2px 0 0' }} />}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 3 }}>
+                  {/* Linha de destaque do dia atual */}
+                  {isNow && (
+                    <div style={{
+                      position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+                      background: 'linear-gradient(90deg, #3d2b1f 0%, #c9a96e 100%)',
+                    }} />
+                  )}
+
+                  {/* Número do dia */}
+                  <div className="flex justify-end mb-1.5">
                     {isNow ? (
-                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: '50%', background: '#3d2b1f', color: '#c9a96e', fontSize: 11, fontWeight: 700 }}>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: 24, height: 24, borderRadius: '50%',
+                        background: '#3d2b1f', color: '#c9a96e',
+                        fontSize: 11, fontWeight: 800,
+                      }}>
                         {format(day, 'd')}
                       </span>
                     ) : (
-                      <span style={{ fontSize: 12, fontWeight: 500, color: inMonth ? '#6b7280' : '#d1d5db' }}>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: 24, height: 24, borderRadius: '50%',
+                        fontSize: 12, fontWeight: 500,
+                        color: inMonth ? '#6b7280' : '#d1d5db',
+                      }}>
                         {format(day, 'd')}
                       </span>
                     )}
                   </div>
+
+                  {/* Eventos */}
                   <div>
                     {visible.map(ev => renderChip(ev, day))}
                     {extra > 0 && (
-                      <div style={{ fontSize: 10, fontWeight: 600, color: '#c9a96e', paddingLeft: 2 }}>+{extra} mais</div>
+                      <div style={{
+                        fontSize: 10, fontWeight: 600,
+                        color: '#c9a96e', paddingLeft: 5, paddingTop: 1,
+                        letterSpacing: '-0.01em',
+                      }}>
+                        +{extra} mais
+                      </div>
                     )}
                   </div>
                 </div>
@@ -313,39 +375,59 @@ export function Calendar({
     const weekDates = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
 
     return (
-      <div className="rounded-2xl overflow-hidden" style={{ border: '0.5px solid rgba(201,169,110,0.3)', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-        <div className="grid grid-cols-7" style={{ background: '#3d2b1f' }}>
+      <div style={CARD_STYLE}>
+        {/* Cabeçalho com datas */}
+        <div className="grid grid-cols-7" style={HEADER_CELL_STYLE}>
           {weekDates.map((d, i) => {
             const isNow = isToday(d);
             return (
               <div key={i} onClick={() => onDayClick(d)} className="py-3 text-center cursor-pointer"
-                style={{ borderRight: i < 6 ? '0.5px solid rgba(201,169,110,0.12)' : 'none' }}>
-                <div style={{ fontSize: 9, fontWeight: 500, color: 'rgba(201,169,110,0.55)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                style={{ borderRight: i < 6 ? '0.5px solid rgba(201,169,110,0.08)' : 'none' }}>
+                <div style={{ fontSize: 9, fontWeight: 600, color: 'rgba(201,169,110,0.45)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>
                   {WEEK_SHORT[d.getDay()]}
                 </div>
                 {isNow ? (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: '50%', marginTop: 2, background: '#c9a96e', color: '#3d2b1f', fontSize: 14, fontWeight: 700 }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: 28, height: 28, borderRadius: '50%',
+                    background: '#c9a96e', color: '#3d2b1f',
+                    fontSize: 14, fontWeight: 800,
+                  }}>
                     {format(d, 'd')}
                   </span>
                 ) : (
-                  <div style={{ fontSize: 16, fontWeight: 600, marginTop: 2, color: 'rgba(201,169,110,0.6)' }}>{format(d, 'd')}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(201,169,110,0.6)' }}>{format(d, 'd')}</div>
                 )}
               </div>
             );
           })}
         </div>
+
+        {/* Corpo */}
         <div className="grid grid-cols-7">
           {weekDates.map((d, i) => {
-            const isNow  = isToday(d);
-            const events = getDayEvents(d);
-            const maxVis = 10;
+            const isNow   = isToday(d);
+            const events  = getDayEvents(d);
+            const maxVis  = 10;
             const visible = events.slice(0, maxVis);
             const extra   = events.length - maxVis;
             return (
               <div key={i} onClick={() => onDayClick(d)} className="cursor-pointer"
-                style={{ minHeight: 280, padding: 6, background: isNow ? 'rgba(201,169,110,0.04)' : 'white', borderRight: i < 6 ? '0.5px solid rgba(201,169,110,0.15)' : 'none' }}>
+                style={{
+                  minHeight: 280, padding: '8px 6px',
+                  background: isNow ? 'rgba(201,169,110,0.04)' : '#ffffff',
+                  borderRight: i < 6 ? '0.5px solid rgba(201,169,110,0.1)' : 'none',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => { if (!isNow) e.currentTarget.style.background = 'rgba(201,169,110,0.025)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = isNow ? 'rgba(201,169,110,0.04)' : '#ffffff'; }}
+              >
                 {visible.map(ev => renderChip(ev, d))}
-                {extra > 0 && <div style={{ fontSize: 10, fontWeight: 600, color: '#c9a96e', textAlign: 'center', paddingTop: 4 }}>+{extra} mais</div>}
+                {extra > 0 && (
+                  <div style={{ fontSize: 10, fontWeight: 600, color: '#c9a96e', textAlign: 'center', paddingTop: 4 }}>
+                    +{extra} mais
+                  </div>
+                )}
               </div>
             );
           })}
@@ -356,36 +438,54 @@ export function Calendar({
 
   // ─── VIEW DIA ──────────────────────────────────────────────────────────────
   const renderDayView = () => {
-    const isNow    = isToday(currentDate);
+    const isNow     = isToday(currentDate);
     const dayEvents = getDayEvents(currentDate);
 
     return (
-      <div className="rounded-2xl overflow-hidden" style={{ border: '0.5px solid rgba(201,169,110,0.3)', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-        <div className="grid" style={{ gridTemplateColumns: '64px 1fr', background: '#3d2b1f' }}>
-          <div style={{ padding: '10px 0', textAlign: 'center', fontSize: 10, color: 'rgba(201,169,110,0.4)', borderRight: '0.5px solid rgba(201,169,110,0.12)' }}>Hora</div>
-          <div style={{ padding: '10px 0', textAlign: 'center' }}>
-            <div style={{ fontSize: 10, fontWeight: 500, color: 'rgba(201,169,110,0.5)', textTransform: 'capitalize', letterSpacing: '0.05em' }}>
+      <div style={CARD_STYLE}>
+        {/* Header */}
+        <div className="grid" style={{ gridTemplateColumns: '68px 1fr', ...HEADER_CELL_STYLE }}>
+          <div style={{
+            padding: '12px 0', textAlign: 'center',
+            fontSize: 9, color: 'rgba(201,169,110,0.4)',
+            borderRight: '0.5px solid rgba(201,169,110,0.1)',
+            fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+          }}>Hora</div>
+          <div style={{ padding: '12px 0', textAlign: 'center' }}>
+            <div style={{ fontSize: 9, fontWeight: 600, color: 'rgba(201,169,110,0.45)', textTransform: 'capitalize', letterSpacing: '0.08em' }}>
               {format(currentDate, 'EEEE', { locale: ptBR })}
             </div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: isNow ? '#c9a96e' : 'rgba(201,169,110,0.6)', marginTop: 2 }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: isNow ? '#c9a96e' : 'rgba(201,169,110,0.6)', marginTop: 2, lineHeight: 1 }}>
               {format(currentDate, 'd')}
             </div>
           </div>
         </div>
+
+        {/* Grade de horas */}
         <div style={{ maxHeight: 580, overflowY: 'auto' }}>
           {HOURS.map(hour => {
             const hourEvents = dayEvents.filter(ev => {
               if (!ev.time) return hour === 7;
               return parseInt(ev.time.split(':')[0], 10) === hour;
             });
+            const hasEvents = hourEvents.length > 0;
             return (
-              <div key={hour} className="grid" style={{ gridTemplateColumns: '64px 1fr', borderBottom: '0.5px solid rgba(201,169,110,0.1)' }}>
-                <div style={{ padding: '10px 8px 10px 0', textAlign: 'right', fontSize: 11, color: '#9ca3af', fontWeight: 500, borderRight: '0.5px solid rgba(201,169,110,0.1)' }}>
+              <div key={hour} className="grid" style={{ gridTemplateColumns: '68px 1fr', borderBottom: '0.5px solid rgba(201,169,110,0.08)' }}>
+                <div style={{
+                  padding: '10px 10px 10px 0', textAlign: 'right',
+                  fontSize: 11, color: '#9ca3af', fontWeight: 600,
+                  borderRight: '0.5px solid rgba(201,169,110,0.08)',
+                  fontVariantNumeric: 'tabular-nums',
+                  background: hasEvents ? 'rgba(201,169,110,0.02)' : 'transparent',
+                }}>
                   {String(hour).padStart(2, '0')}:00
                 </div>
-                <div className="transition-colors hover:bg-stone-50"
-                  style={{ minHeight: 52, padding: 6, cursor: 'pointer' }}
-                  onClick={() => onDayClick(currentDate)}>
+                <div
+                  style={{ minHeight: hasEvents ? 'auto' : 48, padding: '6px 8px', cursor: 'pointer', transition: 'background 0.1s' }}
+                  onClick={() => onDayClick(currentDate)}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(201,169,110,0.025)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
                   {hourEvents.map(ev => renderChip(ev, currentDate))}
                 </div>
               </div>
@@ -396,42 +496,59 @@ export function Calendar({
     );
   };
 
-  // ─── RENDER ────────────────────────────────────────────────────────────────
+  // ─── RENDER PRINCIPAL ──────────────────────────────────────────────────────
   return (
-    <div className="space-y-3">
-      {/* Barra de navegação */}
+    <div className="space-y-4">
+      {/* ── Barra de navegação premium ── */}
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <div className="inline-flex items-center rounded-xl overflow-hidden bg-card"
-            style={{ border: '0.5px solid rgba(201,169,110,0.3)' }}>
-            <button type="button" onClick={goPrev} className="px-3 py-2 transition-colors hover:bg-stone-50"
-              style={{ borderRight: '0.5px solid rgba(201,169,110,0.2)' }} aria-label="Anterior">
-              <ChevronLeft className="h-4 w-4" style={{ color: '#6b7280' }} />
-            </button>
-            <button type="button" onClick={goNext} className="px-3 py-2 transition-colors hover:bg-stone-50" aria-label="Próximo">
-              <ChevronRight className="h-4 w-4" style={{ color: '#6b7280' }} />
-            </button>
-          </div>
-          <button type="button" onClick={goToday} className="px-4 py-2 rounded-xl transition-colors"
-            style={{ fontSize: 12, fontWeight: 600, background: '#3d2b1f', color: '#c9a96e', border: '0.5px solid rgba(201,169,110,0.3)' }}>
+
+        {/* Prev / Next / Hoje */}
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={goPrev} aria-label="Anterior"
+            className="p-2 rounded-xl transition-colors"
+            style={{ color: '#9ca3af' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(201,169,110,0.1)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={goNext} aria-label="Próximo"
+            className="p-2 rounded-xl transition-colors"
+            style={{ color: '#9ca3af' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(201,169,110,0.1)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={goToday}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold ml-1 transition-all"
+            style={{ background: 'rgba(201,169,110,0.1)', color: '#3d2b1f', border: '0.5px solid rgba(201,169,110,0.3)' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(201,169,110,0.18)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(201,169,110,0.1)')}>
             Hoje
           </button>
         </div>
 
-        <h2 style={{ fontSize: 16, fontWeight: 600, color: '#3d2b1f' }} className="capitalize dark:text-[#c9a96e]">
+        {/* Título do período */}
+        <h2 className="capitalize font-semibold tracking-tight dark:text-[#c9a96e]"
+          style={{ fontSize: 17, color: '#3d2b1f', letterSpacing: '-0.02em' }}>
           {getTitle()}
         </h2>
 
-        <div className="inline-flex items-center rounded-xl overflow-hidden bg-card"
-          style={{ border: '0.5px solid rgba(201,169,110,0.3)' }}>
+        {/* Toggle de visualização */}
+        <div className="inline-flex rounded-xl p-0.5"
+          style={{ background: 'rgba(201,169,110,0.07)', border: '0.5px solid rgba(201,169,110,0.2)' }}>
           {([
             { label: 'Mês',    value: 'mes'    as ViewMode },
             { label: 'Semana', value: 'semana' as ViewMode },
             { label: 'Dia',    value: 'dia'    as ViewMode },
-          ]).map(({ label, value }, i) => (
+          ]).map(({ label, value }) => (
             <button type="button" key={value} onClick={() => onViewModeChange?.(value)}
-              className="transition-colors"
-              style={{ padding: '7px 14px', fontSize: 12, fontWeight: 500, background: viewMode === value ? '#3d2b1f' : 'transparent', color: viewMode === value ? '#c9a96e' : '#6b7280', borderRight: i < 2 ? '0.5px solid rgba(201,169,110,0.2)' : 'none', cursor: 'pointer' }}>
+              className="transition-all"
+              style={{
+                padding: '5px 14px', fontSize: 12, fontWeight: 500,
+                borderRadius: 10, cursor: 'pointer',
+                background: viewMode === value ? '#3d2b1f' : 'transparent',
+                color: viewMode === value ? '#c9a96e' : '#9ca3af',
+              }}>
               {label}
             </button>
           ))}
