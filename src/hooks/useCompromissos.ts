@@ -89,7 +89,7 @@ export function useCompromissos() {
     }
 
     const list = (data as Compromisso[]) || [];
-    console.log(`[useCompromissos] Loaded ${list.length} compromissos`);
+    console.log(`[useCompromissos] Loaded ${list.length} compromissos`, list.map(c => ({ id: c.id.slice(0,8), data: c.data_inicio, tipo: c.tipo })));
     setCompromissos(list);
     setLoading(false);
   }, [toast]);
@@ -158,7 +158,7 @@ export function useCompromissos() {
       return { error };
     }
 
-    console.log('[useCompromissos] Created:', data?.id);
+    console.log('[useCompromissos] Created:', data?.id, '| data_inicio:', data?.data_inicio);
 
     // ✅ FIX importante: ATUALIZA o estado local imediatamente
     // Não espera o realtime — adiciona direto na lista
