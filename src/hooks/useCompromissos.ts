@@ -68,29 +68,40 @@ export function useCompromissos() {
   const { toast } = useToast();
   const channelRef = useRef<any>(null);
 
-  // ─── Buscar todos os compromissos ───────────────────────────────────────────
+  // ─── Buscar todos os compromissos (paginado — supera o limite de 1000 do PostgREST) ──
   const fetchCompromissos = useCallback(async () => {
     console.log('[useCompromissos] Fetching compromissos...');
 
-    const { data, error } = await supabase
-      .from('compromissos')
-      .select('*')
-      .order('data_inicio', { ascending: true });
+    const PAGE = 1000;
+    const all: Compromisso[] = [];
+    let page = 0;
 
-    if (error) {
-      console.error('[useCompromissos] Fetch error:', error);
-      toast({
-        title: 'Erro ao carregar compromissos',
-        description: error.message,
-        variant: 'destructive',
-      });
-      setLoading(false);
-      return;
+    while (true) {
+      const { data, error } = await supabase
+        .from('compromissos')
+        .select('*')
+        .order('data_inicio', { ascending: true })
+        .range(page * PAGE, (page + 1) * PAGE - 1);
+
+      if (error) {
+        console.error('[useCompromissos] Fetch error:', error);
+        toast({
+          title: 'Erro ao carregar compromissos',
+          description: error.message,
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+
+      const chunk = (data as Compromisso[]) || [];
+      all.push(...chunk);
+      if (chunk.length < PAGE) break;
+      page++;
     }
 
-    const list = (data as Compromisso[]) || [];
-    console.log(`[useCompromissos] Loaded ${list.length} compromissos`, list.map(c => ({ id: c.id.slice(0,8), data: c.data_inicio, tipo: c.tipo })));
-    setCompromissos(list);
+    console.log(`[useCompromissos] Loaded ${all.length} compromissos`);
+    setCompromissos(all);
     setLoading(false);
   }, [toast]);
 
