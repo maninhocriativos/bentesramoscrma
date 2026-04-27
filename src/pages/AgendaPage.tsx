@@ -36,7 +36,10 @@ const SITUACAO_OPTIONS = [
 ];
 
 function AgendaPage() {
-  const { compromissos, loading, updateCompromisso, fetchCompromissos } = useCompromissos();
+  const {
+    compromissos, loading,
+    createCompromisso, updateCompromisso, deleteCompromisso,
+  } = useCompromissos();
   const { intimacoes, loading: loadingIntimacoes } = useIntimacoes();
 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -66,7 +69,7 @@ function AgendaPage() {
 
   const handleDayClick = (date: Date) => { setSelectedDate(date); setIsDayEventsModalOpen(true); };
   const handleEventClick = (c: Compromisso) => { setSelectedCompromisso(c); setSelectedDate(null); setIsModalOpen(true); };
-  const handleCloseModal = () => { setIsModalOpen(false); setSelectedDate(null); setSelectedCompromisso(null); fetchCompromissos(); };
+  const handleCloseModal = () => { setIsModalOpen(false); setSelectedDate(null); setSelectedCompromisso(null); };
   const handleNewCompromisso = () => { setSelectedDate(new Date()); setSelectedCompromisso(null); setIsModalOpen(true); };
   const handleStatusChange = async (id: string, s: ConfirmacaoStatus) => { await updateCompromisso(id, { confirmacao_status: s }); };
 
@@ -232,6 +235,9 @@ function AgendaPage() {
         onClose={handleCloseModal}
         compromisso={selectedCompromisso}
         selectedDate={selectedDate || undefined}
+        createCompromisso={createCompromisso}
+        updateCompromisso={updateCompromisso}
+        deleteCompromisso={deleteCompromisso}
       />
     </AppLayout>
   );

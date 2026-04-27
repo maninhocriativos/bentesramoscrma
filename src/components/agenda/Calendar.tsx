@@ -1,11 +1,9 @@
 import { useState, useMemo } from 'react';
 import {
-  format,
-  startOfMonth, endOfMonth,
-  startOfWeek, endOfWeek,
-  addDays, isSameMonth, isToday,
-  addMonths, subMonths,
-  addWeeks, subWeeks,
+  format, startOfMonth, endOfMonth,
+  startOfWeek, endOfWeek, addDays,
+  isSameMonth, isToday,
+  addMonths, subMonths, addWeeks, subWeeks,
 } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
@@ -16,48 +14,47 @@ import { IntimacaoEvent } from '@/hooks/useIntimacoes';
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 
-const TIMEZONE = 'America/Manaus';
+const TZ = 'America/Manaus';
 
 /**
- * Gera uma chave de data no formato 'yyyy-MM-dd'.
- *
- * - string ISO (eventos do banco): converte para Manaus via formatInTimeZone,
- *   garantindo que o evento apareça no dia correto independente do fuso do navegador.
- * - Date object (células do grid): usa format() no fuso local do navegador,
- *   pois as células são construídas com date-fns no fuso local — aplicar
- *   formatInTimeZone aqui deslocaria as células 1 dia para trás em fusos à frente
- *   de Manaus (ex: BRT UTC-3 vs Manaus UTC-4).
+ * Retorna a data do evento em Manaus (yyyy-MM-dd).
+ * Recebe a string ISO do banco — sempre UTC.
  */
-const dateKey = (input: Date | string | null | undefined): string => {
-  if (!input) return '';
+const eventDateStr = (isoStr: string | null | undefined): string => {
+  if (!isoStr) return '';
   try {
-    if (typeof input === 'string') {
-      const d = new Date(input);
-      if (isNaN(d.getTime())) return '';
-      return formatInTimeZone(d, TIMEZONE, 'yyyy-MM-dd');
-    }
-    if (isNaN(input.getTime())) return '';
-    return format(input, 'yyyy-MM-dd');
-  } catch {
-    return '';
-  }
-};
-
-const timeManaus = (input: Date | string | null | undefined): string => {
-  if (!input) return '';
-  try {
-    const d = typeof input === 'string' ? new Date(input) : input;
+    const d = new Date(isoStr);
     if (isNaN(d.getTime())) return '';
-    return formatInTimeZone(d, TIMEZONE, 'HH:mm');
-  } catch {
-    return '';
-  }
+    return formatInTimeZone(d, TZ, 'yyyy-MM-dd');
+  } catch { return ''; }
 };
 
-// ─── TYPES ───────────────────────────────────────────────────────────────────
+/**
+ * Retorna a data da célula do grid (yyyy-MM-dd) no fuso local do navegador.
+ * As células são construídas com date-fns no fuso local, então usamos format()
+ * para obter exatamente o dia exibido ao usuário — sem conversão de fuso.
+ */
+const cellDateStr = (d: Date): string => {
+  try {
+    if (isNaN(d.getTime())) return '';
+    return format(d, 'yyyy-MM-dd');
+  } catch { return ''; }
+};
+
+/** Horário do evento em Manaus (HH:mm). */
+const eventTimeStr = (isoStr: string | null | undefined): string => {
+  if (!isoStr) return '';
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return '';
+    return formatInTimeZone(d, TZ, 'HH:mm');
+  } catch { return ''; }
+};
+
+// ─── TIPOS ───────────────────────────────────────────────────────────────────
 
 type ColorMode = 'tipo' | 'situacao';
-type ViewMode = 'mes' | 'semana' | 'dia';
+type ViewMode  = 'mes' | 'semana' | 'dia';
 
 interface CalendarProps {
   compromissos: Compromisso[];
@@ -98,7 +95,7 @@ const PALETTE: Record<string, { bg: string; dot: string; text: string }> = {
 
 type PaletteKey = keyof typeof PALETTE;
 
-const paletteByTipo = (c: Compromisso): PaletteKey => {
+const pkByTipo = (c: Compromisso): PaletteKey => {
   switch (c.tipo) {
     case 'Audiência': return 'audiencia';
     case 'Reunião':   return 'reuniao';
@@ -108,7 +105,7 @@ const paletteByTipo = (c: Compromisso): PaletteKey => {
   }
 };
 
-const paletteBySituacao = (c: Compromisso): PaletteKey => {
+const pkBySituacao = (c: Compromisso): PaletteKey => {
   switch (c.confirmacao_status || 'pendente') {
     case 'confirmado': return 'confirmado';
     case 'cancelado':  return 'cancelado';
@@ -117,16 +114,14 @@ const paletteBySituacao = (c: Compromisso): PaletteKey => {
   }
 };
 
-const paletteIntimacao = (titulo: string): PaletteKey => {
-  const t = titulo.toLowerCase();
-  const prazoKeywords = [
-    'manifestação', 'contestação', 'contrarrazões', 'réplica',
-    'emenda', 'recurso', 'embargos', 'alegações', 'apelação',
-    'agravo', 'sine die', 'pagamento',
-    'manifestacao', 'contestacao', 'contrarrazoes', 'replica',
-    'alegacoes', 'apelacao',
+const pkIntimacao = (titulo: string): PaletteKey => {
+  const prazoKw = [
+    'manifestação','contestação','contrarrazões','réplica','emenda',
+    'recurso','embargos','alegações','apelação','agravo','sine die',
+    'pagamento','manifestacao','contestacao','contrarrazoes','replica',
+    'alegacoes','apelacao',
   ];
-  return prazoKeywords.some(k => t.includes(k)) ? 'intim_prazo' : 'intim';
+  return prazoKw.some(k => titulo.toLowerCase().includes(k)) ? 'intim_prazo' : 'intim';
 };
 
 const WEEK_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -142,83 +137,81 @@ export function Calendar({
 }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  // ─── INDEX: agrupa eventos por chave de data Manaus ────────────────────────
-  // Pré-calcula um Map para evitar O(n*m) no render do mês inteiro
+  // ─── INDEX: eventos agrupados por data ────────────────────────────────────
+  // Chave do evento  = data Manaus (formatInTimeZone)
+  // Chave da célula  = data local do browser (format) — ambas yyyy-MM-dd
+  // Para BRT (UTC-3): célula 29/04 local == evento 29/04 Manaus ✓
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalEvent[]>();
 
-    // Compromissos
     for (const c of compromissos) {
-      const key = dateKey(c.data_inicio);
+      const key = eventDateStr(c.data_inicio);
       if (!key) continue;
       const ev: CalEvent = {
         id: c.id,
         title: c.titulo || '(sem título)',
-        time: timeManaus(c.data_inicio),
-        pk: colorMode === 'situacao' ? paletteBySituacao(c) : paletteByTipo(c),
+        time: eventTimeStr(c.data_inicio),
+        pk: colorMode === 'situacao' ? pkBySituacao(c) : pkByTipo(c),
         original: c,
       };
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(ev);
     }
 
-    // Intimações agrupadas por tipo
+    // Intimações agrupadas por tipo dentro do mesmo dia
     const intimByDay: Record<string, Record<string, IntimacaoEvent[]>> = {};
     for (const i of intimacoes) {
-      const dt = i.data_intimacao || i.data_publicacao || i.data_disponibilizacao;
-      const key = dateKey(dt);
+      const raw = i.data_intimacao || i.data_publicacao || i.data_disponibilizacao;
+      const key = eventDateStr(raw);
       if (!key) continue;
-      const tipoKey = i.tipo_intimacao || i.processo_titulo || 'Intimação';
+      const grp = i.tipo_intimacao || i.processo_titulo || 'Intimação';
       if (!intimByDay[key]) intimByDay[key] = {};
-      if (!intimByDay[key][tipoKey]) intimByDay[key][tipoKey] = [];
-      intimByDay[key][tipoKey].push(i);
+      if (!intimByDay[key][grp]) intimByDay[key][grp] = [];
+      intimByDay[key][grp].push(i);
     }
-
     for (const [dayK, groups] of Object.entries(intimByDay)) {
       if (!map.has(dayK)) map.set(dayK, []);
       for (const [tipo, items] of Object.entries(groups)) {
         map.get(dayK)!.push({
           id: items[0].id,
           title: tipo,
-          pk: paletteIntimacao(tipo),
+          pk: pkIntimacao(tipo),
           count: items.length,
           isIntimacao: true,
         });
       }
     }
 
-    // Ordena os eventos de cada dia por horário
-    for (const [, list] of map.entries()) {
+    // Ordena por horário dentro do dia
+    for (const list of map.values()) {
       list.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
     }
 
     return map;
   }, [compromissos, intimacoes, colorMode]);
 
-  const getEventsForDay = (date: Date): CalEvent[] => {
-    const key = dateKey(date);
-    return eventsByDay.get(key) || [];
-  };
+  const getDayEvents = (day: Date): CalEvent[] =>
+    eventsByDay.get(cellDateStr(day)) || [];
 
   // ─── NAVEGAÇÃO ─────────────────────────────────────────────────────────────
   const goPrev = () => {
-    if (viewMode === 'mes') setCurrentDate(d => subMonths(d, 1));
+    if (viewMode === 'mes')    setCurrentDate(d => subMonths(d, 1));
     else if (viewMode === 'semana') setCurrentDate(d => subWeeks(d, 1));
     else setCurrentDate(d => addDays(d, -1));
   };
   const goNext = () => {
-    if (viewMode === 'mes') setCurrentDate(d => addMonths(d, 1));
+    if (viewMode === 'mes')    setCurrentDate(d => addMonths(d, 1));
     else if (viewMode === 'semana') setCurrentDate(d => addWeeks(d, 1));
     else setCurrentDate(d => addDays(d, 1));
   };
-  const goToToday = () => setCurrentDate(new Date());
+  const goToday = () => setCurrentDate(new Date());
 
   const getTitle = () => {
     if (viewMode === 'dia') return format(currentDate, "d 'de' MMMM 'de' yyyy", { locale: ptBR });
     if (viewMode === 'semana') {
       const ws = startOfWeek(currentDate, { locale: ptBR });
       const we = endOfWeek(currentDate, { locale: ptBR });
-      return `${format(ws, 'd MMM', { locale: ptBR })} – ${format(we, "d MMM yyyy", { locale: ptBR })}`;
+      return `${format(ws, 'd MMM', { locale: ptBR })} – ${format(we, 'd MMM yyyy', { locale: ptBR })}`;
     }
     return format(currentDate, "MMMM 'de' yyyy", { locale: ptBR });
   };
@@ -232,23 +225,11 @@ export function Calendar({
         onClick={e => { e.stopPropagation(); ev.original ? onEventClick(ev.original) : onDayClick(day); }}
         title={ev.title}
         className="flex items-center gap-1 rounded overflow-hidden cursor-pointer select-none w-full"
-        style={{
-          background: p.bg,
-          color: p.text,
-          padding: '2px 5px',
-          fontSize: 10,
-          lineHeight: '15px',
-          fontWeight: 500,
-          marginBottom: 2,
-        }}
+        style={{ background: p.bg, color: p.text, padding: '2px 5px', fontSize: 10, lineHeight: '15px', fontWeight: 500, marginBottom: 2 }}
       >
         <span className="shrink-0 rounded-full" style={{ width: 6, height: 6, background: p.dot, flexShrink: 0 }} />
-        {ev.time && (
-          <span style={{ fontSize: 9, fontWeight: 700, opacity: 0.8, flexShrink: 0 }}>{ev.time}</span>
-        )}
-        {ev.count && ev.count > 1 && (
-          <span style={{ fontSize: 9, fontWeight: 700, opacity: 0.75, flexShrink: 0 }}>{ev.count}×</span>
-        )}
+        {ev.time && <span style={{ fontSize: 9, fontWeight: 700, opacity: 0.8, flexShrink: 0 }}>{ev.time}</span>}
+        {ev.count && ev.count > 1 && <span style={{ fontSize: 9, fontWeight: 700, opacity: 0.75, flexShrink: 0 }}>{ev.count}×</span>}
         <span className="truncate min-w-0">{ev.title}</span>
       </div>
     );
@@ -267,33 +248,26 @@ export function Calendar({
 
     return (
       <div className="rounded-2xl overflow-hidden" style={{ border: '0.5px solid rgba(201,169,110,0.3)', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+        {/* Cabeçalho dias da semana */}
         <div className="grid grid-cols-7" style={{ background: '#3d2b1f' }}>
           {WEEK_SHORT.map((wd, i) => (
-            <div
-              key={wd}
-              className="py-2.5 text-center"
-              style={{
-                fontSize: 11, fontWeight: 500,
-                color: 'rgba(201,169,110,0.65)',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                borderRight: i < 6 ? '0.5px solid rgba(201,169,110,0.12)' : 'none',
-              }}
-            >
+            <div key={wd} className="py-2.5 text-center"
+              style={{ fontSize: 11, fontWeight: 500, color: 'rgba(201,169,110,0.65)', letterSpacing: '0.08em', textTransform: 'uppercase', borderRight: i < 6 ? '0.5px solid rgba(201,169,110,0.12)' : 'none' }}>
               {wd}
             </div>
           ))}
         </div>
 
+        {/* Células */}
         {Array.from({ length: rows }).map((_, rowIdx) => (
           <div key={rowIdx} className="grid grid-cols-7">
             {days.slice(rowIdx * 7, rowIdx * 7 + 7).map((day, colIdx) => {
               const inMonth = isSameMonth(day, currentDate);
-              const isNow = isToday(day);
-              const events = getEventsForDay(day);
-              const maxVis = 4;
+              const isNow   = isToday(day);
+              const events  = getDayEvents(day);
+              const maxVis  = 4;
               const visible = events.slice(0, maxVis);
-              const extra = events.length - maxVis;
+              const extra   = events.length - maxVis;
 
               return (
                 <div
@@ -304,24 +278,12 @@ export function Calendar({
                     !inMonth && 'opacity-25',
                     isNow ? 'bg-amber-50/40' : 'bg-white dark:bg-card hover:bg-stone-50 dark:hover:bg-[#c9a96e]/4',
                   )}
-                  style={{
-                    minHeight: 110,
-                    padding: '5px 5px 4px 5px',
-                    borderBottom: '0.5px solid rgba(201,169,110,0.15)',
-                    borderRight: colIdx < 6 ? '0.5px solid rgba(201,169,110,0.15)' : 'none',
-                  }}
+                  style={{ minHeight: 110, padding: '5px 5px 4px 5px', borderBottom: '0.5px solid rgba(201,169,110,0.15)', borderRight: colIdx < 6 ? '0.5px solid rgba(201,169,110,0.15)' : 'none' }}
                 >
-                  {isNow && (
-                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: '#3d2b1f', borderRadius: '2px 2px 0 0' }} />
-                  )}
+                  {isNow && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: '#3d2b1f', borderRadius: '2px 2px 0 0' }} />}
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 3 }}>
                     {isNow ? (
-                      <span style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        width: 22, height: 22, borderRadius: '50%',
-                        background: '#3d2b1f', color: '#c9a96e',
-                        fontSize: 11, fontWeight: 700,
-                      }}>
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: '50%', background: '#3d2b1f', color: '#c9a96e', fontSize: 11, fontWeight: 700 }}>
                         {format(day, 'd')}
                       </span>
                     ) : (
@@ -333,9 +295,7 @@ export function Calendar({
                   <div>
                     {visible.map(ev => renderChip(ev, day))}
                     {extra > 0 && (
-                      <div style={{ fontSize: 10, fontWeight: 600, color: '#c9a96e', paddingLeft: 2 }}>
-                        +{extra} mais
-                      </div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: '#c9a96e', paddingLeft: 2 }}>+{extra} mais</div>
                     )}
                   </div>
                 </div>
@@ -358,28 +318,17 @@ export function Calendar({
           {weekDates.map((d, i) => {
             const isNow = isToday(d);
             return (
-              <div
-                key={i}
-                onClick={() => onDayClick(d)}
-                className="py-3 text-center cursor-pointer transition-colors"
-                style={{ borderRight: i < 6 ? '0.5px solid rgba(201,169,110,0.12)' : 'none' }}
-              >
+              <div key={i} onClick={() => onDayClick(d)} className="py-3 text-center cursor-pointer"
+                style={{ borderRight: i < 6 ? '0.5px solid rgba(201,169,110,0.12)' : 'none' }}>
                 <div style={{ fontSize: 9, fontWeight: 500, color: 'rgba(201,169,110,0.55)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
                   {WEEK_SHORT[d.getDay()]}
                 </div>
                 {isNow ? (
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    width: 28, height: 28, borderRadius: '50%', marginTop: 2,
-                    background: '#c9a96e', color: '#3d2b1f',
-                    fontSize: 14, fontWeight: 700,
-                  }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: '50%', marginTop: 2, background: '#c9a96e', color: '#3d2b1f', fontSize: 14, fontWeight: 700 }}>
                     {format(d, 'd')}
                   </span>
                 ) : (
-                  <div style={{ fontSize: 16, fontWeight: 600, marginTop: 2, color: 'rgba(201,169,110,0.6)' }}>
-                    {format(d, 'd')}
-                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 600, marginTop: 2, color: 'rgba(201,169,110,0.6)' }}>{format(d, 'd')}</div>
                 )}
               </div>
             );
@@ -387,28 +336,16 @@ export function Calendar({
         </div>
         <div className="grid grid-cols-7">
           {weekDates.map((d, i) => {
-            const isNow = isToday(d);
-            const events = getEventsForDay(d);
+            const isNow  = isToday(d);
+            const events = getDayEvents(d);
             const maxVis = 10;
             const visible = events.slice(0, maxVis);
-            const extra = events.length - maxVis;
+            const extra   = events.length - maxVis;
             return (
-              <div
-                key={i}
-                onClick={() => onDayClick(d)}
-                className="cursor-pointer transition-colors"
-                style={{
-                  minHeight: 280, padding: 6,
-                  background: isNow ? 'rgba(201,169,110,0.04)' : 'white',
-                  borderRight: i < 6 ? '0.5px solid rgba(201,169,110,0.15)' : 'none',
-                }}
-              >
+              <div key={i} onClick={() => onDayClick(d)} className="cursor-pointer"
+                style={{ minHeight: 280, padding: 6, background: isNow ? 'rgba(201,169,110,0.04)' : 'white', borderRight: i < 6 ? '0.5px solid rgba(201,169,110,0.15)' : 'none' }}>
                 {visible.map(ev => renderChip(ev, d))}
-                {extra > 0 && (
-                  <div style={{ fontSize: 10, fontWeight: 600, color: '#c9a96e', textAlign: 'center', paddingTop: 4 }}>
-                    +{extra} mais
-                  </div>
-                )}
+                {extra > 0 && <div style={{ fontSize: 10, fontWeight: 600, color: '#c9a96e', textAlign: 'center', paddingTop: 4 }}>+{extra} mais</div>}
               </div>
             );
           })}
@@ -419,15 +356,13 @@ export function Calendar({
 
   // ─── VIEW DIA ──────────────────────────────────────────────────────────────
   const renderDayView = () => {
-    const isNow = isToday(currentDate);
-    const dayEvents = getEventsForDay(currentDate);
+    const isNow    = isToday(currentDate);
+    const dayEvents = getDayEvents(currentDate);
 
     return (
       <div className="rounded-2xl overflow-hidden" style={{ border: '0.5px solid rgba(201,169,110,0.3)', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
         <div className="grid" style={{ gridTemplateColumns: '64px 1fr', background: '#3d2b1f' }}>
-          <div style={{ padding: '10px 0', textAlign: 'center', fontSize: 10, color: 'rgba(201,169,110,0.4)', borderRight: '0.5px solid rgba(201,169,110,0.12)' }}>
-            Hora
-          </div>
+          <div style={{ padding: '10px 0', textAlign: 'center', fontSize: 10, color: 'rgba(201,169,110,0.4)', borderRight: '0.5px solid rgba(201,169,110,0.12)' }}>Hora</div>
           <div style={{ padding: '10px 0', textAlign: 'center' }}>
             <div style={{ fontSize: 10, fontWeight: 500, color: 'rgba(201,169,110,0.5)', textTransform: 'capitalize', letterSpacing: '0.05em' }}>
               {format(currentDate, 'EEEE', { locale: ptBR })}
@@ -448,11 +383,9 @@ export function Calendar({
                 <div style={{ padding: '10px 8px 10px 0', textAlign: 'right', fontSize: 11, color: '#9ca3af', fontWeight: 500, borderRight: '0.5px solid rgba(201,169,110,0.1)' }}>
                   {String(hour).padStart(2, '0')}:00
                 </div>
-                <div
-                  className="transition-colors hover:bg-stone-50"
+                <div className="transition-colors hover:bg-stone-50"
                   style={{ minHeight: 52, padding: 6, cursor: 'pointer' }}
-                  onClick={() => onDayClick(currentDate)}
-                >
+                  onClick={() => onDayClick(currentDate)}>
                   {hourEvents.map(ev => renderChip(ev, currentDate))}
                 </div>
               </div>
@@ -469,38 +402,18 @@ export function Calendar({
       {/* Barra de navegação */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div
-            className="inline-flex items-center rounded-xl overflow-hidden bg-card"
-            style={{ border: '0.5px solid rgba(201,169,110,0.3)' }}
-          >
-            <button
-              type="button"
-              onClick={goPrev}
-              className="px-3 py-2 transition-colors hover:bg-stone-50 dark:hover:bg-[#c9a96e]/8"
-              style={{ borderRight: '0.5px solid rgba(201,169,110,0.2)' }}
-              aria-label="Anterior"
-            >
+          <div className="inline-flex items-center rounded-xl overflow-hidden bg-card"
+            style={{ border: '0.5px solid rgba(201,169,110,0.3)' }}>
+            <button type="button" onClick={goPrev} className="px-3 py-2 transition-colors hover:bg-stone-50"
+              style={{ borderRight: '0.5px solid rgba(201,169,110,0.2)' }} aria-label="Anterior">
               <ChevronLeft className="h-4 w-4" style={{ color: '#6b7280' }} />
             </button>
-            <button
-              type="button"
-              onClick={goNext}
-              className="px-3 py-2 transition-colors hover:bg-stone-50 dark:hover:bg-[#c9a96e]/8"
-              aria-label="Próximo"
-            >
+            <button type="button" onClick={goNext} className="px-3 py-2 transition-colors hover:bg-stone-50" aria-label="Próximo">
               <ChevronRight className="h-4 w-4" style={{ color: '#6b7280' }} />
             </button>
           </div>
-          <button
-            type="button"
-            onClick={goToToday}
-            className="px-4 py-2 rounded-xl transition-colors"
-            style={{
-              fontSize: 12, fontWeight: 600,
-              background: '#3d2b1f', color: '#c9a96e',
-              border: '0.5px solid rgba(201,169,110,0.3)',
-            }}
-          >
+          <button type="button" onClick={goToday} className="px-4 py-2 rounded-xl transition-colors"
+            style={{ fontSize: 12, fontWeight: 600, background: '#3d2b1f', color: '#c9a96e', border: '0.5px solid rgba(201,169,110,0.3)' }}>
             Hoje
           </button>
         </div>
@@ -509,28 +422,16 @@ export function Calendar({
           {getTitle()}
         </h2>
 
-        <div
-          className="inline-flex items-center rounded-xl overflow-hidden bg-card"
-          style={{ border: '0.5px solid rgba(201,169,110,0.3)' }}
-        >
+        <div className="inline-flex items-center rounded-xl overflow-hidden bg-card"
+          style={{ border: '0.5px solid rgba(201,169,110,0.3)' }}>
           {([
             { label: 'Mês',    value: 'mes'    as ViewMode },
             { label: 'Semana', value: 'semana' as ViewMode },
             { label: 'Dia',    value: 'dia'    as ViewMode },
           ]).map(({ label, value }, i) => (
-            <button
-              type="button"
-              key={value}
-              onClick={() => onViewModeChange?.(value)}
+            <button type="button" key={value} onClick={() => onViewModeChange?.(value)}
               className="transition-colors"
-              style={{
-                padding: '7px 14px', fontSize: 12, fontWeight: 500,
-                background: viewMode === value ? '#3d2b1f' : 'transparent',
-                color: viewMode === value ? '#c9a96e' : '#6b7280',
-                borderRight: i < 2 ? '0.5px solid rgba(201,169,110,0.2)' : 'none',
-                cursor: 'pointer',
-              }}
-            >
+              style={{ padding: '7px 14px', fontSize: 12, fontWeight: 500, background: viewMode === value ? '#3d2b1f' : 'transparent', color: viewMode === value ? '#c9a96e' : '#6b7280', borderRight: i < 2 ? '0.5px solid rgba(201,169,110,0.2)' : 'none', cursor: 'pointer' }}>
               {label}
             </button>
           ))}

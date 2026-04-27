@@ -59,6 +59,10 @@ interface CompromissoModalProps {
   onClose: () => void;
   compromisso?: Compromisso | null;
   selectedDate?: Date;
+  // Funções CRUD injetadas pelo AgendaPage para evitar instância dupla do hook
+  createCompromisso?: (p: Omit<Compromisso, 'id' | 'created_at' | 'updated_at'>) => Promise<{ data?: Compromisso; error?: any }>;
+  updateCompromisso?: (id: string, u: Partial<Compromisso>) => Promise<{ error: any }>;
+  deleteCompromisso?: (id: string) => Promise<{ error: any }>;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; className: string; emoji: string }> = {
@@ -80,8 +84,18 @@ const TIPO_ICONS: Record<string, string> = {
 // COMPONENTE
 // =============================================================================
 
-export function CompromissoModal({ isOpen, onClose, compromisso, selectedDate }: CompromissoModalProps) {
-  const { createCompromisso, updateCompromisso, deleteCompromisso } = useCompromissos();
+export function CompromissoModal({
+  isOpen, onClose, compromisso, selectedDate,
+  createCompromisso: createProp,
+  updateCompromisso: updateProp,
+  deleteCompromisso: deleteProp,
+}: CompromissoModalProps) {
+  // Usa funções injetadas pelo pai quando disponíveis (evita instância dupla do hook)
+  // Fallback para hook próprio caso o modal seja usado sem as props (compatibilidade)
+  const hookFns = useCompromissos();
+  const createCompromisso = createProp ?? hookFns.createCompromisso;
+  const updateCompromisso = updateProp ?? hookFns.updateCompromisso;
+  const deleteCompromisso = deleteProp ?? hookFns.deleteCompromisso;
   const [isEditing, setIsEditing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
