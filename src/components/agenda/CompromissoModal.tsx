@@ -131,8 +131,10 @@ export function CompromissoModal({
       setIsEditing(false);
     } else {
       // NOVO: usa selectedDate ou hoje
+      // Usa format() (fuso local do browser) para manter o mesmo dia que aparece
+      // no calendário — evita off-by-one quando browser != Manaus (ex: BRT = UTC-3)
       const baseDate = selectedDate || new Date();
-      const dataStr = formatInTimeZone(baseDate, MANAUS_TZ, 'yyyy-MM-dd');
+      const dataStr = format(baseDate, 'yyyy-MM-dd');
       form.reset({
         titulo: '',
         descricao: '',
