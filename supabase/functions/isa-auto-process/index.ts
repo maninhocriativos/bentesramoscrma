@@ -100,6 +100,9 @@ const SLOW_CONFIG = {
   stage_3: { delay_minutos: 21600, titulo: "Reativação 3 - 15 dias (última mensagem calorosa)" }
 };
 
+// ─── Endereço físico do escritório ────────────────────────────────────────────
+const ENDERECO_FISICO = 'Ed. Vieiralves Business Center - Sala 708\nR. Salvador, 120, Adrianópolis, Manaus - AM 😊';
+
 // ─── Nomes e intros dos agentes especialistas ──────────────────────────────────
 const AGENT_DISPLAY_NAMES: Record<string, string> = {
   'isa_triagem':  'Isa',
@@ -953,9 +956,16 @@ ${strictMode ? '🔒 MODO RÍGIDO ATIVADO: Opere pela máquina de estados.\n' : 
 
 AGENTE ATUAL: ${agentAtual}
 
+🏢 ENDEREÇO FÍSICO DO ESCRITÓRIO:
+${ENDERECO_FISICO}
+- Quando o cliente perguntar se tem endereço físico, responda com o endereço acima.
+- Em seguida pergunte se ele já possui o contrato assinado conosco.
+- Se possuir contrato, ofereça horários de Terça ou Quinta.
+
 📅 REGRAS DE AGENDAMENTO:
-- Dias: Segunda, Quarta e Sexta
-- Horários: ${HORARIOS_DISPONIVEIS.join(', ')}
+- Dias: Terça-feira e Quinta-feira APENAS
+- Horários manhã: 09:00, 10:00, 11:00 | Horários tarde: 14:00, 15:00, 16:00
+- Use verificar_agenda para checar disponibilidade antes de oferecer horários
 - Link: https://cal.com/bentes-ramos-advocacia-1ucmau/agendamentos-crm
 
 ${temAgendamentoPendente ? `⚠️ AGENDAMENTO PENDENTE: ${JSON.stringify(opcoesAgendamento.map((o: { label: string }) => o.label))}\n` : ''}

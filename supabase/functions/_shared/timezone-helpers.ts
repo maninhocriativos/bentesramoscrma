@@ -172,9 +172,9 @@ export function getProximaSegundaFormatada(): string {
 // ============================================================
 
 /**
- * Dias permitidos para agendamento: Terça (2), Quarta (3), Quinta (4)
+ * Dias permitidos para agendamento: Terça (2) e Quinta (4)
  */
-export const DIAS_PERMITIDOS = [2, 3, 4]; // 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sab
+export const DIAS_PERMITIDOS = [2, 4]; // 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sab
 
 /**
  * Nomes dos dias da semana
@@ -259,7 +259,7 @@ export function validarAgendamento(date: Date | string, hora?: string): Validaca
     const nomeDia = NOMES_DIAS[diaSemana];
     return {
       valido: false,
-      motivo: `${nomeDia.charAt(0).toUpperCase() + nomeDia.slice(1)} NÃO é dia de atendimento. Atendemos apenas Terça, Quarta e Quinta.`,
+      motivo: `${nomeDia.charAt(0).toUpperCase() + nomeDia.slice(1)} NÃO é dia de atendimento. Atendemos apenas Terça e Quinta.`,
       sugestoes: getProximosDiasDisponiveis(3)
     };
   }

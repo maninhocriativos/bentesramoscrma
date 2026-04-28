@@ -598,6 +598,35 @@ serve(async (req: Request) => {
       }
     }
 
+    // ── Dedup precoce: evitar processamento duplicado do mesmo messageId
+    // Z-API dispara o mesmo webhook 2×; verificar system_events é mais rápido
+    // que manychat_mensagens e evita a race condition entre as duas chamadas.
+    if (normalized.messageId && !normalized.fromMe && leadId) {
+      const dedupeKey = `zmsg_${normalized.messageId}`;
+      const { data: dupeLock } = await supabase
+        .from('system_events')
+        .select('id')
+        .eq('acao', 'zapi_msg_dedup')
+        .eq('dados->>dedup_key', dedupeKey)
+        .gte('created_at', new Date(Date.now() - 30000).toISOString())
+        .maybeSingle();
+
+      if (dupeLock) {
+        console.log('[Z-API Webhook] 🔁 Duplicate webhook — skipping message:', normalized.messageId);
+        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'duplicate_webhook' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      await supabase.from('system_events').insert({
+        tipo: 'msg_dedup',
+        fonte: 'zapi_webhook',
+        acao: 'zapi_msg_dedup',
+        dados: { dedup_key: dedupeKey, message_id: normalized.messageId, lead_id: leadId },
+        processado: true
+      });
+    }
+
     // Salvar mensagem - com prevenção de duplicatas por message_id
     if (normalized.message && leadId) {
       console.log('[Z-API Webhook] Saving message for subscriber:', subscriberId, 'messageId:', normalized.messageId, 'fromMe:', normalized.fromMe);
