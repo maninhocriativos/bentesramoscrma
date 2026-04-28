@@ -553,6 +553,61 @@ export async function resolveInstanceForLead(
 }
 
 /**
+ * Envia vídeo via Z-API
+ */
+export async function sendVideo(
+  config: ZapiConfig,
+  phone: string,
+  videoUrl: string,
+  caption?: string
+): Promise<ZapiSendResult> {
+  const cleanPhone = normalizePhone(phone);
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (config.client_token) headers['Client-Token'] = config.client_token;
+    const response = await fetch(
+      `https://api.z-api.io/instances/${config.instance_id}/token/${config.token}/send-video`,
+      { method: 'POST', headers, body: JSON.stringify({ phone: cleanPhone, video: videoUrl, caption: caption || '' }) }
+    );
+    const data = await response.json();
+    if (response.ok && !data.error) return { success: true, messageId: data.messageId, provider: 'zapi' };
+    return { success: false, error: data.error || 'Erro ao enviar vídeo', provider: 'zapi' };
+  } catch (error: any) {
+    return { success: false, error: error.message, provider: 'zapi' };
+  }
+}
+
+/**
+ * Envia mensagem com lista de botões via Z-API
+ */
+export async function sendButtonList(
+  config: ZapiConfig,
+  phone: string,
+  message: string,
+  buttons: { id: string; label: string }[]
+): Promise<ZapiSendResult> {
+  const cleanPhone = normalizePhone(phone);
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (config.client_token) headers['Client-Token'] = config.client_token;
+    const response = await fetch(
+      `https://api.z-api.io/instances/${config.instance_id}/token/${config.token}/send-button-list`,
+      {
+        method: 'POST', headers,
+        body: JSON.stringify({ phone: cleanPhone, message, buttonList: { buttons } }),
+      }
+    );
+    const data = await response.json();
+    if (response.ok && !data.error) return { success: true, messageId: data.messageId, provider: 'zapi' };
+    // Fallback: send as plain text if buttons not supported
+    console.warn('[Z-API Helper] Button list failed, sending as text');
+    return await sendText(config, phone, message + '\n\n1️⃣ Sim, autorizo\n2️⃣ Não, obrigado');
+  } catch (error: any) {
+    return { success: false, error: error.message, provider: 'zapi' };
+  }
+}
+
+/**
  * Atualiza last_contact_at do lead após envio
  */
 export async function atualizarContatoLead(supabase: any, leadId: string): Promise<void> {

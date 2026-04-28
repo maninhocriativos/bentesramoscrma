@@ -458,6 +458,56 @@ serve(async (req: Request) => {
         }
       }
 
+      // ============================================
+      // 🌱 NUTRIÇÃO: detectar resposta ao opt-in (botão ou texto)
+      // ============================================
+      if (!normalized.fromMe && normalized.phone) {
+        const phoneNorm = normalizePhone(normalized.phone);
+        const msgLowerNut = (normalized.message || '').toLowerCase().trim();
+        const btnId = (normalized.media as any)?.buttonId || (normalized.media as any)?.id || '';
+        const isSimBtn = normalized.messageType === 'buttonResponse' && btnId === 'sim_nutricao';
+        const isNaoBtn = normalized.messageType === 'buttonResponse' && btnId === 'nao_nutricao';
+        const isSimText = ['sim', 'sim!', 'sim.', 'aceito', '1', 'autorizo'].includes(msgLowerNut);
+        const isNaoText = ['não', 'nao', 'não!', 'nao!', '2'].includes(msgLowerNut);
+        const isPararText = msgLowerNut === 'parar' || msgLowerNut.startsWith('parar ');
+
+        if (isSimBtn || isNaoBtn || isSimText || isNaoText || isPararText) {
+          try {
+            if (isPararText) {
+              await supabase.from('followup_nutricao')
+                .update({ status: 'recusado', resposta_em: new Date().toISOString(), updated_at: new Date().toISOString() })
+                .eq('telefone', phoneNorm).eq('status', 'aceito');
+              console.log('[Z-API Webhook] 🌱 Nutrição PARAR de:', phoneNorm);
+            } else if (isSimBtn || isSimText) {
+              const { data: nut } = await supabase.from('followup_nutricao')
+                .select('id').eq('telefone', phoneNorm).eq('status', 'pendente').maybeSingle();
+              if (nut) {
+                await supabase.from('followup_nutricao').update({
+                  status: 'aceito',
+                  resposta_em: new Date().toISOString(),
+                  proxima_campanha_em: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                }).eq('id', nut.id);
+                console.log('[Z-API Webhook] 🌱 Nutrição ACEITA de:', phoneNorm);
+              }
+            } else if (isNaoBtn || isNaoText) {
+              const { data: nut } = await supabase.from('followup_nutricao')
+                .select('id').eq('telefone', phoneNorm).eq('status', 'pendente').maybeSingle();
+              if (nut) {
+                await supabase.from('followup_nutricao').update({
+                  status: 'recusado',
+                  resposta_em: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                }).eq('id', nut.id);
+                console.log('[Z-API Webhook] 🌱 Nutrição RECUSADA de:', phoneNorm);
+              }
+            }
+          } catch (nutErr) {
+            console.error('[Z-API Webhook] Nutrição opt-in error:', nutErr);
+          }
+        }
+      }
+
     // 🆕 INSCREVER LEAD DE TRÁFEGO NO FOLLOW-UP (se for novo lead de tráfego)
     if (leadId && isNewLead && trafficSource.isTraffic && normalized.phone) {
       try {
@@ -469,7 +519,7 @@ serve(async (req: Request) => {
           .maybeSingle();
         
         if (!existingFollowup) {
-          const firstStageDelay = 10; // 10 minutos
+          const firstStageDelay = 15; // 15 minutos após agente responder
           const nextMessageAt = new Date(Date.now() + firstStageDelay * 60 * 1000);
           
           await supabase.from('traffic_followups').insert({
@@ -1240,6 +1290,12 @@ function normalizeZapiEvent(body: any): {
     messageType = 'location';
     media = body.location;
     mediaUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+  } else if (body.buttonResponse || body.type === 'ButtonResponseMessage') {
+    const btnId = body.buttonResponse?.buttonId || body.buttonResponse?.id;
+    const btnMsg = body.buttonResponse?.message;
+    message = btnMsg || btnId || '[Botão pressionado]';
+    messageType = 'buttonResponse';
+    media = body.buttonResponse;
   } else if (body.reaction) {
     // Reações - ignorar
     message = null;
