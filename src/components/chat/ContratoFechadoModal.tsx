@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useMetaCapi } from '@/hooks/useMetaCapi';
 import {
   CheckCircle2, Loader2, AlertTriangle, FileCheck,
   User, Hash, Briefcase, MapPin,
@@ -66,6 +67,7 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
   const [duplicataInfo, setDuplicata] = useState<string | null>(null);
   const [leads, setLeads]             = useState<{ id: string; nome: string }[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(false);
+  const { sendMetaEvent } = useMetaCapi();
 
   // Atualiza form quando o subscriber muda
   useEffect(() => {
@@ -220,6 +222,41 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
           direcao:        'interno',
           data_interacao: new Date().toISOString(),
         });
+
+      // 4. Disparar Meta CAPI — apenas para leads de tráfego pago
+      try {
+        const { data: leadData } = await supabase
+          .from('leads_juridicos')
+          .select('tipo_origem, email, telefone, facebook_lead_id, valor_causa')
+          .eq('id', formData.leadId)
+          .single();
+
+        if (leadData?.tipo_origem === 'trafego') {
+          const metaResult = await sendMetaEvent({
+            lead_id: formData.leadId,
+            facebook_lead_id: (leadData as any).facebook_lead_id ?? null,
+            email: leadData.email ?? null,
+            phone: leadData.telefone ?? null,
+            event_name: 'Purchase',
+            value: (leadData as any).valor_causa ?? 0,
+            status: 'Contrato Assinado',
+          });
+
+          if (metaResult.success) {
+            // Marcar como enviado na tabela de contratos
+            await supabase
+              .from('contratos_fechados' as any)
+              .update({ meta_conversion_sent: true } as any)
+              .eq('lead_id', formData.leadId)
+              .eq('tipo_contrato', formData.tipoContrato)
+              .order('created_at', { ascending: false })
+              .limit(1);
+          }
+        }
+      } catch (metaErr) {
+        // Não bloquear o fluxo por erro no Meta CAPI
+        console.warn('[ContratoFechadoModal] Aviso Meta CAPI:', metaErr);
+      }
 
       toast.success('✅ Contrato registrado com sucesso!', {
         description: `${formData.tipoContrato} · ${formData.modalidadeAssinatura}`,

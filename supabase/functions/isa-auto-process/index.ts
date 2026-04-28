@@ -61,6 +61,7 @@ const ACOES_AUTOMATICAS = [
   'consultar_processo',
   'transicionar_agente', // ← NOVO: roteamento entre agentes
   'direcionar_atendimento_humano',
+  'agendar_lembrete', // ← lembrete contextual agendado
 ];
 
 const ACOES_CONFIRMACAO = [
@@ -747,6 +748,31 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
         return { success: true, message: `Lead roteado para ${AGENT_DISPLAY_NAMES[isa_agent] || isa_agent}`, data: { isa_agent, motivo } };
       }
 
+      case 'agendar_lembrete': {
+        const { lead_id, mensagem: msgLembrete, delay_minutos } = dados;
+        if (!msgLembrete) return { success: false, message: 'mensagem é obrigatória para agendar_lembrete' };
+        const delayMin = Math.max(5, Math.min(Number(delay_minutos) || 120, 1440));
+        const scheduledFor = new Date(Date.now() + delayMin * 60 * 1000).toISOString();
+        const { error: lembreteErr } = await supabase.from('system_events').insert({
+          tipo: 'lembrete',
+          fonte: 'isa_auto',
+          acao: 'lembrete_pendente',
+          lead_id,
+          dados: {
+            subscriber_id: subscriberId,
+            lead_id,
+            mensagem: msgLembrete,
+            scheduled_for: scheduledFor,
+            agendado_em: new Date().toISOString(),
+          },
+          processado: false,
+        });
+        if (lembreteErr) throw lembreteErr;
+        const horaManaus = new Date(scheduledFor).toLocaleTimeString('pt-BR', { timeZone: 'America/Manaus', hour: '2-digit', minute: '2-digit' });
+        console.log(`[Lembrete] ✅ Agendado para ${horaManaus} — lead ${lead_id}`);
+        return { success: true, message: `Lembrete agendado para ${horaManaus}`, data: { scheduled_for: scheduledFor } };
+      }
+
       case 'direcionar_atendimento_humano': {
         const lead_id = dados.lead_id;
         const motivo = dados.motivo || 'Lead qualificado para atendimento humano';
@@ -1008,6 +1034,12 @@ async function processarComIA(contexto: LeadContext, mensagem: string, subscribe
   // Buscar agente atual para info no prompt
   const agentAtual = await getIsaAgent(supabaseClient, contexto.lead.id);
 
+  // Últimas mensagens enviadas por ESTE agente (para evitar repetição)
+  const ultimasBotMsgs = contexto.mensagens
+    .filter((m: any) => m.direcao === 'saida' && m.metadata?.agent === agentAtual)
+    .slice(0, 3)
+    .map((m: any) => (m.conteudo || '').substring(0, 250));
+
   const basePrompt = promptConfig?.content || 'Você é Isa, assistente do escritório Bentes & Ramos.';
 
   const systemPrompt = `${basePrompt}
@@ -1050,6 +1082,9 @@ ${leadState === 'READY_FOR_LAWYER' ? '→ BLOQUEADO. Aguardar equipe jurídica.'
 📜 HISTÓRICO:
 ${historicoFormatado || '(Sem histórico)'}
 
+${ultimasBotMsgs.length > 0 ? `⚠️ SUAS ÚLTIMAS MENSAGENS ENVIADAS (NUNCA REPITA TEXTUALMENTE — varie sempre):
+${ultimasBotMsgs.map((m: string, i: number) => `${i + 1}. "${m}"`).join('\n')}
+` : ''}
 ⚙️ AÇÕES DISPONÍVEIS:
 - transicionar_agente: { lead_id, isa_agent: "isa_bancario"|"isa_aereo"|"humano" } — ROTEAMENTO SILENCIOSO
 - transicionar_estado: { lead_id, to_state }
@@ -1063,12 +1098,18 @@ ${historicoFormatado || '(Sem histórico)'}
 - verificar_agenda, agendar_direto: para agendamentos
 - pausar_followup / retomar_followup: { lead_id }
 - direcionar_atendimento_humano: { lead_id, motivo, tipo }
+- agendar_lembrete: { lead_id, mensagem, delay_minutos } — Agenda mensagem para enviar ao cliente após X minutos (mín 5, máx 1440)
 
 ROTEAMENTO (apenas quando agente=isa_triagem):
 - Bancário → transicionar_agente com isa_agent: "isa_bancario"
 - Aéreo → transicionar_agente com isa_agent: "isa_aereo"
 - Outra área → direcionar_atendimento_humano com [TRANSFERIR_HUMANO]
 - Transferência SILENCIOSA — não avisar o cliente
+
+FOLLOW-UP CONTEXTUAL (use agendar_lembrete quando):
+- Cliente disser que fará algo mais tarde / quando chegar em casa / amanhã → agende com delay adequado (ex: 120 min) e mensagem "Olá! Você já chegou em casa? Estou aguardando os documentos 😊"
+- Cliente informar horário específico → calcule os minutos e use esse delay exato
+- Nunca agende mais de um lembrete por conversa para o mesmo assunto
 
 Responda em JSON:
 {
