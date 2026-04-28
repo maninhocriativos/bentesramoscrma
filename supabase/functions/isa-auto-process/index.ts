@@ -350,7 +350,7 @@ async function enviarNotificacaoEquipe(
   supabase: any,
   lead: any,
   acoesPendentes: Array<{ acao: string; dados: any; motivo: string }>,
-  analise: { intencao: string; sentimento: string; urgencia: string },
+  analise: { intencao: string; sentimento: string; urgencia: string; area_juridica?: string; deve_direcionar_humano?: boolean; motivo_handoff?: string },
   mensagemOriginal: string
 ): Promise<boolean> {
   if (!RESEND_API_KEY) {
@@ -891,6 +891,60 @@ function isAudioUrl(content: string): boolean {
   return lowerContent.match(/\.(ogg|mp3|wav|m4a|aac|opus)(\?|$)/) !== null || lowerContent.includes('voice') || lowerContent.includes('audio');
 }
 
+function isImageUrl(content: string): boolean {
+  if (!content) return false;
+  const lower = content.toLowerCase();
+  return lower.match(/\.(jpg|jpeg|png|gif|webp|bmp)(\?|$)/) !== null || lower.includes('image') || lower.includes('photo');
+}
+
+function isPdfUrl(content: string): boolean {
+  if (!content) return false;
+  const lower = content.toLowerCase();
+  return lower.includes('.pdf') || lower.includes('application/pdf');
+}
+
+async function analisarPdfComIA(pdfUrl: string): Promise<string | null> {
+  const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+  if (!ANTHROPIC_API_KEY) { console.log('⚠️ ANTHROPIC_API_KEY não configurada'); return null; }
+  try {
+    const pdfResponse = await fetch(pdfUrl);
+    if (!pdfResponse.ok) { console.error('❌ Não foi possível baixar o PDF:', pdfResponse.status); return null; }
+    const pdfBuffer = await pdfResponse.arrayBuffer();
+    const bytes = new Uint8Array(pdfBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    const base64 = btoa(binary);
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'pdfs-2024-09-25',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+            { type: 'text', text: 'Analise este documento e extraia as informações principais relevantes para um escritório de advocacia. Identifique: tipo de documento, nome do titular, CPF/RG se presente, datas relevantes, valores, banco/instituição se mencionado, cláusulas importantes. Seja conciso e objetivo. Responda em português.' },
+          ],
+        }],
+      }),
+    });
+
+    if (!response.ok) { console.error('❌ Erro Anthropic PDF:', await response.text()); return null; }
+    const data = await response.json();
+    return data.content?.[0]?.text || null;
+  } catch (error) {
+    console.error('❌ Erro ao processar PDF:', error);
+    return null;
+  }
+}
+
 async function getLeadState(supabase: any, leadId: string): Promise<string | null> {
   const { data: lead } = await supabase.from('leads_juridicos').select('lead_state, status, is_lost, tipo_origem, fonte_trafego, canal_origem, created_at, linha_whatsapp, isa_ativa, empresa_tag').eq('id', leadId).single();
   if (!lead) return null;
@@ -913,10 +967,10 @@ async function getLeadState(supabase: any, leadId: string): Promise<string | nul
 // ============================================================
 // ALTERAÇÃO 3: processarComIA usa getPromptForAgent
 // ============================================================
-async function processarComIA(contexto: LeadContext, mensagem: string, subscriberId: string): Promise<{
+async function processarComIA(contexto: LeadContext, mensagem: string, subscriberId: string, imageUrl?: string): Promise<{
   resposta: string;
   acoes: Array<{ acao: string; dados: any; motivo: string; automatica: boolean }>;
-  analise: { intencao: string; sentimento: string; urgencia: string };
+  analise: { intencao: string; sentimento: string; urgencia: string; area_juridica?: string; deve_direcionar_humano?: boolean; motivo_handoff?: string };
 }> {
   const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
@@ -1037,7 +1091,15 @@ Responda em JSON:
       model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `NOVA MENSAGEM DO CLIENTE:\n"${mensagem}"` }
+        {
+          role: 'user',
+          content: imageUrl
+            ? [
+                { type: 'image_url', image_url: { url: imageUrl, detail: 'auto' } },
+                { type: 'text', text: `NOVA MENSAGEM DO CLIENTE (enviou uma imagem):\n"${mensagem}"` },
+              ]
+            : `NOVA MENSAGEM DO CLIENTE:\n"${mensagem}"`,
+        },
       ],
       response_format: { type: 'json_object' },
       temperature: 0.3,
@@ -1067,13 +1129,14 @@ serve(async (req) => {
   const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
   try {
-    const { lead_id, subscriber_id, mensagem, canal, tipo_mensagem } = await req.json();
-    
+    const { lead_id, subscriber_id, mensagem, canal, tipo_mensagem, media_url } = await req.json();
+
     console.log('🤖 Isa Auto-Process iniciado');
     console.log('📝 Lead ID:', lead_id);
     console.log('📱 Subscriber ID:', subscriber_id);
     console.log('💬 Mensagem:', mensagem?.substring(0, 100));
     console.log('📎 Tipo:', tipo_mensagem);
+    console.log('🔗 Media URL:', media_url ? 'presente' : 'ausente');
 
     if (!lead_id || !mensagem) {
       return new Response(JSON.stringify({ success: false, error: 'lead_id e mensagem são obrigatórios' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -1127,14 +1190,34 @@ serve(async (req) => {
     // Transcrever áudio se necessário
     let mensagemProcessada = mensagem;
     let audioTranscrito = false;
+    let imageUrlParaIA: string | undefined;
+
     if (tipo_mensagem === 'audio' || isAudioUrl(mensagem)) {
-      const transcricao = await transcreverAudio(mensagem);
+      const urlAudio = media_url || mensagem;
+      const transcricao = await transcreverAudio(urlAudio);
       if (transcricao) {
         mensagemProcessada = transcricao;
         audioTranscrito = true;
         await supabase.from('interacoes').insert({ cliente_id: lead_id, tipo: 'WhatsApp', resumo: `Áudio transcrito: "${transcricao.substring(0, 200)}"`, detalhes: transcricao, direcao: 'Entrada' });
       } else {
         mensagemProcessada = '[Áudio recebido - transcrição não disponível]';
+      }
+    } else if (tipo_mensagem === 'image' || (media_url && isImageUrl(media_url))) {
+      // Imagem: passa a URL para o GPT-4o-mini vision processar diretamente
+      imageUrlParaIA = media_url || mensagem;
+      mensagemProcessada = mensagem && mensagem !== imageUrlParaIA ? mensagem : '[Imagem enviada]';
+      console.log('🖼️ Imagem detectada — enviando para análise visual');
+    } else if (tipo_mensagem === 'document' || (media_url && isPdfUrl(media_url))) {
+      // PDF/Documento: extrai conteúdo com Anthropic e passa como texto
+      const docUrl = media_url || mensagem;
+      console.log('📄 Documento recebido — analisando com IA...');
+      const analise = await analisarPdfComIA(docUrl);
+      if (analise) {
+        mensagemProcessada = `[Documento/PDF recebido]\n\nConteúdo extraído:\n${analise}`;
+        await supabase.from('interacoes').insert({ cliente_id: lead_id, tipo: 'WhatsApp', resumo: 'Documento PDF analisado pela IA', detalhes: analise.substring(0, 500), direcao: 'Entrada' });
+        console.log('✅ PDF analisado com sucesso');
+      } else {
+        mensagemProcessada = `[Documento recebido — não foi possível extrair o conteúdo automaticamente]`;
       }
     }
 
@@ -1198,7 +1281,7 @@ serve(async (req) => {
     }
 
     // Processar com IA
-    const resultado = await processarComIA(contexto, mensagemProcessada, subscriber_id);
+    const resultado = await processarComIA(contexto, mensagemProcessada, subscriber_id, imageUrlParaIA);
     console.log('🧠 Análise da IA:', resultado.analise);
     console.log('📋 Ações sugeridas:', resultado.acoes.length);
 
