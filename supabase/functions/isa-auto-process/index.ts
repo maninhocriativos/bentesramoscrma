@@ -1090,8 +1090,9 @@ serve(async (req) => {
     const { data: lockData } = await supabase.from('system_events').insert({ tipo: 'lock', fonte: 'isa_auto', acao: 'isa_processing_lock', lead_id, dados: { mensagem_hash: mensagem.substring(0, 50), subscriber_id }, processado: false }).select().single();
     const lockId = lockData?.id;
 
-    // Rate limit
-    const { data: recentIsaMessages } = await supabase.from('manychat_mensagens').select('id, conteudo, created_at').eq('lead_id', lead_id).eq('direcao', 'saida').eq('metadata->>source', 'isa').gte('created_at', new Date(Date.now() - 60 * 1000).toISOString()).order('created_at', { ascending: false }).limit(3);
+    // Rate limit — conta apenas mensagens do agente atual para não bloquear após transferência
+    const currentAgentForRateLimit = await getIsaAgent(supabase, lead_id);
+    const { data: recentIsaMessages } = await supabase.from('manychat_mensagens').select('id, conteudo, created_at').eq('lead_id', lead_id).eq('direcao', 'saida').eq('metadata->>source', 'isa').eq('metadata->>agent', currentAgentForRateLimit).gte('created_at', new Date(Date.now() - 60 * 1000).toISOString()).order('created_at', { ascending: false }).limit(3);
     if (recentIsaMessages && recentIsaMessages.length >= 2) {
       console.log('🛑 Rate limit - muitas respostas recentes');
       if (lockId) await supabase.from('system_events').update({ processado: true }).eq('id', lockId);
