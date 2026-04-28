@@ -100,6 +100,19 @@ const SLOW_CONFIG = {
   stage_3: { delay_minutos: 21600, titulo: "Reativação 3 - 15 dias (última mensagem calorosa)" }
 };
 
+// ─── Nomes e intros dos agentes especialistas ──────────────────────────────────
+const AGENT_DISPLAY_NAMES: Record<string, string> = {
+  'isa_triagem':  'Isa',
+  'isa_bancario': 'Melissa',
+  'isa_aereo':    'Jerussa',
+  'humano':       'Atendente',
+};
+
+const AGENT_INTROS: Record<string, string> = {
+  'isa_bancario': 'Olá! Sou a *Melissa*, especialista em Direito Bancário aqui no escritório Bentes & Ramos 😊\n\nVi que você tem uma questão relacionada a serviços financeiros. Para que eu possa te ajudar da melhor forma, pode me dizer qual banco ou instituição está envolvida e o tipo de produto (empréstimo, financiamento, cartão, consignado)?',
+  'isa_aereo':    'Olá! Sou a *Jerussa*, especialista em Direito Aéreo do escritório Bentes & Ramos 😊\n\nVi que você passou por alguma situação com uma companhia aérea. Pode me contar mais detalhes? Qual companhia e o que aconteceu (cancelamento, atraso, bagagem extraviada, overbooking)?',
+};
+
 interface LeadContext {
   lead: any;
   mensagens: any[];
@@ -709,9 +722,20 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
         if (!isa_agent) return { success: false, message: 'isa_agent não informado' };
         const agentesValidos = ['isa_triagem', 'isa_bancario', 'isa_aereo', 'humano'];
         if (!agentesValidos.includes(isa_agent)) return { success: false, message: `Agente inválido: ${isa_agent}` };
+
+        // Transferência para humano → acionar handoff completo (não apenas mudar campo)
+        if (isa_agent === 'humano') {
+          return await executarAcao(supabase, 'direcionar_atendimento_humano', {
+            lead_id,
+            motivo: motivo || 'Transferência solicitada pela IA',
+            tipo: 'transicao_agente',
+          }, subscriberId);
+        }
+
         const supabaseLocal = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
         await setIsaAgent(supabaseLocal, lead_id, isa_agent);
-        return { success: true, message: `Lead roteado para ${isa_agent}`, data: { isa_agent, motivo } };
+        console.log(`[Isa Routing] ✅ Lead ${lead_id} → ${AGENT_DISPLAY_NAMES[isa_agent] || isa_agent}`);
+        return { success: true, message: `Lead roteado para ${AGENT_DISPLAY_NAMES[isa_agent] || isa_agent}`, data: { isa_agent, motivo } };
       }
 
       case 'direcionar_atendimento_humano': {
@@ -1103,7 +1127,11 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: false, error: 'Lead não encontrado' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log('📊 Contexto carregado para:', contexto.lead.nome);
+    // Capturar agente ativo ANTES do processamento (para subscriber_nome correto)
+    const agentKeyBefore = await getIsaAgent(supabase, lead_id);
+    const agentDisplayName = AGENT_DISPLAY_NAMES[agentKeyBefore] || 'Isa';
+
+    console.log('📊 Contexto carregado para:', contexto.lead.nome, '| Agente:', agentDisplayName);
 
     // Marcar follow-up como respondido
     const agora = new Date().toISOString();
@@ -1147,7 +1175,14 @@ serve(async (req) => {
       await enviarNotificacaoEquipe(supabase, contexto.lead, acoesNauto, resultado.analise, audioTranscrito ? `[🎤 Áudio]: ${mensagemProcessada}` : mensagem);
     }
 
-    // Enviar resposta
+    // Verificar se houve transferência para especialista nesta rodada
+    const transferAction = resultado.acoes.find(a =>
+      a.acao === 'transicionar_agente' &&
+      (a.dados.isa_agent === 'isa_bancario' || a.dados.isa_agent === 'isa_aereo') &&
+      acoesExecutadas.some(ae => ae.acao === 'transicionar_agente' && ae.resultado?.success)
+    );
+
+    // Enviar resposta do agente atual
     let respostaEnviada = false;
     let respostaMsgId: string | null = null;
     if (resultado.resposta && subscriber_id) {
@@ -1156,11 +1191,40 @@ serve(async (req) => {
       respostaMsgId = sendResult.messageId || null;
       if (respostaEnviada && respostaMsgId) {
         const { error: insertErr } = await supabase.from('manychat_mensagens').insert({
-          subscriber_id, subscriber_nome: 'Isa (Assistente)', canal: canal || 'whatsapp', conteudo: resultado.resposta, tipo: 'text', direcao: 'saida', lead_id,
-          metadata: { auto_gerada: true, source: 'isa', message_id: respostaMsgId, analise: resultado.analise },
+          subscriber_id,
+          subscriber_nome: agentDisplayName,
+          canal: canal || 'whatsapp',
+          conteudo: resultado.resposta,
+          tipo: 'text',
+          direcao: 'saida',
+          lead_id,
+          metadata: { auto_gerada: true, source: 'isa', agent: agentKeyBefore, message_id: respostaMsgId, analise: resultado.analise },
         });
         if (insertErr && !insertErr.message?.includes('duplicate') && !insertErr.code?.includes('23505')) {
           console.error('[Isa] Erro ao salvar resposta:', insertErr);
+        }
+      }
+    }
+
+    // Após transferência → enviar intro do especialista com pequeno delay
+    if (transferAction && subscriber_id) {
+      const newAgent = transferAction.dados.isa_agent as string;
+      const introMsg = AGENT_INTROS[newAgent];
+      if (introMsg) {
+        await new Promise<void>(r => setTimeout(r, 2000));
+        const introSend = await enviarRespostaZapi(supabase, subscriber_id, introMsg);
+        if (introSend.success) {
+          await supabase.from('manychat_mensagens').insert({
+            subscriber_id,
+            subscriber_nome: AGENT_DISPLAY_NAMES[newAgent] || 'Especialista',
+            canal: canal || 'whatsapp',
+            conteudo: introMsg,
+            tipo: 'text',
+            direcao: 'saida',
+            lead_id,
+            metadata: { auto_gerada: true, source: 'isa', agent: newAgent },
+          });
+          console.log(`[Isa Routing] ✅ Intro de ${AGENT_DISPLAY_NAMES[newAgent]} enviada ao lead ${lead_id}`);
         }
       }
     }
