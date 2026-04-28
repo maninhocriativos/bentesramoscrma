@@ -169,6 +169,7 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
         <table className="w-full">
           <thead>
             <tr className="border-b border-border/50 bg-muted/30">
+              <th className="w-[3px] p-0" />
               <th className="text-left px-5 py-3 w-[22%]"><SortBtn col="cliente"  label="Cliente" /></th>
               <th className="text-left px-4 py-3 w-[22%]"><SortBtn col="numero"   label="Processo" /></th>
               <th className="text-left px-3 py-3 w-[9%]"> <SortBtn col="tribunal" label="Tribunal" /></th>
