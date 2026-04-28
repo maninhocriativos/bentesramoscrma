@@ -1149,6 +1149,38 @@ serve(async (req) => {
 
     console.log('📊 Contexto carregado para:', contexto.lead.nome, '| Agente:', agentDisplayName);
 
+    // Se especialista está respondendo pela primeira vez, enviar intro antes da resposta IA
+    if ((agentKeyBefore === 'isa_bancario' || agentKeyBefore === 'isa_aereo') && subscriber_id) {
+      const { data: prevSpecialistMsg } = await supabase
+        .from('manychat_mensagens')
+        .select('id')
+        .eq('lead_id', lead_id)
+        .eq('direcao', 'saida')
+        .eq('metadata->>agent', agentKeyBefore)
+        .limit(1)
+        .maybeSingle();
+
+      if (!prevSpecialistMsg) {
+        const introMsg = AGENT_INTROS[agentKeyBefore];
+        if (introMsg) {
+          console.log(`[Isa Routing] 📣 Primeiro contato de ${AGENT_DISPLAY_NAMES[agentKeyBefore]} — enviando intro`);
+          const introSend = await enviarRespostaZapi(supabase, subscriber_id, introMsg);
+          if (introSend.success) {
+            await supabase.from('manychat_mensagens').insert({
+              subscriber_id,
+              subscriber_nome: AGENT_DISPLAY_NAMES[agentKeyBefore] || 'Especialista',
+              canal: canal || 'whatsapp',
+              conteudo: introMsg,
+              tipo: 'text',
+              direcao: 'saida',
+              lead_id,
+              metadata: { auto_gerada: true, source: 'isa', agent: agentKeyBefore },
+            });
+          }
+        }
+      }
+    }
+
     // Marcar follow-up como respondido
     const agora = new Date().toISOString();
     if (contexto.followup) {
