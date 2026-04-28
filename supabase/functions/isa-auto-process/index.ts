@@ -111,6 +111,12 @@ const AGENT_DISPLAY_NAMES: Record<string, string> = {
   'humano':       'Atendente',
 };
 
+// Mensagem curta de Isa anunciando a transferência (sem se reapresentar)
+const AGENT_HANDOFFS: Record<string, string> = {
+  'isa_bancario': 'Certo! Vou te conectar agora com a *Melissa*, nossa especialista em Direito Bancário. Um momento! 😊',
+  'isa_aereo':    'Certo! Vou te conectar agora com a *Jerussa*, nossa especialista em Direito Aéreo. Um momento! 😊',
+};
+
 const AGENT_INTROS: Record<string, string> = {
   'isa_bancario': 'Olá! Sou a *Melissa*, especialista em Direito Bancário aqui no escritório Bentes & Ramos 😊\n\nVi que você tem uma questão relacionada a serviços financeiros. Para que eu possa te ajudar da melhor forma, pode me dizer qual banco ou instituição está envolvida e o tipo de produto (empréstimo, financiamento, cartão, consignado)?',
   'isa_aereo':    'Olá! Sou a *Jerussa*, especialista em Direito Aéreo do escritório Bentes & Ramos 😊\n\nVi que você passou por alguma situação com uma companhia aérea. Pode me contar mais detalhes? Qual companhia e o que aconteceu (cancelamento, atraso, bagagem extraviada, overbooking)?',
@@ -1193,9 +1199,11 @@ serve(async (req) => {
     );
 
     // Enviar resposta do agente atual
+    // SILÊNCIO NA TRANSFERÊNCIA: quando há transicionar_agente para especialista,
+    // a resposta da Isa NÃO vai para o cliente — só o intro do especialista é enviado.
     let respostaEnviada = false;
     let respostaMsgId: string | null = null;
-    if (resultado.resposta && subscriber_id) {
+    if (resultado.resposta && subscriber_id && !transferAction) {
       const sendResult = await enviarRespostaZapi(supabase, subscriber_id, resultado.resposta);
       respostaEnviada = sendResult.success;
       respostaMsgId = sendResult.messageId || null;
@@ -1216,9 +1224,29 @@ serve(async (req) => {
       }
     }
 
-    // Após transferência → enviar intro do especialista com pequeno delay
+    // Após transferência → 1) Isa anuncia brevemente, 2) especialista se apresenta
     if (transferAction && subscriber_id) {
       const newAgent = transferAction.dados.isa_agent as string;
+
+      // Mensagem curta de Isa (sem se reapresentar)
+      const handoffMsg = AGENT_HANDOFFS[newAgent];
+      if (handoffMsg) {
+        const handoffSend = await enviarRespostaZapi(supabase, subscriber_id, handoffMsg);
+        if (handoffSend.success) {
+          await supabase.from('manychat_mensagens').insert({
+            subscriber_id,
+            subscriber_nome: agentDisplayName,
+            canal: canal || 'whatsapp',
+            conteudo: handoffMsg,
+            tipo: 'text',
+            direcao: 'saida',
+            lead_id,
+            metadata: { auto_gerada: true, source: 'isa', agent: agentKeyBefore },
+          });
+        }
+      }
+
+      // Intro da especialista após 2s
       const introMsg = AGENT_INTROS[newAgent];
       if (introMsg) {
         await new Promise<void>(r => setTimeout(r, 2000));

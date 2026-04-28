@@ -34,7 +34,7 @@ async function analisarTextoPuro(texto: string, apiKey: string): Promise<string>
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-opus-4-6",
+      model: "claude-opus-4-7",
       max_tokens: 16000,
       messages: [
         {
@@ -85,7 +85,7 @@ async function extrairDoPdf(base64: string, apiKey: string): Promise<string> {
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-opus-4-6",
+      model: "claude-opus-4-7",
       max_tokens: 16000,
       messages: [
         {
@@ -459,7 +459,7 @@ Deno.serve(async (req) => {
               "content-type": "application/json",
             },
             body: JSON.stringify({
-              model: "claude-opus-4-6",
+              model: "claude-opus-4-7",
               max_tokens: 8000,
               messages: [{
                 role: "user",
