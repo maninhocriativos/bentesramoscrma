@@ -1173,11 +1173,25 @@ serve(async (req) => {
     const acoesExecutadas = [];
     const acoesNauto = [];
 
+    // Captura o agente de destino diretamente no loop para evitar falha de detecção pós-loop
+    let transferredToAgent: string | null = null;
+
     for (const acao of resultado.acoes) {
       if (acao.automatica) {
         console.log(`⚡ Executando ação automática: ${acao.acao}`);
         const resultadoAcao = await executarAcao(supabase, acao.acao, acao.dados, subscriber_id);
         acoesExecutadas.push({ ...acao, resultado: resultadoAcao });
+
+        // Detectar transferência para especialista no momento exato em que ocorre
+        if (
+          acao.acao === 'transicionar_agente' &&
+          resultadoAcao.success &&
+          (acao.dados.isa_agent === 'isa_bancario' || acao.dados.isa_agent === 'isa_aereo')
+        ) {
+          transferredToAgent = acao.dados.isa_agent;
+          console.log(`[Isa Routing] 🔀 Transferência detectada → ${transferredToAgent}`);
+        }
+
         if (acao.acao === 'confirmar_agendamento') {
           await supabase.from('system_events').update({ processado: true }).eq('lead_id', lead_id).eq('acao', 'aguardando_confirmacao_lead').eq('processado', false);
         }
@@ -1191,19 +1205,10 @@ serve(async (req) => {
       await enviarNotificacaoEquipe(supabase, contexto.lead, acoesNauto, resultado.analise, audioTranscrito ? `[🎤 Áudio]: ${mensagemProcessada}` : mensagem);
     }
 
-    // Verificar se houve transferência para especialista nesta rodada
-    const transferAction = resultado.acoes.find(a =>
-      a.acao === 'transicionar_agente' &&
-      (a.dados.isa_agent === 'isa_bancario' || a.dados.isa_agent === 'isa_aereo') &&
-      acoesExecutadas.some(ae => ae.acao === 'transicionar_agente' && ae.resultado?.success)
-    );
-
-    // Enviar resposta do agente atual
-    // SILÊNCIO NA TRANSFERÊNCIA: quando há transicionar_agente para especialista,
-    // a resposta da Isa NÃO vai para o cliente — só o intro do especialista é enviado.
+    // Enviar resposta da Isa — suprimida se houve transferência para especialista
     let respostaEnviada = false;
     let respostaMsgId: string | null = null;
-    if (resultado.resposta && subscriber_id && !transferAction) {
+    if (resultado.resposta && subscriber_id && !transferredToAgent) {
       const sendResult = await enviarRespostaZapi(supabase, subscriber_id, resultado.resposta);
       respostaEnviada = sendResult.success;
       respostaMsgId = sendResult.messageId || null;
@@ -1225,8 +1230,8 @@ serve(async (req) => {
     }
 
     // Após transferência → 1) Isa anuncia brevemente, 2) especialista se apresenta
-    if (transferAction && subscriber_id) {
-      const newAgent = transferAction.dados.isa_agent as string;
+    if (transferredToAgent && subscriber_id) {
+      const newAgent = transferredToAgent;
 
       // Mensagem curta de Isa (sem se reapresentar)
       const handoffMsg = AGENT_HANDOFFS[newAgent];
