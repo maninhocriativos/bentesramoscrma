@@ -41,16 +41,26 @@ function getInstanceInfoFromConnectedPhone(connectedPhone?: string): InstanceInf
   return null;
 }
 
-export function ConversationItem({ 
-  subscriber, 
-  isSelected, 
-  onClick, 
+function formatPhone(phone?: string): string {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  const local = digits.startsWith('55') ? digits.slice(2) : digits;
+  if (local.length === 11) return `(${local.slice(0, 2)}) ${local.slice(2, 7)}-${local.slice(7)}`;
+  if (local.length === 10) return `(${local.slice(0, 2)}) ${local.slice(2, 6)}-${local.slice(6)}`;
+  return phone;
+}
+
+export function ConversationItem({
+  subscriber,
+  isSelected,
+  onClick,
   lastMessage,
   unreadCount = 0,
-  themeClasses 
+  themeClasses
 }: ConversationItemProps) {
   const displayName = getDisplayName(subscriber);
   const initials = getInitials(subscriber);
+  const phoneFormatted = formatPhone(subscriber.telefone);
   
   // Detect which instance this subscriber belongs to (from connectedPhone in metadata)
   const instanceInfo = getInstanceInfoFromConnectedPhone(subscriber.instance_name);
@@ -112,6 +122,11 @@ export function ConversationItem({
           </div>
         </div>
         
+        {phoneFormatted && (
+          <p className={`text-xs truncate ${themeClasses.secondaryText} opacity-70`}>
+            {phoneFormatted}
+          </p>
+        )}
         <p className={`text-sm truncate mt-0.5 ${themeClasses.secondaryText}`}>
           {lastMessage || 'Nenhuma mensagem'}
         </p>
