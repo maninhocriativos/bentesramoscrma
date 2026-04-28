@@ -1205,6 +1205,33 @@ serve(async (req) => {
       await enviarNotificacaoEquipe(supabase, contexto.lead, acoesNauto, resultado.analise, audioTranscrito ? `[🎤 Áudio]: ${mensagemProcessada}` : mensagem);
     }
 
+    // ── Fallback de roteamento ─────────────────────────────────────────────────
+    // Se a IA identificou a área jurídica mas NÃO incluiu transicionar_agente
+    // nas ações (ou as ações falharam), forçamos a transferência agora.
+    if (!transferredToAgent && agentKeyBefore === 'isa_triagem') {
+      const area = resultado.analise?.area_juridica;
+      const agentTarget = area === 'bancario' ? 'isa_bancario'
+                        : area === 'aereo'    ? 'isa_aereo'
+                        : null;
+      if (agentTarget) {
+        console.log(`[Isa Routing] ⚠️ Fallback: AI não chamou transicionar_agente, forçando → ${agentTarget}`);
+        const forcedResult = await executarAcao(supabase, 'transicionar_agente', { lead_id, isa_agent: agentTarget }, subscriber_id);
+        if (forcedResult.success) {
+          transferredToAgent = agentTarget;
+        }
+      }
+    }
+
+    // ── Verificação final via DB (garante consistência) ────────────────────────
+    if (!transferredToAgent) {
+      const agentKeyAfter = await getIsaAgent(supabase, lead_id);
+      if (agentKeyBefore === 'isa_triagem' &&
+          (agentKeyAfter === 'isa_bancario' || agentKeyAfter === 'isa_aereo')) {
+        transferredToAgent = agentKeyAfter;
+        console.log(`[Isa Routing] ✅ Transferência confirmada via DB → ${transferredToAgent}`);
+      }
+    }
+
     // Enviar resposta da Isa — suprimida se houve transferência para especialista
     let respostaEnviada = false;
     let respostaMsgId: string | null = null;
