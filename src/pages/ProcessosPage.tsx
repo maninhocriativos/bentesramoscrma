@@ -13,6 +13,7 @@ import {
   Loader2, Search, Scale, Plus,
   CheckCircle2, PauseCircle, Archive, Trophy, XCircle,
   RefreshCw, SlidersHorizontal, Upload, Gavel, FileCheck, X,
+  Download, Users, Layers,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -180,9 +181,23 @@ function ProcessosPage() {
   const [isNew, setIsNew] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('todos');
+  const [advogadoFilter, setAdvogadoFilter] = useState('todos');
+  const [faseFilter, setFaseFilter] = useState('todos');
   const [activeView, setActiveView] = useState<ViewTab>('internos');
   const [showImportCsv, setShowImportCsv] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
+
+  const advogados = useMemo(() => {
+    const set = new Set<string>();
+    processos.forEach(p => { if (p.advogado_responsavel) set.add(p.advogado_responsavel.replace(/\s*\(OAB.*\)/i, '').trim()); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [processos]);
+
+  const fases = useMemo(() => {
+    const set = new Set<string>();
+    processos.forEach(p => { if (p.fase) set.add(p.fase.trim()); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [processos]);
 
   const handleProcessoClick = useCallback((p: Processo) => {
     setSelectedProcesso(p); setIsNew(false); setIsModalOpen(true);
@@ -219,8 +234,28 @@ function ProcessosPage() {
     if (statusFilter === 'recursal') matchStatus = p.fase?.toLowerCase() === 'recursal';
     else if (statusFilter === 'execucao') matchStatus = ['execução', 'execucao'].includes(p.fase?.toLowerCase() || '');
     else if (statusFilter !== 'todos') matchStatus = p.status === statusFilter;
-    return matchSearch && matchStatus;
-  }), [processos, searchTerm, statusFilter]);
+    const matchAdvogado = advogadoFilter === 'todos' || p.advogado_responsavel?.replace(/\s*\(OAB.*\)/i, '').trim() === advogadoFilter;
+    const matchFase = faseFilter === 'todos' || p.fase?.trim() === faseFilter;
+    return matchSearch && matchStatus && matchAdvogado && matchFase;
+  }), [processos, searchTerm, statusFilter, advogadoFilter, faseFilter]);
+
+  const handleExportCSV = useCallback(() => {
+    const cols = ['numero_processo','nome_cliente','advogado_responsavel','tribunal','grau','fase','status','data_distribuicao','valor_causa','assunto','classe_cnj'];
+    const headers = ['Número','Cliente','Advogado','Tribunal','Grau','Fase','Status','Distribuição','Valor','Assunto','Classe CNJ'];
+    const escape = (v: unknown) => {
+      if (v == null) return '';
+      const s = String(v).replace(/"/g, '""');
+      return /[,"\n]/.test(s) ? `"${s}"` : s;
+    };
+    const rows = [headers.join(','), ...filteredProcessos.map((p: Processo) =>
+      cols.map(c => escape((p as unknown as Record<string, unknown>)[c])).join(',')
+    )];
+    const blob = new Blob(['﻿' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `processos_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  }, [filteredProcessos]);
 
   if (perfilLoading) return <AppLayout><PageSkeleton cards={5} rows={8} /></AppLayout>;
   if (!canAccessProcessos) return null;
@@ -283,12 +318,15 @@ function ProcessosPage() {
                   <span className="hidden sm:inline font-bold">Novo</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="rounded-xl shadow-xl border-border/60 w-44">
+              <DropdownMenuContent align="end" className="rounded-xl shadow-xl border-border/60 w-48">
                 <DropdownMenuItem onClick={handleNewProcesso} className="rounded-lg gap-2 font-medium">
                   <Plus className="h-4 w-4" /> Novo Processo
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setShowImportCsv(true)} className="rounded-lg gap-2 font-medium">
                   <Upload className="h-4 w-4" /> Importar CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportCSV} className="rounded-lg gap-2 font-medium">
+                  <Download className="h-4 w-4" /> Exportar CSV
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -347,58 +385,121 @@ function ProcessosPage() {
           </div>
 
           {activeView === 'internos' && (
-            <div className="flex flex-1 items-center gap-2 w-full">
-              {/* Search */}
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                <Input
-                  placeholder="Número, cliente, advogado, assunto..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-9 h-10 rounded-xl bg-card border-border/60 shadow-sm focus:shadow-md transition-shadow"
-                />
-                {searchTerm && (
-                  <button
-                    onClick={() => setSearchTerm('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 rounded-full bg-muted hover:bg-muted-foreground/20 flex items-center justify-center transition-colors"
+            <div className="flex flex-col flex-1 gap-2 w-full">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Search */}
+                <div className="relative flex-1 min-w-[200px] max-w-sm">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  <Input
+                    placeholder="Número, cliente, advogado, assunto..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="pl-10 pr-9 h-10 rounded-xl bg-card border-border/60 shadow-sm focus:shadow-md transition-shadow"
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 rounded-full bg-muted hover:bg-muted-foreground/20 flex items-center justify-center transition-colors"
+                    >
+                      <X className="h-3 w-3 text-muted-foreground" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Status select */}
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[152px] h-10 rounded-xl bg-card border-border/60 shrink-0 shadow-sm">
+                    <SlidersHorizontal className="h-3.5 w-3.5 mr-1.5 text-muted-foreground shrink-0" />
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl shadow-xl">
+                    <SelectItem value="todos">Todos os status</SelectItem>
+                    <SelectItem value="Em Andamento">Em Andamento</SelectItem>
+                    <SelectItem value="Suspenso">Suspenso</SelectItem>
+                    <SelectItem value="Arquivado">Arquivado</SelectItem>
+                    <SelectItem value="Ganho">Ganho</SelectItem>
+                    <SelectItem value="Perdido">Perdido</SelectItem>
+                    <SelectItem value="recursal">Recursal</SelectItem>
+                    <SelectItem value="execucao">Execução</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Advogado select */}
+                {advogados.length > 0 && (
+                  <Select value={advogadoFilter} onValueChange={setAdvogadoFilter}>
+                    <SelectTrigger className="w-[160px] h-10 rounded-xl bg-card border-border/60 shrink-0 shadow-sm">
+                      <Users className="h-3.5 w-3.5 mr-1.5 text-muted-foreground shrink-0" />
+                      <SelectValue placeholder="Advogado" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl shadow-xl max-h-60">
+                      <SelectItem value="todos">Todos advogados</SelectItem>
+                      {advogados.map(adv => (
+                        <SelectItem key={adv} value={adv}>{adv}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                {/* Fase select */}
+                {fases.length > 0 && (
+                  <Select value={faseFilter} onValueChange={setFaseFilter}>
+                    <SelectTrigger className="w-[148px] h-10 rounded-xl bg-card border-border/60 shrink-0 shadow-sm">
+                      <Layers className="h-3.5 w-3.5 mr-1.5 text-muted-foreground shrink-0" />
+                      <SelectValue placeholder="Fase" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl shadow-xl">
+                      <SelectItem value="todos">Todas as fases</SelectItem>
+                      {fases.map(f => (
+                        <SelectItem key={f} value={f}>{f}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                {(searchTerm || statusFilter !== 'todos' || advogadoFilter !== 'todos' || faseFilter !== 'todos') && (
+                  <Button
+                    variant="ghost" size="sm"
+                    onClick={() => { setSearchTerm(''); setStatusFilter('todos'); setAdvogadoFilter('todos'); setFaseFilter('todos'); }}
+                    className="h-10 px-3 rounded-xl text-xs text-muted-foreground hover:text-foreground shrink-0"
                   >
-                    <X className="h-3 w-3 text-muted-foreground" />
-                  </button>
+                    <X className="h-3.5 w-3.5 mr-1" /> Limpar tudo
+                  </Button>
                 )}
               </div>
 
-              {/* Status select */}
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[160px] h-10 rounded-xl bg-card border-border/60 shrink-0 shadow-sm">
-                  <SlidersHorizontal className="h-3.5 w-3.5 mr-2 text-muted-foreground shrink-0" />
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl shadow-xl">
-                  <SelectItem value="todos">Todos os status</SelectItem>
-                  <SelectItem value="Em Andamento">Em Andamento</SelectItem>
-                  <SelectItem value="Suspenso">Suspenso</SelectItem>
-                  <SelectItem value="Arquivado">Arquivado</SelectItem>
-                  <SelectItem value="Ganho">Ganho</SelectItem>
-                  <SelectItem value="Perdido">Perdido</SelectItem>
-                  <SelectItem value="recursal">Recursal</SelectItem>
-                  <SelectItem value="execucao">Execução</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {statusFilter !== 'todos' && (
-                <Button
-                  variant="ghost" size="sm"
-                  onClick={() => setStatusFilter('todos')}
-                  className="h-10 px-3 rounded-xl text-xs text-muted-foreground hover:text-foreground shrink-0"
-                >
-                  <X className="h-3.5 w-3.5 mr-1" /> Limpar
-                </Button>
-              )}
-
-              {(searchTerm || statusFilter !== 'todos') && (
-                <span className="text-xs text-muted-foreground shrink-0 hidden md:inline font-medium">
-                  {filteredProcessos.length} resultado{filteredProcessos.length !== 1 ? 's' : ''}
-                </span>
+              {/* Active filter chips */}
+              {(statusFilter !== 'todos' || advogadoFilter !== 'todos' || faseFilter !== 'todos' || searchTerm) && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mr-1">
+                    {filteredProcessos.length} resultado{filteredProcessos.length !== 1 ? 's' : ''}
+                  </span>
+                  {searchTerm && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted/70 border border-border/50 text-[11px] font-medium text-foreground">
+                      "{searchTerm.length > 20 ? searchTerm.slice(0, 20) + '…' : searchTerm}"
+                      <button onClick={() => setSearchTerm('')} className="hover:text-destructive transition-colors ml-0.5"><X className="h-2.5 w-2.5" /></button>
+                    </span>
+                  )}
+                  {statusFilter !== 'todos' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-[11px] font-medium text-primary">
+                      {statusFilter}
+                      <button onClick={() => setStatusFilter('todos')} className="hover:text-destructive transition-colors ml-0.5"><X className="h-2.5 w-2.5" /></button>
+                    </span>
+                  )}
+                  {advogadoFilter !== 'todos' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[11px] font-medium text-blue-700 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800/40">
+                      <Users className="h-2.5 w-2.5 shrink-0" />
+                      {advogadoFilter.split(' ')[0]}
+                      <button onClick={() => setAdvogadoFilter('todos')} className="hover:text-destructive transition-colors ml-0.5"><X className="h-2.5 w-2.5" /></button>
+                    </span>
+                  )}
+                  {faseFilter !== 'todos' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-[11px] font-medium text-purple-700 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800/40">
+                      <Layers className="h-2.5 w-2.5 shrink-0" />
+                      {faseFilter}
+                      <button onClick={() => setFaseFilter('todos')} className="hover:text-destructive transition-colors ml-0.5"><X className="h-2.5 w-2.5" /></button>
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           )}

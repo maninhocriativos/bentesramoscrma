@@ -6,7 +6,7 @@ import { ptBR } from 'date-fns/locale';
 import {
   Scale, ChevronRight, Building2, User, Calendar,
   DollarSign, ArrowUpDown, CheckCircle2, PauseCircle,
-  Archive, Trophy, XCircle, Gavel, FileCheck,
+  Archive, Trophy, XCircle, Gavel, FileCheck, Activity,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -195,10 +195,10 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
                   onClick={() => onProcessoClick(processo)}
                   className="group cursor-pointer hover:bg-accent/20 transition-colors relative"
                 >
-                  {/* Left accent bar via pseudo — use a td trick */}
+                  {/* Left accent bar — faintly visible, full opacity on hover */}
                   <td className="px-0 py-0 w-[3px] p-0 relative">
                     <div
-                      className="absolute left-0 top-0 bottom-0 w-[3px] opacity-0 group-hover:opacity-100 transition-opacity rounded-r-sm"
+                      className="absolute left-0 top-0 bottom-0 w-[3px] opacity-25 group-hover:opacity-100 transition-opacity rounded-r-sm"
                       style={{ background: cfg.barColor }}
                     />
                   </td>
@@ -269,7 +269,10 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
                       <p className="text-[9px] text-muted-foreground/35 mt-1">Sync: {dataSync}</p>
                     )}
                     {movCount > 0 && (
-                      <p className="text-[9px] text-muted-foreground/35 mt-0.5">{movCount} mov.</p>
+                      <span className="inline-flex items-center gap-0.5 mt-1 px-1.5 py-0.5 rounded-md bg-muted/60 border border-border/30 text-[9px] font-bold text-muted-foreground">
+                        <Activity className="h-2 w-2 shrink-0" />
+                        {movCount}
+                      </span>
                     )}
                   </td>
 
@@ -287,18 +290,24 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
 
                   {/* Status */}
                   <td className="px-5 py-3.5 align-top">
-                    <div className="flex flex-col items-end gap-1.5">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${cfg.cls}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${cfg.dot}`} />
-                        {status}
-                      </span>
-                      {(ultimaMov?.nome) && (
-                        <p className="text-[9px] text-muted-foreground/50 text-right truncate max-w-[180px]" title={ultimaMov.nome}>
-                          {ultimaMov.nome.length > 40 ? ultimaMov.nome.slice(0, 40) + '…' : ultimaMov.nome}
-                        </p>
-                      )}
+                    <div className="flex items-start justify-end gap-2">
+                      <div className="flex flex-col items-end gap-1.5 flex-1 min-w-0">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${cfg.cls}`}>
+                          {(() => { const StatusIcon = cfg.icon; return <StatusIcon className="h-3 w-3 shrink-0" />; })()}
+                          {status}
+                        </span>
+                        {(ultimaMov?.nome) && (
+                          <p className="text-[9px] text-muted-foreground/50 text-right truncate max-w-[180px]" title={ultimaMov.nome}>
+                            {ultimaMov.nome.length > 40 ? ultimaMov.nome.slice(0, 40) + '…' : ultimaMov.nome}
+                          </p>
+                        )}
+                      </div>
+                      <div className="opacity-0 group-hover:opacity-100 transition-all translate-x-1 group-hover:translate-x-0 shrink-0 self-center">
+                        <span className="inline-flex items-center gap-0.5 px-2 py-1 rounded-lg bg-primary/10 text-primary text-[10px] font-bold whitespace-nowrap border border-primary/20">
+                          Abrir <ChevronRight className="h-3 w-3" />
+                        </span>
+                      </div>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground/15 opacity-0 group-hover:opacity-100 group-hover:text-primary transition-all float-right mt-1 ml-2 shrink-0" />
                   </td>
                 </tr>
               );
