@@ -4,6 +4,7 @@ import {
   Building2, Scale, Calendar, DollarSign, Plus, X,
   FileText, Bell, Hash, FolderOpen, Shield, Pencil, ChevronRight,
   CheckCircle2, Search, Tag, UserPlus, AlertTriangle,
+  CheckCircle, PauseCircle, Archive, Trophy, XCircle, Activity,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -79,12 +80,12 @@ const createEmptyForm = (): ProcessoFormData => ({
   complemento_enderecamento: '',
 });
 
-const STATUS_CONFIG: Record<string, { cls: string; dot: string }> = {
-  'Em Andamento': { cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800/40', dot: 'bg-blue-500' },
-  'Ganho':        { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300', dot: 'bg-emerald-500' },
-  'Perdido':      { cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-300', dot: 'bg-red-500' },
-  'Suspenso':     { cls: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300', dot: 'bg-amber-500' },
-  'Arquivado':    { cls: 'bg-muted text-muted-foreground border-border', dot: 'bg-muted-foreground' },
+const STATUS_CONFIG: Record<string, { cls: string; dot: string; barColor: string; icon: React.ElementType }> = {
+  'Em Andamento': { cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800/40', dot: 'bg-blue-500', barColor: '#3b82f6', icon: CheckCircle },
+  'Ganho':        { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300', dot: 'bg-emerald-500', barColor: '#10b981', icon: Trophy },
+  'Perdido':      { cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-300', dot: 'bg-red-500', barColor: '#ef4444', icon: XCircle },
+  'Suspenso':     { cls: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300', dot: 'bg-amber-500', barColor: '#f59e0b', icon: PauseCircle },
+  'Arquivado':    { cls: 'bg-muted text-muted-foreground border-border', dot: 'bg-muted-foreground', barColor: '#94a3b8', icon: Archive },
 };
 
 const parseMoney = (v: string): number | null => {
@@ -690,11 +691,19 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   const hasPartes  = partes.length > 0;
   const isValidCnj = CNJ_REGEX.test((formData.numero_processo || '').trim());
   const statusCfg  = STATUS_CONFIG[formData.status] || STATUS_CONFIG['Arquivado'];
+  const barColor   = statusCfg.barColor;
+  const StatusIcon = statusCfg.icon;
+  const clienteName = clienteSelecionado?.nome
+    || partes.find(p => p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT')?.nome;
 
-  // Alturas calculadas com base nos elementos fixos do modal:
-  // Header: ~73px | Tabs bar: ~53px | Footer: ~57px | Total chrome: ~183px
-  const MODAL_H    = '94vh';
-  const CONTENT_H  = 'calc(94vh - 183px)';
+  const infoStripVisible = !isNew && !!(
+    clienteName || formData.advogado_responsavel || formData.data_distribuicao ||
+    formData.valor_causa || formData.fase || movimentos.length > 0
+  );
+
+  // Alturas: Header ~73px | Info strip ~46px | Tabs bar ~53px | Footer ~57px
+  const MODAL_H   = '94vh';
+  const CONTENT_H = `calc(94vh - ${183 + (infoStripVisible ? 46 : 0)}px)`;
 
   return (
     <>
@@ -707,24 +716,39 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
 
           {/* ── Header ── */}
           <div className="relative overflow-hidden shrink-0">
-            <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-primary via-primary/80 to-primary/40" />
+            {/* Status-colored top accent */}
+            <div className="absolute top-0 left-0 right-0 h-1 transition-all duration-500"
+              style={{ background: `linear-gradient(90deg, ${barColor}, ${barColor}88, ${barColor}33)` }} />
             <div className="flex items-center justify-between px-6 py-4 bg-card border-b border-border/60">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-md shadow-primary/20 shrink-0">
-                  <Scale className="h-5 w-5 text-primary-foreground" />
+                {/* Icon with status color */}
+                <div className="h-11 w-11 rounded-xl flex items-center justify-center shadow-md shrink-0 transition-all duration-500"
+                  style={{ background: `linear-gradient(135deg, ${barColor}, ${barColor}bb)`, boxShadow: `0 4px 12px ${barColor}40` }}>
+                  <Scale className="h-5 w-5 text-white" />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2.5 flex-wrap">
-                    <h2 className="text-sm font-black text-foreground leading-none">{isNew ? 'Novo Processo' : 'Detalhes do Processo'}</h2>
+                    <h2 className="text-sm font-black text-foreground leading-none truncate max-w-[340px]">
+                      {isNew ? 'Novo Processo' : (formData.titulo_acao || formData.classe_cnj || 'Detalhes do Processo')}
+                    </h2>
                     {!isNew && formData.status && (
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${statusCfg.cls}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${statusCfg.dot}`} />{formData.status}
+                        <StatusIcon className="h-3 w-3 shrink-0" />{formData.status}
                       </span>
                     )}
                   </div>
-                  {formData.numero_processo && <p className="text-[11px] font-mono text-muted-foreground mt-0.5">{formData.numero_processo}</p>}
+                  {formData.numero_processo && (
+                    <p className="text-[11px] font-mono text-muted-foreground mt-0.5 flex items-center gap-1.5">
+                      <Hash className="h-2.5 w-2.5 shrink-0" />{formData.numero_processo}
+                    </p>
+                  )}
+                  {!isNew && clienteName && (
+                    <p className="text-[11px] text-muted-foreground/70 mt-0.5 flex items-center gap-1 truncate max-w-[360px]">
+                      <Users className="h-2.5 w-2.5 shrink-0" />{clienteName}
+                    </p>
+                  )}
                   {!isNew && processo?.ultima_consulta_api_at && (
-                    <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                    <p className="text-[10px] text-muted-foreground/40 mt-0.5">
                       Sync: {new Date(processo.ultima_consulta_api_at).toLocaleString('pt-BR', { day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit' })}
                       {fetchingData && ' · Atualizando...'}
                     </p>
@@ -733,6 +757,12 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {fetchingData && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                {formData.valor_causa && !isNew && (
+                  <span className="hidden lg:flex items-center gap-1 text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800/40">
+                    <DollarSign className="h-3.5 w-3.5 shrink-0" />
+                    {(() => { const n = parseFloat(formData.valor_causa.replace(/\./g,'').replace(',','.')); return isNaN(n) ? formData.valor_causa : n.toLocaleString('pt-BR',{maximumFractionDigits:0}); })()}
+                  </span>
+                )}
                 {formData.tribunal && (
                   <span className="hidden md:flex items-center gap-1.5 text-xs font-semibold text-muted-foreground bg-muted/60 px-2.5 py-1 rounded-lg border border-border/40">
                     <Building2 className="h-3.5 w-3.5" />{formData.tribunal}
@@ -742,20 +772,59 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
             </div>
           </div>
 
+          {/* ── Info Strip ── */}
+          {infoStripVisible && (
+            <div className="px-6 py-2.5 bg-muted/20 border-b border-border/30 shrink-0 flex items-center gap-4 flex-wrap">
+              {formData.advogado_responsavel && (
+                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <BadgeCheck className="h-3 w-3 text-blue-500 shrink-0" />
+                  {formData.advogado_responsavel.replace(/\s*\(OAB.*\)/i, '')}
+                </span>
+              )}
+              {formData.data_distribuicao && (
+                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <Calendar className="h-3 w-3 shrink-0" />
+                  {new Date(formData.data_distribuicao + 'T12:00:00').toLocaleDateString('pt-BR')}
+                </span>
+              )}
+              {formData.fase && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-800/40">
+                  {formData.fase}
+                </span>
+              )}
+              {formData.area && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/30 dark:text-sky-400 dark:border-sky-800/40">
+                  {formData.area}
+                </span>
+              )}
+              {movimentos.length > 0 && (
+                <button
+                  onClick={() => setActiveTab('movimentos')}
+                  className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary transition-colors font-medium"
+                >
+                  <Activity className="h-3 w-3 shrink-0" />
+                  {movimentos.length} movimentaç{movimentos.length === 1 ? 'ão' : 'ões'} →
+                </button>
+              )}
+            </div>
+          )}
+
           {/* ── Tabs ── */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            <div className="px-6 pt-3 pb-0 shrink-0 bg-card border-b border-border/40">
-              <TabsList className="h-9 bg-muted/50 rounded-xl p-1 gap-1">
-                <TabsTrigger value="processo" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm">
+            <div className="px-6 pt-3 pb-3 shrink-0 bg-card border-b border-border/40">
+              <TabsList className="h-9 bg-muted/40 rounded-xl p-1 gap-0.5 border border-border/30">
+                <TabsTrigger value="processo" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm data-[state=active]:bg-card font-semibold">
                   <Scale className="h-3.5 w-3.5" /> Processo
                 </TabsTrigger>
-                <TabsTrigger value="movimentos" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm">
-                  <Calendar className="h-3.5 w-3.5" /> Movimentos
+                <TabsTrigger value="movimentos" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm data-[state=active]:bg-card font-semibold">
+                  <Activity className="h-3.5 w-3.5" /> Movimentos
                   {movimentos.length > 0 && (
-                    <span className="ml-1 h-4 min-w-4 px-1 rounded-full bg-primary/15 text-primary text-[9px] font-black flex items-center justify-center">{movimentos.length}</span>
+                    <span className="ml-0.5 h-4 min-w-4 px-1 rounded-full bg-primary/15 text-primary text-[9px] font-black flex items-center justify-center border border-primary/15">
+                      {movimentos.length}
+                    </span>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="notificacoes" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm">
+                <TabsTrigger value="notificacoes" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm data-[state=active]:bg-card font-semibold">
                   <MessageSquare className="h-3.5 w-3.5" /> Notificações
                 </TabsTrigger>
               </TabsList>
@@ -943,13 +1012,16 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                 <div className="w-px bg-border/40 shrink-0" />
 
                 {/* Partes — largura responsiva, sem overflow */}
-                <div className="w-[300px] xl:w-[340px] shrink-0 flex flex-col overflow-hidden h-full bg-muted/10">
-                  <div className="px-4 pt-4 pb-3 border-b border-border/40 shrink-0 bg-card">
+                <div className="w-[300px] xl:w-[340px] shrink-0 flex flex-col overflow-hidden h-full bg-muted/5">
+                  <div className="px-4 pt-3.5 pb-3 border-b border-border/40 shrink-0 bg-card">
                     <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                         <Users className="h-3.5 w-3.5 text-primary" />
                       </div>
-                      <h3 className="text-[11px] font-black text-foreground uppercase tracking-widest">Partes</h3>
+                      <div>
+                        <h3 className="text-[11px] font-black text-foreground uppercase tracking-widest leading-none">Partes</h3>
+                        <p className="text-[10px] text-muted-foreground/50 leading-none mt-0.5">polo ativo e passivo</p>
+                      </div>
                       {hasPartes && (
                         <span className="ml-auto h-5 min-w-5 px-1.5 rounded-full bg-primary/10 text-primary text-[10px] font-black flex items-center justify-center border border-primary/15">
                           {partes.length}
@@ -994,10 +1066,25 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                       </Button>
                     </div>
                   ) : (
-                    <div className="space-y-2 pb-6">
-                      <p className="text-xs text-muted-foreground mb-4 font-medium">{movimentosEnriquecidos.length} movimentação(ões) · clique para detalhes</p>
+                    <div className="space-y-1.5 pb-6">
+                      {/* Summary bar */}
+                      <div className="flex items-center justify-between mb-4 pb-3 border-b border-border/30">
+                        <div className="flex items-center gap-2">
+                          <span className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                            <Activity className="h-3.5 w-3.5 text-primary" />
+                          </span>
+                          <div>
+                            <p className="text-xs font-bold text-foreground leading-none">{movimentosEnriquecidos.length} movimentaç{movimentosEnriquecidos.length === 1 ? 'ão' : 'ões'}</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">clique para ver detalhes</p>
+                          </div>
+                        </div>
+                        <Button variant="outline" size="sm" className="rounded-xl h-8 gap-1.5 text-xs border-border/60" onClick={() => handleRefreshStatus(false)} disabled={fetchingData || !isValidCnj}>
+                          {fetchingData ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                          Atualizar
+                        </Button>
+                      </div>
                       {movimentosEnriquecidos.map((mov, i) => (
-                        <div key={i} className="group flex items-start gap-3 p-3.5 rounded-2xl border border-border/40 bg-card hover:bg-accent/30 hover:border-border cursor-pointer transition-all duration-150 hover:shadow-sm"
+                        <div key={i} className="group flex items-start gap-3 p-3.5 rounded-2xl border border-border/30 bg-card hover:bg-accent/20 hover:border-border cursor-pointer transition-all duration-150 hover:shadow-sm"
                           onClick={() => { setSelectedMovimento(mov); setMovModalOpen(true); }}>
                           <div className="shrink-0 mt-0.5">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-bold border ${getCategoriaColor(mov.categoria)}`}>{mov.badge}</span>
@@ -1007,8 +1094,8 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{mov.descricao_humana}</p>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0 self-start">
-                            <span className="text-[11px] text-muted-foreground whitespace-nowrap">{mov.dataHora}</span>
-                            <ChevronRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                            <span className="text-[11px] text-muted-foreground/70 whitespace-nowrap bg-muted/50 px-2 py-0.5 rounded-md border border-border/30">{mov.dataHora}</span>
+                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/20 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
                           </div>
                         </div>
                       ))}
@@ -1041,13 +1128,14 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
           </Tabs>
 
           {/* ── Footer ── */}
-          <div className="flex items-center justify-between px-6 py-3.5 border-t border-border/60 bg-card shrink-0">
-            <div>
+          <div className="flex items-center justify-between px-6 py-3.5 border-t border-border/50 bg-card/95 backdrop-blur-sm shrink-0">
+            <div className="flex items-center gap-2">
               {!isNew && canDelete && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="sm" className="rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10 h-9 gap-1.5">
-                      <Trash2 className="h-3.5 w-3.5" /> Excluir
+                    <Button variant="ghost" size="sm" className="rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10 h-9 gap-1.5 px-3">
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Excluir</span>
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent className="rounded-2xl">
@@ -1059,15 +1147,28 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                   </AlertDialogContent>
                 </AlertDialog>
               )}
+              {activeTab === 'processo' && (
+                <Button variant="outline" size="sm" className="rounded-xl gap-1.5 h-9 border-border/60 text-xs" onClick={() => handleRefreshStatus(false)} disabled={fetchingData || !isValidCnj}>
+                  {fetchingData ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  {isNew ? 'Buscar DataJud' : 'Atualizar CNJ'}
+                </Button>
+              )}
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="rounded-xl gap-1.5 h-9 border-border/60" onClick={() => handleRefreshStatus(false)} disabled={fetchingData || !isValidCnj}>
-                {fetchingData ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                {isNew ? 'Buscar DataJud' : 'Atualizar'}
+              <Button variant="ghost" size="sm" className="rounded-xl h-9 text-muted-foreground hover:text-foreground" onClick={onClose}>
+                Cancelar
               </Button>
-              <Button variant="ghost" size="sm" className="rounded-xl h-9" onClick={onClose}>Cancelar</Button>
-              <Button size="sm" className="rounded-xl px-6 h-9 shadow-sm font-bold gap-1.5" onClick={handleSave} disabled={saving}>
-                {saving ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Salvando...</> : isNew ? 'Criar Processo' : 'Salvar'}
+              <Button
+                size="sm"
+                className="rounded-xl px-6 h-9 shadow-sm font-bold gap-1.5 transition-all"
+                style={{ background: barColor, boxShadow: `0 2px 8px ${barColor}50` }}
+                onClick={handleSave}
+                disabled={saving}
+              >
+                {saving
+                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Salvando...</>
+                  : isNew ? <><Plus className="h-3.5 w-3.5" /> Criar Processo</> : <><CheckCircle2 className="h-3.5 w-3.5" /> Salvar</>
+                }
               </Button>
             </div>
           </div>
