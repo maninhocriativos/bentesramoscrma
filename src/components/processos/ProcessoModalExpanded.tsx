@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Trash2, Loader2, Users, BadgeCheck, RefreshCw, MessageSquare,
   Building2, Scale, Calendar, DollarSign, Plus, X,
@@ -445,6 +445,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   const [leads,             setLeads]             = useState<LeadName[]>(leadsInit);
   const [assuntoPickerOpen, setAssuntoPickerOpen] = useState(false);
   const [novoClienteOpen,   setNovoClienteOpen]   = useState(false);
+  const syncedThisSession = useRef<Set<string>>(new Set());
 
   useEffect(() => { setLeads(leadsInit); }, [leadsInit]);
   const movimentosEnriquecidos = useMemo(() => enrichMovements(movimentos), [movimentos]);
@@ -545,7 +546,11 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
       const neverSynced = !processo.ultima_consulta_api_at;
       const lastCheck = processo.ultima_consulta_api_at ? new Date(processo.ultima_consulta_api_at).getTime() : 0;
       const isStale = Date.now() - lastCheck > 3 * 24 * 60 * 60 * 1000;
-      if (hasValidCnj && (neverSynced || isStale) && !fetchingData) handleRefreshStatus(true);
+      const alreadySynced = syncedThisSession.current.has(processo.id);
+      if (hasValidCnj && (neverSynced || isStale) && !fetchingData && !alreadySynced) {
+        syncedThisSession.current.add(processo.id);
+        handleRefreshStatus(true);
+      }
     }
   }, [processo?.id, isOpen, draftHydrated, autoFetchDone, isNew]);
 
@@ -900,7 +905,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                           <Field label="Número CNJ">
                             <div className="relative">
                               <Input value={formData.numero_processo} onChange={e => update('numero_processo', e.target.value)} className="rounded-xl bg-card font-mono text-sm pr-9 h-10" placeholder="0000000-00.0000.0.00.0000" />
-                              {fetchingData  && <Loader2      className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-primary" />}
+                              {fetchingData && isNew && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-primary" />}
                               {!fetchingData && isValidCnj && <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />}
                             </div>
                             {isNew && <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1"><AlertTriangle className="h-2.5 w-2.5" /> Digite para carregar automaticamente</p>}
