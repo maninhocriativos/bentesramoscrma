@@ -591,7 +591,11 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
           valor_causa:          fields.valorCausa != null ? fmtMoney(fields.valorCausa) : prev.valor_causa,
           data_distribuicao:    fields.dataDistrib ? fields.dataDistrib.slice(0, 10) : prev.data_distribuicao,
         }));
-        if (proc.partes?.length) setPartes(proc.partes);
+        if (proc.partes?.length) setPartes(prev => {
+          const apiNames = new Set(proc.partes.map((p: any) => (p.nome || '').toLowerCase().trim()));
+          const manual = prev.filter(p => !apiNames.has((p.nome || '').toLowerCase().trim()));
+          return [...proc.partes, ...manual];
+        });
         if (proc.movimentos?.length) setMovimentos(proc.movimentos.slice(0, 100));
         toast.success('Dados carregados!', { description: fields.classe || proc.tribunal });
       } else { toast.error('Processo não encontrado', { description: data?.mensagem }); }
@@ -610,7 +614,13 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
         const proc = data.processo; const fields = extractFromProc(proc);
         const toDate = (v?: string | null): string => { if (!v) return ''; if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10); const pt = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if (pt) return `${pt[3]}-${pt[2]}-${pt[1]}`; try { const d = new Date(v); if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10); } catch { /**/ } return ''; };
         const newPartes = proc.partes || []; const newMovs = (proc.movimentos || []).slice(0, 100);
-        setPartes(newPartes); setMovimentos(newMovs);
+        setPartes((prev: ProcessoParte[]) => {
+          if (!newPartes.length) return prev;
+          const apiNames = new Set(newPartes.map((p: any) => (p.nome || '').toLowerCase().trim()));
+          const manual = prev.filter((p: ProcessoParte) => !apiNames.has((p.nome || '').toLowerCase().trim()));
+          return [...newPartes, ...manual];
+        });
+        setMovimentos(newMovs);
         setFormData(prev => ({ ...prev,
           titulo_acao:       fields.classe          || prev.titulo_acao,
           status:            mapStatus(proc.status),
@@ -748,16 +758,13 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
     formData.valor_causa || formData.fase || movimentos.length > 0
   );
 
-  // Alturas: Header ~73px | Info strip ~46px | Tabs bar ~53px | Footer ~57px
-  const MODAL_H   = '94vh';
-  const CONTENT_H = `calc(94vh - ${183 + (infoStripVisible ? 46 : 0)}px)`;
 
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent
           className="w-[96vw] max-w-[1200px] rounded-2xl overflow-hidden flex flex-col p-0 gap-0"
-          style={{ height: MODAL_H, maxHeight: MODAL_H }}
+          style={{ height: '94vh', maxHeight: '94vh' }}
         >
           <DialogHeader className="sr-only"><DialogTitle>{isNew ? 'Novo Processo' : 'Detalhes do Processo'}</DialogTitle></DialogHeader>
 
@@ -878,9 +885,9 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
             </div>
 
             {/* ── TAB PROCESSO ── */}
-            <TabsContent value="processo" className="flex-1 min-h-0 mt-0 overflow-hidden">
+            <TabsContent value="processo" className="flex-1 min-h-0 mt-0 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col">
               {/* Layout: form à esquerda | divider | partes à direita */}
-              <div className="flex overflow-hidden" style={{ height: CONTENT_H }}>
+              <div className="flex flex-1 min-h-0 overflow-hidden">
 
                 {/* Form — scroll interno */}
                 <ScrollArea className="flex-1 min-w-0 h-full">
@@ -1157,10 +1164,33 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                       ) : partes.map((parte, i) => (
                         <ParteCard key={i} parte={parte} index={i}
                           onUpdate={(idx, field, val) => setPartes(prev => prev.map((p, j) => j === idx ? { ...p, [field]: val } : p))}
-                          onRemove={idx => setPartes(prev => prev.filter((_, j) => j !== idx))}
+                          onRemove={idx => {
+                            const removed = partes[idx];
+                            setPartes(prev => prev.filter((_, j) => j !== idx));
+                            if (processo?.id && removed?.nome) {
+                              supabase.from('processo_partes').delete()
+                                .eq('processo_id', processo.id).eq('nome', removed.nome)
+                                .catch(console.error);
+                            }
+                          }}
                         />
                       ))}
-                      <AddParteForm onAdd={parte => setPartes(prev => [...prev, parte])} />
+                      <AddParteForm onAdd={parte => {
+                        setPartes(prev => [...prev, parte]);
+                        if (processo?.id) {
+                          supabase.from('processo_partes').insert({
+                            processo_id: processo.id,
+                            nome: parte.nome,
+                            tipo: parte.tipo,
+                            polo: parte.polo || null,
+                            tipo_pessoa: parte.tipoPessoa || null,
+                            documento: parte.documento || null,
+                            celular: parte.celular || null,
+                            telefone_adicional: (parte as any).telefone_adicional || null,
+                            advogados: parte.advogados || null,
+                          }).catch(console.error);
+                        }
+                      }} />
                     </div>
                   </ScrollArea>
                 </div>
