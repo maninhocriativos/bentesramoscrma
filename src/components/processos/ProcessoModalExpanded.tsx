@@ -43,10 +43,10 @@ interface ProcessoModalExpandedProps {
 type ProcessoFormData = {
   numero_processo: string; numero_complementar: string; titulo_acao: string;
   status: ProcessoStatus; advogado_responsavel: string; cliente_id: string;
-  cpf_cliente: string; tribunal: string; vara_comarca: string; assunto: string;
-  valor_causa: string; orgao_julgador: string; grau: string; origem_cliente: string;
-  descricao: string; marcadores: string; area: string; fase: string;
-  classe_cnj: string; assunto_cnj: string; segredo_justica: boolean;
+  nome_cliente: string; cpf_cliente: string; tribunal: string; vara_comarca: string;
+  assunto: string; valor_causa: string; orgao_julgador: string; grau: string;
+  origem_cliente: string; descricao: string; marcadores: string; area: string;
+  fase: string; classe_cnj: string; assunto_cnj: string; segredo_justica: boolean;
   data_distribuicao: string; data_citacao: string; data_recebimento: string;
   data_arquivamento: string; data_encerramento: string; valor_provisionado: string;
   probabilidade: string; monitorar_push: boolean; tipo_orgao_julgador: string;
@@ -70,8 +70,8 @@ const DRAFT_MAX_AGE = 1000 * 60 * 60 * 24;
 const createEmptyForm = (): ProcessoFormData => ({
   numero_processo: '', numero_complementar: '', titulo_acao: '',
   status: 'Em Andamento', advogado_responsavel: '', cliente_id: '',
-  cpf_cliente: '', tribunal: '', vara_comarca: '', assunto: '',
-  valor_causa: '', orgao_julgador: '', grau: '', origem_cliente: '',
+  nome_cliente: '', cpf_cliente: '', tribunal: '', vara_comarca: '',
+  assunto: '', valor_causa: '', orgao_julgador: '', grau: '', origem_cliente: '',
   descricao: '', marcadores: '', area: '', fase: '', classe_cnj: '',
   assunto_cnj: '', segredo_justica: false, data_distribuicao: '',
   data_citacao: '', data_recebimento: '', data_arquivamento: '',
@@ -94,6 +94,12 @@ const parseMoney = (v: string): number | null => {
   return isNaN(n) ? null : n;
 };
 
+const fmtMoney = (v: number | string | null | undefined): string => {
+  if (v == null || v === '') return '';
+  const n = Number(v);
+  return isNaN(n) ? '' : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 const parseDate = (v: string): string | null => {
   if (!v || v.trim() === '') return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
@@ -110,9 +116,12 @@ const normalizarCNJ = (numero: string | null | undefined): string | null => {
 };
 
 const extractFromProc = (proc: any) => ({
-  classe:        proc.classe        || proc.titulo_acao   || proc.classeNome   || '',
+  classe:        proc.classe        || proc.titulo_acao    || proc.classeNome   || '',
   tribunal:      proc.tribunal      || proc.sigla_tribunal || '',
-  orgaoJulgador: proc.orgaoJulgador || proc.orgao_julgador || proc.vara_comarca || proc.orgao || '',
+  // orgaoJulgador = o órgão específico (vara, turma, câmara)
+  orgaoJulgador: proc.orgaoJulgador || proc.orgao_julgador || proc.orgao || '',
+  // varaComarca = comarca/circunscrição (campo separado do órgão)
+  varaComarca:   proc.vara_comarca  || proc.comarca        || proc.varaComarca || '',
   grau:          proc.grau          || proc.grauFormatado  || '',
   assunto:       proc.assuntos?.[0]?.nome || proc.assunto || '',
   assuntoCnj:    proc.assuntos?.[0]?.codigo?.toString() || proc.assunto_cnj || '',
@@ -474,11 +483,12 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
         numero_processo: processo.numero_processo || '', numero_complementar: p.numero_complementar || '',
         titulo_acao: processo.titulo_acao || '', status: (processo.status as ProcessoStatus) || 'Em Andamento',
         advogado_responsavel: processo.advogado_responsavel || '', cliente_id: processo.cliente_id || '',
+        nome_cliente: p.nome_cliente || '',
         cpf_cliente: processo.cpf_cliente || '', tribunal: processo.tribunal || '',
-        vara_comarca: processo.vara_comarca || processo.orgao_julgador || '',
+        vara_comarca: processo.vara_comarca || '',
         assunto: processo.assunto || '',
-        valor_causa: processo.valor_causa ? processo.valor_causa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '',
-        orgao_julgador: processo.orgao_julgador || processo.vara_comarca || '', grau: processo.grau || '',
+        valor_causa: fmtMoney(processo.valor_causa),
+        orgao_julgador: processo.orgao_julgador || '', grau: processo.grau || '',
         origem_cliente: p.origem_cliente || '', descricao: p.descricao || '', marcadores: p.marcadores || '',
         area: p.area || '', fase: p.fase || '', classe_cnj: processo.classe_cnj || processo.titulo_acao || '',
         assunto_cnj: p.assunto_cnj || '', segredo_justica: p.segredo_justica || false,
@@ -487,7 +497,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
         data_recebimento: p.data_recebimento ? p.data_recebimento.slice(0, 10) : '',
         data_arquivamento: p.data_arquivamento ? p.data_arquivamento.slice(0, 10) : '',
         data_encerramento: p.data_encerramento ? p.data_encerramento.slice(0, 10) : '',
-        valor_provisionado: p.valor_provisionado ? String(p.valor_provisionado) : '',
+        valor_provisionado: fmtMoney(p.valor_provisionado),
         probabilidade: p.probabilidade || '', monitorar_push: p.monitorar_push ?? true,
         tipo_orgao_julgador: p.tipo_orgao_julgador || '', sistema_judicial: p.sistema_judicial || '',
         complemento_enderecamento: p.complemento_enderecamento || '',
@@ -564,7 +574,23 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
         let clienteId = '';
         if (autor?.nome) { const norm = autor.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); const match = leads.find(l => { const ln = (l.nome || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); return ln.includes(norm) || norm.includes(ln); }); if (match) clienteId = match.id; }
         const adv = autor?.advogados?.[0];
-        setFormData(prev => ({ ...prev, titulo_acao: fields.classe || prev.titulo_acao, status: mapStatus(proc.status), cliente_id: clienteId || prev.cliente_id, advogado_responsavel: adv ? (adv.oab ? `${adv.nome} (${adv.oab})` : adv.nome) : prev.advogado_responsavel, tribunal: fields.tribunal || prev.tribunal, orgao_julgador: fields.orgaoJulgador || prev.orgao_julgador, vara_comarca: fields.orgaoJulgador || prev.vara_comarca, grau: fields.grau || prev.grau, assunto: fields.assunto || prev.assunto, assunto_cnj: fields.assuntoCnj || prev.assunto_cnj, classe_cnj: fields.classeCnj || prev.classe_cnj, valor_causa: fields.valorCausa?.toString() || prev.valor_causa, data_distribuicao: fields.dataDistrib ? fields.dataDistrib.slice(0, 10) : prev.data_distribuicao }));
+        const leadNome = clienteId ? leads.find(l => l.id === clienteId)?.nome : (autor?.nome || '');
+        setFormData(prev => ({ ...prev,
+          titulo_acao:          fields.classe          || prev.titulo_acao,
+          status:               mapStatus(proc.status),
+          cliente_id:           clienteId              || prev.cliente_id,
+          nome_cliente:         leadNome               || autor?.nome || prev.nome_cliente,
+          advogado_responsavel: adv ? (adv.oab ? `${adv.nome} (${adv.oab})` : adv.nome) : prev.advogado_responsavel,
+          tribunal:             fields.tribunal        || prev.tribunal,
+          orgao_julgador:       fields.orgaoJulgador   || prev.orgao_julgador,
+          vara_comarca:         fields.varaComarca     || prev.vara_comarca,
+          grau:                 fields.grau            || prev.grau,
+          assunto:              fields.assunto         || prev.assunto,
+          assunto_cnj:          fields.assuntoCnj      || prev.assunto_cnj,
+          classe_cnj:           fields.classeCnj       || prev.classe_cnj,
+          valor_causa:          fields.valorCausa != null ? fmtMoney(fields.valorCausa) : prev.valor_causa,
+          data_distribuicao:    fields.dataDistrib ? fields.dataDistrib.slice(0, 10) : prev.data_distribuicao,
+        }));
         if (proc.partes?.length) setPartes(proc.partes);
         if (proc.movimentos?.length) setMovimentos(proc.movimentos.slice(0, 100));
         toast.success('Dados carregados!', { description: fields.classe || proc.tribunal });
@@ -585,9 +611,29 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
         const toDate = (v?: string | null): string => { if (!v) return ''; if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10); const pt = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if (pt) return `${pt[3]}-${pt[2]}-${pt[1]}`; try { const d = new Date(v); if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10); } catch { /**/ } return ''; };
         const newPartes = proc.partes || []; const newMovs = (proc.movimentos || []).slice(0, 100);
         setPartes(newPartes); setMovimentos(newMovs);
-        setFormData(prev => ({ ...prev, titulo_acao: fields.classe || prev.titulo_acao, status: mapStatus(proc.status), tribunal: fields.tribunal || prev.tribunal, orgao_julgador: fields.orgaoJulgador || prev.orgao_julgador, vara_comarca: fields.orgaoJulgador || prev.vara_comarca, grau: fields.grau || prev.grau, assunto: fields.assunto || prev.assunto, assunto_cnj: fields.assuntoCnj || prev.assunto_cnj, classe_cnj: fields.classeCnj || prev.classe_cnj, valor_causa: fields.valorCausa?.toString() || prev.valor_causa, data_distribuicao: toDate(fields.dataDistrib) || prev.data_distribuicao }));
+        setFormData(prev => ({ ...prev,
+          titulo_acao:       fields.classe          || prev.titulo_acao,
+          status:            mapStatus(proc.status),
+          tribunal:          fields.tribunal        || prev.tribunal,
+          orgao_julgador:    fields.orgaoJulgador   || prev.orgao_julgador,
+          vara_comarca:      fields.varaComarca     || prev.vara_comarca,
+          grau:              fields.grau            || prev.grau,
+          assunto:           fields.assunto         || prev.assunto,
+          assunto_cnj:       fields.assuntoCnj      || prev.assunto_cnj,
+          classe_cnj:        fields.classeCnj       || prev.classe_cnj,
+          valor_causa:       fields.valorCausa != null ? fmtMoney(fields.valorCausa) : prev.valor_causa,
+          data_distribuicao: toDate(fields.dataDistrib) || prev.data_distribuicao,
+        }));
         if (processo?.id) {
-          await supabase.from('processos').update({ titulo_acao: fields.classe || null, status: mapStatus(proc.status), tribunal: fields.tribunal || null, orgao_julgador: fields.orgaoJulgador || null, vara_comarca: fields.orgaoJulgador || null, assunto: fields.assunto || null, assunto_cnj: fields.assuntoCnj || null, classe_cnj: fields.classeCnj || null, valor_causa: fields.valorCausa || null, partes_json: newPartes.length > 0 ? newPartes : null, movimentos_json: newMovs.length > 0 ? newMovs : null, ultima_consulta_api_at: new Date().toISOString(), data_ultima_atualizacao: new Date().toISOString() }).eq('id', processo.id);
+          await supabase.from('processos').update({
+            titulo_acao: fields.classe || null, status: mapStatus(proc.status),
+            tribunal: fields.tribunal || null, orgao_julgador: fields.orgaoJulgador || null,
+            vara_comarca: fields.varaComarca || null, assunto: fields.assunto || null,
+            assunto_cnj: fields.assuntoCnj || null, classe_cnj: fields.classeCnj || null,
+            valor_causa: fields.valorCausa || null,
+            partes_json: newPartes.length > 0 ? newPartes : null, movimentos_json: newMovs.length > 0 ? newMovs : null,
+            ultima_consulta_api_at: new Date().toISOString(), data_ultima_atualizacao: new Date().toISOString(),
+          }).eq('id', processo.id);
           fetchProcessos();
         }
         if (!silent) toast.success('Atualizado!', { description: `${newMovs.length} movimentações · ${newPartes.length} partes` });
@@ -600,8 +646,9 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
     setSaving(true);
     try {
       const resolvedClienteId = formData.cliente_id === '__none__' ? null : formData.cliente_id || null;
-      let nomeCliente: string | null = null;
-      if (resolvedClienteId) { const l = leads.find(l => l.id === resolvedClienteId); if (l?.nome) nomeCliente = l.nome; }
+      // Priority: manual field > CRM lead > polo ativo
+      let nomeCliente: string | null = formData.nome_cliente?.trim() || null;
+      if (!nomeCliente && resolvedClienteId) { const l = leads.find(l => l.id === resolvedClienteId); if (l?.nome) nomeCliente = l.nome; }
       if (!nomeCliente && partes.length > 0) { const autor = partes.find(p => p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT'); if (autor?.nome) nomeCliente = autor.nome; }
 
       const data = {
@@ -878,23 +925,55 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                         <Field label="Descrição / Anotações">
                           <Textarea value={formData.descricao} onChange={e => update('descricao', e.target.value)} className="rounded-xl bg-card min-h-[60px] text-sm resize-none" placeholder="Anotações internas..." />
                         </Field>
+                        {/* Nome do Cliente — campo principal */}
+                        <Field label="Nome do Cliente">
+                          <div className="flex gap-2">
+                            <Input
+                              value={formData.nome_cliente}
+                              onChange={e => update('nome_cliente', e.target.value)}
+                              className="rounded-xl bg-card h-10 flex-1"
+                              placeholder="Nome do cliente (manual ou via CRM)"
+                            />
+                            {clienteSelecionado?.nome && formData.nome_cliente !== clienteSelecionado.nome && (
+                              <Button type="button" variant="outline" size="sm"
+                                className="h-10 px-3 rounded-xl text-xs shrink-0 gap-1 border-primary/30 text-primary hover:bg-primary/5"
+                                onClick={() => update('nome_cliente', clienteSelecionado.nome)}>
+                                ← CRM
+                              </Button>
+                            )}
+                          </div>
+                          {clienteSelecionado?.nome && (
+                            <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+                              <Users className="h-2.5 w-2.5 text-primary shrink-0" />
+                              CRM vinculado: <span className="font-semibold text-foreground/70">{clienteSelecionado.nome}</span>
+                            </p>
+                          )}
+                        </Field>
+
                         <Row2>
-                          <Field label="Marcadores">
-                            <Input value={formData.marcadores} onChange={e => update('marcadores', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Separados por vírgula" />
-                          </Field>
-                          <Field label="Pasta do Cliente">
+                          <Field label="Vincular ao CRM">
                             <div className="space-y-1.5">
-                              <Select value={formData.cliente_id || '__none__'} onValueChange={v => update('cliente_id', v === '__none__' ? '' : v)}>
+                              <Select
+                                value={formData.cliente_id || '__none__'}
+                                onValueChange={v => {
+                                  const id = v === '__none__' ? '' : v;
+                                  const lead = id ? leads.find(l => l.id === id) : null;
+                                  setFormData(prev => ({ ...prev, cliente_id: id, nome_cliente: lead?.nome || prev.nome_cliente }));
+                                }}
+                              >
                                 <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="__none__">Nenhum</SelectItem>
-                                  {leads.map(l => <SelectItem key={l.id} value={l.id}>{l.nome}{l.telefone ? ` (${l.telefone})` : ''}</SelectItem>)}
+                                  <SelectItem value="__none__">Não vincular</SelectItem>
+                                  {leads.map(l => <SelectItem key={l.id} value={l.id}>{l.nome}{l.telefone ? ` · ${l.telefone}` : ''}</SelectItem>)}
                                 </SelectContent>
                               </Select>
                               <button type="button" onClick={() => setNovoClienteOpen(true)} className="flex items-center gap-1.5 text-[11px] text-primary hover:text-primary/80 font-semibold transition-colors">
-                                <UserPlus className="h-3 w-3" /> Criar novo cliente e vincular
+                                <UserPlus className="h-3 w-3" /> Criar novo e vincular
                               </button>
                             </div>
+                          </Field>
+                          <Field label="Marcadores">
+                            <Input value={formData.marcadores} onChange={e => update('marcadores', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Separados por vírgula" />
                           </Field>
                         </Row2>
                       </FieldGroup>
@@ -940,10 +1019,24 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                             </Select>
                           </Field>
                         </Row2>
-                        <Row2>
-                          <Field label="Vara / Comarca"><Input value={formData.vara_comarca} onChange={e => update('vara_comarca', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Vara" /></Field>
-                          <Field label="Órgão Julgador"><Input value={formData.orgao_julgador} onChange={e => update('orgao_julgador', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Ex: 2ª Vara Cível" /></Field>
-                        </Row2>
+                        <Field label="Vara / Comarca">
+                          <Input
+                            value={formData.vara_comarca}
+                            onChange={e => update('vara_comarca', e.target.value)}
+                            className="rounded-xl bg-card h-10"
+                            placeholder="Ex: Comarca de Manaus"
+                            title={formData.vara_comarca}
+                          />
+                        </Field>
+                        <Field label="Órgão Julgador">
+                          <Input
+                            value={formData.orgao_julgador}
+                            onChange={e => update('orgao_julgador', e.target.value)}
+                            className="rounded-xl bg-card h-10"
+                            placeholder="Ex: 2ª Vara Cível"
+                            title={formData.orgao_julgador}
+                          />
+                        </Field>
                         <Row2>
                           <Field label="Sistema Judicial"><Input value={formData.sistema_judicial} onChange={e => update('sistema_judicial', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Ex: PJe, e-SAJ" /></Field>
                           <Field label="Complemento"><Input value={formData.complemento_enderecamento} onChange={e => update('complemento_enderecamento', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Complemento" /></Field>
