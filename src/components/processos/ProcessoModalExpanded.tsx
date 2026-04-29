@@ -97,7 +97,7 @@ const parseMoney = (v: string): number | null => {
 const fmtMoney = (v: number | string | null | undefined): string => {
   if (v == null || v === '') return '';
   const n = Number(v);
-  return isNaN(n) ? '' : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return isNaN(n) || n === 0 ? '' : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 const parseDate = (v: string): string | null => {
@@ -542,10 +542,10 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
         } catch (err) { console.error('Erro ao carregar dados:', err); }
       })();
       const hasValidCnj = processo.numero_processo && CNJ_REGEX.test(processo.numero_processo.trim());
-      const isMissingData = !processo.classe_cnj || !processo.orgao_julgador || !processo.assunto_cnj;
+      const neverSynced = !processo.ultima_consulta_api_at;
       const lastCheck = processo.ultima_consulta_api_at ? new Date(processo.ultima_consulta_api_at).getTime() : 0;
       const isStale = Date.now() - lastCheck > 3 * 24 * 60 * 60 * 1000;
-      if (hasValidCnj && (isMissingData || isStale) && !fetchingData) handleRefreshStatus(true);
+      if (hasValidCnj && (neverSynced || isStale) && !fetchingData) handleRefreshStatus(true);
     }
   }, [processo?.id, isOpen, draftHydrated, autoFetchDone, isNew]);
 
@@ -1059,16 +1059,38 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                       <FieldGroup>
                         <Row2>
                           <Field label="Área">
-                            <Select value={formData.area || '__none__'} onValueChange={v => update('area', v === '__none__' ? '' : v)}>
-                              <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                              <SelectContent><SelectItem value="__none__">Selecione</SelectItem>{['Cível','Trabalhista','Criminal','Tributário','Previdenciário','Administrativo','Consumidor','Família'].map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent>
-                            </Select>
+                            {(() => {
+                              const areaOpts = ['Cível','Trabalhista','Criminal','Tributário','Previdenciário','Administrativo','Consumidor','Família'];
+                              const currentArea = formData.area || '';
+                              const hasExtra = currentArea && !areaOpts.includes(currentArea);
+                              return (
+                                <Select value={currentArea || '__none__'} onValueChange={v => update('area', v === '__none__' ? '' : v)}>
+                                  <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">Selecione</SelectItem>
+                                    {hasExtra && <SelectItem value={currentArea}>{currentArea}</SelectItem>}
+                                    {areaOpts.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              );
+                            })()}
                           </Field>
                           <Field label="Fase">
-                            <Select value={formData.fase || '__none__'} onValueChange={v => update('fase', v === '__none__' ? '' : v)}>
-                              <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                              <SelectContent><SelectItem value="__none__">Selecione</SelectItem>{['Conhecimento','Execução','Recursal','Cumprimento de Sentença','Liquidação'].map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
-                            </Select>
+                            {(() => {
+                              const faseOpts = ['Conhecimento','Execução','Recursal','Cumprimento de Sentença','Liquidação'];
+                              const currentFase = formData.fase || '';
+                              const hasExtra = currentFase && !faseOpts.includes(currentFase);
+                              return (
+                                <Select value={currentFase || '__none__'} onValueChange={v => update('fase', v === '__none__' ? '' : v)}>
+                                  <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">Selecione</SelectItem>
+                                    {hasExtra && <SelectItem value={currentFase}>{currentFase}</SelectItem>}
+                                    {faseOpts.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              );
+                            })()}
                           </Field>
                         </Row2>
                         <Row2>
