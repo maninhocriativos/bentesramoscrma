@@ -14,7 +14,7 @@ function normalizarCNJ(numero: string | null | undefined): string | null {
   return digits.length === 20 ? digits : null;
 }
 
-export function useProcessos() {
+export function useProcessos({ withRealtime = true }: { withRealtime?: boolean } = {}) {
   const [processos, setProcessos] = useState<Processo[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
@@ -57,8 +57,8 @@ export function useProcessos() {
     fetchProcessos();
   }, [user, fetchProcessos]);
 
-  // Realtime — canal criado UMA vez com []
   useEffect(() => {
+    if (!withRealtime) return;
     const channel = supabase
       .channel('processos-realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'processos' }, (payload) => {
@@ -84,7 +84,7 @@ export function useProcessos() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [withRealtime]);
 
   const createProcesso = async (processo: Partial<Omit<Processo, 'id' | 'created_at'>>) => {
     // ✅ Sempre preenche cnj_normalizado ao criar

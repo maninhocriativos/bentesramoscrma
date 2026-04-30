@@ -116,16 +116,14 @@ const normalizarCNJ = (numero: string | null | undefined): string | null => {
 };
 
 const extractFromProc = (proc: any) => ({
-  classe:        proc.classe        || proc.titulo_acao    || proc.classeNome   || '',
+  classe:        proc.classe        || proc.titulo_acao    || proc.classeNome   || proc.classe_cnj || '',
   tribunal:      proc.tribunal      || proc.sigla_tribunal || '',
-  // orgaoJulgador = o órgão específico (vara, turma, câmara)
   orgaoJulgador: proc.orgaoJulgador || proc.orgao_julgador || proc.orgao || '',
-  // varaComarca = comarca/circunscrição (campo separado do órgão)
   varaComarca:   proc.vara_comarca  || proc.comarca        || proc.varaComarca || '',
   grau:          proc.grau          || proc.grauFormatado  || '',
   assunto:       proc.assuntos?.[0]?.nome || proc.assunto || '',
   assuntoCnj:    proc.assuntos?.[0]?.codigo?.toString() || proc.assunto_cnj || '',
-  classeCnj:     proc.classe        || proc.classeCodigo   || '',
+  classeCnj:     proc.classe        || proc.classe_cnj     || proc.classeCodigo || '',
   valorCausa:    proc.valorCausa    || proc.valor_causa    || null,
   dataDistrib:   proc.dataDistribuicao || proc.data_distribuicao || proc.dataAjuizamento || '',
 });
@@ -427,12 +425,13 @@ function AddParteForm({ onAdd }: { onAdd: (parte: ProcessoParte) => void }) {
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false, canDelete = false, leads: leadsInit }: ProcessoModalExpandedProps) {
-  const { createProcesso, updateProcesso, deleteProcesso, fetchProcessos } = useProcessos();
+  const { createProcesso, updateProcesso, deleteProcesso, fetchProcessos } = useProcessos({ withRealtime: false });
 
   const [formData,          setFormData]          = useState<ProcessoFormData>(createEmptyForm());
   const [partes,            setPartes]            = useState<ProcessoParte[]>([]);
   const [movimentos,        setMovimentos]        = useState<ProcessoMovimento[]>([]);
   const [saving,            setSaving]            = useState(false);
+  const [saveError,         setSaveError]         = useState<string | null>(null);
   const [fetchingData,      setFetchingData]      = useState(false);
   const [sendingNotif,      setSendingNotif]      = useState(false);
   const [activeTab,         setActiveTab]         = useState('processo');
@@ -659,6 +658,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       const resolvedClienteId = formData.cliente_id === '__none__' ? null : formData.cliente_id || null;
       // Priority: manual field > CRM lead > polo ativo
@@ -710,11 +710,21 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
       let savedId: string | null = null;
       if (isNew) {
         const result = await createProcesso(data);
-        if (result?.error) return;
+        if (result?.error) {
+          const msg = (result.error as any).message || 'Erro ao criar processo';
+          setSaveError(msg);
+          toast.error(msg);
+          return;
+        }
         savedId = (result?.data as any)?.id || null;
       } else if (processo) {
         const result = await updateProcesso(processo.id, data);
-        if (result?.error) return;
+        if (result?.error) {
+          const msg = (result.error as any).message || 'Erro ao atualizar processo';
+          setSaveError(msg);
+          toast.error(msg);
+          return;
+        }
         savedId = processo.id;
       }
 
@@ -727,7 +737,9 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
       clearDraft();
       onClose();
     } catch (err: any) {
-      toast.error('Erro inesperado', { description: err?.message });
+      const msg = err?.message || 'Erro inesperado';
+      setSaveError(msg);
+      toast.error('Erro inesperado', { description: msg });
     } finally { setSaving(false); }
   };
 
@@ -1278,6 +1290,12 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
           </Tabs>
 
           {/* ── Footer ── */}
+          {saveError && (
+            <div className="px-6 py-2 bg-destructive/10 border-t border-destructive/20 shrink-0 flex items-center gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
+              <span className="text-xs text-destructive font-medium">{saveError}</span>
+            </div>
+          )}
           <div className="flex items-center justify-between px-6 py-3.5 border-t border-border/50 bg-card/95 backdrop-blur-sm shrink-0">
             <div className="flex items-center gap-2">
               {!isNew && canDelete && (

@@ -69,8 +69,9 @@ Responda APENAS as linhas DATA | DESCRIÇÃO | VALOR:`,
   });
 
   if (!response.ok) {
-    console.error("Erro analisarTextoPuro:", response.status, await response.text());
-    return "";
+    const errText = await response.text();
+    console.error("Erro analisarTextoPuro:", response.status, errText);
+    throw new Error(`Anthropic API falhou (${response.status}): ${errText.substring(0, 300)}`);
   }
   const result = await response.json();
   return result.content?.[0]?.text || "";
@@ -125,8 +126,9 @@ Responda APENAS as linhas DATA | DESCRIÇÃO | VALOR:`,
   });
 
   if (!response.ok) {
-    console.error("Erro extrairDoPdf:", response.status, await response.text());
-    return "";
+    const errText = await response.text();
+    console.error("Erro extrairDoPdf:", response.status, errText);
+    throw new Error(`Anthropic API falhou (${response.status}): ${errText.substring(0, 300)}`);
   }
   const result = await response.json();
   return result.content?.[0]?.text || "";
@@ -411,8 +413,8 @@ Deno.serve(async (req) => {
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
-      return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY não configurada" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY não configurada no servidor" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -483,7 +485,7 @@ Deno.serve(async (req) => {
     if (!linhasAnalisadas.trim()) {
       return new Response(
         JSON.stringify({ error: "Não foi possível extrair lançamentos. Verifique se o arquivo é um extrato bancário válido." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -558,7 +560,7 @@ Deno.serve(async (req) => {
   } catch (e: any) {
     console.error("Erro geral:", e.message, e.stack);
     return new Response(JSON.stringify({ error: e.message || "Erro desconhecido" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
