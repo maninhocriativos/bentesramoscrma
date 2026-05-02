@@ -484,14 +484,14 @@ async function reativarConversasAtivas(supabase: any, zapiConfig: any): Promise<
 
       if (!ultimaFoiDoAgente || !passouDuasHoras || !clienteJaRespondeu) continue;
 
-      // Não reativar se já existe follow-up automático ativo
-      const { data: fuAtivo } = await supabase
+      // Não reativar se já existe QUALQUER registro no pipeline de follow-up
+      // (ativo = processFollowups cuida; pausado/responded/nutricao = ciclo concluído)
+      const { data: fuRecord } = await supabase
         .from('traffic_followups')
-        .select('id, automation_active')
+        .select('id, automation_active, status')
         .eq('lead_id', lead.id)
-        .eq('automation_active', true)
         .maybeSingle();
-      if (fuAtivo) continue;
+      if (fuRecord) continue;
 
       // Não reativar se já enviamos mensagem nas últimas 4h
       const { data: msgRecente } = await supabase
@@ -628,10 +628,14 @@ serve(async (req: Request) => {
     const action = body.action || 'process';
     console.log('[Followup] Action:', action);
 
-    // Instância de tráfego
+    // Instância de tráfego: buscar pela nome primeiro, depois não-default, fallback para primeira
     const { data: instances } = await supabase
       .from('zapi_instances').select('*').eq('is_active', true).order('is_default', { ascending: true });
-    const trafegoInstance = instances?.find((i: any) => !i.is_default) || instances?.[0];
+    const normalize = (s: string) => s?.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '') || '';
+    const trafegoInstance =
+      instances?.find((i: any) => normalize(i.name).includes('trafego')) ||
+      instances?.find((i: any) => !i.is_default) ||
+      instances?.[0];
     if (!trafegoInstance) {
       return new Response(JSON.stringify({ error: 'Z-API não configurada' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
