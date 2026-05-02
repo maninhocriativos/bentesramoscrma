@@ -594,17 +594,21 @@ function InscricaoModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
   const [loading, setLoading] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const [enrolled, setEnrolled] = useState<number | null>(null);
+  const [optedOutIds, setOptedOutIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   const fetchDisponivel = async (t: 'trafego' | 'escritorio' | 'campanha') => {
     setLoading(true);
     try {
       // Apenas leads ATIVOS no follow-up (não permite re-inscrever quem ainda está em andamento)
-      const { data: existentes } = await supabase
-        .from('traffic_followups')
-        .select('lead_id')
-        .or('automation_active.eq.true,status.in.(new,in_progress)');
+      const [{ data: existentes }, { data: optedOut }] = await Promise.all([
+        supabase.from('traffic_followups').select('lead_id')
+          .or('automation_active.eq.true,status.in.(new,in_progress)'),
+        supabase.from('traffic_followups').select('lead_id')
+          .eq('automation_active', false),
+      ]);
       const inscritosSet = new Set((existentes || []).map((e: any) => e.lead_id));
+      setOptedOutIds(new Set((optedOut || []).map((e: any) => e.lead_id)));
 
       let query = supabase
         .from('leads_juridicos')
@@ -620,7 +624,7 @@ function InscricaoModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
       setLeads(disponiveis as LeadDisponivel[]);
 
       if (t !== 'campanha') {
-        // Pré-seleciona todos
+        // Pré-seleciona todos (incluindo os que pediram pausa — usuário pode confirmar ciente)
         setSelected(new Set(disponiveis.map((l: any) => l.id)));
       }
     } finally { setLoading(false); }
@@ -674,6 +678,7 @@ function InscricaoModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
     !search || l.nome?.toLowerCase().includes(search.toLowerCase()) || l.telefone?.includes(search)
   );
   const allSelected = filteredLeads.length > 0 && filteredLeads.every(l => selected.has(l.id));
+  const optedOutInSelection = leads.filter((l: LeadDisponivel) => selected.has(l.id) && optedOutIds.has(l.id)).length;
 
   const TIPO_CFG = {
     trafego:   { icon: '📢', label: 'Leads de Tráfego',   desc: 'Todos os leads vindos de anúncios (Meta Ads, Google, etc.)', color: T.blue,   bg: T.blueBg },
@@ -746,6 +751,12 @@ function InscricaoModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
                   <div style={{ background: T.blueBg, border: `1px solid ${T.blue}20`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: T.blue, lineHeight: 1.6 }}>
                     <strong>ℹ️ O que acontece:</strong> Cada lead receberá o 1º follow-up em ~15 minutos (se dentro do horário 8h–20h Manaus). A sequência completa é 15min → 24h → 44h → Nutrição.
                   </div>
+                  {optedOutInSelection > 0 && (
+                    <div style={{ background: '#fff8e1', border: '1.5px solid #f59e0b', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#92400e', lineHeight: 1.6, display: 'flex', gap: 8 }}>
+                      <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+                      <span><strong>{optedOutInSelection} lead{optedOutInSelection !== 1 ? 's' : ''}</strong> deste grupo solicitou não receber mensagens. Ao confirmar, {optedOutInSelection !== 1 ? 'eles serão incluídos' : 'ele será incluído'} mesmo assim.</span>
+                    </div>
+                  )}
                   <button onClick={doEnroll} disabled={enrolling || leads.length === 0}
                     style={{ padding: '14px 24px', borderRadius: 12, border: 'none', background: leads.length === 0 ? T.borderLight : `linear-gradient(135deg, ${TIPO_CFG[tipo].color}, ${TIPO_CFG[tipo].color}cc)`, color: leads.length === 0 ? T.muted : '#fff', fontWeight: 800, fontSize: 14, cursor: leads.length === 0 ? 'not-allowed' : 'pointer', boxShadow: leads.length > 0 ? `0 4px 16px ${TIPO_CFG[tipo].color}40` : 'none' }}>
                     {enrolling ? 'Inscrevendo...' : `Inscrever ${leads.length} lead${leads.length !== 1 ? 's' : ''}`}
@@ -786,13 +797,16 @@ function InscricaoModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
                 ) : filteredLeads.length === 0 ? (
                   <div style={{ padding: 24, textAlign: 'center', color: T.muted, fontSize: 12 }}>Nenhum lead disponível</div>
                 ) : filteredLeads.map((l, i) => (
-                  <label key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: i < filteredLeads.length - 1 ? `1px solid ${T.borderLight}` : 'none', cursor: 'pointer', background: selected.has(l.id) ? T.douradoPale : T.white, transition: 'background 0.1s' }}>
+                  <label key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: i < filteredLeads.length - 1 ? `1px solid ${T.borderLight}` : 'none', cursor: 'pointer', background: selected.has(l.id) ? (optedOutIds.has(l.id) ? '#fff8e1' : T.douradoPale) : T.white, transition: 'background 0.1s' }}>
                     <input type="checkbox" checked={selected.has(l.id)} onChange={() => {
                       setSelected(prev => { const n = new Set(prev); n.has(l.id) ? n.delete(l.id) : n.add(l.id); return n; });
                     }} style={{ width: 14, height: 14, cursor: 'pointer', flexShrink: 0 }} />
                     <Avatar nome={l.nome} size={28} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 12, color: T.marrom, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.nome}</div>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: T.marrom, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {l.nome}
+                        {optedOutIds.has(l.id) && <span style={{ marginLeft: 6, fontSize: 10, background: '#fef3c7', color: '#92400e', border: '1px solid #f59e0b', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>não contatar</span>}
+                      </div>
                       <div style={{ fontSize: 10, color: T.muted }}>{l.telefone}</div>
                     </div>
                     <Badge color={l.tipo_origem === 'trafego' ? T.blue : T.dourado} bg={l.tipo_origem === 'trafego' ? T.blueBg : T.douradoPale}>
@@ -801,6 +815,14 @@ function InscricaoModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
                   </label>
                 ))}
               </div>
+
+              {/* Aviso opted-out */}
+              {optedOutInSelection > 0 && (
+                <div style={{ background: '#fff8e1', border: '1.5px solid #f59e0b', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#92400e', lineHeight: 1.6, display: 'flex', gap: 8 }}>
+                  <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+                  <span><strong>{optedOutInSelection} lead{optedOutInSelection !== 1 ? 's' : ''} selecionado{optedOutInSelection !== 1 ? 's' : ''}</strong> solicitou não receber mensagens. {optedOutInSelection !== 1 ? 'Eles serão incluídos' : 'Ele será incluído'} mesmo assim ao confirmar.</span>
+                </div>
+              )}
 
               {/* Ações */}
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
