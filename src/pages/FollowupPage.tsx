@@ -599,8 +599,11 @@ function InscricaoModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
   const fetchDisponivel = async (t: 'trafego' | 'escritorio' | 'campanha') => {
     setLoading(true);
     try {
-      // IDs já inscritos
-      const { data: existentes } = await supabase.from('traffic_followups').select('lead_id');
+      // Apenas leads ATIVOS no follow-up (não permite re-inscrever quem ainda está em andamento)
+      const { data: existentes } = await supabase
+        .from('traffic_followups')
+        .select('lead_id')
+        .or('automation_active.eq.true,status.in.(new,in_progress)');
       const inscritosSet = new Set((existentes || []).map((e: any) => e.lead_id));
 
       let query = supabase
@@ -654,7 +657,7 @@ function InscricaoModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
       for (let i = 0; i < records.length; i += BATCH) {
         const { error } = await supabase
           .from('traffic_followups')
-          .upsert(records.slice(i, i + BATCH), { onConflict: 'lead_id', ignoreDuplicates: true });
+          .upsert(records.slice(i, i + BATCH), { onConflict: 'lead_id', ignoreDuplicates: false });
         if (error) throw error;
         count += records.slice(i, i + BATCH).length;
       }
