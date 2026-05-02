@@ -45,9 +45,10 @@ import {
 
 // ─── Z-API instance routing ───────────────────────────────────────────────────
 
+// REGRA ABSOLUTA: Tráfego → 98588-8190 | Escritório → 91604-348
 const PHONE_TO_INSTANCE_ID: Record<string, string> = {
-  "85888190": "3EDDF959BC2B81F86B410203B614D70E", // Tráfego  (92 98588-8190)
-  "91604348": "3EDB5B4FF93662A609ADFAF4F663B13A", // Bentes Ramos (92 99160-4348)
+  "85888190": "3EDDF959BC2B81F86B410203B614D70E", // "Bentes Ramos Trafego" (92) 98588-8190
+  "91604348": "3EDB5B4FF93662A609ADFAF4F663B13A", // "Bentes Ramos"         (92) 91604-348
 };
 
 function resolveInstanceId(subscriber: { instance_name?: string | null }): string | undefined {
@@ -63,10 +64,10 @@ function getInstanceInfoFromConnectedPhone(connectedPhone?: string): InstanceInf
   if (!connectedPhone) return null;
   const phone = connectedPhone.replace(/\D/g, "");
   if (phone.includes("559285888190") || phone.includes("5592985888190") || phone.endsWith("85888190")) {
-    return { name: "Bentes Ramos-2", label: "Tráfego", color: "red" };
+    return { name: "Bentes Ramos Trafego", label: "Tráfego", color: "trafego" };
   }
   if (phone.includes("559291604348") || phone.includes("5592991604348") || phone.endsWith("91604348")) {
-    return { name: "Bentes Ramos", label: "Bentes Ramos", color: "blue" };
+    return { name: "Bentes Ramos", label: "Bentes Ramos", color: "escritorio" };
   }
   return null;
 }
