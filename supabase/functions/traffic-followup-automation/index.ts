@@ -30,18 +30,70 @@ const AGENT_NAMES: Record<string, string> = {
 };
 
 // ============================================
-// PROVA SOCIAL
+// ÁUDIOS E SEQUÊNCIA DE FOLLOW-UP
 // ============================================
+
+// Google Drive — IDs dos áudios de follow-up
+const AUDIO_1_URL = 'https://drive.google.com/uc?export=download&id=1RfaX1szxmAMw9V1SGc9eK2wylg0Tf4Hr&confirm=t';
+const AUDIO_2_URL = 'https://drive.google.com/uc?export=download&id=1cmnJj1SS9HK6xuuZZRyA1jkTh4C8M4qo&confirm=t';
+
+const TEXTO_FOLLOWUP_1 = `Entendo que analisar questões jurídicas exija cautela. Mas quero reforçar um ponto importante: a nossa avaliação inicial do seu contrato é um diagnóstico estratégico, feito para garantir que você não perca dinheiro.
+
+Enquanto o seu documento não entra na nossa fila de análise, o tempo corre a favor do banco. Basta encaminhar o PDF ou uma foto nítida aqui mesmo para darmos andamento.`;
+
+// Prova social (2º follow-up)
 const PROVA_SOCIAL_IMAGE_URL = 'https://bentesramoscrma.lovable.app/images/prova-social-bradesco.jpg';
 const PROVA_SOCIAL_TEXTO = (nome: string) => {
   const n = (nome || 'Cliente').split(' ')[0];
   return `${n}, olha essa decisão que acabamos de ganhar! 🎉\n\nUm banco foi *condenado a pagar R$ 8.000,00* por cobrança indevida em contrato de financiamento.\n\nSe você também passa por algo parecido, seus direitos podem estar sendo violados. 💬 Me conta sua situação!`;
 };
 
-async function getFollowupAudioUrl(supabase: any): Promise<string | null> {
-  const { data } = await supabase
-    .from('ai_prompts').select('content').eq('name', 'followup_audio_url').maybeSingle();
-  return data?.content || null;
+// Botões + LGPD — vão em TODA mensagem de follow-up
+const FOLLOWUP_BUTTONS = [
+  { id: 'enviar_docs_agora',  label: '📄 Enviar documentação agora' },
+  { id: 'receber_noticias',   label: '🔔 Quero receber novidades' },
+];
+const LGPD_BUTTONS_MESSAGE = (nome: string) => {
+  const n = (nome || 'Cliente').split(' ')[0];
+  return `${n}, escolha uma opção abaixo:\n\n📋 *Privacidade (LGPD – Lei 13.709/2018):* Seus dados são usados exclusivamente neste atendimento. Encerre respondendo *PARAR*.`;
+};
+
+// Função: envia a sequência completa de follow-up pelo estágio
+async function enviarSequenciaFollowup(
+  zapiConfig: any,
+  telefone: string,
+  nome: string,
+  stage: string,
+  mensagemIA: string,
+): Promise<boolean> {
+  const n = (nome || 'Cliente').split(' ')[0];
+
+  if (stage === '15min') {
+    // Sequência anti-bloqueio: esperar 6-10s entre cada mensagem
+    const a1 = await sendAudio(zapiConfig, telefone, AUDIO_1_URL);
+    await sleep(8000);
+    await sendText(zapiConfig, telefone, TEXTO_FOLLOWUP_1);
+    await sleep(9000);
+    const a2 = await sendAudio(zapiConfig, telefone, AUDIO_2_URL);
+    await sleep(7000);
+    const btn = await sendButtonList(zapiConfig, telefone, LGPD_BUTTONS_MESSAGE(n), FOLLOWUP_BUTTONS);
+    // Considera sucesso se pelo menos uma das mensagens chegou
+    return a1.success || a2.success || btn.success;
+  }
+
+  if (stage === '24h') {
+    const img = await sendImage(zapiConfig, telefone, PROVA_SOCIAL_IMAGE_URL, PROVA_SOCIAL_TEXTO(n));
+    if (!img.success) await sendText(zapiConfig, telefone, PROVA_SOCIAL_TEXTO(n));
+    await sleep(7000);
+    const btn = await sendButtonList(zapiConfig, telefone, LGPD_BUTTONS_MESSAGE(n), FOLLOWUP_BUTTONS);
+    return img.success || btn.success;
+  }
+
+  // 44h — encerramento + botões
+  await sendText(zapiConfig, telefone, mensagemIA);
+  await sleep(7000);
+  const btn = await sendButtonList(zapiConfig, telefone, LGPD_BUTTONS_MESSAGE(n), FOLLOWUP_BUTTONS);
+  return btn.success;
 }
 
 function getNextStage(current: string | null): string {
@@ -217,27 +269,9 @@ async function processFollowups(supabase: any, zapiConfig: any): Promise<any[]> 
       if (!mensagem) mensagem = getMessageTemplate(nextStage, lead.nome);
       if (!mensagem) continue;
 
-      // Envio inteligente por estágio:
-      // 15min → áudio (se configurado) + texto (mais humanizado)
-      // 24h   → prova social com imagem + texto
-      // 44h   → texto simples de encerramento
-      let sendResult;
-      const audioUrl = await getFollowupAudioUrl(supabase);
+      const enviado = await enviarSequenciaFollowup(zapiConfig, fu.telefone, lead.nome, nextStage, mensagem);
 
-      if (nextStage === '15min' && audioUrl) {
-        await sendAudio(zapiConfig, fu.telefone, audioUrl);
-        await sleep(2000);
-        sendResult = await sendText(zapiConfig, fu.telefone, mensagem);
-      } else if (nextStage === '24h') {
-        sendResult = await sendImage(zapiConfig, fu.telefone, PROVA_SOCIAL_IMAGE_URL, PROVA_SOCIAL_TEXTO(lead.nome));
-        if (!sendResult.success) {
-          sendResult = await sendText(zapiConfig, fu.telefone, PROVA_SOCIAL_TEXTO(lead.nome) + '\n\n' + mensagem);
-        }
-      } else {
-        sendResult = await sendText(zapiConfig, fu.telefone, mensagem);
-      }
-
-      if (sendResult.success) {
+      if (enviado) {
         const subscriberNome = agentData ? `${agentData.agentName} (Follow-up)` : 'Isa (Follow-up)';
         await supabase.from('manychat_mensagens').insert({
           subscriber_id: fu.subscriber_id, subscriber_nome: subscriberNome,
@@ -263,7 +297,7 @@ async function processFollowups(supabase: any, zapiConfig: any): Promise<any[]> 
         console.log(`[Followup] ✅ ${nextStage} enviado para ${lead.nome}`);
         await sleep(7000);
       } else {
-        console.error(`[Followup] ❌ Falha: ${lead.nome}`, sendResult.error);
+        console.error(`[Followup] ❌ Falha ao enviar: ${lead.nome}`);
       }
     } catch (err: any) {
       console.error('[Followup] Erro:', err.message);
