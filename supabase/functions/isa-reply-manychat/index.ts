@@ -726,16 +726,18 @@ serve(async (req: Request) => {
 
     console.log('[ISA-REPLY] 💬 Processando:', fullMessage.substring(0, 100));
 
-    // 📋 Buscar contexto completo do lead
+    // 📋 Buscar contexto completo do lead (com timeout de 5s para não travar)
     let context = '';
     if (leadId) {
-      context = await getLeadContext(leadId, supabase);
-      
-      // 🚀 Fluxo expresso: ativado SOMENTE quando a mensagem específica do anúncio chega
-      // (ex: "Quero saber se meu contrato tem venda casada")
-      // Se o lead é de anúncio mas NÃO veio com essa mensagem específica, segue fluxo normal
+      try {
+        const ctxPromise = getLeadContext(leadId, supabase);
+        const timeoutPromise = new Promise<string>(r => setTimeout(() => r(''), 5000));
+        context = await Promise.race([ctxPromise, timeoutPromise]);
+      } catch {
+        context = '';
+      }
+
       const isExpressMessage = /quero saber se meu contrato tem venda casada/i.test(mensagem);
-      
       if (isExpressMessage) {
         context = `[LEAD DE ANÚNCIO - FLUXO EXPRESSO]\n⚡ O cliente chegou pela mensagem padrão do anúncio sobre venda casada. Siga o FLUXO EXPRESSO: apresente-se, solicite IMEDIATAMENTE contrato e extrato bancário (pode ser foto), analise os documentos quando recebidos buscando juros abusivos/seguro prestamista/capitalização/venda casada, e após análise encaminhe para Amanda.\n\n${context}`;
         console.log('[ISA-REPLY] 🚀 Fluxo expresso ativado - mensagem específica do anúncio detectada');
@@ -744,11 +746,19 @@ serve(async (req: Request) => {
       context = `[NOVO CONTATO - Sem lead vinculado ainda]\nNome informado: ${nome}\nTelefone: ${telefone}\n`;
     }
 
-    // 🤖 Gerar resposta
-    const { response: respostaIsa } = await generateResponse(fullMessage, context);
+    // 🤖 Gerar resposta (com fallback para nunca deixar a conversa morrer)
+    let respostaIsa = '';
+    try {
+      const { response } = await generateResponse(fullMessage, context);
+      respostaIsa = response;
+    } catch (aiError) {
+      console.error('[ISA-REPLY] ❌ Erro na IA, usando mensagem fallback:', aiError);
+    }
 
     if (!respostaIsa) {
-      throw new Error('Resposta vazia da IA');
+      const primeiroNome = (subscriber?.nome || nome || 'Cliente').split(' ')[0];
+      respostaIsa = `${primeiroNome}, recebi sua mensagem! 😊 Pode continuar me contando sobre sua situação?`;
+      console.log('[ISA-REPLY] ⚠️ Usando mensagem fallback');
     }
 
     // 🔄 Detectar pedido de transferência para humano

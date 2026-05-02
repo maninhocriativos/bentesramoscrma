@@ -29,6 +29,21 @@ const AGENT_NAMES: Record<string, string> = {
   isa_aereo:    'Jerusa',
 };
 
+// ============================================
+// PROVA SOCIAL
+// ============================================
+const PROVA_SOCIAL_IMAGE_URL = 'https://bentesramoscrma.lovable.app/images/prova-social-bradesco.jpg';
+const PROVA_SOCIAL_TEXTO = (nome: string) => {
+  const n = (nome || 'Cliente').split(' ')[0];
+  return `${n}, olha essa decisão que acabamos de ganhar! 🎉\n\nUm banco foi *condenado a pagar R$ 8.000,00* por cobrança indevida em contrato de financiamento.\n\nSe você também passa por algo parecido, seus direitos podem estar sendo violados. 💬 Me conta sua situação!`;
+};
+
+async function getFollowupAudioUrl(supabase: any): Promise<string | null> {
+  const { data } = await supabase
+    .from('ai_prompts').select('content').eq('name', 'followup_audio_url').maybeSingle();
+  return data?.content || null;
+}
+
 function getNextStage(current: string | null): string {
   if (!current) return '15min';
   return STAGES_CONFIG[current]?.next || '';
@@ -202,7 +217,26 @@ async function processFollowups(supabase: any, zapiConfig: any): Promise<any[]> 
       if (!mensagem) mensagem = getMessageTemplate(nextStage, lead.nome);
       if (!mensagem) continue;
 
-      const sendResult = await sendText(zapiConfig, fu.telefone, mensagem);
+      // Envio inteligente por estágio:
+      // 15min → áudio (se configurado) + texto (mais humanizado)
+      // 24h   → prova social com imagem + texto
+      // 44h   → texto simples de encerramento
+      let sendResult;
+      const audioUrl = await getFollowupAudioUrl(supabase);
+
+      if (nextStage === '15min' && audioUrl) {
+        await sendAudio(zapiConfig, fu.telefone, audioUrl);
+        await sleep(2000);
+        sendResult = await sendText(zapiConfig, fu.telefone, mensagem);
+      } else if (nextStage === '24h') {
+        sendResult = await sendImage(zapiConfig, fu.telefone, PROVA_SOCIAL_IMAGE_URL, PROVA_SOCIAL_TEXTO(lead.nome));
+        if (!sendResult.success) {
+          sendResult = await sendText(zapiConfig, fu.telefone, PROVA_SOCIAL_TEXTO(lead.nome) + '\n\n' + mensagem);
+        }
+      } else {
+        sendResult = await sendText(zapiConfig, fu.telefone, mensagem);
+      }
+
       if (sendResult.success) {
         const subscriberNome = agentData ? `${agentData.agentName} (Follow-up)` : 'Isa (Follow-up)';
         await supabase.from('manychat_mensagens').insert({
@@ -367,6 +401,100 @@ async function processNutricao(supabase: any, zapiConfig: any): Promise<any[]> {
 }
 
 // ============================================
+// REATIVAR CONVERSAS ATIVAS QUE PARARAM
+// Detecta leads onde o agente enviou algo mas o cliente sumiu há 2h+
+// ============================================
+async function reativarConversasAtivas(supabase: any, zapiConfig: any): Promise<any[]> {
+  const now = new Date();
+  const results: any[] = [];
+
+  const horaManaus = new Date(now.getTime() - 4 * 60 * 60 * 1000).getUTCHours();
+  if (horaManaus < 8 || horaManaus >= 20) return results;
+
+  const duasHorasAtras = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
+  const quarentaOitoHoras = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+  const quatroHorasAtras = new Date(now.getTime() - 4 * 60 * 60 * 1000).toISOString();
+
+  const { data: leads } = await supabase
+    .from('leads_juridicos')
+    .select('id, nome, telefone, status, tipo_origem, isa_agent')
+    .eq('tipo_origem', 'trafego')
+    .not('status', 'in', '("Ganho","Perdido","Contrato Assinado")')
+    .limit(30);
+
+  for (const lead of leads || []) {
+    try {
+      // Não reativar se estiver em atendimento humano
+      const { data: subscriber } = await supabase
+        .from('manychat_subscribers')
+        .select('atendimento_humano, subscriber_id')
+        .eq('lead_id', lead.id)
+        .maybeSingle();
+      if (subscriber?.atendimento_humano) continue;
+
+      // Buscar mensagens das últimas 48h
+      const { data: mensagens } = await supabase
+        .from('manychat_mensagens')
+        .select('direcao, created_at')
+        .eq('lead_id', lead.id)
+        .gte('created_at', quarentaOitoHoras)
+        .order('created_at', { ascending: false })
+        .limit(15);
+
+      if (!mensagens || mensagens.length < 2) continue;
+
+      const ultima = mensagens[0];
+      const ultimaFoiDoAgente = ultima.direcao === 'saida' || ultima.direcao === 'outbound';
+      const passouDuasHoras = new Date(ultima.created_at) < new Date(duasHorasAtras);
+      const clienteJaRespondeu = mensagens.some((m: any) => m.direcao === 'entrada' || m.direcao === 'inbound');
+
+      if (!ultimaFoiDoAgente || !passouDuasHoras || !clienteJaRespondeu) continue;
+
+      // Não reativar se já existe follow-up automático ativo
+      const { data: fuAtivo } = await supabase
+        .from('traffic_followups')
+        .select('id, automation_active')
+        .eq('lead_id', lead.id)
+        .eq('automation_active', true)
+        .maybeSingle();
+      if (fuAtivo) continue;
+
+      // Não reativar se já enviamos mensagem nas últimas 4h
+      const { data: msgRecente } = await supabase
+        .from('manychat_mensagens')
+        .select('id')
+        .eq('lead_id', lead.id)
+        .eq('direcao', 'saida')
+        .gte('created_at', quatroHorasAtras)
+        .limit(1);
+      if (msgRecente?.length) continue;
+
+      const agentData = await getAgentPrompt(supabase, lead.id);
+      const mensagemReativacao = await gerarMensagemIA(supabase, lead, '15min') ||
+        `${(lead.nome || 'Cliente').split(' ')[0]}, tudo bem? 😊 Vi que você estava me contando sobre sua situação. Posso continuar te ajudando?`;
+
+      const sendResult = await sendText(zapiConfig, lead.telefone, mensagemReativacao);
+      if (sendResult.success) {
+        const sid = subscriber?.subscriber_id || `zapi_${normalizePhone(lead.telefone)}`;
+        await supabase.from('manychat_mensagens').insert({
+          subscriber_id: sid,
+          subscriber_nome: `${agentData?.agentName || 'Isa'} (Reativação)`,
+          lead_id: lead.id, conteudo: mensagemReativacao,
+          direcao: 'saida', tipo: 'text', canal: 'whatsapp',
+          metadata: { source: 'reativacao_conversa', agent: agentData?.agentKey || 'isa_triagem' },
+        });
+        results.push({ lead_id: lead.id, nome: lead.nome, action: 'reativado' });
+        console.log(`[Reativação] ✅ ${lead.nome}`);
+        await sleep(5000);
+      }
+    } catch (err: any) {
+      console.error('[Reativação] Erro:', err.message);
+    }
+  }
+  return results;
+}
+
+// ============================================
 // INSCREVER LEAD
 // ============================================
 async function enrollLead(supabase: any, leadId: string, telefone: string, subscriberId?: string) {
@@ -492,9 +620,10 @@ serve(async (req: Request) => {
       }
       default: {
         const followupResults = await processFollowups(supabase, zapiConfig);
+        const reativacaoResults = await reativarConversasAtivas(supabase, zapiConfig);
         const nutricaoResults = await processNutricao(supabase, zapiConfig);
         return new Response(
-          JSON.stringify({ success: true, followups: followupResults.length, nutricao: nutricaoResults.length }),
+          JSON.stringify({ success: true, followups: followupResults.length, reativacoes: reativacaoResults.length, nutricao: nutricaoResults.length }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }
