@@ -628,11 +628,14 @@ serve(async (req: Request) => {
     const action = body.action || 'process';
     console.log('[Followup] Action:', action);
 
-    // Instância de tráfego: buscar pela nome primeiro, depois não-default, fallback para primeira
+    // REGRA ABSOLUTA: esta automação dispara SOMENTE pela instância de tráfego.
+    // Instância: "Bentes Ramos Trafego" | Número: (92) 98588-8190 | phone_number: 5592985888190
+    // Seleção: 1º por nome contendo 'trafego', 2º !is_default, 3º fallback primeira ativa
     const { data: instances } = await supabase
       .from('zapi_instances').select('*').eq('is_active', true).order('is_default', { ascending: true });
     const normalize = (s: string) => s?.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '') || '';
     const trafegoInstance =
+      instances?.find((i: any) => i.phone_number?.replace(/\D/g,'') === '5592985888190') ||
       instances?.find((i: any) => normalize(i.name).includes('trafego')) ||
       instances?.find((i: any) => !i.is_default) ||
       instances?.[0];

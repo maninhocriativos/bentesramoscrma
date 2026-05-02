@@ -1103,28 +1103,41 @@ serve(async (req: Request) => {
     }
     
     // Fallback: resolver pela origem do lead
+    // REGRA ABSOLUTA: tráfego → "Bentes Ramos Trafego" (98588-8190) | escritório → "Bentes Ramos" (91604-348)
     if (!instanceId && leadId) {
       const { data: leadData } = await supabase
         .from('leads_juridicos')
         .select('linha_whatsapp, tipo_origem')
         .eq('id', leadId)
         .maybeSingle();
-      
+
       if (leadData) {
         const isTrafego = leadData.linha_whatsapp === 'trafego_isa' || leadData.linha_whatsapp === 'trafego' ||
                           leadData.tipo_origem === 'trafego' || leadData.tipo_origem === 'trafego_isa';
-        
+
+        // Número canônico de cada instância
+        const PHONE_TRAFEGO    = '5592985888190'; // (92) 98588-8190 → "Bentes Ramos Trafego"
+        const PHONE_ESCRITORIO = '559291604348';  // (92) 91604-348  → "Bentes Ramos"
+        const targetPhone = isTrafego ? PHONE_TRAFEGO : PHONE_ESCRITORIO;
+
         const { data: instances } = await supabase
           .from('zapi_instances')
-          .select('instance_id, is_default, name')
+          .select('instance_id, is_default, name, phone_number')
           .eq('is_active', true);
-        
+
         if (instances) {
-          const target = isTrafego 
+          // 1º: match pelo número de telefone registrado (mais confiável)
+          const byPhone = instances.find((i: any) =>
+            i.phone_number?.replace(/\D/g, '') === targetPhone
+          );
+          // 2º: fallback por is_default flag
+          const byFlag = isTrafego
             ? instances.find((i: any) => !i.is_default) || instances[0]
             : instances.find((i: any) => i.is_default) || instances[0];
+
+          const target = byPhone || byFlag;
           instanceId = target.instance_id;
-          console.log(`[ISA-REPLY] 📱 Instância via lead origin: ${target.name} (trafego=${isTrafego})`);
+          console.log(`[ISA-REPLY] 📱 Instância via lead origin: ${target.name} (${target.phone_number}) trafego=${isTrafego}`);
         }
       }
     }

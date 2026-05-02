@@ -1,12 +1,28 @@
 /**
  * Z-API Helper - Utilitário centralizado para envio de mensagens WhatsApp via Z-API
  * SUPORTA MÚLTIPLAS INSTÂNCIAS
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │  REGRA ABSOLUTA DE ROTEAMENTO — NÃO ALTERAR SEM REVISÃO                │
+ * │                                                                         │
+ * │  Leads de TRÁFEGO  → SOMENTE via "Bentes Ramos Trafego" (98588-8190)   │
+ * │  Leads de ESCRITÓRIO → SOMENTE via "Bentes Ramos"       (91604-348)    │
+ * │                                                                         │
+ * │  A separação é garantida por tipo_origem = 'trafego' no banco.         │
+ * │  Nunca enviar mensagem de tráfego pela instância do escritório          │
+ * │  e vice-versa.                                                          │
+ * └─────────────────────────────────────────────────────────────────────────┘
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+// ── Números canônicos das instâncias Z-API ────────────────────────────────────
+// Alterar APENAS se o número do WhatsApp mudar fisicamente.
+export const PHONE_TRAFEGO    = '5592985888190'; // (92) 98588-8190 → "Bentes Ramos Trafego"
+export const PHONE_ESCRITORIO = '559291604348';  // (92) 91604-348  → "Bentes Ramos"
 
 export interface ZapiConfig {
   instance_id: string;
@@ -515,9 +531,12 @@ export async function enviarParaLead(
 
 /**
  * Resolve a instância Z-API correta para enviar mensagem a um lead.
- * REGRA ESTRITA:
- * - Clientes Bentes Ramos (559291604348) → responder APENAS pela instância Bentes Ramos
- * - Clientes de Tráfego (559285888190) → responder APENAS pela instância Tráfego
+ *
+ * REGRA ABSOLUTA:
+ * - tipo_origem = 'trafego'  → SOMENTE "Bentes Ramos Trafego" (92) 98588-8190
+ * - demais origens            → SOMENTE "Bentes Ramos"         (92) 91604-348
+ *
+ * Prioridade de seleção: 1) número de telefone exato, 2) is_default flag
  */
 export async function resolveInstanceForLead(
   supabase: any,
@@ -526,29 +545,32 @@ export async function resolveInstanceForLead(
   const linhaWhatsapp = lead.linha_whatsapp || 'indefinido';
   const tipoOrigem = lead.tipo_origem || 'indefinido';
 
-  // Determinar se é tráfego
   const isTrafego = linhaWhatsapp === 'trafego' || linhaWhatsapp === 'trafego_isa' ||
                     tipoOrigem === 'trafego' || tipoOrigem === 'trafego_isa';
 
-  // Buscar todas as instâncias ativas
+  // Número-alvo canônico
+  const targetPhone = isTrafego ? PHONE_TRAFEGO : PHONE_ESCRITORIO;
+
   const { data: instances } = await supabase
     .from('zapi_instances')
-    .select('instance_id, is_default, name')
-    .eq('is_active', true)
-    .order('is_default', { ascending: false });
+    .select('instance_id, is_default, name, phone_number')
+    .eq('is_active', true);
 
   if (!instances || instances.length === 0) return undefined;
 
-  let target;
-  if (isTrafego) {
-    // Tráfego → instância NÃO default (Bentes Ramos-2)
-    target = instances.find((i: any) => !i.is_default) || instances[0];
-  } else {
-    // Bentes Ramos / orgânico → instância default (Bentes Ramos)
-    target = instances.find((i: any) => i.is_default) || instances[0];
-  }
+  // PRIMÁRIO: match pelo número de telefone registrado na instância (mais confiável)
+  const byPhone = instances.find((i: any) =>
+    i.phone_number?.replace(/\D/g, '') === targetPhone
+  );
 
-  console.log(`[Z-API Helper] 📱 Roteamento: linha=${linhaWhatsapp}, tipo=${tipoOrigem}, isTrafego=${isTrafego} → ${target.name}`);
+  // FALLBACK: tráfego = !is_default | escritório = is_default
+  const byFlag = isTrafego
+    ? instances.find((i: any) => !i.is_default) || instances[0]
+    : instances.find((i: any) => i.is_default) || instances[0];
+
+  const target = byPhone || byFlag;
+
+  console.log(`[Z-API Helper] 📱 Roteamento: tipo_origem=${tipoOrigem}, isTrafego=${isTrafego} → ${target.name} (${target.phone_number || '?'})`);
   return target.instance_id;
 }
 
