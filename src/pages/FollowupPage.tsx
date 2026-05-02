@@ -578,6 +578,248 @@ function TabNutricao() {
   );
 }
 
+// ── Interface para leads disponíveis no modal ──────────────────────────────────
+interface LeadDisponivel {
+  id: string; nome: string; telefone: string;
+  tipo_origem: string | null; status: string | null;
+}
+
+// ── Modal de Inscrição ─────────────────────────────────────────────────────────
+function InscricaoModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [step, setStep] = useState<'escolha' | 'confirmar' | 'selecionar'>('escolha');
+  const [tipo, setTipo] = useState<'trafego' | 'escritorio' | 'campanha' | null>(null);
+  const [leads, setLeads] = useState<LeadDisponivel[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [enrolling, setEnrolling] = useState(false);
+  const [enrolled, setEnrolled] = useState<number | null>(null);
+  const { toast } = useToast();
+
+  const fetchDisponivel = async (t: 'trafego' | 'escritorio' | 'campanha') => {
+    setLoading(true);
+    try {
+      // IDs já inscritos
+      const { data: existentes } = await supabase.from('traffic_followups').select('lead_id');
+      const inscritosSet = new Set((existentes || []).map((e: any) => e.lead_id));
+
+      let query = supabase
+        .from('leads_juridicos')
+        .select('id, nome, telefone, tipo_origem, status')
+        .not('telefone', 'is', null)
+        .not('status', 'in', '("Ganho","Perdido","Contrato Assinado")');
+
+      if (t === 'trafego') query = query.eq('tipo_origem', 'trafego');
+      else if (t === 'escritorio') query = (query as any).neq('tipo_origem', 'trafego');
+
+      const { data } = await query.order('nome', { ascending: true }).limit(500);
+      const disponiveis = (data || []).filter((l: any) => !inscritosSet.has(l.id));
+      setLeads(disponiveis as LeadDisponivel[]);
+
+      if (t !== 'campanha') {
+        // Pré-seleciona todos
+        setSelected(new Set(disponiveis.map((l: any) => l.id)));
+      }
+    } finally { setLoading(false); }
+  };
+
+  const handleEscolha = async (t: 'trafego' | 'escritorio' | 'campanha') => {
+    setTipo(t);
+    await fetchDisponivel(t);
+    setStep(t === 'campanha' ? 'selecionar' : 'confirmar');
+  };
+
+  const doEnroll = async () => {
+    const toEnroll = leads.filter(l => selected.has(l.id));
+    if (toEnroll.length === 0) { toast({ title: 'Nenhum lead selecionado', variant: 'destructive' }); return; }
+    setEnrolling(true);
+    try {
+      const nextAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      const records = toEnroll.map(l => {
+        const phone = (l.telefone || '').replace(/\D/g, '');
+        return {
+          lead_id: l.id,
+          subscriber_id: `zapi_${phone}`,
+          telefone: phone,
+          status: 'new',
+          automation_active: true,
+          current_stage: null,
+          next_message_at: nextAt,
+          stages_sent: {},
+        };
+      });
+
+      const BATCH = 50;
+      let count = 0;
+      for (let i = 0; i < records.length; i += BATCH) {
+        const { error } = await supabase
+          .from('traffic_followups')
+          .upsert(records.slice(i, i + BATCH), { onConflict: 'lead_id', ignoreDuplicates: true });
+        if (error) throw error;
+        count += records.slice(i, i + BATCH).length;
+      }
+
+      setEnrolled(count);
+      toast({ title: `✅ ${count} lead(s) inscritos no follow-up!` });
+      onSuccess();
+    } catch (err: any) {
+      toast({ title: 'Erro ao inscrever', description: err.message, variant: 'destructive' });
+    } finally { setEnrolling(false); }
+  };
+
+  const filteredLeads = leads.filter(l =>
+    !search || l.nome?.toLowerCase().includes(search.toLowerCase()) || l.telefone?.includes(search)
+  );
+  const allSelected = filteredLeads.length > 0 && filteredLeads.every(l => selected.has(l.id));
+
+  const TIPO_CFG = {
+    trafego:   { icon: '📢', label: 'Leads de Tráfego',   desc: 'Todos os leads vindos de anúncios (Meta Ads, Google, etc.)', color: T.blue,   bg: T.blueBg },
+    escritorio: { icon: '🏛️', label: 'Leads do Escritório', desc: 'Leads orgânicos, indicações e atendimentos diretos',          color: T.dourado, bg: T.douradoPale },
+    campanha:  { icon: '🎯', label: 'Nova Campanha',       desc: 'Escolha leads específicos para inscrever manualmente',         color: T.purple, bg: T.purpleBg },
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,16,8,0.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, backdropFilter: 'blur(4px)' }} onClick={onClose}>
+      <div style={{ background: T.white, borderRadius: 24, width: '100%', maxWidth: step === 'selecionar' ? 640 : 480, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 80px rgba(30,16,8,0.35)', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ background: `linear-gradient(135deg, ${T.marrom}, ${T.marromMed})`, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>
+              {step === 'escolha' ? '➕ Inscrever Leads' : step === 'confirmar' ? `Confirmar: ${TIPO_CFG[tipo!].label}` : '🎯 Selecionar Leads'}
+            </div>
+            {step === 'escolha' && <div style={{ fontSize: 11, color: T.douradoLight, marginTop: 2 }}>Escolha quais leads entram no follow-up automático</div>}
+          </div>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={14} /></button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+
+          {/* ── STEP 1: Escolha ── */}
+          {step === 'escolha' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {(Object.entries(TIPO_CFG) as [keyof typeof TIPO_CFG, typeof TIPO_CFG['trafego']][]).map(([key, cfg]) => (
+                <button key={key} onClick={() => handleEscolha(key)} disabled={loading}
+                  style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', borderRadius: 16, border: `1.5px solid ${T.border}`, background: T.cream, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = cfg.color; (e.currentTarget as HTMLButtonElement).style.background = cfg.bg; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.border; (e.currentTarget as HTMLButtonElement).style.background = T.cream; }}>
+                  <div style={{ fontSize: 28, lineHeight: 1, flexShrink: 0 }}>{cfg.icon}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: T.marrom, marginBottom: 3 }}>{cfg.label}</div>
+                    <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.4 }}>{cfg.desc}</div>
+                  </div>
+                  <div style={{ color: T.mutedLight, fontSize: 16 }}>›</div>
+                </button>
+              ))}
+              {loading && <div style={{ textAlign: 'center', color: T.muted, fontSize: 12, padding: 8 }}>Carregando leads...</div>}
+            </div>
+          )}
+
+          {/* ── STEP 2a: Confirmar (tráfego / escritório) ── */}
+          {step === 'confirmar' && tipo && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ background: TIPO_CFG[tipo].bg, border: `1.5px solid ${TIPO_CFG[tipo].color}25`, borderRadius: 16, padding: 20, textAlign: 'center' }}>
+                <div style={{ fontSize: 36, marginBottom: 8 }}>{TIPO_CFG[tipo].icon}</div>
+                <div style={{ fontSize: 32, fontWeight: 900, color: TIPO_CFG[tipo].color, letterSpacing: '-0.03em', marginBottom: 4 }}>
+                  {loading ? '...' : leads.length}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: T.marrom }}>
+                  {leads.length === 1 ? 'lead disponível' : 'leads disponíveis'} para inscrição
+                </div>
+                <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>
+                  (já inscritos e com contrato fechado foram excluídos automaticamente)
+                </div>
+              </div>
+
+              {enrolled !== null ? (
+                <div style={{ background: T.greenBg, border: `1.5px solid ${T.green}30`, borderRadius: 12, padding: 16, textAlign: 'center' }}>
+                  <div style={{ fontSize: 20, marginBottom: 4 }}>✅</div>
+                  <div style={{ fontWeight: 800, color: T.green, fontSize: 15 }}>{enrolled} leads inscritos com sucesso!</div>
+                  <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>O follow-up automático começa em até 15 minutos.</div>
+                </div>
+              ) : (
+                <>
+                  <div style={{ background: T.blueBg, border: `1px solid ${T.blue}20`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: T.blue, lineHeight: 1.6 }}>
+                    <strong>ℹ️ O que acontece:</strong> Cada lead receberá o 1º follow-up em ~15 minutos (se dentro do horário 8h–20h Manaus). A sequência completa é 15min → 24h → 44h → Nutrição.
+                  </div>
+                  <button onClick={doEnroll} disabled={enrolling || leads.length === 0}
+                    style={{ padding: '14px 24px', borderRadius: 12, border: 'none', background: leads.length === 0 ? T.borderLight : `linear-gradient(135deg, ${TIPO_CFG[tipo].color}, ${TIPO_CFG[tipo].color}cc)`, color: leads.length === 0 ? T.muted : '#fff', fontWeight: 800, fontSize: 14, cursor: leads.length === 0 ? 'not-allowed' : 'pointer', boxShadow: leads.length > 0 ? `0 4px 16px ${TIPO_CFG[tipo].color}40` : 'none' }}>
+                    {enrolling ? 'Inscrevendo...' : `Inscrever ${leads.length} lead${leads.length !== 1 ? 's' : ''}`}
+                  </button>
+                </>
+              )}
+              {!enrolled && <button onClick={() => { setStep('escolha'); setTipo(null); setLeads([]); }} style={{ background: 'none', border: 'none', color: T.muted, cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}>← Voltar</button>}
+            </div>
+          )}
+
+          {/* ── STEP 2b: Selecionar (campanha) ── */}
+          {step === 'selecionar' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Busca */}
+              <div style={{ position: 'relative' }}>
+                <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: T.muted }} />
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar lead por nome ou telefone..."
+                  style={{ width: '100%', padding: '9px 10px 9px 30px', borderRadius: 9, border: `1.5px solid ${T.border}`, background: T.cream, fontSize: 12, color: T.marrom, outline: 'none', boxSizing: 'border-box' }}
+                  onFocus={e => e.target.style.borderColor = T.dourado} onBlur={e => e.target.style.borderColor = T.border} />
+              </div>
+
+              {/* Selecionar todos */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 4px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: T.marrom }}>
+                  <input type="checkbox" checked={allSelected} onChange={() => {
+                    if (allSelected) setSelected(new Set());
+                    else setSelected(new Set(filteredLeads.map(l => l.id)));
+                  }} style={{ width: 14, height: 14, cursor: 'pointer' }} />
+                  Selecionar todos ({filteredLeads.length})
+                </label>
+                <span style={{ fontSize: 11, color: T.dourado, fontWeight: 700 }}>{selected.size} selecionado{selected.size !== 1 ? 's' : ''}</span>
+              </div>
+
+              {/* Lista */}
+              <div style={{ border: `1px solid ${T.border}`, borderRadius: 12, overflow: 'hidden', maxHeight: 320, overflowY: 'auto' }}>
+                {loading ? (
+                  <div style={{ padding: 24, textAlign: 'center', color: T.muted, fontSize: 12 }}>Carregando...</div>
+                ) : filteredLeads.length === 0 ? (
+                  <div style={{ padding: 24, textAlign: 'center', color: T.muted, fontSize: 12 }}>Nenhum lead disponível</div>
+                ) : filteredLeads.map((l, i) => (
+                  <label key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: i < filteredLeads.length - 1 ? `1px solid ${T.borderLight}` : 'none', cursor: 'pointer', background: selected.has(l.id) ? T.douradoPale : T.white, transition: 'background 0.1s' }}>
+                    <input type="checkbox" checked={selected.has(l.id)} onChange={() => {
+                      setSelected(prev => { const n = new Set(prev); n.has(l.id) ? n.delete(l.id) : n.add(l.id); return n; });
+                    }} style={{ width: 14, height: 14, cursor: 'pointer', flexShrink: 0 }} />
+                    <Avatar nome={l.nome} size={28} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: T.marrom, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.nome}</div>
+                      <div style={{ fontSize: 10, color: T.muted }}>{l.telefone}</div>
+                    </div>
+                    <Badge color={l.tipo_origem === 'trafego' ? T.blue : T.dourado} bg={l.tipo_origem === 'trafego' ? T.blueBg : T.douradoPale}>
+                      {l.tipo_origem === 'trafego' ? '📢' : '🏛️'} {l.tipo_origem || 'orgânico'}
+                    </Badge>
+                  </label>
+                ))}
+              </div>
+
+              {/* Ações */}
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <button onClick={() => { setStep('escolha'); setTipo(null); setLeads([]); setSelected(new Set()); }} style={{ flex: 1, padding: '11px 16px', borderRadius: 10, border: `1px solid ${T.border}`, background: T.white, color: T.muted, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>← Voltar</button>
+                <button onClick={doEnroll} disabled={enrolling || selected.size === 0}
+                  style={{ flex: 2, padding: '11px 16px', borderRadius: 10, border: 'none', background: selected.size === 0 ? T.borderLight : `linear-gradient(135deg, ${T.marrom}, ${T.marromMed})`, color: selected.size === 0 ? T.muted : '#fff', cursor: selected.size === 0 ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 800, boxShadow: selected.size > 0 ? `0 4px 16px ${T.marrom}40` : 'none' }}>
+                  {enrolling ? 'Inscrevendo...' : `Inscrever ${selected.size} lead${selected.size !== 1 ? 's' : ''}`}
+                </button>
+              </div>
+              {enrolled !== null && (
+                <div style={{ background: T.greenBg, border: `1px solid ${T.green}30`, borderRadius: 10, padding: 12, textAlign: 'center', fontSize: 13, fontWeight: 700, color: T.green }}>
+                  ✅ {enrolled} leads inscritos! O follow-up começa em ~15 min.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── PÁGINA PRINCIPAL ──────────────────────────────────────────────────────────
 export default function FollowupPage() {
   const [items, setItems] = useState<Lead[]>([]);
@@ -588,6 +830,7 @@ export default function FollowupPage() {
   const [activeTab, setActiveTab] = useState<'sequencias' | 'nutricao' | 'campanhas'>('sequencias');
   const [massAction, setMassAction] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showInscricao, setShowInscricao] = useState(false);
   const { toast } = useToast();
 
   const metrics = {
@@ -657,13 +900,6 @@ export default function FollowupPage() {
     toast({ title: `${ids.length} leads ${active ? 'retomados' : 'pausados'}` });
   };
 
-  const handleBackfill = async () => {
-    try {
-      const { data } = await supabase.functions.invoke('traffic-followup-automation', { body: { action: 'backfill' } });
-      toast({ title: `✅ Backfill: ${data?.enrolled || 0} inscritos, ${data?.skipped || 0} ignorados` });
-      fetchData();
-    } catch (err: any) { toast({ title: 'Erro', description: err.message, variant: 'destructive' }); }
-  };
 
   const filtered = items.filter(item => {
     const matchSearch = !search || item.nome?.toLowerCase().includes(search.toLowerCase()) || item.telefone?.includes(search);
@@ -717,8 +953,8 @@ export default function FollowupPage() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={handleBackfill} style={{ padding: '9px 14px', borderRadius: 9, border: `1px solid ${T.border}`, background: T.white, color: T.muted, cursor: 'pointer', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
-                <ArrowUpRight size={13} /> Inscrever leads antigos
+              <button onClick={() => setShowInscricao(true)} style={{ padding: '9px 14px', borderRadius: 9, border: `1px solid ${T.border}`, background: T.white, color: T.muted, cursor: 'pointer', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <ArrowUpRight size={13} /> Inscrever leads
               </button>
               <button onClick={fetchData} style={{ padding: '9px 11px', borderRadius: 9, border: `1px solid ${T.border}`, background: T.white, color: T.muted, cursor: 'pointer' }}><RefreshCw size={14} /></button>
             </div>
@@ -887,6 +1123,12 @@ export default function FollowupPage() {
         </div>
       </div>
       <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(1.4)}}`}</style>
+      {showInscricao && (
+        <InscricaoModal
+          onClose={() => setShowInscricao(false)}
+          onSuccess={() => { setShowInscricao(false); fetchData(); }}
+        />
+      )}
     </AppLayout>
   );
 }
