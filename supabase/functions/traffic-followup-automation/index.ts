@@ -33,16 +33,16 @@ const AGENT_NAMES: Record<string, string> = {
 // ÁUDIOS E SEQUÊNCIA DE FOLLOW-UP
 // ============================================
 
-// Google Drive — IDs dos áudios de follow-up
-const AUDIO_1_URL = 'https://drive.google.com/uc?export=download&id=1RfaX1szxmAMw9V1SGc9eK2wylg0Tf4Hr&confirm=t';
-const AUDIO_2_URL = 'https://drive.google.com/uc?export=download&id=1cmnJj1SS9HK6xuuZZRyA1jkTh4C8M4qo&confirm=t';
+// Áudios hospedados no Netlify (via public/ no repositório)
+const AUDIO_1_URL = 'https://raw.githubusercontent.com/maninhocriativos/bentesramoscrma/main/public/audio1_followup.mp3';
+const AUDIO_2_URL = 'https://raw.githubusercontent.com/maninhocriativos/bentesramoscrma/main/public/audio2_followup.mp3';
 
 const TEXTO_FOLLOWUP_1 = `Entendo que analisar questões jurídicas exija cautela. Mas quero reforçar um ponto importante: a nossa avaliação inicial do seu contrato é um diagnóstico estratégico, feito para garantir que você não perca dinheiro.
 
 Enquanto o seu documento não entra na nossa fila de análise, o tempo corre a favor do banco. Basta encaminhar o PDF ou uma foto nítida aqui mesmo para darmos andamento.`;
 
 // Prova social (2º follow-up)
-const PROVA_SOCIAL_IMAGE_URL = 'https://bentesramoscrma.lovable.app/images/prova-social-bradesco.jpg';
+const PROVA_SOCIAL_IMAGE_URL = 'https://raw.githubusercontent.com/maninhocriativos/bentesramoscrma/main/public/images/prova-social-bradesco.jpg';
 const PROVA_SOCIAL_TEXTO = (nome: string) => {
   const n = (nome || 'Cliente').split(' ')[0];
   return `${n}, olha essa decisão que acabamos de ganhar! 🎉\n\nUm banco foi *condenado a pagar R$ 8.000,00* por cobrança indevida em contrato de financiamento.\n\nSe você também passa por algo parecido, seus direitos podem estar sendo violados. 💬 Me conta sua situação!`;

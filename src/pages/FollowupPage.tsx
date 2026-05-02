@@ -51,7 +51,8 @@ interface Lead {
   total_messages_sent: number; next_message_at: string | null;
   last_inbound_at: string | null; status: string;
   stages_sent: Record<string, any>; nome: string;
-  isa_agent: string | null;
+  isa_agent: string | null; pause_reason: string | null;
+  created_at: string | null; updated_at: string | null;
 }
 
 interface Nutricao {
@@ -104,40 +105,92 @@ function Badge({ children, color, bg }: { children: React.ReactNode; color: stri
 // ── Lead Card ─────────────────────────────────────────────────────────────────
 function LeadCard({ item, onToggle, onSelect, selected }: { item: Lead; onToggle: (id: string, active: boolean) => void; onSelect: (i: Lead) => void; selected: boolean }) {
   const stageCfg = item.current_stage ? STAGE_CFG[item.current_stage] : null;
+
+  // Detect if client responded recently (< 2 hours)
+  const respondedRecently = item.last_inbound_at
+    ? (Date.now() - new Date(item.last_inbound_at).getTime()) < 2 * 60 * 60 * 1000
+    : false;
+  const isNew = item.status === 'new' || item.status === 'in_progress';
+  const isActive = item.automation_active && isNew;
+
+  // Derive last sent time from stages_sent
+  const allSentTimes = Object.values(item.stages_sent || {})
+    .map((s: any) => s?.at ? new Date(s.at).getTime() : 0)
+    .filter(Boolean);
+  const lastSentAt = allSentTimes.length > 0 ? new Date(Math.max(...allSentTimes)) : null;
+
+  const stageOrder = Object.entries(STAGE_CFG).sort((a, b) => a[1].order - b[1].order);
+
   return (
     <div onClick={() => onSelect(item)} style={{
-      background: selected ? `linear-gradient(135deg, ${T.marrom}f8, ${T.marromMed}f8)` : T.white,
-      border: selected ? `1.5px solid ${T.dourado}` : `1px solid ${T.border}`,
+      background: selected ? `linear-gradient(135deg, ${T.marrom}f8, ${T.marromMed}f8)` : respondedRecently ? `linear-gradient(135deg, ${T.greenBg}, #fff)` : T.white,
+      border: selected ? `1.5px solid ${T.dourado}` : respondedRecently ? `1.5px solid ${T.green}` : `1px solid ${T.border}`,
       borderRadius: 16, padding: '14px 16px', cursor: 'pointer',
-      boxShadow: selected ? `0 4px 20px ${T.marrom}30` : '0 1px 3px rgba(30,16,8,0.05)',
+      boxShadow: selected ? `0 4px 20px ${T.marrom}30` : respondedRecently ? `0 4px 16px ${T.green}20` : '0 1px 3px rgba(30,16,8,0.05)',
       transition: 'all 0.15s', position: 'relative', overflow: 'hidden',
     }}>
-      {stageCfg && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2.5, background: `linear-gradient(90deg, ${stageCfg.color}, ${stageCfg.color}60)`, borderRadius: '16px 16px 0 0' }} />}
+      {/* Top color bar — stage or "respondeu" */}
+      {respondedRecently
+        ? <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.green}, ${T.green}60)`, borderRadius: '16px 16px 0 0' }} />
+        : stageCfg && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2.5, background: `linear-gradient(90deg, ${stageCfg.color}, ${stageCfg.color}60)`, borderRadius: '16px 16px 0 0' }} />
+      }
+      {/* Active pulse dot */}
+      {isActive && <div style={{ position: 'absolute', top: 10, right: 10, width: 7, height: 7, borderRadius: '50%', background: T.green, boxShadow: `0 0 0 3px ${T.green}30`, animation: 'pulse 2s infinite' }} />}
+
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <Avatar nome={item.nome} size={38} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 800, fontSize: 13, color: selected ? '#fff' : T.marrom, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nome || item.telefone}</div>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
-            {stageCfg && <Badge color={stageCfg.color} bg={stageCfg.bg}>{stageCfg.label}</Badge>}
-            {item.status === 'responded' && <Badge color={T.green} bg={T.greenBg}>✅ Respondeu</Badge>}
+            {stageCfg && !respondedRecently && <Badge color={stageCfg.color} bg={stageCfg.bg}>{stageCfg.label}</Badge>}
+            {respondedRecently && <Badge color={T.green} bg={T.greenBg}>💬 Respondeu agora!</Badge>}
+            {item.status === 'responded' && !respondedRecently && <Badge color={T.green} bg={T.greenBg}>✅ Respondeu</Badge>}
             {item.status === 'nutricao' && <Badge color={T.teal} bg={T.tealBg}>🌱 Nutrição</Badge>}
+            {!item.automation_active && isNew && <Badge color={T.orange} bg={T.orangeBg}>⏸ Pausado</Badge>}
           </div>
         </div>
-        {item.status !== 'responded' && item.status !== 'archived' && item.status !== 'nutricao' && (
+        {isNew && (
           <button onClick={e => { e.stopPropagation(); onToggle(item.id, !item.automation_active); }}
             style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: item.automation_active ? `${T.green}20` : `${T.orange}20`, cursor: 'pointer', color: item.automation_active ? T.green : T.orange, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {item.automation_active ? <Pause size={11} /> : <Play size={11} />}
           </button>
         )}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTop: `1px solid ${selected ? 'rgba(255,255,255,0.1)' : T.borderLight}` }}>
+
+      {/* Stage progress dots */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 10, marginBottom: 4 }}>
+        {stageOrder.map(([key, cfg], idx) => {
+          const sent = !!item.stages_sent?.[key];
+          const isCurrent = item.current_stage === key;
+          return (
+            <React.Fragment key={key}>
+              {idx > 0 && <div style={{ flex: 1, height: 2, background: sent ? cfg.color : `${T.border}`, borderRadius: 2, transition: 'background 0.3s' }} />}
+              <div title={cfg.label} style={{
+                width: 9, height: 9, borderRadius: '50%', flexShrink: 0, transition: 'all 0.3s',
+                background: sent ? cfg.color : isCurrent ? `${cfg.color}40` : T.borderLight,
+                border: isCurrent ? `2px solid ${cfg.color}` : sent ? 'none' : `1px solid ${T.border}`,
+                boxShadow: isCurrent ? `0 0 0 3px ${cfg.color}20` : 'none',
+              }} />
+            </React.Fragment>
+          );
+        })}
+        <div style={{ flex: 1, height: 2, background: item.status === 'nutricao' ? T.teal : T.border, borderRadius: 2, transition: 'background 0.3s' }} />
+        <div title="Nutrição" style={{ width: 9, height: 9, borderRadius: '50%', flexShrink: 0, background: item.status === 'nutricao' ? T.teal : T.borderLight, border: `1px solid ${item.status === 'nutricao' ? T.teal : T.border}` }} />
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 6, borderTop: `1px solid ${selected ? 'rgba(255,255,255,0.1)' : T.borderLight}` }}>
         <span style={{ fontSize: 10, color: selected ? 'rgba(255,255,255,0.5)' : T.muted }}>
           <MessageCircle size={9} style={{ display: 'inline', marginRight: 3 }} />{item.total_messages_sent} msgs
+          {lastSentAt && <span style={{ marginLeft: 6 }}>· env. {formatDistanceToNow(lastSentAt, { locale: ptBR, addSuffix: true })}</span>}
         </span>
-        {item.next_message_at && item.automation_active ? (
+        {item.next_message_at && item.automation_active && isNew ? (
           <span style={{ fontSize: 10, color: selected ? T.douradoLight : T.dourado, fontWeight: 700 }}>
             <Clock size={9} style={{ display: 'inline', marginRight: 3 }} />
             {formatDistanceToNow(new Date(item.next_message_at), { locale: ptBR, addSuffix: true })}
+          </span>
+        ) : item.last_inbound_at ? (
+          <span style={{ fontSize: 10, color: selected ? T.douradoLight : T.green, fontWeight: 600 }}>
+            resp. {formatDistanceToNow(new Date(item.last_inbound_at), { locale: ptBR, addSuffix: true })}
           </span>
         ) : (
           <span style={{ fontSize: 10, color: selected ? 'rgba(255,255,255,0.4)' : T.mutedLight }}>{item.telefone}</span>
@@ -545,26 +598,50 @@ export default function FollowupPage() {
     taxa: items.length > 0 ? Math.round((items.filter(i => i.status === 'responded').length / items.length) * 100) : 0,
   };
 
+  const mapRow = useCallback((d: any): Lead => ({
+    id: d.id, lead_id: d.lead_id, telefone: d.telefone,
+    current_stage: d.current_stage, automation_active: d.automation_active,
+    total_messages_sent: d.total_messages_sent || 0, next_message_at: d.next_message_at,
+    last_inbound_at: d.last_inbound_at, status: d.status || 'new',
+    stages_sent: d.stages_sent || {}, nome: d.lead?.nome || d.telefone,
+    isa_agent: d.lead?.isa_agent || null, pause_reason: d.pause_reason || null,
+    created_at: d.created_at || null, updated_at: d.updated_at || null,
+  }), []);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await supabase
         .from('traffic_followups')
-        .select('id, lead_id, telefone, current_stage, automation_active, total_messages_sent, next_message_at, last_inbound_at, status, stages_sent, lead:leads_juridicos(nome, isa_agent)')
+        .select('id, lead_id, telefone, current_stage, automation_active, total_messages_sent, next_message_at, last_inbound_at, status, stages_sent, pause_reason, created_at, updated_at, lead:leads_juridicos(nome, isa_agent)')
         .order('next_message_at', { ascending: true, nullsFirst: false }).limit(300);
-      setItems((data || []).map((d: any) => ({
-        id: d.id, lead_id: d.lead_id, telefone: d.telefone,
-        current_stage: d.current_stage, automation_active: d.automation_active,
-        total_messages_sent: d.total_messages_sent || 0, next_message_at: d.next_message_at,
-        last_inbound_at: d.last_inbound_at, status: d.status || 'new',
-        stages_sent: d.stages_sent || {}, nome: d.lead?.nome || d.telefone,
-        isa_agent: d.lead?.isa_agent || null,
-      })));
+      setItems((data || []).map(mapRow));
     } catch (err: any) { toast({ title: 'Erro', description: err.message, variant: 'destructive' }); }
     finally { setLoading(false); }
-  }, [toast]);
+  }, [toast, mapRow]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Real-time subscription — update cards as automation fires
+  useEffect(() => {
+    const channel = supabase
+      .channel('followup-page-realtime')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'traffic_followups' }, (payload: { new: Record<string, any> }) => {
+        setItems((prev: Lead[]) => prev.map((i: Lead) => i.id === payload.new.id
+          ? { ...i, ...mapRow({ ...payload.new, lead: { nome: i.nome, isa_agent: i.isa_agent } }) }
+          : i
+        ));
+        setSelected((prev: Lead | null) => prev?.id === payload.new.id
+          ? { ...prev, ...mapRow({ ...payload.new, lead: { nome: prev.nome, isa_agent: prev.isa_agent } }) }
+          : prev
+        );
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'traffic_followups' }, () => {
+        fetchData();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchData, mapRow]);
 
   const handleToggle = async (id: string, active: boolean) => {
     await supabase.from('traffic_followups').update({ automation_active: active, pause_reason: active ? null : 'Pausado manualmente' }).eq('id', id);
@@ -809,7 +886,7 @@ export default function FollowupPage() {
           )}
         </div>
       </div>
-      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(1.4)}}`}</style>
     </AppLayout>
   );
 }
