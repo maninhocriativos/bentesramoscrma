@@ -20,6 +20,22 @@ export interface SubscriberTag {
   created_at: string;
 }
 
+// Mapeamento de nome de tag → campos que devem ser atualizados em leads_juridicos
+const TAG_LEAD_ACTIONS: Record<string, Record<string, string>> = {
+  'Tráfego Pago':        { tipo_origem: 'trafego' },
+  'Bentes Ramos':        { tipo_origem: 'whatsapp_direto' },
+  'Desistiu':            { status: 'Perdido' },
+  'Perdido':             { status: 'Perdido' },
+  'Aguardando contrato': { lead_state: 'CONTRACT_SENT', status: 'Aguardando Contrato' },
+  'Indicação':           { tipo_origem: 'indicacao' },
+  'Enviou documentação': { lead_state: 'DOCS_PENDING' },
+  'Bancário':            { case_type: 'bancario' },
+  'Família':             { case_type: 'familia' },
+  'Previdenciário':      { case_type: 'previdenciario' },
+  'Trabalhista':         { case_type: 'trabalhista' },
+  'Aéreo':               { case_type: 'aereo' },
+};
+
 export function useChatTags() {
   const [tags, setTags] = useState<ChatTag[]>([]);
   const [subscriberTags, setSubscriberTags] = useState<Map<string, SubscriberTag[]>>(new Map());
@@ -92,14 +108,15 @@ export function useChatTags() {
     setSubscriberTags(newMap);
   }, [subscriberTags]);
 
-  // Add tag to subscriber
+  // Add tag to subscriber (+ aplica efeito real no lead se houver mapeamento)
   const addTagToSubscriber = useCallback(async (
-    subscriberId: string, 
-    tagId: string, 
-    reason?: string
+    subscriberId: string,
+    tagId: string,
+    reason?: string,
+    leadId?: string,
   ) => {
     const { data: userData } = await supabase.auth.getUser();
-    
+
     const { error } = await supabase
       .from('subscriber_tags')
       .insert({
@@ -119,10 +136,26 @@ export function useChatTags() {
       return { error };
     }
 
-    // Refresh tags for this subscriber
+    // Aplicar efeito real no lead se houver mapeamento
+    if (leadId) {
+      const tagName = tags.find(t => t.id === tagId)?.name;
+      const action = tagName ? TAG_LEAD_ACTIONS[tagName] : null;
+      if (action) {
+        const { error: leadError } = await (supabase as any)
+          .from('leads_juridicos')
+          .update(action)
+          .eq('id', leadId);
+        if (leadError) {
+          console.error('[useChatTags] Erro ao aplicar ação da tag no lead:', leadError);
+        } else {
+          console.log(`[useChatTags] Tag "${tagName}" aplicou: ${JSON.stringify(action)} em lead ${leadId}`);
+        }
+      }
+    }
+
     await loadSubscriberTags([subscriberId]);
     return { error: null };
-  }, [loadSubscriberTags, toast]);
+  }, [loadSubscriberTags, tags, toast]);
 
   // Remove tag from subscriber
   const removeTagFromSubscriber = useCallback(async (
@@ -142,9 +175,9 @@ export function useChatTags() {
     }
 
     // Update local state
-    const newMap = new Map(subscriberTags);
+    const newMap = new Map<string, SubscriberTag[]>(subscriberTags);
     const currentTags = newMap.get(subscriberId) || [];
-    newMap.set(subscriberId, currentTags.filter(t => t.tag_id !== tagId));
+    newMap.set(subscriberId, currentTags.filter((t: SubscriberTag) => t.tag_id !== tagId));
     setSubscriberTags(newMap);
 
     return { error: null };
@@ -211,16 +244,16 @@ export function useChatTags() {
 
 // Color mapping for tailwind classes
 export const TAG_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  orange: { bg: 'bg-orange-500/10', text: 'text-orange-600', border: 'border-orange-500/20' },
-  green: { bg: 'bg-green-500/10', text: 'text-green-600', border: 'border-green-500/20' },
-  blue: { bg: 'bg-blue-500/10', text: 'text-blue-600', border: 'border-blue-500/20' },
-  red: { bg: 'bg-red-500/10', text: 'text-red-600', border: 'border-red-500/20' },
-  yellow: { bg: 'bg-yellow-500/10', text: 'text-yellow-600', border: 'border-yellow-500/20' },
-  purple: { bg: 'bg-purple-500/10', text: 'text-purple-600', border: 'border-purple-500/20' },
-  cyan: { bg: 'bg-cyan-500/10', text: 'text-cyan-600', border: 'border-cyan-500/20' },
-  indigo: { bg: 'bg-indigo-500/10', text: 'text-indigo-600', border: 'border-indigo-500/20' },
-  emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-600', border: 'border-emerald-500/20' },
-  amber: { bg: 'bg-amber-500/10', text: 'text-amber-600', border: 'border-amber-500/20' },
-  pink: { bg: 'bg-pink-500/10', text: 'text-pink-600', border: 'border-pink-500/20' },
-  gray: { bg: 'bg-gray-500/10', text: 'text-gray-600', border: 'border-gray-500/20' },
+  orange:  { bg: 'bg-orange-100',  text: 'text-orange-700',  border: 'border-orange-300' },
+  green:   { bg: 'bg-green-100',   text: 'text-green-700',   border: 'border-green-300' },
+  blue:    { bg: 'bg-blue-100',    text: 'text-blue-700',    border: 'border-blue-300' },
+  red:     { bg: 'bg-red-100',     text: 'text-red-700',     border: 'border-red-300' },
+  yellow:  { bg: 'bg-yellow-100',  text: 'text-yellow-700',  border: 'border-yellow-300' },
+  purple:  { bg: 'bg-purple-100',  text: 'text-purple-700',  border: 'border-purple-300' },
+  cyan:    { bg: 'bg-cyan-100',    text: 'text-cyan-700',    border: 'border-cyan-300' },
+  indigo:  { bg: 'bg-indigo-100',  text: 'text-indigo-700',  border: 'border-indigo-300' },
+  emerald: { bg: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-300' },
+  amber:   { bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-300' },
+  pink:    { bg: 'bg-pink-100',    text: 'text-pink-700',    border: 'border-pink-300' },
+  gray:    { bg: 'bg-gray-100',    text: 'text-gray-600',    border: 'border-gray-300' },
 };

@@ -359,13 +359,21 @@ async function processNutricao(supabase: any, zapiConfig: any): Promise<any[]> {
 
   const { data: leads } = await supabase
     .from('followup_nutricao')
-    .select('*, lead:leads_juridicos(id, nome, telefone)')
+    .select('*, lead:leads_juridicos(id, nome, telefone, status)')
     .eq('status', 'aceito')
     .lte('proxima_campanha_em', now.toISOString())
     .limit(20);
 
   for (const nutricao of leads || []) {
     try {
+      // Não enviar para leads com contrato assinado ou encerrados
+      if (nutricao.lead?.status && ['Ganho', 'Perdido', 'Contrato Assinado'].includes(nutricao.lead.status)) {
+        await supabase.from('followup_nutricao')
+          .update({ status: 'recusado', proxima_campanha_em: null }).eq('id', nutricao.id);
+        console.log(`[Nutrição] ⏭ Pulando ${nutricao.lead.nome} — status: ${nutricao.lead.status}`);
+        continue;
+      }
+
       // Buscar próxima campanha na ordem
       let campanhaQuery = supabase
         .from('followup_campanhas').select('*').eq('ativo', true);
@@ -536,6 +544,9 @@ async function enrollLead(supabase: any, leadId: string, telefone: string, subsc
     .from('leads_juridicos').select('id, nome, tipo_origem, status').eq('id', leadId).single();
   if (!lead) return { success: false, error: 'Lead not found' };
   if (lead.tipo_origem !== 'trafego') return { success: false, error: 'Não é lead de tráfego' };
+  if (['Ganho', 'Perdido', 'Contrato Assinado'].includes(lead.status)) {
+    return { success: false, error: `Lead encerrado (${lead.status}) — não inscrito` };
+  }
 
   const { data: existing } = await supabase
     .from('traffic_followups').select('id').eq('lead_id', leadId).maybeSingle();

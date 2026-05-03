@@ -148,6 +148,16 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // PAUSADO — aguardando validação completa do fluxo de agendamentos
+  const ATIVO = false;
+  if (!ATIVO) {
+    console.log('[ISA-SCHEDULER] Função pausada (ATIVO=false)');
+    return new Response(JSON.stringify({ success: true, paused: true, message: 'Função pausada temporariamente' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    });
+  }
+
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {

@@ -107,19 +107,19 @@ const ENDERECO_FISICO = 'Ed. Vieiralves Business Center - Sala 708\nR. Salvador,
 const AGENT_DISPLAY_NAMES: Record<string, string> = {
   'isa_triagem':  'Isa',
   'isa_bancario': 'Melissa',
-  'isa_aereo':    'Jerussa',
+  'isa_aereo':    'Jerusa',
   'humano':       'Atendente',
 };
 
 // Mensagem curta de Isa anunciando a transferência (sem se reapresentar)
 const AGENT_HANDOFFS: Record<string, string> = {
   'isa_bancario': 'Certo! Vou te conectar agora com a *Melissa*, nossa especialista em Direito Bancário. Um momento! 😊',
-  'isa_aereo':    'Certo! Vou te conectar agora com a *Jerussa*, nossa especialista em Direito Aéreo. Um momento! 😊',
+  'isa_aereo':    'Certo! Vou te conectar agora com a *Jerusa*, nossa especialista em Direito Aéreo. Um momento! 😊',
 };
 
 const AGENT_INTROS: Record<string, string> = {
   'isa_bancario': 'Olá! Sou a *Melissa*, especialista em Direito Bancário aqui no escritório Bentes & Ramos 😊\n\nVi que você tem uma questão relacionada a serviços financeiros. Para que eu possa te ajudar da melhor forma, pode me dizer qual banco ou instituição está envolvida e o tipo de produto (empréstimo, financiamento, cartão, consignado)?',
-  'isa_aereo':    'Olá! Sou a *Jerussa*, especialista em Direito Aéreo do escritório Bentes & Ramos 😊\n\nVi que você passou por alguma situação com uma companhia aérea. Pode me contar mais detalhes? Qual companhia e o que aconteceu (cancelamento, atraso, bagagem extraviada, overbooking)?',
+  'isa_aereo':    'Olá! Sou a *Jerusa*, especialista em Direito Aéreo do escritório Bentes & Ramos 😊\n\nVi que você passou por alguma situação com uma companhia aérea. Pode me contar mais detalhes? Qual companhia e o que aconteceu (cancelamento, atraso, bagagem extraviada, overbooking)?',
 };
 
 interface LeadContext {
@@ -884,6 +884,44 @@ async function enviarRespostaZapi(supabaseClient: any, subscriberId: string, men
   }
 }
 
+async function enviarImagemZapi(supabaseClient: any, subscriberId: string, imageUrl: string, caption: string): Promise<{ success: boolean }> {
+  try {
+    const { data: subscriber } = await supabaseClient.from('manychat_subscribers').select('telefone, linha_whatsapp, lead_id').eq('subscriber_id', subscriberId).maybeSingle();
+    if (!subscriber?.telefone) return { success: false };
+    const isTrafficLine = subscriber.linha_whatsapp === 'trafego_isa';
+    let useTrafficInstance = isTrafficLine;
+    if (!useTrafficInstance && subscriber.lead_id) {
+      const { data: lead } = await supabaseClient.from('leads_juridicos').select('linha_whatsapp, tipo_origem, fonte_trafego').eq('id', subscriber.lead_id).maybeSingle();
+      useTrafficInstance = lead?.linha_whatsapp === 'trafego_isa' || lead?.tipo_origem === 'trafego' || lead?.fonte_trafego?.includes('facebook');
+    }
+    let instanceId: string | undefined;
+    let token: string | undefined;
+    let clientToken: string | undefined;
+    if (useTrafficInstance) {
+      const { data: ti } = await supabaseClient.from('zapi_instances').select('instance_id, token, client_token').eq('is_active', true).ilike('phone_number', '%85888190%').maybeSingle();
+      if (ti) { instanceId = ti.instance_id; token = ti.token; clientToken = ti.client_token; }
+    }
+    if (!instanceId) {
+      const { data: di } = await supabaseClient.from('zapi_instances').select('instance_id, token, client_token').eq('is_active', true).eq('is_default', true).maybeSingle();
+      if (di) { instanceId = di.instance_id; token = di.token; clientToken = di.client_token; }
+    }
+    if (!instanceId || !token) return { success: false };
+    let cleanPhone = subscriber.telefone.replace(/\D/g, '');
+    if (cleanPhone.length === 10 || cleanPhone.length === 11) cleanPhone = '55' + cleanPhone;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (clientToken) headers['Client-Token'] = clientToken;
+    const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-image`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ phone: cleanPhone, image: imageUrl, caption }),
+    });
+    const result = await response.json();
+    return { success: response.ok && !result.error };
+  } catch (err) {
+    console.error('❌ Erro ao enviar imagem Z-API:', err);
+    return { success: false };
+  }
+}
+
 async function enviarRespostaManyChat(subscriberId: string, mensagem: string): Promise<boolean> {
   const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
   const result = await enviarRespostaZapi(supabaseClient, subscriberId, mensagem);
@@ -1412,9 +1450,28 @@ serve(async (req) => {
       }
     }
 
-    // Após transferência → 1) Isa anuncia brevemente, 2) especialista se apresenta
+    // Após transferência → 0) prova social, 1) Isa anuncia, 2) especialista se apresenta
     if (transferredToAgent && subscriber_id) {
       const newAgent = transferredToAgent;
+
+      // Prova social: imagem Bradesco + texto de casos de sucesso antes da transferência
+      const PROVA_SOCIAL_IMG = 'https://bentesramoscrma.lovable.app/images/prova-social-bradesco.jpg';
+      const provaSocialTexto = 'Enquanto te conecto com a nossa especialista, olha esse caso que resolvemos recentemente! 🏆 Já ajudamos centenas de clientes a recuperarem seus direitos. Pode ter certeza que seu caso estará em ótimas mãos! 💪⚖️';
+      const imgSend = await enviarImagemZapi(supabase, subscriber_id, PROVA_SOCIAL_IMG, provaSocialTexto);
+      if (imgSend.success) {
+        await supabase.from('manychat_mensagens').insert({
+          subscriber_id,
+          subscriber_nome: agentDisplayName,
+          canal: canal || 'whatsapp',
+          conteudo: provaSocialTexto,
+          tipo: 'image',
+          direcao: 'saida',
+          lead_id,
+          metadata: { auto_gerada: true, source: 'isa', agent: agentKeyBefore, prova_social: true, image_url: PROVA_SOCIAL_IMG },
+        });
+        console.log('[Isa Routing] 📸 Prova social enviada antes do handoff');
+      }
+      await new Promise<void>(r => setTimeout(r, 1500));
 
       // Mensagem curta de Isa (sem se reapresentar)
       const handoffMsg = AGENT_HANDOFFS[newAgent];

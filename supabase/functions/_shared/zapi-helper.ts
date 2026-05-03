@@ -6,7 +6,7 @@
  * │  REGRA ABSOLUTA DE ROTEAMENTO — NÃO ALTERAR SEM REVISÃO                │
  * │                                                                         │
  * │  Leads de TRÁFEGO  → SOMENTE via "Bentes Ramos Trafego" (98588-8190)   │
- * │  Leads de ESCRITÓRIO → SOMENTE via "Bentes Ramos"       (91604-348)    │
+ * │  Leads de ESCRITÓRIO → SOMENTE via "Bentes Ramos"       (99160-4348)   │
  * │                                                                         │
  * │  A separação é garantida por tipo_origem = 'trafego' no banco.         │
  * │  Nunca enviar mensagem de tráfego pela instância do escritório          │
@@ -22,7 +22,7 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 // ── Números canônicos das instâncias Z-API ────────────────────────────────────
 // Alterar APENAS se o número do WhatsApp mudar fisicamente.
 export const PHONE_TRAFEGO    = '5592985888190'; // (92) 98588-8190 → "Bentes Ramos Trafego"
-export const PHONE_ESCRITORIO = '559291604348';  // (92) 91604-348  → "Bentes Ramos"
+export const PHONE_ESCRITORIO = '5592991604348'; // (92) 99160-4348 → "Bentes Ramos"
 
 export interface ZapiConfig {
   instance_id: string;
@@ -534,7 +534,7 @@ export async function enviarParaLead(
  *
  * REGRA ABSOLUTA:
  * - tipo_origem = 'trafego'  → SOMENTE "Bentes Ramos Trafego" (92) 98588-8190
- * - demais origens            → SOMENTE "Bentes Ramos"         (92) 91604-348
+ * - demais origens            → SOMENTE "Bentes Ramos"         (92) 99160-4348
  *
  * Prioridade de seleção: 1) número de telefone exato, 2) is_default flag
  */

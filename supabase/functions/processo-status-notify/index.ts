@@ -76,12 +76,17 @@ async function resolveInstance(supabase: any, cliente: any) {
   const linhaWhatsapp = cliente.linha_whatsapp || "indefinido";
   const tipoOrigem = cliente.tipo_origem || "indefinido";
 
-  // Determine which instance to use
-  // Tráfego clients → Tráfego instance (non-default)
-  // Bentes Ramos / organic clients → Bentes Ramos instance (default)
-  const isTrafego = linhaWhatsapp === "trafego" || linhaWhatsapp === "trafego_isa" || tipoOrigem === "trafego" || tipoOrigem === "trafego_isa";
+  // REGRA ABSOLUTA: tipo_origem é a fonte de verdade para roteamento
+  // Tráfego → "Bentes Ramos Trafego" (92) 98588-8190 [5592985888190]
+  // Escritório → "Bentes Ramos" (92) 99160-4348 [5592991604348]
+  const isTrafego = tipoOrigem === "trafego" || tipoOrigem === "trafego_isa" ||
+                    linhaWhatsapp === "trafego" || linhaWhatsapp === "trafego_isa";
 
-  console.log(`📱 Roteamento: linha_whatsapp=${linhaWhatsapp}, tipo_origem=${tipoOrigem}, isTrafego=${isTrafego}`);
+  const PHONE_TRAFEGO    = "5592985888190"; // (92) 98588-8190
+  const PHONE_ESCRITORIO = "5592991604348"; // (92) 99160-4348
+  const targetPhone = isTrafego ? PHONE_TRAFEGO : PHONE_ESCRITORIO;
+
+  console.log(`📱 Roteamento: tipo_origem=${tipoOrigem}, linha_whatsapp=${linhaWhatsapp}, isTrafego=${isTrafego}, targetPhone=${targetPhone}`);
 
   // Try zapi_instances table first
   const { data: instances } = await supabase
@@ -91,16 +96,18 @@ async function resolveInstance(supabase: any, cliente: any) {
     .order("is_default", { ascending: false });
 
   if (instances && instances.length > 0) {
-    let target;
-    if (isTrafego) {
-      // Find non-default (tráfego) instance
-      target = instances.find((i: any) => !i.is_default) || instances[0];
-    } else {
-      // Find default (Bentes Ramos) instance
-      target = instances.find((i: any) => i.is_default) || instances[0];
-    }
+    // 1º: match pelo número de telefone (mais confiável)
+    const byPhone = instances.find((i: any) =>
+      i.phone_number?.replace(/\D/g, "") === targetPhone
+    );
+    // 2º: fallback pelo flag is_default
+    const byFlag = isTrafego
+      ? instances.find((i: any) => !i.is_default) || instances[0]
+      : instances.find((i: any) => i.is_default) || instances[0];
 
-    console.log(`✅ Instância selecionada: ${target.name || target.instance_id} (default=${target.is_default})`);
+    const target = byPhone || byFlag;
+
+    console.log(`✅ Instância selecionada: ${target.name || target.instance_id} (via=${byPhone ? 'phone' : 'flag'})`);
 
     return {
       instanceId: target.instance_id,

@@ -227,6 +227,16 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // PAUSADO — notificações de processo desativadas temporariamente
+  const ATIVO = false;
+  if (!ATIVO) {
+    console.log('[PROCESSO-MONITOR] Função pausada (ATIVO=false)');
+    return new Response(JSON.stringify({ success: true, paused: true, message: 'Função pausada temporariamente' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    });
+  }
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;

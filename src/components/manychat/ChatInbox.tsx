@@ -1573,7 +1573,7 @@ const ManyChatInboxContent = () => {
                   {isTyping(selectedSubscriber.subscriber_id) && <span className="text-[11px] md:text-xs text-[#00A884] font-medium animate-pulse">digitando...</span>}
                   <div className="hidden md:contents">
                     {getSubscriberTags(selectedSubscriber.subscriber_id).slice(0, 3).map(st => st.tag && <TagBadge key={st.id} tag={st.tag} reason={st.reason} size="sm" showRemove onRemove={() => removeTagFromSubscriber(selectedSubscriber.subscriber_id, st.tag_id)} />)}
-                    <TagSelector subscriberId={selectedSubscriber.subscriber_id} availableTags={availableTags} currentTags={getSubscriberTags(selectedSubscriber.subscriber_id)} onAddTag={(tagId, reason) => addTagToSubscriber(selectedSubscriber.subscriber_id, tagId, reason)} onRemoveTag={tagId => removeTagFromSubscriber(selectedSubscriber.subscriber_id, tagId)} onCreateTag={createTag} />
+                    <TagSelector subscriberId={selectedSubscriber.subscriber_id} availableTags={availableTags} currentTags={getSubscriberTags(selectedSubscriber.subscriber_id)} onAddTag={(tagId, reason) => addTagToSubscriber(selectedSubscriber.subscriber_id, tagId, reason, selectedSubscriber.lead_id ?? undefined)} onRemoveTag={tagId => removeTagFromSubscriber(selectedSubscriber.subscriber_id, tagId)} onCreateTag={createTag} />
                   </div>
                 </div>
               </div>
