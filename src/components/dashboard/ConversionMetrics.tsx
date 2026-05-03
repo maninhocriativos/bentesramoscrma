@@ -74,8 +74,12 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
 
       const mc = trafficLeads.filter(l => {
         if (!isConverted(l)) return false;
-        const signedAt = (l as any).contract_signed_at;
-        const d = signedAt ? new Date(signedAt) : new Date(l.created_at);
+        // Prioridade: contract_signed_at > state_updated_at > updated_at > created_at
+        const dateStr = (l as any).contract_signed_at
+          || (l as any).state_updated_at
+          || l.updated_at
+          || l.created_at;
+        const d = new Date(dateStr);
         return isAfter(d, mStart) && isBefore(d, mEnd);
       });
 
