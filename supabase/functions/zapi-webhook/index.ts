@@ -1028,7 +1028,7 @@ serve(async (req: Request) => {
         // Não usar zapiConfig genérico — buscar explicitamente a instância
         // do escritório pelo phone_number para garantir roteamento correto
         // ============================================
-        const officePhones = ['559291604348', '5592991604348'];
+        const officePhones = ['5592991604348']; // (92) 99160-4348 — "Bentes Ramos" escritório
         const { data: officeInstance } = await supabase
           .from('zapi_instances')
           .select('*')

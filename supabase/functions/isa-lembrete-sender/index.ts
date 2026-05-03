@@ -43,7 +43,7 @@ serve(async (req) => {
       // Verificar atendimento humano ou lead bloqueado
       const { data: sub } = await supabase
         .from('manychat_subscribers')
-        .select('atendimento_humano, telefone, linha_whatsapp')
+        .select('atendimento_humano, telefone, linha_whatsapp, lead_id')
         .eq('subscriber_id', subscriber_id)
         .maybeSingle();
 
@@ -56,31 +56,44 @@ serve(async (req) => {
         continue;
       }
 
-      // Buscar instância Z-API correta
-      const isTrafficLine = sub?.linha_whatsapp === 'trafego_isa';
+      // REGRA ABSOLUTA: tipo_origem = 'trafego' → 5592985888190 | demais → 5592991604348
+      const PHONE_TRAFEGO    = '5592985888190'; // (92) 98588-8190 — "Bentes Ramos Trafego"
+      const PHONE_ESCRITORIO = '5592991604348'; // (92) 99160-4348 — "Bentes Ramos"
+
+      // Verificar se é lead de tráfego: linha_whatsapp OU tipo_origem do lead
+      let isTrafego = sub?.linha_whatsapp === 'trafego_isa' || sub?.linha_whatsapp === 'trafego';
+      if (!isTrafego && sub?.lead_id) {
+        const { data: lead } = await supabase
+          .from('leads_juridicos')
+          .select('tipo_origem')
+          .eq('id', sub.lead_id)
+          .maybeSingle();
+        if (lead?.tipo_origem === 'trafego' || lead?.tipo_origem === 'trafego_isa') isTrafego = true;
+      }
+
+      const targetPhone = isTrafego ? PHONE_TRAFEGO : PHONE_ESCRITORIO;
+
       let instanceId: string | undefined;
       let token: string | undefined;
       let clientToken: string | undefined;
 
-      if (isTrafficLine) {
-        const { data: ti } = await supabase
-          .from('zapi_instances')
-          .select('instance_id, token, client_token')
-          .eq('is_active', true)
-          .ilike('phone_number', '%85888190%')
-          .maybeSingle();
-        if (ti) { instanceId = ti.instance_id; token = ti.token; clientToken = ti.client_token; }
-      }
+      // 1º: match pelo número de telefone exato (mais confiável)
+      const { data: instances } = await supabase
+        .from('zapi_instances')
+        .select('instance_id, token, client_token, phone_number, is_default')
+        .eq('is_active', true);
 
-      if (!instanceId) {
-        const { data: di } = await supabase
-          .from('zapi_instances')
-          .select('instance_id, token, client_token')
-          .eq('is_active', true)
-          .eq('is_default', true)
-          .maybeSingle();
-        if (di) { instanceId = di.instance_id; token = di.token; clientToken = di.client_token; }
-      }
+      const byPhone = (instances || []).find((i: any) =>
+        i.phone_number?.replace(/\D/g, '') === targetPhone
+      );
+      const byFlag = isTrafego
+        ? (instances || []).find((i: any) => !i.is_default)
+        : (instances || []).find((i: any) => i.is_default);
+      const inst = byPhone || byFlag || (instances || [])[0];
+
+      if (inst) { instanceId = inst.instance_id; token = inst.token; clientToken = inst.client_token; }
+
+      console.log(`[Lembrete] 📱 Roteamento: isTrafego=${isTrafego} → ${inst?.phone_number || 'sem instância'} (via ${byPhone ? 'phone' : 'flag'})`);
 
       if (!instanceId || !token || !sub?.telefone) {
         console.error(`[Lembrete] ❌ Sem instância ou telefone para ${subscriber_id}`);

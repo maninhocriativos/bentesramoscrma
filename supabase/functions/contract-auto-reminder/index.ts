@@ -135,12 +135,17 @@ serve(async (req: Request): Promise<Response> => {
         case 3: message = CONTRACT_MESSAGES.reminder_5d(clientName, contractLink); break;
       }
 
-      // REGRA ESTRITA: resolver instância correta por lead
-      const isTrafego = lead.linha_whatsapp === 'trafego_isa' || lead.linha_whatsapp === 'trafego' ||
-                        lead.tipo_origem === 'trafego' || lead.tipo_origem === 'trafego_isa';
-      const target = isTrafego 
+      // REGRA ABSOLUTA: tipo_origem é a fonte de verdade; phone_number é a seleção primária
+      const PHONE_TRAFEGO    = '5592985888190'; // (92) 98588-8190 — "Bentes Ramos Trafego"
+      const PHONE_ESCRITORIO = '5592991604348'; // (92) 99160-4348 — "Bentes Ramos"
+      const isTrafego = lead.tipo_origem === 'trafego' || lead.tipo_origem === 'trafego_isa' ||
+                        lead.linha_whatsapp === 'trafego_isa' || lead.linha_whatsapp === 'trafego';
+      const targetPhone = isTrafego ? PHONE_TRAFEGO : PHONE_ESCRITORIO;
+      const byPhone = allInstances.find((i: any) => i.phone_number?.replace(/\D/g, '') === targetPhone);
+      const byFlag  = isTrafego
         ? allInstances.find((i: any) => !i.is_default) || allInstances[0]
         : allInstances.find((i: any) => i.is_default) || allInstances[0];
+      const target = byPhone || byFlag;
       const zapiConfig = {
         instance_id: target.instance_id,
         token: target.token,
