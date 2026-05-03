@@ -17,7 +17,6 @@ const corsHeaders = {
 };
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY');
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 
 const ACAO_LABELS: Record<string, string> = {
@@ -544,7 +543,7 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
       }
 
       case 'solicitar_agendamento': {
-        if (!subscriberId || !MANYCHAT_API_KEY) return { success: false, message: 'Subscriber ID ou ManyChat API não disponível' };
+        if (!subscriberId) return { success: false, message: 'Subscriber ID não disponível' };
         const { lead_id, mensagem_personalizada } = dados;
         const agora = new Date().toISOString();
         const { data: compromissosExistentes } = await supabase.from('compromissos').select('id, titulo, data_inicio, confirmacao_status').eq('lead_id', lead_id).gte('data_inicio', agora).order('data_inicio', { ascending: true }).limit(1);

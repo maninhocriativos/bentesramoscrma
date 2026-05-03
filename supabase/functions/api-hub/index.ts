@@ -198,38 +198,6 @@ serve(async (req: Request) => {
         }
       }
       
-      // Se nome ainda é Desconhecido, buscar via API do ManyChat
-      const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY');
-      if ((!nome || nome === 'Desconhecido') && MANYCHAT_API_KEY && subscriberId && !subscriberId.startsWith('api_')) {
-        try {
-          console.log('[API-HUB] Buscando nome via API ManyChat para:', subscriberId);
-          const mcUrl = new URL('https://api.manychat.com/fb/subscriber/getInfo');
-          mcUrl.searchParams.append('subscriber_id', subscriberId);
-          
-          const mcResponse = await fetch(mcUrl.toString(), {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-          });
-          
-          if (mcResponse.ok) {
-            const mcData = await mcResponse.json();
-            if (mcData.status === 'success' && mcData.data) {
-              const sub = mcData.data;
-              const mcNome = sub.name || `${sub.first_name || ''} ${sub.last_name || ''}`.trim();
-              if (mcNome && mcNome !== '') {
-                nome = mcNome;
-                console.log('[API-HUB] Nome encontrado via ManyChat API:', nome);
-              }
-            }
-          }
-        } catch (mcError) {
-          console.log('[API-HUB] Erro ao buscar nome no ManyChat (não crítico):', mcError);
-        }
-      }
-      
       nome = nome || 'Desconhecido';
       
       const telefoneRaw = body.phone || body.subscriber?.phone || body.telefone || body.wa_id;

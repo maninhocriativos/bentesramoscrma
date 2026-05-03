@@ -315,6 +315,36 @@ const ManyChatInboxContent = () => {
     try { localStorage.setItem(LAST_READ_KEY, JSON.stringify(lastReadRef.current)); } catch { /* ignore */ }
   }, []);
 
+  // Altera a origem do lead (tráfego ↔ escritório) e persiste no DB
+  const changeLeadOrigin = useCallback(async (subscriber: Subscriber, origin: 'trafego' | 'escritorio') => {
+    const isTrafego = origin === 'trafego';
+    const newTipoOrigem = isTrafego ? 'trafego' : 'whatsapp_direto';
+    const newLinhaWhatsapp: string | null = isTrafego ? 'trafego' : null;
+    const newInstancePhone = isTrafego ? '5592985888190' : '5592991604348';
+    try {
+      await supabase.from('manychat_subscribers' as any)
+        .update({ linha_whatsapp: newLinhaWhatsapp, instance_name: newInstancePhone })
+        .eq('subscriber_id', subscriber.subscriber_id);
+      if (subscriber.lead_id) {
+        await supabase.from('leads_juridicos' as any)
+          .update({ tipo_origem: newTipoOrigem })
+          .eq('id', subscriber.lead_id);
+      }
+      setSelectedSubscriber(prev => prev ? { ...prev, instance_name: newInstancePhone, lead_tipo_origem: newTipoOrigem } : null);
+      setSubscribers(prev => prev.map(s =>
+        s.subscriber_id === subscriber.subscriber_id
+          ? { ...s, instance_name: newInstancePhone, lead_tipo_origem: newTipoOrigem }
+          : s
+      ));
+      toast({
+        title: `Origem → ${isTrafego ? 'Tráfego' : 'Escritório'}`,
+        description: `Automações usarão ${isTrafego ? 'Bentes Ramos Trafego (98588-8190)' : 'Bentes Ramos (99160-4348)'}`,
+      });
+    } catch (error: any) {
+      toast({ title: 'Erro ao alterar origem', description: error.message, variant: 'destructive' });
+    }
+  }, [toast]);
+
   // ─── Initial unreads computation ────────────────────────────────────────────
 
   const computeInitialUnreads = useCallback(async (subs: Subscriber[]) => {
@@ -1461,9 +1491,7 @@ const ManyChatInboxContent = () => {
                         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
                           <span className={`text-[15px] truncate leading-tight font-medium ${isUnreadVisual ? "text-[#E9EDEF] font-semibold" : themeClasses.headerText}`}>{getDisplayName(subscriber)}</span>
                           {instanceInfo ? (
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 leading-none ${instanceInfo.color === "red" ? "bg-red-500/15 text-red-400" : "bg-blue-500/15 text-blue-400"}`}>
-                              {formatPhone(subscriber.telefone) ? `${formatPhone(subscriber.telefone)} · ` : ""}{instanceInfo.label}
-                            </span>
+                            <InstanceBadge instance={instanceInfo} size="sm" />
                           ) : (formatPhone(subscriber.telefone) && <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 leading-none ${themeClasses.secondaryText}`}>{formatPhone(subscriber.telefone)}</span>)}
                         </div>
                         <div className="flex items-center gap-1 min-w-0 mt-[3px] overflow-hidden">
@@ -1512,7 +1540,33 @@ const ManyChatInboxContent = () => {
                 <div className="flex items-center gap-1.5 min-w-0">
                   <ChannelIcon canal={selectedSubscriber.canal} size="sm" />
                   <h3 className={`font-semibold text-[14px] md:text-[16px] ${themeClasses.headerText} truncate`}>{getDisplayName(selectedSubscriber)}</h3>
-                  {(() => { const instanceInfo = getInstanceInfoFromConnectedPhone(selectedSubscriber.instance_name); return instanceInfo ? <InstanceBadge instance={instanceInfo} size="sm" /> : null; })()}
+                  {(() => {
+                    const instanceInfo = getInstanceInfoFromConnectedPhone(selectedSubscriber.instance_name);
+                    if (!instanceInfo) return null;
+                    return (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button className="cursor-pointer hover:opacity-75 transition-opacity" title="Alterar origem do lead">
+                            <InstanceBadge instance={instanceInfo} size="sm" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-52">
+                          <div className="px-2 py-1.5 text-[11px] text-muted-foreground font-medium tracking-wide">Origem / Instância</div>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem className="text-xs gap-2 cursor-pointer" onClick={() => changeLeadOrigin(selectedSubscriber, 'trafego')}>
+                            <span className="h-2 w-2 rounded-full bg-red-500 shrink-0" />
+                            Tráfego — 98588-8190
+                            {instanceInfo.color === 'trafego' && <span className="ml-auto text-[10px] opacity-60">atual</span>}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="text-xs gap-2 cursor-pointer" onClick={() => changeLeadOrigin(selectedSubscriber, 'escritorio')}>
+                            <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+                            Escritório — 99160-4348
+                            {instanceInfo.color === 'escritorio' && <span className="ml-auto text-[10px] opacity-60">atual</span>}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    );
+                  })()}
                 </div>
                 <div className="flex items-center gap-1.5 mt-0.5 overflow-hidden max-h-[16px] md:max-h-none">
                   <ActivityIndicator subscriber={selectedSubscriber} showText />

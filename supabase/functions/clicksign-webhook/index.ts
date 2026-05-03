@@ -8,7 +8,9 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const MANYCHAT_API_URL = 'https://api.manychat.com';
+// Z-API routing constants (REGRA ABSOLUTA)
+const PHONE_TRAFEGO    = '5592985888190'; // (92) 98588-8190 — "Bentes Ramos Trafego"
+const PHONE_ESCRITORIO = '5592991604348'; // (92) 99160-4348 — "Bentes Ramos"
 
 const CLICKSIGN_API_KEY = Deno.env.get("CLICKSIGN_API_KEY");
 const CLICKSIGN_BASE_URL = "https://app.clicksign.com/api/v1";
@@ -134,48 +136,42 @@ const CONTRACT_MESSAGES = {
     `*Bentes & Ramos Advocacia*`,
 };
 
-async function sendManyChatMessage(
-  subscriberId: string,
+async function sendZapiMessage(
+  supabase: any,
+  tipoOrigem: string | null | undefined,
+  telefone: string,
   message: string
 ): Promise<{ success: boolean; error?: string }> {
-  const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY');
-  
-  if (!MANYCHAT_API_KEY) {
-    console.log('[Clicksign] MANYCHAT_API_KEY not configured');
-    return { success: false, error: 'MANYCHAT_API_KEY não configurada' };
-  }
-
+  const isTrafego = tipoOrigem === 'trafego' || tipoOrigem === 'trafego_isa';
+  const targetPhone = isTrafego ? PHONE_TRAFEGO : PHONE_ESCRITORIO;
+  const { data: instances } = await supabase
+    .from('zapi_instances')
+    .select('instance_id, token, client_token, phone_number, is_default')
+    .eq('is_active', true);
+  const byPhone = (instances || []).find((i: any) => i.phone_number?.replace(/\D/g, '') === targetPhone);
+  const byFlag  = isTrafego
+    ? (instances || []).find((i: any) => !i.is_default)
+    : (instances || []).find((i: any) => i.is_default);
+  const inst = byPhone || byFlag || (instances || [])[0];
+  if (!inst) return { success: false, error: 'Nenhuma instância Z-API ativa' };
+  let cleanPhone = telefone.replace(/\D/g, '');
+  if (cleanPhone.length <= 11) cleanPhone = '55' + cleanPhone;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (inst.client_token) headers['Client-Token'] = inst.client_token;
   try {
-    console.log(`[Clicksign] Sending ManyChat message to subscriber ${subscriberId}`);
-    
-    const response = await fetch(`${MANYCHAT_API_URL}/fb/sending/sendContent`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        subscriber_id: parseInt(subscriberId),
-        data: {
-          version: 'v2',
-          content: {
-            messages: [{ type: 'text', text: message }],
-          },
-        },
-      }),
-    });
-
-    const result = await response.json();
-    
-    if (result.status === 'success') {
-      console.log('[Clicksign] ManyChat message sent successfully');
+    console.log(`[Clicksign] Sending Z-API message via ${inst.phone_number} to ${cleanPhone}`);
+    const response = await fetch(
+      `https://api.z-api.io/instances/${inst.instance_id}/token/${inst.token}/send-text`,
+      { method: 'POST', headers, body: JSON.stringify({ phone: cleanPhone, message }) },
+    );
+    if (response.ok) {
+      console.log('[Clicksign] Z-API message sent successfully');
       return { success: true };
-    } else {
-      console.error('[Clicksign] ManyChat failed:', result);
-      return { success: false, error: result.message || 'Erro ao enviar' };
     }
+    const err = await response.text();
+    return { success: false, error: err };
   } catch (error) {
-    console.error('[Clicksign] Error sending ManyChat:', error);
+    console.error('[Clicksign] Error sending Z-API:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Erro desconhecido' };
   }
 }
@@ -575,7 +571,7 @@ serve(async (req: Request): Promise<Response> => {
         }
         
         if (message) {
-          const sendResult = await sendManyChatMessage(subscriber.subscriber_id, message);
+          const sendResult = await sendZapiMessage(supabase, lead.tipo_origem, lead.telefone || subscriber.telefone, message);
           
           if (sendResult.success) {
             // Record in manychat_mensagens
@@ -598,7 +594,7 @@ serve(async (req: Request): Promise<Response> => {
               document_key: documentKey,
               event_name: eventName,
               status: newStatus,
-              manychat_sent: sendResult.success,
+              zapi_sent: sendResult.success,
             }
           });
         }

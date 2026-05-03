@@ -8,7 +8,34 @@ const corsHeaders = {
 };
 
 const DATAJUD_API_KEY = Deno.env.get('DATAJUD_API_KEY');
-const MANYCHAT_API_KEY = Deno.env.get('MANYCHAT_API_KEY');
+
+// Z-API routing constants (REGRA ABSOLUTA)
+const PHONE_TRAFEGO    = '5592985888190'; // (92) 98588-8190 — "Bentes Ramos Trafego"
+const PHONE_ESCRITORIO = '5592991604348'; // (92) 99160-4348 — "Bentes Ramos"
+
+async function enviarViaZapi(supabase: any, tipoOrigem: string | null, telefone: string, mensagem: string): Promise<boolean> {
+  const isTrafego = tipoOrigem === 'trafego' || tipoOrigem === 'trafego_isa';
+  const targetPhone = isTrafego ? PHONE_TRAFEGO : PHONE_ESCRITORIO;
+  const { data: instances } = await supabase
+    .from('zapi_instances')
+    .select('instance_id, token, client_token, phone_number, is_default')
+    .eq('is_active', true);
+  const byPhone = (instances || []).find((i: any) => i.phone_number?.replace(/\D/g, '') === targetPhone);
+  const byFlag  = isTrafego
+    ? (instances || []).find((i: any) => !i.is_default)
+    : (instances || []).find((i: any) => i.is_default);
+  const inst = byPhone || byFlag || (instances || [])[0];
+  if (!inst) return false;
+  let cleanPhone = telefone.replace(/\D/g, '');
+  if (cleanPhone.length <= 11) cleanPhone = '55' + cleanPhone;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (inst.client_token) headers['Client-Token'] = inst.client_token;
+  const response = await fetch(
+    `https://api.z-api.io/instances/${inst.instance_id}/token/${inst.token}/send-text`,
+    { method: 'POST', headers, body: JSON.stringify({ phone: cleanPhone, message: mensagem }) },
+  );
+  return response.ok;
+}
 
 // Lista de tribunais disponíveis
 const TRIBUNAIS: Record<string, string> = {
@@ -194,38 +221,6 @@ function formatarMensagemAtualizacao(processo: any, nomeCliente: string): string
   return mensagem;
 }
 
-// Envia mensagem via ManyChat
-async function enviarMensagemManyChat(subscriberId: string, mensagem: string): Promise<boolean> {
-  if (!MANYCHAT_API_KEY) {
-    console.log('⚠️ MANYCHAT_API_KEY não configurada');
-    return false;
-  }
-  
-  try {
-    const response = await fetch('https://api.manychat.com/fb/sending/sendContent', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${MANYCHAT_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        subscriber_id: subscriberId,
-        data: {
-          version: "v2",
-          content: {
-            messages: [{ type: "text", text: mensagem }]
-          }
-        },
-        message_tag: "ACCOUNT_UPDATE"
-      }),
-    });
-    
-    return response.ok;
-  } catch (error) {
-    console.error('❌ Erro ao enviar ManyChat:', error);
-    return false;
-  }
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -333,7 +328,8 @@ serve(async (req) => {
           leads_juridicos!inner (
             id,
             nome,
-            telefone
+            telefone,
+            tipo_origem
           )
         `)
         .in('status', ['Em Andamento', 'Suspenso'])
@@ -403,19 +399,12 @@ serve(async (req) => {
                 .eq('id', proc.id);
             }
             
-            // Buscar subscriber_id do lead para enviar mensagem
-            const { data: subscriber } = await supabase
-              .from('manychat_subscribers')
-              .select('subscriber_id')
-              .eq('lead_id', leadId)
-              .maybeSingle();
-            
-            if (subscriber?.subscriber_id) {
+            if (lead?.telefone) {
               // Gerar mensagem personalizada
               const mensagem = formatarMensagemAtualizacao(processoAtualizado, lead?.nome || 'Cliente');
-              
-              // Enviar via ManyChat
-              const enviado = await enviarMensagemManyChat(subscriber.subscriber_id, mensagem);
+
+              // Enviar via Z-API usando telefone + origem do lead
+              const enviado = await enviarViaZapi(supabase, lead?.tipo_origem ?? null, lead.telefone, mensagem);
               
               if (enviado) {
                 enviados++;
