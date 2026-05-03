@@ -1,9 +1,13 @@
 /**
  * Utility functions for identifying Z-API instances
  *
- * INSTÂNCIAS CANÔNICAS:
- * - "Bentes Ramos Trafego" → (92) 98588-8190 → leads tipo_origem='trafego'
- * - "Bentes Ramos"         → (92) 91604-348  → leads escritório / whatsapp_direto
+ * INSTÂNCIAS CANÔNICAS (REGRA IMUTÁVEL):
+ * - "Bentes Ramos Trafego" → (92) 98588-8190  [5592985888190] → leads tipo_origem='trafego'
+ * - "Bentes Ramos"         → (92) 99160-4348  [5592991604348] → leads escritório / whatsapp_direto
+ *
+ * Clientes de tráfego → SOMENTE pelo número de tráfego
+ * Clientes do escritório → SOMENTE pelo número do escritório
+ * Estas instâncias NUNCA se misturam.
  */
 
 export interface InstanceInfo {
@@ -21,12 +25,11 @@ const KNOWN_INSTANCES: Record<string, InstanceInfo> = {
   '9285888190':     { name: 'Bentes Ramos Trafego', label: 'Tráfego', color: 'trafego' },
   '85888190':       { name: 'Bentes Ramos Trafego', label: 'Tráfego', color: 'trafego' },
 
-  // ── Escritório: "Bentes Ramos" (92) 91604-348 ────────────────────────────────
-  '559291604348':   { name: 'Bentes Ramos', label: 'Bentes Ramos', color: 'escritorio' },
+  // ── Escritório: "Bentes Ramos" (92) 99160-4348 ──────────────────────────────
   '5592991604348':  { name: 'Bentes Ramos', label: 'Bentes Ramos', color: 'escritorio' },
   '92991604348':    { name: 'Bentes Ramos', label: 'Bentes Ramos', color: 'escritorio' },
-  '9291604348':     { name: 'Bentes Ramos', label: 'Bentes Ramos', color: 'escritorio' },
-  '91604348':       { name: 'Bentes Ramos', label: 'Bentes Ramos', color: 'escritorio' },
+  '991604348':      { name: 'Bentes Ramos', label: 'Bentes Ramos', color: 'escritorio' },
+  '91604348':       { name: 'Bentes Ramos', label: 'Bentes Ramos', color: 'escritorio' }, // suffix fallback
 };
 
 export function getInstanceFromPhone(phone?: string | null): InstanceInfo | null {
@@ -78,11 +81,11 @@ export function getInstanceFromSubscriber(subscriber?: {
 export function getInstanceBadgeClasses(info: InstanceInfo): string {
   switch (info.color) {
     case 'trafego':
-      // Laranja vibrante — identidade "Tráfego pago / Meta Ads"
-      return 'bg-orange-500/15 text-orange-700 border-orange-400/40 dark:bg-orange-500/20 dark:text-orange-300 dark:border-orange-400/30';
+      // Vermelho — tráfego pago / Meta Ads → instância "Bentes Ramos Trafego" (98588-8190)
+      return 'bg-red-500/15 text-red-700 border-red-400/40 dark:bg-red-500/20 dark:text-red-300 dark:border-red-400/30';
     case 'escritorio':
-      // Dourado/marrom — identidade visual do escritório Bentes Ramos
-      return 'bg-amber-500/15 text-amber-800 border-amber-400/40 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-400/30';
+      // Azul — clientes do escritório → instância "Bentes Ramos" (99160-4348)
+      return 'bg-blue-500/15 text-blue-700 border-blue-400/40 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-400/30';
     default:
       return 'bg-zinc-500/10 text-zinc-500 border-zinc-400/20';
   }

@@ -146,11 +146,12 @@ function LeadCard({ item, onToggle, onSelect, selected }: { item: Lead; onToggle
             {respondedRecently && <Badge color={T.green} bg={T.greenBg}>💬 Respondeu agora!</Badge>}
             {item.status === 'responded' && !respondedRecently && <Badge color={T.green} bg={T.greenBg}>✅ Respondeu</Badge>}
             {item.status === 'nutricao' && <Badge color={T.teal} bg={T.tealBg}>🌱 Nutrição</Badge>}
-            {!item.automation_active && isNew && <Badge color={T.orange} bg={T.orangeBg}>⏸ Pausado</Badge>}
+            {!item.automation_active && item.status !== 'archived' && <Badge color={T.orange} bg={T.orangeBg}>⏸ Pausado</Badge>}
           </div>
         </div>
-        {isNew && (
+        {item.status !== 'archived' && (
           <button onClick={e => { e.stopPropagation(); onToggle(item.id, !item.automation_active); }}
+            title={item.automation_active ? 'Pausar automação' : 'Retomar automação'}
             style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: item.automation_active ? `${T.green}20` : `${T.orange}20`, cursor: 'pointer', color: item.automation_active ? T.green : T.orange, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {item.automation_active ? <Pause size={11} /> : <Play size={11} />}
           </button>
