@@ -181,7 +181,8 @@ const ManyChatInboxContent = () => {
   const mediaRecorderRef         = useRef<MediaRecorder | null>(null);
   const audioChunksRef           = useRef<Blob[]>([]);
   const typingTimeoutRef         = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastMessageIdRef         = useRef<string | null>(null);
+  const recentMsgIdsRef          = useRef<Set<string>>(new Set());
+  const readReceiptsChannelRef   = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const subscribersLoadedRef     = useRef(false);
   const selectedSubscriberRef    = useRef<Subscriber | null>(null);
   const subscribersRef           = useRef<Subscriber[]>([]);
@@ -313,6 +314,24 @@ const ManyChatInboxContent = () => {
     lastReadRef.current[unreadKey] = now;
     lastReadRef.current[subscriber.subscriber_id] = now;
     try { localStorage.setItem(LAST_READ_KEY, JSON.stringify(lastReadRef.current)); } catch { /* ignore */ }
+  }, []);
+
+  // Avisa todos os agentes conectados que esta conversa foi lida
+  const broadcastConversationRead = useCallback((subscriber: Subscriber) => {
+    const channel = readReceiptsChannelRef.current;
+    if (!channel) return;
+    const unread_key = getConversationUnreadKey(subscriber);
+    const phone_suffix = getSubscriberPhoneSuffix(subscriber);
+    channel.send({
+      type: 'broadcast',
+      event: 'conversation_read',
+      payload: {
+        unread_key,
+        subscriber_id: subscriber.subscriber_id,
+        lead_id: subscriber.lead_id || null,
+        phone_suffix: phone_suffix || null,
+      },
+    }).catch(() => {});
   }, []);
 
   // Altera a origem do lead (tráfego ↔ escritório) e persiste no DB
@@ -572,8 +591,12 @@ const ManyChatInboxContent = () => {
       const channel = supabase.channel(`manychat-msgs-${user?.id || "anon"}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "manychat_mensagens" }, (payload) => {
         if (!isSubscribed) return;
         const newMsg = payload.new as Message & { subscriber_id: string; subscriber_nome?: string };
-        if (lastMessageIdRef.current === newMsg.id) return;
-        lastMessageIdRef.current = newMsg.id;
+        if (recentMsgIdsRef.current.has(newMsg.id)) return;
+        recentMsgIdsRef.current.add(newMsg.id);
+        if (recentMsgIdsRef.current.size > 100) {
+          const arr = Array.from(recentMsgIdsRef.current);
+          recentMsgIdsRef.current = new Set(arr.slice(-50));
+        }
         const currentSub = selectedSubscriberRef.current;
         const currentSubId = currentSub?.subscriber_id;
         const currentLeadId = currentSub?.lead_id;
@@ -661,11 +684,31 @@ const ManyChatInboxContent = () => {
 
     const messagesChannel = setupMessagesChannel();
     const subscribersChannel = setupSubscribersChannel();
+
+    // Broadcast channel: sincroniza leitura de mensagens entre todos os agentes conectados
+    const readChannel = supabase.channel('chat-read-receipts-global')
+      .on('broadcast', { event: 'conversation_read' }, ({ payload }) => {
+        if (!isSubscribed || !payload) return;
+        const { unread_key, subscriber_id, lead_id, phone_suffix } = payload as any;
+        setUnreadCounts(prev => {
+          const next = new Map(prev);
+          if (unread_key) next.delete(unread_key);
+          if (subscriber_id) { next.delete(subscriber_id); next.delete(`zapi_${subscriber_id}`); }
+          if (lead_id) { next.delete(`lead:${lead_id}`); }
+          if (phone_suffix) next.delete(`phone:${phone_suffix}`);
+          return next;
+        });
+      })
+      .subscribe();
+    readReceiptsChannelRef.current = readChannel;
+
     return () => {
       isSubscribed = false;
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(subscribersChannel);
+      supabase.removeChannel(readChannel);
+      readReceiptsChannelRef.current = null;
     };
   }, [user?.id, playNotificationSound, notifyNewMessage, notifyAssignment]);
 
@@ -718,13 +761,14 @@ const ManyChatInboxContent = () => {
         return newMap;
       });
       saveLastRead(selectedSubscriber);
+      broadcastConversationRead(selectedSubscriber);
       setCurrentChat(selectedSubscriber.subscriber_id);
       setShowMobileChat(true);
     } else {
       setMessages([]);
       setCurrentChat(null);
     }
-  }, [selectedSubscriber?.subscriber_id, setCurrentChat, saveLastRead]);
+  }, [selectedSubscriber?.subscriber_id, setCurrentChat, saveLastRead, broadcastConversationRead]);
 
   useEffect(() => { loadSubscribers(); }, []);
 
@@ -739,7 +783,8 @@ const ManyChatInboxContent = () => {
   const loadSubscribers = async () => {
     setIsLoading(true);
     try {
-      const { data: subsData, error: subsError } = await supabase.from("manychat_subscribers" as any).select("*").order("ultima_interacao", { ascending: false });
+      // Limite de 300 para evitar sobrecarga — os mais recentes têm prioridade
+      const { data: subsData, error: subsError } = await supabase.from("manychat_subscribers" as any).select("*").order("ultima_interacao", { ascending: false }).limit(300);
       if (subsError) throw subsError;
       const rawSubscribers = (subsData as Subscriber[]) || [];
       const leadIds = [...new Set(rawSubscribers.map(s => s.lead_id).filter(Boolean))];
@@ -754,26 +799,29 @@ const ManyChatInboxContent = () => {
       if (subsWithoutInstance.length > 0) {
         const missingLeadIds = [...new Set(subsWithoutInstance.map(s => s.lead_id).filter(Boolean))] as string[];
         const missingSubIds = subsWithoutInstance.map(s => s.subscriber_id);
-        if (missingLeadIds.length > 0) {
-          const { data: messagesByLead } = await supabase.from("manychat_mensagens").select("lead_id, metadata, created_at").in("lead_id", missingLeadIds).order("created_at", { ascending: false }).limit(500);
-          if (messagesByLead) {
-            for (const msg of messagesByLead as any[]) {
-              const lid = msg.lead_id as string | null;
-              if (!lid || instanceByLeadId.has(lid)) continue;
-              const connectedPhone = (msg.metadata as any)?.original?.connectedPhone;
-              if (connectedPhone) instanceByLeadId.set(lid, connectedPhone);
-            }
+        // Executar as duas queries em paralelo para reduzir latência
+        const [leadMsgsResult, subMsgsResult] = await Promise.all([
+          missingLeadIds.length > 0
+            ? supabase.from("manychat_mensagens").select("lead_id, metadata, created_at").in("lead_id", missingLeadIds).order("created_at", { ascending: false }).limit(500)
+            : Promise.resolve({ data: null }),
+          missingSubIds.length > 0
+            ? supabase.from("manychat_mensagens").select("subscriber_id, metadata, created_at").in("subscriber_id", missingSubIds).order("created_at", { ascending: false }).limit(500)
+            : Promise.resolve({ data: null }),
+        ]);
+        if (leadMsgsResult.data) {
+          for (const msg of leadMsgsResult.data as any[]) {
+            const lid = msg.lead_id as string | null;
+            if (!lid || instanceByLeadId.has(lid)) continue;
+            const connectedPhone = (msg.metadata as any)?.original?.connectedPhone;
+            if (connectedPhone) instanceByLeadId.set(lid, connectedPhone);
           }
         }
-        if (missingSubIds.length > 0) {
-          const { data: messagesBySubscriber } = await supabase.from("manychat_mensagens").select("subscriber_id, metadata, created_at").in("subscriber_id", missingSubIds).order("created_at", { ascending: false }).limit(500);
-          if (messagesBySubscriber) {
-            for (const msg of messagesBySubscriber as any[]) {
-              const sid = msg.subscriber_id as string;
-              if (!sid || instanceBySubscriberId.has(sid)) continue;
-              const connectedPhone = (msg.metadata as any)?.original?.connectedPhone;
-              if (connectedPhone) instanceBySubscriberId.set(sid, connectedPhone);
-            }
+        if (subMsgsResult.data) {
+          for (const msg of subMsgsResult.data as any[]) {
+            const sid = msg.subscriber_id as string;
+            if (!sid || instanceBySubscriberId.has(sid)) continue;
+            const connectedPhone = (msg.metadata as any)?.original?.connectedPhone;
+            if (connectedPhone) instanceBySubscriberId.set(sid, connectedPhone);
           }
         }
       }
@@ -1473,6 +1521,7 @@ const ManyChatInboxContent = () => {
                       });
 
                       saveLastRead(subscriber);
+                      broadcastConversationRead(subscriber);
 
                       if (isSameConversation) loadMessages(subscriber.subscriber_id, true, subscriber);
                     }}
