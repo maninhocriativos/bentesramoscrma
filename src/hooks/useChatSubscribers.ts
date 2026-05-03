@@ -52,7 +52,21 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
       const subsWithoutInstance = subs.filter(s => !s.instance_name);
       
       if (subs.length === 0 || subsWithoutInstance.length === 0) {
-        setSubscribers(subs);
+        // Still enrich names even if instance_name is already populated
+        const INVALID_NAMES = ['Desconhecido', 'Sem nome', 'desconhecido', 'null', '', '{{wa_id}}'];
+        const needName = subs.filter(s => s.lead_id && (!s.nome || INVALID_NAMES.includes(s.nome) || s.nome.startsWith('{{')));
+        if (needName.length > 0) {
+          const ids = [...new Set(needName.map(s => s.lead_id!))];
+          const { data: leads } = await supabase.from('leads_juridicos' as any).select('id, nome').in('id', ids);
+          const map = new Map((leads as any[] || []).map((l: any) => [l.id, l.nome as string]));
+          setSubscribers(subs.map(s => {
+            const invalid = !s.nome || INVALID_NAMES.includes(s.nome) || s.nome.startsWith('{{');
+            const ln = s.lead_id ? map.get(s.lead_id) : undefined;
+            return (invalid && ln) ? { ...s, nome: ln } : s;
+          }));
+        } else {
+          setSubscribers(subs);
+        }
         return;
       }
 
@@ -100,12 +114,34 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
         }
       }
 
+      // Enrich instance_name
       const enrichedSubs = subs.map(sub => ({
         ...sub,
         instance_name: sub.instance_name || (sub.lead_id ? instanceByLeadId.get(sub.lead_id) : undefined) || instanceBySubscriberId.get(sub.subscriber_id) || undefined,
       }));
 
-      setSubscribers(enrichedSubs);
+      // Enrich nome from leads_juridicos for subscribers with invalid/missing names
+      const INVALID_NAMES = ['Desconhecido', 'Sem nome', 'desconhecido', 'null', '', '{{wa_id}}'];
+      const subsNeedingName = enrichedSubs.filter(s =>
+        s.lead_id && (!s.nome || INVALID_NAMES.includes(s.nome) || s.nome.startsWith('{{') || s.nome.startsWith('['))
+      );
+
+      if (subsNeedingName.length > 0) {
+        const leadIds = [...new Set(subsNeedingName.map(s => s.lead_id!))];
+        const { data: leads } = await supabase
+          .from('leads_juridicos' as any)
+          .select('id, nome')
+          .in('id', leadIds);
+        const leadNomeMap = new Map((leads as any[] || []).map((l: any) => [l.id, l.nome as string]));
+        setSubscribers(enrichedSubs.map(sub => {
+          if (!sub.lead_id) return sub;
+          const invalid = !sub.nome || INVALID_NAMES.includes(sub.nome) || sub.nome.startsWith('{{');
+          const leadNome = leadNomeMap.get(sub.lead_id);
+          return (invalid && leadNome) ? { ...sub, nome: leadNome } : sub;
+        }));
+      } else {
+        setSubscribers(enrichedSubs);
+      }
     } catch (error) {
       console.error('[useChatSubscribers] Erro ao carregar subscribers:', error);
     } finally {
