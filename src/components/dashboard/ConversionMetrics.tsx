@@ -4,7 +4,7 @@ import { TrendingUp, TrendingDown, Minus, Calendar, Target, DollarSign, Megaphon
 import {
   startOfWeek, startOfMonth, startOfQuarter,
   subWeeks, subMonths, subQuarters,
-  isAfter, isBefore, format
+  differenceInMonths, isAfter, isBefore, format
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -54,35 +54,42 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
     };
   }, [trafficLeads, now]);
 
-  // Gráfico mensal — critério correto de tráfego
-  const monthlyData = useMemo(() => Array.from({ length: 6 }, (_, i) => {
-    const mStart = subMonths(startOfMonth(now), 5 - i);
-    const mEnd   = i === 5 ? now : subMonths(startOfMonth(now), 4 - i);
+  // Gráfico mensal — desde a implementação do sistema (ou mín. 6 meses)
+  const monthlyData = useMemo(() => {
+    const allTs = leads
+      .filter(l => l.created_at)
+      .map(l => new Date(l.created_at).getTime())
+      .filter(t => Number.isFinite(t));
+    const earliestStart = allTs.length > 0 ? startOfMonth(new Date(Math.min(...allTs))) : subMonths(startOfMonth(now), 5);
+    const diffMonths = differenceInMonths(startOfMonth(now), earliestStart) + 1;
+    const numMonths = Math.min(Math.max(diffMonths, 6), 36);
+    return Array.from({ length: numMonths }, (_, i) => {
+      const mStart = subMonths(startOfMonth(now), numMonths - 1 - i);
+      const mEnd   = i === numMonths - 1 ? now : subMonths(startOfMonth(now), numMonths - 2 - i);
 
-    // Leads de tráfego criados neste mês
-    const ml = trafficLeads.filter(l => {
-      const d = new Date(l.created_at);
-      return isAfter(d, mStart) && isBefore(d, mEnd);
+      const ml = trafficLeads.filter(l => {
+        const d = new Date(l.created_at);
+        return isAfter(d, mStart) && isBefore(d, mEnd);
+      });
+
+      const mc = trafficLeads.filter(l => {
+        if (!isConverted(l)) return false;
+        const signedAt = (l as any).contract_signed_at;
+        const d = signedAt ? new Date(signedAt) : new Date(l.created_at);
+        return isAfter(d, mStart) && isBefore(d, mEnd);
+      });
+
+      const total     = ml.length;
+      const converted = mc.reduce((s, l) => s + 1 + ((l as any).contratos_adicionais || 0), 0);
+
+      return {
+        month: format(mStart, 'MMM/yy', { locale: ptBR }),
+        leads_trafego: total,
+        contratos: converted,
+        taxa: total > 0 ? Math.round((converted / total) * 100) : 0,
+      };
     });
-
-    // Contratos fechados neste mês (por data de contrato ou criação)
-    const mc = trafficLeads.filter(l => {
-      if (!isConverted(l)) return false;
-      const signedAt = (l as any).contract_signed_at;
-      const d = signedAt ? new Date(signedAt) : new Date(l.created_at);
-      return isAfter(d, mStart) && isBefore(d, mEnd);
-    });
-
-    const total     = ml.length;
-    const converted = mc.reduce((s, l) => s + 1 + ((l as any).contratos_adicionais || 0), 0);
-
-    return {
-      month: format(mStart, 'MMM/yy', { locale: ptBR }),
-      leads_trafego: total,
-      contratos: converted,
-      taxa: total > 0 ? Math.round((converted / total) * 100) : 0,
-    };
-  }), [trafficLeads, now]);
+  }, [trafficLeads, leads, now]);
 
   const global = useMemo(() => {
     const total     = trafficLeads.length;
@@ -178,23 +185,25 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
             <div className="h-8 w-8 rounded-xl bg-[#c9a96e]/12 flex items-center justify-center">
               <FileSignature style={{ width: 16, height: 16, color: '#c9a96e' }} />
             </div>
-            <p className="text-sm font-semibold text-foreground">Contratos Assinados por Mês (Tráfego Pago)</p>
+            <p className="text-sm font-semibold text-foreground">Contratos Assinados por Mês — Tráfego Pago</p>
             <span className="ml-auto text-[11px] text-muted-foreground px-2 py-0.5 rounded-lg bg-muted/40">
-              critério: tipo_origem=trafego ou origem=Tráfego Pago
+              desde a implementação do sistema
             </span>
           </div>
-          <div style={{ height: 260 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData} margin={{ left: 0, right: 20, top: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(201,169,110,0.15)" />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ backgroundColor: 'white', border: '1px solid rgba(201,169,110,0.3)', borderRadius: 12, fontSize: 12 }} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="leads_trafego" fill="#c9a96e" opacity={0.35} radius={[4,4,0,0]} name="Leads Tráfego" isAnimationActive={false} />
-                <Bar dataKey="contratos"     fill="#3d2b1f" radius={[4,4,0,0]} name="Contratos Assinados" isAnimationActive={false} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div style={{ overflowX: 'auto' }}>
+            <div style={{ height: 280, minWidth: Math.max(monthlyData.length * 52, 480) }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyData} margin={{ left: 0, right: 20, top: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(201,169,110,0.15)" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ backgroundColor: 'white', border: '1px solid rgba(201,169,110,0.3)', borderRadius: 12, fontSize: 12 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="leads_trafego" fill="#c9a96e" opacity={0.35} radius={[4,4,0,0]} name="Leads Tráfego" isAnimationActive={false} />
+                  <Bar dataKey="contratos"     fill="#3d2b1f" radius={[4,4,0,0]} name="Contratos Assinados" isAnimationActive={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
       </div>

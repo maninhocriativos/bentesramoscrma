@@ -1544,8 +1544,17 @@ const ManyChatInboxContent = () => {
                           ) : (formatPhone(subscriber.telefone) && <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 leading-none ${themeClasses.secondaryText}`}>{formatPhone(subscriber.telefone)}</span>)}
                         </div>
                         <div className="flex items-center gap-1 min-w-0 mt-[3px] overflow-hidden">
-                          {msgPreview?.startsWith("Você:") && <CheckCheck className="h-3.5 w-3.5 shrink-0 text-[#53BDEB]" />}
-                          <p className={`text-[13px] truncate leading-tight ${isUnreadVisual ? "text-[#D1D7DB] font-medium" : themeClasses.secondaryText}`}>{msgPreview ? (msgPreview.startsWith("Você: ") ? msgPreview.slice(6) : msgPreview) : "Nenhuma mensagem"}</p>
+                          {msgPreview ? (
+                            <>
+                              {msgPreview.startsWith("Você:") && <CheckCheck className="h-3.5 w-3.5 shrink-0 text-[#53BDEB]" />}
+                              <p className={`text-[13px] truncate leading-tight ${isUnreadVisual ? "text-[#D1D7DB] font-medium" : themeClasses.secondaryText}`}>{msgPreview.startsWith("Você: ") ? msgPreview.slice(6) : msgPreview}</p>
+                            </>
+                          ) : (
+                            <p className="flex items-center gap-1 text-[11px] font-semibold text-[#53BDEB]/80">
+                              <span className="h-1.5 w-1.5 rounded-full bg-[#53BDEB]/70 shrink-0" />
+                              Novo contato
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="w-[76px] min-w-[76px] shrink-0 flex flex-col items-end justify-between gap-1">

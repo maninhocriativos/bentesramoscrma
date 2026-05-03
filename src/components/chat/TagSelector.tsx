@@ -142,12 +142,12 @@ export function TagSelector({
             autoFocus
           />
 
-          <div className="max-h-72 overflow-y-auto space-y-3 pr-0.5">
-            {sortedCategories.map((category) => {
+          <div className="max-h-72 overflow-y-auto space-y-1 pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border">
+            {sortedCategories.map((category, catIdx) => {
               const CatIcon = CATEGORY_ICONS[category] || Tag;
               return (
-                <div key={category}>
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide px-0.5 pb-1.5">
+                <div key={category} className={cn(catIdx > 0 && 'pt-2 mt-1 border-t border-border/60')}>
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest px-0.5 pb-2">
                     <CatIcon className="h-3 w-3" />
                     {CATEGORY_LABELS[category] || category}
                   </div>
@@ -162,13 +162,13 @@ export function TagSelector({
                           onClick={() => handleTagClick(tag)}
                           disabled={loading}
                           className={cn(
-                            'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-all',
+                            'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-all duration-150',
                             colors.bg,
                             colors.text,
                             colors.border,
                             isSelected
-                              ? 'ring-2 ring-primary/60 ring-offset-1 opacity-100'
-                              : 'hover:opacity-80',
+                              ? 'ring-2 ring-offset-1 ring-primary/70 shadow-sm scale-105'
+                              : 'opacity-75 hover:opacity-100 hover:scale-105',
                             'disabled:opacity-40 cursor-pointer',
                           )}
                         >
