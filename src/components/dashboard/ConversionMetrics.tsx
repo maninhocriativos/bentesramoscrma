@@ -11,14 +11,13 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 
 interface ConversionMetricsProps { leads: Lead[]; }
 
-const CONVERTED_STATES = ['CONTRACT_SIGNED', 'DOCS_PENDING', 'READY_FOR_LAWYER'];
-
 // ── Critério correto: tipo_origem='trafego' OU origem='Tráfego Pago'
 const isTrafficLead = (l: Lead) =>
   (l as any).tipo_origem === 'trafego' || l.origem === 'Tráfego Pago';
 
+// Apenas contratos efetivamente fechados (não inclui "aguardando docs" ou intermediários)
 const isConverted = (l: Lead) =>
-  CONVERTED_STATES.includes(l.lead_state || '') ||
+  l.lead_state === 'CONTRACT_SIGNED' ||
   l.status === 'Contrato Assinado' ||
   l.status === 'Ganho';
 
