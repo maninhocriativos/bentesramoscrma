@@ -16,6 +16,7 @@ export interface Alerta {
 
 export function useAlertas(leads: Lead[], processos: Processo[]) {
   const [alertasRetomada, setAlertasRetomada] = useState<Alerta[]>([]);
+  const [alertasParcelas, setAlertasParcelas] = useState<Alerta[]>([]);
 
   // Buscar alertas de leads frios que responderam
   useEffect(() => {
@@ -67,6 +68,35 @@ export function useAlertas(leads: Lead[], processos: Processo[]) {
     };
   }, []);
 
+  // Parcelas vencidas
+  useEffect(() => {
+    const fetchParcelasVencidas = async () => {
+      const today = new Date().toISOString().split('T')[0];
+      const { data } = await supabase
+        .from('parcelas')
+        .select('id, valor, data_vencimento')
+        .eq('status', 'Pendente')
+        .lt('data_vencimento', today)
+        .limit(20);
+      if (data && data.length > 0) {
+        const totalVencido = data.reduce((s, p) => s + Number(p.valor), 0);
+        const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 });
+        setAlertasParcelas([{
+          id: 'parcelas-vencidas',
+          tipo: 'risco',
+          titulo: `${data.length} Parcela${data.length > 1 ? 's' : ''} Vencida${data.length > 1 ? 's' : ''}`,
+          descricao: `${fmt.format(totalVencido)} em pagamentos pendentes`,
+          prioridade: data.length >= 3 ? 'alta' : 'media',
+        }]);
+      } else {
+        setAlertasParcelas([]);
+      }
+    };
+    fetchParcelasVencidas();
+    const interval = setInterval(fetchParcelasVencidas, 300_000);
+    return () => clearInterval(interval);
+  }, []);
+
   const alertas = useMemo(() => {
     const now = new Date();
     const result: Alerta[] = [];
@@ -102,7 +132,29 @@ export function useAlertas(leads: Lead[], processos: Processo[]) {
       }
     });
 
-    // 3. Prazos próximos (processos - usando created_at como referência por enquanto)
+    // 3. Leads de tráfego parados há mais de 48h (sem movimentação)
+    const trafegoParados = leads.filter(lead => {
+      if (lead.is_lost) return false;
+      if (!['Lead Frio', 'Em Atendimento'].includes(lead.status || '')) return false;
+      const isTraffic = (lead as any).tipo_origem === 'trafego' || lead.origem === 'Tráfego Pago';
+      if (!isTraffic) return false;
+      const lastActivity = (lead as any).last_contact_at || lead.updated_at || lead.created_at;
+      return differenceInHours(now, new Date(lastActivity)) >= 48;
+    });
+    if (trafegoParados.length > 0) {
+      const dias = Math.floor(differenceInHours(now, new Date(
+        (trafegoParados[0] as any).last_contact_at || trafegoParados[0].updated_at || trafegoParados[0].created_at
+      )) / 24);
+      result.push({
+        id: 'trafego-parado',
+        tipo: 'risco',
+        titulo: `${trafegoParados.length} Lead${trafegoParados.length > 1 ? 's' : ''} Tráfego Parado${trafegoParados.length > 1 ? 's' : ''}`,
+        descricao: `Sem movimentação há ${dias}+ dias — verifique o follow-up`,
+        prioridade: trafegoParados.length >= 5 ? 'alta' : 'media',
+      });
+    }
+
+    // 4. Prazos próximos (processos - usando created_at como referência por enquanto)
     // Nota: Em um cenário real, você teria uma coluna de data_prazo
     processos.forEach(processo => {
       if (processo.status === 'Em Andamento' && processo.created_at) {
@@ -124,11 +176,11 @@ export function useAlertas(leads: Lead[], processos: Processo[]) {
     });
 
     // Ordenar por prioridade
-    return [...alertasRetomada, ...result].sort((a, b) => {
+    return [...alertasRetomada, ...alertasParcelas, ...result].sort((a, b) => {
       const prioridadeOrder = { alta: 0, media: 1, baixa: 2 };
       return prioridadeOrder[a.prioridade] - prioridadeOrder[b.prioridade];
     });
-  }, [leads, processos, alertasRetomada]);
+  }, [leads, processos, alertasRetomada, alertasParcelas]);
 
   return { alertas };
 }

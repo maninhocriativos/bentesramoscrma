@@ -11,6 +11,7 @@ import { useProcessos } from '@/hooks/useProcessos';
 import { useAlertas } from '@/hooks/useAlertas';
 import { useDashboardStats } from '@/hooks/useDashboardStats';
 import { Users, DollarSign, Briefcase, Loader2, TrendingUp } from 'lucide-react';
+import { FinanceiroResumoWidget } from '@/components/dashboard/FinanceiroResumoWidget';
 import { Skeleton } from '@/components/ui/skeleton';
 import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, isAfter } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -184,6 +185,9 @@ function DashboardPage() {
                 <Suspense fallback={<ChartFallback />}>
                   <DashboardCharts leads={filteredLeads} />
                 </Suspense>
+
+                {/* Resumo financeiro */}
+                <FinanceiroResumoWidget />
 
                 {/* Widgets inferiores — 3 colunas igualadas */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch pb-4">

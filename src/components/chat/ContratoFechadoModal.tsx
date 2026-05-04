@@ -176,6 +176,7 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
     setSaving(true);
     try {
       const quantidade = parseInt(formData.quantidadeContratos);
+      const now = new Date().toISOString();
 
       // 1. Salvar na tabela contratos_fechados
       const { error: insertError } = await supabase
@@ -195,10 +196,9 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
             tipo_contrato: formData.tipoContrato,
             modalidade:    formData.modalidadeAssinatura,
             quantidade,
-            timestamp:     new Date().toISOString(),
+            timestamp:     now,
           },
         } as any);
-
       if (insertError) throw insertError;
 
       // 2. Calcular total de contratos deste lead (fonte da verdade = contratos_fechados)
@@ -211,8 +211,14 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
       );
       const contratosAdicionais = Math.max(0, totalContratos - 1);
 
-      // 3. Atualizar status do lead (inclui lead_state e contratos_adicionais para rastreio correto no dashboard)
-      const now = new Date().toISOString();
+      // 3. Buscar dados do lead (reutilizado no honorário e Meta CAPI)
+      const { data: leadData } = await supabase
+        .from('leads_juridicos')
+        .select('tipo_origem, email, telefone, facebook_lead_id, valor_causa')
+        .eq('id', formData.leadId)
+        .single();
+
+      // 4. Atualizar status do lead
       await supabase
         .from('leads_juridicos')
         .update({
@@ -226,13 +232,41 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
         } as any)
         .eq('id', formData.leadId);
 
-      // Broadcast para atualização imediata do dashboard
+      // 5. Broadcast para atualização imediata do dashboard
       supabase
         .channel('app-events')
         .send({ type: 'broadcast', event: 'contrato_assinado', payload: { lead_id: formData.leadId } })
         .catch(() => {});
 
-      // 4. Log de interação
+      // 6. Auto-criar honorário rascunho (apenas se não existir ainda e lead tem valor_causa)
+      try {
+        const valorCausa = (leadData as any)?.valor_causa;
+        if (valorCausa > 0) {
+          const { data: honorariosExistentes } = await supabase
+            .from('honorarios')
+            .select('id')
+            .eq('cliente_id', formData.leadId)
+            .limit(1);
+          if (!honorariosExistentes || honorariosExistentes.length === 0) {
+            await supabase.from('honorarios').insert({
+              cliente_id:        formData.leadId,
+              tipo:              'Fixo',
+              valor_total:       valorCausa,
+              valor_entrada:     null,
+              percentual_exito:  null,
+              forma_pagamento:   'À Vista',
+              num_parcelas:      1,
+              data_contrato:     now.split('T')[0],
+              status:            'Ativo',
+              observacoes:       `Gerado automaticamente — Contrato: ${formData.tipoContrato}`,
+            });
+          }
+        }
+      } catch {
+        // Não bloquear o fluxo por erro no honorário
+      }
+
+      // 7. Log de interação
       await supabase
         .from('interacoes')
         .insert({
@@ -241,30 +275,22 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
           resumo:         `Contrato fechado: ${formData.tipoContrato} (${formData.modalidadeAssinatura})`,
           detalhes:       `Quantidade: ${quantidade} | Modalidade: ${formData.modalidadeAssinatura} | ${formData.observacoes || ''}`,
           direcao:        'interno',
-          data_interacao: new Date().toISOString(),
+          data_interacao: now,
         });
 
-      // 5. Disparar Meta CAPI — apenas para leads de tráfego pago
+      // 8. Meta CAPI — apenas para leads de tráfego pago
       try {
-        const { data: leadData } = await supabase
-          .from('leads_juridicos')
-          .select('tipo_origem, email, telefone, facebook_lead_id, valor_causa')
-          .eq('id', formData.leadId)
-          .single();
-
         if (leadData?.tipo_origem === 'trafego') {
           const metaResult = await sendMetaEvent({
-            lead_id: formData.leadId,
+            lead_id:          formData.leadId,
             facebook_lead_id: (leadData as any).facebook_lead_id ?? null,
-            email: leadData.email ?? null,
-            phone: leadData.telefone ?? null,
-            event_name: 'Purchase',
-            value: (leadData as any).valor_causa ?? 0,
-            status: 'Contrato Assinado',
+            email:            leadData.email ?? null,
+            phone:            leadData.telefone ?? null,
+            event_name:       'Purchase',
+            value:            (leadData as any).valor_causa ?? 0,
+            status:           'Contrato Assinado',
           });
-
           if (metaResult.success) {
-            // Marcar como enviado na tabela de contratos
             await supabase
               .from('contratos_fechados' as any)
               .update({ meta_conversion_sent: true } as any)
@@ -275,14 +301,12 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
           }
         }
       } catch (metaErr) {
-        // Não bloquear o fluxo por erro no Meta CAPI
         console.warn('[ContratoFechadoModal] Aviso Meta CAPI:', metaErr);
       }
 
       toast.success('✅ Contrato registrado com sucesso!', {
         description: `${formData.tipoContrato} · ${formData.modalidadeAssinatura}`,
       });
-
       setFormData(prev => ({
         ...prev,
         quantidadeContratos: '1',
