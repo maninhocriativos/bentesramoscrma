@@ -201,17 +201,28 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
 
       if (insertError) throw insertError;
 
-      // 2. Atualizar status do lead (inclui lead_state para rastreio correto no dashboard)
+      // 2. Calcular total de contratos deste lead (fonte da verdade = contratos_fechados)
+      const { data: todosContratos } = await supabase
+        .from('contratos_fechados' as any)
+        .select('quantidade_contratos')
+        .eq('lead_id', formData.leadId);
+      const totalContratos = (todosContratos || []).reduce(
+        (s: number, r: any) => s + (r.quantidade_contratos || 1), 0
+      );
+      const contratosAdicionais = Math.max(0, totalContratos - 1);
+
+      // 3. Atualizar status do lead (inclui lead_state e contratos_adicionais para rastreio correto no dashboard)
       const now = new Date().toISOString();
       await supabase
         .from('leads_juridicos')
         .update({
-          status:              'Contrato Assinado',
-          lead_state:          'CONTRACT_SIGNED',
-          contract_signed_at:  now,
-          state_updated_at:    now,
-          tipo_conversao:      formData.tipoContrato,
-          data_conversao:      now,
+          status:               'Contrato Assinado',
+          lead_state:           'CONTRACT_SIGNED',
+          contract_signed_at:   now,
+          state_updated_at:     now,
+          tipo_conversao:       formData.tipoContrato,
+          data_conversao:       now,
+          contratos_adicionais: contratosAdicionais,
         } as any)
         .eq('id', formData.leadId);
 
@@ -221,7 +232,7 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
         .send({ type: 'broadcast', event: 'contrato_assinado', payload: { lead_id: formData.leadId } })
         .catch(() => {});
 
-      // 3. Log de interação
+      // 4. Log de interação
       await supabase
         .from('interacoes')
         .insert({
@@ -233,7 +244,7 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
           data_interacao: new Date().toISOString(),
         });
 
-      // 4. Disparar Meta CAPI — apenas para leads de tráfego pago
+      // 5. Disparar Meta CAPI — apenas para leads de tráfego pago
       try {
         const { data: leadData } = await supabase
           .from('leads_juridicos')
