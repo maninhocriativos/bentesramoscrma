@@ -10,6 +10,7 @@ import { useChatPresence } from "@/hooks/useChatPresence";
 import { useTeamPresence } from "@/hooks/useTeamPresence";
 import { useChatNotifications } from "@/hooks/useChatNotifications";
 import { useChatTags } from "@/hooks/useChatTags";
+import { useLeadNames } from "@/hooks/useLeadNames";
 import { useAuth } from "@/hooks/useAuth";
 import { usePerfil } from "@/hooks/usePerfil";
 import { ChatThemeProvider, useChatTheme } from "./ChatThemeProvider";
@@ -165,6 +166,8 @@ const ManyChatInboxContent = () => {
     tags: availableTags, loadSubscriberTags, getSubscriberTags,
     addTagToSubscriber, removeTagFromSubscriber, createTag,
   } = useChatTags();
+
+  const { leadNames } = useLeadNames();
 
   // ─── Refs ───────────────────────────────────────────────────────────────────
 
@@ -548,8 +551,13 @@ const ManyChatInboxContent = () => {
           }
         }
         if (subscriber) {
-          await supabase.from("manychat_subscribers").update({ lead_id: pendingLeadId }).eq("subscriber_id", subscriber.subscriber_id);
-          setSelectedSubscriber({ ...subscriber, lead_id: pendingLeadId });
+          const invalidNames = ["Desconhecido", "Sem nome", "desconhecido", "null", "", "{{wa_id}}"];
+          const subHasInvalidName = !subscriber.nome || invalidNames.includes(subscriber.nome) || subscriber.nome.startsWith("{{") || subscriber.nome.startsWith("[");
+          const updatePayload: Record<string, string> = { lead_id: pendingLeadId };
+          if (subHasInvalidName && lead.nome) updatePayload.nome = lead.nome;
+          await supabase.from("manychat_subscribers").update(updatePayload).eq("subscriber_id", subscriber.subscriber_id);
+          setSelectedSubscriber({ ...subscriber, lead_id: pendingLeadId, nome: updatePayload.nome || subscriber.nome });
+          setSubscribers((prev: Subscriber[]) => prev.map((s: Subscriber) => s.subscriber_id === subscriber!.subscriber_id ? { ...s, lead_id: pendingLeadId, nome: updatePayload.nome || s.nome } : s));
           setPendingLeadId(null);
           return;
         }
@@ -1145,6 +1153,11 @@ const ManyChatInboxContent = () => {
     const invalidNames = ["Desconhecido", "Sem nome", "desconhecido", "null", "", "{{wa_id}}"];
     const hasValidName = sub.nome && !invalidNames.includes(sub.nome) && !sub.nome.startsWith("{{") && !sub.nome.startsWith("[");
     if (hasValidName) return sub.nome;
+    // Se o subscriber tem lead vinculado, usa o nome real do lead
+    if (sub.lead_id) {
+      const lead = leadNames.find((l) => l.id === sub.lead_id);
+      if (lead?.nome && !invalidNames.includes(lead.nome) && !lead.nome.startsWith("{{")) return lead.nome;
+    }
     const formattedPhone = formatPhone(sub.telefone);
     if (formattedPhone) return formattedPhone;
     if (sub.telefone && sub.telefone.replace(/\D/g, "").length > 15) return `Grupo #${sub.subscriber_id?.slice(-4) || "????"}`;

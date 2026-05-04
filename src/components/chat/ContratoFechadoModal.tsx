@@ -201,15 +201,25 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
 
       if (insertError) throw insertError;
 
-      // 2. Atualizar status do lead
+      // 2. Atualizar status do lead (inclui lead_state para rastreio correto no dashboard)
+      const now = new Date().toISOString();
       await supabase
         .from('leads_juridicos')
         .update({
-          status:          'Contrato Assinado',
-          tipo_conversao:  formData.tipoContrato,
-          data_conversao:  new Date().toISOString(),
+          status:              'Contrato Assinado',
+          lead_state:          'CONTRACT_SIGNED',
+          contract_signed_at:  now,
+          state_updated_at:    now,
+          tipo_conversao:      formData.tipoContrato,
+          data_conversao:      now,
         } as any)
         .eq('id', formData.leadId);
+
+      // Broadcast para atualização imediata do dashboard
+      supabase
+        .channel('app-events')
+        .send({ type: 'broadcast', event: 'contrato_assinado', payload: { lead_id: formData.leadId } })
+        .catch(() => {});
 
       // 3. Log de interação
       await supabase

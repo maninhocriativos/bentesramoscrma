@@ -104,9 +104,19 @@ export function useDashboardStats() {
       )
       .subscribe();
 
+    // Listener de broadcast para atualização imediata quando contrato é assinado
+    const eventsChannel = supabase
+      .channel('app-events')
+      .on('broadcast', { event: 'contrato_assinado' }, () => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        fetchStatsRef.current?.();
+      })
+      .subscribe();
+
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       supabase.removeChannel(channel);
+      supabase.removeChannel(eventsChannel);
     };
   }, []); // ✅ Dependência vazia — canal criado uma vez, nunca recriado
 
