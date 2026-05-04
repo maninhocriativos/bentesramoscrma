@@ -29,16 +29,33 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
   const trafficLeads = useMemo(() => leads.filter(isTrafficLead), [leads]);
 
   const metrics = useMemo(() => {
+    // Retorna data de assinatura do contrato usando a mesma cadeia de fallback do gráfico
+    const getSignedDate = (l: any): Date => {
+      const dateStr = l.contract_signed_at || l.state_updated_at || l.updated_at || l.created_at;
+      return new Date(dateStr);
+    };
+
     const getPeriod = (start: Date, end: Date) => {
+      // Leads que ENTRARAM neste período (para mostrar o volume de captação)
       const pl = trafficLeads.filter(l => {
         const d = new Date(l.created_at);
         return isAfter(d, start) && isBefore(d, end);
       });
       const total = pl.length;
-      const contracts = pl.reduce((s, l) => s + (isConverted(l) ? 1 : 0) + ((l as any).contratos_adicionais || 0), 0);
+
+      // Contratos ASSINADOS neste período (independente de quando o lead entrou)
+      const signedInPeriod = trafficLeads.filter(l => {
+        if (!isConverted(l)) return false;
+        const d = getSignedDate(l);
+        return isAfter(d, start) && isBefore(d, end);
+      });
+      const contracts = signedInPeriod.reduce((s, l) => s + 1 + ((l as any).contratos_adicionais || 0), 0);
+
+      // Leads perdidos que ENTRARAM neste período
       const lost = pl.filter(l => l.is_lost || l.status === 'Perdido').length;
+
       const conversionRate = total > 0 ? (contracts / total) * 100 : 0;
-      const totalValue = pl.filter(isConverted).reduce((s, l) => s + (l.valor_causa || 0), 0);
+      const totalValue = signedInPeriod.reduce((s, l) => s + (l.valor_causa || 0), 0);
       return { total, converted: contracts, lost, conversionRate, totalValue };
     };
 
