@@ -68,7 +68,9 @@ export function useLeads() {
         (payload) => {
           setLeads(prev =>
             prev.map(lead =>
-              lead.id === (payload.new as Lead).id ? (payload.new as Lead) : lead
+              lead.id === (payload.new as Lead).id
+                ? { ...lead, ...(payload.new as Partial<Lead>) }
+                : lead
             )
           );
         }

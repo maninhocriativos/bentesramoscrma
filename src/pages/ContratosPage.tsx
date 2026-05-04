@@ -106,10 +106,12 @@ export default function ContratosPage() {
       if (leadIds.length > 0) {
         const { data: leadsData } = await supabase
           .from('leads_juridicos')
-          .select('id, tipo_origem')
+          .select('id, tipo_origem, origem')
           .in('id', leadIds);
         for (const l of leadsData || []) {
-          if (l.tipo_origem) tipoOrigemByLeadId.set(l.id, l.tipo_origem);
+          const isTraffic = l.tipo_origem === 'trafego' || (l.origem || '').includes('Tráfego');
+          if (isTraffic) tipoOrigemByLeadId.set(l.id, 'trafego');
+          else if (l.tipo_origem) tipoOrigemByLeadId.set(l.id, l.tipo_origem);
         }
       }
 
