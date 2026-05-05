@@ -178,7 +178,7 @@ function DashboardPage() {
 
                 {/* Conversão */}
                 <Suspense fallback={<ChartFallback />}>
-                  <ConversionMetrics leads={leads} />
+                  <ConversionMetrics leads={leads} stats={stats} />
                 </Suspense>
 
                 {/* Gráficos — largura total */}

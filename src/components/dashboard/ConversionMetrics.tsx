@@ -9,7 +9,10 @@ import {
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
-interface ConversionMetricsProps { leads: Lead[]; }
+interface ConversionMetricsProps {
+  leads: Lead[];
+  stats?: { contratos_trafego_total?: number; leads_trafego?: number; };
+}
 
 // ── Critério correto: tipo_origem='trafego' OU origem='Tráfego Pago'
 const isTrafficLead = (l: Lead) =>
@@ -24,7 +27,7 @@ const isConverted = (l: Lead) =>
 const fmt = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }).format(v);
 
-export function ConversionMetrics({ leads }: ConversionMetricsProps) {
+export function ConversionMetrics({ leads, stats }: ConversionMetricsProps) {
   const [now] = useState(() => new Date());
   const trafficLeads = useMemo(() => leads.filter(isTrafficLead), [leads]);
 
@@ -70,7 +73,7 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
     };
   }, [trafficLeads, now]);
 
-  // Gráfico mensal — desde a implementação do sistema (ou mín. 6 meses)
+  // Gráfico mensal — análise de coorte: para cada mês de ENTRADA, quantos converteram (qualquer data)
   const monthlyData = useMemo(() => {
     const allTs = leads
       .filter(l => l.created_at)
@@ -83,21 +86,14 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
       const mStart = subMonths(startOfMonth(now), numMonths - 1 - i);
       const mEnd   = i === numMonths - 1 ? now : subMonths(startOfMonth(now), numMonths - 2 - i);
 
+      // Leads que ENTRARAM neste mês (coorte)
       const ml = trafficLeads.filter(l => {
         const d = new Date(l.created_at);
         return isAfter(d, mStart) && isBefore(d, mEnd);
       });
 
-      const mc = trafficLeads.filter(l => {
-        if (!isConverted(l)) return false;
-        // Prioridade: contract_signed_at > state_updated_at > updated_at > created_at
-        const dateStr = (l as any).contract_signed_at
-          || (l as any).state_updated_at
-          || l.updated_at
-          || l.created_at;
-        const d = new Date(dateStr);
-        return isAfter(d, mStart) && isBefore(d, mEnd);
-      });
+      // Dos leads que ENTRARAM neste mês, quantos já converteram (qualquer momento)
+      const mc = ml.filter(l => isConverted(l));
 
       const total     = ml.length;
       const converted = mc.reduce((s, l) => s + 1 + ((l as any).contratos_adicionais || 0), 0);
@@ -112,10 +108,12 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
   }, [trafficLeads, leads, now]);
 
   const global = useMemo(() => {
-    const total     = trafficLeads.length;
-    const converted = trafficLeads.reduce((s, l) => s + (isConverted(l) ? 1 : 0) + ((l as any).contratos_adicionais || 0), 0);
+    // Usar RPC quando disponível (fonte autoritativa), fallback para cálculo local
+    const total     = stats?.leads_trafego ?? trafficLeads.length;
+    const converted = stats?.contratos_trafego_total
+      ?? trafficLeads.reduce((s, l) => s + (isConverted(l) ? 1 : 0) + ((l as any).contratos_adicionais || 0), 0);
     return { total, converted, taxa: total > 0 ? Math.round((converted / total) * 100) : 0 };
-  }, [trafficLeads]);
+  }, [trafficLeads, stats]);
 
   const getTrend = (cur: number, prev: number) => {
     if (cur > prev) return { icon: <TrendingUp style={{ width: 14, height: 14, color: '#16a34a' }} />, color: '#16a34a', label: `+${((cur - prev) / (prev || 1) * 100).toFixed(0)}%` };
@@ -205,9 +203,9 @@ export function ConversionMetrics({ leads }: ConversionMetricsProps) {
             <div className="h-8 w-8 rounded-xl bg-[#c9a96e]/12 flex items-center justify-center">
               <FileSignature style={{ width: 16, height: 16, color: '#c9a96e' }} />
             </div>
-            <p className="text-sm font-semibold text-foreground">Contratos Assinados por Mês — Tráfego Pago</p>
+            <p className="text-sm font-semibold text-foreground">Conversão por Mês de Entrada — Tráfego Pago</p>
             <span className="ml-auto text-[11px] text-muted-foreground px-2 py-0.5 rounded-lg bg-muted/40">
-              desde a implementação do sistema
+              coorte: leads que entraram em cada mês
             </span>
           </div>
           <div style={{ overflowX: 'auto' }}>
