@@ -218,7 +218,7 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
         .eq('id', formData.leadId)
         .single();
 
-      // 4. Atualizar status do lead
+      // 4. Atualizar status e nome do lead
       await supabase
         .from('leads_juridicos')
         .update({
@@ -229,6 +229,7 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
           tipo_conversao:       formData.tipoContrato,
           data_conversao:       now,
           contratos_adicionais: contratosAdicionais,
+          ...(formData.leadNome ? { nome: formData.leadNome } : {}),
         } as any)
         .eq('id', formData.leadId);
 
@@ -278,27 +279,26 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
           data_interacao: now,
         });
 
-      // 8. Meta CAPI — apenas para leads de tráfego pago
+      // 8. Meta CAPI — para todos os leads (não só tráfego)
       try {
-        if (leadData?.tipo_origem === 'trafego') {
-          const metaResult = await sendMetaEvent({
-            lead_id:          formData.leadId,
-            facebook_lead_id: (leadData as any).facebook_lead_id ?? null,
-            email:            leadData.email ?? null,
-            phone:            leadData.telefone ?? null,
-            event_name:       'Purchase',
-            value:            (leadData as any).valor_causa ?? 0,
-            status:           'Contrato Assinado',
-          });
-          if (metaResult.success) {
-            await supabase
-              .from('contratos_fechados' as any)
-              .update({ meta_conversion_sent: true } as any)
-              .eq('lead_id', formData.leadId)
-              .eq('tipo_contrato', formData.tipoContrato)
-              .order('created_at', { ascending: false })
-              .limit(1);
-          }
+        const metaResult = await sendMetaEvent({
+          lead_id:          formData.leadId,
+          facebook_lead_id: (leadData as any)?.facebook_lead_id ?? null,
+          email:            leadData?.email ?? null,
+          phone:            leadData?.telefone ?? null,
+          nome:             formData.leadNome || null,
+          event_name:       'Purchase',
+          value:            (leadData as any)?.valor_causa ?? 0,
+          status:           'Contrato Assinado',
+        });
+        if (metaResult.success) {
+          await supabase
+            .from('contratos_fechados' as any)
+            .update({ meta_conversion_sent: true } as any)
+            .eq('lead_id', formData.leadId)
+            .eq('tipo_contrato', formData.tipoContrato)
+            .order('created_at', { ascending: false })
+            .limit(1);
         }
       } catch (metaErr) {
         console.warn('[ContratoFechadoModal] Aviso Meta CAPI:', metaErr);

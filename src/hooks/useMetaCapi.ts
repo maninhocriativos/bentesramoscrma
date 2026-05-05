@@ -7,6 +7,7 @@ interface MetaEventData {
   facebook_lead_id?: string | null;
   email?: string | null;
   phone?: string | null;
+  nome?: string | null;
   event_name?: string;
   value?: number;
   status?: string;
