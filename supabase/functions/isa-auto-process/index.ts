@@ -88,6 +88,34 @@ const LEAD_STATES = {
 
 const ESTADOS_BLOQUEADOS = ['CONTRACT_SIGNED', 'READY_FOR_LAWYER'];
 
+const RESPONSE_INTELLIGENCE_GUIDE = `
+INTELIGENCIA OPERACIONAL PARA Z-API:
+- Leia CONTEXTO DO LEAD, ESTADO ATUAL e HISTORICO antes de responder. Eles prevalecem sobre suposicoes.
+- Nao repita perguntas ja respondidas, nem repita textualmente suas ultimas mensagens.
+- Escolha um unico objetivo para a resposta: acolher, classificar, pedir dado faltante, confirmar entendimento, agendar/lembrar ou transferir.
+- Faca no maximo UMA pergunta objetiva por mensagem. Priorize o dado que destrava o proximo passo.
+- Se faltar informacao essencial, peca essa informacao antes de concluir, classificar com certeza ou sugerir documento desnecessario.
+- Nao invente fatos, agenda, status, valores, documentos recebidos ou probabilidade de exito.
+- Nunca prometa resultado, nunca diga que algo e ilegal com certeza e nunca de parecer juridico. Use linguagem condicional.
+- Se o cliente pedir humano, demonstrar irritacao, perguntar honorarios especificos, trouxer tema fora de Bancario/Aereo ou houver incerteza relevante, use direcionar_atendimento_humano.
+- Para WhatsApp, responda em 2 a 4 linhas, humano e direto. Use emoji so se ajudar o tom.
+- Quando sugerir acoes, use apenas as acoes disponiveis e preencha lead_id implicitamente; nao crie campos que nao existem no contrato JSON.
+`;
+
+function parseAiJson(content: string): any {
+  const raw = (content || '').trim();
+  try {
+    return JSON.parse(raw);
+  } catch (_) {
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
+    if (fenced) return JSON.parse(fenced);
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start >= 0 && end > start) return JSON.parse(raw.slice(start, end + 1));
+    throw new Error('Resposta da IA nao esta em JSON valido');
+  }
+}
+
 const FAST_CONFIG = {
   stage_1: { delay_minutos: 10, titulo: "Follow-up FAST 1 - 10 min" },
   stage_2: { delay_minutos: 240, titulo: "Follow-up FAST 2 - 4h" },
@@ -1083,6 +1111,8 @@ async function processarComIA(contexto: LeadContext, mensagem: string, subscribe
 
 ${strictMode ? '🔒 MODO RÍGIDO ATIVADO: Opere pela máquina de estados.\n' : ''}
 
+${RESPONSE_INTELLIGENCE_GUIDE}
+
 AGENTE ATUAL: ${agentAtual}
 
 🏢 ENDEREÇO FÍSICO DO ESCRITÓRIO:
@@ -1187,7 +1217,7 @@ Responda em JSON:
   if (!response.ok) { const error = await response.text(); console.error('❌ Erro na API OpenAI:', error); throw new Error('Erro ao processar com IA'); }
 
   const data = await response.json();
-  const resultado = JSON.parse(data.choices[0].message.content);
+  const resultado = parseAiJson(data.choices[0].message.content);
 
   const acoesProcessadas = (resultado.acoes || []).map((a: any) => ({
     acao: a.acao,

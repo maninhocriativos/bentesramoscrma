@@ -70,7 +70,7 @@ function Avatar({ nome, size = 40 }: { nome: string | null; size?: number }) {
       fontSize: size * 0.38, fontWeight: 800, color: initials === '?' ? T.muted : '#fff',
       boxShadow: initials === '?' ? 'none' : '0 2px 8px rgba(0,0,0,0.15)',
       border: initials === '?' ? `1px solid ${T.border}` : 'none',
-      letterSpacing: '-0.02em', flexShrink: 0,
+      letterSpacing: '-0.02em',
     }}>
       {initials === '?' ? <User size={size * 0.4} /> : initials}
     </div>
