@@ -279,8 +279,9 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
           data_interacao: now,
         });
 
-      // 8. Meta CAPI — para todos os leads (não só tráfego)
+      // 8. Meta CAPI — apenas para leads de tráfego pago
       try {
+        if (leadData?.tipo_origem === 'trafego') {
         const metaResult = await sendMetaEvent({
           lead_id:          formData.leadId,
           facebook_lead_id: (leadData as any)?.facebook_lead_id ?? null,
@@ -300,6 +301,7 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
             .order('created_at', { ascending: false })
             .limit(1);
         }
+        } // end if trafego
       } catch (metaErr) {
         console.warn('[ContratoFechadoModal] Aviso Meta CAPI:', metaErr);
       }
