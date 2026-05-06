@@ -89,16 +89,18 @@ const LEAD_STATES = {
 const ESTADOS_BLOQUEADOS = ['CONTRACT_SIGNED', 'READY_FOR_LAWYER'];
 
 const RESPONSE_INTELLIGENCE_GUIDE = `
-INTELIGENCIA OPERACIONAL PARA Z-API:
-- Leia CONTEXTO DO LEAD, ESTADO ATUAL e HISTORICO antes de responder. Eles prevalecem sobre suposicoes.
-- Nao repita perguntas ja respondidas, nem repita textualmente suas ultimas mensagens.
-- Escolha um unico objetivo para a resposta: acolher, classificar, pedir dado faltante, confirmar entendimento, agendar/lembrar ou transferir.
-- Faca no maximo UMA pergunta objetiva por mensagem. Priorize o dado que destrava o proximo passo.
-- Se faltar informacao essencial, peca essa informacao antes de concluir, classificar com certeza ou sugerir documento desnecessario.
+INTELIGENCIA OPERACIONAL PARA Z-API - LEADS DE TRAFEGO:
+- Estes agentes respondem somente leads de trafego atendidos pela linha Z-API de trafego. Nao trate contatos do escritorio como automacao.
+- Antes de responder, leia MEMORIA OPERACIONAL, CONTEXTO DO LEAD, ESTADO ATUAL, DOCUMENTOS e HISTORICO. A resposta deve partir do que ja aconteceu.
+- Nao peca novamente informacao ou documento que ja foi enviado, confirmado no historico ou marcado como recebido.
+- Se o cliente enviou contrato, extrato, comprovante, audio, imagem ou PDF, reconheca o recebimento e avance para o proximo dado/documento pendente.
+- Escolha um unico objetivo por mensagem: confirmar recebimento, pedir o proximo documento, esclarecer o problema, agendar lembrete/follow-up ou transferir.
+- Faca no maximo UMA pergunta objetiva por mensagem. Priorize o dado que destrava a analise.
 - Nao invente fatos, agenda, status, valores, documentos recebidos ou probabilidade de exito.
-- Nunca prometa resultado, nunca diga que algo e ilegal com certeza e nunca de parecer juridico. Use linguagem condicional.
+- Nunca prometa resultado, nunca diga que algo e ilegal com certeza e nunca de parecer juridico. Use linguagem segura e condicional.
 - Se o cliente pedir humano, demonstrar irritacao, perguntar honorarios especificos, trouxer tema fora de Bancario/Aereo ou houver incerteza relevante, use direcionar_atendimento_humano.
-- Para WhatsApp, responda em 2 a 4 linhas, humano e direto. Use emoji so se ajudar o tom.
+- Tom: humano, profissional e firme. Evite emojis, brincadeiras, excesso de entusiasmo e jargoes juridicos. Use tratamento respeitoso quando o nome permitir.
+- Para WhatsApp, responda em 2 a 4 linhas, com autoridade e proximo passo claro.
 - Quando sugerir acoes, use apenas as acoes disponiveis e preencha lead_id implicitamente; nao crie campos que nao existem no contrato JSON.
 `;
 
@@ -116,6 +118,54 @@ function parseAiJson(content: string): any {
   }
 }
 
+type DocumentoResumo = {
+  pendentes: string[];
+  recebidos: string[];
+  pendentesCriticos: string[];
+};
+
+function formatarLista(items: string[]): string {
+  return items.length > 0 ? items.join(', ') : 'Nenhum';
+}
+
+function resumirDocumentos(docsChecklist: any[]): DocumentoResumo {
+  const recebidos = (docsChecklist || [])
+    .filter((d: any) => d.received)
+    .map((d: any) => d.doc_label || d.doc_type)
+    .filter(Boolean);
+
+  const pendentes = (docsChecklist || [])
+    .filter((d: any) => d.is_required && !d.received)
+    .map((d: any) => d.doc_label || d.doc_type)
+    .filter(Boolean);
+
+  const pendentesCriticos = pendentes.filter((doc: string) => {
+    const normalized = doc.toLowerCase();
+    return normalized.includes('contrato') ||
+      normalized.includes('extrato') ||
+      normalized.includes('comprovante') ||
+      normalized.includes('rg') ||
+      normalized.includes('cnh') ||
+      normalized.includes('documento');
+  });
+
+  return { pendentes, recebidos, pendentesCriticos };
+}
+
+function inferirDocumentosDaMensagem(mensagem: string, tipoMensagem?: string, mediaUrl?: string): string[] {
+  const text = `${mensagem || ''} ${mediaUrl || ''}`.toLowerCase();
+  const docs: string[] = [];
+  if (tipoMensagem === 'document' || text.includes('.pdf') || text.includes('contrato') || text.includes('extrato')) {
+    if (text.includes('extrato')) docs.push('extrato');
+    if (text.includes('contrato') || text.includes('.pdf')) docs.push('contrato_ou_extrato');
+  }
+  if (tipoMensagem === 'image' || text.includes('rg') || text.includes('cnh') || text.includes('identidade')) {
+    if (text.includes('rg')) docs.push('rg');
+    if (text.includes('cnh')) docs.push('cnh');
+  }
+  if (text.includes('comprovante')) docs.push('comprovante_do_problema');
+  return [...new Set(docs)];
+}
 const FAST_CONFIG = {
   stage_1: { delay_minutos: 10, titulo: "Follow-up FAST 1 - 10 min" },
   stage_2: { delay_minutos: 240, titulo: "Follow-up FAST 2 - 4h" },
@@ -141,13 +191,13 @@ const AGENT_DISPLAY_NAMES: Record<string, string> = {
 
 // Mensagem curta de Isa anunciando a transferência (sem se reapresentar)
 const AGENT_HANDOFFS: Record<string, string> = {
-  'isa_bancario': 'Certo! Vou te conectar agora com a *Melissa*, nossa especialista em Direito Bancário. Um momento! 😊',
-  'isa_aereo':    'Certo! Vou te conectar agora com a *Jerusa*, nossa especialista em Direito Aéreo. Um momento! 😊',
+  'isa_bancario': 'Entendi. Vou direcionar seu atendimento para a Melissa, nossa especialista em demandas bancarias. Ela dara continuidade a analise a partir do que voce ja enviou.',
+  'isa_aereo':    'Entendi. Vou direcionar seu atendimento para a Jerusa, nossa especialista em demandas aereas. Ela dara continuidade a partir das informacoes ja enviadas.',
 };
 
 const AGENT_INTROS: Record<string, string> = {
-  'isa_bancario': 'Olá! Sou a *Melissa*, especialista em Direito Bancário aqui no escritório Bentes & Ramos 😊\n\nVi que você tem uma questão relacionada a serviços financeiros. Para que eu possa te ajudar da melhor forma, pode me dizer qual banco ou instituição está envolvida e o tipo de produto (empréstimo, financiamento, cartão, consignado)?',
-  'isa_aereo':    'Olá! Sou a *Jerusa*, especialista em Direito Aéreo do escritório Bentes & Ramos 😊\n\nVi que você passou por alguma situação com uma companhia aérea. Pode me contar mais detalhes? Qual companhia e o que aconteceu (cancelamento, atraso, bagagem extraviada, overbooking)?',
+  'isa_bancario': 'Sou a Melissa, especialista em demandas bancarias do Bentes & Ramos. Vou analisar as informacoes que voce ja enviou e conduzir os proximos passos com objetividade. Se ainda faltar algum documento, vou solicitar apenas o necessario para a analise.',
+  'isa_aereo':    'Sou a Jerusa, especialista em demandas aereas do Bentes & Ramos. Vou analisar as informacoes que voce ja enviou e orientar o proximo passo de forma direta.',
 };
 
 interface LeadContext {
@@ -164,6 +214,7 @@ interface LeadContext {
   contractData?: any;
   docsChecklist?: any[];
   stateHistory?: any[];
+  lembretesPendentes?: any[];
 }
 
 async function buscarContextoLead(supabase: any, leadId: string): Promise<LeadContext | null> {
@@ -181,6 +232,7 @@ async function buscarContextoLead(supabase: any, leadId: string): Promise<LeadCo
     { data: contractData },
     { data: docsChecklist },
     { data: stateHistory },
+    { data: lembretesPendentes },
   ] = await Promise.all([
     supabase.from('leads_juridicos').select('*').eq('id', leadId).single(),
     supabase.from('manychat_mensagens').select('*').eq('lead_id', leadId).order('created_at', { ascending: false }).limit(20),
@@ -195,6 +247,7 @@ async function buscarContextoLead(supabase: any, leadId: string): Promise<LeadCo
     supabase.from('lead_contract_data').select('*').eq('lead_id', leadId).maybeSingle(),
     supabase.from('lead_docs_checklist').select('*').eq('lead_id', leadId),
     supabase.from('lead_state_history').select('*').eq('lead_id', leadId).order('created_at', { ascending: false }).limit(5),
+    supabase.from('system_events').select('*').eq('lead_id', leadId).eq('tipo', 'lembrete').eq('acao', 'lembrete_pendente').eq('processado', false).order('created_at', { ascending: false }).limit(3),
   ]);
 
   if (!lead) return null;
@@ -223,6 +276,7 @@ async function buscarContextoLead(supabase: any, leadId: string): Promise<LeadCo
     contractData: contractData || null,
     docsChecklist: docsChecklist || [],
     stateHistory: stateHistory || [],
+    lembretesPendentes: lembretesPendentes || [],
   };
 }
 
@@ -711,15 +765,38 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
 
       case 'marcar_doc_recebido': {
         const { lead_id, doc_type, file_id, notes } = dados;
-        if (!doc_type) return { success: false, message: 'Tipo do documento (doc_type) é obrigatório' };
-        const { data, error } = await supabase.from('lead_docs_checklist').update({ received: true, received_at: new Date().toISOString(), file_id: file_id || null, notes: notes || null, updated_at: new Date().toISOString() }).eq('lead_id', lead_id).eq('doc_type', doc_type).select().single();
+        if (!doc_type) return { success: false, message: 'Tipo do documento (doc_type) e obrigatorio' };
+        const normalizedDocType = String(doc_type).toLowerCase().trim().replace(/\s+/g, '_');
+        const labels: Record<string, string> = {
+          contrato: 'Contrato',
+          extrato: 'Extrato',
+          contrato_ou_extrato: 'Contrato ou extrato',
+          comprovante_do_problema: 'Comprovante do problema',
+          rg_frente: 'RG - frente',
+          rg_verso: 'RG - verso',
+          cnh_frente: 'CNH - frente',
+          cnh_verso: 'CNH - verso',
+          rg: 'RG recebido (verificar frente e verso)',
+          cnh: 'CNH recebida (verificar frente e verso)',
+          comprovante_residencia: 'Comprovante de residencia',
+        };
+        const { data, error } = await supabase.from('lead_docs_checklist').upsert({
+          lead_id,
+          doc_type: normalizedDocType,
+          doc_label: labels[normalizedDocType] || normalizedDocType,
+          is_required: true,
+          received: true,
+          received_at: new Date().toISOString(),
+          file_id: file_id || null,
+          notes: notes || null,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'lead_id,doc_type' }).select().single();
         if (error) throw error;
         const { data: pending } = await supabase.from('lead_docs_checklist').select('id').eq('lead_id', lead_id).eq('is_required', true).eq('received', false);
         const allReceived = !pending || pending.length === 0;
-        await supabase.from('system_events').insert({ tipo: 'documento', fonte: 'isa_auto', acao: 'doc_recebido', lead_id, dados: { doc_type, all_docs_received: allReceived }, processado: true });
-        return { success: true, message: allReceived ? `Documento "${doc_type}" recebido. ✅ TODOS os documentos recebidos!` : `Documento "${doc_type}" recebido. Ainda há pendentes.`, data: { ...data, all_docs_received: allReceived } };
+        await supabase.from('system_events').insert({ tipo: 'documento', fonte: 'isa_auto', acao: 'doc_recebido', lead_id, dados: { doc_type: normalizedDocType, all_docs_received: allReceived, notes }, processado: true });
+        return { success: true, message: allReceived ? `Documento "${normalizedDocType}" recebido. Todos os documentos obrigatorios foram recebidos.` : `Documento "${normalizedDocType}" recebido. Ainda ha pendencias.`, data: { ...data, all_docs_received: allReceived } };
       }
-
       case 'verificar_docs_pendentes': {
         const { lead_id } = dados;
         const { data: checklist, error } = await supabase.from('lead_docs_checklist').select('*').eq('lead_id', lead_id);
@@ -776,8 +853,21 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
       }
 
       case 'agendar_lembrete': {
-        const { lead_id, mensagem: msgLembrete, delay_minutos } = dados;
-        if (!msgLembrete) return { success: false, message: 'mensagem é obrigatória para agendar_lembrete' };
+        const { lead_id, mensagem: msgLembrete, delay_minutos, assunto } = dados;
+        if (!msgLembrete) return { success: false, message: 'mensagem e obrigatoria para agendar_lembrete' };
+        const reminderSubject = String(assunto || msgLembrete).toLowerCase().substring(0, 120);
+        const { data: existingReminder } = await supabase
+          .from('system_events')
+          .select('id, dados')
+          .eq('lead_id', lead_id)
+          .eq('tipo', 'lembrete')
+          .eq('acao', 'lembrete_pendente')
+          .eq('processado', false)
+          .limit(1)
+          .maybeSingle();
+        if (existingReminder) {
+          return { success: true, message: 'Ja existe lembrete pendente para este lead; nao foi criado outro.', data: existingReminder };
+        }
         const delayMin = Math.max(5, Math.min(Number(delay_minutos) || 120, 1440));
         const scheduledFor = new Date(Date.now() + delayMin * 60 * 1000).toISOString();
         const { error: lembreteErr } = await supabase.from('system_events').insert({
@@ -789,6 +879,7 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
             subscriber_id: subscriberId,
             lead_id,
             mensagem: msgLembrete,
+            assunto: reminderSubject,
             scheduled_for: scheduledFor,
             agendado_em: new Date().toISOString(),
           },
@@ -796,10 +887,9 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
         });
         if (lembreteErr) throw lembreteErr;
         const horaManaus = new Date(scheduledFor).toLocaleTimeString('pt-BR', { timeZone: 'America/Manaus', hour: '2-digit', minute: '2-digit' });
-        console.log(`[Lembrete] ✅ Agendado para ${horaManaus} — lead ${lead_id}`);
+        console.log(`[Lembrete] Agendado para ${horaManaus} - lead ${lead_id}`);
         return { success: true, message: `Lembrete agendado para ${horaManaus}`, data: { scheduled_for: scheduledFor } };
       }
-
       case 'direcionar_atendimento_humano': {
         const lead_id = dados.lead_id;
         const motivo = dados.motivo || 'Lead qualificado para atendimento humano';
@@ -1093,8 +1183,24 @@ async function processarComIA(contexto: LeadContext, mensagem: string, subscribe
   const classification = contexto.classification;
   const contractData = contexto.contractData;
   const docsChecklist = contexto.docsChecklist || [];
+  const docsResumo = resumirDocumentos(docsChecklist);
   const docsPending = docsChecklist.filter((d: any) => d.is_required && !d.received);
   const docsReceived = docsChecklist.filter((d: any) => d.received);
+  const ultimasMensagensCliente = contexto.mensagens
+    .filter((m: any) => m.direcao === 'entrada' || m.direcao === 'inbound')
+    .slice(0, 5)
+    .map((m: any) => (m.conteudo || '').substring(0, 220));
+  const ultimaMensagemCliente = ultimasMensagensCliente[0] || '(sem mensagem anterior do cliente)';
+  const ultimaMensagemAgente = contexto.mensagens
+    .filter((m: any) => m.direcao === 'saida')
+    .slice(0, 1)
+    .map((m: any) => (m.conteudo || '').substring(0, 260))[0] || '(sem resposta anterior do agente)';
+  const lembretesPendentes = (contexto.lembretesPendentes || [])
+    .map((e: any) => `${e.dados?.scheduled_for || 'sem horario'}: ${e.dados?.mensagem || 'lembrete pendente'}`)
+    .slice(0, 3);
+  const camposContratoSalvos = contractData
+    ? Object.keys(contractData).filter(k => contractData[k] && !['id', 'lead_id', 'created_at', 'updated_at'].includes(k))
+    : [];
 
   // Buscar agente atual para info no prompt
   const agentAtual = await getIsaAgent(supabaseClient, contexto.lead.id);
@@ -1131,13 +1237,26 @@ ${temAgendamentoPendente ? `⚠️ AGENDAMENTO PENDENTE: ${JSON.stringify(opcoes
 
 ${followupInfo}
 
-📊 CONTEXTO DO LEAD:
-Nome: ${contexto.lead.nome || 'Não informado'}
+MEMORIA OPERACIONAL OBRIGATORIA:
+- Ultima mensagem do cliente: ${ultimaMensagemCliente}
+- Ultima mensagem do agente: ${ultimaMensagemAgente}
+- Documentos ja recebidos: ${formatarLista(docsResumo.recebidos)}
+- Documentos pendentes: ${formatarLista(docsResumo.pendentes)}
+- Pendencias criticas: ${formatarLista(docsResumo.pendentesCriticos)}
+- Dados de contrato ja salvos: ${formatarLista(camposContratoSalvos)}
+- Lembretes/follow-ups ja agendados: ${formatarLista(lembretesPendentes)}
+
+REGRA DE MEMORIA:
+- Se a ultima mensagem do agente ja pediu um documento/dado, nao repita a mesma pergunta. Avance, confirme ou agende follow-up.
+- Se o cliente respondeu com documento, audio, imagem, PDF ou confirmacao, reconheca isso antes de pedir qualquer outra coisa.
+- Se houver lembrete pendente para o mesmo assunto, nao crie outro.
+
+CONTEXTO DO LEAD:
+Nome: ${contexto.lead.nome || 'Nao informado'}
 Status: ${contexto.lead.status || 'Lead Frio'}
 Estado: ${leadState}
-Telefone: ${contexto.lead.telefone || 'Não informado'}
-Tipo Ação: ${contexto.lead.tipo_acao || 'Não classificado'}
-
+Telefone: ${contexto.lead.telefone || 'Nao informado'}
+Tipo Acao: ${contexto.lead.tipo_acao || 'Nao classificado'}
 🔄 ESTADO ATUAL: ${leadState}
 ${leadState === 'NEW' ? '→ Identifique o problema e roteie para o especialista correto usando transicionar_agente.' : ''}
 ${leadState === 'TRIAGE' ? '→ Classifique o caso e transfira para especialista.' : ''}
@@ -1155,9 +1274,9 @@ ${ultimasBotMsgs.map((m: string, i: number) => `${i + 1}. "${m}"`).join('\n')}
 ⚙️ AÇÕES DISPONÍVEIS:
 - transicionar_agente: { lead_id, isa_agent: "isa_bancario"|"isa_aereo"|"humano" } — ROTEAMENTO SILENCIOSO
 - transicionar_estado: { lead_id, to_state }
-- classificar_caso: { lead_id, case_type, sub_type?, recommended_docs? }
-- salvar_dados_contrato: { lead_id, cpf?, rg?, endereco?, cidade?, uf?, cep? }
-- marcar_doc_recebido: { lead_id, doc_type }
+- classificar_caso: { lead_id, case_type, sub_type?, summary?, recommended_docs? }
+- salvar_dados_contrato: { lead_id, cpf?, rg?, data_nascimento?, endereco?, cidade?, uf?, cep?, estado_civil?, profissao?, nacionalidade?, nome_mae?, dados_extras? }
+- marcar_doc_recebido: { lead_id, doc_type, notes? } - doc_type sugeridos: contrato, extrato, contrato_ou_extrato, comprovante_do_problema, rg_frente, rg_verso, cnh_frente, cnh_verso, comprovante_residencia
 - verificar_docs_pendentes: { lead_id }
 - classificar_lead: { lead_id, novo_status }
 - atualizar_dados_lead: { lead_id, nome?, telefone?, email? }
@@ -1173,11 +1292,19 @@ ROTEAMENTO (apenas quando agente=isa_triagem):
 - Outra área → direcionar_atendimento_humano com [TRANSFERIR_HUMANO]
 - Transferência SILENCIOSA — não avisar o cliente
 
-FOLLOW-UP CONTEXTUAL (use agendar_lembrete quando):
-- Cliente disser que fará algo mais tarde / quando chegar em casa / amanhã → agende com delay adequado (ex: 120 min) e mensagem "Olá! Você já chegou em casa? Estou aguardando os documentos 😊"
-- Cliente informar horário específico → calcule os minutos e use esse delay exato
-- Nunca agende mais de um lembrete por conversa para o mesmo assunto
+MELISSA - OBJETIVO EM BANCARIO:
+- Analisar a conversa e documentos antes de pedir qualquer coisa.
+- Se contrato/extrato ja foi recebido, confirme e solicite apenas o proximo item faltante.
+- Para analise bancaria, priorize: contrato ou extrato, comprovante do problema/desconto, documento com foto frente e verso (RG ou CNH) e dados minimos para contrato.
+- RG ou CNH sempre precisa de frente e verso. Se so houver um lado, peca somente o lado faltante.
+- Se o lead pedir para analisar contrato, nao pergunte novamente banco/produto se o documento ou historico ja indicarem isso.
 
+FOLLOW-UP CONTEXTUAL (use agendar_lembrete quando):
+- Se voce pedir documento/dado essencial e o lead nao responder imediatamente, agende um lembrete coerente para cobrar esse mesmo item.
+- Cliente disser que fara algo mais tarde / quando chegar em casa / amanha: agende com delay adequado (ex: 120 min) e mensagem profissional, sem emoji.
+- Cliente informar horario especifico: calcule os minutos e use esse delay exato.
+- Nunca agende mais de um lembrete para o mesmo assunto se ja houver lembrete pendente em MEMORIA OPERACIONAL.
+- Quando o lead enviar o documento cobrado, nao cobre de novo; confirme recebimento e avance.
 Responda em JSON:
 {
   "analise": {
@@ -1330,11 +1457,23 @@ serve(async (req) => {
     }
 
     // Buscar contexto do lead
-    const contexto = await buscarContextoLead(supabase, lead_id);
+    let contexto = await buscarContextoLead(supabase, lead_id);
     if (!contexto) {
-      return new Response(JSON.stringify({ success: false, error: 'Lead não encontrado' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ success: false, error: 'Lead nao encontrado' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    const docsInferidos = inferirDocumentosDaMensagem(mensagemProcessada, tipo_mensagem, media_url);
+    if (docsInferidos.length > 0) {
+      for (const docType of docsInferidos) {
+        await executarAcao(supabase, 'marcar_doc_recebido', {
+          lead_id,
+          doc_type: docType,
+          notes: `Documento inferido automaticamente pela Melissa a partir de ${tipo_mensagem || 'mensagem'}`,
+        }, subscriber_id);
+      }
+      const contextoAtualizado = await buscarContextoLead(supabase, lead_id);
+      if (contextoAtualizado) contexto = contextoAtualizado;
+    }
     // Capturar agente ativo ANTES do processamento (para subscriber_nome correto)
     const agentKeyBefore = await getIsaAgent(supabase, lead_id);
     const agentDisplayName = AGENT_DISPLAY_NAMES[agentKeyBefore] || 'Isa';
@@ -1486,7 +1625,7 @@ serve(async (req) => {
 
       // Prova social: imagem Bradesco + texto de casos de sucesso antes da transferência
       const PROVA_SOCIAL_IMG = 'https://bentesramoscrma.lovable.app/images/prova-social-bradesco.jpg';
-      const provaSocialTexto = 'Enquanto te conecto com a nossa especialista, olha esse caso que resolvemos recentemente! 🏆 Já ajudamos centenas de clientes a recuperarem seus direitos. Pode ter certeza que seu caso estará em ótimas mãos! 💪⚖️';
+      const provaSocialTexto = 'Enquanto direciono seu atendimento, compartilho um exemplo de caso bancario ja analisado pelo escritorio. Seguimos com criterio, documentacao adequada e proximos passos objetivos.';
       const imgSend = await enviarImagemZapi(supabase, subscriber_id, PROVA_SOCIAL_IMG, provaSocialTexto);
       if (imgSend.success) {
         await supabase.from('manychat_mensagens').insert({
