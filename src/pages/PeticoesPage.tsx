@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, Search, MoreHorizontal, Eye, Copy, Archive, Trash2,
@@ -321,14 +321,20 @@ function ModelsSidePanel({
       getModelsForAction(a.id).some(m => m.nome.toLowerCase().includes(q))
     );
   }, [actionTypes, search, getModelsForAction]);
+  useEffect(() => {
+    if (visible.length === 0) return;
+    if (!expanded || !visible.some(action => action.id === expanded)) {
+      setExpanded(visible[0].id);
+    }
+  }, [expanded, visible]);
 
   return (
-    <div className="flex flex-col h-full rounded-2xl border border-border/50 bg-card overflow-hidden shadow-sm">
+    <div className="flex flex-col h-full rounded-xl border border-border/60 bg-card overflow-hidden shadow-sm">
       {/* Header */}
-      <div className="px-4 pt-5 pb-4 border-b border-border/40 shrink-0">
+      <div className="px-4 pt-4 pb-3 border-b border-border/40 shrink-0">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <p className="text-sm font-bold text-foreground leading-tight">Modelos</p>
+            <p className="text-sm font-bold text-foreground leading-tight">Biblioteca de modelos</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
               {totalModels} modelos · {actionTypes.length} categorias
             </p>
@@ -343,14 +349,14 @@ function ModelsSidePanel({
             placeholder="Buscar modelo ou ação..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="pl-9 h-9 text-xs rounded-xl bg-muted/40 border-border/40 focus:bg-background"
+            className="pl-9 h-9 text-xs rounded-lg bg-muted/40 border-border/40 focus:bg-background"
           />
         </div>
       </div>
 
       {/* Lista */}
       <ScrollArea className="flex-1">
-        <div className="p-3 space-y-2">
+        <div className="p-2.5 space-y-2">
           {visible.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <FileText className="h-8 w-8 mx-auto mb-2 opacity-10" />
@@ -362,12 +368,12 @@ function ModelsSidePanel({
             const isOpen = expanded === action.id;
 
             return (
-              <div key={action.id} className="rounded-xl overflow-hidden border border-border/40 bg-background">
+              <div key={action.id} className="rounded-lg overflow-hidden border border-border/40 bg-background">
                 {/* Cabeçalho accordion */}
                 <button
                   onClick={() => setExpanded(isOpen ? null : action.id)}
                   className={cn(
-                    'w-full flex items-center gap-3 px-3 py-3 transition-colors text-left',
+                    'w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left',
                     isOpen ? 'bg-muted/50' : 'hover:bg-muted/30'
                   )}
                 >
@@ -396,7 +402,7 @@ function ModelsSidePanel({
                         key={model.id}
                         onClick={() => onSelectModel(action.id, model.id)}
                         className={cn(
-                          'group w-full text-left flex items-start gap-3 px-3 py-3 hover:bg-primary/5 transition-colors',
+                          'group w-full text-left flex items-start gap-3 px-3 py-2.5 hover:bg-primary/5 transition-colors',
                           i < mods.length - 1 && 'border-b border-border/25'
                         )}
                       >
@@ -460,19 +466,24 @@ export default function PeticoesPage() {
   }), [petitions]);
 
   const filtered = useMemo(() => petitions.filter(p => {
-    const fd   = p.form_data_json as Record<string, unknown>;
-    const nome = (fd?.cliente as Record<string, string>)?.nome_completo ?? '';
-    const acao = p.action_types?.nome ?? '';
-    const okS  = !searchTerm || nome.toLowerCase().includes(searchTerm.toLowerCase()) || acao.toLowerCase().includes(searchTerm.toLowerCase());
-    const okF  = statusFilter === 'all' || p.status === statusFilter;
+    const q = searchTerm.toLowerCase();
+    const nome = getClientName(p).toLowerCase();
+    const acao = p.action_types?.nome?.toLowerCase() ?? '';
+    const modelo = p.petition_models_v2?.nome?.toLowerCase() ?? '';
+    const okS = !q || nome.includes(q) || acao.includes(q) || modelo.includes(q);
+    const okF = statusFilter === 'all' || p.status === statusFilter;
     return okS && okF;
   }), [petitions, searchTerm, statusFilter]);
 
   function getClientName(p: typeof petitions[0]) {
     const fd = p.form_data_json as Record<string, unknown>;
-    return (fd?.cliente as Record<string, string>)?.nome_completo ?? '—';
+    const nested = fd?.cliente as Record<string, string> | undefined;
+    return nested?.nome_completo
+      || (fd.nome_completo as string)
+      || (fd.nome_maiusculo as string)
+      || (fd.nome as string)
+      || 'Sem cliente informado';
   }
-
   function handleOpen(id: string, status: string) {
     navigate(status === 'generated' || status === 'filed'
       ? `/peticoes/${id}/revisao`
@@ -501,12 +512,12 @@ export default function PeticoesPage() {
       <AppHeader title="Gerador de Petições" />
 
       <ScrollArea className="flex-1">
-        <div className="p-5 md:p-7 space-y-6 max-w-[1600px] mx-auto">
+        <div className="p-4 md:p-6 space-y-5 max-w-[1680px] mx-auto">
 
           {/* ── Header ── */}
-          <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center justify-between gap-4 flex-wrap rounded-xl border border-border/60 bg-card px-4 py-4 shadow-sm">
             <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20 shrink-0">
+              <div className="h-11 w-11 rounded-xl bg-primary flex items-center justify-center shadow-sm shrink-0">
                 <Scale className="h-6 w-6 text-primary-foreground" />
               </div>
               <div>
@@ -521,7 +532,7 @@ export default function PeticoesPage() {
             <Button
               onClick={() => setModalOpen(true)}
               size="lg"
-              className="gap-2 rounded-xl shadow-lg shadow-primary/20 font-bold shrink-0 h-11 px-6"
+              className="gap-2 rounded-lg shadow-sm font-bold shrink-0 h-10 px-5"
             >
               <Plus className="h-5 w-5" />
               Nova Petição
@@ -529,7 +540,7 @@ export default function PeticoesPage() {
           </div>
 
           {/* ── Stats cards ── */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
             {STAT_ITEMS.map(s => {
               const isActive = statusFilter === s.filter;
               return (
@@ -537,13 +548,13 @@ export default function PeticoesPage() {
                   key={s.label}
                   onClick={() => setStatusFilter(s.filter)}
                   className={cn(
-                    'group text-left rounded-2xl border p-5 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0',
+                    'group text-left rounded-xl border px-4 py-3.5 transition-all duration-200 hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0',
                     isActive
                       ? 'border-primary/40 bg-primary/5 shadow-sm shadow-primary/10'
                       : 'border-border/50 bg-card hover:border-border'
                   )}
                 >
-                  <div className="flex items-center gap-2 mb-3">
+                  <div className="flex items-center gap-2 mb-2">
                     <div className={cn('h-2.5 w-2.5 rounded-full shrink-0', s.dot)} />
                     <span className={cn(
                       'text-[10px] uppercase tracking-widest font-black truncate transition-colors',
@@ -553,7 +564,7 @@ export default function PeticoesPage() {
                     </span>
                   </div>
                   <p className={cn(
-                    'text-4xl font-black tabular-nums leading-none transition-colors',
+                    'text-3xl font-black tabular-nums leading-none transition-colors',
                     isActive ? 'text-primary' : 'text-foreground'
                   )}>
                     {s.value}
@@ -564,20 +575,20 @@ export default function PeticoesPage() {
           </div>
 
           {/* ── 2 colunas ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start">
 
             {/* Tabela (2/3) */}
-            <div className="lg:col-span-2 space-y-4">
+            <div className="space-y-3">
 
               {/* Filtros */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-sm">
                 <div className="relative w-full sm:max-w-sm">
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Buscar por cliente ou tipo de ação..."
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
-                    className="pl-10 h-10 rounded-xl border-border/50 bg-card focus:bg-background"
+                    className="pl-10 h-10 rounded-lg border-border/50 bg-background focus:bg-background"
                   />
                 </div>
                 <div className="flex gap-1.5 flex-wrap">
@@ -586,7 +597,7 @@ export default function PeticoesPage() {
                       key={f.v}
                       onClick={() => setStatusFilter(f.v)}
                       className={cn(
-                        'px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150',
+                        'px-3 py-2 rounded-lg text-xs font-bold transition-all duration-150',
                         statusFilter === f.v
                           ? 'bg-primary text-primary-foreground shadow-sm'
                           : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -599,7 +610,7 @@ export default function PeticoesPage() {
               </div>
 
               {/* Tabela */}
-              <div className="rounded-2xl border border-border/50 overflow-hidden bg-card shadow-sm">
+              <div className="rounded-xl border border-border/60 overflow-hidden bg-card shadow-sm min-h-[520px]">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/30 hover:bg-muted/30 border-b border-border/50">
@@ -669,7 +680,7 @@ export default function PeticoesPage() {
                             onClick={() => handleOpen(p.id, p.status)}
                           >
                             {/* Data */}
-                            <TableCell className="py-4 text-xs text-muted-foreground font-semibold whitespace-nowrap">
+                            <TableCell className="py-3.5 text-xs text-muted-foreground font-semibold whitespace-nowrap">
                               {format(new Date(p.created_at), 'dd/MM/yy', { locale: ptBR })}
                             </TableCell>
 
@@ -681,14 +692,21 @@ export default function PeticoesPage() {
                                     <ActionIcon icone={p.action_types.icone ?? 'FileText'} className="h-3.5 w-3.5" />
                                   </div>
                                 )}
-                                <span className="text-sm font-bold text-foreground leading-tight">
-                                  {p.action_types?.nome ?? '—'}
-                                </span>
+                                <div className="min-w-0">
+                                  <span className="block text-sm font-bold text-foreground leading-tight truncate">
+                                    {p.action_types?.nome ?? '—'}
+                                  </span>
+                                  {p.petition_models_v2?.nome && (
+                                    <span className="block text-[11px] text-muted-foreground truncate mt-0.5">
+                                      {p.petition_models_v2.nome}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </TableCell>
 
                             {/* Cliente */}
-                            <TableCell className="py-4 text-sm text-foreground font-medium">
+                            <TableCell className="py-4 text-sm text-foreground font-semibold">
                               {getClientName(p)}
                             </TableCell>
 
@@ -704,18 +722,18 @@ export default function PeticoesPage() {
                             </TableCell>
 
                             {/* Atualizado */}
-                            <TableCell className="py-4 text-xs text-muted-foreground font-medium whitespace-nowrap">
+                            <TableCell className="py-3.5 text-xs text-muted-foreground font-medium whitespace-nowrap">
                               {format(new Date(p.updated_at), "dd/MM HH:mm", { locale: ptBR })}
                             </TableCell>
 
                             {/* Ações */}
-                            <TableCell className="py-4 text-right">
+                            <TableCell className="py-3.5 text-right">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className="h-8 w-8 rounded-lg md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                                   >
                                     <MoreHorizontal className="h-4 w-4" />
                                   </Button>
@@ -746,7 +764,7 @@ export default function PeticoesPage() {
             </div>
 
             {/* Painel lateral (1/3) */}
-            <div className="hidden lg:block lg:sticky lg:top-4" style={{ height: 'calc(100vh - 190px)' }}>
+            <div className="hidden xl:block xl:sticky xl:top-4" style={{ height: 'calc(100vh - 170px)' }}>
               <ModelsSidePanel
                 actionTypes={actionTypes}
                 getModelsForAction={getModelsForAction}
