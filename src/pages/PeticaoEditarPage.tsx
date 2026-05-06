@@ -50,19 +50,115 @@ type FormData = Record<string, string>;
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function numberToWords(value: string): string {
-  // Simple helper — advogado preenche por extenso manualmente
+  // Simple helper - advogado preenche por extenso manualmente
   return value;
 }
 
+function normalizeText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
 function detectActionSlug(actionName: string): string {
-  const name = actionName.toLowerCase();
-  if (name.includes('venda casada')) return 'venda-casada';
-  if (name.includes('rmc') || name.includes('rcc') || name.includes('cartão consignado')) return 'rmc-rcc';
+  const name = normalizeText(actionName);
+  if (name.includes('venda casada') || name.includes('vendas casadas')) return 'venda-casada';
+  if (name.includes('tarifa bancaria')) return 'tarifa-bancaria';
+  if (name.includes('desconto indevido') || name.includes('descontos indevidos')) return 'descontos-indevidos';
+  if (name.includes('rmc') || name.includes('rcc') || name.includes('cartao consignado')) return 'rmc-rcc';
   if (name.includes('cancelamento') && name.includes('voo')) return 'cancelamento-voo';
-  if (name.includes('empréstimo fraudulento') || name.includes('emprestimo fraudulento')) return 'emprestimo-fraudulento';
-  if (name.includes('diferença salarial') || name.includes('diferenca salarial')) return 'diferenca-salarial';
-  if (name.includes('negativação') || name.includes('negativacao')) return 'negativacao-indevida';
+  if (name.includes('emprestimo fraudulento')) return 'emprestimo-fraudulento';
+  if (name.includes('diferenca salarial')) return 'diferenca-salarial';
+  if (name.includes('negativacao')) return 'negativacao-indevida';
   return 'generico';
+}
+
+function normalizeActionSlug(slug: string | null | undefined, actionName: string): string {
+  const normalized = (slug || '').replace(/_/g, '-');
+  if (normalized === 'vendas-casadas') return 'venda-casada';
+  if ([
+    'venda-casada',
+    'tarifa-bancaria',
+    'descontos-indevidos',
+    'rmc-rcc',
+    'cancelamento-voo',
+    'emprestimo-fraudulento',
+    'diferenca-salarial',
+    'negativacao-indevida',
+  ].includes(normalized)) {
+    return normalized;
+  }
+
+  return detectActionSlug(actionName);
+}
+
+function buildEnderecoCliente(formData: FormData): string {
+  const cidadeUf = [formData.endereco_cidade, formData.endereco_uf].filter(Boolean).join('/');
+  const parts = [
+    formData.endereco_rua,
+    formData.endereco_numero ? `n° ${formData.endereco_numero}` : '',
+    formData.endereco_complemento,
+    formData.endereco_bairro ? `bairro: ${formData.endereco_bairro}` : '',
+    cidadeUf,
+    formData.endereco_cep ? `Cep: ${formData.endereco_cep}` : '',
+  ].filter(Boolean);
+
+  return parts.join(', ');
+}
+
+function buildQualificacao(formData: FormData): string {
+  return [
+    formData.nacionalidade,
+    formData.naturalidade,
+    formData.estado_civil,
+    formData.profissao,
+  ].filter(Boolean).join(', ');
+}
+
+function buildTemplateData(formData: FormData, actionName: string): Record<string, string> {
+  const enderecoCliente = formData.endereco_cliente || buildEnderecoCliente(formData);
+  const qualificacao = formData.qualificacao || buildQualificacao(formData);
+  const tipoAcao = formData.tipo_acao || actionName;
+  const reuNome = formData.reu_nome || formData.banco_nome || '';
+  const reuCnpj = formData.reu_cnpj || formData.banco_cnpj || '';
+  const reuEndereco = formData.reu_endereco || formData.banco_endereco || '';
+  const nomeCompleto = formData.nome_completo || formData.nome_maiusculo || '';
+  const nomeMaiusculo = formData.nome_maiusculo || nomeCompleto.toUpperCase();
+  const varaJuizo = formData.vara_juizo || '____ª VARA DO JUIZADO ESPECIAL CÍVEL DA COMARCA DE MANAUS/AM';
+
+  const data: Record<string, string> = {
+    ...formData,
+    nome_completo: nomeCompleto,
+    nome_maiusculo: nomeMaiusculo,
+    qualificacao,
+    endereco_cliente: enderecoCliente,
+    tipo_acao: tipoAcao,
+    reu_nome: reuNome,
+    reu_cnpj: reuCnpj,
+    reu_endereco: reuEndereco,
+    doc_id: formData.rg || formData.cpf || '',
+    vara_juizo: varaJuizo,
+    NOME_COMPLETO: nomeMaiusculo,
+    NOME_COMPLETO_NORMAL: nomeCompleto,
+    QUALIFICACAO: qualificacao,
+    RG: formData.rg || '',
+    CPF: formData.cpf || '',
+    ENDERECO_CLIENTE: enderecoCliente,
+    TIPO_ACAO: tipoAcao,
+    REU_NOME: reuNome,
+    REU_CNPJ: reuCnpj,
+    REU_ENDERECO: reuEndereco,
+    BANCO_NOME: formData.banco_nome || reuNome,
+    BANCO_CNPJ: formData.banco_cnpj || reuCnpj,
+    BANCO_ENDERECO: formData.banco_endereco || reuEndereco,
+    DOC_ID: formData.rg || formData.cpf || '',
+    VARA_JUIZO: varaJuizo,
+  };
+
+  return Object.fromEntries(
+    Object.entries(data).map(([key, value]) => [key, String(value ?? '')]),
+  );
 }
 
 // ─── Configuração de campos por tipo de ação ───────────────────────────────────
@@ -373,7 +469,7 @@ export default function PeticaoEditarPage() {
           setFormData(d.form_data_json || {});
           setCurrentStep(d.current_step || 1);
           setActionName(d.action_types?.nome || '');
-          setActionSlug(d.action_types?.slug || detectActionSlug(d.action_types?.nome || ''));
+          setActionSlug(normalizeActionSlug(d.action_types?.slug, d.action_types?.nome || ''));
           setModel(d.petition_models_v2 || null);
           setPetitionId(id);
         }
@@ -388,7 +484,7 @@ export default function PeticaoEditarPage() {
         ]);
 
         const aName = (actionData as any)?.nome || '';
-        const aSlug = (actionData as any)?.slug || detectActionSlug(aName);
+        const aSlug = normalizeActionSlug((actionData as any)?.slug, aName);
         setActionName(aName);
         setActionSlug(aSlug);
         setModel((modelData as any) || null);
@@ -539,8 +635,9 @@ export default function PeticaoEditarPage() {
         nullGetter()  { return ''; },
       });
 
-      // Renderizar com todos os campos do formData
-      doc.render(formData);
+      // Renderizar com aliases compatíveis com os modelos .docx
+      const templateData = buildTemplateData(formData, actionName);
+      doc.render(templateData);
 
       const blob = doc.getZip().generate({
         type:     'blob',
