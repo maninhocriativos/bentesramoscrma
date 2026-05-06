@@ -1069,7 +1069,13 @@ async function transcreverAudio(audioUrl: string): Promise<string | null> {
 function isAudioUrl(content: string): boolean {
   if (!content) return false;
   const lowerContent = content.toLowerCase();
-  return lowerContent.match(/\.(ogg|mp3|wav|m4a|aac|opus)(\?|$)/) !== null || lowerContent.includes('voice') || lowerContent.includes('audio');
+  return lowerContent.match(/\.(ogg|mp3|wav|m4a|aac|opus)(\?|$)/) !== null || lowerContent.includes('voice') || lowerContent.includes('audio') || lowerContent.includes('ptt');
+}
+
+function isAudioMessage(tipoMensagem?: string, mensagem?: string, mediaUrl?: string): boolean {
+  const tipo = (tipoMensagem || '').toLowerCase();
+  const content = String(mensagem || '') + ' ' + String(mediaUrl || '');
+  return ['audio', 'ptt', 'voice', 'voice_message', 'audiomessage', 'audio_message'].includes(tipo) || isAudioUrl(content);
 }
 
 function isImageUrl(content: string): boolean {
@@ -1373,8 +1379,8 @@ serve(async (req) => {
     console.log('📎 Tipo:', tipo_mensagem);
     console.log('🔗 Media URL:', media_url ? 'presente' : 'ausente');
 
-    if (!lead_id || !mensagem) {
-      return new Response(JSON.stringify({ success: false, error: 'lead_id e mensagem são obrigatórios' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (!lead_id || (!mensagem && !media_url)) {
+      return new Response(JSON.stringify({ success: false, error: 'lead_id e mensagem ou media_url sao obrigatorios' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // LOCK de processamento
@@ -1385,7 +1391,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, skipped: true, reason: 'processamento_concorrente' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     
-    const { data: lockData } = await supabase.from('system_events').insert({ tipo: 'lock', fonte: 'isa_auto', acao: 'isa_processing_lock', lead_id, dados: { mensagem_hash: mensagem.substring(0, 50), subscriber_id }, processado: false }).select().single();
+    const { data: lockData } = await supabase.from('system_events').insert({ tipo: 'lock', fonte: 'isa_auto', acao: 'isa_processing_lock', lead_id, dados: { mensagem_hash: String(mensagem || media_url || '').substring(0, 50), subscriber_id }, processado: false }).select().single();
     const lockId = lockData?.id;
 
     // Rate limit — conta apenas respostas reais do agente atual (exclui intros) nos últimos 30s
@@ -1408,7 +1414,7 @@ serve(async (req) => {
     }
 
     // Ignorar mensagens do bot
-    const mensagemLower = mensagem.toLowerCase().trim();
+    const mensagemLower = String(mensagem || media_url || '').toLowerCase().trim();
     if (mensagemLower.startsWith('bot diz:') || mensagemLower.startsWith('isa diz:') || mensagemLower.startsWith('[bot]') || mensagemLower.startsWith('[isa]')) {
       return new Response(JSON.stringify({ success: true, skipped: true, reason: 'mensagem_do_bot' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -1423,12 +1429,12 @@ serve(async (req) => {
     }
 
     // Transcrever áudio se necessário
-    let mensagemProcessada = mensagem;
+    let mensagemProcessada = mensagem || media_url || '[Midia recebida]';
     let audioTranscrito = false;
     let imageUrlParaIA: string | undefined;
 
-    if (tipo_mensagem === 'audio' || isAudioUrl(mensagem)) {
-      const urlAudio = media_url || mensagem;
+    if (isAudioMessage(tipo_mensagem, mensagemProcessada, media_url)) {
+      const urlAudio = media_url || mensagemProcessada;
       const transcricao = await transcreverAudio(urlAudio);
       if (transcricao) {
         mensagemProcessada = transcricao;
@@ -1559,7 +1565,7 @@ serve(async (req) => {
           await supabase.from('system_events').update({ processado: true }).eq('lead_id', lead_id).eq('acao', 'aguardando_confirmacao_lead').eq('processado', false);
         }
       } else {
-        await supabase.from('system_events').insert({ tipo: 'acao_pendente', fonte: 'isa_auto', acao: 'acao_sugerida', entidade_id: lead_id, lead_id, dados: { acao_sugerida: acao.acao, dados_acao: acao.dados, motivo: acao.motivo, mensagem_original: mensagem, audio_transcrito: audioTranscrito, analise: resultado.analise }, processado: false });
+        await supabase.from('system_events').insert({ tipo: 'acao_pendente', fonte: 'isa_auto', acao: 'acao_sugerida', entidade_id: lead_id, lead_id, dados: { acao_sugerida: acao.acao, dados_acao: acao.dados, motivo: acao.motivo, mensagem_original: mensagemProcessada, audio_transcrito: audioTranscrito, analise: resultado.analise }, processado: false });
         acoesNauto.push(acao);
       }
     }
@@ -1682,7 +1688,7 @@ serve(async (req) => {
     }
 
     // Registrar processamento
-    await supabase.from('system_events').insert({ tipo: 'processamento', fonte: 'isa_auto', acao: 'mensagem_processada', entidade_id: lead_id, lead_id, dados: { mensagem_original: mensagem.substring(0, 200), audio_transcrito: audioTranscrito, analise: resultado.analise, acoes_executadas: acoesExecutadas.length, acoes_pendentes: acoesNauto.length, resposta_enviada: respostaEnviada }, processado: true });
+    await supabase.from('system_events').insert({ tipo: 'processamento', fonte: 'isa_auto', acao: 'mensagem_processada', entidade_id: lead_id, lead_id, dados: { mensagem_original: String(mensagem || media_url || '').substring(0, 200), mensagem_processada: mensagemProcessada.substring(0, 500), audio_transcrito: audioTranscrito, analise: resultado.analise, acoes_executadas: acoesExecutadas.length, acoes_pendentes: acoesNauto.length, resposta_enviada: respostaEnviada }, processado: true });
 
     // Liberar lock
     if (lockId) await supabase.from('system_events').update({ processado: true }).eq('id', lockId);
