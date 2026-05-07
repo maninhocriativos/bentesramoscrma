@@ -9,6 +9,7 @@ import { useLeadNames } from '@/hooks/useLeadNames';
 import { Processo } from '@/types/processos';
 import { ImportProcessosCsvModal } from '@/components/processos/ImportProcessosCsvModal';
 import { SyncProcessosModal } from '@/components/processos/SyncProcessosModal';
+import { MovimentosRecentes } from '@/components/processos/MovimentosRecentes';
 import {
   Loader2, Search, Scale, Plus,
   CheckCircle2, PauseCircle, Archive, Trophy, XCircle,
@@ -209,6 +210,11 @@ function ProcessosPage() {
     setIsModalOpen(false); setSelectedProcesso(null); setIsNew(false);
   }, []);
 
+  const handleMovimentoProcessoSelect = useCallback((processoId: string) => {
+    const p = processos.find(x => x.id === processoId);
+    if (p) { setSelectedProcesso(p); setIsNew(false); setIsModalOpen(true); }
+  }, [processos]);
+
   useEffect(() => {
     if (!perfilLoading && !canAccessProcessos) navigate('/dashboard');
   }, [perfilLoading, canAccessProcessos, navigate]);
@@ -357,6 +363,11 @@ function ProcessosPage() {
             <SummaryPanel kpis={kpis} statusFilter={statusFilter} setStatusFilter={setStatusFilter} />
           </div>
         </div>
+
+        {/* MOVIMENTOS RECENTES */}
+        {activeView === 'internos' && (
+          <MovimentosRecentes onProcessoSelect={handleMovimentoProcessoSelect} />
+        )}
 
         {/* CONTROLS BAR */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
