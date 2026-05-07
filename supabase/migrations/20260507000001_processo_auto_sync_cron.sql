@@ -1,23 +1,20 @@
 -- ============================================================
 -- Agendamento automático de sincronização de processos
 -- Executa processo-auto-sync todo dia às 03:00 (Manaus = UTC-4)
--- ============================================================
---
--- PRÉ-REQUISITO (rodar uma vez no SQL Editor do Supabase):
---   ALTER DATABASE postgres
---     SET "app.settings.service_role_key" = '<sua_service_role_key>';
---
--- A service_role_key está em: Supabase Dashboard → Settings → API
+-- verify_jwt=false → anon key é suficiente para invocar a função
 -- ============================================================
 
--- Garantir extensões necessárias
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 CREATE EXTENSION IF NOT EXISTS pg_net;
 
 -- Remover agendamento existente (idempotente)
-SELECT cron.unschedule(jobid)
-  FROM cron.job
- WHERE jobname = 'processo-auto-sync-daily';
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'processo-auto-sync-daily') THEN
+    PERFORM cron.unschedule('processo-auto-sync-daily');
+  END IF;
+END;
+$$;
 
 -- Agendar: 07:00 UTC = 03:00 Manaus (UTC-4), todo dia
 SELECT cron.schedule(
@@ -27,18 +24,13 @@ SELECT cron.schedule(
   SELECT
     net.http_post(
       url     := 'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/processo-auto-sync',
-      headers := jsonb_build_object(
-        'Content-Type',  'application/json',
-        'Authorization', 'Bearer ' || coalesce(
-          current_setting('app.settings.service_role_key', true), ''
-        )
-      ),
-      body    := '{"max": 50}'::jsonb
+      headers := '{"Content-Type":"application/json","Authorization":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFnZW5hbHRranRsdndmZ3lrcHhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ5NjYxOTMsImV4cCI6MjA4MDU0MjE5M30.ewhDXc8qxAXdAevO-LMU_HOzu7oGUbj-p6Tj39hyUgg"}'::jsonb,
+      body    := '{"max":50}'::jsonb
     ) AS request_id;
   $$
 );
 
--- Verificar agendamento criado
+-- Confirmar
 SELECT jobid, jobname, schedule, active
   FROM cron.job
  WHERE jobname = 'processo-auto-sync-daily';
