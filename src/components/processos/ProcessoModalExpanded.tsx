@@ -13,7 +13,6 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Processo, ProcessoStatus, ProcessoParte, ProcessoMovimento } from '@/types/processos';
@@ -304,6 +303,7 @@ function ParteCard({ parte, index, onUpdate, onRemove }: {
   onUpdate: (i: number, field: string, value: string) => void;
   onRemove: (i: number) => void;
 }) {
+  const [editing, setEditing] = useState(false);
   const tipoLower = (parte.tipo || '').toLowerCase();
   const isAutor = tipoLower.includes('autor');
   const isReu   = tipoLower.includes('réu') || tipoLower.includes('reu');
@@ -315,19 +315,23 @@ function ParteCard({ parte, index, onUpdate, onRemove }: {
     : 'bg-muted text-muted-foreground border-border';
 
   return (
-    <Collapsible>
-      <div className="rounded-xl border border-border/40 bg-card overflow-hidden" style={{ borderLeftWidth: 3, borderLeftColor: barColor }}>
+    <div>
+      <div className="rounded-xl border border-border/40 bg-card" style={{ borderLeftWidth: 3, borderLeftColor: barColor }}>
         <div className="p-2.5 pl-3">
           {/* Nome + ações na linha de cima */}
           <div className="flex items-center justify-between gap-1 mb-1">
             <p className="text-xs font-semibold truncate flex-1 min-w-0">{parte.nome}</p>
             <div className="flex items-center gap-1 shrink-0 ml-1">
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/50 hover:text-primary shrink-0">
-                  <Pencil className="h-2.5 w-2.5" />
-                </Button>
-              </CollapsibleTrigger>
-              <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/50 hover:text-destructive shrink-0" onClick={() => onRemove(index)}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={`h-5 w-5 shrink-0 ${editing ? 'text-primary' : 'text-muted-foreground/50 hover:text-primary'}`}
+                onClick={() => setEditing(v => !v)}
+              >
+                <Pencil className="h-2.5 w-2.5" />
+              </Button>
+              <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/50 hover:text-destructive shrink-0" onClick={() => onRemove(index)}>
                 <X className="h-2.5 w-2.5" />
               </Button>
             </div>
@@ -344,7 +348,7 @@ function ParteCard({ parte, index, onUpdate, onRemove }: {
             </div>
           )}
         </div>
-        <CollapsibleContent>
+        {editing && (
           <div className="px-3 pb-3 pt-2 border-t border-border/30 space-y-2">
             <div className="grid grid-cols-2 gap-2">
               <div><Label className="text-[10px] text-muted-foreground">Nome</Label><Input value={parte.nome || ''} onChange={e => onUpdate(index, 'nome', e.target.value)} className="h-7 text-xs rounded-lg mt-1" /></div>
@@ -365,7 +369,7 @@ function ParteCard({ parte, index, onUpdate, onRemove }: {
               <div><Label className="text-[10px] text-muted-foreground">Celular</Label><Input value={parte.celular || ''} onChange={e => onUpdate(index, 'celular', e.target.value)} className="h-7 text-xs rounded-lg mt-1" placeholder="(00) 00000-0000" /></div>
             </div>
           </div>
-        </CollapsibleContent>
+        )}
       </div>
       {/* Advogados */}
       {parte.advogados && parte.advogados.length > 0 && (
@@ -383,7 +387,7 @@ function ParteCard({ parte, index, onUpdate, onRemove }: {
           ))}
         </div>
       )}
-    </Collapsible>
+    </div>
   );
 }
 
@@ -731,7 +735,8 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
       if (savedId) {
         await supabase.from('processo_partes').delete().eq('processo_id', savedId);
         if (partes.length > 0) {
-          await supabase.from('processo_partes').insert(partes.map(p => ({ processo_id: savedId!, nome: p.nome, tipo: p.tipo, polo: p.polo || null, tipo_pessoa: p.tipoPessoa || null, documento: p.documento || null, celular: p.celular || null, telefone_adicional: (p as any).telefone_adicional || null, advogados: p.advogados || null })));
+          const { error: partesErr } = await supabase.from('processo_partes').insert(partes.map(p => ({ processo_id: savedId!, nome: p.nome, tipo: p.tipo, polo: p.polo || null, tipo_pessoa: p.tipoPessoa || null, documento: p.documento || null, celular: p.celular || null, telefone_adicional: (p as any).telefone_adicional || null, advogados: p.advogados || null })));
+          if (partesErr) console.error('[ProcessoModal] Erro ao salvar partes:', partesErr.message);
         }
       }
       clearDraft();
