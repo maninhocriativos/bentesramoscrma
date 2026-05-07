@@ -881,11 +881,16 @@ serve(async (req: Request) => {
         || lead?.empresa_tag === 'BENTES_RAMOS'
         || subscriber?.linha_whatsapp === 'bentes_ramos_antigo';
 
+      // Bloquear ISA para leads com contrato assinado / casos encerrados
+      const STATUSES_BLOQUEADOS_ISA = ['Contrato Assinado', 'Ganho', 'Contrato Fechado'];
+      const isLeadBlocked = STATUSES_BLOQUEADOS_ISA.includes(lead?.status || '');
+
 // ISA só atende se a mensagem entrou na linha de tráfego E o lead NÃO é cliente do escritório
       const shouldIsaRespond = isTrafficLine
         && !isaExplicitlyDisabled
         && !humanAttendanceActive
-        && !isOfficeClient;
+        && !isOfficeClient
+        && !isLeadBlocked;
       
       console.log(`[Z-API Webhook] ISA Decision for lead ${leadId}:`, {
         isTrafficLine,
@@ -948,9 +953,12 @@ serve(async (req: Request) => {
             normalized.media?.url;
           
           // Para áudio/imagem, enviar a URL para processamento
-          const mensagemParaProcessar = (normalized.messageType === 'audio' || normalized.messageType === 'image') && mediaUrlToProcess
-            ? mediaUrlToProcess  // Enviar URL para transcrição/análise
-            : normalized.message;
+          const btnIdForIsa = (normalized.media as any)?.buttonId || (normalized.media as any)?.id || '';
+          const mensagemParaProcessar = normalized.messageType === 'buttonResponse' && btnIdForIsa
+            ? `[BOTÃO CLICADO: ${btnIdForIsa}] ${normalized.message || ''}`
+            : (normalized.messageType === 'audio' || normalized.messageType === 'image') && mediaUrlToProcess
+              ? mediaUrlToProcess  // Enviar URL para transcrição/análise
+              : normalized.message;
           
           console.log(`[Z-API Webhook] Tipo: ${normalized.messageType}, mediaUrl: ${mediaUrlToProcess ? 'presente' : 'ausente'}`);
           

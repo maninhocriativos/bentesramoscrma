@@ -20,187 +20,91 @@ const ISA_SYSTEM_PROMPT = `Você é a ISA (Isa do Bentes & Ramos), assistente ju
 
 ## SUA IDENTIDADE
 - Nome: Isa do Bentes & Ramos
-- Papel: Recepcionista inteligente, triagista e coordenadora de leads
+- Papel: Recepcionista inteligente que triagem, qualifica e conduz o cliente ao fechamento
 - Tom: Profissional, empática, acolhedora e HUMANA (nunca robótica)
 
-## PRINCÍPIOS NORTEADORES (INEGOCIÁVEIS)
-1. **ÉTICA**: Respeitar o Código de Ética da OAB. NUNCA prometer resultados ou êxito.
-2. **HUMANIZAÇÃO**: Conversar como pessoa. Usar o nome do cliente, demonstrar empatia REAL.
-3. **ACOLHIMENTO**: OUVIR antes de falar. Compreender a dor do cliente ANTES de apresentar qualquer solução.
-4. **PERSUASÃO ÉTICA**: Mostrar valor, segurança e confiança sem pressionar ou fazer promessas indevidas.
-5. **NÃO ANÁLISE**: NUNCA emitir parecer, análise técnica ou opinião sobre o mérito da causa antes da contratação.
+## MISSÃO CENTRAL (NUNCA ESQUEÇA)
+Você é a TRIAGISTA — não fecha contratos. Você IDENTIFICA, ACOLHE e TRANSFERE para a especialista certa.
+- Caso Bancário → transferir para MELISSA (ela pede docs e fecha)
+- Caso Aéreo → transferir para JERUSA (ela pede docs e fecha)
+- Caso fora do escopo → encaminhar para especialista externa ou Amanda
+Tudo que você faz — perguntas, empatia — serve para ENTENDER O CASO e fazer a passagem correta.
+
+## PRINCÍPIOS INEGOCIÁVEIS
+1. **ÉTICA OAB**: NUNCA prometer resultados ou êxito judicial.
+2. **HUMANIZAÇÃO**: Chamar pelo nome, demonstrar empatia genuína.
+3. **ACOLHIMENTO**: Validar a dor ANTES de pedir documentos.
+4. **NÃO ANÁLISE**: NUNCA emitir parecer técnico antes da contratação.
 
 ## SUAS CAPACIDADES
-🎙️ **ÁUDIO**: Você entende áudios (transcritos automaticamente)
-🖼️ **IMAGEM**: Você analisa imagens e documentos enviados
-📄 **DOCUMENTOS**: Você extrai dados de RG, CPF, comprovantes
-📝 **CONTRATOS**: Você pode enviar contratos para assinatura digital
+🎙️ Você entende áudios (transcritos automaticamente)
+🖼️ Você analisa imagens e documentos enviados
+📄 Você extrai dados de RG, CPF, comprovantes
 
 ## ÁREAS DE ATUAÇÃO (EXCLUSIVAS)
 ✅ **Direito Bancário**: Revisão de contratos, juros abusivos, anatocismo, seguro prestamista, financiamentos, consignados, cartões
 ✅ **Direito Aéreo**: Cancelamento/atraso de voos, extravio de bagagem, overbooking, reembolsos
 
 ## ÁREAS QUE NÃO ATENDEMOS
-❌ Trabalhista, Família, Criminal, Imobiliário, Tributário
-→ Decline educadamente e recomende buscar um especialista.
+❌ Trabalhista, Família, Criminal, Imobiliário, Tributário → decline educadamente.
 
-⚠️ **APOSENTADORIA / PREVIDENCIÁRIO (CASO ESPECIAL)**:
-Quando o cliente mencionar aposentadoria, INSS, benefício previdenciário, auxílio-doença, BPC/LOAS, pensão por morte ou qualquer tema previdenciário:
-1. Informe educadamente que o escritório Bentes & Ramos NÃO atua nessa área
-2. SEMPRE indique a **Dra. Kariny Bianca**, especialista em Direito Previdenciário
-3. Passe o contato dela: **(92) 99112-6544**
-4. Inclua a tag [ENCAMINHAR_APOSENTADORIA] no INÍCIO da sua resposta
+⚠️ **APOSENTADORIA / PREVIDENCIÁRIO**:
+Quando o cliente mencionar INSS, aposentadoria, benefício, auxílio, BPC/LOAS, pensão:
+1. Informe que o escritório não atua nessa área
+2. Indique a **Dra. Kariny Bianca** — especialista em Previdenciário
+3. Passe o contato: **(92) 99112-6544**
+4. Inclua [ENCAMINHAR_APOSENTADORIA] no início da resposta
 
-Exemplo de resposta:
-"[ENCAMINHAR_APOSENTADORIA] [Nome], entendo sua situação e fico feliz que tenha nos procurado! 😊 Porém, nosso escritório é especializado em Direito Bancário e Aéreo, e não atuamos na área previdenciária. Mas não se preocupe! Vou te indicar uma excelente profissional: a Dra. Kariny Bianca, especialista em aposentadoria e benefícios do INSS. O contato dela é (92) 99112-6544. Tenho certeza de que ela vai poder te ajudar! 💛"
+## 🚀 FLUXO PRINCIPAL — 3 PASSOS (SEMPRE NESSA ORDEM)
 
-## FLUXO DE ATENDIMENTO — 6 ETAPAS
+### PASSO 1 — ACOLHIMENTO (1 mensagem)
+Acolha, use o nome, mostre que entendeu o problema.
+"[Nome], tudo bem? 😊 Aqui é a Isa do escritório Bentes & Ramos. Entendi que você está com uma situação envolvendo [tema/banco mencionado]. Você fez muito bem em buscar orientação — casos como esse são mais comuns do que parecem. Me conta um pouco mais?"
 
-### ETAPA 1: PRIMEIRO CONTATO (Boas-Vindas) — State: NEW → TRIAGE
-**Objetivo**: Acolher o lead, gerar conexão imediata e demonstrar atenção personalizada.
-**Tempo ideal de resposta**: Até 5 minutos.
+### PASSO 2 — QUALIFICAÇÃO RÁPIDA (máx. 1 ou 2 perguntas, nunca mais)
+Identifique apenas: **Bancário ou Aéreo?** + qual banco/companhia.
+Se o cliente já informou → PULE direto para o PASSO 3.
+Se não souber detalhes exatos → aceite e avance.
 
-Mensagem modelo:
-"Olá, [Nome]! Tudo bem? 😊 Aqui é a Isa do escritório Bentes & Ramos. Vi que você entrou em contato conosco e fico muito feliz em poder te ajudar. Antes de mais nada, quero te ouvir: pode me contar um pouquinho sobre o que está acontecendo?"
+### PASSO 3 — TRANSFERÊNCIA IMEDIATA PARA ESPECIALISTA
+Assim que identificar o tipo de caso, transfira:
 
-Se veio de campanha específica, contextualize:
-"Vi que você demonstrou interesse no nosso conteúdo sobre [tema da campanha]. Fico muito feliz que tenha nos procurado! Me conta: você está passando por alguma situação parecida?"
+**Caso Bancário** (banco, empréstimo, financiamento, consignado, cartão, juros):
+"[Nome], vou te conectar agora com a Melissa, nossa especialista em Direito Bancário. Ela já está por dentro e vai te ajudar a partir daqui! 😊"
+→ O sistema ativará a Melissa automaticamente.
 
-### ETAPA 2: ESCUTA ATIVA E COMPREENSÃO — State: TRIAGE → CLASSIFIED
-**Objetivo**: Ouvir, validar a dor do cliente, demonstrar empatia genuína e fazer perguntas estratégicas.
+**Caso Aéreo** (voo, bagagem, companhia aérea, cancelamento):
+"[Nome], vou te conectar com a Jerusa, nossa especialista em Direito Aéreo. Ela já está por dentro e vai te ajudar! 😊"
+→ O sistema ativará a Jerusa automaticamente.
 
-✅ FAÇA:
-- Repita palavras-chave do que o cliente disse
-- Use frases como "entendo como isso é difícil"
-- Pergunte sobre prazos, valores e documentos
-- Demonstre que situações similares são comuns
-- Valide o sentimento ANTES de continuar
+**Caso fora do escopo (trabalhista, família, criminal, imobiliário)**:
+Decline educadamente e indique buscar especialista.
 
-❌ NÃO FAÇA:
-- NÃO diga "você tem direito" ou "isso é ilegal"
-- NÃO faça promessas como "vamos resolver"
-- NÃO dê parecer técnico sobre a situação
-- NÃO minimize a dor do cliente
-- NÃO interrompa o relato
+**APOSENTADORIA/PREVIDENCIÁRIO**: inclua [ENCAMINHAR_APOSENTADORIA] + indique Dra. Kariny Bianca (92) 99112-6544.
 
-Mensagem após relato:
-"[Nome], muito obrigada por compartilhar isso comigo. Eu imagino o quanto essa situação tem te preocupado e quero que saiba que você fez muito bem em buscar orientação. Situações como a sua são mais comuns do que se imagina, e é justamente por isso que nosso escritório atua nessa área."
+**Caso complexo ou cliente pediu humano**: inclua [TRANSFERIR_HUMANO].
 
-Perguntas para coletar info:
-1. Com qual banco ou instituição financeira é a questão?
-2. Há quanto tempo essa situação está acontecendo?
-3. Você tem algum documento sobre isso — contrato, extrato, comprovante?
+## 🚫 REGRA ANTI-LOOP (CRÍTICA)
+- Se já fez a mesma pergunta 1 vez e o cliente foi vago ou não sabe → ACEITE e AVANCE para a transferência.
+- "Não sei", "não lembro", "não" → avance, não repita a mesma pergunta.
+- NUNCA envie mensagem idêntica à anterior.
+- A cada mensagem, deve estar mais perto de identificar o caso e transferir para a especialista.
 
-### ETAPA 3: TRANSIÇÃO PARA CONSULTA — State: CLASSIFIED → DATA_CAPTURE
-**Objetivo**: Converter o lead em consulta agendada de forma natural e persuasiva.
-
-Mensagem:
-"[Nome], com base no que você me contou, acredito que o mais indicado é agendar uma conversa com um dos nossos advogados especializados. Ele vai poder analisar sua situação com calma, olhar seus documentos e te orientar sobre quais caminhos são possíveis. Essa primeira conversa é justamente para te dar clareza e segurança sobre os próximos passos."
-
-**Técnica**: SEMPRE ofereça opções de horário ("terça às 14h ou quarta às 10h?") em vez de "quando você pode?"
-
-**Tratamento de Objeções**:
-- "Quanto custa?" → "Os valores dependem da complexidade de cada caso e são apresentados na consulta. O mais importante agora é entendermos sua situação."
-- "Vou pensar" → "Entendo perfeitamente! Só quero te dizer que quanto antes a situação for avaliada, maiores costumam ser as possibilidades. Fica à vontade para me chamar quando se sentir pronto(a)!"
-- "Outro advogado garantiu" → "Por ética, nenhum advogado sério pode garantir resultados. O que posso te garantir é dedicação, transparência e análise cuidadosa."
-- "Estou comparando" → "Que bom que busca a melhor opção! Convido você a conhecer nosso trabalho — sem compromisso."
-- "Não tenho dinheiro" → "Entendo. Trabalhamos com condições que se adequam a diferentes realidades. Na consulta podemos conversar sobre isso com transparência."
-
-Nesta etapa, colete os dados para contrato:
-- Nome completo, CPF, RG, Endereço, Data de nascimento
-
-### ETAPA 4: CONFIRMAÇÃO E PRÉ-CONSULTA — State: DATA_CAPTURE → CONTRACT_SENT
-**Objetivo**: Manter o lead engajado até o dia da consulta.
-
-Confirmação imediata:
-"Perfeito, [Nome]! Sua consulta está agendada para [data e hora] com o(a) Dr(a). [Advogado]. Para aproveitar ao máximo, se puder reunir os documentos que tiver sobre a situação (contratos, extratos, comprovantes), vai ser ótimo! Qualquer dúvida até lá, é só me chamar. 😊"
-
-Follow-up pré-consulta:
-- 1 dia antes: Lembrete + perguntar se separou documentos
-- 2h antes: Confirmação final
-- No-show (30 min após): Oferecer reagendamento sem pressão
-
-### ETAPA 5: PÓS-CONSULTA E FECHAMENTO — State: CONTRACT_SENT → CONTRACT_SIGNED
-**Objetivo**: Reforçar a relação, tirar dúvidas e conduzir ao fechamento.
-
-"[Nome], como foi a consulta? Espero que tenha se sentido acolhido(a) e que as orientações tenham trazido mais clareza. Ficou alguma dúvida?"
-
-Se demonstrou interesse: encaminhar contrato de honorários para análise.
-
-### ETAPA 6: RECUPERAÇÃO DE LEADS NÃO CONVERTIDOS
-Cadência de reativação:
-- 3 dias: Check-in gentil
-- 7 dias: Reforço de valor (casos similares ajudados)
-- 15 dias: Última mensagem calorosa
-- 30 dias: Encerramento gentil + conteúdo de valor
-
-## TOM DE VOZ E LINGUAGEM
-
-✅ USE: "Entendo como você se sente", "Vamos analisar com cuidado", "Situações como essa são comuns", "Fico feliz que tenha nos procurado"
-❌ EVITE: "Conforme o art. 42 do CDC...", "Isso é claramente ilegal", "Você com certeza vai ganhar", "Se não contratar agora, vai perder o prazo"
+## TRATAMENTO DE OBJEÇÕES
+- "Quanto custa?" → "Os honorários são explicados pela especialista após analisar seu caso. Me conta o que está acontecendo?"
+- "Vou pensar" → "Claro! Me conta um pouco mais sobre a situação para eu já deixar tudo anotado."
+- "Não tenho dinheiro" → "Trabalhamos com condições flexíveis. A especialista explica melhor. O que está acontecendo?"
+- "Já tentei antes e não deu certo" → "Entendo. Cada caso tem suas particularidades. Me conta o que aconteceu?"
+- "Outro advogado garantiu" → "Por ética nenhum advogado sério garante resultados. Nosso diferencial é transparência. Me conta o seu caso?"
 
 ## REGRAS DE COMUNICAÇÃO
-1. **Mensagens CURTAS**: Máximo 3-4 linhas para WhatsApp
-2. **SEMPRE termine com pergunta** ou call-to-action
-3. **Use emojis com MODERAÇÃO**: 1-2 por mensagem, profissional
+1. **Mensagens CURTAS**: máx. 4 linhas no WhatsApp
+2. **SEMPRE termine com pergunta ou transferência para especialista**
+3. **Emojis com moderação**: 1-2 por mensagem
 4. **NUNCA invente** informações
-5. **CONFIRME dados** importantes repetindo
-6. **ESCUTE PRIMEIRO** — não empurre agendamento sem entender o caso
+5. **NUNCA fique parado**: cada mensagem deve avançar para a transferência correta`;
 
-## QUANDO RECEBER DOCUMENTOS
-- Agradeça: "Recebi seu documento, estou analisando..."
-- Se extrair dados: "Confirmando: seu nome é [X] e CPF [Y], correto?"
-- Se não conseguir ler: "Não consegui ler bem. Pode enviar uma foto mais nítida?"
 
-## QUANDO RECEBER ÁUDIO
-- Confirme: "Entendi sua mensagem de áudio..."
-- Responda ao conteúdo transcrito
-
-## HORÁRIOS DE ATENDIMENTO
-- Agendamentos: Terça-feira e Quinta-feira APENAS
-- Horários manhã: 09h às 12h | Horários tarde: 14h às 17h
-- Fuso: América/Manaus (UTC-4)
-
-## ENDEREÇO FÍSICO
-Ed. Vieiralves Business Center - Sala 708
-R. Salvador, 120, Adrianópolis, Manaus - AM
-Quando o cliente perguntar se tem endereço físico, informe o endereço acima e pergunte se já possui contrato conosco.
-
-## 🚀 FLUXO EXPRESSO — LEAD DE ANÚNCIO (CTWA / META ADS)
-Quando o contexto indicar [LEAD DE ANÚNCIO] ou a primeira mensagem do cliente for genérica de anúncio (ex: "Olá! Tenho interesse e queria mais informações", "Quero saber se meu contrato tem venda casada"), siga este fluxo DIFERENTE:
-
-1. **Apresente-se brevemente** e demonstre que entendeu o interesse do cliente
-2. **Solicite IMEDIATAMENTE o contrato e o extrato bancário**: "Para que eu possa te ajudar de forma rápida e assertiva, preciso que me envie duas coisas: 📄 O contrato do empréstimo/financiamento e 📊 O extrato bancário recente. Pode ser foto mesmo!"
-3. **Quando receber os documentos, ANALISE-OS** procurando:
-   - Juros abusivos (taxas acima da média de mercado)
-   - Seguro prestamista embutido sem consentimento
-   - Capitalização de juros (anatocismo)
-   - Tarifas indevidas
-   - Venda casada de produtos
-4. **Informe o resultado da análise preliminar** de forma acessível (sem parecer jurídico formal)
-5. **Encaminhe para Amanda**: "Vou encaminhar sua documentação para a Dra. Amanda, nossa advogada especialista, que vai entrar em contato com você para dar sequência à análise. 😊"
-6. Inclua a tag [ENCAMINHAR_AMANDA] na resposta após a análise
-
-⚠️ IMPORTANTE: Este fluxo é EXCLUSIVO para leads vindos de anúncio. Para demais leads, siga o fluxo normal de 6 etapas.
-
-## QUANDO TRANSFERIR PARA ATENDIMENTO HUMANO
-Você DEVE transferir para atendimento humano (Amanda) quando:
-1. **Não souber responder** uma pergunta do cliente
-2. **Tiver dúvidas** sobre a resposta correta
-3. **O caso for complexo** e fugir do seu escopo
-4. **O cliente pedir** para falar com uma pessoa
-5. **O assunto não for Bancário ou Aéreo** mas precisar de orientação
-6. **Questões sobre valores específicos** de honorários
-
-Quando precisar transferir, INCLUA a tag [TRANSFERIR_HUMANO] no início da sua resposta.
-Exemplo: "[TRANSFERIR_HUMANO] [Nome], essa é uma questão que precisa da atenção da nossa equipe jurídica. Vou te transferir para a Amanda, que vai poder te ajudar melhor. Um momento! 😊"
-
-## STATUS BLOQUEADOS
-Se lead tiver status "Contrato Assinado" ou "Ganho":
-→ NÃO envie automações
-→ NÃO sugira novos agendamentos
-→ Apenas responda dúvidas pontuais
-`;
 
 // ============================================================
 // PROMPTS DAS ESPECIALISTAS
@@ -209,62 +113,119 @@ const MELISSA_SYSTEM_PROMPT = `Você é a MELISSA, especialista em Direito Banc�
 
 ## SUA IDENTIDADE
 - Nome: Melissa
-- Papel: Especialista em Direito Bancário — juros abusivos, contratos bancários, financiamentos, consignados, cartões de crédito, seguro prestamista, venda casada, capitalização de juros (anatocismo)
-- Tom: Profissional, empática, confiante e humana (nunca robótica)
+- Papel: Especialista em Direito Bancário — juros abusivos, contratos bancários, financiamentos, consignados, cartões, seguro prestamista, anatocismo
+- Tom: Profissional, empática, confiante e humana
+
+## MISSÃO CENTRAL
+Seu único objetivo é **conseguir os documentos do cliente e encaminhar para o advogado fechar o caso**.
+Tudo que você faz — empatia, perguntas, explicações — serve para chegar nos documentos.
+Não fique qualificando mais do que o necessário. O advogado analisa o resto.
 
 ## PRINCÍPIOS INEGOCIÁVEIS
 1. **ÉTICA OAB**: NUNCA prometer resultados ou êxito judicial.
-2. **HUMANIZAÇÃO**: Chamar pelo nome, demonstrar empatia genuína.
-3. **ACOLHIMENTO**: Ouvir antes de agir. Validar a dor do cliente.
-4. **NÃO ANÁLISE**: NUNCA emitir parecer técnico antes da contratação.
+2. **HUMANIZAÇÃO**: Chamar pelo nome, empatia genuína.
+3. **NÃO ANÁLISE**: NUNCA emitir parecer técnico antes da contratação.
 
-## SEU FOCO
-Você cuida exclusivamente de casos de **Direito Bancário**:
-- Revisão de contratos com juros abusivos
-- Seguro prestamista cobrado indevidamente
-- Venda casada de produtos bancários
-- Financiamentos e consignados irregulares
-- Cartões de crédito com tarifas indevidas
-- Anatocismo (juros sobre juros)
+## 🚀 SEU FLUXO — 3 PASSOS
 
-## FLUXO
-1. Apresente-se brevemente e confirme que já foi briefada pela Isa sobre o caso
-2. Aprofunde o entendimento da situação bancária do cliente
-3. Solicite documentos necessários: extratos, contratos bancários, comprovantes
-4. Agende consulta com o advogado responsável quando o caso estiver maduro
-5. Quando precisar de atendimento humano, inclua [TRANSFERIR_HUMANO] no início da resposta
+### PASSO 1 — APRESENTAÇÃO + CONFIRMAÇÃO (1 mensagem)
+"Olá, [Nome]! Sou a Melissa, especialista em Direito Bancário aqui no Bentes & Ramos. 😊
+Já estou por dentro do seu caso com o [banco mencionado]. Para o Dr. poder analisar se há irregularidades no seu contrato, preciso de alguns documentos. Posso te pedir?"
 
-Responda de forma natural, curta (máximo 3-4 linhas) e sempre com uma pergunta ou próximo passo claro.`;
+Se o banco ainda não foi mencionado: "Com qual banco é a situação?"
+Aceite qualquer resposta e vá para o PASSO 2.
+
+### PASSO 2 — PEDIR DOCUMENTOS (OBJETIVO PRINCIPAL — logo após a confirmação)
+Não faça mais de 1 pergunta antes de pedir os documentos.
+Assim que souber o banco ou tipo de produto → peça os documentos:
+
+"[Nome], para o Dr. analisar seu caso preciso de 4 documentos:
+1️⃣ Contrato do empréstimo/produto com o [banco]
+2️⃣ Extrato bancário dos últimos 3 meses
+3️⃣ RG (frente e verso)
+4️⃣ CPF
+Pode mandar foto ou PDF. 📎"
+
+Se o cliente perguntar "para que serve isso?":
+"Esses documentos permitem identificar se há juros abusivos, seguro prestamista indevido ou venda casada — irregularidades comuns em contratos bancários. Sem eles o Dr. não consegue fazer a análise do seu caso. 😊"
+
+### PASSO 3 — ACOMPANHAR RECEBIMENTO (um de cada vez se precisar)
+- Quando receber documentos: "Recebi! ✅ Falta só [documento pendente]. Pode mandar?"
+- Quando receber tudo: "Perfeito, [Nome]! Recebi todos os documentos. Vou encaminhar agora para o Dr. responsável. Em breve nossa equipe entra em contato com o resultado da análise! 😊" → inclua [ENCAMINHAR_AMANDA]
+
+## 🚫 REGRA ANTI-LOOP
+- Se já perguntou banco/tempo/valor 1 vez e o cliente foi vago → ACEITE e vá para pedir os documentos.
+- "Não sei", "não lembro", "aproximadamente" → são respostas suficientes. Avance.
+- NUNCA repita a mesma pergunta duas vezes. Se o cliente não sabe, não importa — peça os documentos.
+- Não fique em ciclo de qualificação. 1 pergunta de banco → direto para documentos.
+
+## TRATAMENTO DE OBJEÇÕES
+- "Quanto custa?" → "Os honorários são apresentados após a análise do Dr. Primeiro me manda os documentos para ele avaliar seu caso. 😊"
+- "Vou pensar" → "Claro! Mas se quiser adiantar, pode já me mandar os documentos. A análise fica pronta e quando você decidir já temos tudo."
+- "Não tenho o contrato" → "Tudo bem! Manda o extrato bancário e o RG/CPF. O contrato você pode pedir direto no banco ou pelo app deles."
+- "Não tenho dinheiro" → "Trabalhamos com condições que se adequam a cada caso. Me manda os documentos e o Dr. avalia — aí conversamos sobre pagamento."
+- Quando precisar de atendimento humano: inclua [TRANSFERIR_HUMANO] no início da resposta.
+
+## REGRAS DE COMUNICAÇÃO
+- Máximo 4 linhas por mensagem
+- Sempre termine com um pedido de documento específico ou confirmação de recebimento
+- Emojis com moderação (1-2 por mensagem)
+- NUNCA fique parado: cada mensagem deve estar mais perto de receber os documentos`;
 
 const JERUSA_SYSTEM_PROMPT = `Você é a JERUSA, especialista em Direito Aéreo do escritório Bentes & Ramos Advocacia.
 
 ## SUA IDENTIDADE
 - Nome: Jerusa
-- Papel: Especialista em Direito Aéreo — atrasos/cancelamentos de voo, extravio de bagagem, overbooking, reembolsos, danos morais por falha no transporte aéreo
-- Tom: Profissional, empática, ágil e humana (nunca robótica)
+- Papel: Especialista em Direito Aéreo — atrasos/cancelamentos, extravio de bagagem, overbooking, reembolsos, danos morais
+- Tom: Profissional, empática, ágil e humana
+
+## MISSÃO CENTRAL
+Seu único objetivo é **conseguir os documentos do cliente e encaminhar para o advogado fechar o caso**.
+Qualifique o mínimo necessário. O advogado analisa o resto.
 
 ## PRINCÍPIOS INEGOCIÁVEIS
 1. **ÉTICA OAB**: NUNCA prometer resultados ou êxito judicial.
-2. **HUMANIZAÇÃO**: Chamar pelo nome, demonstrar empatia genuína.
-3. **ACOLHIMENTO**: Ouvir antes de agir. Validar a dor do cliente.
-4. **NÃO ANÁLISE**: NUNCA emitir parecer técnico antes da contratação.
+2. **HUMANIZAÇÃO**: Chamar pelo nome, empatia genuína.
+3. **NÃO ANÁLISE**: NUNCA emitir parecer técnico antes da contratação.
 
-## SEU FOCO
-Você cuida exclusivamente de casos de **Direito Aéreo**:
-- Cancelamento ou atraso significativo de voo
-- Extravio, dano ou atraso na entrega de bagagem
-- Overbooking (embarque negado)
-- Reembolso de passagens e taxas
-- Danos morais por falha na prestação do serviço aéreo
+## 🚀 SEU FLUXO — 3 PASSOS
 
-## FLUXO
-1. Apresente-se brevemente e confirme que já foi briefada pela Isa sobre o caso
-2. Aprofunde o entendimento do ocorrido (data do voo, companhia, tipo do problema)
-3. Solicite documentos: bilhete, comprovante de atraso/cancelamento, registro de bagagem
-4. Agende consulta com o advogado responsável quando o caso estiver maduro
-5. Quando precisar de atendimento humano, inclua [TRANSFERIR_HUMANO] no início da resposta
+### PASSO 1 — APRESENTAÇÃO + 1 PERGUNTA (se necessário)
+"Olá, [Nome]! Sou a Jerusa, especialista em Direito Aéreo aqui no Bentes & Ramos. 😊
+Entendi a situação com [companhia/voo mencionado]. Para o Dr. analisar seu caso, preciso de alguns documentos."
+Se companhia/problema não foram mencionados: faça UMA pergunta (qual companhia aérea?).
+Aceite qualquer resposta e vá para o PASSO 2.
 
-Responda de forma natural, curta (máximo 3-4 linhas) e sempre com uma pergunta ou próximo passo claro.`;
+### PASSO 2 — PEDIR DOCUMENTOS (OBJETIVO PRINCIPAL)
+Após entender minimamente o caso → peça os documentos imediatamente:
+
+"[Nome], para o Dr. analisar seu caso preciso de:
+1️⃣ Bilhete/passagem (foto ou PDF)
+2️⃣ Comprovante do problema (email de cancelamento, recibo de atraso, registro da bagagem)
+3️⃣ RG (frente e verso)
+4️⃣ CPF
+Pode mandar foto ou PDF. 📎"
+
+### PASSO 3 — ACOMPANHAR RECEBIMENTO
+- Quando receber documentos: "Recebi! ✅ Falta só [pendente]. Pode mandar?"
+- Quando receber tudo: "Perfeito! Vou encaminhar para análise. Em breve nossa equipe retorna com o resultado! 😊" → inclua [ENCAMINHAR_AMANDA]
+
+## 🚫 REGRA ANTI-LOOP
+- Máximo 1 pergunta de qualificação antes de pedir documentos.
+- Se cliente foi vago ou não sabe detalhe → ACEITE e peça os documentos.
+- NUNCA repita a mesma pergunta. Se não sabe, avance.
+
+## TRATAMENTO DE OBJEÇÕES
+- "Quanto custa?" → "Após a análise do Dr. apresentamos as condições. Primeiro me manda os documentos. 😊"
+- "Vou pensar" → "Claro! Já pode me mandar os documentos — a análise fica pronta e quando decidir já temos tudo."
+- "Não tenho todos os documentos" → "Manda o que tiver. Com o bilhete e o RG já conseguimos iniciar."
+- Quando precisar de humano: inclua [TRANSFERIR_HUMANO] no início da resposta.
+
+## REGRAS DE COMUNICAÇÃO
+- Máximo 4 linhas por mensagem
+- Sempre termine com pedido de documento ou confirmação
+- Emojis com moderação (1-2 por mensagem)
+- NUNCA fique parado: cada mensagem deve avançar para receber os documentos`;
 
 const AGENT_PROMPTS: Record<string, string> = {
   'isa_triagem':  ISA_SYSTEM_PROMPT,
@@ -590,57 +551,313 @@ async function determineAndUpdateLeadState(
 }
 
 // ============================================================
-// GERAR RESPOSTA COM IA
+// FERRAMENTAS DOS AGENTES (FUNCTION CALLING)
+// ============================================================
+const AGENT_TOOLS = [
+  {
+    type: 'function' as const,
+    function: {
+      name: 'transferir_para_especialista',
+      description: 'Use quando identificar que o caso é Bancário (banco, empréstimo, financiamento, consignado, cartão, juros) ou Aéreo (voo, bagagem, companhia aérea). Transfere o atendimento para a especialista correta imediatamente.',
+      parameters: {
+        type: 'object',
+        properties: {
+          especialista: { type: 'string', enum: ['melissa', 'jerusa'], description: 'melissa = Direito Bancário | jerusa = Direito Aéreo' },
+          resumo_caso: { type: 'string', description: 'Resumo do caso para briefar a especialista (banco, produto, problema relatado)' },
+        },
+        required: ['especialista', 'resumo_caso'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'registrar_documentos_recebidos',
+      description: 'Use quando o cliente enviar um ou mais documentos (imagem, PDF). Registra quais documentos foram recebidos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          documentos: {
+            type: 'array',
+            items: { type: 'string', enum: ['contrato', 'extrato', 'rg', 'cpf', 'bilhete', 'comprovante_problema', 'outro'] },
+            description: 'Lista dos documentos recebidos nesta mensagem',
+          },
+        },
+        required: ['documentos'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'encaminhar_para_analise',
+      description: 'Use quando todos os documentos necessários foram recebidos. Encaminha o caso para a equipe fazer a análise e entrar em contato com o cliente.',
+      parameters: {
+        type: 'object',
+        properties: {
+          resumo_completo: { type: 'string', description: 'Resumo completo do caso: banco, produto, problema e documentos recebidos' },
+        },
+        required: ['resumo_completo'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'agendar_followup',
+      description: 'Use após enviar uma pergunta importante ou pedido de documentos. Agenda follow-up automático para caso o cliente não responda.',
+      parameters: {
+        type: 'object',
+        properties: {
+          horas: { type: 'number', description: 'Horas para aguardar antes de enviar o follow-up (ex: 2, 4, 24)' },
+          mensagem_followup: { type: 'string', description: 'Mensagem personalizada para o follow-up — natural, não robótica' },
+        },
+        required: ['horas', 'mensagem_followup'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'encaminhar_aposentadoria',
+      description: 'Use quando o cliente mencionar INSS, aposentadoria, benefício, auxílio-doença, BPC/LOAS, pensão. Encaminha para Dra. Kariny Bianca.',
+      parameters: {
+        type: 'object',
+        properties: {
+          nome_cliente: { type: 'string', description: 'Nome do cliente' },
+          resumo: { type: 'string', description: 'Resumo breve do que o cliente precisa' },
+        },
+        required: ['nome_cliente', 'resumo'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'transferir_para_humano',
+      description: 'Use quando: (1) cliente pede para falar com uma pessoa, (2) situação muito complexa fora do escopo, (3) cliente demonstra insatisfação grave, (4) dúvida sobre honorários específicos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          motivo: { type: 'string', description: 'Motivo detalhado da transferência' },
+        },
+        required: ['motivo'],
+      },
+    },
+  },
+];
+
+// ============================================================
+// EXECUTAR FERRAMENTAS
+// ============================================================
+async function executeTool(
+  toolName: string,
+  args: any,
+  leadId: string | null,
+  subscriberId: string,
+  supabase: any,
+): Promise<{ result: string; flag?: string }> {
+  console.log(`[ISA-REPLY] 🔧 Tool: ${toolName}`, JSON.stringify(args).substring(0, 150));
+
+  switch (toolName) {
+    case 'transferir_para_especialista': {
+      const agentMap: Record<string, string> = { melissa: 'isa_bancario', jerusa: 'isa_aereo' };
+      const newAgent = agentMap[args.especialista] || 'isa_bancario';
+      if (leadId) {
+        await supabase.from('leads_juridicos').update({ isa_agent: newAgent }).eq('id', leadId);
+        await supabase.from('interacoes').insert({
+          cliente_id: leadId,
+          tipo: 'WhatsApp',
+          resumo: `ISA transferiu para ${args.especialista === 'melissa' ? 'Melissa (Bancário)' : 'Jerusa (Aéreo)'}`,
+          detalhes: args.resumo_caso,
+          direcao: 'Interna',
+        });
+      }
+      return { result: `Transferido para ${args.especialista}. Briefing: ${args.resumo_caso}` };
+    }
+
+    case 'registrar_documentos_recebidos': {
+      if (leadId && args.documentos?.length > 0) {
+        for (const doc of args.documentos) {
+          await supabase.from('lead_docs_checklist').upsert({
+            lead_id: leadId,
+            doc_label: doc,
+            received: true,
+            received_at: new Date().toISOString(),
+          }, { onConflict: 'lead_id,doc_label' });
+        }
+      }
+      return { result: `Documentos registrados: ${args.documentos?.join(', ')}` };
+    }
+
+    case 'encaminhar_para_analise': {
+      return { result: `Encaminhando para análise: ${args.resumo_completo}`, flag: 'ENCAMINHAR_AMANDA' };
+    }
+
+    case 'agendar_followup': {
+      if (leadId) {
+        const followupAt = new Date(Date.now() + args.horas * 3_600_000).toISOString();
+        await supabase.from('system_events').insert({
+          tipo: 'followup_agendado',
+          fonte: 'isa-reply-zapi',
+          acao: 'followup_automatico',
+          lead_id: leadId,
+          dados: {
+            subscriber_id: subscriberId,
+            mensagem: args.mensagem_followup,
+            agendado_para: followupAt,
+            horas: args.horas,
+          },
+          processado: false,
+        });
+      }
+      return { result: `Follow-up em ${args.horas}h: "${args.mensagem_followup}"` };
+    }
+
+    case 'encaminhar_aposentadoria': {
+      return { result: `Encaminhar para Dra. Kariny: ${args.nome_cliente} — ${args.resumo}`, flag: 'ENCAMINHAR_APOSENTADORIA' };
+    }
+
+    case 'transferir_para_humano': {
+      return { result: `Transferindo para humano: ${args.motivo}`, flag: 'TRANSFERIR_HUMANO' };
+    }
+
+    default:
+      return { result: 'Tool desconhecida' };
+  }
+}
+
+// ============================================================
+// BUSCAR HISTÓRICO REAL DA CONVERSA
+// ============================================================
+async function getConversationHistory(
+  subscriberId: string,
+  supabase: any,
+): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+  const { data: msgs } = await supabase
+    .from('manychat_mensagens')
+    .select('conteudo, direcao, created_at')
+    .eq('subscriber_id', subscriberId)
+    .order('created_at', { ascending: true })
+    .limit(60);
+
+  return (msgs || [])
+    .filter((m: any) => m.conteudo?.trim())
+    .map((m: any) => ({
+      role: m.direcao === 'entrada' ? 'user' : 'assistant',
+      content: (m.conteudo || '').substring(0, 800),
+    }));
+}
+
+// ============================================================
+// GERAR RESPOSTA COM IA — GPT-4o + FUNCTION CALLING
 // ============================================================
 async function generateResponse(
-  message: string,
-  context: string,
-  threadId?: string,
-  systemPrompt: string = ISA_SYSTEM_PROMPT,
-): Promise<{ response: string; threadId?: string }> {
+  newMessage: string,
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+  systemPrompt: string,
+  leadId: string | null,
+  subscriberId: string,
+  supabase: any,
+  leadContext: string = '',
+): Promise<{
+  response: string;
+  toolsExecuted: string[];
+  needsHandoff: boolean;
+  needsAmandaEncaminhamento: boolean;
+  needsAposentadoriaEncaminhamento: boolean;
+}> {
+  const apiKey = OPENAI_API_KEY;
+  if (!apiKey) throw new Error('OPENAI_API_KEY não configurada');
 
-  const apiUrl = LOVABLE_API_KEY
-    ? 'https://ai.gateway.lovable.dev/v1/chat/completions'
-    : 'https://api.openai.com/v1/chat/completions';
+  const systemFull = leadContext
+    ? `${systemPrompt}\n\n---\n[CONTEXTO DO LEAD]\n${leadContext}`
+    : systemPrompt;
 
-  const apiKey = LOVABLE_API_KEY || OPENAI_API_KEY;
+  const messages: any[] = [
+    { role: 'system', content: systemFull },
+    ...conversationHistory,
+    { role: 'user', content: newMessage },
+  ];
 
-  if (!apiKey) {
-    throw new Error('Nenhuma API key configurada (LOVABLE_API_KEY ou OPENAI_API_KEY)');
+  const toolsExecuted: string[] = [];
+  let needsHandoff = false;
+  let needsAmandaEncaminhamento = false;
+  let needsAposentadoriaEncaminhamento = false;
+
+  // Primeira chamada com tools
+  const res1 = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      messages,
+      tools: AGENT_TOOLS,
+      tool_choice: 'auto',
+      max_tokens: 600,
+      temperature: 0.65,
+    }),
+  });
+
+  if (!res1.ok) {
+    const err = await res1.text();
+    throw new Error(`OpenAI API error ${res1.status}: ${err.substring(0, 200)}`);
   }
 
-  try {
-    const response = await fetch(apiUrl, {
+  const data1 = await res1.json();
+  const choice1 = data1.choices?.[0];
+
+  // Processar tool calls se existirem
+  if (choice1?.message?.tool_calls?.length > 0) {
+    const toolCallMsg = choice1.message;
+    const toolResultMsgs: any[] = [];
+
+    for (const tc of toolCallMsg.tool_calls) {
+      let args: any = {};
+      try { args = JSON.parse(tc.function.arguments); } catch { /* ignore */ }
+
+      const { result, flag } = await executeTool(tc.function.name, args, leadId, subscriberId, supabase);
+      toolsExecuted.push(tc.function.name);
+
+      if (flag === 'TRANSFERIR_HUMANO') needsHandoff = true;
+      if (flag === 'ENCAMINHAR_AMANDA') needsAmandaEncaminhamento = true;
+      if (flag === 'ENCAMINHAR_APOSENTADORIA') needsAposentadoriaEncaminhamento = true;
+
+      toolResultMsgs.push({ role: 'tool', tool_call_id: tc.id, content: result });
+    }
+
+    // Segunda chamada para obter resposta final em texto
+    const res2 = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: LOVABLE_API_KEY ? 'google/gemini-2.5-flash' : 'gpt-4o',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `${context}\n\n[NOVA MENSAGEM DO CLIENTE]\n${message}` }
-        ],
+        model: 'gpt-4o',
+        messages: [...messages, toolCallMsg, ...toolResultMsgs],
         max_tokens: 500,
-        temperature: 0.7,
+        temperature: 0.65,
       }),
     });
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('[ISA-REPLY] Erro na API:', error);
-      throw new Error(`API error: ${response.status}`);
-    }
+    if (!res2.ok) throw new Error(`OpenAI 2nd call error ${res2.status}`);
+    const data2 = await res2.json();
+    const responseText = data2.choices?.[0]?.message?.content || '';
 
-    const data = await response.json();
-    const resposta = data.choices?.[0]?.message?.content || '';
-
-    return { response: resposta, threadId };
-  } catch (error) {
-    console.error('[ISA-REPLY] Erro ao gerar resposta:', error);
-    throw error;
+    return { response: responseText, toolsExecuted, needsHandoff, needsAmandaEncaminhamento, needsAposentadoriaEncaminhamento };
   }
+
+  // Sem tool calls — verificar tags legadas por compatibilidade
+  const responseText = choice1?.message?.content || '';
+  if (responseText.includes('[TRANSFERIR_HUMANO]')) needsHandoff = true;
+  if (responseText.includes('[ENCAMINHAR_AMANDA]')) needsAmandaEncaminhamento = true;
+  if (responseText.includes('[ENCAMINHAR_APOSENTADORIA]')) needsAposentadoriaEncaminhamento = true;
+
+  return {
+    response: responseText.replace(/\[TRANSFERIR_HUMANO\]|\[ENCAMINHAR_AMANDA\]|\[ENCAMINHAR_APOSENTADORIA\]/g, '').trim(),
+    toolsExecuted,
+    needsHandoff,
+    needsAmandaEncaminhamento,
+    needsAposentadoriaEncaminhamento,
+  };
 }
 
 // ============================================================
@@ -711,6 +928,24 @@ serve(async (req: Request) => {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // ── Deduplicação: ignorar se já respondemos a mesma mensagem nos últimos 60s ──
+    const dedupeWindow = new Date(Date.now() - 60_000).toISOString();
+    const { data: recentReply } = await supabase
+      .from('manychat_mensagens')
+      .select('id')
+      .eq('subscriber_id', subscriberId)
+      .eq('direcao', 'saida')
+      .gte('created_at', dedupeWindow)
+      .limit(1)
+      .maybeSingle();
+
+    if (recentReply) {
+      console.log('[ISA-REPLY] ⏭️ Deduplicação: resposta já enviada nos últimos 60s para', subscriberId);
+      return new Response(JSON.stringify({
+        success: true, skipped: true, reason: 'deduplicated_60s'
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // Buscar subscriber e lead vinculado
@@ -796,57 +1031,80 @@ serve(async (req: Request) => {
 
     console.log('[ISA-REPLY] 💬 Processando:', fullMessage.substring(0, 100));
 
-    // 📋 Buscar contexto completo do lead (com timeout de 5s para não travar)
-    let context = '';
+    // 📋 Contexto mínimo do lead (estado, documentos pendentes) para orientar a IA
+    let leadContext = '';
     if (leadId) {
       try {
         const ctxPromise = getLeadContext(leadId, supabase);
-        const timeoutPromise = new Promise<string>(r => setTimeout(() => r(''), 5000));
-        context = await Promise.race([ctxPromise, timeoutPromise]);
-      } catch {
-        context = '';
-      }
+        const timeoutPromise = new Promise<string>(r => setTimeout(() => r(''), 4000));
+        leadContext = await Promise.race([ctxPromise, timeoutPromise]);
+      } catch { leadContext = ''; }
 
-      const isExpressMessage = /quero saber se meu contrato tem venda casada/i.test(mensagem);
-      if (isExpressMessage) {
-        context = `[LEAD DE ANÚNCIO - FLUXO EXPRESSO]\n⚡ O cliente chegou pela mensagem padrão do anúncio sobre venda casada. Siga o FLUXO EXPRESSO: apresente-se, solicite IMEDIATAMENTE contrato e extrato bancário (pode ser foto), analise os documentos quando recebidos buscando juros abusivos/seguro prestamista/capitalização/venda casada, e após análise encaminhe para Amanda.\n\n${context}`;
-        console.log('[ISA-REPLY] 🚀 Fluxo expresso ativado - mensagem específica do anúncio detectada');
+      // Fluxo expresso para leads de anúncio com mensagem padrão
+      if (/quero saber se meu contrato tem venda casada/i.test(mensagem)) {
+        leadContext = `[LEAD DE ANÚNCIO - FLUXO EXPRESSO] Solicite IMEDIATAMENTE contrato e extrato bancário.\n\n${leadContext}`;
       }
     } else {
-      context = `[NOVO CONTATO - Sem lead vinculado ainda]\nNome informado: ${nome}\nTelefone: ${telefone}\n`;
+      leadContext = `[NOVO CONTATO]\nNome: ${nome} | Telefone: ${telefone}`;
     }
+
+    // 📜 Histórico real da conversa
+    const conversationHistory = await getConversationHistory(subscriberId, supabase);
 
     // Determinar prompt e nome do agente ativo
     const activePrompt = AGENT_PROMPTS[isaAgent] || ISA_SYSTEM_PROMPT;
     const activeAgentName = AGENT_NAMES[isaAgent] || 'Isa';
-    console.log(`[ISA-REPLY] 🤖 Agente ativo: ${activeAgentName} (${isaAgent})`);
+    console.log(`[ISA-REPLY] 🤖 Agente: ${activeAgentName} | Histórico: ${conversationHistory.length} msgs`);
 
-    // 🤖 Gerar resposta (com fallback para nunca deixar a conversa morrer)
+    // 🤖 Gerar resposta com GPT-4o + Function Calling
     let respostaIsa = '';
+    let needsHandoff = false;
+    let needsAmandaEncaminhamento = false;
+    let needsAposentadoriaEncaminhamento = false;
+    let toolsExecuted: string[] = [];
+
     try {
-      const { response } = await generateResponse(fullMessage, context, undefined, activePrompt);
-      respostaIsa = response;
+      const aiResult = await generateResponse(
+        fullMessage, conversationHistory, activePrompt,
+        leadId, subscriberId, supabase, leadContext,
+      );
+      respostaIsa = aiResult.response;
+      needsHandoff = aiResult.needsHandoff;
+      needsAmandaEncaminhamento = aiResult.needsAmandaEncaminhamento;
+      needsAposentadoriaEncaminhamento = aiResult.needsAposentadoriaEncaminhamento;
+      toolsExecuted = aiResult.toolsExecuted;
+      if (toolsExecuted.length > 0) {
+        console.log('[ISA-REPLY] 🔧 Tools executadas:', toolsExecuted.join(', '));
+      }
     } catch (aiError) {
-      console.error('[ISA-REPLY] ❌ Erro na IA, usando mensagem fallback:', aiError);
+      console.error('[ISA-REPLY] ❌ Erro na IA, usando fallback:', aiError);
     }
 
     if (!respostaIsa) {
       const primeiroNome = (subscriber?.nome || nome || 'Cliente').split(' ')[0];
       respostaIsa = `${primeiroNome}, recebi sua mensagem! 😊 Pode continuar me contando sobre sua situação?`;
-      console.log('[ISA-REPLY] ⚠️ Usando mensagem fallback');
     }
 
-    // 🔄 Detectar pedido de transferência para humano
-    const needsHandoff = respostaIsa.includes('[TRANSFERIR_HUMANO]');
-    // 🏥 Detectar encaminhamento para aposentadoria (Dra. Kariny)
-    const needsAposentadoriaEncaminhamento = respostaIsa.includes('[ENCAMINHAR_APOSENTADORIA]');
-    // 📄 Detectar encaminhamento para Amanda (análise documental de anúncio)
-    const needsAmandaEncaminhamento = respostaIsa.includes('[ENCAMINHAR_AMANDA]');
-    const respostaLimpa = respostaIsa
-      .replace('[TRANSFERIR_HUMANO]', '')
-      .replace('[ENCAMINHAR_APOSENTADORIA]', '')
-      .replace('[ENCAMINHAR_AMANDA]', '')
-      .trim();
+    // ── Suprimir se idêntica à última mensagem enviada ──
+    const { data: ultimaMsgEnviada } = await supabase
+      .from('manychat_mensagens')
+      .select('conteudo')
+      .eq('subscriber_id', subscriberId)
+      .eq('direcao', 'saida')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (ultimaMsgEnviada?.conteudo) {
+      const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim().substring(0, 120);
+      if (normalize(respostaIsa) === normalize(ultimaMsgEnviada.conteudo)) {
+        console.log('[ISA-REPLY] ⏭️ Resposta idêntica à anterior, suprimindo');
+        return new Response(JSON.stringify({ success: true, skipped: true, reason: 'identical_suppressed' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
+    const respostaLimpa = respostaIsa.trim();
 
     // Truncar resposta para WhatsApp (máx 500 chars)
     const respostaFinal = respostaLimpa.length > 500 
@@ -1243,6 +1501,7 @@ serve(async (req: Request) => {
         subscriber_id: subscriberId,
         mensagem_recebida: fullMessage.substring(0, 200),
         resposta_enviada: respostaFinal.substring(0, 300),
+        tools_executadas: toolsExecuted,
         media_processada: !!mediaContent,
         estado_anterior: currentLeadState,
         novo_estado: stateTransition,

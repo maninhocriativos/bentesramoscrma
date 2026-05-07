@@ -62,12 +62,13 @@ serve(async (req) => {
       );
     }
 
-    const { 
-      lead_id, 
+    const {
+      lead_id,
       facebook_lead_id,
-      email, 
-      phone, 
-      event_name = 'Purchase', 
+      email,
+      phone,
+      nome,
+      event_name = 'Purchase',
       value = 0,
       status,
       // Opcional: permite enviar explícito do frontend, mas mantemos um default seguro
@@ -108,6 +109,16 @@ serve(async (req) => {
         userData.ph = await sha256Hash(normalizedPhone);
         console.log('[Meta CAPI] Phone hashed successfully:', normalizedPhone.substring(0, 4) + '***');
       }
+    }
+
+    // Hash do nome (fn = primeiro nome, ln = sobrenome)
+    if (nome) {
+      const parts = nome.trim().split(/\s+/);
+      const firstName = parts[0]?.toLowerCase();
+      const lastName = parts.slice(1).join(' ').toLowerCase();
+      if (firstName) userData.fn = await sha256Hash(firstName);
+      if (lastName) userData.ln = await sha256Hash(lastName);
+      console.log('[Meta CAPI] Name hashed successfully');
     }
 
     // Verificar se temos dados de usuário suficientes

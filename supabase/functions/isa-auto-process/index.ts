@@ -61,6 +61,7 @@ const ACOES_AUTOMATICAS = [
   'transicionar_agente', // ← NOVO: roteamento entre agentes
   'direcionar_atendimento_humano',
   'agendar_lembrete', // ← lembrete contextual agendado
+  'enviar_video_inss', // ← vídeo INSS com botões para aposentados/pensionistas
 ];
 
 const ACOES_CONFIRMACAO = [
@@ -73,7 +74,7 @@ const ACOES_CONFIRMACAO = [
 
 const STATUS_PERMITE_FAST = ['Lead Frio'];
 const STATUS_PERMITE_SLOW = ['Lead Frio', 'Em Atendimento', 'Em Negociação', 'Aguardando Contrato'];
-const STATUS_BLOQUEADOS = ['Contrato Assinado', 'Ganho'];
+const STATUS_BLOQUEADOS = ['Contrato Assinado', 'Ganho', 'Contrato Fechado'];
 
 const LEAD_STATES = {
   NEW: 'NEW',
@@ -196,8 +197,87 @@ const AGENT_HANDOFFS: Record<string, string> = {
 };
 
 const AGENT_INTROS: Record<string, string> = {
-  'isa_bancario': 'Sou a Melissa, especialista em demandas bancarias do Bentes & Ramos. Vou analisar as informacoes que voce ja enviou e conduzir os proximos passos com objetividade. Se ainda faltar algum documento, vou solicitar apenas o necessario para a analise.',
-  'isa_aereo':    'Sou a Jerusa, especialista em demandas aereas do Bentes & Ramos. Vou analisar as informacoes que voce ja enviou e orientar o proximo passo de forma direta.',
+  'isa_bancario': 'Olá! 😊 Sou a *Melissa*, especialista em Direito Bancário do escritório Bentes & Ramos!\n\nVi que você está com um problema com banco ou instituição financeira. Esses casos geralmente têm ótimo resultado e podemos te ajudar!\n\nPara analisar seu caso, preciso de alguns documentos básicos:\n\n📎 *1. RG ou CNH*\n📎 *2. CPF*\n📎 *3. Contrato ou extrato do banco/financeira*\n📎 *4. Comprovante do problema* (cobrança indevida, negativação, etc.)\n\nPode ir me enviando um por um? Começa pelo que tiver mais fácil! 😊',
+  'isa_aereo':    'Olá! 😊 Sou a *Jerusa*, especialista em Direito Aéreo do escritório Bentes & Ramos!\n\nVi que você passou por uma situação ruim com uma companhia aérea — infelizmente é muito comum e você TEM direitos!\n\nPara defender seus direitos, preciso de alguns documentos:\n\n📎 *1. RG ou CNH*\n📎 *2. CPF*\n📎 *3. Cartão de embarque ou localizador do voo*\n📎 *4. Comprovante do problema* (print do app, e-mail da companhia, recibo de despesas extras)\n\nPode começar enviando o que tiver à mão? 😊',
+};
+
+// Missão específica de cada agente (adicionada ao prompt para guiar comportamento)
+const AGENT_MISSIONS: Record<string, string> = {
+  'isa_triagem': `
+🎯 SUA MISSÃO — ISA (TRIAGEM):
+- SEMPRE se apresente na PRIMEIRA mensagem: "Olá! 😊 Sou a *Isa*, assistente virtual do escritório *Bentes & Ramos Advocacia*. Como posso te ajudar?"
+- Seu papel é IDENTIFICAR o problema jurídico e ENCAMINHAR para o especialista correto.
+- NUNCA tente coletar documentos — isso é responsabilidade de Melissa (bancário) ou Jerusa (aéreo).
+- NUNCA tente fechar contratos — você apenas filtra e direciona.
+
+REGRAS CRÍTICAS DE ROTEAMENTO:
+- Se area_juridica="bancario" → transicionar_agente para "isa_bancario" IMEDIATAMENTE
+- Se area_juridica="aereo" → transicionar_agente para "isa_aereo" IMEDIATAMENTE
+- Se area_juridica="indefinido" → NUNCA chame direcionar_atendimento_humano! Faça UMA pergunta: "Pode me contar mais sobre o que aconteceu?"
+- Só use direcionar_atendimento_humano se o cliente mencionar explicitamente área jurídica fora do escopo (trabalhista, criminal, família, imobiliário)
+- NUNCA use direcionar_atendimento_humano para saudações como "Olá", "Oi", "Bom dia"
+
+SE O ASSUNTO NÃO FOR JURÍDICO (ex: limpeza, serviços, produtos, outros):
+- Responda educadamente: "Olá! 😊 Somos um escritório de advocacia especializado em Direito Bancário e Aéreo. Para outros serviços, infelizmente não podemos ajudar. Se tiver alguma questão jurídica relacionada a banco ou voo, estarei aqui! 🙏"
+- NÃO use nenhuma ação/ferramenta nesses casos — apenas responda e encerre
+`,
+  'isa_bancario': `
+🎯 SUA MISSÃO — MELISSA (DIREITO BANCÁRIO):
+- Você é especialista em Direito Bancário. Seu papel é FECHAR O CASO e COLETAR OS DOCUMENTOS.
+- Seja persuasiva, empática e focada em resultado: o cliente precisa sentir que vai ganhar.
+- Documentos obrigatórios (coletar 1 por vez, não pedir todos de uma vez):
+  1. RG ou CNH
+  2. CPF
+  3. Extrato ou contrato com o banco/financeira
+  4. Comprovante do problema (cobrança indevida, negativação, cláusula abusiva, etc.)
+- Fluxo: entender o caso → confirmar que pode ajudar → pedir doc 1 → receber → pedir doc 2 → etc. → encaminhar para análise
+- Ao receber cada documento: use marcar_doc_recebido
+- Quando todos os docs chegarem: use transicionar_estado com to_state "DOCS_PENDING"
+- NUNCA encerre a conversa sem tentar fechar o contrato.
+
+📋 CLIENTES APOSENTADOS/PENSIONISTAS SEM CONTRATO OU EXTRATO:
+Quando o cliente for aposentado/pensionista/servidor e NÃO tiver o contrato ou extrato:
+1. Pergunte qual é o problema específico para enviar o vídeo certo:
+   - "não tenho acesso ao Meu INSS" / "não sei a senha" → enviar_video_inss com video_numero=2
+   - "não sei onde achar o extrato" / "não acho o empréstimo lá" → enviar_video_inss com video_numero=1
+   - "perdi acesso ao GOV.br" / "não consigo entrar no gov" → enviar_video_inss com video_numero=3
+   - problema não especificado → enviar_video_inss com video_numero=1 (mais comum)
+2. Use SEMPRE a ação enviar_video_inss — NUNCA escreva os links manualmente no texto.
+3. Envie UM vídeo por vez com a ação. NÃO chame enviar_video_inss mais de uma vez por resposta.
+4. Após enviar o vídeo, diga no texto: "É bem simples! Quando conseguir o extrato, me manda aqui 😊"
+
+RESPOSTA AOS BOTÕES DO VÍDEO (no histórico aparece como [BOTÃO CLICADO: ID]):
+- [BOTÃO CLICADO: video_ajudou_inss_1] ou video_ajudou_inss_2 ou video_ajudou_inss_3 → O vídeo ajudou! Elogie ("Ótimo! 🎉") e peça o próximo documento da lista.
+- [BOTÃO CLICADO: falar_amanda] → Cliente quer atendimento humano. Use direcionar_atendimento_humano com motivo "Cliente solicitou falar com Amanda via botão" e responda: "Claro! 😊 Vou te conectar com a *Amanda* agora. Um momento!"
+
+📅 FOLLOW-UP AUTOMÁTICO (clientes de tráfego):
+- Sempre que pedir um documento, chame TAMBÉM agendar_lembrete na MESMA resposta:
+  - delay_minutos: 1440 (24h)
+  - mensagem: "Oi! 😊 Passando para saber se já conseguiu nos enviar [nome do doc pedido]. Estamos aguardando para dar andamento no seu caso!"
+- Se for a segunda vez pedindo o mesmo doc (cliente sumiu): delay_minutos: 2880 (48h) e mensagem mais enfática: "Olá! Só um lembrete rápido 😊 Precisamos do [doc] para seguir com a análise do seu caso. Consegue enviar hoje?"
+- NÃO agende lembrete se o cliente acabou de enviar algo ou está respondendo ativamente.
+`,
+  'isa_aereo': `
+🎯 SUA MISSÃO — JERUSA (DIREITO AÉREO):
+- Você é especialista em Direito Aéreo. Seu papel é FECHAR O CASO e COLETAR OS DOCUMENTOS.
+- Seja empática e combativa: companhias aéreas violam direitos constantemente e o cliente MERECE ser indenizado.
+- Documentos obrigatórios (coletar 1 por vez):
+  1. RG ou CNH
+  2. CPF
+  3. Cartão de embarque ou localizador/e-ticket do voo
+  4. Comprovante do problema (print do cancelamento, e-mail da cia aérea, recibo de despesas extras)
+- Fluxo: entender o ocorrido → confirmar direitos do cliente → pedir doc 1 → receber → pedir doc 2 → etc. → encaminhar para análise
+- Ao receber cada documento: use marcar_doc_recebido
+- Quando todos os docs chegarem: use transicionar_estado com to_state "DOCS_PENDING"
+- NUNCA encerre a conversa sem tentar fechar o contrato.
+
+📅 FOLLOW-UP AUTOMÁTICO (clientes de tráfego):
+- Sempre que pedir um documento, chame TAMBÉM agendar_lembrete na MESMA resposta:
+  - delay_minutos: 1440 (24h)
+  - mensagem: "Oi! 😊 Passando para saber se já conseguiu nos enviar [nome do doc pedido]. Estamos aguardando para dar andamento no seu caso de indenização!"
+- Se for a segunda vez pedindo o mesmo doc (cliente sumiu): delay_minutos: 2880 (48h) e mensagem mais enfática.
+- NÃO agende lembrete se o cliente acabou de enviar algo ou está respondendo ativamente.
+`,
 };
 
 interface LeadContext {
@@ -235,7 +315,7 @@ async function buscarContextoLead(supabase: any, leadId: string): Promise<LeadCo
     { data: lembretesPendentes },
   ] = await Promise.all([
     supabase.from('leads_juridicos').select('*').eq('id', leadId).single(),
-    supabase.from('manychat_mensagens').select('*').eq('lead_id', leadId).order('created_at', { ascending: false }).limit(20),
+    supabase.from('manychat_mensagens').select('*').eq('lead_id', leadId).order('created_at', { ascending: false }).limit(60),
     supabase.from('interacoes').select('*').eq('cliente_id', leadId).order('data_interacao', { ascending: false }).limit(10),
     supabase.from('tarefas').select('*').eq('cliente_id', leadId).order('created_at', { ascending: false }).limit(10),
     supabase.from('compromissos').select('*').eq('lead_id', leadId).order('data_inicio', { ascending: false }).limit(5),
@@ -890,6 +970,53 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
         console.log(`[Lembrete] Agendado para ${horaManaus} - lead ${lead_id}`);
         return { success: true, message: `Lembrete agendado para ${horaManaus}`, data: { scheduled_for: scheduledFor } };
       }
+
+      case 'enviar_video_inss': {
+        const { lead_id, video_numero } = dados;
+        if (!subscriberId) return { success: false, message: 'Subscriber ID não disponível para enviar vídeo' };
+        const supabaseLocal = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+        const VIDEOS_INSS = [
+          { num: 1, titulo: '📹 Como acessar o extrato de empréstimo no Meu INSS', url: 'https://drive.google.com/file/d/16TzO0QybAi32O3xFU8LphBrrQR7JtvQm/view?usp=sharing' },
+          { num: 2, titulo: '📹 Como criar código de acesso no Meu INSS', url: 'https://drive.google.com/file/d/1Sy28fDE--TOm_7h2n9qjsGSFqt9Y1Nbv/view?usp=sharing' },
+          { num: 3, titulo: '📹 Como recuperar seu acesso ao GOV.br', url: 'https://drive.google.com/file/d/1NiGr6qCVqmF4NjxNw-fdHzvBb3ycUnOv/view?usp=sharing' },
+        ];
+        const num = Math.max(1, Math.min(3, Number(video_numero) || 1));
+        const video = VIDEOS_INSS[num - 1];
+        const videoMsg = `${video.titulo}:\n${video.url}`;
+        const textSend = await enviarRespostaZapi(supabaseLocal, subscriberId, videoMsg);
+        if (textSend.success) {
+          await supabaseLocal.from('manychat_mensagens').insert({
+            subscriber_id: subscriberId,
+            subscriber_nome: 'Melissa',
+            canal: 'whatsapp',
+            conteudo: videoMsg,
+            tipo: 'text',
+            direcao: 'saida',
+            lead_id,
+            metadata: { auto_gerada: true, source: 'isa', agent: 'isa_bancario', tipo: 'video_inss', video_numero: num },
+          });
+        }
+        await new Promise<void>(r => setTimeout(r, 1200));
+        const buttonSend = await enviarBotoesZapi(supabaseLocal, subscriberId, 'Este vídeo te ajudou? 😊', [
+          { id: `video_ajudou_inss_${num}`, title: '✅ Sim, me ajudou!' },
+          { id: 'falar_amanda', title: '💬 Falar com Amanda' },
+        ]);
+        if (buttonSend.success) {
+          await supabaseLocal.from('manychat_mensagens').insert({
+            subscriber_id: subscriberId,
+            subscriber_nome: 'Melissa',
+            canal: 'whatsapp',
+            conteudo: 'Este vídeo te ajudou? 😊 [Botões: ✅ Sim, me ajudou! | 💬 Falar com Amanda]',
+            tipo: 'buttons',
+            direcao: 'saida',
+            lead_id,
+            metadata: { auto_gerada: true, source: 'isa', agent: 'isa_bancario', tipo: 'buttons_video_inss', video_numero: num },
+          });
+        }
+        console.log(`[Melissa] 📹 Vídeo INSS ${num} enviado${buttonSend.success ? ' com botões' : ' (somente texto)'}`);
+        return { success: true, message: `Vídeo INSS ${num} enviado ao cliente`, data: { video_numero: num, buttons_sent: buttonSend.success } };
+      }
+
       case 'direcionar_atendimento_humano': {
         const lead_id = dados.lead_id;
         const motivo = dados.motivo || 'Lead qualificado para atendimento humano';
@@ -1040,6 +1167,55 @@ async function enviarImagemZapi(supabaseClient: any, subscriberId: string, image
   }
 }
 
+async function enviarBotoesZapi(
+  supabaseClient: any,
+  subscriberId: string,
+  mensagem: string,
+  botoes: Array<{ id: string; title: string }>
+): Promise<{ success: boolean }> {
+  try {
+    const { data: subscriber } = await supabaseClient.from('manychat_subscribers').select('telefone, linha_whatsapp, lead_id').eq('subscriber_id', subscriberId).maybeSingle();
+    if (!subscriber?.telefone) return { success: false };
+    const isTrafficLine = subscriber.linha_whatsapp === 'trafego_isa';
+    let useTrafficInstance = isTrafficLine;
+    if (!useTrafficInstance && subscriber.lead_id) {
+      const { data: lead } = await supabaseClient.from('leads_juridicos').select('linha_whatsapp, tipo_origem, fonte_trafego').eq('id', subscriber.lead_id).maybeSingle();
+      useTrafficInstance = lead?.linha_whatsapp === 'trafego_isa' || lead?.tipo_origem === 'trafego' || lead?.fonte_trafego?.includes('facebook');
+    }
+    let instanceId: string | undefined;
+    let token: string | undefined;
+    let clientToken: string | undefined;
+    if (useTrafficInstance) {
+      const { data: ti } = await supabaseClient.from('zapi_instances').select('instance_id, token, client_token').eq('is_active', true).ilike('phone_number', '%85888190%').maybeSingle();
+      if (ti) { instanceId = ti.instance_id; token = ti.token; clientToken = ti.client_token; }
+    }
+    if (!instanceId) {
+      const { data: di } = await supabaseClient.from('zapi_instances').select('instance_id, token, client_token').eq('is_active', true).eq('is_default', true).maybeSingle();
+      if (di) { instanceId = di.instance_id; token = di.token; clientToken = di.client_token; }
+    }
+    if (!instanceId || !token) return { success: false };
+    let cleanPhone = subscriber.telefone.replace(/\D/g, '');
+    if (cleanPhone.length === 10 || cleanPhone.length === 11) cleanPhone = '55' + cleanPhone;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (clientToken) headers['Client-Token'] = clientToken;
+    const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-button-actions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        phone: cleanPhone,
+        message: mensagem,
+        buttonActions: botoes.map(b => ({ id: b.id, type: 'REPLY', reply: { title: b.title } })),
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok || result.error) { console.error('❌ Z-API botões erro:', result); return { success: false }; }
+    return { success: true };
+  } catch (err) {
+    console.error('❌ Erro ao enviar botões Z-API:', err);
+    return { success: false };
+  }
+}
+
 async function enviarRespostaManyChat(subscriberId: string, mensagem: string): Promise<boolean> {
   const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
   const result = await enviarRespostaZapi(supabaseClient, subscriberId, mensagem);
@@ -1136,7 +1312,7 @@ async function getLeadState(supabase: any, leadId: string): Promise<string | nul
   const { data: lead } = await supabase.from('leads_juridicos').select('lead_state, status, is_lost, tipo_origem, fonte_trafego, canal_origem, created_at, linha_whatsapp, isa_ativa, empresa_tag').eq('id', leadId).single();
   if (!lead) return null;
   if (lead.is_lost) return 'LOST';
-  if (['Contrato Assinado', 'Ganho'].includes(lead.status)) return 'BLOCKED';
+  if (['Contrato Assinado', 'Ganho', 'Contrato Fechado'].includes(lead.status)) return 'BLOCKED';
   if (lead.isa_ativa === false || lead.linha_whatsapp === 'bentes_ramos_antigo') return 'BENTES_RAMOS';
   if (lead.linha_whatsapp === 'trafego_isa') return lead.lead_state || 'NEW';
   const tipoOrigem = lead.tipo_origem || 'indefinido';
@@ -1179,11 +1355,11 @@ async function processarComIA(contexto: LeadContext, mensagem: string, subscribe
   }
 
   const historicoCompleto = [
-    ...contexto.mensagens.slice(0, 20).map(m => ({ tipo: 'chat', origem: m.direcao === 'inbound' ? 'cliente' : 'bot/equipe', conteudo: m.conteudo, data: m.created_at })),
+    ...contexto.mensagens.slice(0, 50).map(m => ({ tipo: 'chat', origem: m.direcao === 'inbound' ? 'cliente' : 'bot/equipe', conteudo: m.conteudo, data: m.created_at })),
     ...contexto.interacoes.slice(0, 10).map(i => ({ tipo: 'interacao', origem: i.direcao === 'entrada' ? 'cliente' : 'equipe', conteudo: `[${i.tipo}] ${i.resumo}${i.detalhes ? ': ' + i.detalhes : ''}`, data: i.data_interacao })),
   ].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
 
-  const historicoFormatado = historicoCompleto.slice(-25).map(h => `[${h.origem.toUpperCase()}] ${h.conteudo}`).join('\n');
+  const historicoFormatado = historicoCompleto.slice(-40).map(h => `[${h.origem.toUpperCase()}] ${h.conteudo}`).join('\n');
 
   const leadState = contexto.lead.lead_state || 'NEW';
   const classification = contexto.classification;
@@ -1214,7 +1390,7 @@ async function processarComIA(contexto: LeadContext, mensagem: string, subscribe
   // Últimas mensagens enviadas por ESTE agente (para evitar repetição)
   const ultimasBotMsgs = contexto.mensagens
     .filter((m: any) => m.direcao === 'saida' && m.metadata?.agent === agentAtual)
-    .slice(0, 3)
+    .slice(0, 5)
     .map((m: any) => (m.conteudo || '').substring(0, 250));
 
   const basePrompt = promptConfig?.content || 'Você é Isa, assistente do escritório Bentes & Ramos.';
@@ -1226,6 +1402,7 @@ ${strictMode ? '🔒 MODO RÍGIDO ATIVADO: Opere pela máquina de estados.\n' : 
 ${RESPONSE_INTELLIGENCE_GUIDE}
 
 AGENTE ATUAL: ${agentAtual}
+${AGENT_MISSIONS[agentAtual] || ''}
 
 🏢 ENDEREÇO FÍSICO DO ESCRITÓRIO:
 ${ENDERECO_FISICO}
@@ -1291,6 +1468,7 @@ ${ultimasBotMsgs.map((m: string, i: number) => `${i + 1}. "${m}"`).join('\n')}
 - pausar_followup / retomar_followup: { lead_id }
 - direcionar_atendimento_humano: { lead_id, motivo, tipo }
 - agendar_lembrete: { lead_id, mensagem, delay_minutos } — Agenda mensagem para enviar ao cliente após X minutos (mín 5, máx 1440)
+- enviar_video_inss: { lead_id, video_numero: 1|2|3 } — Envia tutorial INSS com botões (1=acessar extrato, 2=criar código acesso, 3=recuperar GOV.br)
 
 ROTEAMENTO (apenas quando agente=isa_triagem):
 - Bancário → transicionar_agente com isa_agent: "isa_bancario"
@@ -1304,6 +1482,13 @@ MELISSA - OBJETIVO EM BANCARIO:
 - Para analise bancaria, priorize: contrato ou extrato, comprovante do problema/desconto, documento com foto frente e verso (RG ou CNH) e dados minimos para contrato.
 - RG ou CNH sempre precisa de frente e verso. Se so houver um lado, peca somente o lado faltante.
 - Se o lead pedir para analisar contrato, nao pergunte novamente banco/produto se o documento ou historico ja indicarem isso.
+
+FOLLOW-UP CONTEXTUAL — REGRAS (somente leads de tráfego):
+- Ao pedir qualquer documento: chame agendar_lembrete NA MESMA resposta (delay_minutos=1440, mensagem contextual ao doc)
+- Cliente disse que fará mais tarde / quando chegar em casa: delay proporcional (ex: 120 min)
+- Cliente informou horário específico: calcule os minutos exatos
+- Não agende lembrete se o cliente acabou de enviar algo ou está respondendo na mesma conversa
+- Não agende mais de 1 lembrete ativo por conversa para o mesmo assunto
 
 FOLLOW-UP CONTEXTUAL (use agendar_lembrete quando):
 - Se voce pedir documento/dado essencial e o lead nao responder imediatamente, agende um lembrete coerente para cobrar esse mesmo item.
@@ -1329,7 +1514,7 @@ Responda em JSON:
     method: 'POST',
     headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',
       messages: [
         { role: 'system', content: systemPrompt },
         {

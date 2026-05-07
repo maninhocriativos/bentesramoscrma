@@ -56,6 +56,27 @@ serve(async (req) => {
         continue;
       }
 
+      // Cancelar lembrete se o lead respondeu nas últimas 12h (não precisa mais do reengajamento)
+      if (lead_id) {
+        const dozeHorasAtras = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+        const { data: msgRecente } = await supabase
+          .from('manychat_mensagens')
+          .select('id')
+          .eq('lead_id', lead_id)
+          .eq('direcao', 'inbound')
+          .gte('created_at', dozeHorasAtras)
+          .limit(1)
+          .maybeSingle();
+        if (msgRecente) {
+          console.log(`[Lembrete] ⏭️ Pulando — cliente respondeu nas últimas 12h: ${lead_id}`);
+          await supabase.from('system_events')
+            .update({ processado: true, dados: { ...lembrete.dados, cancelado_por: 'cliente_respondeu_recente' } })
+            .eq('id', lembrete.id);
+          pulados++;
+          continue;
+        }
+      }
+
       // REGRA ABSOLUTA: tipo_origem = 'trafego' → 5592985888190 | demais → 5592991604348
       const PHONE_TRAFEGO    = '5592985888190'; // (92) 98588-8190 — "Bentes Ramos Trafego"
       const PHONE_ESCRITORIO = '5592991604348'; // (92) 99160-4348 — "Bentes Ramos"
