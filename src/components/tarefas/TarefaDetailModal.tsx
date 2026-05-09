@@ -115,6 +115,13 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit }: Tarefa
                   </span>
                 </div>
               </div>
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Horário</p>
+                <div className="flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-sm">{tarefa.horario ? tarefa.horario.slice(0, 5) : 'Sem horário'}</span>
+                </div>
+              </div>
             </div>
 
             {tarefa.descricao && (

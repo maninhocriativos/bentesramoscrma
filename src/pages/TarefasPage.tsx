@@ -115,6 +115,15 @@ function TarefaCard({ tarefa, onClick }: { tarefa: Tarefa; onClick: () => void }
               {dl.label}
             </span>
           )}
+          {tarefa.horario && (
+            <span style={{
+              fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+              background: 'rgba(59,130,246,0.08)', color: '#2563eb',
+              border: '0.5px solid rgba(59,130,246,0.2)'
+            }}>
+              {tarefa.horario.slice(0, 5)}
+            </span>
+          )}
           {aprov && (
             <span style={{
               fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
@@ -574,7 +583,7 @@ export default function TarefasPage() {
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-foreground truncate">{tarefa.titulo}</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Prazo fatal: {deadline ? format(new Date(deadline), 'dd/MM/yyyy', { locale: ptBR }) : 'sem prazo'}
+                          Prazo fatal: {deadline ? format(new Date(deadline), 'dd/MM/yyyy', { locale: ptBR }) : 'sem prazo'}{tarefa.horario ? ` às ${tarefa.horario.slice(0, 5)}` : ''}
                         </p>
                       </div>
                       <span className="shrink-0 rounded-full bg-destructive px-2 py-1 text-[10px] font-bold text-white">

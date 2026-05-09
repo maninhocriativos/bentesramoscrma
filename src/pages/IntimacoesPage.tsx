@@ -531,6 +531,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const [selectedTarefaTipo, setSelectedTarefaTipo] = useState('');
   const [prazoSeguranca, setPrazoSeguranca] = useState('');
   const [prazoFatal, setPrazoFatal] = useState('');
+  const [horarioTarefa, setHorarioTarefa] = useState('');
   const [responsavelId, setResponsavelId] = useState('');
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [savingTarefa, setSavingTarefa] = useState(false);
@@ -595,6 +596,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
         `Processo: ${processoNumero}`,
         intimacao.tribunal ? `Tribunal: ${intimacao.tribunal}` : '',
         comentario ? `Comentario: ${comentario}` : '',
+        horarioTarefa ? `Horário: ${horarioTarefa}` : '',
         conteudo ? `Resumo da publicacao: ${conteudo.slice(0, 700)}` : '',
       ].filter(Boolean);
 
@@ -611,6 +613,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
           data_limite: prazoFatal,
           prazo_seguranca: prazoSeguranca,
           prazo_fatal: prazoFatal,
+          horario: horarioTarefa || null,
           data_conclusao: null,
           entrega_texto: null,
           entrega_anexo_url: null,
@@ -628,7 +631,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
       await supabase.from('notificacoes_internas' as any).insert({
         user_id: responsavelId,
         titulo: 'Nova tarefa atribuída',
-        mensagem: `${selectedTarefaTipo} - prazo fatal ${format(prazoFat, 'dd/MM/yyyy')}`,
+        mensagem: `${selectedTarefaTipo} - prazo fatal ${format(prazoFat, 'dd/MM/yyyy')}${horarioTarefa ? ` às ${horarioTarefa}` : ''}`,
         tipo: prioridade === 'Urgente' ? 'alerta' : 'info',
         lida: false,
         link: '/tarefas',
@@ -638,11 +641,13 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
           tarefa_id: data?.id,
           prazo_seguranca: prazoSeguranca,
           prazo_fatal: prazoFatal,
+          horario: horarioTarefa || null,
         },
       } as any);
 
       setTarefasAdicionadas(prev => prev.includes(selectedTarefaTipo) ? prev : [...prev, selectedTarefaTipo]);
       setSelectedTarefaTipo('');
+      setHorarioTarefa('');
       toast.success('Tarefa criada e atribuída ao responsável');
     } catch (err: any) {
       toast.error('Erro ao criar tarefa', { description: err.message });
@@ -840,7 +845,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                     Cadastrar
                   </Button>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-border/50 pt-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-border/50 pt-3">
                   <div className="space-y-1.5">
                     <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Prazo de seguranca</p>
                     <Input type="date" value={prazoSeguranca} onChange={e => setPrazoSeguranca(e.target.value)} className="h-9 text-xs rounded-lg" />
@@ -848,6 +853,10 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                   <div className="space-y-1.5">
                     <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Prazo fatal</p>
                     <Input type="date" value={prazoFatal} onChange={e => setPrazoFatal(e.target.value)} className="h-9 text-xs rounded-lg" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Horário</p>
+                    <Input type="time" value={horarioTarefa} onChange={e => setHorarioTarefa(e.target.value)} className="h-9 text-xs rounded-lg" />
                   </div>
                 </div>
                 <div className="space-y-1.5">

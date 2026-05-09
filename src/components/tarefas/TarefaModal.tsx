@@ -35,6 +35,7 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModa
   const [dataLimite, setDataLimite] = useState('');
   const [prazoSeguranca, setPrazoSeguranca] = useState('');
   const [prazoFatal, setPrazoFatal] = useState('');
+  const [horario, setHorario] = useState('');
   const [members, setMembers] = useState<TeamMember[]>([]);
 
   const isEditing = !!tarefa;
@@ -49,6 +50,7 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModa
       setDataLimite(tarefa.data_limite || '');
       setPrazoSeguranca(tarefa.prazo_seguranca || '');
       setPrazoFatal(tarefa.prazo_fatal || '');
+      setHorario(tarefa.horario?.slice(0, 5) || '');
     } else if (open && !tarefa) {
       setTitulo('');
       setDescricao('');
@@ -58,6 +60,7 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModa
       setDataLimite('');
       setPrazoSeguranca('');
       setPrazoFatal('');
+      setHorario('');
     }
   }, [open, tarefa]);
 
@@ -89,6 +92,7 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModa
       data_limite: prazoFatal || dataLimite || null,
       prazo_seguranca: prazoSeguranca || null,
       prazo_fatal: prazoFatal || dataLimite || null,
+      horario: horario || null,
       responsavel_id: responsavelId !== 'none' ? responsavelId : null,
     };
 
@@ -192,7 +196,7 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModa
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="prazo_seguranca">Prazo de Segurança</Label>
               <Input id="prazo_seguranca" type="date" value={prazoSeguranca} onChange={e => setPrazoSeguranca(e.target.value)} />
@@ -200,6 +204,10 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModa
             <div className="space-y-2">
               <Label htmlFor="prazo_fatal">Prazo Fatal</Label>
               <Input id="prazo_fatal" type="date" value={prazoFatal} onChange={e => { setPrazoFatal(e.target.value); setDataLimite(e.target.value); }} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="horario">Horário</Label>
+              <Input id="horario" type="time" value={horario} onChange={e => setHorario(e.target.value)} />
             </div>
           </div>
           
