@@ -19,7 +19,6 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
@@ -496,7 +495,7 @@ export default function IntimacoesPage() {
 
       {/* DETAIL MODAL */}
       <Dialog open={!!selectedIntimacao} onOpenChange={() => setSelectedIntimacao(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0 gap-0 rounded-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0 rounded-2xl border-border/70 bg-background shadow-2xl">
           {selectedIntimacao && (
             <IntimacaoDetailModal
               intimacao={selectedIntimacao}
@@ -660,48 +659,48 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   };
   return (
     <>
-      {/* Modal Header with gradient */}
-      <div className="relative overflow-hidden rounded-t-2xl">
-        <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, var(--primary) 0%, color-mix(in srgb, var(--primary) 75%, ${tc.bar}) 100%)` }} />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_75%_25%,rgba(255,255,255,0.12),transparent_60%)]" />
-        {/* left accent */}
-        <div className="absolute left-0 top-0 bottom-0 w-1.5 rounded-tl-2xl" style={{ background: `linear-gradient(to bottom, ${tc.avatarFrom}, ${tc.avatarTo})` }} />
-        <div className="relative px-7 py-6">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-white/20 text-white backdrop-blur-sm border border-white/15">
+      <div className="relative overflow-hidden rounded-t-2xl border-b border-border/50 bg-card">
+        <div className="absolute inset-x-0 top-0 h-1.5" style={{ background: `linear-gradient(90deg, ${tc.avatarFrom}, ${tc.avatarTo})` }} />
+        <div className="px-7 pb-5 pt-7">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-primary/15 bg-primary/10 px-3 py-1 text-[11px] font-bold text-primary">
               {intimacao.tipo_intimacao || 'Publicação'}
             </span>
-            <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${intimacao.lida ? 'bg-emerald-500/25 border border-emerald-400/30 text-emerald-100' : 'bg-amber-500/25 border border-amber-400/30 text-amber-100'}`}>
-              {intimacao.lida ? '✓ Lida' : '● Não lida'}
+            <span className={`rounded-full border px-3 py-1 text-[11px] font-bold ${intimacao.lida ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+              {intimacao.lida ? 'Lida' : 'Não lida'}
             </span>
           </div>
-          <h2 className="text-lg font-bold text-white leading-snug mb-2">
-            {intimacao.processo_titulo || intimacao.tipo_intimacao || 'Publicação'}
-          </h2>
-          {intimacao.processo_cnj && (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/12 border border-white/20">
-              <span className="text-sm font-mono font-bold text-white tracking-wide">{intimacao.processo_cnj}</span>
-              <button onClick={() => void copyTextToClipboard(intimacao.processo_cnj)} className="h-5 w-5 rounded-md bg-white/20 hover:bg-white/35 flex items-center justify-center text-white transition-colors">
-                <Copy className="h-3 w-3" />
+
+          <div className="space-y-3 pr-8">
+            <h2 className="text-xl font-bold leading-snug text-foreground">
+              {intimacao.processo_titulo || intimacao.tipo_intimacao || 'Publicação'}
+            </h2>
+            {intimacao.processo_cnj && (
+              <button
+                type="button"
+                onClick={() => void copyTextToClipboard(intimacao.processo_cnj)}
+                className="inline-flex max-w-full items-center gap-2 rounded-xl border border-border/60 bg-muted/35 px-3 py-2 text-left transition-colors hover:bg-muted/60"
+              >
+                <span className="truncate font-mono text-sm font-bold text-foreground">{intimacao.processo_cnj}</span>
+                <Copy className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Action bar */}
-      <div className="flex items-center gap-2 px-6 py-3 border-b border-border/40 bg-muted/20 flex-wrap">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border/40 bg-muted/15 px-6 py-3">
         {!intimacao.lida && (
-          <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm" onClick={onMarkRead}>
-            <CheckCircle2 className="h-3.5 w-3.5" /> Marcar como lida
+          <Button size="sm" className="h-8 rounded-lg bg-emerald-600 text-xs text-white shadow-sm hover:bg-emerald-700" onClick={onMarkRead}>
+            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Marcar como lida
           </Button>
         )}
-        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={onGenerateReport}>
-          <FileText className="h-3.5 w-3.5" /> Relatório PDF
+        <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs" onClick={onGenerateReport}>
+          <FileText className="mr-1.5 h-3.5 w-3.5" /> Relatório PDF
         </Button>
         {intimacao.processo_cnj && (
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => void copyTextToClipboard(intimacao.processo_cnj)}>
-            <Copy className="h-3.5 w-3.5" /> Copiar nº
+          <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs" onClick={() => void copyTextToClipboard(intimacao.processo_cnj)}>
+            <Copy className="mr-1.5 h-3.5 w-3.5" /> Copiar nº
           </Button>
         )}
       </div>
@@ -925,27 +924,19 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   );
 }
 
-function CollapsibleSection({ icon: Icon, title, defaultOpen = false, actions, children }: {
+function CollapsibleSection({ icon: Icon, title, actions, children }: {
   icon: React.ElementType; title: string; defaultOpen?: boolean; actions?: React.ReactNode; children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <div className="border border-border/50 rounded-xl bg-card overflow-hidden">
-        <CollapsibleTrigger asChild>
-          <button className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors">
-            <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-              <Icon className="h-4 w-4 text-muted-foreground" />{title}
-            </div>
-            <div className="flex items-center gap-2">
-              {actions && <div onClick={e => e.stopPropagation()}>{actions}</div>}
-            </div>
-          </button>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="px-4 pb-4 pt-2 border-t border-border/30">{children}</div>
-        </CollapsibleContent>
+    <div className="overflow-hidden rounded-xl border border-border/50 bg-card shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-border/30 bg-muted/15 px-4 py-3">
+        <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+          <Icon className="h-4 w-4 text-muted-foreground" />
+          <span>{title}</span>
+        </div>
+        {actions && <div className="shrink-0">{actions}</div>}
       </div>
-    </Collapsible>
+      <div className="px-4 pb-4 pt-3">{children}</div>
+    </div>
   );
 }
