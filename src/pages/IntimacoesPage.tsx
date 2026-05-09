@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import {
   Loader2, Gavel, Search, RefreshCw, CheckCircle2,
   Clock, AlertTriangle, Eye, FileText, CalendarDays,
-  Scale, BookOpen, ChevronRight, ChevronDown, ChevronUp,
+  Scale, BookOpen, ChevronRight, ChevronDown,
   MessageSquare, ClipboardList, Copy, ExternalLink,
   Inbox, EyeOff, Timer, X,
 } from 'lucide-react';
@@ -28,6 +28,7 @@ import { format, parseISO, isValid, addDays, addBusinessDays, isWeekend } from '
 import { ptBR } from 'date-fns/locale';
 import { generateIntimacaoReport, generateBatchIntimacaoReport } from '@/lib/intimacaoReportGenerator';
 import { Checkbox } from '@/components/ui/checkbox';
+import { DocumentoUploadModal } from '@/components/documentos/DocumentoUploadModal';
 
 interface TeamMember {
   id: string;
@@ -526,8 +527,8 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const [showDropdown, setShowDropdown] = useState(false);
   const [tarefasAdicionadas, setTarefasAdicionadas] = useState<string[]>([]);
   const [tarefasCustom, setTarefasCustom] = useState<string[]>([]);
-  const [showTarefaSelector, setShowTarefaSelector] = useState(false);
   const [tarefaModalOpen, setTarefaModalOpen] = useState(false);
+  const [documentoModalOpen, setDocumentoModalOpen] = useState(false);
   const [novaTarefa, setNovaTarefa] = useState('');
   const [selectedTarefaTipo, setSelectedTarefaTipo] = useState('');
   const [prazoSeguranca, setPrazoSeguranca] = useState('');
@@ -801,7 +802,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection icon={FileText} title="Documentos" actions={<Button size="sm" className="h-7 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white">Adicionar</Button>}>
+        <CollapsibleSection icon={FileText} title="Documentos" actions={<Button size="sm" className="h-7 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={e => { e.stopPropagation(); setDocumentoModalOpen(true); }}>Adicionar</Button>}>
           <p className="text-sm text-muted-foreground">Nenhum documento anexado.</p>
         </CollapsibleSection>
 
@@ -818,67 +819,6 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                 ))}
               </div>
             ) : <p className="text-sm text-muted-foreground">Nenhuma tarefa relacionada.</p>}
-            {showTarefaSelector && (
-              <div className="border border-border rounded-xl p-3 bg-muted/20 space-y-3">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-between h-9 text-xs rounded-lg"><span>{selectedTarefaTipo || 'Selecione o tipo...'}</span><ChevronDown className="h-3.5 w-3.5 opacity-50" /></Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Buscar tarefa..." />
-                      <CommandList>
-                        <CommandEmpty>Nenhuma encontrada.</CommandEmpty>
-                        <CommandGroup>
-                          {allTarefas.filter(t => !tarefasAdicionadas.includes(t)).map(t => (
-                            <CommandItem key={t} value={t} onSelect={() => setSelectedTarefaTipo(t)} className="text-xs cursor-pointer">{t}</CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-                <div className="flex gap-2 border-t border-border/50 pt-2">
-                  <Input placeholder="Cadastrar nova tarefa..." value={novaTarefa} onChange={e => setNovaTarefa(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomTarefa(); }}}
-                    className="h-8 text-xs rounded-lg" />
-                  <Button size="sm" variant="outline" className="h-8 text-xs rounded-lg shrink-0" disabled={!novaTarefa.trim()}
-                    onClick={addCustomTarefa}>
-                    Cadastrar
-                  </Button>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-border/50 pt-3">
-                  <div className="space-y-1.5">
-                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Prazo de seguranca</p>
-                    <Input type="date" value={prazoSeguranca} onChange={e => setPrazoSeguranca(e.target.value)} className="h-9 text-xs rounded-lg" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Prazo fatal</p>
-                    <Input type="date" value={prazoFatal} onChange={e => setPrazoFatal(e.target.value)} className="h-9 text-xs rounded-lg" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Horário</p>
-                    <Input type="time" value={horarioTarefa} onChange={e => setHorarioTarefa(e.target.value)} className="h-9 text-xs rounded-lg" />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Responsável pela tarefa</p>
-                  <Select value={responsavelId} onValueChange={setResponsavelId}>
-                    <SelectTrigger className="h-9 text-xs rounded-lg">
-                      <SelectValue placeholder="Selecione o responsável" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {members.map(member => (
-                        <SelectItem key={member.id} value={member.id}>{getMemberName(member)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button className="w-full h-9 text-xs rounded-lg" disabled={savingTarefa} onClick={handleCreateRelatedTask}>
-                  {savingTarefa ? 'Criando tarefa...' : 'Criar tarefa relacionada'}
-                </Button>
-              </div>
-            )}
           </div>
         </CollapsibleSection>
 
@@ -889,6 +829,8 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
           </div>
         </CollapsibleSection>
       </div>
+      <DocumentoUploadModal open={documentoModalOpen} onOpenChange={setDocumentoModalOpen} processoId={linkedProcesso?.id} />
+
       <Dialog open={tarefaModalOpen} onOpenChange={setTarefaModalOpen}>
         <DialogContent className="sm:max-w-xl p-0 rounded-2xl overflow-hidden">
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-border/40">
@@ -997,7 +939,6 @@ function CollapsibleSection({ icon: Icon, title, defaultOpen = false, actions, c
             </div>
             <div className="flex items-center gap-2">
               {actions && <div onClick={e => e.stopPropagation()}>{actions}</div>}
-              {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
             </div>
           </button>
         </CollapsibleTrigger>
