@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useTarefas, useTimesheet } from '@/hooks/useTarefas';
 import { useTeamPresence } from '@/hooks/useTeamPresence';
 import { useAuth } from '@/hooks/useAuth';
@@ -20,7 +21,7 @@ import {
   ChevronRight, Circle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDistanceToNow, isPast, isToday, isTomorrow, format } from 'date-fns';
+import { differenceInCalendarDays, formatDistanceToNow, isPast, isToday, isTomorrow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 // ── Paleta marrom/dourado ────────────────────────────────────────────────────
@@ -214,6 +215,7 @@ export default function TarefasPage() {
   const [selectedTarefa, setSelectedTarefa] = useState<Tarefa | null>(null);
   const [detailTarefa, setDetailTarefa] = useState<Tarefa | null>(null);
   const [activeUser, setActiveUser] = useState<string>('all');
+  const [criticalPopupOpen, setCriticalPopupOpen] = useState(false);
 
   const handleNew = () => { setSelectedTarefa(null); setTarefaModalOpen(true); };
 
@@ -243,6 +245,22 @@ export default function TarefasPage() {
     ].filter((t, i, arr) => arr.findIndex(x => x.id === t.id) === i).slice(0, 20);
   }, [tarefas]);
 
+  const criticalTasks = useMemo(() => {
+    if (!user) return [];
+    return tarefas
+      .filter(t => t.responsavel_id === user.id && t.status !== 'Concluída' && t.status !== 'Cancelada')
+      .filter(t => {
+        const deadline = t.prazo_fatal || t.data_limite;
+        if (!deadline) return false;
+        return differenceInCalendarDays(new Date(deadline), new Date()) <= 3;
+      })
+      .sort((a, b) => new Date(a.prazo_fatal || a.data_limite || '').getTime() - new Date(b.prazo_fatal || b.data_limite || '').getTime())
+      .slice(0, 5);
+  }, [tarefas, user]);
+
+  useEffect(() => {
+    if (criticalTasks.length > 0) setCriticalPopupOpen(true);
+  }, [criticalTasks.length]);
   const tarefasPorUsuario = useMemo(() => {
     const map: Record<string, Tarefa[]> = {};
     tarefas.forEach(t => {
@@ -530,6 +548,46 @@ export default function TarefasPage() {
       </div>
 
       {/* Modals */}
+      <Dialog open={criticalPopupOpen} onOpenChange={setCriticalPopupOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Tarefas com prazo crítico
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Você possui {criticalTasks.length} tarefa{criticalTasks.length !== 1 ? 's' : ''} próxima{criticalTasks.length !== 1 ? 's' : ''} do prazo fatal ou atrasada{criticalTasks.length !== 1 ? 's' : ''}.
+            </p>
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {criticalTasks.map(tarefa => {
+                const deadline = tarefa.prazo_fatal || tarefa.data_limite;
+                const days = deadline ? differenceInCalendarDays(new Date(deadline), new Date()) : null;
+                return (
+                  <button
+                    key={tarefa.id}
+                    className="w-full text-left rounded-xl border border-destructive/20 bg-destructive/5 p-3 transition-colors hover:bg-destructive/10"
+                    onClick={() => { setCriticalPopupOpen(false); setDetailTarefa(tarefa); }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-foreground truncate">{tarefa.titulo}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Prazo fatal: {deadline ? format(new Date(deadline), 'dd/MM/yyyy', { locale: ptBR }) : 'sem prazo'}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-destructive px-2 py-1 text-[10px] font-bold text-white">
+                        {days !== null && days < 0 ? `${Math.abs(days)}d atraso` : days === 0 ? 'Hoje' : `${days}d`}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       <TarefaDetailModal open={!!detailTarefa} onOpenChange={o => !o && setDetailTarefa(null)} tarefa={detailTarefa}
         onEdit={t => { setDetailTarefa(null); setSelectedTarefa(t); setTarefaModalOpen(true); }} />
       <TarefaModal open={tarefaModalOpen} onOpenChange={setTarefaModalOpen} tarefa={selectedTarefa} onDelete={deleteTarefa} />

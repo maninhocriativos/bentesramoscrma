@@ -23,10 +23,18 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, parseISO, isValid, addDays, addBusinessDays, isWeekend } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { generateIntimacaoReport, generateBatchIntimacaoReport } from '@/lib/intimacaoReportGenerator';
 import { Checkbox } from '@/components/ui/checkbox';
+
+interface TeamMember {
+  id: string;
+  nome: string | null;
+  sobrenome: string | null;
+  email: string | null;
+}
 
 interface Intimacao {
   id: string;
@@ -520,6 +528,12 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const [tarefasCustom, setTarefasCustom] = useState<string[]>([]);
   const [showTarefaSelector, setShowTarefaSelector] = useState(false);
   const [novaTarefa, setNovaTarefa] = useState('');
+  const [selectedTarefaTipo, setSelectedTarefaTipo] = useState('');
+  const [prazoSeguranca, setPrazoSeguranca] = useState('');
+  const [prazoFatal, setPrazoFatal] = useState('');
+  const [responsavelId, setResponsavelId] = useState('');
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [savingTarefa, setSavingTarefa] = useState(false);
 
   const TAREFAS = ['Manifestação','Recurso de Apelação','Recurso Especial','Recurso Extraordinário','Recurso Ordinário','Recurso Inominado','Embargos de Declaração','Contrarrazões','Alegações Finais','Memoriais','Agravo de Instrumento','Agravo Interno','Sentença','Acórdão','Sessão de Julgamento','Réplica','Perícia'];
   const allTarefas = [...TAREFAS, ...tarefasCustom];
@@ -536,6 +550,106 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     setProcessoResults((data as any[]) || []); setShowDropdown(true);
   };
 
+  useEffect(() => {
+    const fetchMembers = async () => {
+      const { data } = await supabase
+        .from('perfis')
+        .select('id, nome, sobrenome, email')
+        .eq('aprovado', true)
+        .order('nome', { ascending: true });
+      setMembers((data as TeamMember[]) || []);
+    };
+    void fetchMembers();
+  }, []);
+
+  useEffect(() => {
+    if (!prazoSeguranca && prazos.dataConclusao) setPrazoSeguranca(format(prazos.dataConclusao, 'yyyy-MM-dd'));
+    if (!prazoFatal && prazos.dataFatal) setPrazoFatal(format(prazos.dataFatal, 'yyyy-MM-dd'));
+  }, [prazos.dataConclusao, prazos.dataFatal, prazoFatal, prazoSeguranca]);
+
+  const getMemberName = (member: TeamMember) => {
+    const name = [member.nome, member.sobrenome].filter(Boolean).join(' ');
+    return name || member.email || 'Usuario';
+  };
+
+  const addCustomTarefa = () => {
+    const title = novaTarefa.trim();
+    if (!title) return;
+    if (!allTarefas.includes(title)) setTarefasCustom(prev => [...prev, title]);
+    setSelectedTarefaTipo(title);
+    setNovaTarefa('');
+  };
+
+  const handleCreateRelatedTask = async () => {
+    if (!selectedTarefaTipo) { toast.error('Selecione ou cadastre o tipo da tarefa'); return; }
+    if (!responsavelId) { toast.error('Selecione o responsável pela tarefa'); return; }
+    if (!prazoSeguranca || !prazoFatal) { toast.error('Informe o prazo de segurança e o prazo fatal'); return; }
+
+    setSavingTarefa(true);
+    try {
+      const prazoFat = parseISO(prazoFatal);
+      const prioridade = isValid(prazoFat) && Math.ceil((prazoFat.getTime() - Date.now()) / 86400000) <= 3 ? 'Urgente' : 'Alta';
+      const processoNumero = linkedProcesso?.numero || intimacao.processo_cnj || 'sem numero';
+      const descriptionParts = [
+        `Tarefa criada a partir da intimacao ${intimacao.tipo_intimacao || ''}`.trim(),
+        `Processo: ${processoNumero}`,
+        intimacao.tribunal ? `Tribunal: ${intimacao.tribunal}` : '',
+        comentario ? `Comentario: ${comentario}` : '',
+        conteudo ? `Resumo da publicacao: ${conteudo.slice(0, 700)}` : '',
+      ].filter(Boolean);
+
+      const { data, error } = await supabase
+        .from('tarefas')
+        .insert({
+          titulo: selectedTarefaTipo,
+          descricao: descriptionParts.join('\n\n'),
+          responsavel_id: responsavelId,
+          processo_id: linkedProcesso?.id || null,
+          cliente_id: null,
+          prioridade,
+          status: 'Pendente',
+          data_limite: prazoFatal,
+          prazo_seguranca: prazoSeguranca,
+          prazo_fatal: prazoFatal,
+          data_conclusao: null,
+          entrega_texto: null,
+          entrega_anexo_url: null,
+          entregue_em: null,
+          aprovacao_status: null,
+          aprovacao_nota: null,
+          aprovacao_feedback: null,
+          aprovado_por: null,
+          aprovado_em: null,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+
+      await supabase.from('notificacoes_internas' as any).insert({
+        user_id: responsavelId,
+        titulo: 'Nova tarefa atribuída',
+        mensagem: `${selectedTarefaTipo} - prazo fatal ${format(prazoFat, 'dd/MM/yyyy')}`,
+        tipo: prioridade === 'Urgente' ? 'alerta' : 'info',
+        lida: false,
+        link: '/tarefas',
+        dados: {
+          source: 'intimacoes',
+          intimacao_id: intimacao.id,
+          tarefa_id: data?.id,
+          prazo_seguranca: prazoSeguranca,
+          prazo_fatal: prazoFatal,
+        },
+      } as any);
+
+      setTarefasAdicionadas(prev => prev.includes(selectedTarefaTipo) ? prev : [...prev, selectedTarefaTipo]);
+      setSelectedTarefaTipo('');
+      toast.success('Tarefa criada e atribuída ao responsável');
+    } catch (err: any) {
+      toast.error('Erro ao criar tarefa', { description: err.message });
+    } finally {
+      setSavingTarefa(false);
+    }
+  };
   return (
     <>
       {/* Modal Header with gradient */}
@@ -701,7 +815,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
               <div className="border border-border rounded-xl p-3 bg-muted/20 space-y-3">
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-between h-9 text-xs rounded-lg"><span>Selecione o tipo...</span><ChevronDown className="h-3.5 w-3.5 opacity-50" /></Button>
+                    <Button variant="outline" className="w-full justify-between h-9 text-xs rounded-lg"><span>{selectedTarefaTipo || 'Selecione o tipo...'}</span><ChevronDown className="h-3.5 w-3.5 opacity-50" /></Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                     <Command>
@@ -710,7 +824,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                         <CommandEmpty>Nenhuma encontrada.</CommandEmpty>
                         <CommandGroup>
                           {allTarefas.filter(t => !tarefasAdicionadas.includes(t)).map(t => (
-                            <CommandItem key={t} value={t} onSelect={() => setTarefasAdicionadas(p => [...p, t])} className="text-xs cursor-pointer">{t}</CommandItem>
+                            <CommandItem key={t} value={t} onSelect={() => setSelectedTarefaTipo(t)} className="text-xs cursor-pointer">{t}</CommandItem>
                           ))}
                         </CommandGroup>
                       </CommandList>
@@ -719,13 +833,39 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                 </Popover>
                 <div className="flex gap-2 border-t border-border/50 pt-2">
                   <Input placeholder="Cadastrar nova tarefa..." value={novaTarefa} onChange={e => setNovaTarefa(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && novaTarefa.trim()) { if (!allTarefas.includes(novaTarefa.trim())) setTarefasCustom(p => [...p, novaTarefa.trim()]); setTarefasAdicionadas(p => [...p, novaTarefa.trim()]); setNovaTarefa(''); }}}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomTarefa(); }}}
                     className="h-8 text-xs rounded-lg" />
                   <Button size="sm" variant="outline" className="h-8 text-xs rounded-lg shrink-0" disabled={!novaTarefa.trim()}
-                    onClick={() => { if (!allTarefas.includes(novaTarefa.trim())) setTarefasCustom(p => [...p, novaTarefa.trim()]); setTarefasAdicionadas(p => [...p, novaTarefa.trim()]); setNovaTarefa(''); }}>
+                    onClick={addCustomTarefa}>
                     Cadastrar
                   </Button>
                 </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-border/50 pt-3">
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Prazo de seguranca</p>
+                    <Input type="date" value={prazoSeguranca} onChange={e => setPrazoSeguranca(e.target.value)} className="h-9 text-xs rounded-lg" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Prazo fatal</p>
+                    <Input type="date" value={prazoFatal} onChange={e => setPrazoFatal(e.target.value)} className="h-9 text-xs rounded-lg" />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Responsável pela tarefa</p>
+                  <Select value={responsavelId} onValueChange={setResponsavelId}>
+                    <SelectTrigger className="h-9 text-xs rounded-lg">
+                      <SelectValue placeholder="Selecione o responsável" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {members.map(member => (
+                        <SelectItem key={member.id} value={member.id}>{getMemberName(member)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button className="w-full h-9 text-xs rounded-lg" disabled={savingTarefa} onClick={handleCreateRelatedTask}>
+                  {savingTarefa ? 'Criando tarefa...' : 'Criar tarefa relacionada'}
+                </Button>
               </div>
             )}
           </div>

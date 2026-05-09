@@ -33,6 +33,8 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModa
   const [status, setStatus] = useState<'Pendente' | 'Em Andamento' | 'Concluída' | 'Cancelada'>('Pendente');
   const [responsavelId, setResponsavelId] = useState<string>('none');
   const [dataLimite, setDataLimite] = useState('');
+  const [prazoSeguranca, setPrazoSeguranca] = useState('');
+  const [prazoFatal, setPrazoFatal] = useState('');
   const [members, setMembers] = useState<TeamMember[]>([]);
 
   const isEditing = !!tarefa;
@@ -45,6 +47,8 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModa
       setStatus(tarefa.status);
       setResponsavelId(tarefa.responsavel_id || 'none');
       setDataLimite(tarefa.data_limite || '');
+      setPrazoSeguranca(tarefa.prazo_seguranca || '');
+      setPrazoFatal(tarefa.prazo_fatal || '');
     } else if (open && !tarefa) {
       setTitulo('');
       setDescricao('');
@@ -52,6 +56,8 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModa
       setStatus('Pendente');
       setResponsavelId('none');
       setDataLimite('');
+      setPrazoSeguranca('');
+      setPrazoFatal('');
     }
   }, [open, tarefa]);
 
@@ -80,7 +86,9 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModa
       descricao: descricao || null,
       prioridade,
       status,
-      data_limite: dataLimite || null,
+      data_limite: prazoFatal || dataLimite || null,
+      prazo_seguranca: prazoSeguranca || null,
+      prazo_fatal: prazoFatal || dataLimite || null,
       responsavel_id: responsavelId !== 'none' ? responsavelId : null,
     };
 
@@ -184,9 +192,15 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModa
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="data_limite">Data Limite</Label>
-            <Input id="data_limite" type="date" value={dataLimite} onChange={e => setDataLimite(e.target.value)} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="prazo_seguranca">Prazo de Segurança</Label>
+              <Input id="prazo_seguranca" type="date" value={prazoSeguranca} onChange={e => setPrazoSeguranca(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="prazo_fatal">Prazo Fatal</Label>
+              <Input id="prazo_fatal" type="date" value={prazoFatal} onChange={e => { setPrazoFatal(e.target.value); setDataLimite(e.target.value); }} />
+            </div>
           </div>
           
           <div className="flex gap-2">

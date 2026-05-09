@@ -8,6 +8,8 @@ export interface Tarefa {
   prioridade: 'Baixa' | 'Media' | 'Alta' | 'Urgente';
   status: 'Pendente' | 'Em Andamento' | 'Concluída' | 'Cancelada';
   data_limite: string | null;
+  prazo_seguranca: string | null;
+  prazo_fatal: string | null;
   data_conclusao: string | null;
   created_at: string;
   updated_at: string;
