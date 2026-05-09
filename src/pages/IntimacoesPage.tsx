@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -527,6 +527,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const [tarefasAdicionadas, setTarefasAdicionadas] = useState<string[]>([]);
   const [tarefasCustom, setTarefasCustom] = useState<string[]>([]);
   const [showTarefaSelector, setShowTarefaSelector] = useState(false);
+  const [tarefaModalOpen, setTarefaModalOpen] = useState(false);
   const [novaTarefa, setNovaTarefa] = useState('');
   const [selectedTarefaTipo, setSelectedTarefaTipo] = useState('');
   const [prazoSeguranca, setPrazoSeguranca] = useState('');
@@ -648,6 +649,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
       setTarefasAdicionadas(prev => prev.includes(selectedTarefaTipo) ? prev : [...prev, selectedTarefaTipo]);
       setSelectedTarefaTipo('');
       setHorarioTarefa('');
+      setTarefaModalOpen(false);
       toast.success('Tarefa criada e atribuída ao responsável');
     } catch (err: any) {
       toast.error('Erro ao criar tarefa', { description: err.message });
@@ -804,7 +806,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
         </CollapsibleSection>
 
         <CollapsibleSection icon={ClipboardList} title="Tarefas relacionadas"
-          actions={<Button size="sm" className="h-7 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={e => { e.stopPropagation(); setShowTarefaSelector(p => !p); }}>Adicionar</Button>}
+          actions={<Button size="sm" className="h-7 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={e => { e.stopPropagation(); setTarefaModalOpen(true); }}>Adicionar</Button>}
         >
           <div className="space-y-3">
             {tarefasAdicionadas.length > 0 ? (
@@ -887,6 +889,96 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
           </div>
         </CollapsibleSection>
       </div>
+      <Dialog open={tarefaModalOpen} onOpenChange={setTarefaModalOpen}>
+        <DialogContent className="sm:max-w-xl p-0 rounded-2xl overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-border/40">
+            <DialogTitle className="text-base font-semibold">Adicionar tarefa relacionada</DialogTitle>
+          </DialogHeader>
+
+          <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" className="w-full justify-between rounded-lg">
+                  {selectedTarefaTipo || 'Selecione o tipo de tarefa'}
+                  <ChevronDown className="h-4 w-4 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Buscar tarefa..." />
+                  <CommandEmpty>Nenhuma tarefa encontrada.</CommandEmpty>
+                  <CommandList>
+                    <CommandGroup>
+                      {allTarefas.map(t => (
+                        <CommandItem key={t} value={t} onSelect={() => setSelectedTarefaTipo(t)}>
+                          {t}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+
+            <div className="flex gap-2 border-t border-border/50 pt-3">
+              <Input
+                placeholder="Cadastrar nova tarefa..."
+                value={novaTarefa}
+                onChange={e => setNovaTarefa(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addCustomTarefa();
+                  }
+                }}
+                className="h-9 rounded-lg"
+              />
+              <Button size="sm" variant="secondary" className="h-9 rounded-lg" onClick={addCustomTarefa}>
+                Cadastrar
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-border/50 pt-3">
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Prazo de seguranca</p>
+                <Input type="date" value={prazoSeguranca} onChange={e => setPrazoSeguranca(e.target.value)} className="h-9 rounded-lg" />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Prazo fatal</p>
+                <Input type="date" value={prazoFatal} onChange={e => setPrazoFatal(e.target.value)} className="h-9 rounded-lg" />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Horario</p>
+                <Input type="time" value={horarioTarefa} onChange={e => setHorarioTarefa(e.target.value)} className="h-9 rounded-lg" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Responsavel pela tarefa</p>
+              <Select value={responsavelId} onValueChange={setResponsavelId}>
+                <SelectTrigger className="h-9 rounded-lg">
+                  <SelectValue placeholder="Selecione o responsavel" />
+                </SelectTrigger>
+                <SelectContent>
+                  {members.map(member => (
+                    <SelectItem key={member.id} value={member.id}>{getMemberName(member)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" className="h-9 rounded-lg" onClick={() => setTarefaModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button className="h-9 rounded-lg" disabled={savingTarefa} onClick={handleCreateRelatedTask}>
+                {savingTarefa ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Criar tarefa relacionada
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
