@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { Tarefa } from '@/types/tarefas';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -61,6 +61,12 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export function AnalyticsTab({ tarefas, team }: AnalyticsTabProps) {
+  // Força o Recharts a re-medir os containers após a tab se tornar visível
+  useEffect(() => {
+    const t = setTimeout(() => window.dispatchEvent(new Event('resize')), 80);
+    return () => clearTimeout(t);
+  }, []);
+
   const memberMap = useMemo(() => {
     const m: Record<string, string> = {};
     team.forEach(t => { m[t.id] = t.nome || t.fullName.split(' ')[0]; });

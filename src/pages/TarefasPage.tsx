@@ -174,7 +174,7 @@ function AlertaItem({ tarefa, onClick }: { tarefa: Tarefa; onClick: () => void }
         }
       </div>
       <div className="flex-1 min-w-0">
-        <p style={{ fontSize: 12, fontWeight: 700, color: '#1c1917' }} className="truncate">{tarefa.titulo}</p>
+        <p style={{ fontSize: 12, fontWeight: 700, color: '#1c1917', lineHeight: 1.35 }} className="line-clamp-2">{tarefa.titulo}</p>
         <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>
           {atrasada
             ? `Atrasada ${formatDistanceToNow(dl!, { locale: ptBR, addSuffix: true })}`
@@ -327,7 +327,7 @@ export default function TarefasPage() {
           </div>
 
           {/* ── Layout principal ── */}
-          <div className="grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-6 items-start">
+          <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 items-start">
 
             {/* Kanban + Tabs */}
             <div className="space-y-4">
@@ -472,9 +472,9 @@ export default function TarefasPage() {
                   </div>
                 </TabsContent>
 
-                {/* Analytics — admin only */}
+                {/* Analytics — admin only — forceMount mantém DOM para Recharts medir */}
                 {isAdmin && (
-                  <TabsContent value="analytics" className="mt-4">
+                  <TabsContent value="analytics" className="mt-4 data-[state=inactive]:hidden" forceMount>
                     <AnalyticsTab tarefas={tarefas} team={team} />
                   </TabsContent>
                 )}
