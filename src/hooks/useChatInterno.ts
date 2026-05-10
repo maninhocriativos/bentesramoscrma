@@ -34,26 +34,49 @@ export function useChatInterno() {
 
   useEffect(() => { fetchMensagens(); }, [fetchMensagens]);
 
+  // Realtime subscription — recebe mensagens dos outros usuários
   useEffect(() => {
-    const ch = supabase.channel('chat-interno-realtime')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_mensagens' }, async (payload) => {
-        const { data } = await supabase
-          .from('chat_mensagens')
-          .select('*, perfis(nome, sobrenome)')
-          .eq('id', payload.new.id)
-          .single();
-        if (data) {
-          setMensagens(prev => [...prev, data as ChatMensagem]);
-          if ((data as ChatMensagem).sender_id !== user?.id) setUnread(n => n + 1);
+    const ch = supabase
+      .channel(`chat-interno-${Math.random()}`) // nome único evita conflito de canais antigos
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'chat_mensagens' },
+        async (payload) => {
+          const { data } = await supabase
+            .from('chat_mensagens')
+            .select('*, perfis(nome, sobrenome)')
+            .eq('id', payload.new.id)
+            .single();
+          if (data) {
+            setMensagens(prev => {
+              if (prev.some(m => m.id === (data as ChatMensagem).id)) return prev;
+              return [...prev, data as ChatMensagem];
+            });
+            if ((data as ChatMensagem).sender_id !== user?.id) {
+              setUnread(n => n + 1);
+            }
+          }
         }
-      })
+      )
       .subscribe();
+
     return () => { supabase.removeChannel(ch); };
   }, [user?.id]);
 
   const enviar = async (conteudo: string) => {
     if (!user || !conteudo.trim()) return;
-    await supabase.from('chat_mensagens').insert({ sender_id: user.id, conteudo: conteudo.trim() });
+    // Otimista: insere e busca a mensagem completa (com perfis) para mostrar imediatamente
+    const { data, error } = await supabase
+      .from('chat_mensagens')
+      .insert({ sender_id: user.id, conteudo: conteudo.trim() })
+      .select('*, perfis(nome, sobrenome)')
+      .single();
+    if (data && !error) {
+      setMensagens(prev => {
+        if (prev.some(m => m.id === (data as ChatMensagem).id)) return prev;
+        return [...prev, data as ChatMensagem];
+      });
+    }
   };
 
   const marcarLido = () => {
