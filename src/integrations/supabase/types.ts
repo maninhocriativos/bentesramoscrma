@@ -3517,9 +3517,12 @@ export type Database = {
           entrega_anexo_url: string | null
           entrega_texto: string | null
           entregue_em: string | null
+          horario: string | null
           id: string
           prioridade: string | null
           processo_id: string | null
+          prazo_fatal: string | null
+          prazo_seguranca: string | null
           responsavel_id: string | null
           status: string | null
           titulo: string
@@ -3539,9 +3542,12 @@ export type Database = {
           entrega_anexo_url?: string | null
           entrega_texto?: string | null
           entregue_em?: string | null
+          horario?: string | null
           id?: string
           prioridade?: string | null
           processo_id?: string | null
+          prazo_fatal?: string | null
+          prazo_seguranca?: string | null
           responsavel_id?: string | null
           status?: string | null
           titulo: string
@@ -3561,9 +3567,12 @@ export type Database = {
           entrega_anexo_url?: string | null
           entrega_texto?: string | null
           entregue_em?: string | null
+          horario?: string | null
           id?: string
           prioridade?: string | null
           processo_id?: string | null
+          prazo_fatal?: string | null
+          prazo_seguranca?: string | null
           responsavel_id?: string | null
           status?: string | null
           titulo?: string

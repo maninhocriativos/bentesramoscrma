@@ -94,14 +94,32 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit }: Tarefa
                 </div>
               </div>
               <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Data Limite</p>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Prazo Segurança</p>
                 <div className="flex items-center gap-1.5">
                   <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="text-sm">
-                    {tarefa.data_limite
-                      ? new Date(tarefa.data_limite).toLocaleDateString('pt-BR')
+                    {tarefa.prazo_seguranca
+                      ? new Date(tarefa.prazo_seguranca).toLocaleDateString('pt-BR')
                       : 'Sem prazo'}
                   </span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Prazo Fatal</p>
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-sm">
+                    {(tarefa.prazo_fatal || tarefa.data_limite)
+                      ? new Date(tarefa.prazo_fatal || tarefa.data_limite!).toLocaleDateString('pt-BR')
+                      : 'Sem prazo'}
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Horário</p>
+                <div className="flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-sm">{tarefa.horario ? tarefa.horario.slice(0, 5) : 'Sem horário'}</span>
                 </div>
               </div>
             </div>
