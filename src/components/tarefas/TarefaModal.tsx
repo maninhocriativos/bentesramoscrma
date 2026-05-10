@@ -17,6 +17,7 @@ interface TarefaModalProps {
   onOpenChange: (open: boolean) => void;
   tarefa?: Tarefa | null;
   onDelete?: (id: string) => Promise<boolean>;
+  onSuccess?: () => void;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -39,7 +40,7 @@ const inputStyle: { [key: string]: string | number } = {
 
 const inputFocusClass = 'focus:border-[#c9a96e] focus:ring-0';
 
-export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModalProps) {
+export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }: TarefaModalProps) {
   const { createTarefa, updateTarefa } = useTarefas();
   const [saving, setSaving] = useState(false);
   const [titulo, setTitulo]           = useState('');
@@ -112,6 +113,7 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModa
     }
     setSaving(false);
     onOpenChange(false);
+    onSuccess?.();
   };
 
   const handleDelete = async () => {
@@ -120,6 +122,7 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModa
     await onDelete(tarefa.id);
     setSaving(false);
     onOpenChange(false);
+    onSuccess?.();
   };
 
   return (

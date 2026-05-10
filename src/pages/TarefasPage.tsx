@@ -217,7 +217,7 @@ export default function TarefasPage() {
   const userName = [perfil?.nome, perfil?.sobrenome].filter(Boolean).join(' ') || user?.email || '';
   const { getTeamWithStatus } = useTeamPresence(user?.id, userName);
   const { canAccessSettings: isAdmin } = usePerfil();
-  const { tarefas, loading, updateTarefa, deleteTarefa } = useTarefas();
+  const { tarefas, loading, updateTarefa, deleteTarefa, fetchTarefas } = useTarefas();
   const { registros, loading: loadingTS } = useTimesheet();
   const team = getTeamWithStatus();
 
@@ -609,8 +609,9 @@ export default function TarefasPage() {
         </DialogContent>
       </Dialog>
       <TarefaDetailModal open={!!detailTarefa} onOpenChange={o => !o && setDetailTarefa(null)} tarefa={detailTarefa}
-        onEdit={t => { setDetailTarefa(null); setSelectedTarefa(t); setTarefaModalOpen(true); }} />
-      <TarefaModal open={tarefaModalOpen} onOpenChange={setTarefaModalOpen} tarefa={selectedTarefa} onDelete={deleteTarefa} />
+        onEdit={t => { setDetailTarefa(null); setSelectedTarefa(t); setTarefaModalOpen(true); }}
+        onSuccess={fetchTarefas} />
+      <TarefaModal open={tarefaModalOpen} onOpenChange={setTarefaModalOpen} tarefa={selectedTarefa} onDelete={deleteTarefa} onSuccess={fetchTarefas} />
       <TimesheetModal open={timesheetModalOpen} onOpenChange={setTimesheetModal} />
     </AppLayout>
   );

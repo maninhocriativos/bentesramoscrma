@@ -49,9 +49,10 @@ interface TarefaDetailModalProps {
   onOpenChange: (open: boolean) => void;
   tarefa: Tarefa | null;
   onEdit?: (tarefa: Tarefa) => void;
+  onSuccess?: () => void;
 }
 
-export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit }: TarefaDetailModalProps) {
+export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit, onSuccess }: TarefaDetailModalProps) {
   const { user } = useAuth();
   const { canAccessSettings: isManager } = usePerfil();
   const { updateTarefa } = useTarefas();
@@ -85,6 +86,7 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit }: Tarefa
     await updateTarefa(tarefa.id, { status: 'Em Andamento' });
     setStarting(false);
     onOpenChange(false);
+    onSuccess?.();
   };
 
   return (
