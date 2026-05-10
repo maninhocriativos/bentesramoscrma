@@ -456,6 +456,13 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   const [vinculoResultados, setVinculoResultados]   = useState<Array<Pick<Processo, 'id' | 'numero_processo' | 'titulo_acao' | 'status'>>>([]);
   const [vinculoBuscando,   setVinculoBuscando]     = useState(false);
   const syncedThisSession = useRef<Set<string>>(new Set());
+  const [novoFilhoNumero,   setNovoFilhoNumero]   = useState('');
+  const [novoFilhoTitulo,   setNovoFilhoTitulo]   = useState('');
+  const [criandoFilho,      setCriandoFilho]       = useState(false);
+  const [showNovoFilhoForm, setShowNovoFilhoForm]  = useState(false);
+  const [verificandoTodos,  setVerificandoTodos]   = useState(false);
+  const [verificacaoStatus, setVerificacaoStatus]  = useState<Record<string, 'ok' | 'erro'>>({});
+  const autoSavePartesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { setLeads(leadsInit); }, [leadsInit]);
   const movimentosEnriquecidos = useMemo(() => enrichMovements(movimentos), [movimentos]);
@@ -819,6 +826,15 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
     toast.success('Partes salvas!');
   };
 
+  // Auto-save partes 1.5 s after any change (only for existing processes)
+  useEffect(() => {
+    if (!partesModificadas || isNew || !processo?.id) return;
+    if (autoSavePartesTimerRef.current) clearTimeout(autoSavePartesTimerRef.current);
+    autoSavePartesTimerRef.current = setTimeout(() => { handleSavePartes(); }, 1500);
+    return () => { if (autoSavePartesTimerRef.current) clearTimeout(autoSavePartesTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partes, partesModificadas, isNew, processo?.id]);
+
   const handleVincularComoPai = async (paiId: string) => {
     if (!processo?.id) return;
     const { error } = await supabase.from('processos').update({ processo_pai_id: paiId }).eq('id', processo.id);
@@ -852,6 +868,56 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
     if (error) { toast.error('Erro ao desvincular', { description: error.message }); return; }
     setProcessoFilhos(prev => prev.filter(f => f.id !== filhoId));
     toast.success('Desvinculado!');
+  };
+
+  const handleCriarProcessoFilho = async () => {
+    if (!processo?.id || !novoFilhoTitulo.trim()) return;
+    setCriandoFilho(true);
+    try {
+      const numCnj = novoFilhoNumero.trim() || null;
+      const { data, error } = await supabase.from('processos').insert({
+        titulo_acao: novoFilhoTitulo.trim(),
+        processo_pai_id: processo.id,
+        status: 'Em Andamento',
+        numero_processo: numCnj,
+        cnj_normalizado: normalizarCNJ(numCnj),
+      }).select('id,numero_processo,titulo_acao,status,fase').single();
+      if (error) { toast.error('Erro ao criar subprocesso', { description: error.message }); return; }
+      setProcessoFilhos(prev => [...prev, data as any]);
+      setNovoFilhoNumero('');
+      setNovoFilhoTitulo('');
+      setShowNovoFilhoForm(false);
+      toast.success('Subprocesso criado!', { description: data.titulo_acao });
+      if (numCnj && CNJ_REGEX.test(numCnj)) {
+        supabase.functions.invoke('consulta-processos', {
+          body: { numeroProcesso: numCnj, force_refresh: true, persistir: true, processo_id: data.id },
+        }).catch(() => {});
+      }
+    } finally { setCriandoFilho(false); }
+  };
+
+  const handleVerificarTodos = async () => {
+    const todos = [
+      ...(processo ? [processo] : []),
+      ...processoFilhos,
+    ].filter(p => p.numero_processo && CNJ_REGEX.test(p.numero_processo.trim()));
+    if (!todos.length) { toast.error('Nenhum número CNJ válido para verificar'); return; }
+    setVerificandoTodos(true);
+    setVerificacaoStatus({});
+    const results: Record<string, 'ok' | 'erro'> = {};
+    for (const p of todos) {
+      try {
+        const { data } = await supabase.functions.invoke('consulta-processos', {
+          body: { numeroProcesso: p.numero_processo!.trim() },
+        });
+        results[p.id] = data?.encontrado ? 'ok' : 'erro';
+      } catch { results[p.id] = 'erro'; }
+      setVerificacaoStatus({ ...results });
+    }
+    setVerificandoTodos(false);
+    const ok  = Object.values(results).filter(v => v === 'ok').length;
+    const err = Object.values(results).filter(v => v === 'erro').length;
+    toast.success(`Verificação: ${ok} encontrado${ok !== 1 ? 's' : ''}${err ? `, ${err} não encontrado${err !== 1 ? 's' : ''}` : ''}`);
   };
 
   const clienteSelecionado = leads.find(l => l.id === formData.cliente_id);
@@ -1238,7 +1304,18 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                     </div>
 
                     <div>
-                      <SectionTitle icon={GitBranch} label="Vínculos Processuais" bg="bg-violet-500/10" color="text-violet-600 dark:text-violet-400" />
+                      {/* Vínculos header with "Verificar Todos" button */}
+                      <div className="flex items-center justify-between mb-2">
+                        <SectionTitle icon={GitBranch} label="Vínculos Processuais" bg="bg-violet-500/10" color="text-violet-600 dark:text-violet-400" />
+                        {!isNew && (processo?.numero_processo && CNJ_REGEX.test(processo.numero_processo.trim()) || processoFilhos.some(f => f.numero_processo && CNJ_REGEX.test(f.numero_processo.trim()))) && (
+                          <Button type="button" variant="outline" size="sm"
+                            className="h-6 text-[10px] px-2 rounded-lg gap-1 border-violet-200 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400 shrink-0"
+                            onClick={handleVerificarTodos} disabled={verificandoTodos}>
+                            {verificandoTodos ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <BadgeCheck className="h-2.5 w-2.5" />}
+                            Verificar Todos
+                          </Button>
+                        )}
+                      </div>
                       <FieldGroup>
                         {processoPai ? (
                           <div>
@@ -1250,6 +1327,8 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                                 <p className="text-[10px] font-mono truncate text-muted-foreground">{processoPai.numero_processo}</p>
                                 <p className="text-[11px] font-semibold truncate text-foreground">{processoPai.titulo_acao || '-'}</p>
                               </div>
+                              {verificacaoStatus[processoPai.id] === 'ok' && <BadgeCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
+                              {verificacaoStatus[processoPai.id] === 'erro' && <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />}
                               <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground/50 hover:text-destructive shrink-0" onClick={handleDesvincularPai}>
                                 <Link2Off className="h-3.5 w-3.5" />
                               </Button>
@@ -1260,31 +1339,82 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                             <FolderOpen className="h-3 w-3" /> Sem processo principal vinculado
                           </p>
                         )}
-                        {processoFilhos.length > 0 && (
-                          <div>
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                              <GitBranch className="h-3 w-3 text-violet-500" /> Derivados ({processoFilhos.length})
+
+                        {/* Subprocessos (filhos) */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                              <GitBranch className="h-3 w-3 text-violet-500" />
+                              Subprocessos {processoFilhos.length > 0 && `(${processoFilhos.length})`}
                             </p>
+                            {!isNew && (
+                              <Button type="button" variant="ghost" size="sm"
+                                className="h-5 text-[10px] px-1.5 rounded-md gap-0.5 text-violet-600 hover:text-violet-700 hover:bg-violet-50 dark:text-violet-400"
+                                onClick={() => setShowNovoFilhoForm(v => !v)}>
+                                <Plus className="h-3 w-3" /> Novo
+                              </Button>
+                            )}
+                          </div>
+
+                          {/* New child process form */}
+                          {showNovoFilhoForm && !isNew && (
+                            <div className="mb-2 p-2.5 rounded-xl border border-violet-200/60 bg-violet-50/20 dark:border-violet-800/30 dark:bg-violet-950/10 space-y-2">
+                              <p className="text-[10px] font-semibold text-violet-700 dark:text-violet-400">Criar subprocesso vinculado</p>
+                              <Input
+                                value={novoFilhoTitulo}
+                                onChange={e => setNovoFilhoTitulo(e.target.value)}
+                                className="h-8 text-xs rounded-lg bg-card"
+                                placeholder="Título / classe *"
+                              />
+                              <Input
+                                value={novoFilhoNumero}
+                                onChange={e => setNovoFilhoNumero(e.target.value)}
+                                className="h-8 text-xs rounded-lg bg-card font-mono"
+                                placeholder="Número CNJ (opcional)"
+                              />
+                              <div className="flex gap-1.5">
+                                <Button type="button" size="sm"
+                                  className="flex-1 h-7 text-[11px] rounded-lg gap-1 bg-violet-600 hover:bg-violet-700 text-white"
+                                  onClick={handleCriarProcessoFilho}
+                                  disabled={criandoFilho || !novoFilhoTitulo.trim()}>
+                                  {criandoFilho ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                                  Criar
+                                </Button>
+                                <Button type="button" variant="ghost" size="sm"
+                                  className="h-7 text-[11px] rounded-lg px-2"
+                                  onClick={() => { setShowNovoFilhoForm(false); setNovoFilhoNumero(''); setNovoFilhoTitulo(''); }}>
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+
+                          {processoFilhos.length > 0 ? (
                             <div className="space-y-1.5">
                               {processoFilhos.map(filho => (
                                 <div key={filho.id} className="flex items-center gap-2 p-2.5 rounded-xl border border-border/40 bg-card">
                                   <ChevronRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-[10px] font-mono truncate text-muted-foreground">{filho.numero_processo}</p>
+                                    <p className="text-[10px] font-mono truncate text-muted-foreground">{filho.numero_processo || '—'}</p>
                                     <p className="text-[11px] font-semibold truncate text-foreground">{filho.titulo_acao || '-'}</p>
                                   </div>
                                   {filho.status && <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-muted border border-border/50 text-muted-foreground shrink-0">{filho.status}</span>}
+                                  {verificacaoStatus[filho.id] === 'ok' && <BadgeCheck className="h-3 w-3 text-emerald-500 shrink-0" />}
+                                  {verificacaoStatus[filho.id] === 'erro' && <XCircle className="h-3 w-3 text-destructive shrink-0" />}
                                   <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/50 hover:text-destructive shrink-0" onClick={() => handleDesvincularFilho(filho.id)}>
                                     <X className="h-3 w-3" />
                                   </Button>
                                 </div>
                               ))}
                             </div>
-                          </div>
-                        )}
+                          ) : !showNovoFilhoForm && (
+                            <p className="text-[10px] text-muted-foreground/40 italic">Nenhum subprocesso</p>
+                          )}
+                        </div>
+
                         {!isNew && (
                           <div>
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Vincular Processo</p>
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Vincular Processo Existente</p>
                             <div className="relative">
                               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                               <Input value={vinculoBusca} onChange={e => setVinculoBusca(e.target.value)} className="pl-9 h-9 rounded-xl text-xs bg-card" placeholder="Buscar por número ou título..." />
