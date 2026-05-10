@@ -14,6 +14,8 @@ import { TarefaModal } from '@/components/tarefas/TarefaModal';
 import { TarefaDetailModal } from '@/components/tarefas/TarefaDetailModal';
 import { TimesheetModal } from '@/components/tarefas/TimesheetModal';
 import { TimesheetTable } from '@/components/tarefas/TimesheetTable';
+import { AnalyticsTab } from '@/components/tarefas/AnalyticsTab';
+import { ChatInterno } from '@/components/tarefas/ChatInterno';
 import { Tarefa } from '@/types/tarefas';
 import {
   Plus, Clock, AlertTriangle, CheckCircle2, CheckSquare,
@@ -215,6 +217,7 @@ export default function TarefasPage() {
   const { perfil } = usePerfil();
   const userName = [perfil?.nome, perfil?.sobrenome].filter(Boolean).join(' ') || user?.email || '';
   const { getTeamWithStatus } = useTeamPresence(user?.id, userName);
+  const { canAccessSettings: isAdmin } = usePerfil();
   const { tarefas, loading, updateTarefa, deleteTarefa } = useTarefas();
   const { registros, loading: loadingTS } = useTimesheet();
   const team = getTeamWithStatus();
@@ -313,7 +316,7 @@ export default function TarefasPage() {
           </div>
 
           {/* ── KPIs ── */}
-          <div className="grid grid-cols-4 lg:grid-cols-8 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
             <KpiCard label="Pendentes"   value={kpis.pendentes}   icon={CheckSquare} accent="#f59e0b" bg="rgba(245,158,11,0.08)" />
             <KpiCard label="Em Andamento" value={kpis.emAndamento} icon={TrendingUp}  accent="#3b82f6" bg="rgba(59,130,246,0.08)" />
             <KpiCard label="Concluídas"  value={kpis.concluidas}  icon={CheckCircle2} accent="#16a34a" bg="rgba(22,163,74,0.08)" />
@@ -336,6 +339,7 @@ export default function TarefasPage() {
                     <TabsTrigger value="kanban"    style={{ fontSize: 12, fontWeight: 600 }}>Quadro</TabsTrigger>
                     <TabsTrigger value="equipe"    style={{ fontSize: 12, fontWeight: 600 }}>Por Usuário</TabsTrigger>
                     <TabsTrigger value="timesheet" style={{ fontSize: 12, fontWeight: 600 }}>Timesheet</TabsTrigger>
+                    {isAdmin && <TabsTrigger value="analytics" style={{ fontSize: 12, fontWeight: 600 }}>Analytics</TabsTrigger>}
                   </TabsList>
 
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -468,6 +472,13 @@ export default function TarefasPage() {
                     <div className="p-4"><TimesheetTable registros={registros} loading={loadingTS} /></div>
                   </div>
                 </TabsContent>
+
+                {/* Analytics — admin only */}
+                {isAdmin && (
+                  <TabsContent value="analytics" className="mt-4">
+                    <AnalyticsTab tarefas={tarefas} team={team} />
+                  </TabsContent>
+                )}
               </Tabs>
             </div>
 
@@ -498,7 +509,7 @@ export default function TarefasPage() {
                     <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 3 }}>Nenhuma tarefa urgente ou atrasada</p>
                   </div>
                 ) : (
-                  <ScrollArea style={{ height: 300 }}>
+                  <ScrollArea style={{ maxHeight: 380 }}>
                     <div className="p-3 space-y-2">
                       {alertas.map(t => <AlertaItem key={t.id} tarefa={t} onClick={() => setDetailTarefa(t)} />)}
                     </div>
@@ -601,6 +612,7 @@ export default function TarefasPage() {
         onEdit={t => { setDetailTarefa(null); setSelectedTarefa(t); setTarefaModalOpen(true); }} />
       <TarefaModal open={tarefaModalOpen} onOpenChange={setTarefaModalOpen} tarefa={selectedTarefa} onDelete={deleteTarefa} />
       <TimesheetModal open={timesheetModalOpen} onOpenChange={setTimesheetModal} />
+      <ChatInterno />
     </AppLayout>
   );
 }

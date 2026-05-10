@@ -47,9 +47,9 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit }: Tarefa
 
   const config = PRIORIDADE_CONFIG[tarefa.prioridade] || PRIORIDADE_CONFIG.Media;
   const isMyTask = user?.id === tarefa.responsavel_id;
-  const canStart = isMyTask && tarefa.status === 'Pendente';
-  const canDeliver = isMyTask && tarefa.status === 'Em Andamento' && !tarefa.aprovacao_status;
-  const canResubmit = isMyTask && tarefa.aprovacao_status === 'devolvida';
+  const canStart = (isMyTask || isManager) && tarefa.status === 'Pendente';
+  const canDeliver = (isMyTask || isManager) && tarefa.status === 'Em Andamento' && !tarefa.aprovacao_status;
+  const canResubmit = (isMyTask || isManager) && tarefa.aprovacao_status === 'devolvida';
   const canApprove = isManager && tarefa.aprovacao_status === 'aguardando_aprovacao';
 
   const handleStart = async () => {

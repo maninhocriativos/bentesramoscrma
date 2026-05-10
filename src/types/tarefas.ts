@@ -12,6 +12,7 @@ export interface Tarefa {
   prazo_fatal: string | null;
   horario: string | null;
   data_conclusao: string | null;
+  started_at: string | null;
   created_at: string;
   updated_at: string;
   // Approval workflow

@@ -47,9 +47,17 @@ export function useTarefas(processoId?: string) {
   };
 
   const updateTarefa = async (id: string, updates: Partial<Tarefa>) => {
+    const enriched: Partial<Tarefa> = { ...updates };
+    if (updates.status === 'Em Andamento') {
+      const existing = tarefas.find(t => t.id === id);
+      if (existing && !existing.started_at) enriched.started_at = new Date().toISOString();
+    }
+    if (updates.status === 'Concluída' && !updates.data_conclusao) {
+      enriched.data_conclusao = new Date().toISOString().slice(0, 10);
+    }
     const { error } = await supabase
       .from('tarefas')
-      .update(updates)
+      .update(enriched)
       .eq('id', id);
 
     if (error) {
