@@ -4,6 +4,7 @@ import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { OnboardingModal } from '@/components/onboarding/OnboardingModal';
 import { PageTransition } from '@/components/layouts/PageTransition';
+import { ChatInterno } from '@/components/tarefas/ChatInterno';
 
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
@@ -51,6 +52,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       </div>
       
       {needsOnboarding && <OnboardingModal />}
+      <ChatInterno />
     </SidebarProvider>
   );
 }

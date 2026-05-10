@@ -15,7 +15,6 @@ import { TarefaDetailModal } from '@/components/tarefas/TarefaDetailModal';
 import { TimesheetModal } from '@/components/tarefas/TimesheetModal';
 import { TimesheetTable } from '@/components/tarefas/TimesheetTable';
 import { AnalyticsTab } from '@/components/tarefas/AnalyticsTab';
-import { ChatInterno } from '@/components/tarefas/ChatInterno';
 import { Tarefa } from '@/types/tarefas';
 import {
   Plus, Clock, AlertTriangle, CheckCircle2, CheckSquare,
@@ -612,7 +611,6 @@ export default function TarefasPage() {
         onEdit={t => { setDetailTarefa(null); setSelectedTarefa(t); setTarefaModalOpen(true); }} />
       <TarefaModal open={tarefaModalOpen} onOpenChange={setTarefaModalOpen} tarefa={selectedTarefa} onDelete={deleteTarefa} />
       <TimesheetModal open={timesheetModalOpen} onOpenChange={setTimesheetModal} />
-      <ChatInterno />
     </AppLayout>
   );
 }

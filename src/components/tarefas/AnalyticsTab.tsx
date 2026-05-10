@@ -176,14 +176,16 @@ export function AnalyticsTab({ tarefas, team }: AnalyticsTabProps) {
               <p style={{ fontSize: 12, color: '#9ca3af' }}>Sem dados ainda — inicie e conclua tarefas</p>
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={tempoMedioData} layout="vertical" margin={{ left: 0, right: 20 }}>
-                <XAxis type="number" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={v => `${v.toFixed(0)}h`} />
-                <YAxis type="category" dataKey="nome" tick={{ fontSize: 11, fill: BROWN, fontWeight: 700 }} width={70} />
-                <Tooltip content={<CustomTooltip />} formatter={(v: any) => [`${Number(v).toFixed(1)}h`, 'Média']} />
-                <Bar dataKey="media" fill={GOLD} radius={[0, 6, 6, 0]} name="Média (h)" />
-              </BarChart>
-            </ResponsiveContainer>
+            <div style={{ width: '100%', height: 200 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={tempoMedioData} layout="vertical" margin={{ left: 0, right: 20 }}>
+                  <XAxis type="number" tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={v => `${v.toFixed(0)}h`} />
+                  <YAxis type="category" dataKey="nome" tick={{ fontSize: 11, fill: BROWN, fontWeight: 700 }} width={70} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="media" fill={GOLD} radius={[0, 6, 6, 0]} name="Média (h)" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </div>
 
@@ -200,18 +202,20 @@ export function AnalyticsTab({ tarefas, team }: AnalyticsTabProps) {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <ResponsiveContainer width="60%" height={200}>
-              <PieChart>
-                <Pie data={prioData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
-                  {prioData.map(entry => (
-                    <Cell key={entry.name} fill={PRIO_COLORS[entry.name] || '#94a3b8'} />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
+            <div style={{ width: '60%', height: 200, flexShrink: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={prioData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
+                    {prioData.map((entry: { name: string; value: number }) => (
+                      <Cell key={entry.name} fill={PRIO_COLORS[entry.name] || '#94a3b8'} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
             <div className="space-y-2">
-              {prioData.map(d => (
+              {prioData.map((d: { name: string; value: number }) => (
                 <div key={d.name} className="flex items-center gap-2">
                   <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: PRIO_COLORS[d.name] || '#94a3b8' }} />
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#1c1917' }}>{d.name}</span>
@@ -234,18 +238,20 @@ export function AnalyticsTab({ tarefas, team }: AnalyticsTabProps) {
               <p style={{ fontSize: 11, color: '#9ca3af' }}>por status das tarefas</p>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={cargaData} margin={{ left: -10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={`${GOLD}20`} />
-              <XAxis dataKey="nome" tick={{ fontSize: 11, fill: BROWN, fontWeight: 700 }} />
-              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} allowDecimals={false} />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="Pendente"      stackId="a" fill="#f59e0b"  radius={[0,0,0,0]} name="Pendente" />
-              <Bar dataKey="Em Andamento"  stackId="a" fill="#3b82f6"  radius={[0,0,0,0]} name="Em Andamento" />
-              <Bar dataKey="Concluída"     stackId="a" fill="#16a34a"  radius={[6,6,0,0]} name="Concluída" />
-            </BarChart>
-          </ResponsiveContainer>
+          <div style={{ width: '100%', height: 200 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={cargaData} margin={{ left: -10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={`${GOLD}20`} />
+                <XAxis dataKey="nome" tick={{ fontSize: 11, fill: BROWN, fontWeight: 700 }} />
+                <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} allowDecimals={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="Pendente"     stackId="a" fill="#f59e0b" radius={[0,0,0,0]} name="Pendente" />
+                <Bar dataKey="Em Andamento" stackId="a" fill="#3b82f6" radius={[0,0,0,0]} name="Em Andamento" />
+                <Bar dataKey="Concluída"    stackId="a" fill="#16a34a" radius={[6,6,0,0]} name="Concluída" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
         {/* Tendência semanal */}
@@ -260,17 +266,19 @@ export function AnalyticsTab({ tarefas, team }: AnalyticsTabProps) {
               <p style={{ fontSize: 11, color: '#9ca3af' }}>criadas vs concluídas (últimas 5 semanas)</p>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={tendenciaData} margin={{ left: -10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={`${GOLD}20`} />
-              <XAxis dataKey="semana" tick={{ fontSize: 10, fill: '#9ca3af' }} />
-              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} allowDecimals={false} />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="Criadas"    stroke={GOLD}     strokeWidth={2} dot={{ r: 4, fill: GOLD }}     name="Criadas" />
-              <Line type="monotone" dataKey="Concluídas" stroke="#16a34a"  strokeWidth={2} dot={{ r: 4, fill: '#16a34a' }} name="Concluídas" />
-            </LineChart>
-          </ResponsiveContainer>
+          <div style={{ width: '100%', height: 200 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={tendenciaData} margin={{ left: -10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={`${GOLD}20`} />
+                <XAxis dataKey="semana" tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} allowDecimals={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Line type="monotone" dataKey="Criadas"    stroke={GOLD}    strokeWidth={2} dot={{ r: 4, fill: GOLD }}    name="Criadas" />
+                <Line type="monotone" dataKey="Concluídas" stroke="#16a34a" strokeWidth={2} dot={{ r: 4, fill: '#16a34a' }} name="Concluídas" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
     </div>
