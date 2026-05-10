@@ -5,6 +5,7 @@ import {
   FileText, Bell, Hash, FolderOpen, Shield, Pencil, ChevronRight,
   CheckCircle2, Search, Tag, UserPlus, AlertTriangle,
   CheckCircle, PauseCircle, Archive, Trophy, XCircle, Activity,
+  Link2, Link2Off, GitBranch,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -446,8 +447,14 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   const [lastLoadedId,      setLastLoadedId]      = useState<string | null>(null);
   const [wasNew,            setWasNew]            = useState(isNew);
   const [leads,             setLeads]             = useState<LeadName[]>(leadsInit);
-  const [assuntoPickerOpen, setAssuntoPickerOpen] = useState(false);
-  const [novoClienteOpen,   setNovoClienteOpen]   = useState(false);
+  const [assuntoPickerOpen, setAssuntoPickerOpen]   = useState(false);
+  const [novoClienteOpen,   setNovoClienteOpen]     = useState(false);
+  const [partesModificadas, setPartesModificadas]   = useState(false);
+  const [processoPai,       setProcessoPai]         = useState<Pick<Processo, 'id' | 'numero_processo' | 'titulo_acao' | 'status' | 'fase'> | null>(null);
+  const [processoFilhos,    setProcessoFilhos]      = useState<Array<Pick<Processo, 'id' | 'numero_processo' | 'titulo_acao' | 'status' | 'fase'>>>([]);
+  const [vinculoBusca,      setVinculoBusca]        = useState('');
+  const [vinculoResultados, setVinculoResultados]   = useState<Array<Pick<Processo, 'id' | 'numero_processo' | 'titulo_acao' | 'status'>>>([]);
+  const [vinculoBuscando,   setVinculoBuscando]     = useState(false);
   const syncedThisSession = useRef<Set<string>>(new Set());
 
   useEffect(() => { setLeads(leadsInit); }, [leadsInit]);
@@ -522,10 +529,38 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
       });
       if (isNew) { setPartes(Array.isArray(draft.partes) ? draft.partes : []); setMovimentos(Array.isArray(draft.movimentos) ? draft.movimentos : []); }
     }
+    setPartesModificadas(false); setProcessoPai(null); setProcessoFilhos([]); setVinculoBusca(''); setVinculoResultados([]);
     setLastLoadedId(processoId); setWasNew(isNew); setDraftHydrated(true);
   }, [processo, processoId, isNew, lastLoadedId, wasNew, readDraft]);
 
   useEffect(() => { setAutoFetchDone(false); }, [processoId]);
+
+  useEffect(() => {
+    if (!processo?.id || isNew) { setProcessoPai(null); setProcessoFilhos([]); return; }
+    if ((processo as any).processo_pai_id) {
+      supabase.from('processos').select('id,numero_processo,titulo_acao,status,fase').eq('id', (processo as any).processo_pai_id).single()
+        .then(({ data }) => setProcessoPai((data as any) || null));
+    } else { setProcessoPai(null); }
+    supabase.from('processos').select('id,numero_processo,titulo_acao,status,fase').eq('processo_pai_id', processo.id)
+      .then(({ data }) => setProcessoFilhos((data || []) as any));
+  }, [processo?.id, (processo as any)?.processo_pai_id, isNew]);
+
+  useEffect(() => {
+    const term = vinculoBusca.trim();
+    if (term.length < 3 || !processo?.id) { setVinculoResultados([]); return; }
+    const t = setTimeout(async () => {
+      setVinculoBuscando(true);
+      const like = `%${term}%`;
+      const { data } = await supabase.from('processos')
+        .select('id,numero_processo,titulo_acao,status')
+        .or(`numero_processo.ilike.${like},titulo_acao.ilike.${like}`)
+        .neq('id', processo.id)
+        .limit(8);
+      setVinculoResultados((data || []) as any);
+      setVinculoBuscando(false);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [vinculoBusca, processo?.id]);
 
   useEffect(() => {
     if (!isNew && isOpen && processo?.id && !autoFetchDone && draftHydrated) {
@@ -535,6 +570,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
           const { data: dbPartes } = await supabase.from('processo_partes').select('*').eq('processo_id', processo.id);
           if (dbPartes && dbPartes.length > 0) {
             setPartes(dbPartes.map((p: any) => ({ nome: p.nome, tipo: p.tipo, polo: p.polo || '', tipoPessoa: p.tipo_pessoa || '', documento: p.documento || '', celular: p.celular || '', telefone_adicional: p.telefone_adicional || '', advogados: Array.isArray(p.advogados) ? p.advogados : [] })));
+            setPartesModificadas(false);
           } else if (processo.partes_json?.length) {
             setPartes(processo.partes_json);
             await supabase.from('processo_partes').insert(processo.partes_json.map((p: any) => ({ processo_id: processo.id, nome: p.nome, tipo: p.tipo, polo: p.polo || null, tipo_pessoa: p.tipoPessoa || null, documento: p.documento || null, celular: p.celular || null, advogados: p.advogados || null })));
@@ -764,6 +800,58 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
       else throw new Error(data?.error);
     } catch (err: any) { toast.error('Erro ao enviar notificação', { description: err.message }); }
     finally { setSendingNotif(false); }
+  };
+
+  const handleSavePartes = async () => {
+    if (!processo?.id) return;
+    const id = processo.id;
+    await supabase.from('processo_partes').delete().eq('processo_id', id);
+    if (partes.length > 0) {
+      const { error } = await supabase.from('processo_partes').insert(partes.map(p => ({
+        processo_id: id, nome: p.nome, tipo: p.tipo, polo: p.polo || null,
+        tipo_pessoa: p.tipoPessoa || null, documento: p.documento || null,
+        celular: p.celular || null, telefone_adicional: (p as any).telefone_adicional || null,
+        advogados: p.advogados || null,
+      })));
+      if (error) { toast.error('Erro ao salvar partes', { description: error.message }); return; }
+    }
+    setPartesModificadas(false);
+    toast.success('Partes salvas!');
+  };
+
+  const handleVincularComoPai = async (paiId: string) => {
+    if (!processo?.id) return;
+    const { error } = await supabase.from('processos').update({ processo_pai_id: paiId }).eq('id', processo.id);
+    if (error) { toast.error('Erro ao vincular', { description: error.message }); return; }
+    const found = vinculoResultados.find(r => r.id === paiId) as any;
+    if (found) setProcessoPai({ id: found.id, numero_processo: found.numero_processo, titulo_acao: found.titulo_acao, status: found.status, fase: null });
+    setVinculoBusca(''); setVinculoResultados([]);
+    toast.success('Processo principal vinculado!');
+  };
+
+  const handleDesvincularPai = async () => {
+    if (!processo?.id) return;
+    const { error } = await supabase.from('processos').update({ processo_pai_id: null }).eq('id', processo.id);
+    if (error) { toast.error('Erro ao desvincular', { description: error.message }); return; }
+    setProcessoPai(null);
+    toast.success('Desvinculado!');
+  };
+
+  const handleVincularComoFilho = async (filhoId: string) => {
+    if (!processo?.id) return;
+    const { error } = await supabase.from('processos').update({ processo_pai_id: processo.id }).eq('id', filhoId);
+    if (error) { toast.error('Erro ao vincular', { description: error.message }); return; }
+    const found = vinculoResultados.find(r => r.id === filhoId) as any;
+    if (found) setProcessoFilhos(prev => [...prev, { id: found.id, numero_processo: found.numero_processo, titulo_acao: found.titulo_acao, status: found.status, fase: null }]);
+    setVinculoBusca(''); setVinculoResultados([]);
+    toast.success('Processo filho vinculado!');
+  };
+
+  const handleDesvincularFilho = async (filhoId: string) => {
+    const { error } = await supabase.from('processos').update({ processo_pai_id: null }).eq('id', filhoId);
+    if (error) { toast.error('Erro ao desvincular', { description: error.message }); return; }
+    setProcessoFilhos(prev => prev.filter(f => f.id !== filhoId));
+    toast.success('Desvinculado!');
   };
 
   const clienteSelecionado = leads.find(l => l.id === formData.cliente_id);
@@ -1149,6 +1237,90 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                       </FieldGroup>
                     </div>
 
+                    <div>
+                      <SectionTitle icon={GitBranch} label="Vínculos Processuais" bg="bg-violet-500/10" color="text-violet-600 dark:text-violet-400" />
+                      <FieldGroup>
+                        {processoPai ? (
+                          <div>
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                              <FolderOpen className="h-3 w-3 text-violet-500" /> Processo Principal
+                            </p>
+                            <div className="flex items-center gap-2 p-2.5 rounded-xl border border-violet-200/60 bg-violet-50/30 dark:border-violet-800/30 dark:bg-violet-950/10">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[10px] font-mono truncate text-muted-foreground">{processoPai.numero_processo}</p>
+                                <p className="text-[11px] font-semibold truncate text-foreground">{processoPai.titulo_acao || '-'}</p>
+                              </div>
+                              <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground/50 hover:text-destructive shrink-0" onClick={handleDesvincularPai}>
+                                <Link2Off className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        ) : !isNew && (
+                          <p className="text-[10px] text-muted-foreground/50 flex items-center gap-1.5">
+                            <FolderOpen className="h-3 w-3" /> Sem processo principal vinculado
+                          </p>
+                        )}
+                        {processoFilhos.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                              <GitBranch className="h-3 w-3 text-violet-500" /> Derivados ({processoFilhos.length})
+                            </p>
+                            <div className="space-y-1.5">
+                              {processoFilhos.map(filho => (
+                                <div key={filho.id} className="flex items-center gap-2 p-2.5 rounded-xl border border-border/40 bg-card">
+                                  <ChevronRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[10px] font-mono truncate text-muted-foreground">{filho.numero_processo}</p>
+                                    <p className="text-[11px] font-semibold truncate text-foreground">{filho.titulo_acao || '-'}</p>
+                                  </div>
+                                  {filho.status && <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-muted border border-border/50 text-muted-foreground shrink-0">{filho.status}</span>}
+                                  <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/50 hover:text-destructive shrink-0" onClick={() => handleDesvincularFilho(filho.id)}>
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {!isNew && (
+                          <div>
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Vincular Processo</p>
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                              <Input value={vinculoBusca} onChange={e => setVinculoBusca(e.target.value)} className="pl-9 h-9 rounded-xl text-xs bg-card" placeholder="Buscar por número ou título..." />
+                              {vinculoBuscando && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+                            </div>
+                            {vinculoResultados.length > 0 && (
+                              <div className="mt-1.5 rounded-xl border border-border/50 bg-card overflow-hidden">
+                                {vinculoResultados.map(r => (
+                                  <div key={r.id} className="flex items-center gap-2 px-3 py-2 hover:bg-muted/40 transition-colors border-b border-border/20 last:border-0">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-[10px] font-mono truncate text-muted-foreground">{r.numero_processo}</p>
+                                      <p className="text-[11px] truncate text-foreground">{r.titulo_acao || '-'}</p>
+                                    </div>
+                                    <div className="flex gap-1 shrink-0">
+                                      {!processoPai && (
+                                        <Button type="button" variant="outline" size="sm"
+                                          className="h-6 text-[10px] px-2 rounded-lg gap-1 border-violet-200 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400"
+                                          onClick={() => handleVincularComoPai(r.id)}>
+                                          <FolderOpen className="h-2.5 w-2.5" /> Pai
+                                        </Button>
+                                      )}
+                                      <Button type="button" variant="outline" size="sm"
+                                        className="h-6 text-[10px] px-2 rounded-lg gap-1"
+                                        onClick={() => handleVincularComoFilho(r.id)}>
+                                        <Link2 className="h-2.5 w-2.5" /> Filho
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </FieldGroup>
+                    </div>
+
                   </div>
                 </ScrollArea>
 
@@ -1166,11 +1338,20 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                         <h3 className="text-[11px] font-black text-foreground uppercase tracking-widest leading-none">Partes</h3>
                         <p className="text-[10px] text-muted-foreground/50 leading-none mt-0.5">polo ativo e passivo</p>
                       </div>
-                      {hasPartes && (
-                        <span className="ml-auto h-5 min-w-5 px-1.5 rounded-full bg-primary/10 text-primary text-[10px] font-black flex items-center justify-center border border-primary/15">
-                          {partes.length}
-                        </span>
-                      )}
+                      <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                        {hasPartes && (
+                          <span className={`h-5 min-w-5 px-1.5 rounded-full text-[10px] font-black flex items-center justify-center border ${partesModificadas ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400' : 'bg-primary/10 text-primary border-primary/15'}`}>
+                            {partes.length}
+                          </span>
+                        )}
+                        {partesModificadas && !isNew && (
+                          <Button type="button" size="sm" variant="outline"
+                            className="h-6 text-[10px] px-2 rounded-lg gap-1 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400"
+                            onClick={handleSavePartes}>
+                            <CheckCircle2 className="h-3 w-3" /> Salvar
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <ScrollArea className="flex-1 min-h-0 h-full">
@@ -1185,34 +1366,11 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                         </div>
                       ) : partes.map((parte, i) => (
                         <ParteCard key={i} parte={parte} index={i}
-                          onUpdate={(idx, field, val) => setPartes(prev => prev.map((p, j) => j === idx ? { ...p, [field]: val } : p))}
-                          onRemove={idx => {
-                            const removed = partes[idx];
-                            setPartes(prev => prev.filter((_, j) => j !== idx));
-                            if (processo?.id && removed?.nome) {
-                              supabase.from('processo_partes').delete()
-                                .eq('processo_id', processo.id).eq('nome', removed.nome)
-                                .catch(console.error);
-                            }
-                          }}
+                          onUpdate={(idx, field, val) => { setPartes(prev => prev.map((p, j) => j === idx ? { ...p, [field]: val } : p)); setPartesModificadas(true); }}
+                          onRemove={idx => { setPartes(prev => prev.filter((_, j) => j !== idx)); setPartesModificadas(true); }}
                         />
                       ))}
-                      <AddParteForm onAdd={parte => {
-                        setPartes(prev => [...prev, parte]);
-                        if (processo?.id) {
-                          supabase.from('processo_partes').insert({
-                            processo_id: processo.id,
-                            nome: parte.nome,
-                            tipo: parte.tipo,
-                            polo: parte.polo || null,
-                            tipo_pessoa: parte.tipoPessoa || null,
-                            documento: parte.documento || null,
-                            celular: parte.celular || null,
-                            telefone_adicional: (parte as any).telefone_adicional || null,
-                            advogados: parte.advogados || null,
-                          }).catch(console.error);
-                        }
-                      }} />
+                      <AddParteForm onAdd={parte => { setPartes(prev => [...prev, parte]); setPartesModificadas(true); }} />
                     </div>
                   </ScrollArea>
                 </div>

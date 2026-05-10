@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Processo } from '@/types/processos';
 import { LeadName } from '@/hooks/useLeadNames';
 import { format, parseISO, isValid } from 'date-fns';
@@ -6,7 +6,7 @@ import { ptBR } from 'date-fns/locale';
 import {
   Scale, ChevronRight, Building2, User, Calendar,
   DollarSign, ArrowUpDown, CheckCircle2, PauseCircle,
-  Archive, Trophy, XCircle, Gavel, FileCheck, Activity,
+  Archive, Trophy, XCircle, Activity, FolderOpen, GitBranch,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -77,6 +77,12 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey,     setSortKey]     = useState<SortKey>('cliente');
   const [sortAsc,     setSortAsc]     = useState(true);
+
+  const parentIds = useMemo(() => {
+    const s = new Set<string>();
+    processos.forEach(p => { if ((p as any).processo_pai_id) s.add((p as any).processo_pai_id); });
+    return s;
+  }, [processos]);
 
   const getClienteName = (processo: Processo) => {
     // 1. nome_cliente salvo diretamente
@@ -189,6 +195,8 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
               const dataSync    = formatDate(processo.data_ultima_atualizacao || ultimaMov?.dataHora);
               const valor       = formatCurrency(processo.valor_causa);
               const movCount    = processo.movimentos_json?.length || 0;
+              const isPai       = parentIds.has(processo.id);
+              const isFilho     = !!(processo as any).processo_pai_id;
 
               return (
                 <tr
@@ -224,9 +232,21 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
 
                   {/* Processo */}
                   <td className="px-4 py-3.5 align-top">
-                    <p className="font-mono text-[12px] font-semibold text-foreground leading-tight">
-                      {processo.numero_processo || '—'}
-                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {isFilho && (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-muted-foreground/50 shrink-0">
+                          <GitBranch className="h-2.5 w-2.5" /> ↳
+                        </span>
+                      )}
+                      <p className="font-mono text-[12px] font-semibold text-foreground leading-tight">
+                        {processo.numero_processo || '—'}
+                      </p>
+                      {isPai && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-violet-50 text-violet-700 border border-violet-200/80 text-[9px] font-bold dark:bg-violet-950/20 dark:text-violet-400 dark:border-violet-800/40 shrink-0">
+                          <FolderOpen className="h-2.5 w-2.5" /> principal
+                        </span>
+                      )}
+                    </div>
                     {processo.assunto && (
                       <p className="text-[10px] text-muted-foreground truncate max-w-[200px] mt-0.5 leading-tight">
                         {processo.assunto}
@@ -326,6 +346,8 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
           const clienteName = getClienteName(processo);
           const dataDistrib = formatDate(processo.data_distribuicao || (processo as any).data_ajuizamento);
           const valor       = formatCurrency(processo.valor_causa);
+          const isPai       = parentIds.has(processo.id);
+          const isFilho     = !!(processo as any).processo_pai_id;
 
           return (
             <div
@@ -348,7 +370,19 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
                   )}
                 </div>
                 <p className="text-sm font-bold text-foreground truncate">{clienteName || 'Sem identificação'}</p>
-                <p className="font-mono text-xs text-muted-foreground">{processo.numero_processo || '—'}</p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {isFilho && (
+                    <span className="text-[9px] font-bold text-muted-foreground/50 flex items-center gap-0.5">
+                      <GitBranch className="h-2.5 w-2.5" /> ↳
+                    </span>
+                  )}
+                  <p className="font-mono text-xs text-muted-foreground">{processo.numero_processo || '—'}</p>
+                  {isPai && (
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-violet-50 text-violet-700 border border-violet-200/80 text-[9px] font-bold dark:bg-violet-950/20 dark:text-violet-400 shrink-0">
+                      <FolderOpen className="h-2.5 w-2.5" /> principal
+                    </span>
+                  )}
+                </div>
                 {processo.assunto && (
                   <p className="text-[11px] text-muted-foreground truncate">{processo.assunto}</p>
                 )}

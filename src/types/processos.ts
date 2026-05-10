@@ -93,4 +93,8 @@ export interface Processo {
 
   // API sync
   ultima_consulta_api_at: string | null;
+
+  // Hierarquia
+  processo_pai_id: string | null;
+  processos_filhos?: Pick<Processo, 'id' | 'numero_processo' | 'titulo_acao' | 'status' | 'fase'>[];
 }
