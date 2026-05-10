@@ -125,6 +125,7 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete }: TarefaModa
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        hideCloseButton
         className="p-0 overflow-hidden"
         style={{
           maxWidth: 500,

@@ -227,6 +227,7 @@ export default function TarefasPage() {
   const [detailTarefa, setDetailTarefa] = useState<Tarefa | null>(null);
   const [activeUser, setActiveUser] = useState<string>('all');
   const [criticalPopupOpen, setCriticalPopupOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('kanban');
 
   const handleNew = () => { setSelectedTarefa(null); setTarefaModalOpen(true); };
 
@@ -331,7 +332,7 @@ export default function TarefasPage() {
 
             {/* Kanban + Tabs */}
             <div className="space-y-4">
-              <Tabs defaultValue="kanban">
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
                 {/* Tab header + filtro usuário */}
                 <div className="flex items-center gap-3 flex-wrap">
                   <TabsList className="h-9" style={{ background: `${GOLD}12`, border: `0.5px solid ${GOLD}30` }}>
@@ -472,9 +473,9 @@ export default function TarefasPage() {
                   </div>
                 </TabsContent>
 
-                {/* Analytics — admin only — forceMount mantém DOM para Recharts medir */}
-                {isAdmin && (
-                  <TabsContent value="analytics" className="mt-4 data-[state=inactive]:hidden" forceMount>
+                {/* Analytics — admin only — monta somente quando a tab está ativa para Recharts medir corretamente */}
+                {isAdmin && activeTab === 'analytics' && (
+                  <TabsContent value="analytics" className="mt-4">
                     <AnalyticsTab tarefas={tarefas} team={team} />
                   </TabsContent>
                 )}

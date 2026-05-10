@@ -91,6 +91,7 @@ export function TarefaDetailModal({ open, onOpenChange, tarefa, onEdit }: Tarefa
     <>
       <Dialog open={open && !entregarModal && !aprovarModal} onOpenChange={onOpenChange}>
         <DialogContent
+          hideCloseButton
           className="p-0 overflow-hidden"
           style={{
             maxWidth: 520,

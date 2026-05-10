@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Tarefa, Timesheet } from '@/types/tarefas';
 import { useToast } from '@/hooks/use-toast';
@@ -8,6 +8,7 @@ export function useTarefas(processoId?: string) {
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const channelName = useRef(`tarefas-realtime-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
   const fetchTarefas = useCallback(async () => {
     setLoading(true);
@@ -43,6 +44,7 @@ export function useTarefas(processoId?: string) {
     }
 
     toast({ title: 'Tarefa criada!' });
+    await fetchTarefas();
     return data;
   };
 
@@ -66,6 +68,7 @@ export function useTarefas(processoId?: string) {
     }
 
     toast({ title: 'Tarefa atualizada!' });
+    await fetchTarefas();
     return true;
   };
 
@@ -81,6 +84,7 @@ export function useTarefas(processoId?: string) {
     }
 
     toast({ title: 'Tarefa excluída!' });
+    await fetchTarefas();
     return true;
   };
 
@@ -91,7 +95,7 @@ export function useTarefas(processoId?: string) {
 
   // Realtime subscriptions
   useEffect(() => {
-    const channel = supabase.channel('tarefas-realtime')
+    const channel = supabase.channel(channelName.current)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tarefas' }, (payload) => {
         const newTarefa = payload.new as Tarefa;
         if (!processoId || newTarefa.processo_id === processoId) {

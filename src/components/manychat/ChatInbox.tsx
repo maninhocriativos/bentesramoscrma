@@ -159,6 +159,8 @@ const ManyChatInboxContent = () => {
 
   // ✅ Modal de contrato fechado
   const [contratoModalOpen, setContratoModalOpen]       = useState(false);
+  const [editingLeadName, setEditingLeadName]           = useState(false);
+  const [editingLeadNameValue, setEditingLeadNameValue] = useState("");
 
   // ─── Hooks ──────────────────────────────────────────────────────────────────
 
@@ -181,6 +183,8 @@ const ManyChatInboxContent = () => {
   const lastReadRef              = useRef<Record<string, string>>({});
   const messagesEndRef           = useRef<HTMLDivElement>(null);
   const fileInputRef             = useRef<HTMLInputElement>(null);
+  const nameInputRef             = useRef<HTMLInputElement>(null);
+  const nameSavingRef            = useRef(false);
   const mediaRecorderRef         = useRef<MediaRecorder | null>(null);
   const audioChunksRef           = useRef<Blob[]>([]);
   const typingTimeoutRef         = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -459,6 +463,8 @@ const ManyChatInboxContent = () => {
 
   useEffect(() => { selectedSubscriberRef.current = selectedSubscriber; }, [selectedSubscriber]);
   useEffect(() => { subscribersRef.current = subscribers; }, [subscribers]);
+  // Fecha edição de nome ao trocar de conversa
+  useEffect(() => { setEditingLeadName(false); nameSavingRef.current = false; }, [selectedSubscriber?.subscriber_id]);
 
   // ─── Scroll & message helpers ───────────────────────────────────────────────
 
@@ -1165,6 +1171,35 @@ const ManyChatInboxContent = () => {
     return `Contato #${sub.subscriber_id?.slice(-4) || "????"}`;
   };
 
+  const saveLeadName = useCallback(async (sub: Subscriber, newName: string) => {
+    // Proteção contra duplo disparo (Enter + onBlur)
+    if (nameSavingRef.current) return;
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    // Não salva se nome não mudou
+    const current = sub.nome?.trim() || "";
+    if (trimmed === current) return;
+    nameSavingRef.current = true;
+    try {
+      const { error: subErr } = await supabase
+        .from("manychat_subscribers")
+        .update({ nome: trimmed })
+        .eq("subscriber_id", sub.subscriber_id);
+      if (subErr) throw subErr;
+      if (sub.lead_id) {
+        await supabase.from("leads_juridicos").update({ nome: trimmed }).eq("id", sub.lead_id);
+      }
+      // Atualiza estado local imediatamente — lista + conversa selecionada
+      setSubscribers(prev => prev.map(s => s.subscriber_id === sub.subscriber_id ? { ...s, nome: trimmed } : s));
+      setSelectedSubscriber(prev => prev?.subscriber_id === sub.subscriber_id ? { ...prev, nome: trimmed } : prev);
+      toast({ title: "Nome atualizado", description: `"${trimmed}" salvo com sucesso.` });
+    } catch {
+      toast({ title: "Erro ao salvar nome", description: "Tente novamente.", variant: "destructive" });
+    } finally {
+      nameSavingRef.current = false;
+    }
+  }, [toast]);
+
   const getInitials = (sub: Subscriber) => {
     const invalidNames = ["Desconhecido", "Sem nome", "desconhecido", "null", "", "{{wa_id}}"];
     const hasValidName = sub.nome && !invalidNames.includes(sub.nome) && !sub.nome.startsWith("{{") && !sub.nome.startsWith("[");
@@ -1610,7 +1645,53 @@ const ManyChatInboxContent = () => {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <ChannelIcon canal={selectedSubscriber.canal} size="sm" />
-                  <h3 className={`font-semibold text-[14px] md:text-[16px] ${themeClasses.headerText} truncate`}>{getDisplayName(selectedSubscriber)}</h3>
+                  {editingLeadName ? (
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <input
+                        ref={nameInputRef}
+                        autoFocus
+                        value={editingLeadNameValue}
+                        onChange={e => setEditingLeadNameValue(e.target.value)}
+                        onBlur={() => {
+                          // Pequeno delay para não conflitar com Enter
+                          setTimeout(() => {
+                            if (!nameSavingRef.current) {
+                              saveLeadName(selectedSubscriber, editingLeadNameValue);
+                            }
+                            setEditingLeadName(false);
+                          }, 80);
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            saveLeadName(selectedSubscriber, editingLeadNameValue);
+                            setEditingLeadName(false);
+                          }
+                          if (e.key === 'Escape') {
+                            nameSavingRef.current = false;
+                            setEditingLeadName(false);
+                          }
+                        }}
+                        className="font-semibold text-[14px] md:text-[16px] bg-transparent border-0 border-b-2 border-[#00A884] outline-none min-w-0 w-[160px] md:w-[220px] text-white placeholder:text-white/50"
+                        placeholder="Nome do lead..."
+                      />
+                      <span className="text-[10px] text-white/40 shrink-0 hidden md:block">Enter p/ salvar</span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`group flex items-center gap-1 font-semibold text-[14px] md:text-[16px] ${themeClasses.headerText} truncate max-w-[200px] hover:opacity-80 transition-opacity text-left`}
+                      title="Clique para editar o nome do lead"
+                      onClick={() => {
+                        setEditingLeadNameValue(selectedSubscriber.nome?.trim() || getDisplayName(selectedSubscriber));
+                        setEditingLeadName(true);
+                        setTimeout(() => nameInputRef.current?.focus(), 30);
+                      }}
+                    >
+                      <span className="truncate">{getDisplayName(selectedSubscriber)}</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+                    </button>
+                  )}
                   {(() => {
                     const instanceInfo = getInstanceInfoFromConnectedPhone(selectedSubscriber.instance_name);
                     if (!instanceInfo) return null;
