@@ -1073,7 +1073,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                       <SectionTitle icon={Hash} label="Numeração" />
                       <FieldGroup>
                         <Row2>
-                          <Field label="Número CNJ">
+                          <Field label="Número CNJ (Principal)">
                             <div className="relative">
                               <Input value={formData.numero_processo} onChange={e => update('numero_processo', e.target.value)} className="rounded-xl bg-card font-mono text-sm pr-9 h-10" placeholder="0000000-00.0000.0.00.0000" />
                               {fetchingData && isNew && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-primary" />}
@@ -1085,6 +1085,87 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                             <Input value={formData.numero_complementar} onChange={e => update('numero_complementar', e.target.value)} className="rounded-xl bg-card h-10" placeholder="Opcional" />
                           </Field>
                         </Row2>
+
+                        {/* ── Subprocessos inline na Numeração ── */}
+                        {!isNew && (
+                          <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                <GitBranch className="h-3 w-3 text-violet-500" />
+                                Subprocessos {processoFilhos.length > 0 && `(${processoFilhos.length})`}
+                              </p>
+                              <div className="flex items-center gap-1.5">
+                                {(isValidCnj || processoFilhos.some(f => f.numero_processo && CNJ_REGEX.test(f.numero_processo.trim()))) && (
+                                  <Button type="button" variant="outline" size="sm"
+                                    className="h-6 text-[10px] px-2 rounded-lg gap-1 border-violet-200 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400"
+                                    onClick={handleVerificarTodos} disabled={verificandoTodos}>
+                                    {verificandoTodos ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <BadgeCheck className="h-2.5 w-2.5" />}
+                                    Verificar Todos
+                                  </Button>
+                                )}
+                                <Button type="button" variant="ghost" size="sm"
+                                  className="h-6 text-[10px] px-1.5 rounded-md gap-0.5 text-violet-600 hover:text-violet-700 hover:bg-violet-50 dark:text-violet-400"
+                                  onClick={() => setShowNovoFilhoForm(v => !v)}>
+                                  <Plus className="h-3 w-3" /> Novo
+                                </Button>
+                              </div>
+                            </div>
+
+                            {showNovoFilhoForm && (
+                              <div className="mb-2 p-2.5 rounded-xl border border-violet-200/60 bg-violet-50/20 dark:border-violet-800/30 dark:bg-violet-950/10 space-y-2">
+                                <p className="text-[10px] font-semibold text-violet-700 dark:text-violet-400">Criar subprocesso vinculado</p>
+                                <Input
+                                  value={novoFilhoTitulo}
+                                  onChange={e => setNovoFilhoTitulo(e.target.value)}
+                                  className="h-8 text-xs rounded-lg bg-card"
+                                  placeholder="Título / classe *"
+                                />
+                                <Input
+                                  value={novoFilhoNumero}
+                                  onChange={e => setNovoFilhoNumero(e.target.value)}
+                                  className="h-8 text-xs rounded-lg bg-card font-mono"
+                                  placeholder="Número CNJ (opcional)"
+                                />
+                                <div className="flex gap-1.5">
+                                  <Button type="button" size="sm"
+                                    className="flex-1 h-7 text-[11px] rounded-lg gap-1 bg-violet-600 hover:bg-violet-700 text-white"
+                                    onClick={handleCriarProcessoFilho}
+                                    disabled={criandoFilho || !novoFilhoTitulo.trim()}>
+                                    {criandoFilho ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                                    Criar
+                                  </Button>
+                                  <Button type="button" variant="ghost" size="sm"
+                                    className="h-7 text-[11px] rounded-lg px-2"
+                                    onClick={() => { setShowNovoFilhoForm(false); setNovoFilhoNumero(''); setNovoFilhoTitulo(''); }}>
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+
+                            {processoFilhos.length > 0 ? (
+                              <div className="space-y-1.5">
+                                {processoFilhos.map(filho => (
+                                  <div key={filho.id} className="flex items-center gap-2 p-2 rounded-xl border border-border/40 bg-muted/20">
+                                    <ChevronRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-[10px] font-mono truncate text-muted-foreground">{filho.numero_processo || '—'}</p>
+                                      <p className="text-[11px] font-semibold truncate text-foreground">{filho.titulo_acao || '-'}</p>
+                                    </div>
+                                    {filho.status && <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-muted border border-border/50 text-muted-foreground shrink-0">{filho.status}</span>}
+                                    {verificacaoStatus[filho.id] === 'ok' && <BadgeCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
+                                    {verificacaoStatus[filho.id] === 'erro' && <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />}
+                                    <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/40 hover:text-destructive shrink-0" onClick={() => handleDesvincularFilho(filho.id)}>
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : !showNovoFilhoForm && (
+                              <p className="text-[10px] text-muted-foreground/40 italic">Nenhum subprocesso — clique em "+ Novo" para adicionar</p>
+                            )}
+                          </div>
+                        )}
                       </FieldGroup>
                     </div>
 
@@ -1304,18 +1385,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                     </div>
 
                     <div>
-                      {/* Vínculos header with "Verificar Todos" button */}
-                      <div className="flex items-center justify-between mb-2">
-                        <SectionTitle icon={GitBranch} label="Vínculos Processuais" bg="bg-violet-500/10" color="text-violet-600 dark:text-violet-400" />
-                        {!isNew && (processo?.numero_processo && CNJ_REGEX.test(processo.numero_processo.trim()) || processoFilhos.some(f => f.numero_processo && CNJ_REGEX.test(f.numero_processo.trim()))) && (
-                          <Button type="button" variant="outline" size="sm"
-                            className="h-6 text-[10px] px-2 rounded-lg gap-1 border-violet-200 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400 shrink-0"
-                            onClick={handleVerificarTodos} disabled={verificandoTodos}>
-                            {verificandoTodos ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <BadgeCheck className="h-2.5 w-2.5" />}
-                            Verificar Todos
-                          </Button>
-                        )}
-                      </div>
+                      <SectionTitle icon={GitBranch} label="Vínculos Processuais" bg="bg-violet-500/10" color="text-violet-600 dark:text-violet-400" />
                       <FieldGroup>
                         {processoPai ? (
                           <div>
@@ -1339,79 +1409,6 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                             <FolderOpen className="h-3 w-3" /> Sem processo principal vinculado
                           </p>
                         )}
-
-                        {/* Subprocessos (filhos) */}
-                        <div>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                              <GitBranch className="h-3 w-3 text-violet-500" />
-                              Subprocessos {processoFilhos.length > 0 && `(${processoFilhos.length})`}
-                            </p>
-                            {!isNew && (
-                              <Button type="button" variant="ghost" size="sm"
-                                className="h-5 text-[10px] px-1.5 rounded-md gap-0.5 text-violet-600 hover:text-violet-700 hover:bg-violet-50 dark:text-violet-400"
-                                onClick={() => setShowNovoFilhoForm(v => !v)}>
-                                <Plus className="h-3 w-3" /> Novo
-                              </Button>
-                            )}
-                          </div>
-
-                          {/* New child process form */}
-                          {showNovoFilhoForm && !isNew && (
-                            <div className="mb-2 p-2.5 rounded-xl border border-violet-200/60 bg-violet-50/20 dark:border-violet-800/30 dark:bg-violet-950/10 space-y-2">
-                              <p className="text-[10px] font-semibold text-violet-700 dark:text-violet-400">Criar subprocesso vinculado</p>
-                              <Input
-                                value={novoFilhoTitulo}
-                                onChange={e => setNovoFilhoTitulo(e.target.value)}
-                                className="h-8 text-xs rounded-lg bg-card"
-                                placeholder="Título / classe *"
-                              />
-                              <Input
-                                value={novoFilhoNumero}
-                                onChange={e => setNovoFilhoNumero(e.target.value)}
-                                className="h-8 text-xs rounded-lg bg-card font-mono"
-                                placeholder="Número CNJ (opcional)"
-                              />
-                              <div className="flex gap-1.5">
-                                <Button type="button" size="sm"
-                                  className="flex-1 h-7 text-[11px] rounded-lg gap-1 bg-violet-600 hover:bg-violet-700 text-white"
-                                  onClick={handleCriarProcessoFilho}
-                                  disabled={criandoFilho || !novoFilhoTitulo.trim()}>
-                                  {criandoFilho ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-                                  Criar
-                                </Button>
-                                <Button type="button" variant="ghost" size="sm"
-                                  className="h-7 text-[11px] rounded-lg px-2"
-                                  onClick={() => { setShowNovoFilhoForm(false); setNovoFilhoNumero(''); setNovoFilhoTitulo(''); }}>
-                                  <X className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-
-                          {processoFilhos.length > 0 ? (
-                            <div className="space-y-1.5">
-                              {processoFilhos.map(filho => (
-                                <div key={filho.id} className="flex items-center gap-2 p-2.5 rounded-xl border border-border/40 bg-card">
-                                  <ChevronRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-[10px] font-mono truncate text-muted-foreground">{filho.numero_processo || '—'}</p>
-                                    <p className="text-[11px] font-semibold truncate text-foreground">{filho.titulo_acao || '-'}</p>
-                                  </div>
-                                  {filho.status && <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-muted border border-border/50 text-muted-foreground shrink-0">{filho.status}</span>}
-                                  {verificacaoStatus[filho.id] === 'ok' && <BadgeCheck className="h-3 w-3 text-emerald-500 shrink-0" />}
-                                  {verificacaoStatus[filho.id] === 'erro' && <XCircle className="h-3 w-3 text-destructive shrink-0" />}
-                                  <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/50 hover:text-destructive shrink-0" onClick={() => handleDesvincularFilho(filho.id)}>
-                                    <X className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              ))}
-                            </div>
-                          ) : !showNovoFilhoForm && (
-                            <p className="text-[10px] text-muted-foreground/40 italic">Nenhum subprocesso</p>
-                          )}
-                        </div>
-
                         {!isNew && (
                           <div>
                             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Vincular Processo Existente</p>
