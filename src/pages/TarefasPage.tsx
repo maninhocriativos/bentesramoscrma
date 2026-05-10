@@ -64,29 +64,31 @@ function getDeadlineInfo(dl: string | null) {
 
 // ── TarefaCard premium ───────────────────────────────────────────────────────
 function TarefaCard({ tarefa, onClick }: { tarefa: Tarefa; onClick: () => void }) {
-  const prio  = PRIO_CFG[tarefa.prioridade] || PRIO_CFG.Baixa;
-  const dl    = getDeadlineInfo(tarefa.data_limite);
-  const aprov = tarefa.aprovacao_status ? APROV_CFG[tarefa.aprovacao_status] : null;
-  const atrasada = tarefa.data_limite && isPast(new Date(tarefa.data_limite)) && !isToday(new Date(tarefa.data_limite));
+  const prio       = PRIO_CFG[tarefa.prioridade] || PRIO_CFG.Baixa;
+  const dl         = getDeadlineInfo(tarefa.data_limite);
+  const aprov      = tarefa.aprovacao_status ? APROV_CFG[tarefa.aprovacao_status] : null;
+  const atrasada   = tarefa.data_limite && isPast(new Date(tarefa.data_limite)) && !isToday(new Date(tarefa.data_limite));
+  const isConcluida = tarefa.status === 'Concluída';
+
+  const cardBg     = isConcluida ? 'rgba(22,163,74,0.06)' : 'white';
+  const cardBorder = isConcluida
+    ? '1px solid rgba(22,163,74,0.30)'
+    : `1px solid ${atrasada ? 'rgba(220,38,38,0.25)' : 'rgba(201,169,110,0.18)'}`;
+  const topBar     = isConcluida ? '#16a34a' : prio.barColor;
 
   return (
     <div
       onClick={onClick}
       className="group rounded-2xl cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
-      style={{
-        background: 'white',
-        border: `1px solid ${atrasada ? 'rgba(220,38,38,0.25)' : 'rgba(201,169,110,0.18)'}`,
-        boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-        overflow: 'hidden',
-      }}
+      style={{ background: cardBg, border: cardBorder, boxShadow: '0 1px 4px rgba(0,0,0,0.04)', overflow: 'hidden' }}
     >
-      {/* Barra de prioridade no topo */}
-      <div style={{ height: 3, background: prio.barColor }} />
+      {/* Barra de cor no topo */}
+      <div style={{ height: 3, background: topBar }} />
 
       <div className="p-4">
         {/* Título + badge prioridade */}
         <div className="flex items-start justify-between gap-2 mb-2">
-          <p style={{ fontSize: 13, fontWeight: 700, color: '#1c1917', lineHeight: 1.35, flex: 1 }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: isConcluida ? '#374151' : '#1c1917', lineHeight: 1.35, flex: 1 }}>
             {tarefa.titulo}
           </p>
           <span style={{
@@ -105,9 +107,20 @@ function TarefaCard({ tarefa, onClick }: { tarefa: Tarefa; onClick: () => void }
           </p>
         )}
 
-        {/* Footer: prazo + aprovação + estrelas */}
+        {/* Footer: prazo + finalizada + aprovação + estrelas */}
         <div className="flex items-center gap-2 flex-wrap">
-          {dl && (
+          {isConcluida && (
+            <span style={{
+              fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+              background: 'rgba(22,163,74,0.12)', color: '#16a34a',
+              border: '0.5px solid rgba(22,163,74,0.30)',
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+              <CheckCircle2 style={{ width: 10, height: 10 }} />
+              Finalizada
+            </span>
+          )}
+          {!isConcluida && dl && (
             <span style={{
               fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
               background: dl.bg, color: dl.color,
