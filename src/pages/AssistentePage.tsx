@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, MessageSquare, Brain, Zap, ListTodo,
-  Settings, Sparkles, Lock, Cpu,
+  Settings, Sparkles, Cpu,
   Scale, Search, Calendar, CheckCircle2,
+  BarChart2, Users, Target, TrendingUp, ScanLine, FileText,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
@@ -12,10 +13,12 @@ import { IsaConversionMetrics } from '@/components/assistentes/IsaConversionMetr
 import isaAvatar from '@/assets/isa-avatar.png';
 
 // ── Paleta ─────────────────────────────────────────────────────────────────────
-const BROWN = '#3d2b1f';
-const GOLD  = '#c9a96e';
+const BROWN  = '#3d2b1f';
+const GOLD   = '#c9a96e';
+const NAVY   = '#0f1528';
+const BLUE_A = '#5b8dd9';
 
-// ── Dados de Isa ───────────────────────────────────────────────────────────────
+// ── Capacidades ────────────────────────────────────────────────────────────────
 const ISA_CAPABILITIES = [
   { icon: Search,       label: 'Análise de Leads' },
   { icon: Scale,        label: 'Consulta de Processos' },
@@ -25,13 +28,21 @@ const ISA_CAPABILITIES = [
   { icon: CheckCircle2, label: 'Automação Inteligente' },
 ];
 
-// ── Tela de chat aberta ────────────────────────────────────────────────────────
+const DONNA_CAPABILITIES = [
+  { icon: BarChart2,  label: 'Relatórios e Indicadores' },
+  { icon: Users,      label: 'Cadastro de Clientes' },
+  { icon: ScanLine,   label: 'Análise de Padrões' },
+  { icon: Target,     label: 'Precisão em Dados' },
+  { icon: TrendingUp, label: 'Insights Estratégicos' },
+  { icon: FileText,   label: 'Gestão de Processos' },
+];
+
+// ── Isa — chat ─────────────────────────────────────────────────────────────────
 function IsaView({ onBack }: { onBack: () => void }) {
   return (
     <AppLayout>
       <AppHeader title="Isa — Assistente Jurídica" />
       <div className="flex-1 flex flex-col min-h-0">
-        {/* Barra voltar */}
         <div className="flex items-center gap-3 px-4 py-2.5 border-b bg-card shrink-0">
           <button
             onClick={onBack}
@@ -50,7 +61,7 @@ function IsaView({ onBack }: { onBack: () => void }) {
   );
 }
 
-// ── Tela de métricas de Isa ────────────────────────────────────────────────────
+// ── Isa — métricas ─────────────────────────────────────────────────────────────
 function IsaMetricsView({ onBack }: { onBack: () => void }) {
   return (
     <AppLayout>
@@ -72,13 +83,102 @@ function IsaMetricsView({ onBack }: { onBack: () => void }) {
   );
 }
 
+// ── Donn@ — em desenvolvimento ────────────────────────────────────────────────
+function DonnaView({ onBack }: { onBack: () => void }) {
+  return (
+    <AppLayout>
+      <AppHeader title="Donn@ — Análise e Relatórios" />
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Barra voltar */}
+        <div className="flex items-center gap-3 px-4 py-2.5 border-b bg-card shrink-0">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" /> Voltar aos agentes
+          </button>
+          <div className="ml-auto flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-amber-400" />
+            <span className="text-[11px] font-bold text-amber-600">Em desenvolvimento</span>
+          </div>
+        </div>
+
+        {/* Tela de boas-vindas */}
+        <div
+          className="flex-1 flex flex-col items-center justify-center px-6 py-12"
+          style={{ background: 'linear-gradient(160deg, #080e1c 0%, #111f3d 50%, #182650 100%)' }}
+        >
+          {/* Avatar */}
+          <div
+            className="h-20 w-20 rounded-2xl flex items-center justify-center mb-5 shadow-2xl text-2xl font-black text-white select-none"
+            style={{ background: `linear-gradient(135deg, ${BLUE_A}, #3a6ab8)` }}
+          >
+            D@
+          </div>
+
+          <h2 className="text-xl font-black text-white mb-1">Donn@</h2>
+          <p className="text-sm font-semibold mb-8" style={{ color: `${BLUE_A}cc` }}>
+            Assistente Jurídica de Análise e Dados
+          </p>
+
+          {/* Card de status */}
+          <div
+            className="w-full max-w-sm rounded-2xl p-5 mb-8"
+            style={{
+              background: 'rgba(255,255,255,0.04)',
+              border: `1px solid ${BLUE_A}30`,
+            }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="h-4 w-4" style={{ color: BLUE_A }} />
+              <span className="text-xs font-black uppercase tracking-widest" style={{ color: BLUE_A }}>
+                Em treinamento
+              </span>
+            </div>
+            <p className="text-sm text-white/60 leading-relaxed">
+              A Donn@ está sendo treinada com os dados do escritório para entregar
+              relatórios precisos, análise de padrões e insights estratégicos.
+            </p>
+          </div>
+
+          {/* Capacidades */}
+          <div className="w-full max-w-sm">
+            <p className="text-[10px] font-black uppercase tracking-widest mb-3 text-center" style={{ color: `${BLUE_A}70` }}>
+              O que ela fará
+            </p>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {DONNA_CAPABILITIES.map(({ icon: Icon, label }) => (
+                <div
+                  key={label}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold"
+                  style={{
+                    background: 'rgba(91,141,217,0.10)',
+                    color: 'rgba(255,255,255,0.60)',
+                    border: '1px solid rgba(91,141,217,0.20)',
+                  }}
+                >
+                  <Icon className="h-3 w-3 shrink-0" style={{ color: BLUE_A }} />
+                  {label}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </AppLayout>
+  );
+}
+
 // ── Página principal ───────────────────────────────────────────────────────────
+type View = 'grid' | 'isa-chat' | 'isa-metrics' | 'donna-chat';
+
 export default function AssistentePage() {
   const navigate = useNavigate();
-  const [view, setView] = useState<'grid' | 'isa-chat' | 'isa-metrics'>('grid');
+  const [view, setView] = useState<View>('grid');
 
-  if (view === 'isa-chat')    return <IsaView onBack={() => setView('grid')} />;
+  if (view === 'isa-chat')    return <IsaView        onBack={() => setView('grid')} />;
   if (view === 'isa-metrics') return <IsaMetricsView onBack={() => setView('grid')} />;
+  if (view === 'donna-chat')  return <DonnaView      onBack={() => setView('grid')} />;
 
   return (
     <AppLayout>
@@ -97,7 +197,7 @@ export default function AssistentePage() {
             </div>
             <h1 className="text-2xl font-black" style={{ color: BROWN }}>Agentes do Escritório</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Assistentes especializados que atuam no seu escritório jurídico
+              Assistentes especializadas que atuam no seu escritório jurídico
             </p>
           </div>
 
@@ -121,7 +221,7 @@ export default function AssistentePage() {
                 style={{ background: GOLD }} />
 
               <div className="relative p-5 flex-1">
-                {/* Header do agente */}
+                {/* Header */}
                 <div className="flex items-start gap-4 mb-5">
                   <div className="relative shrink-0">
                     <img
@@ -173,9 +273,7 @@ export default function AssistentePage() {
               </div>
 
               {/* Rodapé de ações */}
-              <div
-                className="px-5 pb-5 pt-0 flex gap-2"
-              >
+              <div className="px-5 pb-5 pt-0 flex gap-2">
                 <button
                   onClick={() => setView('isa-chat')}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-black transition-all hover:opacity-90 active:scale-[0.98]"
@@ -202,38 +300,99 @@ export default function AssistentePage() {
               </div>
             </div>
 
-            {/* ── Slot reservado — 2ª agente ── */}
+            {/* ── Cartão Donn@ ── */}
             <div
-              className="relative overflow-hidden rounded-2xl flex flex-col items-center justify-center min-h-[320px]"
+              className="relative overflow-hidden rounded-2xl flex flex-col"
               style={{
-                background: 'linear-gradient(160deg, #f9f7f5 0%, #f3f0ec 100%)',
-                border: '1.5px dashed rgba(61,43,31,0.15)',
+                background: 'linear-gradient(160deg, #080e1c 0%, #111f3d 50%, #182650 100%)',
+                border: `1px solid ${BLUE_A}30`,
+                boxShadow: `0 20px 60px rgba(15,21,40,0.40), 0 4px 16px ${BLUE_A}10`,
               }}
             >
-              {/* Ícone */}
-              <div
-                className="h-16 w-16 rounded-2xl flex items-center justify-center mb-4"
-                style={{ background: `${GOLD}12`, border: `1px solid ${GOLD}30` }}
-              >
-                <Lock className="h-7 w-7" style={{ color: `${GOLD}80` }} />
+              {/* Barra azul no topo */}
+              <div style={{ height: 3, background: `linear-gradient(90deg, ${NAVY}, ${BLUE_A}, ${NAVY})` }} />
+
+              {/* Brilho decorativo */}
+              <div className="absolute top-0 right-0 w-48 h-48 rounded-full opacity-[0.05] blur-3xl"
+                style={{ background: BLUE_A }} />
+
+              <div className="relative p-5 flex-1">
+                {/* Header */}
+                <div className="flex items-start gap-4 mb-5">
+                  <div className="relative shrink-0">
+                    <div
+                      className="h-16 w-16 rounded-2xl flex items-center justify-center text-xl font-black text-white select-none"
+                      style={{ background: `linear-gradient(135deg, ${BLUE_A}, #3a6ab8)`, border: `2px solid ${BLUE_A}40` }}
+                    >
+                      D@
+                    </div>
+                    <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-amber-400 border-2 border-[#080e1c]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <h2 className="text-lg font-black text-white">Donn@</h2>
+                      <span
+                        className="text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider"
+                        style={{ background: `${BLUE_A}20`, color: BLUE_A, border: `1px solid ${BLUE_A}35` }}
+                      >
+                        Em breve
+                      </span>
+                    </div>
+                    <p style={{ color: `${BLUE_A}cc`, fontSize: 12, fontWeight: 600 }}>
+                      Assistente de Análise e Dados
+                    </p>
+                    <p className="text-white/40 text-[11px] mt-0.5 leading-snug">
+                      Relatórios, indicadores e insights estratégicos
+                    </p>
+                  </div>
+                </div>
+
+                {/* Capacidades */}
+                <div className="mb-5">
+                  <p className="text-[9px] font-black uppercase tracking-widest mb-2.5"
+                    style={{ color: `${BLUE_A}60` }}>
+                    Capacidades
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {DONNA_CAPABILITIES.map(({ icon: Icon, label }) => (
+                      <div
+                        key={label}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold"
+                        style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.60)', border: '1px solid rgba(255,255,255,0.07)' }}
+                      >
+                        <Icon className="h-2.5 w-2.5 shrink-0" style={{ color: BLUE_A }} />
+                        {label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
-              <p className="text-sm font-black" style={{ color: BROWN, opacity: 0.5 }}>
-                Em breve
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-1 text-center px-8">
-                Nova agente especializada chegando em breve
-              </p>
-
-              {/* Decoração canto */}
-              <div
-                className="absolute top-4 right-4 flex items-center gap-1 px-2 py-1 rounded-full"
-                style={{ background: `${GOLD}15`, border: `1px solid ${GOLD}25` }}
-              >
-                <Sparkles className="h-2.5 w-2.5" style={{ color: GOLD }} />
-                <span className="text-[9px] font-black uppercase tracking-wider" style={{ color: GOLD }}>
-                  Próxima
-                </span>
+              {/* Rodapé de ações */}
+              <div className="px-5 pb-5 pt-0 flex gap-2">
+                <button
+                  onClick={() => setView('donna-chat')}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-black transition-all hover:opacity-90 active:scale-[0.98]"
+                  style={{ background: `linear-gradient(135deg, ${BLUE_A}, #3a6ab8)`, color: '#fff' }}
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  Ver Detalhes
+                </button>
+                <button
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-bold opacity-40 cursor-not-allowed"
+                  style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.50)', border: '1px solid rgba(255,255,255,0.08)' }}
+                  disabled
+                >
+                  <Zap className="h-4 w-4" />
+                  Métricas
+                </button>
+                <button
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-bold opacity-40 cursor-not-allowed"
+                  style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.50)', border: '1px solid rgba(255,255,255,0.08)' }}
+                  disabled
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
               </div>
             </div>
 
