@@ -10,7 +10,8 @@ import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { IsaChat } from '@/components/assistentes/IsaChat';
 import { IsaConversionMetrics } from '@/components/assistentes/IsaConversionMetrics';
-import isaAvatar from '@/assets/isa-avatar.png';
+import isaAvatar   from '@/assets/isa-avatar.png';
+import donnaAvatar from '@/assets/donna-avatar.png';
 
 // ── Paleta ─────────────────────────────────────────────────────────────────────
 const BROWN  = '#3d2b1f';
@@ -109,11 +110,14 @@ function DonnaView({ onBack }: { onBack: () => void }) {
           style={{ background: 'linear-gradient(160deg, #080e1c 0%, #111f3d 50%, #182650 100%)' }}
         >
           {/* Avatar */}
-          <div
-            className="h-20 w-20 rounded-2xl flex items-center justify-center mb-5 shadow-2xl text-2xl font-black text-white select-none"
-            style={{ background: `linear-gradient(135deg, ${BLUE_A}, #3a6ab8)` }}
-          >
-            D@
+          <div className="relative mb-5">
+            <img
+              src={donnaAvatar}
+              alt="Donn@"
+              className="h-24 w-24 rounded-2xl object-cover object-top shadow-2xl"
+              style={{ border: `2px solid ${BLUE_A}50` }}
+            />
+            <span className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-amber-400 border-2 border-[#080e1c]" />
           </div>
 
           <h2 className="text-xl font-black text-white mb-1">Donn@</h2>
@@ -320,12 +324,12 @@ export default function AssistentePage() {
                 {/* Header */}
                 <div className="flex items-start gap-4 mb-5">
                   <div className="relative shrink-0">
-                    <div
-                      className="h-16 w-16 rounded-2xl flex items-center justify-center text-xl font-black text-white select-none"
-                      style={{ background: `linear-gradient(135deg, ${BLUE_A}, #3a6ab8)`, border: `2px solid ${BLUE_A}40` }}
-                    >
-                      D@
-                    </div>
+                    <img
+                      src={donnaAvatar}
+                      alt="Donn@"
+                      className="h-16 w-16 rounded-2xl object-cover object-top"
+                      style={{ border: `2px solid ${BLUE_A}50` }}
+                    />
                     <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-amber-400 border-2 border-[#080e1c]" />
                   </div>
                   <div className="flex-1 min-w-0">
