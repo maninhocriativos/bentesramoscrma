@@ -45,11 +45,11 @@ const statusConfig: Record<string, {
 };
 
 const faseConfig: Record<string, { cls: string }> = {
-  'Recursal':               { cls: 'bg-purple-100 text-purple-700 dark:bg-purple-950/30 dark:text-purple-400' },
-  'Execução':               { cls: 'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400' },
-  'Cumprimento de Sentença':{ cls: 'bg-teal-100 text-teal-700 dark:bg-teal-950/30 dark:text-teal-400' },
-  'Conhecimento':           { cls: 'bg-sky-100 text-sky-700 dark:bg-sky-950/30 dark:text-sky-400' },
-  'Liquidação':             { cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400' },
+  'Recursal':          { cls: 'bg-purple-100 text-purple-700 dark:bg-purple-950/30 dark:text-purple-400' },
+  'Execução':          { cls: 'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400' },
+  'Conhecimento':      { cls: 'bg-sky-100 text-sky-700 dark:bg-sky-950/30 dark:text-sky-400' },
+  'Ganho I Arquivado': { cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' },
+  'Perdido I Arquivado':{ cls: 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400' },
 };
 
 function formatCurrency(value: number | null | undefined): string | null {

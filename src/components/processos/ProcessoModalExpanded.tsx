@@ -1527,7 +1527,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                           </Field>
                           <Field label="Fase">
                             {(() => {
-                              const faseOpts = ['Conhecimento','Execução','Recursal','Cumprimento de Sentença','Liquidação'];
+                              const faseOpts = ['Conhecimento','Execução','Recursal','Ganho I Arquivado','Perdido I Arquivado'];
                               const currentFase = formData.fase || '';
                               const hasExtra = currentFase && !faseOpts.includes(currentFase);
                               return (
