@@ -579,6 +579,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   const [novaTarefaResponsavel,setNovaTarefaResponsavel]= useState('none');
   const [novaTarefaPrioridade, setNovaTarefaPrioridade] = useState<Tarefa['prioridade']>('Media');
   const [novaTarefaPrazoFatal, setNovaTarefaPrazoFatal] = useState('');
+  const [novaTarefaHorario,    setNovaTarefaHorario]    = useState('');
   const [criandoTarefa,        setCriandoTarefa]        = useState(false);
   const [processoTarefas,      setProcessoTarefas]      = useState<Tarefa[]>([]);
   const [tarefasLoading,       setTarefasLoading]       = useState(false);
@@ -1073,7 +1074,8 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
       status:           'Pendente',
       prazo_fatal:      novaTarefaPrazoFatal || null,
       data_limite:      novaTarefaPrazoFatal || null,
-      prazo_seguranca:  null, horario: null, data_conclusao: null,
+      horario:          novaTarefaHorario || null,
+      prazo_seguranca:  null, data_conclusao: null,
       started_at: null, entrega_texto: null, entrega_anexo_url: null,
       entregue_em: null, aprovacao_status: null, aprovacao_nota: null,
       aprovacao_feedback: null, aprovado_por: null, aprovado_em: null,
@@ -1083,7 +1085,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
       toast.success('Tarefa criada!');
       setNovaTarefaTitulo(''); setNovaTarefaDescricao('');
       setNovaTarefaResponsavel('none'); setNovaTarefaPrioridade('Media');
-      setNovaTarefaPrazoFatal(''); setShowNovaTarefaForm(false);
+      setNovaTarefaPrazoFatal(''); setNovaTarefaHorario(''); setShowNovaTarefaForm(false);
     }
     setCriandoTarefa(false);
     fetchProcessoTarefas();
@@ -1826,15 +1828,26 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                           </select>
                         </div>
                       </div>
-                      {/* Prazo */}
-                      <div>
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Prazo Fatal</label>
-                        <Input
-                          type="date"
-                          value={novaTarefaPrazoFatal}
-                          onChange={e => setNovaTarefaPrazoFatal(e.target.value)}
-                          className="h-9 rounded-xl bg-card text-sm max-w-[180px]"
-                        />
+                      {/* Prazo + Horário */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Prazo Fatal</label>
+                          <Input
+                            type="date"
+                            value={novaTarefaPrazoFatal}
+                            onChange={e => setNovaTarefaPrazoFatal(e.target.value)}
+                            className="h-9 rounded-xl bg-card text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Horário</label>
+                          <Input
+                            type="time"
+                            value={novaTarefaHorario}
+                            onChange={e => setNovaTarefaHorario(e.target.value)}
+                            className="h-9 rounded-xl bg-card text-sm"
+                          />
+                        </div>
                       </div>
                       {/* Botões */}
                       <div className="flex gap-2 pt-1">
