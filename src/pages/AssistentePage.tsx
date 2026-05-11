@@ -1,207 +1,259 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, MessageSquare, Calculator, Sparkles, Zap, Brain, TrendingUp, FileText, BarChart3 } from 'lucide-react';
+import {
+  ArrowLeft, MessageSquare, Brain, Zap, ListTodo,
+  Settings, Sparkles, Lock, Cpu,
+  Scale, Search, Calendar, CheckCircle2,
+} from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { IsaChat } from '@/components/assistentes/IsaChat';
-import { CalculadoraChat } from '@/components/assistentes/CalculadoraChat';
 import { IsaConversionMetrics } from '@/components/assistentes/IsaConversionMetrics';
-import { cn } from '@/lib/utils';
 import isaAvatar from '@/assets/isa-avatar.png';
 
-interface Agent {
-  id: string;
-  name: string;
-  description: string;
-  icon: React.ReactNode;
-  gradient: string;
-  route?: string;
+// ── Paleta ─────────────────────────────────────────────────────────────────────
+const BROWN = '#3d2b1f';
+const GOLD  = '#c9a96e';
+
+// ── Dados de Isa ───────────────────────────────────────────────────────────────
+const ISA_CAPABILITIES = [
+  { icon: Search,       label: 'Análise de Leads' },
+  { icon: Scale,        label: 'Consulta de Processos' },
+  { icon: ListTodo,     label: 'Gestão de Tarefas' },
+  { icon: Brain,        label: 'Estratégia Jurídica' },
+  { icon: Calendar,     label: 'Prazos e Agenda' },
+  { icon: CheckCircle2, label: 'Automação Inteligente' },
+];
+
+// ── Tela de chat aberta ────────────────────────────────────────────────────────
+function IsaView({ onBack }: { onBack: () => void }) {
+  return (
+    <AppLayout>
+      <AppHeader title="Isa — Assistente Jurídica" />
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Barra voltar */}
+        <div className="flex items-center gap-3 px-4 py-2.5 border-b bg-card shrink-0">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" /> Voltar aos agentes
+          </button>
+          <div className="ml-auto flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[11px] font-bold text-emerald-600">Online</span>
+          </div>
+        </div>
+        <IsaChat />
+      </div>
+    </AppLayout>
+  );
 }
 
-const agents: Agent[] = [
-  {
-    id: 'isa',
-    name: 'Assistente Geral',
-    description: 'Consulte leads, processos, tarefas e análises.',
-    icon: <MessageSquare className="h-5 w-5" />,
-    gradient: 'from-violet-500 to-purple-600',
-  },
-  {
-    id: 'calculadora',
-    name: 'Cálculo Bancário',
-    description: 'Analise contratos e calcule juros abusivos.',
-    icon: <Calculator className="h-5 w-5" />,
-    gradient: 'from-emerald-500 to-teal-600',
-  },
-  {
-    id: 'peticoes',
-    name: 'Gerador de Petições',
-    description: 'Crie petições JEC em minutos com revisão da Isa.',
-    icon: <FileText className="h-5 w-5" />,
-    gradient: 'from-amber-500 to-orange-600',
-    route: '/peticoes',
-  },
-  {
-    id: 'modelo-editor',
-    name: 'Editor de Modelos',
-    description: 'Envie um modelo Word e edite mantendo o layout original.',
-    icon: <FileText className="h-5 w-5" />,
-    gradient: 'from-sky-500 to-blue-600',
-    route: '/peticoes/modelo-editor',
-  },
-];
+// ── Tela de métricas de Isa ────────────────────────────────────────────────────
+function IsaMetricsView({ onBack }: { onBack: () => void }) {
+  return (
+    <AppLayout>
+      <AppHeader title="Isa — Métricas de Conversão" />
+      <div className="flex-1 overflow-auto">
+        <div className="px-4 py-2.5 border-b bg-card">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" /> Voltar aos agentes
+          </button>
+        </div>
+        <div className="p-6">
+          <IsaConversionMetrics />
+        </div>
+      </div>
+    </AppLayout>
+  );
+}
 
-const capabilities = [
-  { icon: Brain, label: 'Análise de Leads', color: 'text-violet-500' },
-  { icon: TrendingUp, label: 'Métricas do Escritório', color: 'text-emerald-500' },
-  { icon: Zap, label: 'Automação Inteligente', color: 'text-amber-500' },
-];
-
+// ── Página principal ───────────────────────────────────────────────────────────
 export default function AssistentePage() {
   const navigate = useNavigate();
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [view, setView] = useState<'grid' | 'isa-chat' | 'isa-metrics'>('grid');
 
-  const handleAgentClick = (agent: Agent) => {
-    if (agent.route) {
-      navigate(agent.route);
-    } else {
-      setSelectedAgent(agent.id);
-    }
-  };
-
-  const renderAgentChat = () => {
-    switch (selectedAgent) {
-      case 'isa':
-        return <IsaChat />;
-      case 'calculadora':
-        return <CalculadoraChat />;
-      default:
-        return null;
-    }
-  };
-
-  if (selectedAgent) {
-    const agent = agents.find(a => a.id === selectedAgent);
-    return (
-      <AppLayout>
-        <AppHeader title={`Isa - ${agent?.name}`} />
-        <div className="flex-1 flex flex-col">
-          <div className="px-6 py-3 border-b bg-muted/30">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSelectedAgent(null)}
-              className="gap-2 text-muted-foreground hover:text-foreground"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Voltar
-            </Button>
-          </div>
-          {renderAgentChat()}
-        </div>
-      </AppLayout>
-    );
-  }
+  if (view === 'isa-chat')    return <IsaView onBack={() => setView('grid')} />;
+  if (view === 'isa-metrics') return <IsaMetricsView onBack={() => setView('grid')} />;
 
   return (
     <AppLayout>
-      <AppHeader title="Assistentes IA" />
-      
-      <div className="flex-1 p-6">
-        <div className="max-w-5xl mx-auto space-y-6">
-          
-          {/* Hero Section - Compact */}
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-600 p-6 text-white">
-            <div className="absolute inset-0 opacity-10">
-              <div className="absolute top-0 left-0 w-40 h-40 bg-white rounded-full blur-3xl" />
-              <div className="absolute bottom-0 right-0 w-60 h-60 bg-white rounded-full blur-3xl" />
+      <AppHeader title="Agentes IA" />
+
+      <div className="flex-1 overflow-auto">
+        <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
+
+          {/* ── Cabeçalho ── */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Cpu className="h-4 w-4 text-muted-foreground" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                Inteligência Artificial
+              </span>
             </div>
-            
-            <div className="relative flex items-center gap-5">
-              <div className="relative">
-                <img 
-                  src={isaAvatar} 
-                  alt="Isa" 
-                  className="relative h-16 w-16 rounded-full object-cover object-top border-3 border-white/30 shadow-xl"
-                />
-                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-400 rounded-full border-2 border-white flex items-center justify-center">
-                  <Sparkles className="w-2.5 h-2.5 text-white" />
-                </div>
-              </div>
-              
-              <div className="flex-1">
-                <h1 className="text-2xl font-bold">Isa - Assistente Jurídica</h1>
-                <p className="text-white/80 text-sm">
-                  Automação inteligente para conversão de leads
-                </p>
-              </div>
-              
-              <div className="hidden md:flex items-center gap-3">
-                {capabilities.map((cap, i) => (
-                  <div key={i} className="flex items-center gap-1.5 bg-white/10 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs">
-                    <cap.icon className="w-3.5 h-3.5" />
-                    {cap.label}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <h1 className="text-2xl font-black" style={{ color: BROWN }}>Agentes do Escritório</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Assistentes especializados que atuam no seu escritório jurídico
+            </p>
           </div>
 
-          {/* Tabs: Módulos | Métricas */}
-          <Tabs defaultValue="modulos" className="w-full">
-            <TabsList className="grid w-full max-w-md grid-cols-2">
-              <TabsTrigger value="modulos" className="gap-2">
-                <MessageSquare className="h-4 w-4" />
-                Módulos IA
-              </TabsTrigger>
-              <TabsTrigger value="metricas" className="gap-2">
-                <BarChart3 className="h-4 w-4" />
-                Métricas
-              </TabsTrigger>
-            </TabsList>
+          {/* ── Grid de agentes ── */}
+          <div className="grid sm:grid-cols-2 gap-6">
 
-            <TabsContent value="modulos" className="mt-4">
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {agents.map((agent) => (
-                  <Card
-                    key={agent.id}
-                    className="group cursor-pointer hover:shadow-xl hover:border-primary/40 transition-all hover:-translate-y-1 overflow-hidden"
-                    onClick={() => handleAgentClick(agent)}
-                  >
-                    <CardContent className="p-0">
-                      <div className={cn("p-4 bg-gradient-to-r text-white", agent.gradient)}>
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                            {agent.icon}
-                          </div>
-                          <div>
-                            <h3 className="font-semibold">{agent.name}</h3>
-                            <p className="text-sm text-white/80">{agent.description}</p>
-                          </div>
-                        </div>
+            {/* ── Cartão Isa ── */}
+            <div
+              className="relative overflow-hidden rounded-2xl flex flex-col"
+              style={{
+                background: 'linear-gradient(160deg, #1a0e08 0%, #2d1810 50%, #3d2b1f 100%)',
+                border: `1px solid ${GOLD}35`,
+                boxShadow: `0 20px 60px rgba(61,43,31,0.35), 0 4px 16px ${GOLD}15`,
+              }}
+            >
+              {/* Barra dourada no topo */}
+              <div style={{ height: 3, background: `linear-gradient(90deg, ${BROWN}, ${GOLD}, ${BROWN})` }} />
+
+              {/* Brilho decorativo */}
+              <div className="absolute top-0 right-0 w-48 h-48 rounded-full opacity-[0.04] blur-3xl"
+                style={{ background: GOLD }} />
+
+              <div className="relative p-5 flex-1">
+                {/* Header do agente */}
+                <div className="flex items-start gap-4 mb-5">
+                  <div className="relative shrink-0">
+                    <img
+                      src={isaAvatar}
+                      alt="Isa"
+                      className="h-16 w-16 rounded-2xl object-cover object-top"
+                      style={{ border: `2px solid ${GOLD}50` }}
+                    />
+                    <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-emerald-400 border-2 border-[#1a0e08] animate-pulse" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <h2 className="text-lg font-black text-white">Isa</h2>
+                      <span
+                        className="text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider"
+                        style={{ background: `${GOLD}25`, color: GOLD, border: `1px solid ${GOLD}40` }}
+                      >
+                        Ativa
+                      </span>
+                    </div>
+                    <p style={{ color: `${GOLD}cc`, fontSize: 12, fontWeight: 600 }}>
+                      Assistente Jurídica Inteligente
+                    </p>
+                    <p className="text-white/40 text-[11px] mt-0.5 leading-snug">
+                      Análise de leads, processos, prazos e automação
+                    </p>
+                  </div>
+                </div>
+
+                {/* Capacidades */}
+                <div className="mb-5">
+                  <p className="text-[9px] font-black uppercase tracking-widest mb-2.5"
+                    style={{ color: `${GOLD}70` }}>
+                    Capacidades
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ISA_CAPABILITIES.map(({ icon: Icon, label }) => (
+                      <div
+                        key={label}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold"
+                        style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.70)', border: '1px solid rgba(255,255,255,0.08)' }}
+                      >
+                        <Icon className="h-2.5 w-2.5 shrink-0" style={{ color: GOLD }} />
+                        {label}
                       </div>
-                      <div className="p-3 flex items-center justify-between bg-card">
-                        <span className="text-xs text-muted-foreground">Clique para iniciar</span>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-1 group-hover:text-primary transition-all" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                    ))}
+                  </div>
+                </div>
               </div>
-              
-              <p className="text-center text-xs text-muted-foreground flex items-center justify-center gap-1.5 py-4">
-                <Zap className="h-3.5 w-3.5 text-amber-500" />
-                Para processamento automático, acesse <span className="font-medium text-primary">Isa Autônoma</span> no menu.
-              </p>
-            </TabsContent>
 
-            <TabsContent value="metricas" className="mt-4">
-              <IsaConversionMetrics />
-            </TabsContent>
-          </Tabs>
+              {/* Rodapé de ações */}
+              <div
+                className="px-5 pb-5 pt-0 flex gap-2"
+              >
+                <button
+                  onClick={() => setView('isa-chat')}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-black transition-all hover:opacity-90 active:scale-[0.98]"
+                  style={{ background: `linear-gradient(135deg, ${GOLD}, #b8922a)`, color: BROWN }}
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  Abrir Chat
+                </button>
+                <button
+                  onClick={() => setView('isa-metrics')}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-80"
+                  style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.70)', border: '1px solid rgba(255,255,255,0.10)' }}
+                >
+                  <Zap className="h-4 w-4" />
+                  Métricas
+                </button>
+                <button
+                  onClick={() => navigate('/isa-autonoma')}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-80"
+                  style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.70)', border: '1px solid rgba(255,255,255,0.10)' }}
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* ── Slot reservado — 2ª agente ── */}
+            <div
+              className="relative overflow-hidden rounded-2xl flex flex-col items-center justify-center min-h-[320px]"
+              style={{
+                background: 'linear-gradient(160deg, #f9f7f5 0%, #f3f0ec 100%)',
+                border: '1.5px dashed rgba(61,43,31,0.15)',
+              }}
+            >
+              {/* Ícone */}
+              <div
+                className="h-16 w-16 rounded-2xl flex items-center justify-center mb-4"
+                style={{ background: `${GOLD}12`, border: `1px solid ${GOLD}30` }}
+              >
+                <Lock className="h-7 w-7" style={{ color: `${GOLD}80` }} />
+              </div>
+
+              <p className="text-sm font-black" style={{ color: BROWN, opacity: 0.5 }}>
+                Em breve
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-1 text-center px-8">
+                Nova agente especializada chegando em breve
+              </p>
+
+              {/* Decoração canto */}
+              <div
+                className="absolute top-4 right-4 flex items-center gap-1 px-2 py-1 rounded-full"
+                style={{ background: `${GOLD}15`, border: `1px solid ${GOLD}25` }}
+              >
+                <Sparkles className="h-2.5 w-2.5" style={{ color: GOLD }} />
+                <span className="text-[9px] font-black uppercase tracking-wider" style={{ color: GOLD }}>
+                  Próxima
+                </span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* ── Nota de rodapé ── */}
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <Cpu className="h-3.5 w-3.5 text-muted-foreground/40" />
+            <p className="text-xs text-muted-foreground/50">
+              Para automações autônomas, acesse{' '}
+              <button
+                onClick={() => navigate('/isa-autonoma')}
+                className="font-semibold text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+              >
+                Isa Autônoma
+              </button>{' '}
+              no menu lateral
+            </p>
+          </div>
+
         </div>
       </div>
     </AppLayout>
