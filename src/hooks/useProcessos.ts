@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { usePerfil } from './usePerfil';
 import { useAuth } from './useAuth';
 
-const PROCESSOS_LIST_SELECT = 'id,numero_processo,numero_complementar,titulo_acao,status,advogado_responsavel,cliente_id,cpf_cliente,nome_cliente,created_at,tribunal,vara_comarca,assunto,valor_causa,data_ajuizamento,data_ultima_atualizacao,orgao_julgador,grau,classe_cnj,status_detalhado,origem_cliente,ultima_consulta_api_at,frequencia_notificacao_dias,notificacao_ativa,ultima_notificacao_at,descricao,marcadores,area,fase,assunto_cnj,segredo_justica,data_distribuicao,data_citacao,data_recebimento,data_arquivamento,data_encerramento,valor_provisionado,probabilidade,monitorar_push,tipo_orgao_julgador,sistema_judicial,complemento_enderecamento,processo_pai_id';
+const PROCESSOS_LIST_SELECT = 'id,numero_processo,numero_complementar,titulo_acao,status,advogado_responsavel,cliente_id,cpf_cliente,nome_cliente,created_at,tribunal,vara_comarca,assunto,valor_causa,data_ajuizamento,data_ultima_atualizacao,orgao_julgador,grau,classe_cnj,status_detalhado,origem_cliente,ultima_consulta_api_at,frequencia_notificacao_dias,notificacao_ativa,ultima_notificacao_at,descricao,marcadores,area,fase,assunto_cnj,segredo_justica,data_distribuicao,data_citacao,data_recebimento,data_arquivamento,data_encerramento,valor_provisionado,probabilidade,monitorar_push,tipo_orgao_julgador,sistema_judicial,complemento_enderecamento,processo_pai_id,partes_json,movimentos_json';
 
 // ✅ Normaliza CNJ para uso como chave de deduplicação
 function normalizarCNJ(numero: string | null | undefined): string | null {

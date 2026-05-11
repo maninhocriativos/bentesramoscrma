@@ -57,6 +57,20 @@ function formatCurrency(value: number | null | undefined): string | null {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(value);
 }
 
+function getPartes(processo: Processo) {
+  const partes = processo.partes_json || [];
+  const ativo = partes.find(p =>
+    p.polo === 'AT' || p.polo?.toLowerCase() === 'ativo' ||
+    p.tipo?.toLowerCase()?.includes('autor') || p.tipo?.toLowerCase()?.includes('requerente')
+  );
+  const passivo = partes.find(p =>
+    p.polo === 'PA' || p.polo === 'RE' || p.polo?.toLowerCase() === 'passivo' ||
+    p.tipo?.toLowerCase()?.includes('réu') || p.tipo?.toLowerCase()?.includes('requerido') ||
+    p.tipo?.toLowerCase()?.includes('reu')
+  );
+  return { ativo, passivo };
+}
+
 function formatDate(dateStr: string | null | undefined): string | null {
   if (!dateStr) return null;
   try {
@@ -176,12 +190,12 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
           <thead>
             <tr className="border-b border-border/50 bg-muted/30">
               <th className="w-[3px] p-0" />
-              <th className="text-left px-5 py-3 w-[22%]"><SortBtn col="cliente"  label="Cliente" /></th>
+              <th className="text-left px-5 py-3 w-[24%]"><SortBtn col="cliente"  label="Cliente / Partes" /></th>
               <th className="text-left px-4 py-3 w-[22%]"><SortBtn col="numero"   label="Processo" /></th>
               <th className="text-left px-3 py-3 w-[9%]"> <SortBtn col="tribunal" label="Tribunal" /></th>
-              <th className="text-left px-3 py-3 w-[11%]"><SortBtn col="data"     label="Distribuição" /></th>
-              <th className="text-left px-3 py-3 w-[10%]"><SortBtn col="valor"    label="Valor" /></th>
-              <th className="text-right px-5 py-3 w-[26%]"><SortBtn col="status"  label="Situação" /></th>
+              <th className="text-left px-3 py-3 w-[12%]"><SortBtn col="data"     label="Distribuição" /></th>
+              <th className="text-left px-3 py-3 w-[12%]"><SortBtn col="valor"    label="Valor" /></th>
+              <th className="text-left px-5 py-3 w-[21%]"><SortBtn col="status"   label="Situação" /></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/25">
@@ -193,10 +207,12 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
               const ultimaMov   = processo.movimentos_json?.[0];
               const dataDistrib = formatDate(processo.data_distribuicao || (processo as any).data_ajuizamento);
               const dataSync    = formatDate(processo.data_ultima_atualizacao || ultimaMov?.dataHora);
-              const valor       = formatCurrency(processo.valor_causa);
+              const valor       = formatCurrency(processo.valor_causa) || formatCurrency(processo.valor_provisionado);
+              const valorIsProvisionado = !processo.valor_causa && !!processo.valor_provisionado;
               const movCount    = processo.movimentos_json?.length || 0;
               const isPai       = parentIds.has(processo.id);
               const isFilho     = !!(processo as any).processo_pai_id;
+              const { ativo, passivo } = getPartes(processo);
 
               return (
                 <tr
@@ -212,18 +228,25 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
                     />
                   </td>
 
-                  {/* Cliente */}
+                  {/* Cliente / Partes */}
                   <td className="px-5 py-3.5 align-top">
-                    <p className={`text-sm font-bold leading-tight truncate max-w-[190px] ${clienteName ? 'text-foreground' : 'text-muted-foreground/40 font-normal'}`}>
+                    <p className={`text-sm font-bold leading-tight truncate max-w-[200px] ${clienteName ? 'text-foreground' : 'text-muted-foreground/40 font-normal'}`}>
                       {clienteName || 'Sem identificação'}
                     </p>
+                    {/* Polo passivo (réu/requerido) */}
+                    {passivo && passivo.nome !== clienteName && (
+                      <p className="text-[10px] text-muted-foreground/55 truncate max-w-[200px] mt-0.5 flex items-center gap-1 leading-tight">
+                        <span className="text-[8px] font-black text-rose-400/80 shrink-0">vs</span>
+                        {passivo.nome}
+                      </p>
+                    )}
                     {processo.classe_cnj && (
-                      <p className="text-[10px] text-muted-foreground/60 truncate max-w-[190px] mt-0.5 leading-tight">
+                      <p className="text-[10px] text-muted-foreground/50 truncate max-w-[200px] mt-0.5 leading-tight">
                         {processo.classe_cnj}
                       </p>
                     )}
                     {processo.advogado_responsavel && (
-                      <p className="text-[10px] text-muted-foreground/40 truncate max-w-[190px] mt-0.5 flex items-center gap-1 leading-tight">
+                      <p className="text-[10px] text-muted-foreground/40 truncate max-w-[200px] mt-0.5 flex items-center gap-1 leading-tight">
                         <User className="h-2.5 w-2.5 shrink-0" />
                         {processo.advogado_responsavel.replace(/\s*\(OAB.*\)/i, '')}
                       </p>
@@ -300,9 +323,14 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
                   {/* Valor */}
                   <td className="px-3 py-3.5 align-top">
                     {valor ? (
-                      <div className="flex items-center gap-1 text-[11px] font-bold text-foreground">
-                        <DollarSign className="h-3 w-3 text-muted-foreground shrink-0" />
-                        {valor}
+                      <div>
+                        <div className="flex items-center gap-1 text-[11px] font-bold text-foreground">
+                          <DollarSign className="h-3 w-3 text-muted-foreground shrink-0" />
+                          {valor}
+                        </div>
+                        {valorIsProvisionado && (
+                          <p className="text-[8px] text-muted-foreground/40 mt-0.5">provisionado</p>
+                        )}
                       </div>
                     ) : (
                       <span className="text-muted-foreground/20 text-xs">—</span>
@@ -311,14 +339,14 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
 
                   {/* Status */}
                   <td className="px-5 py-3.5 align-top">
-                    <div className="flex items-start justify-end gap-2">
-                      <div className="flex flex-col items-end gap-1.5 flex-1 min-w-0">
+                    <div className="flex items-start gap-2">
+                      <div className="flex flex-col items-start gap-1.5 flex-1 min-w-0">
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${cfg.cls}`}>
                           {(() => { const StatusIcon = cfg.icon; return <StatusIcon className="h-3 w-3 shrink-0" />; })()}
                           {status}
                         </span>
                         {(ultimaMov?.nome) && (
-                          <p className="text-[9px] text-muted-foreground/50 text-right truncate max-w-[180px]" title={ultimaMov.nome}>
+                          <p className="text-[9px] text-muted-foreground/50 truncate max-w-[160px]" title={ultimaMov.nome}>
                             {ultimaMov.nome.length > 40 ? ultimaMov.nome.slice(0, 40) + '…' : ultimaMov.nome}
                           </p>
                         )}
