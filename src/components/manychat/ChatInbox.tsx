@@ -1181,18 +1181,46 @@ const ManyChatInboxContent = () => {
     if (trimmed === current) return;
     nameSavingRef.current = true;
     try {
+      // 1. Atualiza manychat_subscribers
       const { error: subErr } = await supabase
         .from("manychat_subscribers")
         .update({ nome: trimmed })
         .eq("subscriber_id", sub.subscriber_id);
       if (subErr) throw subErr;
+
       if (sub.lead_id) {
+        // 2. Atualiza leads_juridicos (página de Leads)
         await supabase.from("leads_juridicos").update({ nome: trimmed }).eq("id", sub.lead_id);
+        // 3. Atualiza processos.nome_cliente (página de Contratos)
+        await supabase.from("processos").update({ nome_cliente: trimmed }).eq("cliente_id", sub.lead_id);
       }
-      // Atualiza estado local imediatamente — lista + conversa selecionada
+
+      // 4. Atualiza nome do contato no Z-API (fire-and-forget, falha silenciosa)
+      if (sub.telefone) {
+        (async () => {
+          try {
+            const { data: instances } = await supabase
+              .from("zapi_instances")
+              .select("instance_id, token, client_token")
+              .order("is_default", { ascending: false })
+              .limit(1);
+            const inst = instances?.[0];
+            if (!inst) return;
+            const phone = sub.telefone!.replace(/\D/g, '');
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (inst.client_token) headers['Client-Token'] = inst.client_token;
+            await fetch(
+              `https://api.z-api.io/instances/${inst.instance_id}/token/${inst.token}/update-contact`,
+              { method: 'PUT', headers, body: JSON.stringify({ phone, name: trimmed }) }
+            );
+          } catch { /* Z-API contact update não crítico */ }
+        })();
+      }
+
+      // 5. Atualiza estado local imediatamente — lista + conversa selecionada
       setSubscribers(prev => prev.map(s => s.subscriber_id === sub.subscriber_id ? { ...s, nome: trimmed } : s));
       setSelectedSubscriber(prev => prev?.subscriber_id === sub.subscriber_id ? { ...prev, nome: trimmed } : prev);
-      toast({ title: "Nome atualizado", description: `"${trimmed}" salvo com sucesso.` });
+      toast({ title: "Nome atualizado", description: `"${trimmed}" salvo — leads, contratos e WhatsApp sincronizados.` });
     } catch {
       toast({ title: "Erro ao salvar nome", description: "Tente novamente.", variant: "destructive" });
     } finally {
