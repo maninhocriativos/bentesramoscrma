@@ -1287,7 +1287,7 @@ async function analisarPdfComIA(pdfUrl: string): Promise<string | null> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-sonnet-4-6',
         max_tokens: 2000,
         messages: [{
           role: 'user',
@@ -1510,32 +1510,36 @@ Responda em JSON:
   "acoes": [{ "acao": "nome", "dados": {}, "motivo": "razão" }]
 }`;
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const ANTHROPIC_KEY_MAIN = Deno.env.get('ANTHROPIC_API_KEY');
+  if (!ANTHROPIC_KEY_MAIN) throw new Error('ANTHROPIC_API_KEY não configurada');
+
+  const userContent: any = imageUrl
+    ? [
+        { type: 'image', source: { type: 'url', url: imageUrl } },
+        { type: 'text', text: `NOVA MENSAGEM DO CLIENTE (enviou uma imagem):\n"${mensagem}"` },
+      ]
+    : `NOVA MENSAGEM DO CLIENTE:\n"${mensagem}"`;
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+    headers: {
+      'x-api-key': ANTHROPIC_KEY_MAIN,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: imageUrl
-            ? [
-                { type: 'image_url', image_url: { url: imageUrl, detail: 'auto' } },
-                { type: 'text', text: `NOVA MENSAGEM DO CLIENTE (enviou uma imagem):\n"${mensagem}"` },
-              ]
-            : `NOVA MENSAGEM DO CLIENTE:\n"${mensagem}"`,
-        },
-      ],
-      response_format: { type: 'json_object' },
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userContent }],
       temperature: 0.3,
     }),
   });
 
-  if (!response.ok) { const error = await response.text(); console.error('❌ Erro na API OpenAI:', error); throw new Error('Erro ao processar com IA'); }
+  if (!response.ok) { const error = await response.text(); console.error('❌ Erro na API Anthropic:', error); throw new Error('Erro ao processar com IA'); }
 
   const data = await response.json();
-  const resultado = parseAiJson(data.choices[0].message.content);
+  const resultado = parseAiJson(data.content[0].text);
 
   const acoesProcessadas = (resultado.acoes || []).map((a: any) => ({
     acao: a.acao,
@@ -1547,7 +1551,7 @@ Responda em JSON:
   return { resposta: resultado.resposta || '', acoes: acoesProcessadas, analise: resultado.analise };
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
