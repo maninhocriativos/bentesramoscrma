@@ -5,8 +5,10 @@ import {
   FileText, Bell, Hash, FolderOpen, Shield, Pencil, ChevronRight,
   CheckCircle2, Search, Tag, UserPlus, AlertTriangle,
   CheckCircle, PauseCircle, Archive, Trophy, XCircle, Activity,
-  Link2, Link2Off, GitBranch,
+  Link2, Link2Off, GitBranch, ListTodo, Send, Play, RotateCcw, Star,
 } from 'lucide-react';
+import { useTarefas } from '@/hooks/useTarefas';
+import { Tarefa } from '@/types/tarefas';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -427,6 +429,112 @@ function AddParteForm({ onAdd }: { onAdd: (parte: ProcessoParte) => void }) {
   );
 }
 
+// ─── TarefaRowModal ────────────────────────────────────────────────────────────
+
+const PRIO_ROW: Record<string, { bar: string; badge: string; label: string }> = {
+  Urgente: { bar: '#dc2626', badge: 'bg-red-50 text-red-700 border-red-200',      label: 'Urgente' },
+  Alta:    { bar: '#c9a96e', badge: 'bg-amber-50 text-amber-700 border-amber-200', label: 'Alta' },
+  Media:   { bar: '#3d2b1f', badge: 'bg-stone-100 text-stone-600 border-stone-200', label: 'Média' },
+  Baixa:   { bar: '#94a3b8', badge: 'bg-slate-50 text-slate-500 border-slate-200', label: 'Baixa' },
+};
+const STATUS_ROW: Record<string, { icon: React.ElementType; cls: string; label: string }> = {
+  'Pendente':     { icon: AlertTriangle, cls: 'bg-amber-50 text-amber-700 border-amber-200', label: 'Pendente' },
+  'Em Andamento': { icon: Play,          cls: 'bg-blue-50 text-blue-700 border-blue-200',   label: 'Em Andamento' },
+  'Concluída':    { icon: CheckCircle2,  cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Concluída' },
+  'Cancelada':    { icon: XCircle,       cls: 'bg-muted text-muted-foreground border-border', label: 'Cancelada' },
+};
+const STATUS_NEXT: Record<string, Tarefa['status']> = {
+  'Pendente': 'Em Andamento', 'Em Andamento': 'Concluída', 'Concluída': 'Pendente', 'Cancelada': 'Pendente',
+};
+
+function TarefaRowModal({ tarefa, membros, onStatusChange }: {
+  tarefa: Tarefa;
+  membros: { id: string; nome: string | null; sobrenome: string | null; email: string | null }[];
+  onStatusChange: (id: string, status: Tarefa['status']) => void;
+}) {
+  const prio = PRIO_ROW[tarefa.prioridade] || PRIO_ROW.Baixa;
+  const stCfg = STATUS_ROW[tarefa.status] || STATUS_ROW['Pendente'];
+  const StatusIcon = stCfg.icon;
+  const membro = membros.find(m => m.id === tarefa.responsavel_id);
+  const membroNome = membro ? ([membro.nome, membro.sobrenome].filter(Boolean).join(' ') || membro.email || 'Usuário') : null;
+  const isAtrasada = tarefa.prazo_fatal && tarefa.status !== 'Concluída' && tarefa.status !== 'Cancelada'
+    && new Date(tarefa.prazo_fatal) < new Date();
+  const isConcluida = tarefa.status === 'Concluída';
+
+  return (
+    <div
+      className={`rounded-xl border transition-all ${isConcluida ? 'bg-emerald-50/40 border-emerald-200/50' : 'bg-card border-border/40 hover:border-border/70'}`}
+      style={{ borderLeftWidth: 3, borderLeftColor: isConcluida ? '#16a34a' : prio.bar }}
+    >
+      <div className="p-3">
+        <div className="flex items-start justify-between gap-2">
+          {/* Título + meta */}
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm font-semibold leading-tight ${isConcluida ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+              {tarefa.titulo}
+            </p>
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              {/* Status badge clicável para avançar */}
+              <button
+                type="button"
+                onClick={() => onStatusChange(tarefa.id, STATUS_NEXT[tarefa.status])}
+                title={`Avançar para: ${STATUS_NEXT[tarefa.status]}`}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border transition-all hover:opacity-80 ${stCfg.cls}`}
+              >
+                <StatusIcon className="h-2.5 w-2.5 shrink-0" />
+                {stCfg.label}
+              </button>
+              {/* Prioridade */}
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold border ${prio.badge}`}>
+                {prio.label}
+              </span>
+              {/* Responsável */}
+              {membroNome && (
+                <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <Users className="h-2.5 w-2.5" />{membroNome}
+                </span>
+              )}
+              {/* Prazo */}
+              {tarefa.prazo_fatal && (
+                <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${isAtrasada ? 'text-red-600' : 'text-muted-foreground'}`}>
+                  <Calendar className="h-2.5 w-2.5" />
+                  {new Date(tarefa.prazo_fatal).toLocaleDateString('pt-BR')}
+                  {isAtrasada && <AlertTriangle className="h-2.5 w-2.5" />}
+                </span>
+              )}
+            </div>
+            {/* Aprovação */}
+            {tarefa.aprovacao_status && (
+              <div className="mt-1.5 flex items-center gap-1">
+                {tarefa.aprovacao_status === 'aguardando_aprovacao' && (
+                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                    <Send className="h-2.5 w-2.5" /> Aguardando aprovação
+                  </span>
+                )}
+                {tarefa.aprovacao_status === 'aprovada' && (
+                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                    <CheckCircle2 className="h-2.5 w-2.5" /> Aprovada
+                    {tarefa.aprovacao_nota && (
+                      <span className="flex items-center gap-0.5 ml-1">
+                        {[1,2,3,4,5].map(s => <Star key={s} className="h-2 w-2" style={{ color: s <= tarefa.aprovacao_nota! ? '#c9a96e' : '#e5e7eb', fill: s <= tarefa.aprovacao_nota! ? '#c9a96e' : 'transparent' }} />)}
+                      </span>
+                    )}
+                  </span>
+                )}
+                {tarefa.aprovacao_status === 'devolvida' && (
+                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+                    <RotateCcw className="h-2.5 w-2.5" /> Devolvida
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false, canDelete = false, leads: leadsInit }: ProcessoModalExpandedProps) {
@@ -463,6 +571,18 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   const [verificandoTodos,  setVerificandoTodos]   = useState(false);
   const [verificacaoStatus, setVerificacaoStatus]  = useState<Record<string, 'ok' | 'erro'>>({});
   const autoSavePartesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Tarefas do processo ──────────────────────────────────────────────────────
+  const [showNovaTarefaForm,   setShowNovaTarefaForm]   = useState(false);
+  const [novaTarefaTitulo,     setNovaTarefaTitulo]     = useState('');
+  const [novaTarefaDescricao,  setNovaTarefaDescricao]  = useState('');
+  const [novaTarefaResponsavel,setNovaTarefaResponsavel]= useState('none');
+  const [novaTarefaPrioridade, setNovaTarefaPrioridade] = useState<Tarefa['prioridade']>('Media');
+  const [novaTarefaPrazoFatal, setNovaTarefaPrazoFatal] = useState('');
+  const [criandoTarefa,        setCriandoTarefa]        = useState(false);
+  const [processoTarefas,      setProcessoTarefas]      = useState<Tarefa[]>([]);
+  const [tarefasLoading,       setTarefasLoading]       = useState(false);
+  const [membros,              setMembros]              = useState<{ id: string; nome: string | null; sobrenome: string | null; email: string | null }[]>([]);
 
   useEffect(() => { setLeads(leadsInit); }, [leadsInit]);
   const movimentosEnriquecidos = useMemo(() => enrichMovements(movimentos), [movimentos]);
@@ -920,6 +1040,60 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
     toast.success(`Verificação: ${ok} encontrado${ok !== 1 ? 's' : ''}${err ? `, ${err} não encontrado${err !== 1 ? 's' : ''}` : ''}`);
   };
 
+  // ── Tarefas do processo ──────────────────────────────────────────────────────
+  const fetchProcessoTarefas = useCallback(async () => {
+    if (!processo?.id || isNew) return;
+    setTarefasLoading(true);
+    const { data } = await supabase.from('tarefas').select('*').eq('processo_id', processo.id).order('created_at', { ascending: false });
+    setProcessoTarefas((data as Tarefa[]) || []);
+    setTarefasLoading(false);
+  }, [processo?.id, isNew]);
+
+  useEffect(() => {
+    if (activeTab === 'tarefas') {
+      fetchProcessoTarefas();
+      if (membros.length === 0) {
+        supabase.from('perfis').select('id, nome, sobrenome, email').eq('aprovado', true)
+          .then(({ data }) => { if (data) setMembros(data as any); });
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, processo?.id]);
+
+  const handleCriarTarefa = async () => {
+    if (!novaTarefaTitulo.trim() || !processo?.id) return;
+    setCriandoTarefa(true);
+    const { error } = await supabase.from('tarefas').insert({
+      titulo:           novaTarefaTitulo.trim(),
+      descricao:        novaTarefaDescricao.trim() || null,
+      processo_id:      processo.id,
+      cliente_id:       formData.cliente_id && formData.cliente_id !== '__none__' ? formData.cliente_id : null,
+      responsavel_id:   novaTarefaResponsavel !== 'none' ? novaTarefaResponsavel : null,
+      prioridade:       novaTarefaPrioridade,
+      status:           'Pendente',
+      prazo_fatal:      novaTarefaPrazoFatal || null,
+      data_limite:      novaTarefaPrazoFatal || null,
+      prazo_seguranca:  null, horario: null, data_conclusao: null,
+      started_at: null, entrega_texto: null, entrega_anexo_url: null,
+      entregue_em: null, aprovacao_status: null, aprovacao_nota: null,
+      aprovacao_feedback: null, aprovado_por: null, aprovado_em: null,
+    });
+    if (error) { toast.error('Erro ao criar tarefa', { description: error.message }); }
+    else {
+      toast.success('Tarefa criada!');
+      setNovaTarefaTitulo(''); setNovaTarefaDescricao('');
+      setNovaTarefaResponsavel('none'); setNovaTarefaPrioridade('Media');
+      setNovaTarefaPrazoFatal(''); setShowNovaTarefaForm(false);
+    }
+    setCriandoTarefa(false);
+    fetchProcessoTarefas();
+  };
+
+  const handleUpdateTarefaStatus = async (id: string, status: Tarefa['status']) => {
+    await supabase.from('tarefas').update({ status, ...(status === 'Concluída' ? { data_conclusao: new Date().toISOString().slice(0, 10) } : {}) }).eq('id', id);
+    fetchProcessoTarefas();
+  };
+
   const clienteSelecionado = leads.find(l => l.id === formData.cliente_id);
   const hasPartes  = partes.length > 0;
   const isValidCnj = CNJ_REGEX.test((formData.numero_processo || '').trim());
@@ -1057,6 +1231,16 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                 <TabsTrigger value="notificacoes" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm data-[state=active]:bg-card font-semibold">
                   <MessageSquare className="h-3.5 w-3.5" /> Notificações
                 </TabsTrigger>
+                {!isNew && (
+                  <TabsTrigger value="tarefas" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm data-[state=active]:bg-card font-semibold">
+                    <ListTodo className="h-3.5 w-3.5" /> Tarefas
+                    {processoTarefas.length > 0 && (
+                      <span className="ml-0.5 h-4 min-w-4 px-1 rounded-full bg-primary/15 text-primary text-[9px] font-black flex items-center justify-center border border-primary/15">
+                        {processoTarefas.length}
+                      </span>
+                    )}
+                  </TabsTrigger>
+                )}
               </TabsList>
             </div>
 
@@ -1550,6 +1734,154 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/20 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
                           </div>
                         </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </TabsContent>
+
+            {/* ── TAB TAREFAS ── */}
+            <TabsContent value="tarefas" className="flex-1 min-h-0 mt-0 overflow-hidden">
+              <ScrollArea className="h-full">
+                <div className="px-6 py-5 pb-16 space-y-4">
+
+                  {/* Header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-7 w-7 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <ListTodo className="h-4 w-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-foreground">Tarefas do Processo</p>
+                        <p className="text-[10px] text-muted-foreground">Aparecem também na página de Tarefas</p>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="h-8 rounded-xl text-xs gap-1.5"
+                      onClick={() => setShowNovaTarefaForm(v => !v)}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Nova Tarefa
+                    </Button>
+                  </div>
+
+                  {/* Formulário de nova tarefa */}
+                  {showNovaTarefaForm && (
+                    <div className="rounded-2xl border border-primary/20 bg-primary/[0.02] p-4 space-y-3">
+                      <p className="text-[11px] font-black text-foreground uppercase tracking-widest flex items-center gap-1.5">
+                        <Plus className="h-3 w-3 text-primary" /> Nova Tarefa
+                      </p>
+                      {/* Título */}
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Título *</label>
+                        <Input
+                          value={novaTarefaTitulo}
+                          onChange={e => setNovaTarefaTitulo(e.target.value)}
+                          placeholder="O que precisa ser feito?"
+                          className="h-9 rounded-xl bg-card text-sm"
+                          autoFocus
+                        />
+                      </div>
+                      {/* Descrição */}
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Descrição</label>
+                        <Textarea
+                          value={novaTarefaDescricao}
+                          onChange={e => setNovaTarefaDescricao(e.target.value)}
+                          placeholder="Detalhes opcionais..."
+                          rows={2}
+                          className="rounded-xl bg-card text-sm resize-none"
+                        />
+                      </div>
+                      {/* Responsável + Prioridade */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Responsável</label>
+                          <select
+                            value={novaTarefaResponsavel}
+                            onChange={e => setNovaTarefaResponsavel(e.target.value)}
+                            className="flex h-9 w-full rounded-xl border border-input bg-card px-3 text-sm"
+                          >
+                            <option value="none">Sem responsável</option>
+                            {membros.map(m => (
+                              <option key={m.id} value={m.id}>
+                                {[m.nome, m.sobrenome].filter(Boolean).join(' ') || m.email || 'Usuário'}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Prioridade</label>
+                          <select
+                            value={novaTarefaPrioridade}
+                            onChange={e => setNovaTarefaPrioridade(e.target.value as Tarefa['prioridade'])}
+                            className="flex h-9 w-full rounded-xl border border-input bg-card px-3 text-sm"
+                          >
+                            <option value="Baixa">Baixa</option>
+                            <option value="Media">Média</option>
+                            <option value="Alta">Alta</option>
+                            <option value="Urgente">🔴 Urgente</option>
+                          </select>
+                        </div>
+                      </div>
+                      {/* Prazo */}
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 block">Prazo Fatal</label>
+                        <Input
+                          type="date"
+                          value={novaTarefaPrazoFatal}
+                          onChange={e => setNovaTarefaPrazoFatal(e.target.value)}
+                          className="h-9 rounded-xl bg-card text-sm max-w-[180px]"
+                        />
+                      </div>
+                      {/* Botões */}
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          onClick={handleCriarTarefa}
+                          disabled={criandoTarefa || !novaTarefaTitulo.trim()}
+                          className="flex-1 rounded-xl h-9 gap-1.5"
+                        >
+                          {criandoTarefa ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                          {criandoTarefa ? 'Criando...' : 'Criar Tarefa'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => { setShowNovaTarefaForm(false); setNovaTarefaTitulo(''); }}
+                          className="rounded-xl h-9 px-4"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lista de tarefas */}
+                  {tarefasLoading ? (
+                    <div className="flex items-center justify-center py-10 gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Carregando tarefas...</span>
+                    </div>
+                  ) : processoTarefas.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 gap-3 border-2 border-dashed border-border/40 rounded-2xl">
+                      <div className="h-12 w-12 rounded-2xl bg-muted/60 flex items-center justify-center">
+                        <ListTodo className="h-6 w-6 text-muted-foreground/30" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">Nenhuma tarefa ainda</p>
+                      <p className="text-xs text-muted-foreground">Clique em "Nova Tarefa" para adicionar</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {processoTarefas.map(tarefa => (
+                        <TarefaRowModal
+                          key={tarefa.id}
+                          tarefa={tarefa}
+                          membros={membros}
+                          onStatusChange={handleUpdateTarefaStatus}
+                        />
                       ))}
                     </div>
                   )}
