@@ -14,7 +14,7 @@ const MAX_TOKENS    = 4096;
 const MAX_HISTORY   = 20; // mensagens anteriores carregadas do banco
 const MAX_TOOL_ITER = 8;  // iterações máximas do loop de tool use
 
-// ─── System Prompt ─────────────────────────────────────────────────────────────
+// ─── System Prompts ────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `Você é Isa, assistente jurídica inteligente do escritório Bentes Ramos Advogados.
 
@@ -35,6 +35,26 @@ REGRAS:
 3. Para ações irreversíveis (agendamento, tarefas), confirme detalhes antes de executar se houver ambiguidade
 4. Responda de forma estruturada quando houver múltiplas informações
 5. Quando receber contexto do sistema entre [CONTEXTO DO SISTEMA] e [FIM DO CONTEXTO], use esses dados para respostas atualizadas`;
+
+const DONNA_SYSTEM_PROMPT = `Você é Donn@, assistente de análise e gestão estratégica do escritório Bentes Ramos Advogados.
+
+PERSONALIDADE: Analítica, precisa, proativa e orientada a dados. Fala português brasileiro com linguagem clara e objetiva.
+
+CAPACIDADES:
+- Geração de relatórios e indicadores de performance do escritório
+- Análise de clientes, processos, tarefas e prazos com precisão
+- Identificação de padrões, tendências e anomalias nos dados
+- Monitoramento financeiro: honorários, parcelas, inadimplência
+- Insights estratégicos baseados em dados reais
+- Cadastro e gestão de clientes, processos e tarefas
+
+REGRAS:
+1. Use as ferramentas disponíveis para consultar dados reais — nunca invente números ou porcentagens
+2. Seja extremamente precisa com valores, datas e percentuais
+3. Apresente dados de forma estruturada: use listas, totais e comparações quando relevante
+4. Para relatórios, organize em seções claras com resumo executivo no início
+5. Proponha ações concretas quando identificar problemas ou oportunidades
+6. Quando receber contexto do sistema entre [CONTEXTO DO SISTEMA] e [FIM DO CONTEXTO], use esses dados como base da análise`;
 
 // ─── Tools (formato Anthropic) ────────────────────────────────────────────────
 
@@ -262,8 +282,10 @@ serve(async (req: Request) => {
   try {
     if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY não configurada');
 
-    const { message, threadId: clientThreadId, lead_id, phone } = await req.json();
+    const { message, threadId: clientThreadId, lead_id, phone, persona } = await req.json();
     if (!message) throw new Error('message é obrigatório');
+
+    const activeSystemPrompt = persona === 'donna' ? DONNA_SYSTEM_PROMPT : SYSTEM_PROMPT;
 
     // Resolve lead
     let resolvedLeadId = lead_id || null;
@@ -303,7 +325,7 @@ serve(async (req: Request) => {
         body: JSON.stringify({
           model: MODEL,
           max_tokens: MAX_TOKENS,
-          system: SYSTEM_PROMPT,
+          system: activeSystemPrompt,
           tools: TOOLS,
           messages: claudeMessages,
         }),
