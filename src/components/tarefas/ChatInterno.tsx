@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { MessageSquare, X, Send, ChevronDown, AtSign, Bell } from 'lucide-react';
 import { useChatInterno, decodeMencoes } from '@/hooks/useChatInterno';
 import { useAuth } from '@/hooks/useAuth';
@@ -12,6 +12,7 @@ const GOLD  = '#c9a96e';
 
 interface OnlineUser { id: string; nome: string; }
 interface PerfilItem { id: string; nome: string; sobrenome: string | null; }
+interface MencaoInfo { id: string; nome: string; }
 
 function getInitials(nome: string | null, sobrenome: string | null): string {
   const parts = [nome, sobrenome].filter(Boolean) as string[];
@@ -25,22 +26,19 @@ function formatMsgTime(iso: string): string {
   return format(d, "dd/MM HH:mm", { locale: ptBR });
 }
 
-// ── Render message text with mention highlights ───────────────────────────────
-function MsgText({ content, perfilMap }: { content: string; perfilMap: Record<string, string> }) {
+// Highlights @word patterns already embedded in message text
+function MsgText({ content }: { content: string }) {
   const { text } = decodeMencoes(content);
-  // Replace @[uuid] markers with highlighted spans
-  const parts = text.split(/(@\[[a-f0-9-]{36}\])/g);
+  const parts = text.split(/(@\S+)/g);
   return (
     <>
       {parts.map((part, i) => {
-        const m = part.match(/^@\[([a-f0-9-]{36})\]$/);
-        if (m) {
-          const nome = perfilMap[m[1]] || 'alguém';
+        if (/^@\S/.test(part)) {
           return (
             <span key={i}
               className="font-bold rounded px-0.5"
               style={{ color: '#c9a96e', background: 'rgba(201,169,110,0.15)' }}>
-              @{nome}
+              {part}
             </span>
           );
         }
@@ -55,10 +53,9 @@ export function ChatInterno() {
   const [texto,       setTexto]       = useState('');
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [perfis,      setPerfis]      = useState<PerfilItem[]>([]);
-  const [perfilMap,   setPerfilMap]   = useState<Record<string, string>>({});
-  const [mencoes,     setMencoes]     = useState<string[]>([]);      // selected mention IDs
-  const [showAt,      setShowAt]      = useState(false);             // @ dropdown visible
-  const [atQuery,     setAtQuery]     = useState('');                // filter in @ dropdown
+  const [mencoes,     setMencoes]     = useState<MencaoInfo[]>([]); // id + name for badge + UUID payload
+  const [showAt,      setShowAt]      = useState(false);
+  const [atQuery,     setAtQuery]     = useState('');
 
   const { mensagens, loading, unread, enviar, marcarLido, mencaoNotif, dismissMencao, setChatOpenState } =
     useChatInterno();
@@ -67,26 +64,43 @@ export function ChatInterno() {
   const bottomRef  = useRef<HTMLDivElement>(null);
   const inputRef   = useRef<HTMLInputElement>(null);
 
-  // ── Carregar perfis para @ dropdown ─────────────────────────────────────────
+  // Supplementary: fetch perfis for mention dropdown (may fail due to RLS — that's OK)
   const fetchPerfis = useCallback(async () => {
     const { data } = await supabase
       .from('perfis')
       .select('id, nome, sobrenome')
       .order('nome');
-    if (data) {
-      const items = (data as PerfilItem[]).filter(p => p.id !== user?.id);
-      setPerfis(items);
-      const map: Record<string, string> = {};
-      items.forEach(p => {
-        map[p.id] = `${p.nome}${p.sobrenome ? ` ${p.sobrenome.split(' ')[0]}` : ''}`;
-      });
-      setPerfilMap(map);
-    }
+    if (data) setPerfis((data as PerfilItem[]).filter(p => p.id !== user?.id));
   }, [user?.id]);
 
   useEffect(() => { fetchPerfis(); }, [fetchPerfis]);
 
-  // ── Presença online ──────────────────────────────────────────────────────────
+  // Build dropdown candidates from: perfis table + message senders + online users
+  const dropdownCandidates = useMemo<PerfilItem[]>(() => {
+    const seen = new Set<string>();
+    const result: PerfilItem[] = [];
+
+    perfis.forEach(p => { seen.add(p.id); result.push(p); });
+
+    mensagens.forEach(m => {
+      if (!seen.has(m.sender_id) && m.sender_id !== user?.id && m.perfis) {
+        seen.add(m.sender_id);
+        result.push({ id: m.sender_id, nome: m.perfis.nome, sobrenome: m.perfis.sobrenome });
+      }
+    });
+
+    onlineUsers.forEach(u => {
+      if (!seen.has(u.id)) {
+        seen.add(u.id);
+        const parts = u.nome.split(' ');
+        result.push({ id: u.id, nome: parts[0], sobrenome: parts.slice(1).join(' ') || null });
+      }
+    });
+
+    return result;
+  }, [perfis, mensagens, onlineUsers, user?.id]);
+
+  // Presence channel
   useEffect(() => {
     if (!user?.id) return;
     const nome = [perfil?.nome, perfil?.sobrenome].filter(Boolean).join(' ') || user.email || 'Usuário';
@@ -108,7 +122,6 @@ export function ChatInterno() {
     return () => { supabase.removeChannel(ch); };
   }, [user?.id, perfil?.nome, perfil?.sobrenome]);
 
-  // ── Sync open state to hook ──────────────────────────────────────────────────
   useEffect(() => {
     setChatOpenState(open);
     if (open) {
@@ -118,48 +131,42 @@ export function ChatInterno() {
     }
   }, [open, mensagens.length]);
 
-  // ── Send message ─────────────────────────────────────────────────────────────
   const handleSend = async () => {
     const t = texto.trim();
     if (!t) return;
     setTexto('');
     setMencoes([]);
     setShowAt(false);
-    await enviar(t, mencoes);
+    await enviar(t, mencoes.map(m => m.id));
   };
 
-  // ── Input key handler + @ detection ──────────────────────────────────────────
   const handleInputChange = (val: string) => {
     setTexto(val);
     const lastAt = val.lastIndexOf('@');
     if (lastAt !== -1 && (lastAt === 0 || val[lastAt - 1] === ' ')) {
-      const query = val.slice(lastAt + 1).toLowerCase();
-      setAtQuery(query);
+      setAtQuery(val.slice(lastAt + 1).toLowerCase());
       setShowAt(true);
     } else {
       setShowAt(false);
     }
   };
 
-  // ── Select mention from dropdown ─────────────────────────────────────────────
+  // Insert @Nome into texto; track UUID separately for notification payload
   const selectMention = (p: PerfilItem) => {
     const nome = `${p.nome}${p.sobrenome ? ` ${p.sobrenome.split(' ')[0]}` : ''}`;
-    // Replace the partial @query at the end with @[uuid]
     const lastAt = texto.lastIndexOf('@');
     const before = texto.slice(0, lastAt);
-    setTexto(`${before}@[${p.id}] `);
-    setMencoes(prev => prev.includes(p.id) ? prev : [...prev, p.id]);
+    setTexto(`${before}@${nome} `);
+    setMencoes(prev => prev.some(m => m.id === p.id) ? prev : [...prev, { id: p.id, nome }]);
     setShowAt(false);
     inputRef.current?.focus();
   };
 
-  // ── Filtered perfis for dropdown ─────────────────────────────────────────────
-  const filteredPerfis = perfis.filter(p => {
+  const filteredCandidates = dropdownCandidates.filter(p => {
     const full = `${p.nome} ${p.sobrenome || ''}`.toLowerCase();
     return full.includes(atQuery);
   });
 
-  // ── Group messages by day ────────────────────────────────────────────────────
   type MsgGroup = { date: string; msgs: typeof mensagens };
   const groups: MsgGroup[] = [];
   mensagens.forEach(m => {
@@ -188,9 +195,7 @@ export function ChatInterno() {
             boxShadow: `0 8px 32px rgba(0,0,0,0.35), 0 2px 8px ${GOLD}20`,
           }}
         >
-          {/* Barra dourada */}
           <div style={{ height: 3, background: `linear-gradient(90deg, ${BROWN}, ${GOLD}, ${BROWN})` }} />
-
           <div className="p-4">
             <div className="flex items-start gap-3 mb-3">
               <div className="h-8 w-8 rounded-xl flex items-center justify-center shrink-0"
@@ -210,7 +215,6 @@ export function ChatInterno() {
                 </p>
               </div>
             </div>
-
             <div className="flex gap-2">
               <button
                 onClick={() => { dismissMencao(); setOpen(true); }}
@@ -232,7 +236,6 @@ export function ChatInterno() {
       {/* ── Widget principal ── */}
       <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
 
-        {/* ── Painel ── */}
         {open && (
           <div
             className="flex flex-col rounded-2xl overflow-hidden shadow-2xl"
@@ -343,7 +346,7 @@ export function ChatInterno() {
                                 borderBottomLeftRadius:  isMe ? 16 : 4,
                                 wordBreak: 'break-word',
                               }}>
-                              <MsgText content={m.conteudo} perfilMap={perfilMap} />
+                              <MsgText content={m.conteudo} />
                               {mentionsMe && !isMe && (
                                 <span style={{ fontSize: 9, color: GOLD, marginLeft: 4, fontWeight: 700 }}>
                                   • você
@@ -370,12 +373,12 @@ export function ChatInterno() {
             {/* Menções selecionadas */}
             {mencoes.length > 0 && (
               <div className="px-3 pt-2 flex flex-wrap gap-1 shrink-0" style={{ background: 'white' }}>
-                {mencoes.map(id => (
-                  <span key={id}
+                {mencoes.map(m => (
+                  <span key={m.id}
                     className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
                     style={{ background: `${GOLD}20`, color: BROWN }}>
-                    @{perfilMap[id] || id.slice(0, 8)}
-                    <button onClick={() => setMencoes(prev => prev.filter(i => i !== id))}
+                    @{m.nome}
+                    <button onClick={() => setMencoes(prev => prev.filter(x => x.id !== m.id))}
                       className="hover:opacity-60">
                       <X style={{ width: 10, height: 10 }} />
                     </button>
@@ -389,11 +392,11 @@ export function ChatInterno() {
               style={{ borderTop: `0.5px solid ${GOLD}25`, background: 'white' }}>
 
               {/* @ dropdown */}
-              {showAt && filteredPerfis.length > 0 && (
+              {showAt && filteredCandidates.length > 0 && (
                 <div
                   className="absolute bottom-full left-3 right-3 mb-1 rounded-xl overflow-hidden shadow-lg"
                   style={{ background: BROWN, border: `1px solid ${GOLD}30`, maxHeight: 160, overflowY: 'auto' }}>
-                  {filteredPerfis.map(p => (
+                  {filteredCandidates.map(p => (
                     <button key={p.id}
                       onClick={() => selectMention(p)}
                       className="w-full flex items-center gap-2.5 px-3 py-2 transition-all hover:opacity-80 text-left"
@@ -411,10 +414,9 @@ export function ChatInterno() {
               )}
 
               <div className="flex gap-2 items-center">
-                {/* @ button */}
                 <button
                   onClick={() => {
-                    setTexto(t => t + '@');
+                    setTexto(t => t.endsWith(' ') || t === '' ? t + '@' : t + ' @');
                     setAtQuery('');
                     setShowAt(true);
                     inputRef.current?.focus();
@@ -427,15 +429,8 @@ export function ChatInterno() {
 
                 <input
                   ref={inputRef}
-                  value={(() => {
-                    // Display @[uuid] markers as @Nome for readability
-                    return texto.replace(/@\[([a-f0-9-]{36})\]/g, (_, id) => `@${perfilMap[id] || id.slice(0, 8)}`);
-                  })()}
-                  onChange={e => {
-                    // Store raw format — if user types normally we track @[uuid] separately
-                    // Simple approach: use actual text but let selectMention inject @[uuid]
-                    handleInputChange(e.target.value);
-                  }}
+                  value={texto}
+                  onChange={e => handleInputChange(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === 'Escape') { setShowAt(false); return; }
                     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }

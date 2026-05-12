@@ -16,8 +16,9 @@ export interface MencaoNotif {
   preview: string;
 }
 
-// ── Mention encoding helpers ─────────────────────────────────────────────────
-// Format appended to message: " @@[uuid1,uuid2]"
+// ── Mention encoding ─────────────────────────────────────────────────────────
+// Text is stored as-is (display names like "@Thiago").
+// UUIDs are appended as "@@[uuid1,uuid2]" only for notification detection.
 export function encodeMencoes(text: string, ids: string[]): string {
   if (ids.length === 0) return text.trim();
   return `${text.trim()} @@[${ids.join(',')}]`;
@@ -40,9 +41,9 @@ export function playSound(type: 'message' | 'mention') {
     osc.type = 'sine';
 
     if (type === 'mention') {
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(880,  ctx.currentTime);
       osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.09);
-      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.18);
+      osc.frequency.setValueAtTime(880,  ctx.currentTime + 0.18);
       gain.gain.setValueAtTime(0.28, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
       osc.start(ctx.currentTime);
@@ -60,15 +61,15 @@ export function playSound(type: 'message' | 'mention') {
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 export function useChatInterno() {
-  const [mensagens, setMensagens]             = useState<ChatMensagem[]>([]);
-  const [loading,   setLoading]               = useState(true);
-  const [unread,    setUnread]                = useState(0);
-  const [mencaoNotif, setMencaoNotif]         = useState<MencaoNotif | null>(null);
+  const [mensagens,   setMensagens]   = useState<ChatMensagem[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [unread,      setUnread]      = useState(0);
+  const [mencaoNotif, setMencaoNotif] = useState<MencaoNotif | null>(null);
 
-  const lastSeenRef  = useRef<string>(
+  const lastSeenRef = useRef<string>(
     typeof window !== 'undefined' ? (localStorage.getItem('chat_last_seen') || '') : ''
   );
-  const chatOpenRef  = useRef(false);
+  const chatOpenRef = useRef(false);
   const { user } = useAuth();
 
   const fetchMensagens = useCallback(async () => {
@@ -104,11 +105,12 @@ export function useChatInterno() {
             return [...prev, msg];
           });
 
+          // Skip own messages
           if (msg.sender_id === user?.id) return;
 
           const { ids } = decodeMencoes(msg.conteudo);
-          const mencionado = ids.includes(user?.id || '');
-          const remetente  = msg.perfis
+          const mencionado = !!user?.id && ids.includes(user.id);
+          const remetente = msg.perfis
             ? `${msg.perfis.nome}${msg.perfis.sobrenome ? ` ${msg.perfis.sobrenome.split(' ')[0]}` : ''}`
             : 'Alguém';
 
