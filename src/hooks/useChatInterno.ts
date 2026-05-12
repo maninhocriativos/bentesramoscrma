@@ -10,13 +10,65 @@ export interface ChatMensagem {
   perfis: { nome: string; sobrenome: string | null } | null;
 }
 
+export interface MencaoNotif {
+  id: string;
+  remetente: string;
+  preview: string;
+}
+
+// ── Mention encoding helpers ─────────────────────────────────────────────────
+// Format appended to message: " @@[uuid1,uuid2]"
+export function encodeMencoes(text: string, ids: string[]): string {
+  if (ids.length === 0) return text.trim();
+  return `${text.trim()} @@[${ids.join(',')}]`;
+}
+
+export function decodeMencoes(content: string): { text: string; ids: string[] } {
+  const m = content.match(/^([\s\S]*?)\s*@@\[([^\]]*)\]$/);
+  if (m) return { text: m[1].trim(), ids: m[2].split(',').filter(Boolean) };
+  return { text: content, ids: [] };
+}
+
+// ── Web Audio notification sound ──────────────────────────────────────────────
+export function playSound(type: 'message' | 'mention') {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+
+    if (type === 'mention') {
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.09);
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.18);
+      gain.gain.setValueAtTime(0.28, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.45);
+    } else {
+      osc.frequency.setValueAtTime(660, ctx.currentTime);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.2);
+    }
+    setTimeout(() => ctx.close(), 600);
+  } catch { /* audio not supported */ }
+}
+
+// ── Hook ──────────────────────────────────────────────────────────────────────
 export function useChatInterno() {
-  const [mensagens, setMensagens] = useState<ChatMensagem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [unread, setUnread] = useState(0);
-  const lastSeenRef = useRef<string>(
+  const [mensagens, setMensagens]             = useState<ChatMensagem[]>([]);
+  const [loading,   setLoading]               = useState(true);
+  const [unread,    setUnread]                = useState(0);
+  const [mencaoNotif, setMencaoNotif]         = useState<MencaoNotif | null>(null);
+
+  const lastSeenRef  = useRef<string>(
     typeof window !== 'undefined' ? (localStorage.getItem('chat_last_seen') || '') : ''
   );
+  const chatOpenRef  = useRef(false);
   const { user } = useAuth();
 
   const fetchMensagens = useCallback(async () => {
@@ -34,28 +86,44 @@ export function useChatInterno() {
 
   useEffect(() => { fetchMensagens(); }, [fetchMensagens]);
 
-  // Realtime subscription — recebe mensagens dos outros usuários
   useEffect(() => {
     const ch = supabase
-      .channel(`chat-interno-${Math.random()}`) // nome único evita conflito de canais antigos
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'chat_mensagens' },
+      .channel(`chat-interno-${Math.random()}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_mensagens' },
         async (payload) => {
           const { data } = await supabase
             .from('chat_mensagens')
             .select('*, perfis(nome, sobrenome)')
             .eq('id', payload.new.id)
             .single();
-          if (data) {
-            setMensagens(prev => {
-              if (prev.some(m => m.id === (data as ChatMensagem).id)) return prev;
-              return [...prev, data as ChatMensagem];
+          if (!data) return;
+          const msg = data as ChatMensagem;
+
+          setMensagens(prev => {
+            if (prev.some(m => m.id === msg.id)) return prev;
+            return [...prev, msg];
+          });
+
+          if (msg.sender_id === user?.id) return;
+
+          const { ids } = decodeMencoes(msg.conteudo);
+          const mencionado = ids.includes(user?.id || '');
+          const remetente  = msg.perfis
+            ? `${msg.perfis.nome}${msg.perfis.sobrenome ? ` ${msg.perfis.sobrenome.split(' ')[0]}` : ''}`
+            : 'Alguém';
+
+          if (mencionado) {
+            playSound('mention');
+            setMencaoNotif({
+              id: msg.id,
+              remetente,
+              preview: decodeMencoes(msg.conteudo).text.slice(0, 80),
             });
-            if ((data as ChatMensagem).sender_id !== user?.id) {
-              setUnread(n => n + 1);
-            }
+          } else if (!chatOpenRef.current) {
+            playSound('message');
           }
+
+          if (!chatOpenRef.current) setUnread(n => n + 1);
         }
       )
       .subscribe();
@@ -63,12 +131,12 @@ export function useChatInterno() {
     return () => { supabase.removeChannel(ch); };
   }, [user?.id]);
 
-  const enviar = async (conteudo: string) => {
+  const enviar = async (conteudo: string, mencoes: string[] = []) => {
     if (!user || !conteudo.trim()) return;
-    // Otimista: insere e busca a mensagem completa (com perfis) para mostrar imediatamente
+    const raw = encodeMencoes(conteudo, mencoes);
     const { data, error } = await supabase
       .from('chat_mensagens')
-      .insert({ sender_id: user.id, conteudo: conteudo.trim() })
+      .insert({ sender_id: user.id, conteudo: raw })
       .select('*, perfis(nome, sobrenome)')
       .single();
     if (data && !error) {
@@ -86,5 +154,8 @@ export function useChatInterno() {
     setUnread(0);
   };
 
-  return { mensagens, loading, unread, enviar, marcarLido };
+  const setChatOpenState = (open: boolean) => { chatOpenRef.current = open; };
+  const dismissMencao    = () => setMencaoNotif(null);
+
+  return { mensagens, loading, unread, enviar, marcarLido, mencaoNotif, dismissMencao, setChatOpenState };
 }
