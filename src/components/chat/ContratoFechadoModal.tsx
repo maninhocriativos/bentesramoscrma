@@ -280,30 +280,35 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
         });
 
       // 8. Meta CAPI — apenas para leads de tráfego pago
-      try {
-        if (leadData?.tipo_origem === 'trafego') {
-        const metaResult = await sendMetaEvent({
-          lead_id:          formData.leadId,
-          facebook_lead_id: (leadData as any)?.facebook_lead_id ?? null,
-          email:            leadData?.email ?? null,
-          phone:            leadData?.telefone ?? null,
-          nome:             formData.leadNome || null,
-          event_name:       'Purchase',
-          value:            (leadData as any)?.valor_causa ?? 0,
-          status:           'Contrato Assinado',
-        });
-        if (metaResult.success) {
-          await supabase
-            .from('contratos_fechados' as any)
-            .update({ meta_conversion_sent: true } as any)
-            .eq('lead_id', formData.leadId)
-            .eq('tipo_contrato', formData.tipoContrato)
-            .order('created_at', { ascending: false })
-            .limit(1);
+      if ((leadData as any)?.tipo_origem === 'trafego') {
+        try {
+          const metaResult = await sendMetaEvent({
+            lead_id:              formData.leadId,
+            facebook_lead_id:     (leadData as any)?.facebook_lead_id ?? null,
+            email:                (leadData as any)?.email            ?? null,
+            phone:                (leadData as any)?.telefone         ?? null,
+            nome:                 formData.leadNome || null,
+            event_name:           'Purchase',
+            value:                (leadData as any)?.valor_causa      ?? 0,
+            status:               'Contrato Assinado',
+            tipo_contrato:        formData.tipoContrato,
+            quantidade_contratos: quantidade,
+          });
+
+          if (metaResult.success) {
+            await supabase
+              .from('contratos_fechados' as any)
+              .update({ meta_conversion_sent: true } as any)
+              .eq('lead_id', formData.leadId)
+              .eq('tipo_contrato', formData.tipoContrato)
+              .order('created_at', { ascending: false })
+              .limit(1);
+          } else {
+            console.warn('[Meta CAPI] Evento não enviado:', metaResult.warning || metaResult.error);
+          }
+        } catch (metaErr) {
+          console.warn('[ContratoFechadoModal] Aviso Meta CAPI:', metaErr);
         }
-        } // end if trafego
-      } catch (metaErr) {
-        console.warn('[ContratoFechadoModal] Aviso Meta CAPI:', metaErr);
       }
 
       toast.success('✅ Contrato registrado com sucesso!', {

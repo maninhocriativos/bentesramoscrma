@@ -11,6 +11,8 @@ interface MetaEventData {
   event_name?: string;
   value?: number;
   status?: string;
+  tipo_contrato?: string | null;
+  quantidade_contratos?: number;
 }
 
 export function useMetaCapi() {

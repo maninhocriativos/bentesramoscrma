@@ -6,228 +6,169 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Função para criar hash SHA-256
-async function sha256Hash(text: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(text);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+async function sha256(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Normalizar telefone para formato E.164 (apenas números com DDI 55)
 function normalizePhone(phone: string | null | undefined): string | null {
   if (!phone) return null;
-  
-  // Remove tudo que não é número
-  let cleaned = phone.replace(/\D/g, '');
-  
-  // Se começar com 0, remove
-  if (cleaned.startsWith('0')) {
-    cleaned = cleaned.substring(1);
-  }
-  
-  // Se não começar com 55, adiciona
-  if (!cleaned.startsWith('55')) {
-    cleaned = '55' + cleaned;
-  }
-  
-  return cleaned;
-}
-
-// Normalizar email (lowercase, trim)
-function normalizeEmail(email: string | null | undefined): string | null {
-  if (!email) return null;
-  return email.toLowerCase().trim();
+  let n = phone.replace(/\D/g, '');
+  if (n.startsWith('0')) n = n.slice(1);
+  if (!n.startsWith('55')) n = '55' + n;
+  return n;
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const PIXEL_ID = Deno.env.get('META_PIXEL_ID');
+    const PIXEL_ID    = Deno.env.get('META_PIXEL_ID');
     const ACCESS_TOKEN = Deno.env.get('META_ACCESS_TOKEN');
-    // Nome do CRM exigido pelo guia de integração de CRM da Meta (lead_event_source)
-    // Pode ser sobrescrito via secret/env se você quiser personalizar.
-    const CRM_EVENT_SOURCE = Deno.env.get('META_LEAD_EVENT_SOURCE') || 'Bentes ramos-CRM';
+    const CRM_SOURCE  = Deno.env.get('META_LEAD_EVENT_SOURCE') || 'Bentes Ramos CRM';
 
     if (!PIXEL_ID || !ACCESS_TOKEN) {
-      console.error('[Meta CAPI] Missing PIXEL_ID or ACCESS_TOKEN');
       return new Response(
-        JSON.stringify({ error: 'Meta API credentials not configured' }),
+        JSON.stringify({ error: 'META_PIXEL_ID ou META_ACCESS_TOKEN não configurados' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    const body = await req.json();
     const {
       lead_id,
       facebook_lead_id,
       email,
       phone,
       nome,
-      event_name = 'Purchase',
-      value = 0,
+      event_name   = 'Purchase',
+      value        = 0,
       status,
-      // Opcional: permite enviar explícito do frontend, mas mantemos um default seguro
-      lead_event_source
-    } = await req.json();
+      tipo_contrato,
+      quantidade_contratos = 1,
+      lead_event_source,
+    } = body;
 
-    console.log('[Meta CAPI] Received event request:', { 
-      lead_id, 
-      facebook_lead_id,
-      event_name, 
-      value, 
-      status,
-      hasEmail: !!email,
-      hasPhone: !!phone
-    });
+    console.log('[Meta CAPI] Disparando evento:', { event_name, lead_id, hasEmail: !!email, hasPhone: !!phone });
 
-    // Preparar user_data com hashes
-    const userData: Record<string, string> = {};
+    // ── user_data: campos como arrays conforme especificação Meta CAPI ────────
+    const userData: Record<string, unknown> = {};
 
-    // Adicionar lead_id do Facebook se disponível (melhora a qualidade do evento)
     if (facebook_lead_id) {
-      userData.lead_id = facebook_lead_id;
+      // lead_id no user_data deve ser numérico (Facebook Lead ID)
+      const numericId = typeof facebook_lead_id === 'string'
+        ? parseInt(facebook_lead_id, 10)
+        : facebook_lead_id;
+      if (!isNaN(numericId)) userData.lead_id = numericId;
     }
 
-    // Hash do email normalizado
     if (email) {
-      const normalizedEmail = normalizeEmail(email);
-      if (normalizedEmail) {
-        userData.em = await sha256Hash(normalizedEmail);
-        console.log('[Meta CAPI] Email hashed successfully');
-      }
+      const norm = email.toLowerCase().trim();
+      userData.em = [await sha256(norm)];
     }
 
-    // Hash do telefone normalizado (E.164 com DDI 55)
     if (phone) {
-      const normalizedPhone = normalizePhone(phone);
-      if (normalizedPhone) {
-        userData.ph = await sha256Hash(normalizedPhone);
-        console.log('[Meta CAPI] Phone hashed successfully:', normalizedPhone.substring(0, 4) + '***');
-      }
+      const norm = normalizePhone(phone);
+      if (norm) userData.ph = [await sha256(norm)];
     }
 
-    // Hash do nome (fn = primeiro nome, ln = sobrenome)
     if (nome) {
       const parts = nome.trim().split(/\s+/);
-      const firstName = parts[0]?.toLowerCase();
-      const lastName = parts.slice(1).join(' ').toLowerCase();
-      if (firstName) userData.fn = await sha256Hash(firstName);
-      if (lastName) userData.ln = await sha256Hash(lastName);
-      console.log('[Meta CAPI] Name hashed successfully');
+      const fn = parts[0]?.toLowerCase();
+      const ln = parts.slice(1).join(' ').toLowerCase();
+      if (fn) userData.fn = [await sha256(fn)];
+      if (ln) userData.ln = [await sha256(ln)];
     }
 
-    // Verificar se temos dados de usuário suficientes
     if (Object.keys(userData).length === 0) {
-      console.warn('[Meta CAPI] No user data to send (no email, phone, or lead_id)');
+      console.warn('[Meta CAPI] Nenhum dado de usuário disponível — abortando');
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          warning: 'No user data available for event matching' 
-        }),
+        JSON.stringify({ success: false, warning: 'Sem dados para matching (email, telefone ou lead_id)' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Construir payload do evento
+    // ── Payload final ─────────────────────────────────────────────────────────
     const eventPayload = {
       data: [
         {
-          event_name: event_name,
-          event_time: Math.floor(Date.now() / 1000),
+          event_name,
+          event_time:    Math.floor(Date.now() / 1000),
           action_source: 'system_generated',
-          user_data: userData,
+          user_data:     userData,
           custom_data: {
-            currency: 'BRL',
-            value: parseFloat(value) || 0,
-            // Campos esperados no guia de CRM da Meta
-            event_source: 'crm',
-            lead_event_source: (lead_event_source || CRM_EVENT_SOURCE),
-            lead_status: status,
-            internal_lead_id: lead_id
-          }
-        }
+            currency:          'BRL',
+            value:             parseFloat(String(value)) || 0,
+            event_source:      'crm',
+            lead_event_source: lead_event_source || CRM_SOURCE,
+            lead_status:       status        || null,
+            tipo_contrato:     tipo_contrato  || null,
+            num_contratos:     quantidade_contratos,
+            internal_lead_id:  lead_id        || null,
+          },
+        },
       ],
-      access_token: ACCESS_TOKEN
+      access_token: ACCESS_TOKEN,
     };
 
-    console.log('[Meta CAPI] Sending event to Meta:', {
+    console.log('[Meta CAPI] Payload pronto:', {
       event_name,
-      event_time: eventPayload.data[0].event_time,
-      user_data_keys: Object.keys(userData),
-      value: eventPayload.data[0].custom_data.value
+      user_data_fields: Object.keys(userData),
+      value: eventPayload.data[0].custom_data.value,
     });
 
-    // Enviar para Meta Conversions API
-    const metaResponse = await fetch(
+    const metaRes = await fetch(
       `https://graph.facebook.com/v20.0/${PIXEL_ID}/events`,
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(eventPayload)
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(eventPayload),
       }
     );
 
-    const metaResult = await metaResponse.json();
+    const metaResult = await metaRes.json();
 
-    if (!metaResponse.ok) {
-      console.error('[Meta CAPI] Error from Meta API:', metaResult);
+    if (!metaRes.ok) {
+      console.error('[Meta CAPI] Erro da API Meta:', metaResult);
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: metaResult.error?.message || 'Failed to send event to Meta',
-          details: metaResult 
-        }),
-        { status: metaResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: false, error: metaResult.error?.message, details: metaResult }),
+        { status: metaRes.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('[Meta CAPI] Event sent successfully:', metaResult);
+    console.log('[Meta CAPI] Evento enviado com sucesso:', metaResult);
 
-    // Logar o evento no integration_logs
+    // ── Log no banco ──────────────────────────────────────────────────────────
     try {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
-
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      );
       await supabase.from('integration_logs').insert({
-        provider: 'meta_capi',
-        direction: 'outbound',
-        endpoint: `https://graph.facebook.com/v20.0/${PIXEL_ID}/events`,
-        status: 'success',
-        lead_id: lead_id || null,
-        payload_json: {
-          event_name,
-          value,
-          status,
-          user_data_fields: Object.keys(userData)
-        },
-        response_json: metaResult
+        provider:      'meta_capi',
+        direction:     'outbound',
+        endpoint:      `https://graph.facebook.com/v20.0/${PIXEL_ID}/events`,
+        status:        'success',
+        lead_id:       lead_id || null,
+        payload_json:  { event_name, value, status, tipo_contrato, user_data_fields: Object.keys(userData) },
+        response_json: metaResult,
       });
-    } catch (logError) {
-      console.warn('[Meta CAPI] Failed to log event:', logError);
+    } catch (logErr) {
+      console.warn('[Meta CAPI] Falha ao gravar log:', logErr);
     }
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        events_received: metaResult.events_received,
-        fbtrace_id: metaResult.fbtrace_id
-      }),
+      JSON.stringify({ success: true, events_received: metaResult.events_received, fbtrace_id: metaResult.fbtrace_id }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Meta CAPI] Unexpected error:', error);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+    console.error('[Meta CAPI] Erro inesperado:', err);
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: msg }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
