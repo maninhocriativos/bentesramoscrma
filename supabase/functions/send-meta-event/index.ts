@@ -25,8 +25,8 @@ serve(async (req) => {
   }
 
   try {
-    const PIXEL_ID    = Deno.env.get('META_PIXEL_ID')    || '2831740103830298';
-    const ACCESS_TOKEN = Deno.env.get('META_ACCESS_TOKEN') || 'EAAKWJSSvSHUBRQWm32XB0m5CfjZBxUVc9G40U0NZBrux7y3ngTiFU68oKG1pDEvf5833PZAY0lZBlH2nrCIYTkwOtYGIjS2eiQ7E8DB95fZBMZCit87bbuA5ZArQpK2LMgmLpE15BdZBauYO4kVCv5UNgqZCnfp5fm4ql8DGGTOzzszkKzh8CQZBF6en0G8NVwXwZDZD';
+    const PIXEL_ID    = Deno.env.get('META_PIXEL_ID');
+    const ACCESS_TOKEN = Deno.env.get('META_ACCESS_TOKEN');
     const CRM_SOURCE  = Deno.env.get('META_LEAD_EVENT_SOURCE') || 'Bentes Ramos CRM';
 
 
