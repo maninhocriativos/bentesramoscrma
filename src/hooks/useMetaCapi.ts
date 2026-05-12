@@ -13,6 +13,8 @@ interface MetaEventData {
   status?: string;
   tipo_contrato?: string | null;
   quantidade_contratos?: number;
+  pixel_id?: string;
+  access_token?: string;
 }
 
 export function useMetaCapi() {

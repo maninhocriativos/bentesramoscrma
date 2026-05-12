@@ -25,16 +25,11 @@ serve(async (req) => {
   }
 
   try {
-    const PIXEL_ID    = Deno.env.get('META_PIXEL_ID');
-    const ACCESS_TOKEN = Deno.env.get('META_ACCESS_TOKEN');
+    const PIXEL_ID    = Deno.env.get('META_PIXEL_ID')    || '2831740103830298';
+    const ACCESS_TOKEN = Deno.env.get('META_ACCESS_TOKEN') || 'EAAKWJSSvSHUBRQWm32XB0m5CfjZBxUVc9G40U0NZBrux7y3ngTiFU68oKG1pDEvf5833PZAY0lZBlH2nrCIYTkwOtYGIjS2eiQ7E8DB95fZBMZCit87bbuA5ZArQpK2LMgmLpE15BdZBauYO4kVCv5UNgqZCnfp5fm4ql8DGGTOzzszkKzh8CQZBF6en0G8NVwXwZDZD';
     const CRM_SOURCE  = Deno.env.get('META_LEAD_EVENT_SOURCE') || 'Bentes Ramos CRM';
 
-    if (!PIXEL_ID || !ACCESS_TOKEN) {
-      return new Response(
-        JSON.stringify({ error: 'META_PIXEL_ID ou META_ACCESS_TOKEN não configurados' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+
 
     const body = await req.json();
     const {
@@ -49,7 +44,19 @@ serve(async (req) => {
       tipo_contrato,
       quantidade_contratos = 1,
       lead_event_source,
+      pixel_id:     bodyPixelId,
+      access_token: bodyAccessToken,
     } = body;
+
+    const PIXEL_ID_FINAL    = bodyPixelId    || PIXEL_ID;
+    const ACCESS_TOKEN_FINAL = bodyAccessToken || ACCESS_TOKEN;
+
+    if (!PIXEL_ID_FINAL || !ACCESS_TOKEN_FINAL) {
+      return new Response(
+        JSON.stringify({ error: 'pixel_id ou access_token não fornecidos' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     console.log('[Meta CAPI] Disparando evento:', { event_name, lead_id, hasEmail: !!email, hasPhone: !!phone });
 
@@ -110,17 +117,18 @@ serve(async (req) => {
           },
         },
       ],
-      access_token: ACCESS_TOKEN,
+      access_token: ACCESS_TOKEN_FINAL,
     };
 
     console.log('[Meta CAPI] Payload pronto:', {
       event_name,
+      pixel_id: PIXEL_ID_FINAL,
       user_data_fields: Object.keys(userData),
       value: eventPayload.data[0].custom_data.value,
     });
 
     const metaRes = await fetch(
-      `https://graph.facebook.com/v25.0/${PIXEL_ID}/events`,
+      `https://graph.facebook.com/v25.0/${PIXEL_ID_FINAL}/events`,
       {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -149,7 +157,7 @@ serve(async (req) => {
       await supabase.from('integration_logs').insert({
         provider:      'meta_capi',
         direction:     'outbound',
-        endpoint:      `https://graph.facebook.com/v20.0/${PIXEL_ID}/events`,
+        endpoint:      `https://graph.facebook.com/v25.0/${PIXEL_ID_FINAL}/events`,
         status:        'success',
         lead_id:       lead_id || null,
         payload_json:  { event_name, value, status, tipo_contrato, user_data_fields: Object.keys(userData) },
