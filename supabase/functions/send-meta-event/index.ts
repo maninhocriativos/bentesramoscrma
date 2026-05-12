@@ -120,7 +120,7 @@ serve(async (req) => {
     });
 
     const metaRes = await fetch(
-      `https://graph.facebook.com/v20.0/${PIXEL_ID}/events`,
+      `https://graph.facebook.com/v25.0/${PIXEL_ID}/events`,
       {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
