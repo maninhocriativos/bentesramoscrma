@@ -189,6 +189,92 @@ const TOOLS = [
   },
 ];
 
+// ─── Ferramentas da Donn@ (leitura direta do banco + ações de escrita) ─────────
+
+const DONNA_TOOLS = [
+  {
+    name: 'listar_processos',
+    description: 'Lista processos jurídicos do escritório. Use para relatórios e verificação de processos parados.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status:                { type: 'string',  description: 'Filtrar por status do processo (opcional)' },
+        dias_sem_atualizacao:  { type: 'number',  description: 'Retornar processos sem atualização há mais de N dias' },
+        limite:                { type: 'number',  description: 'Máximo de resultados (padrão 50)' },
+      },
+    },
+  },
+  {
+    name: 'listar_parcelas',
+    description: 'Lista parcelas de honorários. Use para relatórios financeiros e identificar inadimplência.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status:          { type: 'string', enum: ['Pendente', 'Pago', 'Atrasado', 'Cancelado'] },
+        apenas_vencidas: { type: 'boolean', description: 'Se true, retorna apenas parcelas com data_vencimento passada' },
+        limite:          { type: 'number' },
+      },
+    },
+  },
+  {
+    name: 'relatorio_leads',
+    description: 'Gera relatório analítico de leads: totais por status, origem e clientes sem contato recente.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        dias:              { type: 'number', description: 'Analisar leads criados nos últimos N dias (padrão 30)' },
+        sem_contato_dias:  { type: 'number', description: 'Incluir contagem de leads sem atualização há mais de N dias' },
+      },
+    },
+  },
+  {
+    name: 'listar_tarefas',
+    description: 'Lista tarefas do escritório. Use para relatório de pendências e tarefas atrasadas.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status:            { type: 'string', enum: ['Pendente', 'Em Andamento', 'Concluída', 'Cancelada'] },
+        apenas_atrasadas:  { type: 'boolean', description: 'Se true, retorna apenas tarefas com prazo vencido' },
+        limite:            { type: 'number' },
+      },
+    },
+  },
+  {
+    name: 'criar_tarefa',
+    description: 'Cria uma tarefa de follow-up no sistema. Use quando identificar uma ação necessária.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        titulo:         { type: 'string' },
+        descricao:      { type: 'string' },
+        data_limite:    { type: 'string', description: 'YYYY-MM-DD' },
+        prioridade:     { type: 'string', enum: ['Baixa', 'Media', 'Alta', 'Urgente'] },
+        responsavel_id: { type: 'string' },
+        cliente_id:     { type: 'string' },
+        processo_id:    { type: 'string' },
+      },
+      required: ['titulo'],
+    },
+  },
+  {
+    name: 'listar_clientes',
+    description: 'Lista clientes/leads com status e data do último contato.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status:           { type: 'string', description: 'Filtrar por status (ex: Aguardando Contrato)' },
+        sem_contato_dias: { type: 'number', description: 'Listar clientes sem atualização há mais de N dias' },
+        limite:           { type: 'number' },
+      },
+    },
+  },
+  {
+    name: 'listar_usuarios',
+    description: 'Lista usuários do sistema para saber responsáveis por processos/tarefas.',
+    input_schema: { type: 'object', properties: {} },
+  },
+];
+
 // ─── Execute tool via isa-actions ─────────────────────────────────────────────
 
 async function executeAction(name: string, input: any): Promise<any> {
@@ -205,6 +291,103 @@ async function executeAction(name: string, input: any): Promise<any> {
     });
     const text = await res.text();
     try { return JSON.parse(text); } catch { return { result: text }; }
+  } catch (err) {
+    return { error: String(err) };
+  }
+}
+
+// ─── Execute tools da Donn@ (leitura direta Supabase + delegação para isa-actions) ──
+
+async function donnaExecuteAction(name: string, input: any): Promise<any> {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) return { error: 'Supabase não configurado' };
+  const hdrs = { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` };
+  const today = new Date().toISOString().split('T')[0];
+
+  try {
+    switch (name) {
+
+      case 'listar_processos': {
+        let url = `${SUPABASE_URL}/rest/v1/processos?select=id,titulo,numero,status,responsavel,updated_at&order=updated_at.desc&limit=${input.limite || 50}`;
+        if (input.status) url += `&status=eq.${encodeURIComponent(input.status)}`;
+        if (input.dias_sem_atualizacao) {
+          const cutoff = new Date(Date.now() - Number(input.dias_sem_atualizacao) * 86400000).toISOString();
+          url += `&updated_at=lt.${encodeURIComponent(cutoff)}`;
+        }
+        const r = await fetch(url, { headers: hdrs });
+        return r.ok ? await r.json() : { error: `HTTP ${r.status}` };
+      }
+
+      case 'listar_parcelas': {
+        let url = `${SUPABASE_URL}/rest/v1/parcelas?select=id,valor,data_vencimento,status,descricao&order=data_vencimento.asc&limit=${input.limite || 100}`;
+        if (input.status) url += `&status=eq.${encodeURIComponent(input.status)}`;
+        if (input.apenas_vencidas) url += `&data_vencimento=lt.${today}`;
+        const r = await fetch(url, { headers: hdrs });
+        return r.ok ? await r.json() : { error: `HTTP ${r.status}` };
+      }
+
+      case 'relatorio_leads': {
+        const dias = Number(input.dias) || 30;
+        const cutoff = new Date(Date.now() - dias * 86400000).toISOString();
+        const url = `${SUPABASE_URL}/rest/v1/leads_juridicos?select=id,nome,status,origem,updated_at,created_at&order=created_at.desc&limit=500`;
+        const r = await fetch(url, { headers: hdrs });
+        if (!r.ok) return { error: `HTTP ${r.status}` };
+        const leads = await r.json();
+
+        const byStatus: Record<string, number> = {};
+        const byOrigem: Record<string, number> = {};
+        let semContato = 0;
+        const semContatoCutoff = input.sem_contato_dias
+          ? new Date(Date.now() - Number(input.sem_contato_dias) * 86400000).toISOString()
+          : null;
+        const recentes = leads.filter((l: any) => l.created_at >= cutoff);
+
+        recentes.forEach((l: any) => {
+          byStatus[l.status || 'Sem status'] = (byStatus[l.status || 'Sem status'] || 0) + 1;
+          byOrigem[l.origem || 'Desconhecida'] = (byOrigem[l.origem || 'Desconhecida'] || 0) + 1;
+        });
+        if (semContatoCutoff) {
+          leads.forEach((l: any) => { if (l.updated_at < semContatoCutoff) semContato++; });
+        }
+
+        return {
+          total_periodo: recentes.length,
+          total_geral: leads.length,
+          periodo_dias: dias,
+          por_status: byStatus,
+          por_origem: byOrigem,
+          ...(semContatoCutoff ? { sem_contato_mais_de_n_dias: semContato } : {}),
+        };
+      }
+
+      case 'listar_tarefas': {
+        let url = `${SUPABASE_URL}/rest/v1/tarefas?select=id,titulo,status,prioridade,data_limite,responsavel_id&order=data_limite.asc&limit=${input.limite || 50}`;
+        if (input.apenas_atrasadas) {
+          url += `&data_limite=lt.${today}&status=in.(Pendente,Em%20Andamento)`;
+        } else if (input.status) {
+          url += `&status=eq.${encodeURIComponent(input.status)}`;
+        }
+        const r = await fetch(url, { headers: hdrs });
+        return r.ok ? await r.json() : { error: `HTTP ${r.status}` };
+      }
+
+      case 'listar_clientes': {
+        let url = `${SUPABASE_URL}/rest/v1/leads_juridicos?select=id,nome,status,telefone,email,updated_at&order=updated_at.desc&limit=${input.limite || 50}`;
+        if (input.status) url += `&status=eq.${encodeURIComponent(input.status)}`;
+        if (input.sem_contato_dias) {
+          const cutoff = new Date(Date.now() - Number(input.sem_contato_dias) * 86400000).toISOString();
+          url += `&updated_at=lt.${encodeURIComponent(cutoff)}`;
+        }
+        const r = await fetch(url, { headers: hdrs });
+        return r.ok ? await r.json() : { error: `HTTP ${r.status}` };
+      }
+
+      case 'criar_tarefa':
+      case 'listar_usuarios':
+        return await executeAction(name, input);
+
+      default:
+        return { error: `Ação '${name}' não reconhecida para Donn@` };
+    }
   } catch (err) {
     return { error: String(err) };
   }
@@ -286,6 +469,7 @@ serve(async (req: Request) => {
     if (!message) throw new Error('message é obrigatório');
 
     const activeSystemPrompt = persona === 'donna' ? DONNA_SYSTEM_PROMPT : SYSTEM_PROMPT;
+    const activeTools        = persona === 'donna' ? DONNA_TOOLS        : TOOLS;
 
     // Resolve lead
     let resolvedLeadId = lead_id || null;
@@ -326,7 +510,7 @@ serve(async (req: Request) => {
           model: MODEL,
           max_tokens: MAX_TOKENS,
           system: activeSystemPrompt,
-          tools: TOOLS,
+          tools: activeTools,
           messages: claudeMessages,
         }),
       });
@@ -364,7 +548,9 @@ serve(async (req: Request) => {
       const toolResults = await Promise.all(
         toolUseBlocks.map(async (tb: any) => {
           console.log('[ai-chat] tool:', tb.name, JSON.stringify(tb.input).slice(0, 120));
-          const result = await executeAction(tb.name, tb.input);
+          const result = persona === 'donna'
+            ? await donnaExecuteAction(tb.name, tb.input)
+            : await executeAction(tb.name, tb.input);
           return {
             type: 'tool_result',
             tool_use_id: tb.id,

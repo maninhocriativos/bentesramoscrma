@@ -12,7 +12,7 @@ import {
   Zap, Brain, CheckCircle2, XCircle, Clock,
   Users, MessageSquare, ListTodo,
   Calendar, RefreshCw, Loader2, Activity, Target, Settings,
-  AlertTriangle, ScanSearch, Bot, ArrowRight, Bell,
+  AlertTriangle, ScanSearch, ArrowRight, Bell,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subDays, startOfDay } from 'date-fns';
@@ -482,36 +482,6 @@ export default function IsaAutonomaPage() {
               </div>
             </div>
 
-            {/* ── Justin-e (em breve) ── */}
-            <div className="relative overflow-hidden rounded-2xl flex flex-col bg-card border border-border/50 opacity-60">
-              <div className="h-[3px] bg-gradient-to-r from-zinc-700 via-zinc-500 to-zinc-700" />
-              <div className="p-5 flex flex-col gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="relative shrink-0">
-                    <div className="h-14 w-14 rounded-full bg-zinc-800 border-2 border-zinc-600 flex items-center justify-center shadow-lg">
-                      <Bot className="h-7 w-7 text-zinc-400" />
-                    </div>
-                    <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-background bg-zinc-500" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-foreground text-base">Justin-e</p>
-                    <p className="text-[11px] text-muted-foreground">Controle de Prazos · Jurídico</p>
-                  </div>
-                  <Badge variant="outline" className="ml-auto text-[10px] border-zinc-600 text-zinc-500">
-                    Em breve
-                  </Badge>
-                </div>
-
-                <div className="flex items-center justify-between bg-muted/50 rounded-lg px-3 py-2">
-                  <span className="text-xs text-muted-foreground">Monitoramento de prazos</span>
-                  <Switch checked={false} disabled className="scale-90" />
-                </div>
-
-                <Button size="sm" className="w-full gap-2" variant="outline" disabled>
-                  <MessageSquare className="h-3.5 w-3.5" /> Em desenvolvimento
-                </Button>
-              </div>
-            </div>
           </div>
 
           {/* ── Stats (últimos 7 dias da Isa) ── */}
