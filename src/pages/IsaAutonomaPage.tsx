@@ -63,20 +63,21 @@ export default function IsaAutonomaPage() {
         .order('created_at', { ascending: false });
 
       if (events) {
-        const leadsClassificados = events.filter(e => 
-          e.acao === 'classificar_lead' || e.acao === 'dados_lead_atualizados'
+        // Nomes reais salvos pelo isa-auto-process no banco
+        const leadsClassificados = events.filter(e =>
+          e.acao === 'lead_classificado' || e.acao === 'dados_lead_atualizados' || e.acao === 'classificar_lead'
         ).length;
-        const interacoesRegistradas = events.filter(e => 
-          e.acao === 'criar_interacao' || e.tipo === 'processamento'
+        const interacoesRegistradas = events.filter(e =>
+          e.fonte === 'isa_auto' && e.processado
         ).length;
-        const tarefasCriadas = events.filter(e => 
-          e.acao === 'criar_tarefa' && e.processado
+        const tarefasCriadas = events.filter(e =>
+          e.acao === 'tarefa_criada' && e.processado
         ).length;
-        const compromissosCriados = events.filter(e => 
-          (e.acao === 'criar_compromisso' || e.tipo === 'agendamento') && e.processado
+        const compromissosCriados = events.filter(e =>
+          (e.acao === 'compromisso_criado' || e.acao === 'agendamento_confirmado_lead') && e.processado
         ).length;
-        
-        // Contar ações pendentes processadas
+
+        // Ações pendentes processadas
         const pendentes = events.filter(e => e.tipo === 'acao_pendente');
         const acoesAprovadas = pendentes.filter(e => e.processado && !(e.metadata as any)?.rejeitado).length;
         const acoesRejeitadas = pendentes.filter(e => e.processado && (e.metadata as any)?.rejeitado).length;
@@ -100,17 +101,17 @@ export default function IsaAutonomaPage() {
   };
 
   const handleNovoEvento = (novoEvento: any) => {
-    const { acao, tipo, processado, metadata } = novoEvento;
+    const { acao, tipo, fonte, processado, metadata } = novoEvento;
     setStats(prev => ({
       ...prev,
       leadsClassificados: prev.leadsClassificados +
-        (acao === 'classificar_lead' || acao === 'dados_lead_atualizados' ? 1 : 0),
+        (acao === 'lead_classificado' || acao === 'dados_lead_atualizados' || acao === 'classificar_lead' ? 1 : 0),
       interacoesRegistradas: prev.interacoesRegistradas +
-        (acao === 'criar_interacao' || tipo === 'processamento' ? 1 : 0),
+        (fonte === 'isa_auto' && processado ? 1 : 0),
       tarefasCriadas: prev.tarefasCriadas +
-        (acao === 'criar_tarefa' && processado ? 1 : 0),
+        (acao === 'tarefa_criada' && processado ? 1 : 0),
       compromissosCriados: prev.compromissosCriados +
-        ((acao === 'criar_compromisso' || tipo === 'agendamento') && processado ? 1 : 0),
+        ((acao === 'compromisso_criado' || acao === 'agendamento_confirmado_lead') && processado ? 1 : 0),
       acoesAprovadas: prev.acoesAprovadas +
         (tipo === 'acao_pendente' && processado && !metadata?.rejeitado ? 1 : 0),
       acoesRejeitadas: prev.acoesRejeitadas +

@@ -12,17 +12,19 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { 
-  CheckCircle2, 
-  XCircle, 
-  Calendar, 
-  ListTodo, 
-  User, 
+import {
+  CheckCircle2,
+  XCircle,
+  Calendar,
+  ListTodo,
+  User,
   Clock,
   AlertTriangle,
   RefreshCw,
   Loader2,
-  MessageSquare
+  MessageSquare,
+  Trash2,
+  ArchiveX
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -109,8 +111,9 @@ export function IsaAcoesPendentes() {
   const [acoes, setAcoes] = useState<AcaoPendente[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
+  const [bulkProcessing, setBulkProcessing] = useState(false);
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
-  
+
   // Modal de agendamento
   const [showDateModal, setShowDateModal] = useState(false);
   const [selectedAcao, setSelectedAcao] = useState<AcaoPendente | null>(null);
@@ -364,6 +367,49 @@ export function IsaAcoesPendentes() {
     });
   };
 
+  const rejeitarTodas = async () => {
+    setBulkProcessing(true);
+    try {
+      const ids = acoes.map(a => a.id);
+      const { error } = await supabase
+        .from('system_events')
+        .update({ processado: true, metadata: { rejeitado: true, rejeitado_em: new Date().toISOString() } })
+        .in('id', ids);
+      if (error) throw error;
+      setAcoes([]);
+      toast.success(`${ids.length} ações rejeitadas`);
+    } catch (err) {
+      toast.error('Erro ao rejeitar ações');
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
+  const limparAntigas = async () => {
+    setBulkProcessing(true);
+    try {
+      const corte = new Date();
+      corte.setDate(corte.getDate() - 3);
+      const antigas = acoes.filter(a => new Date(a.created_at) < corte);
+      if (antigas.length === 0) {
+        toast.info('Nenhuma ação com mais de 3 dias');
+        setBulkProcessing(false);
+        return;
+      }
+      const { error } = await supabase
+        .from('system_events')
+        .update({ processado: true, metadata: { arquivado: true, arquivado_em: new Date().toISOString() } })
+        .in('id', antigas.map(a => a.id));
+      if (error) throw error;
+      setAcoes(prev => prev.filter(a => new Date(a.created_at) >= corte));
+      toast.success(`${antigas.length} ações antigas arquivadas`);
+    } catch (err) {
+      toast.error('Erro ao limpar ações antigas');
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
   if (loading) {
     return (
       <Card className="border-dashed">
@@ -413,10 +459,32 @@ export function IsaAcoesPendentes() {
               <p className="text-xs text-muted-foreground">Aguardando sua aprovação</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             <Badge className="bg-amber-500 text-white hover:bg-amber-600 animate-pulse">
               {acoes.length}
             </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs px-2 text-muted-foreground hover:text-orange-600 hover:border-orange-400"
+              onClick={limparAntigas}
+              disabled={bulkProcessing || loading}
+              title="Arquivar ações com mais de 3 dias"
+            >
+              {bulkProcessing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <ArchiveX className="h-3 w-3 mr-1" />}
+              Limpar antigas
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs px-2 text-muted-foreground hover:text-destructive hover:border-destructive"
+              onClick={rejeitarTodas}
+              disabled={bulkProcessing || loading}
+              title="Rejeitar todas as ações pendentes"
+            >
+              {bulkProcessing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Trash2 className="h-3 w-3 mr-1" />}
+              Rejeitar todas
+            </Button>
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={fetchAcoes} disabled={loading}>
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
