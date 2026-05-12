@@ -178,7 +178,14 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
       const quantidade = parseInt(formData.quantidadeContratos);
       const now = new Date().toISOString();
 
-      // 1. Salvar na tabela contratos_fechados
+      // 1. Buscar dados do lead ANTES do insert (estado atual para cálculo correto)
+      const { data: leadData } = await supabase
+        .from('leads_juridicos')
+        .select('tipo_origem, email, telefone, facebook_lead_id, valor_causa, lead_state, contratos_adicionais')
+        .eq('id', formData.leadId)
+        .single();
+
+      // 2. Salvar na tabela contratos_fechados
       const { error: insertError } = await supabase
         .from('contratos_fechados' as any)
         .insert({
@@ -201,30 +208,22 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
         } as any);
       if (insertError) throw insertError;
 
-      // 2. Calcular total de contratos deste lead (fonte da verdade = contratos_fechados)
-      const { data: todosContratos } = await supabase
-        .from('contratos_fechados' as any)
-        .select('quantidade_contratos')
-        .eq('lead_id', formData.leadId);
-      const totalContratos = (todosContratos || []).reduce(
-        (s: number, r: any) => s + (r.quantidade_contratos || 1), 0
-      );
-      const contratosAdicionais = Math.max(0, totalContratos - 1);
+      // 3. Calcular contratos_adicionais:
+      //    - Lead JÁ convertido (orgânico ou manual anterior): incrementar sobre o atual
+      //    - Primeira conversão via modal: primeiro contrato é a base (adicionais = quantidade - 1)
+      const jaConvertido = (leadData as any)?.lead_state === 'CONTRACT_SIGNED';
+      const adicionaisAtuais = (leadData as any)?.contratos_adicionais || 0;
+      const contratosAdicionais = jaConvertido
+        ? adicionaisAtuais + quantidade
+        : Math.max(0, quantidade - 1);
 
-      // 3. Buscar dados do lead (reutilizado no honorário e Meta CAPI)
-      const { data: leadData } = await supabase
-        .from('leads_juridicos')
-        .select('tipo_origem, email, telefone, facebook_lead_id, valor_causa')
-        .eq('id', formData.leadId)
-        .single();
-
-      // 4. Atualizar status e nome do lead
-      await supabase
+      // 4. Atualizar status e contratos_adicionais do lead (com verificação de erro)
+      const { error: updateError } = await supabase
         .from('leads_juridicos')
         .update({
           status:               'Contrato Assinado',
           lead_state:           'CONTRACT_SIGNED',
-          contract_signed_at:   now,
+          contract_signed_at:   jaConvertido ? (leadData as any)?.contract_signed_at || now : now,
           state_updated_at:     now,
           tipo_conversao:       formData.tipoContrato,
           data_conversao:       now,
@@ -232,6 +231,7 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
           ...(formData.leadNome ? { nome: formData.leadNome } : {}),
         } as any)
         .eq('id', formData.leadId);
+      if (updateError) throw updateError;
 
       // 5. Broadcast para atualização imediata do dashboard
       supabase
