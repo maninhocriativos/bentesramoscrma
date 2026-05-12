@@ -1572,6 +1572,17 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ success: false, error: 'lead_id e mensagem ou media_url sao obrigatorios' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Verificar se a Isa está habilitada via app_settings
+    const { data: isaSetting } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'isa_auto_enabled')
+      .maybeSingle();
+    if (isaSetting && isaSetting.value === 'false') {
+      console.log('⏸️ Isa desabilitada via app_settings — ignorando mensagem');
+      return new Response(JSON.stringify({ success: true, skipped: true, reason: 'agent_disabled' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // LOCK de processamento
     const lockExpiry = 30;
     const { data: recentProcessing } = await supabase.from('system_events').select('id, created_at').eq('lead_id', lead_id).eq('acao', 'isa_processing_lock').eq('processado', false).gte('created_at', new Date(Date.now() - lockExpiry * 1000).toISOString()).maybeSingle();

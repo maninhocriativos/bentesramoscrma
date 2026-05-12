@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, MessageSquare, Brain, Zap, ListTodo,
-  Settings, Sparkles, Cpu,
+  Settings, Cpu,
   Scale, Search, Calendar, CheckCircle2,
   BarChart2, Users, Target, TrendingUp, ScanLine, FileText,
 } from 'lucide-react';
@@ -10,6 +10,7 @@ import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { IsaChat } from '@/components/assistentes/IsaChat';
 import { IsaConversionMetrics } from '@/components/assistentes/IsaConversionMetrics';
+import { DonnaChat } from '@/components/assistentes/DonnaChat';
 import isaAvatar   from '@/assets/isa-avatar.png';
 import donnaAvatar from '@/assets/donna-avatar.png';
 
@@ -84,13 +85,12 @@ function IsaMetricsView({ onBack }: { onBack: () => void }) {
   );
 }
 
-// ── Donn@ — em desenvolvimento ────────────────────────────────────────────────
+// ── Donn@ — chat ──────────────────────────────────────────────────────────────
 function DonnaView({ onBack }: { onBack: () => void }) {
   return (
     <AppLayout>
       <AppHeader title="Donn@ — Análise e Relatórios" />
       <div className="flex-1 flex flex-col min-h-0">
-        {/* Barra voltar */}
         <div className="flex items-center gap-3 px-4 py-2.5 border-b bg-card shrink-0">
           <button
             onClick={onBack}
@@ -99,75 +99,11 @@ function DonnaView({ onBack }: { onBack: () => void }) {
             <ArrowLeft className="h-4 w-4" /> Voltar aos agentes
           </button>
           <div className="ml-auto flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-amber-400" />
-            <span className="text-[11px] font-bold text-amber-600">Em desenvolvimento</span>
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[11px] font-bold text-emerald-600">Online</span>
           </div>
         </div>
-
-        {/* Tela de boas-vindas */}
-        <div
-          className="flex-1 flex flex-col items-center justify-center px-6 py-12"
-          style={{ background: 'linear-gradient(160deg, #080e1c 0%, #111f3d 50%, #182650 100%)' }}
-        >
-          {/* Avatar */}
-          <div className="relative mb-5">
-            <img
-              src={donnaAvatar}
-              alt="Donn@"
-              className="h-24 w-24 rounded-2xl object-cover object-top shadow-2xl"
-              style={{ border: `2px solid ${BLUE_A}50` }}
-            />
-            <span className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-amber-400 border-2 border-[#080e1c]" />
-          </div>
-
-          <h2 className="text-xl font-black text-white mb-1">Donn@</h2>
-          <p className="text-sm font-semibold mb-8" style={{ color: `${BLUE_A}cc` }}>
-            Assistente Jurídica de Análise e Dados
-          </p>
-
-          {/* Card de status */}
-          <div
-            className="w-full max-w-sm rounded-2xl p-5 mb-8"
-            style={{
-              background: 'rgba(255,255,255,0.04)',
-              border: `1px solid ${BLUE_A}30`,
-            }}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="h-4 w-4" style={{ color: BLUE_A }} />
-              <span className="text-xs font-black uppercase tracking-widest" style={{ color: BLUE_A }}>
-                Em treinamento
-              </span>
-            </div>
-            <p className="text-sm text-white/60 leading-relaxed">
-              A Donn@ está sendo treinada com os dados do escritório para entregar
-              relatórios precisos, análise de padrões e insights estratégicos.
-            </p>
-          </div>
-
-          {/* Capacidades */}
-          <div className="w-full max-w-sm">
-            <p className="text-[10px] font-black uppercase tracking-widest mb-3 text-center" style={{ color: `${BLUE_A}70` }}>
-              O que ela fará
-            </p>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {DONNA_CAPABILITIES.map(({ icon: Icon, label }) => (
-                <div
-                  key={label}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold"
-                  style={{
-                    background: 'rgba(91,141,217,0.10)',
-                    color: 'rgba(255,255,255,0.60)',
-                    border: '1px solid rgba(91,141,217,0.20)',
-                  }}
-                >
-                  <Icon className="h-3 w-3 shrink-0" style={{ color: BLUE_A }} />
-                  {label}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <DonnaChat />
       </div>
     </AppLayout>
   );
