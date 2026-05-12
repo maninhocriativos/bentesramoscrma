@@ -72,6 +72,18 @@ export function useChatInterno() {
   const chatOpenRef = useRef(false);
   const { user } = useAuth();
 
+  // Refs para evitar closure stale no handler do realtime
+  const userRef   = useRef(user);
+  const myNomeRef = useRef<string>('');
+  useEffect(() => { userRef.current = user; }, [user]);
+
+  // Busca o primeiro nome do usuário logado para detecção por nome
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase.from('perfis').select('nome').eq('id', user.id).single()
+      .then(({ data }) => { if (data?.nome) myNomeRef.current = data.nome; });
+  }, [user?.id]);
+
   const fetchMensagens = useCallback(async () => {
     const { data } = await supabase
       .from('chat_mensagens')
@@ -106,10 +118,14 @@ export function useChatInterno() {
           });
 
           // Skip own messages
-          if (msg.sender_id === user?.id) return;
+          if (msg.sender_id === userRef.current?.id) return;
 
-          const { ids } = decodeMencoes(msg.conteudo);
-          const mencionado = !!user?.id && ids.includes(user.id);
+          const { ids, text } = decodeMencoes(msg.conteudo);
+          const uid  = userRef.current?.id || '';
+          const nome = myNomeRef.current;
+          const mencionadoPorUUID = !!uid && ids.includes(uid);
+          const mencionadoPorNome = !!nome && new RegExp(`@${nome}\\b`, 'i').test(text);
+          const mencionado = mencionadoPorUUID || mencionadoPorNome;
           const remetente = msg.perfis
             ? `${msg.perfis.nome}${msg.perfis.sobrenome ? ` ${msg.perfis.sobrenome.split(' ')[0]}` : ''}`
             : 'Alguém';
