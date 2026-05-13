@@ -222,6 +222,42 @@ function formatarMensagemAtualizacao(processo: any, nomeCliente: string): string
 }
 
 
+// Formata mensagem proativa mensal para o cliente (usa movimentos_json do sync diário)
+function formatarMensagemMensal(processos: any[], nomeCliente: string): string {
+  const nome = (nomeCliente || 'Cliente').split(' ')[0];
+  const mes = new Date().toLocaleDateString('pt-BR', {
+    timeZone: 'America/Manaus', month: 'long', year: 'numeric',
+  });
+
+  let msg = `Olá, ${nome}! 😊\n\n`;
+  msg += `📋 *Atualização dos seus processos — ${mes}*\n\n`;
+
+  for (let i = 0; i < processos.length; i++) {
+    const p = processos[i];
+    if (i > 0) msg += '\n─────────────────\n\n';
+    msg += `*${i + 1}. ${p.titulo_acao || 'Processo Jurídico'}*\n`;
+    msg += `📌 Nº ${p.numero_processo}\n`;
+    if (p.tribunal) msg += `🏛️ ${p.tribunal}${p.orgao_julgador ? ` — ${p.orgao_julgador}` : ''}\n`;
+    msg += `📊 Status: *${p.status || 'Em Andamento'}*\n`;
+
+    const movs: any[] = p.movimentos_json || [];
+    if (movs.length > 0) {
+      const ultima = movs[0];
+      const data = formatarData(ultima.dataHora || ultima.data);
+      msg += `📅 Última movimentação (${data}):\n`;
+      msg += `_${ultima.nome || 'Movimentação'}`;
+      if (ultima.complemento) msg += ` — ${String(ultima.complemento).substring(0, 120)}`;
+      msg += '_\n';
+    } else {
+      msg += `📅 Sem movimentações registradas ainda\n`;
+    }
+  }
+
+  msg += `\n💼 *Bentes & Ramos Advocacia*\n`;
+  msg += `Qualquer dúvida, estamos à disposição! 🙏`;
+  return msg;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -475,6 +511,105 @@ serve(async (req) => {
       );
     }
     
+    // ─── Notificação mensal proativa para leads do escritório ──────────────────
+    if (action === 'notificar_mensal_escritorio') {
+      console.log('📅 Iniciando notificação mensal do escritório...');
+
+      // Buscar todos os processos ativos com dados do lead
+      const { data: processos } = await supabase
+        .from('processos')
+        .select(`
+          id, numero_processo, titulo_acao, status, tribunal, orgao_julgador,
+          movimentos_json, data_ultima_atualizacao, cliente_id,
+          lead:leads_juridicos!inner(id, nome, telefone, tipo_origem)
+        `)
+        .not('status', 'in', '("Arquivado","Perdido","Transitado em Julgado")')
+        .not('numero_processo', 'is', null)
+        .not('cliente_id', 'is', null);
+
+      if (!processos || processos.length === 0) {
+        return new Response(JSON.stringify({ success: true, enviados: 0, message: 'Nenhum processo ativo' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Filtrar somente leads do escritório (não tráfego)
+      const processosEsc = processos.filter((p: any) => {
+        const tipo = p.lead?.tipo_origem;
+        return tipo !== 'trafego' && tipo !== 'trafego_isa';
+      });
+
+      // Agrupar por lead (um envio por cliente com todos os processos dele)
+      const leadMap = new Map<string, { lead: any; processos: any[] }>();
+      for (const proc of processosEsc) {
+        const lid = proc.cliente_id;
+        if (!lid) continue;
+        if (!leadMap.has(lid)) leadMap.set(lid, { lead: proc.lead, processos: [] });
+        leadMap.get(lid)!.processos.push(proc);
+      }
+
+      console.log(`📊 ${leadMap.size} clientes do escritório com processos ativos`);
+
+      // Limite de envio por dia (evita spam em reprocessamentos)
+      const MAX_POR_EXECUCAO = 50;
+      const vinte5diasAtras = new Date(Date.now() - 25 * 24 * 3600 * 1000).toISOString();
+
+      let enviados = 0;
+      let pulados  = 0;
+      let erros    = 0;
+
+      for (const [leadId, { lead, processos: procs }] of leadMap) {
+        if (enviados >= MAX_POR_EXECUCAO) break;
+        if (!lead?.telefone) { pulados++; continue; }
+
+        // Verificar se já enviamos notificação mensal recentemente (últimos 25 dias)
+        const { data: jaEnviado } = await supabase
+          .from('system_events')
+          .select('id')
+          .eq('tipo', 'notificacao_mensal_escritorio')
+          .eq('lead_id', leadId)
+          .gte('created_at', vinte5diasAtras)
+          .limit(1);
+
+        if (jaEnviado?.length) {
+          console.log(`⏭️ Lead ${leadId} — notificação mensal já enviada, pulando`);
+          pulados++;
+          continue;
+        }
+
+        try {
+          const mensagem = formatarMensagemMensal(procs, lead.nome);
+          const enviado  = await enviarViaZapi(supabase, null, lead.telefone, mensagem);
+
+          if (enviado) {
+            enviados++;
+            await supabase.from('system_events').insert({
+              tipo: 'notificacao_mensal_escritorio',
+              fonte: 'processo_status_monitor',
+              acao: 'mensal_enviado',
+              lead_id: leadId,
+              dados: { processos: procs.map((p: any) => p.numero_processo), total: procs.length },
+            });
+            console.log(`✅ Notificação mensal enviada para ${lead.nome} (${procs.length} processo(s))`);
+          } else {
+            erros++;
+          }
+        } catch (err) {
+          console.error(`❌ Erro ao notificar ${leadId}:`, err);
+          erros++;
+        }
+
+        // Anti-spam: 2s entre envios
+        await new Promise(r => setTimeout(r, 2000));
+      }
+
+      console.log(`📊 Mensal concluído: ${enviados} enviados, ${pulados} pulados, ${erros} erros`);
+      return new Response(
+        JSON.stringify({ success: true, enviados, pulados, erros, total_clientes: leadMap.size }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
     return new Response(
       JSON.stringify({ error: 'Ação não reconhecida' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
