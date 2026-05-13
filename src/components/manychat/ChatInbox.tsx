@@ -36,7 +36,7 @@ import {
   Send, Search, Phone, RefreshCw, Mic, Paperclip, X, CheckCheck,
   ArrowLeft, MoreVertical, Smile, Sun, Moon, Menu, Bot, UserRound,
   Instagram, Facebook, MessageCircle, Sparkles, PanelRightClose, Users,
-  FileText, Square, Star, Contact,
+  FileText, Square, Star, Contact, XCircle, BadgeCheck,
 } from "lucide-react";
 import CalWidget from "./CalWidget";
 import { subDays } from "date-fns";
@@ -1798,35 +1798,34 @@ const ManyChatInboxContent = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-0.5 md:gap-1 shrink-0">
+              <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
                 {/* ❌ BOTÃO LEAD PERDIDO */}
                 {selectedSubscriber.lead_id && (
                   <Button
                     size="sm"
                     onClick={() => setLeadPerdidoOpen(true)}
-                    className="h-8 md:h-9 px-2 md:px-3 rounded-xl gap-1 md:gap-1.5 text-[10px] md:text-xs font-bold shadow-md
-                      bg-gradient-to-r from-red-500 to-red-600
-                      hover:from-red-600 hover:to-red-700
-                      text-white border-0 transition-all hover:scale-105"
                     title="Marcar lead como perdido"
+                    className="h-7 md:h-8 px-2.5 md:px-3.5 rounded-full gap-1.5 text-[11px] md:text-xs font-semibold
+                      border border-red-400/60 bg-red-500/10 text-red-500
+                      hover:bg-red-500 hover:text-white hover:border-red-500 hover:shadow-md hover:shadow-red-500/25
+                      active:scale-95 transition-all duration-150"
                   >
-                    <X className="h-3 w-3 md:h-3.5 md:w-3.5" />
-                    <span className="hidden sm:inline">Lead Perdido</span>
-                    <span className="sm:hidden">Perdido</span>
+                    <XCircle className="h-3.5 w-3.5 shrink-0" />
+                    <span className="hidden sm:inline">Perdido</span>
                   </Button>
                 )}
 
-                {/* ✅ BOTÃO CONTRATO FECHADO — destaque visual forte */}
+                {/* ✅ BOTÃO CONTRATO FECHADO */}
                 <Button
                   size="sm"
                   onClick={() => setContratoModalOpen(true)}
-                  className="h-8 md:h-9 px-2 md:px-3 rounded-xl gap-1 md:gap-1.5 text-[10px] md:text-xs font-bold shadow-md
-                    bg-gradient-to-r from-emerald-500 to-emerald-600
-                    hover:from-emerald-600 hover:to-emerald-700
-                    text-white border-0 transition-all hover:scale-105"
                   title="Registrar contrato fechado"
+                  className="h-7 md:h-8 px-2.5 md:px-3.5 rounded-full gap-1.5 text-[11px] md:text-xs font-semibold
+                    bg-emerald-500 text-white border border-emerald-500
+                    hover:bg-emerald-600 hover:border-emerald-600 hover:shadow-md hover:shadow-emerald-500/30
+                    active:scale-95 transition-all duration-150"
                 >
-                  <CheckCheck className="h-3 w-3 md:h-3.5 md:w-3.5" />
+                  <BadgeCheck className="h-3.5 w-3.5 shrink-0" />
                   <span className="hidden sm:inline">Contrato Fechado</span>
                   <span className="sm:hidden">Contrato</span>
                 </Button>
