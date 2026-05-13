@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Lead } from '@/types/leads';
-import { RefreshCw, Users, Activity, Clock, CheckCircle, Wifi, AlertCircle, Scale } from 'lucide-react';
+import { RefreshCw, Users, Activity, CheckCircle, Wifi, AlertCircle, Scale } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 
 interface RealtimeLeadsMonitorProps {
   leads: Lead[];
@@ -25,6 +26,28 @@ const STATUS_COLORS: Record<string, string> = {
 export function RealtimeLeadsMonitor({ leads, onRefresh }: RealtimeLeadsMonitorProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastCheck, setLastCheck] = useState(new Date());
+  const [extraLeads, setExtraLeads] = useState(0);
+  const prevLen = useRef(leads.length);
+
+  // Reset extra count whenever a full refresh brings in new data
+  useEffect(() => {
+    if (leads.length !== prevLen.current) {
+      setExtraLeads(0);
+      prevLen.current = leads.length;
+    }
+  }, [leads.length]);
+
+  // Real-time subscription — increments counter instantly on INSERT
+  useEffect(() => {
+    const channel = supabase
+      .channel('dashboard-leads-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads_juridicos' }, () => {
+        setExtraLeads(c => c + 1);
+        setLastCheck(new Date());
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -56,6 +79,9 @@ export function RealtimeLeadsMonitor({ leads, onRefresh }: RealtimeLeadsMonitorP
     };
   }, [leads]);
 
+  const displayTotal = stats.total + extraLeads;
+  const displayHoje  = stats.hoje  + extraLeads;
+
   const handleRefresh = () => {
     setIsRefreshing(true);
     onRefresh?.();
@@ -74,7 +100,8 @@ export function RealtimeLeadsMonitor({ leads, onRefresh }: RealtimeLeadsMonitorP
         </div>
         <span className="text-sm font-semibold text-foreground flex-1">Monitor de Leads</span>
         <span className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg" style={{ background: '#f0fdf4', color: '#16a34a' }}>
-          <Wifi style={{ width: 11, height: 11 }} /> Online
+          <Wifi style={{ width: 11, height: 11 }} />
+          {extraLeads > 0 ? `+${extraLeads} agora` : 'Online'}
         </span>
         <button onClick={handleRefresh} disabled={isRefreshing} className="h-7 w-7 rounded-lg flex items-center justify-center transition-colors hover:bg-[#c9a96e]/10">
           <RefreshCw style={{ width: 13, height: 13, color: '#9ca3af' }} className={cn(isRefreshing && 'animate-spin')} />
@@ -90,12 +117,12 @@ export function RealtimeLeadsMonitor({ leads, onRefresh }: RealtimeLeadsMonitorP
           </div>
           <div className="flex-1 min-w-0">
             <p style={{ fontSize: 28, fontWeight: 800, lineHeight: 1, color: 'inherit' }}>
-              {stats.total.toLocaleString('pt-BR')}
+              {displayTotal.toLocaleString('pt-BR')}
             </p>
             <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>Total de leads no CRM</p>
           </div>
           <div className="text-right">
-            <p style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>+{stats.hoje}</p>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>+{displayHoje}</p>
             <p style={{ fontSize: 10, color: '#9ca3af' }}>hoje</p>
           </div>
         </div>

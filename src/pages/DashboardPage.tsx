@@ -201,8 +201,8 @@ function DashboardPage() {
                 {/* Resumo financeiro */}
                 <FinanceiroResumoWidget />
 
-                {/* Widgets inferiores — 4 colunas */}
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-stretch pb-4">
+                {/* Widgets inferiores — 3 colunas */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch">
                   <AgendaPrazosWidget />
                   <Suspense fallback={<ChartFallback />}>
                     <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
@@ -210,6 +210,10 @@ function DashboardPage() {
                   <Suspense fallback={<ChartFallback />}>
                     <TeamStatusWidget />
                   </Suspense>
+                </div>
+
+                {/* Follow-up automático — largura total */}
+                <div className="pb-4">
                   <Suspense fallback={<ChartFallback />}>
                     <FollowupStatsWidget />
                   </Suspense>
