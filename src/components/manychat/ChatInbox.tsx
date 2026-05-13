@@ -27,10 +27,7 @@ import { ConversationSearch } from "@/components/chat/ConversationSearch";
 import { SendContactModal } from "@/components/chat/SendContactModal";
 import { ContratoFechadoModal } from "@/components/chat/ContratoFechadoModal";
 import { useMetaCapi } from "@/hooks/useMetaCapi";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-  DialogDescription, DialogFooter,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ChatFiltersBar, type ConversationFilter, type OrigemFilter } from "@/components/chat/ChatFiltersBar";
 import { formatWhatsAppText as formatWhatsAppTextHelper } from "@/lib/whatsappTextFormatter";
 import { InstanceInfo } from "@/lib/instanceUtils";
@@ -2017,26 +2014,60 @@ const ManyChatInboxContent = () => {
       />
 
       {/* ❌ Confirmação Lead Perdido */}
-      <Dialog open={leadPerdidoOpen} onOpenChange={setLeadPerdidoOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Marcar como Lead Perdido?</DialogTitle>
-            <DialogDescription>
-              O status do lead <strong>{selectedSubscriber ? getDisplayName(selectedSubscriber) : ''}</strong> será alterado para <strong>Perdido</strong> e um evento será enviado para a Meta para otimização de anúncios.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setLeadPerdidoOpen(false)} disabled={leadPerdidoLoading}>
+      <Dialog open={leadPerdidoOpen} onOpenChange={(v: boolean) => { if (!leadPerdidoLoading) setLeadPerdidoOpen(v); }}>
+        <DialogContent className="max-w-sm p-0 overflow-hidden">
+          {/* Header vermelho */}
+          <div className="bg-gradient-to-br from-red-500 to-red-700 px-6 pt-6 pb-5 text-white">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <X className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <DialogTitle className="text-white text-base font-bold leading-tight">Lead Perdido</DialogTitle>
+                <p className="text-red-100 text-xs mt-0.5">Esta ação notificará a Meta Ads</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="px-6 py-5 space-y-3">
+            <div className="flex items-start gap-3 rounded-xl bg-red-50 border border-red-100 p-3">
+              <span className="text-xl mt-0.5">👤</span>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">{selectedSubscriber ? getDisplayName(selectedSubscriber) : ''}</p>
+                <p className="text-xs text-gray-500 mt-0.5">Lead será arquivado como <span className="font-semibold text-red-600">Perdido</span></p>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5 flex gap-2 items-start">
+              <span className="text-sm mt-0.5">📊</span>
+              <p className="text-xs text-amber-700">
+                Um evento <strong>LeadPerdido</strong> será enviado à Meta para que o algoritmo aprenda a não exibir anúncios para perfis similares.
+              </p>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 pb-5 flex gap-2 justify-end">
+            <Button
+              variant="outline"
+              onClick={() => setLeadPerdidoOpen(false)}
+              disabled={leadPerdidoLoading}
+              className="rounded-xl"
+            >
               Cancelar
             </Button>
             <Button
               onClick={handleLeadPerdido}
               disabled={leadPerdidoLoading}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white border-0 gap-1.5"
             >
-              {leadPerdidoLoading ? 'Salvando...' : '❌ Confirmar Perdido'}
+              {leadPerdidoLoading
+                ? <><span className="animate-spin inline-block h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" /> Salvando...</>
+                : <><X className="h-3.5 w-3.5" /> Confirmar Perdido</>
+              }
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
