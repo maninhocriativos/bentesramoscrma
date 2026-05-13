@@ -61,57 +61,75 @@ async function getProcessosDoCliente(supabase: any, leadId: string): Promise<any
 // ─── Formatar lista de processos para contexto da IA ─────────────────────────
 function formatarProcessos(processos: any[]): string {
   if (processos.length === 0) {
-    return 'Nenhum processo ativo encontrado no sistema para este cliente.';
+    return 'NENHUM PROCESSO ATIVO encontrado no sistema para este cliente.';
   }
 
-  const lines: string[] = [`${processos.length} processo(s) ativo(s) no escritório:\n`];
+  const linhas: string[] = [`TOTAL: ${processos.length} processo(s) ativo(s) no escritório Bentes & Ramos.\n`];
   for (let i = 0; i < processos.length; i++) {
     const p = processos[i];
-    lines.push(`[PROCESSO ${i + 1}]`);
-    lines.push(`Número: ${p.numero_processo || 'Sem número'}`);
-    if (p.titulo_acao) lines.push(`Tipo/Classe: ${p.titulo_acao}`);
-    if (p.tribunal) lines.push(`Tribunal: ${p.tribunal}`);
-    if (p.orgao_julgador) lines.push(`Vara/Órgão: ${p.orgao_julgador}`);
-    lines.push(`Status: ${p.status || 'Em Andamento'}`);
-    if (p.advogado_responsavel) lines.push(`Advogado responsável: ${p.advogado_responsavel}`);
-    lines.push(`Última atualização no sistema: ${formatarData(p.data_ultima_atualizacao || p.updated_at)}`);
+    linhas.push(`--- PROCESSO ${i + 1} ---`);
+    linhas.push(`Número CNJ: ${p.numero_processo || 'Não informado'}`);
+    if (p.titulo_acao) linhas.push(`Tipo/Classe: ${p.titulo_acao}`);
+    if (p.tribunal)    linhas.push(`Tribunal: ${p.tribunal}`);
+    if (p.orgao_julgador) linhas.push(`Vara/Órgão: ${p.orgao_julgador}`);
+    linhas.push(`Status atual: ${p.status || 'Em Andamento'}`);
+    if (p.advogado_responsavel) linhas.push(`Advogado: ${p.advogado_responsavel}`);
+
+    const dataAtt = formatarData(p.data_ultima_atualizacao || p.updated_at);
+    linhas.push(`Última atualização no sistema: ${dataAtt}`);
 
     const movs: any[] = p.movimentos_json || [];
     if (movs.length > 0) {
-      lines.push('Últimas movimentações:');
+      linhas.push(`Movimentações recentes (${movs.length} total, mostrando as últimas):`);
       for (const mov of movs.slice(0, 5)) {
         const data = formatarData(mov.dataHora || mov.data);
         const nome = mov.nome || mov.titulo || 'Movimentação';
-        const comp = mov.complemento ? ` — ${String(mov.complemento).substring(0, 150)}` : '';
-        lines.push(`  • ${data}: ${nome}${comp}`);
+        const comp = mov.complemento ? ` — ${String(mov.complemento).substring(0, 200)}` : '';
+        linhas.push(`  [${data}] ${nome}${comp}`);
+      }
+      // Indicar a mais recente explicitamente
+      const ultima = movs[0];
+      if (ultima) {
+        linhas.push(`MAIS RECENTE: ${formatarData(ultima.dataHora || ultima.data)} — ${ultima.nome || ultima.titulo || 'Movimentação'}`);
       }
     } else {
-      lines.push('Movimentações: sem registros ainda');
+      linhas.push('Movimentações: nenhuma registrada ainda no sistema.');
     }
-    lines.push('');
+    linhas.push('');
   }
-  return lines.join('\n');
+  return linhas.join('\n');
 }
 
 // ─── Gerar resposta via OpenAI ────────────────────────────────────────────────
 async function gerarResposta(nomeCliente: string, mensagem: string, processosCtx: string): Promise<string> {
   if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY não configurada');
 
-  const systemPrompt = `Você é a Isa, assistente virtual do escritório Bentes & Ramos Advocacia.
-Sua única função neste canal é informar clientes sobre o andamento dos processos gerenciados pelo escritório.
+  const systemPrompt = `Você é a Isa, assistente virtual do escritório *Bentes & Ramos Advocacia*.
+Sua função é informar clientes sobre o andamento dos processos gerenciados pelo nosso escritório.
 
-DADOS DOS PROCESSOS DO CLIENTE ${nomeCliente}:
+DADOS DOS PROCESSOS DO CLIENTE (${nomeCliente}):
 ${processosCtx}
 
+COMO FORMATAR A RESPOSTA (WhatsApp):
+- Comece com uma saudação curta usando o primeiro nome do cliente
+- Se houver processos: apresente cada um com este modelo:
+
+*[Número] — [Tipo da ação]*
+🏛️ [Tribunal] | [Vara/Órgão]
+📊 Status: [status]
+📅 Última movimentação ([data]): [descrição objetiva do que aconteceu]
+
+- Se houver UMA movimentação recente relevante, explique em 1 frase o que significa em linguagem simples (ex: "Isso significa que o juiz vai analisar o caso em breve")
+- Se não houver movimentações, diga "Ainda não há movimentações registradas — nossa equipe acompanha e te avisa"
+- Se não houver processos ativos: informe com gentileza e oriente a contatar o escritório
+- Finalize com: _Posso te ajudar em algo mais?_
+
 REGRAS:
-- Apresente TODOS os processos ativos de forma clara, um por um
-- Destaque a última movimentação de cada processo — é a informação mais importante
-- Use formatação WhatsApp: *negrito* para dados relevantes, emojis com moderação (📋⚖️📅)
-- Nunca prometa resultados nem dê parecer jurídico
-- Se não houver processos ativos, informe educadamente e oriente a entrar em contato com o escritório
-- Se o sistema não tiver movimentações recentes, diga que vai verificar e que a equipe retornará
-- Seja objetivo e direto — máximo 6 linhas por processo
-- Termine com: "Posso te ajudar em algo mais sobre seu processo?"`;
+- Use *negrito* para números de processo, tipo de ação e informações importantes
+- Nunca invente dados, status ou datas que não estão nos dados acima
+- Nunca prometa resultado nem dê parecer jurídico
+- Tom: acolhedor, claro e profissional — sem juridiquês
+- Máximo 8 linhas por processo`;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -125,8 +143,8 @@ REGRAS:
         { role: 'system', content: systemPrompt },
         { role: 'user', content: mensagem },
       ],
-      max_tokens: 800,
-      temperature: 0.5,
+      max_tokens: 900,
+      temperature: 0.4,
     }),
   });
 
