@@ -227,16 +227,6 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // PAUSADO — notificações de processo desativadas temporariamente
-  const ATIVO = false;
-  if (!ATIVO) {
-    console.log('[PROCESSO-MONITOR] Função pausada (ATIVO=false)');
-    return new Response(JSON.stringify({ success: true, paused: true, message: 'Função pausada temporariamente' }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
-  }
-
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -319,6 +309,16 @@ serve(async (req) => {
     
     // Ação: Monitoramento automático com frequência personalizável
     if (action === 'monitor_semanal') {
+      // Monitoramento automático pausado — reativar quando necessário
+      const MONITOR_ATIVO = false;
+      if (!MONITOR_ATIVO) {
+        console.log('[PROCESSO-MONITOR] Monitoramento automático pausado');
+        return new Response(JSON.stringify({ success: true, paused: true, message: 'Monitoramento automático pausado' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+
       console.log('📋 Iniciando monitoramento de processos com frequência personalizável...');
       
       const agora = new Date();

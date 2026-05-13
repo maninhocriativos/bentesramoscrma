@@ -627,26 +627,27 @@ async function getLeadFullContext(leadId: string, supabase: any, includeAgenda: 
     // Processos vinculados
     const { data: processos } = await supabase
       .from('processos')
-      .select('*, movimentacoes:processo_movimentacoes(titulo, data_movimentacao, descricao)')
-      .eq('lead_id', leadId)
+      .select('id, numero_processo, titulo_acao, status, tribunal, orgao_julgador, advogado_responsavel, movimentos_json, data_ultima_atualizacao, updated_at')
+      .eq('cliente_id', leadId)
       .order('created_at', { ascending: false })
       .limit(5);
 
     if (processos?.length > 0) {
       parts.push(`\n[PROCESSOS DO CLIENTE]`);
       for (const proc of processos) {
-        parts.push(`📋 Processo: ${proc.numero_cnj || 'Sem CNJ'}`);
-        parts.push(`   Tipo: ${proc.tipo_acao || 'N/A'}`);
-        parts.push(`   Tribunal: ${proc.tribunal || 'N/A'}`);
-        parts.push(`   Status: ${proc.status || 'Ativo'}`);
-        parts.push(`   Última atualização: ${proc.ultima_verificacao || proc.updated_at || 'N/A'}`);
-        
-        const movs = proc.movimentacoes?.slice(0, 3) || [];
+        parts.push(`📋 Processo: ${proc.numero_processo || 'Sem número'}`);
+        if (proc.titulo_acao) parts.push(`   Tipo: ${proc.titulo_acao}`);
+        if (proc.tribunal) parts.push(`   Tribunal: ${proc.tribunal}`);
+        if (proc.orgao_julgador) parts.push(`   Vara: ${proc.orgao_julgador}`);
+        parts.push(`   Status: ${proc.status || 'Em Andamento'}`);
+        parts.push(`   Última atualização: ${formatarDataMovimentacao(proc.data_ultima_atualizacao || proc.updated_at)}`);
+
+        const movs = (proc.movimentos_json as any[]) || [];
         if (movs.length > 0) {
           parts.push(`   Últimas movimentações:`);
-          for (const mov of movs) {
-            const data = formatarDataMovimentacao(mov.data_movimentacao);
-            parts.push(`   - ${data}: ${mov.titulo}${mov.descricao ? ` — ${mov.descricao.substring(0, 100)}` : ''}`);
+          for (const mov of movs.slice(0, 3)) {
+            const data = formatarDataMovimentacao(mov.dataHora || mov.data);
+            parts.push(`   - ${data}: ${mov.nome || mov.titulo || 'Movimentação'}${mov.complemento ? ` — ${mov.complemento.substring(0, 100)}` : ''}`);
           }
         }
       }
