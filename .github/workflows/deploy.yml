@@ -41,3 +41,13 @@ jobs:
         run: supabase functions deploy send-meta-event --project-ref qgenaltkjtlvwfgykpxq
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy traffic-followup-automation
+        run: supabase functions deploy traffic-followup-automation --project-ref qgenaltkjtlvwfgykpxq
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy isa-lembrete-sender
+        run: supabase functions deploy isa-lembrete-sender --project-ref qgenaltkjtlvwfgykpxq
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
