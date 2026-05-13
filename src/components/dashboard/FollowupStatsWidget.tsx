@@ -1,4 +1,4 @@
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { MessageSquare, Clock, CheckCircle2, Users, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -31,7 +31,7 @@ function FollowupStatsWidget() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = async (showRefreshing = false) => {
+  const load = useCallback(async (showRefreshing = false) => {
     if (showRefreshing) setRefreshing(true);
     try {
       const [
@@ -43,24 +43,25 @@ function FollowupStatsWidget() {
         supabase.from('traffic_followups').select('id', { count: 'exact', head: true }).eq('automation_active', true),
         supabase.from('traffic_followups').select('id', { count: 'exact', head: true }).eq('status', 'in_progress'),
         supabase.from('followup_nutricao').select('id', { count: 'exact', head: true }).eq('status', 'pendente'),
-        supabase.from('traffic_followups')
-          .select('lead:leads_juridicos(status)', { count: 'exact', head: true })
-          .not('current_stage', 'is', null)
-          .in('lead.status' as any, ['Ganho', 'Contrato Assinado']),
+        // Leads de tráfego que converteram (Ganho ou Contrato Assinado)
+        supabase.from('leads_juridicos')
+          .select('id', { count: 'exact', head: true })
+          .eq('tipo_origem', 'trafego')
+          .in('status', ['Ganho', 'Contrato Assinado']),
       ]);
       setStats({
-        pipeline_ativo:       pipeline_ativo  || 0,
-        em_andamento:         em_andamento    || 0,
-        aguardando_optin:     aguardando_optin || 0,
+        pipeline_ativo:        pipeline_ativo        || 0,
+        em_andamento:          em_andamento          || 0,
+        aguardando_optin:      aguardando_optin      || 0,
         convertidos_automacao: convertidos_automacao || 0,
       });
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   return (
     <div className="rounded-2xl border border-[#c9a96e]/15 bg-card shadow-[0_1px_4px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col">

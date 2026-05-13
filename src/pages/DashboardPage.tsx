@@ -124,8 +124,8 @@ function DashboardPage() {
       <div className="flex-1 overflow-auto">
         {!heroReady ? (
           <div className="px-4 md:px-6 lg:px-8 py-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {[1,2,3].map(i => <Skeleton key={i} className="h-36 rounded-2xl" />)}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[1,2,3,4].map(i => <Skeleton key={i} className="h-36 rounded-2xl" />)}
             </div>
           </div>
         ) : (
