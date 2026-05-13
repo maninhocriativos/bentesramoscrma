@@ -26,6 +26,11 @@ import { ForwardMessageModal } from "@/components/chat/ForwardMessageModal";
 import { ConversationSearch } from "@/components/chat/ConversationSearch";
 import { SendContactModal } from "@/components/chat/SendContactModal";
 import { ContratoFechadoModal } from "@/components/chat/ContratoFechadoModal";
+import { useMetaCapi } from "@/hooks/useMetaCapi";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 import { ChatFiltersBar, type ConversationFilter, type OrigemFilter } from "@/components/chat/ChatFiltersBar";
 import { formatWhatsAppText as formatWhatsAppTextHelper } from "@/lib/whatsappTextFormatter";
 import { InstanceInfo } from "@/lib/instanceUtils";
@@ -159,6 +164,8 @@ const ManyChatInboxContent = () => {
 
   // ✅ Modal de contrato fechado
   const [contratoModalOpen, setContratoModalOpen]       = useState(false);
+  const [leadPerdidoOpen, setLeadPerdidoOpen]           = useState(false);
+  const [leadPerdidoLoading, setLeadPerdidoLoading]     = useState(false);
   const [editingLeadName, setEditingLeadName]           = useState(false);
   const [editingLeadNameValue, setEditingLeadNameValue] = useState("");
 
@@ -170,6 +177,7 @@ const ManyChatInboxContent = () => {
   } = useChatTags();
 
   const { leadNames } = useLeadNames();
+  const { sendMetaEvent } = useMetaCapi();
 
   // ─── Refs ───────────────────────────────────────────────────────────────────
 
@@ -1444,6 +1452,41 @@ const ManyChatInboxContent = () => {
 
   useEffect(() => { if (selectedSubscriber) loadMessageFlags(); }, [selectedSubscriber?.subscriber_id, loadMessageFlags]);
 
+  const handleLeadPerdido = async () => {
+    if (!selectedSubscriber?.lead_id) return;
+    setLeadPerdidoLoading(true);
+    try {
+      const { error } = await supabase
+        .from('leads_juridicos')
+        .update({ status: 'Perdido', lead_state: 'LOST', state_updated_at: new Date().toISOString() } as any)
+        .eq('id', selectedSubscriber.lead_id);
+      if (error) throw error;
+
+      await sendMetaEvent({
+        lead_id:          selectedSubscriber.lead_id,
+        email:            selectedSubscriber.email,
+        phone:            selectedSubscriber.telefone,
+        nome:             selectedSubscriber.nome,
+        facebook_lead_id: (selectedSubscriber as any).facebook_lead_id,
+        event_name:       'LeadPerdido',
+        value:            0,
+        status:           'Perdido',
+      });
+
+      supabase.channel('app-events')
+        .send({ type: 'broadcast', event: 'lead_perdido', payload: { lead_id: selectedSubscriber.lead_id } })
+        .catch(() => {});
+
+      toast({ title: '❌ Lead marcado como Perdido', description: 'Evento enviado para a Meta.' });
+      setLeadPerdidoOpen(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      toast({ title: 'Erro', description: msg, variant: 'destructive' });
+    } finally {
+      setLeadPerdidoLoading(false);
+    }
+  };
+
   // ─── Render message ─────────────────────────────────────────────────────────
 
   const renderMessage = (message: Message) => {
@@ -1759,6 +1802,23 @@ const ManyChatInboxContent = () => {
               </div>
 
               <div className="flex items-center gap-0.5 md:gap-1 shrink-0">
+                {/* ❌ BOTÃO LEAD PERDIDO */}
+                {selectedSubscriber.lead_id && (
+                  <Button
+                    size="sm"
+                    onClick={() => setLeadPerdidoOpen(true)}
+                    className="h-8 md:h-9 px-2 md:px-3 rounded-xl gap-1 md:gap-1.5 text-[10px] md:text-xs font-bold shadow-md
+                      bg-gradient-to-r from-red-500 to-red-600
+                      hover:from-red-600 hover:to-red-700
+                      text-white border-0 transition-all hover:scale-105"
+                    title="Marcar lead como perdido"
+                  >
+                    <X className="h-3 w-3 md:h-3.5 md:w-3.5" />
+                    <span className="hidden sm:inline">Lead Perdido</span>
+                    <span className="sm:hidden">Perdido</span>
+                  </Button>
+                )}
+
                 {/* ✅ BOTÃO CONTRATO FECHADO — destaque visual forte */}
                 <Button
                   size="sm"
@@ -1955,6 +2015,30 @@ const ManyChatInboxContent = () => {
         leadId={selectedSubscriber?.lead_id || null}
         leadNome={selectedSubscriber ? getDisplayName(selectedSubscriber) : ''}
       />
+
+      {/* ❌ Confirmação Lead Perdido */}
+      <Dialog open={leadPerdidoOpen} onOpenChange={setLeadPerdidoOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Marcar como Lead Perdido?</DialogTitle>
+            <DialogDescription>
+              O status do lead <strong>{selectedSubscriber ? getDisplayName(selectedSubscriber) : ''}</strong> será alterado para <strong>Perdido</strong> e um evento será enviado para a Meta para otimização de anúncios.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setLeadPerdidoOpen(false)} disabled={leadPerdidoLoading}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleLeadPerdido}
+              disabled={leadPerdidoLoading}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {leadPerdidoLoading ? 'Salvando...' : '❌ Confirmar Perdido'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
