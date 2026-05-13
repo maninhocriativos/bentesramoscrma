@@ -537,6 +537,107 @@ async function reativarConversasAtivas(supabase: any, zapiConfig: any): Promise<
 }
 
 // ============================================
+// REATIVAR LEADS ANTIGOS (máx 10/dia)
+// ============================================
+const MENSAGEM_REATIVACAO = (nome: string) => {
+  const n = (nome || 'Cliente').split(' ')[0];
+  return `Oi, ${n}! 👋\n\nPassamos por aqui para ver se ainda podemos te ajudar com sua situação com o banco.\n\nMuitas pessoas na mesma situação já recuperaram valores que nem sabiam que tinham direito — cobrança indevida, juros abusivos, desconto sem autorização.\n\nA análise do seu caso é *100% gratuita* e sem compromisso. É só me responder com "OI" que continuo seu atendimento agora mesmo! 😊\n\n📋 *Privacidade (LGPD):* Seus dados são usados exclusivamente neste atendimento. Para não receber mais mensagens, responda *PARAR*.`;
+};
+
+const REATIVACAO_BUTTONS = [
+  { id: 'enviar_docs_agora', label: '📄 Quero analisar meu caso' },
+  { id: 'nao_nutricao',      label: '❌ Não tenho interesse'     },
+];
+
+async function processOptinsPendentes(supabase: any, zapiConfig: any): Promise<{ enviados: number; pulados: number }> {
+  const now = new Date();
+  const horaManaus = new Date(now.getTime() - 4 * 60 * 60 * 1000).getUTCHours();
+  if (horaManaus < 9 || horaManaus >= 18) return { enviados: 0, pulados: 0 };
+
+  // Quantos já enviamos nas últimas 24h (rate limit 10/dia)
+  const vintequatroHorasAtras = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const { count: jaEnviadosHoje } = await supabase
+    .from('manychat_mensagens')
+    .select('id', { count: 'exact', head: true })
+    .gte('created_at', vintequatroHorasAtras)
+    .filter('metadata->>source', 'eq', 'reativacao_antiga');
+
+  const restante = Math.max(0, 10 - (jaEnviadosHoje || 0));
+  if (restante === 0) {
+    console.log('[Reativação Antiga] Limite diário de 10 já atingido.');
+    return { enviados: 0, pulados: 0 };
+  }
+
+  const { data: pendentes } = await supabase
+    .from('followup_nutricao')
+    .select('*, lead:leads_juridicos(id, nome, telefone, status)')
+    .eq('status', 'pendente')
+    .limit(restante * 3); // pega mais para compensar os pulados
+
+  let enviados = 0;
+  let pulados = 0;
+
+  for (const reg of pendentes || []) {
+    if (enviados >= restante) break;
+    try {
+      const lead = reg.lead;
+      if (!lead?.telefone) { pulados++; continue; }
+      if (['Ganho', 'Perdido', 'Contrato Assinado'].includes(lead.status)) { pulados++; continue; }
+
+      // Já enviamos reativação recentemente para este lead?
+      const seteDiasAtras = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: jaEnviado } = await supabase
+        .from('manychat_mensagens')
+        .select('id')
+        .eq('lead_id', lead.id)
+        .filter('metadata->>source', 'eq', 'reativacao_antiga')
+        .gte('created_at', seteDiasAtras)
+        .limit(1);
+      if (jaEnviado?.length) { pulados++; continue; }
+
+      // Atendimento humano ativo?
+      const { data: sub } = await supabase
+        .from('manychat_subscribers')
+        .select('atendimento_humano')
+        .eq('lead_id', lead.id)
+        .maybeSingle();
+      if (sub?.atendimento_humano) { pulados++; continue; }
+
+      const mensagem = MENSAGEM_REATIVACAO(lead.nome);
+      const resultado = await sendButtonList(zapiConfig, lead.telefone, mensagem, REATIVACAO_BUTTONS);
+
+      if (resultado.success) {
+        const sid = reg.subscriber_id || `zapi_${normalizePhone(lead.telefone)}`;
+        await supabase.from('manychat_mensagens').insert({
+          subscriber_id: sid,
+          subscriber_nome: 'Isa (Reativação)',
+          lead_id: lead.id,
+          conteudo: mensagem,
+          direcao: 'saida',
+          tipo: 'text',
+          canal: 'whatsapp',
+          metadata: { source: 'reativacao_antiga', nutricao_id: reg.id },
+        });
+        await supabase.from('followup_nutricao')
+          .update({ optin_enviado_em: now.toISOString() })
+          .eq('id', reg.id);
+        enviados++;
+        console.log(`[Reativação Antiga] ✅ Enviado para ${lead.nome}`);
+        await sleep(8000);
+      } else {
+        pulados++;
+      }
+    } catch (err: any) {
+      console.error('[Reativação Antiga] Erro:', err.message);
+      pulados++;
+    }
+  }
+
+  console.log(`[Reativação Antiga] enviados=${enviados} pulados=${pulados}`);
+  return { enviados, pulados };
+}
+
+// ============================================
 // INSCREVER LEAD
 // ============================================
 async function enrollLead(supabase: any, leadId: string, telefone: string, subscriberId?: string) {
@@ -671,11 +772,18 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       default: {
-        const followupResults = await processFollowups(supabase, zapiConfig);
-        const reativacaoResults = await reativarConversasAtivas(supabase, zapiConfig);
-        const nutricaoResults = await processNutricao(supabase, zapiConfig);
+        const followupResults    = await processFollowups(supabase, zapiConfig);
+        const reativacaoResults  = await reativarConversasAtivas(supabase, zapiConfig);
+        const nutricaoResults    = await processNutricao(supabase, zapiConfig);
+        const optinsResult       = await processOptinsPendentes(supabase, zapiConfig);
         return new Response(
-          JSON.stringify({ success: true, followups: followupResults.length, reativacoes: reativacaoResults.length, nutricao: nutricaoResults.length }),
+          JSON.stringify({
+            success: true,
+            followups:           followupResults.length,
+            reativacoes:         reativacaoResults.length,
+            nutricao:            nutricaoResults.length,
+            reativacoes_antigas: optinsResult.enviados,
+          }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }

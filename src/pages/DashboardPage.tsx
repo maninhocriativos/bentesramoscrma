@@ -10,17 +10,18 @@ import { useLeads } from '@/hooks/useLeads';
 import { useProcessos } from '@/hooks/useProcessos';
 import { useAlertas } from '@/hooks/useAlertas';
 import { useDashboardStats } from '@/hooks/useDashboardStats';
-import { Users, DollarSign, Briefcase, Loader2, TrendingUp } from 'lucide-react';
+import { Users, DollarSign, Briefcase, Loader2, Zap } from 'lucide-react';
 import { FinanceiroResumoWidget } from '@/components/dashboard/FinanceiroResumoWidget';
 import { Skeleton } from '@/components/ui/skeleton';
 import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, isAfter } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-const DashboardCharts   = lazy(() => import('@/components/dashboard/DashboardCharts').then(m => ({ default: m.DashboardCharts })));
-const ConversionMetrics = lazy(() => import('@/components/dashboard/ConversionMetrics').then(m => ({ default: m.ConversionMetrics })));
+const DashboardCharts      = lazy(() => import('@/components/dashboard/DashboardCharts').then(m => ({ default: m.DashboardCharts })));
+const ConversionMetrics    = lazy(() => import('@/components/dashboard/ConversionMetrics').then(m => ({ default: m.ConversionMetrics })));
 const RealtimeLeadsMonitor = lazy(() => import('@/components/dashboard/RealtimeLeadsMonitor').then(m => ({ default: m.RealtimeLeadsMonitor })));
-const TeamStatusWidget  = lazy(() => import('@/components/dashboard/TeamStatusWidget').then(m => ({ default: m.TeamStatusWidget })));
+const TeamStatusWidget     = lazy(() => import('@/components/dashboard/TeamStatusWidget').then(m => ({ default: m.TeamStatusWidget })));
+const FollowupStatsWidget  = lazy(() => import('@/components/dashboard/FollowupStatsWidget'));
 
 const ChartFallback = () => (
   <div className="rounded-2xl border border-[#c9a96e]/15 bg-card p-6 space-y-4 animate-pulse">
@@ -131,11 +132,13 @@ function DashboardPage() {
           <div className="px-4 md:px-6 lg:px-8 py-6 space-y-6 page-enter">
 
             {/* ── Hero KPIs ── */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <HeroCard
-                label="Qtd. de Leads"
+                label="Total de Leads"
                 value={stats.total_leads.toLocaleString('pt-BR')}
-                sub="leads no CRM"
+                sub={stats.total_leads > 0
+                  ? `${((stats.leads_trafego_convertidos / stats.total_leads) * 100).toFixed(1)}% taxa de conversão`
+                  : 'leads no CRM'}
                 icon={Users}
                 accent="bg-[#3d2b1f]"
                 iconBg="bg-[#3d2b1f]/8"
@@ -158,6 +161,15 @@ function DashboardPage() {
                 accent="bg-emerald-500"
                 iconBg="bg-emerald-50"
                 iconColor="text-emerald-600"
+              />
+              <HeroCard
+                label="Tráfego Hoje"
+                value={stats.leads_hoje.toLocaleString('pt-BR')}
+                sub={`${stats.leads_trafego.toLocaleString('pt-BR')} total de tráfego`}
+                icon={Zap}
+                accent="bg-blue-500"
+                iconBg="bg-blue-50"
+                iconColor="text-blue-600"
               />
             </div>
 
@@ -189,14 +201,17 @@ function DashboardPage() {
                 {/* Resumo financeiro */}
                 <FinanceiroResumoWidget />
 
-                {/* Widgets inferiores — 3 colunas igualadas */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch pb-4">
+                {/* Widgets inferiores — 4 colunas */}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-stretch pb-4">
                   <AgendaPrazosWidget />
                   <Suspense fallback={<ChartFallback />}>
                     <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
                   </Suspense>
                   <Suspense fallback={<ChartFallback />}>
                     <TeamStatusWidget />
+                  </Suspense>
+                  <Suspense fallback={<ChartFallback />}>
+                    <FollowupStatsWidget />
                   </Suspense>
                 </div>
               </>
