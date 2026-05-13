@@ -230,7 +230,7 @@ async function processFollowups(supabase: any, zapiConfig: any): Promise<any[]> 
         continue;
       }
 
-      if (['Ganho', 'Perdido', 'Contrato Assinado'].includes(lead.status)) {
+      if (['Ganho', 'Perdido', 'Contrato Assinado', 'Contrato Fechado'].includes(lead.status)) {
         await supabase.from('traffic_followups')
           .update({ automation_active: false, status: 'archived', pause_reason: `Status: ${lead.status}` }).eq('id', fu.id);
         continue;
@@ -367,7 +367,7 @@ async function processNutricao(supabase: any, zapiConfig: any): Promise<any[]> {
   for (const nutricao of leads || []) {
     try {
       // Não enviar para leads com contrato assinado ou encerrados
-      if (nutricao.lead?.status && ['Ganho', 'Perdido', 'Contrato Assinado'].includes(nutricao.lead.status)) {
+      if (nutricao.lead?.status && ['Ganho', 'Perdido', 'Contrato Assinado', 'Contrato Fechado'].includes(nutricao.lead.status)) {
         await supabase.from('followup_nutricao')
           .update({ status: 'recusado', proxima_campanha_em: null }).eq('id', nutricao.id);
         console.log(`[Nutrição] ⏭ Pulando ${nutricao.lead.nome} — status: ${nutricao.lead.status}`);
@@ -461,7 +461,7 @@ async function reativarConversasAtivas(supabase: any, zapiConfig: any): Promise<
     .from('leads_juridicos')
     .select('id, nome, telefone, status, tipo_origem, isa_agent')
     .eq('tipo_origem', 'trafego')
-    .not('status', 'in', '("Ganho","Perdido","Contrato Assinado")')
+    .not('status', 'in', '("Ganho","Perdido","Contrato Assinado","Contrato Fechado")')
     .limit(30);
 
   for (const lead of leads || []) {
@@ -582,7 +582,7 @@ async function processOptinsPendentes(supabase: any, zapiConfig: any): Promise<{
     try {
       const lead = reg.lead;
       if (!lead?.telefone) { pulados++; continue; }
-      if (['Ganho', 'Perdido', 'Contrato Assinado'].includes(lead.status)) { pulados++; continue; }
+      if (['Ganho', 'Perdido', 'Contrato Assinado', 'Contrato Fechado'].includes(lead.status)) { pulados++; continue; }
 
       // Já enviamos reativação recentemente para este lead?
       const seteDiasAtras = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -645,7 +645,7 @@ async function enrollLead(supabase: any, leadId: string, telefone: string, subsc
     .from('leads_juridicos').select('id, nome, tipo_origem, status').eq('id', leadId).single();
   if (!lead) return { success: false, error: 'Lead not found' };
   if (lead.tipo_origem !== 'trafego') return { success: false, error: 'Não é lead de tráfego' };
-  if (['Ganho', 'Perdido', 'Contrato Assinado'].includes(lead.status)) {
+  if (['Ganho', 'Perdido', 'Contrato Assinado', 'Contrato Fechado'].includes(lead.status)) {
     return { success: false, error: `Lead encerrado (${lead.status}) — não inscrito` };
   }
 
@@ -675,7 +675,7 @@ async function backfillLeads(supabase: any) {
   const { data: leads, error } = await supabase
     .from('leads_juridicos').select('id, nome, telefone, tipo_origem, created_at, status')
     .eq('tipo_origem', 'trafego').not('telefone', 'is', null)
-    .not('status', 'in', '("Ganho","Perdido","Contrato Assinado")');
+    .not('status', 'in', '("Ganho","Perdido","Contrato Assinado","Contrato Fechado")');
 
   if (error) return { success: false, error: error.message };
   const enrolled: any[] = [], skipped: any[] = [];
