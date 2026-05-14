@@ -350,7 +350,8 @@ serve(async (req) => {
       
       const agora = new Date();
       
-      // Buscar todos os processos ativos com notificação ativa
+      // Buscar processos do escritório com notificação ativa
+      // nosso_processo = true: exclui processos de outros advogados trazidos via DataJud/CPF
       const { data: processos } = await supabase
         .from('processos')
         .select(`
@@ -371,7 +372,8 @@ serve(async (req) => {
         `)
         .in('status', ['Em Andamento', 'Suspenso'])
         .not('numero_processo', 'is', null)
-        .eq('notificacao_ativa', true);
+        .eq('notificacao_ativa', true)
+        .eq('nosso_processo', true);
       
       if (!processos || processos.length === 0) {
         console.log('📭 Nenhum processo ativo para monitorar');
@@ -390,8 +392,8 @@ serve(async (req) => {
       for (const proc of processos) {
         if (!proc.numero_processo) continue;
         
-        // Verificar se está na hora de enviar baseado na frequência
-        const frequencia = proc.frequencia_notificacao_dias || 7;
+        // Verificar se está na hora de enviar baseado na frequência (padrão 30 dias)
+        const frequencia = proc.frequencia_notificacao_dias || 30;
         const ultimaNotificacao = proc.ultima_notificacao_at ? new Date(proc.ultima_notificacao_at) : null;
         
         if (ultimaNotificacao) {
@@ -440,8 +442,9 @@ serve(async (req) => {
               // Gerar mensagem personalizada
               const mensagem = formatarMensagemAtualizacao(processoAtualizado, lead?.nome || 'Cliente');
 
-              // Enviar via Z-API usando telefone + origem do lead
-              const enviado = await enviarViaZapi(supabase, lead?.tipo_origem ?? null, lead.telefone, mensagem);
+              // Routing null-safe: tráfego → instância tráfego; qualquer outro (incluindo null) → escritório
+              const tipoOrigem = lead?.tipo_origem ?? 'escritorio';
+              const enviado = await enviarViaZapi(supabase, tipoOrigem, lead.telefone, mensagem);
               
               if (enviado) {
                 enviados++;
