@@ -492,14 +492,15 @@ async function reativarConversasAtivas(supabase: any, zapiConfig: any): Promise<
 
       if (!ultimaFoiDoAgente || !passouDuasHoras || !clienteJaRespondeu) continue;
 
-      // Não reativar se já existe QUALQUER registro no pipeline de follow-up
-      // (ativo = processFollowups cuida; pausado/responded/nutricao = ciclo concluído)
+      // Pular só se o pipeline de follow-up ainda está rodando para este lead
+      // (processFollowups já cuida disso). Se automation_active = false, a conversa
+      // pode ter parado no meio — reativação deve agir.
       const { data: fuRecord } = await supabase
         .from('traffic_followups')
         .select('id, automation_active, status')
         .eq('lead_id', lead.id)
         .maybeSingle();
-      if (fuRecord) continue;
+      if (fuRecord?.automation_active) continue;
 
       // Não reativar se já enviamos mensagem nas últimas 4h
       const { data: msgRecente } = await supabase
