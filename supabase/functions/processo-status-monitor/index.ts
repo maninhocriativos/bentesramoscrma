@@ -1,3 +1,4 @@
+// v2 — cron a cada 10min, 1 envio/execução, máx 10/dia, só nosso_processo=true
 import "npm:@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
