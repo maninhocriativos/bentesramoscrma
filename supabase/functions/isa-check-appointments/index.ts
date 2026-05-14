@@ -10,15 +10,6 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // PAUSADO — aguardando validação completa do fluxo de agendamentos
-  const ATIVO = false;
-  if (!ATIVO) {
-    console.log('[ISA-CHECK] Função pausada (ATIVO=false)');
-    return new Response(JSON.stringify({ success: true, paused: true, message: 'Função pausada temporariamente' }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
-  }
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;

@@ -345,15 +345,6 @@ serve(async (req) => {
     
     // Ação: Monitoramento automático com frequência personalizável
     if (action === 'monitor_semanal') {
-      // Monitoramento automático pausado — reativar quando necessário
-      const MONITOR_ATIVO = false;
-      if (!MONITOR_ATIVO) {
-        console.log('[PROCESSO-MONITOR] Monitoramento automático pausado');
-        return new Response(JSON.stringify({ success: true, paused: true, message: 'Monitoramento automático pausado' }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders },
-        });
-      }
 
       console.log('📋 Iniciando monitoramento de processos com frequência personalizável...');
       
