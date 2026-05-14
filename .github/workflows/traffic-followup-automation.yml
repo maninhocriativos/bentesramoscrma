@@ -1,0 +1,45 @@
+name: Traffic Follow-up Automation
+
+on:
+  schedule:
+    # A cada 30 minutos nos dias úteis, 9h-18h Manaus (UTC-4) = 13h-22h UTC
+    - cron: '0,30 13,14,15,16,17,18,19,20,21 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  run-followup:
+    name: Processar follow-ups pendentes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Disparar traffic-followup-automation
+        run: |
+          echo "Disparando traffic-followup-automation..."
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            --max-time 300 \
+            -X POST \
+            "https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/traffic-followup-automation" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFnZW5hbHRranRsdndmZ3lrcHhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ5NjYxOTMsImV4cCI6MjA4MDU0MjE5M30.ewhDXc8qxAXdAevO-LMU_HOzu7oGUbj-p6Tj39hyUgg" \
+            -d '{"action":"process"}')
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+
+          echo "HTTP $HTTP_CODE"
+          echo "$BODY" | python3 -m json.tool 2>/dev/null || echo "$BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "ERRO: resposta HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+          FU=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('followups',0))" 2>/dev/null || echo "?")
+          REA=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('reativacoes',0))" 2>/dev/null || echo "?")
+          NUT=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nutricao',0))" 2>/dev/null || echo "?")
+          ANT=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('reativacoes_antigas',0))" 2>/dev/null || echo "?")
+
+          echo ""
+          echo "Resultado: $FU follow-ups | $REA reativações | $NUT nutrição | $ANT reativações antigas"
