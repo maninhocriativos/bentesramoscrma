@@ -343,166 +343,161 @@ serve(async (req) => {
       }
     }
     
-    // Ação: Monitoramento automático com frequência personalizável
+    // Ação: Monitoramento automático — cron a cada 10min, 1 cliente por execução, máx 10/dia
     if (action === 'monitor_semanal') {
 
-      console.log('📋 Iniciando monitoramento de processos com frequência personalizável...');
-      
       const agora = new Date();
-      
-      // Buscar processos do escritório com notificação ativa
-      // nosso_processo = true: exclui processos de outros advogados trazidos via DataJud/CPF
+      const MAX_POR_DIA = 10;
+
+      // Rate limit diário: máx 10 envios por dia
+      const inicioDia = new Date(agora);
+      inicioDia.setHours(0, 0, 0, 0);
+      const { count: enviadosHoje } = await supabase
+        .from('system_events')
+        .select('id', { count: 'exact', head: true })
+        .eq('tipo', 'processo')
+        .eq('acao', 'atualizacao_processo_enviada')
+        .gte('created_at', inicioDia.toISOString());
+
+      if ((enviadosHoje ?? 0) >= MAX_POR_DIA) {
+        console.log(`[Monitor] Limite diário atingido (${enviadosHoje}/${MAX_POR_DIA}). Aguardando amanhã.`);
+        return new Response(
+          JSON.stringify({ success: true, enviados: 0, motivo: 'limite_diario', enviados_hoje: enviadosHoje }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Buscar o próximo processo a notificar:
+      // - Do escritório (nosso_processo = true)
+      // - Notificação ativa
+      // - Status ativo
+      // - Com número e cliente com telefone
+      // - Ordenado por ultima_notificacao_at ASC NULLS FIRST (mais antigo/nunca notificado primeiro)
       const { data: processos } = await supabase
         .from('processos')
         .select(`
-          id,
-          numero_processo,
-          titulo_acao,
-          status,
-          cliente_id,
-          frequencia_notificacao_dias,
-          ultima_notificacao_at,
-          notificacao_ativa,
-          leads_juridicos!inner (
-            id,
-            nome,
-            telefone,
-            tipo_origem
-          )
+          id, numero_processo, titulo_acao, status, cliente_id,
+          frequencia_notificacao_dias, ultima_notificacao_at,
+          leads_juridicos!inner (id, nome, telefone, tipo_origem)
         `)
         .in('status', ['Em Andamento', 'Suspenso'])
         .not('numero_processo', 'is', null)
         .eq('notificacao_ativa', true)
-        .eq('nosso_processo', true);
-      
+        .eq('nosso_processo', true)
+        .order('ultima_notificacao_at', { ascending: true, nullsFirst: true })
+        .limit(20); // busca 20 para filtrar pela janela de frequência
+
       if (!processos || processos.length === 0) {
-        console.log('📭 Nenhum processo ativo para monitorar');
+        console.log('[Monitor] Nenhum processo ativo para monitorar.');
         return new Response(
-          JSON.stringify({ success: true, processados: 0, mensagem: 'Nenhum processo ativo' }),
+          JSON.stringify({ success: true, enviados: 0, motivo: 'sem_processos' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      
-      console.log(`📊 ${processos.length} processos para avaliar`);
-      
-      let enviados = 0;
-      let erros = 0;
-      let ignorados = 0;
-      
-      for (const proc of processos) {
-        if (!proc.numero_processo) continue;
-        
-        // Verificar se está na hora de enviar baseado na frequência (padrão 30 dias)
-        const frequencia = proc.frequencia_notificacao_dias || 30;
-        const ultimaNotificacao = proc.ultima_notificacao_at ? new Date(proc.ultima_notificacao_at) : null;
-        
-        if (ultimaNotificacao) {
-          const diasDesdeUltima = Math.floor((agora.getTime() - ultimaNotificacao.getTime()) / (1000 * 60 * 60 * 24));
-          if (diasDesdeUltima < frequencia) {
-            console.log(`⏭️ Processo ${proc.numero_processo}: próxima notificação em ${frequencia - diasDesdeUltima} dias`);
-            ignorados++;
-            continue;
-          }
-        }
-        
-        const leadId = proc.cliente_id;
-        const lead = proc.leads_juridicos as any;
-        
-        try {
-          // Detectar tribunal e buscar dados atualizados
-          let tribunal = detectarTribunal(proc.numero_processo);
-          if (!tribunal) tribunal = 'tjam';
-          
-          const resultado = await buscarProcesso(proc.numero_processo, tribunal);
-          
-          if (resultado.hits && resultado.hits.total.value > 0) {
-            const processoAtualizado = resultado.hits.hits[0]._source;
-            const novoStatus = determinarStatus(processoAtualizado);
-            
-            // Verificar se houve movimentação recente
-            const ultimaMovimentacao = processoAtualizado.movimentos?.[0];
-            let houveMudanca = false;
-            
-            if (ultimaMovimentacao?.dataHora) {
-              const dataMovimentacao = new Date(ultimaMovimentacao.dataHora);
-              const diasAtras = new Date();
-              diasAtras.setDate(diasAtras.getDate() - frequencia);
-              houveMudanca = dataMovimentacao > diasAtras;
-            }
-            
-            // Atualizar status do processo no banco se mudou
-            if (novoStatus !== proc.status) {
-              await supabase
-                .from('processos')
-                .update({ status: novoStatus })
-                .eq('id', proc.id);
-            }
-            
-            if (lead?.telefone) {
-              // Gerar mensagem personalizada
-              const mensagem = formatarMensagemAtualizacao(processoAtualizado, lead?.nome || 'Cliente');
 
-              // Routing null-safe: tráfego → instância tráfego; qualquer outro (incluindo null) → escritório
-              const tipoOrigem = lead?.tipo_origem ?? 'escritorio';
-              const enviado = await enviarViaZapi(supabase, tipoOrigem, lead.telefone, mensagem);
-              
-              if (enviado) {
-                enviados++;
-                console.log(`✅ Atualização enviada para ${lead?.nome} (${proc.numero_processo}) - frequência ${frequencia} dias`);
-                
-                // Atualizar data da última notificação
-                await supabase
-                  .from('processos')
-                  .update({ ultima_notificacao_at: agora.toISOString() })
-                  .eq('id', proc.id);
-                
-                // Registrar evento
-                await supabase.from('system_events').insert({
-                  tipo: 'processo',
-                  fonte: 'isa_monitor',
-                  acao: 'atualizacao_processo_enviada',
-                  lead_id: leadId,
-                  dados: { 
-                    numero_processo: proc.numero_processo, 
-                    status: novoStatus,
-                    houve_mudanca: houveMudanca,
-                    frequencia_dias: frequencia
-                  },
-                });
-                
-                // Registrar interação
-                await supabase.from('interacoes').insert({
-                  cliente_id: leadId,
-                  tipo: 'Mensagem',
-                  resumo: `Atualização do processo ${proc.numero_processo}`,
-                  detalhes: `Status: ${novoStatus}. ${houveMudanca ? 'Houve movimentação recente.' : 'Sem novas movimentações.'} Frequência: ${frequencia} dias.`,
-                  direcao: 'saida',
-                });
-              }
-            }
-          }
-          
-          // Delay entre requisições para não sobrecarregar a API
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-        } catch (err) {
-          console.error(`❌ Erro ao processar ${proc.numero_processo}:`, err);
-          erros++;
-        }
+      // Encontrar o primeiro que já passou sua janela de frequência
+      let proc: any = null;
+      for (const p of processos) {
+        const frequencia = (p as any).frequencia_notificacao_dias || 30;
+        const ultima = (p as any).ultima_notificacao_at ? new Date((p as any).ultima_notificacao_at) : null;
+        if (!ultima) { proc = p; break; } // nunca notificado — enviar
+        const dias = Math.floor((agora.getTime() - ultima.getTime()) / (1000 * 60 * 60 * 24));
+        if (dias >= frequencia) { proc = p; break; }
       }
-      
-      console.log(`📊 Monitoramento concluído: ${enviados} enviados, ${ignorados} ignorados, ${erros} erros`);
-      
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          processados: processos.length,
-          enviados,
-          ignorados,
-          erros
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+
+      if (!proc) {
+        console.log('[Monitor] Nenhum processo com janela de frequência vencida.');
+        return new Response(
+          JSON.stringify({ success: true, enviados: 0, motivo: 'todos_dentro_da_janela' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const lead = proc.leads_juridicos as any;
+      const frequencia = proc.frequencia_notificacao_dias || 30;
+
+      if (!lead?.telefone) {
+        console.log(`[Monitor] Lead sem telefone para processo ${proc.numero_processo}.`);
+        return new Response(
+          JSON.stringify({ success: true, enviados: 0, motivo: 'sem_telefone' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      try {
+        let tribunal = detectarTribunal(proc.numero_processo);
+        if (!tribunal) tribunal = 'tjam';
+
+        const resultado = await buscarProcesso(proc.numero_processo, tribunal);
+
+        if (!resultado.hits || resultado.hits.total.value === 0) {
+          console.log(`[Monitor] Processo ${proc.numero_processo} não encontrado no DataJud.`);
+          return new Response(
+            JSON.stringify({ success: true, enviados: 0, motivo: 'nao_encontrado_datajud', numero: proc.numero_processo }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const processoAtualizado = resultado.hits.hits[0]._source;
+        const novoStatus = determinarStatus(processoAtualizado);
+
+        // Verificar se houve movimentação recente
+        const ultimaMovimentacao = processoAtualizado.movimentos?.[0];
+        let houveMudanca = false;
+        if (ultimaMovimentacao?.dataHora) {
+          const diasAtras = new Date();
+          diasAtras.setDate(diasAtras.getDate() - frequencia);
+          houveMudanca = new Date(ultimaMovimentacao.dataHora) > diasAtras;
+        }
+
+        // Atualizar status no banco se mudou
+        if (novoStatus !== proc.status) {
+          await supabase.from('processos').update({ status: novoStatus }).eq('id', proc.id);
+        }
+
+        const mensagem = formatarMensagemAtualizacao(processoAtualizado, lead.nome || 'Cliente');
+        // Routing null-safe: tráfego → instância tráfego; qualquer outro → escritório
+        const tipoOrigem = lead.tipo_origem ?? 'escritorio';
+        const enviado = await enviarViaZapi(supabase, tipoOrigem, lead.telefone, mensagem);
+
+        if (enviado) {
+          await supabase.from('processos')
+            .update({ ultima_notificacao_at: agora.toISOString() })
+            .eq('id', proc.id);
+
+          await supabase.from('system_events').insert({
+            tipo: 'processo', fonte: 'isa_monitor', acao: 'atualizacao_processo_enviada',
+            lead_id: proc.cliente_id,
+            dados: { numero_processo: proc.numero_processo, status: novoStatus, houve_mudanca: houveMudanca, frequencia_dias: frequencia },
+          });
+
+          await supabase.from('interacoes').insert({
+            cliente_id: proc.cliente_id, tipo: 'Mensagem',
+            resumo: `Atualização do processo ${proc.numero_processo}`,
+            detalhes: `Status: ${novoStatus}. ${houveMudanca ? 'Movimentação recente.' : 'Sem novas movimentações.'} Freq: ${frequencia} dias.`,
+            direcao: 'saida',
+          });
+
+          console.log(`[Monitor] ✅ Enviado para ${lead.nome} (${proc.numero_processo}) — ${(enviadosHoje ?? 0) + 1}/${MAX_POR_DIA} hoje`);
+
+          return new Response(
+            JSON.stringify({ success: true, enviados: 1, lead: lead.nome, numero_processo: proc.numero_processo, enviados_hoje: (enviadosHoje ?? 0) + 1 }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({ success: false, enviados: 0, motivo: 'falha_zapi', numero: proc.numero_processo }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
+      } catch (err: any) {
+        console.error(`[Monitor] ❌ Erro ao processar ${proc.numero_processo}:`, err);
+        return new Response(
+          JSON.stringify({ success: false, erro: err.message, numero: proc.numero_processo }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
     
     // ─── Notificação mensal proativa para leads do escritório ──────────────────

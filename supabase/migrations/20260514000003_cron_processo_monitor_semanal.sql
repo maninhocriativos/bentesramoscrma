@@ -11,7 +11,7 @@ $$;
 
 SELECT cron.schedule(
   'processo-monitor-semanal',
-  '0 13 * * *',
+  '*/10 * * * *',
   $$
   SELECT net.http_post(
     url     := 'https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/processo-status-monitor',
