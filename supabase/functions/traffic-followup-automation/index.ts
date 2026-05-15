@@ -670,6 +670,53 @@ async function enrollLead(supabase: any, leadId: string, telefone: string, subsc
 }
 
 // ============================================
+// AUTO-ENROLL: INSCREVE NOVOS LEADS AUTOMATICAMENTE
+// Roda no cron — garante que todo lead de tráfego entre no pipeline
+// sem depender de chamada manual ao action 'enroll'
+// ============================================
+async function autoEnrollNovosLeads(supabase: any): Promise<number> {
+  const quarentaOitoHorasAtras = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+
+  const { data: leads } = await supabase
+    .from('leads_juridicos')
+    .select('id, telefone, created_at')
+    .eq('tipo_origem', 'trafego')
+    .not('status', 'in', '("Ganho","Perdido","Contrato Assinado","Contrato Fechado")')
+    .not('telefone', 'is', null)
+    .gte('created_at', quarentaOitoHorasAtras);
+
+  if (!leads?.length) return 0;
+
+  const { data: existentes } = await supabase
+    .from('traffic_followups')
+    .select('lead_id')
+    .in('lead_id', leads.map((l: any) => l.id));
+
+  const existentesIds = new Set((existentes || []).map((r: any) => r.lead_id));
+  const novos = leads.filter((l: any) => !existentesIds.has(l.id));
+  if (!novos.length) return 0;
+
+  let enrolled = 0;
+  for (const lead of novos) {
+    const phone = normalizePhone(lead.telefone);
+    // Timer baseado em created_at do lead — mantém janela correta mesmo para leads antigos
+    const nextAt = new Date(new Date(lead.created_at).getTime() + 15 * 60 * 1000);
+    const { error } = await supabase.from('traffic_followups').insert({
+      lead_id: lead.id,
+      subscriber_id: `zapi_${phone}`,
+      telefone: phone,
+      status: 'new',
+      automation_active: true,
+      current_stage: null,
+      next_message_at: nextAt.toISOString(),
+    });
+    if (!error) enrolled++;
+  }
+  if (enrolled > 0) console.log(`[AutoEnroll] ✅ ${enrolled} novo(s) lead(s) inscrito(s) no pipeline`);
+  return enrolled;
+}
+
+// ============================================
 // BACKFILL: LEEDS ANTIGOS
 // ============================================
 async function backfillLeads(supabase: any) {
@@ -773,6 +820,7 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify(result), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       default: {
+        const autoEnrolled       = await autoEnrollNovosLeads(supabase);
         const followupResults    = await processFollowups(supabase, zapiConfig);
         const reativacaoResults  = await reativarConversasAtivas(supabase, zapiConfig);
         const nutricaoResults    = await processNutricao(supabase, zapiConfig);
@@ -780,6 +828,7 @@ serve(async (req: Request) => {
         return new Response(
           JSON.stringify({
             success: true,
+            auto_enrolled:       autoEnrolled,
             followups:           followupResults.length,
             reativacoes:         reativacaoResults.length,
             nutricao:            nutricaoResults.length,
