@@ -443,8 +443,9 @@ async function processNutricao(supabase: any, zapiConfig: any): Promise<any[]> {
 }
 
 // ============================================
-// REATIVAR CONVERSAS ATIVAS QUE PARARAM
-// Detecta leads onde o agente enviou algo mas o cliente sumiu há 2h+
+// LEMBRETE IMEDIATO (roda a cada 2min via cron dedicado)
+// Detecta quando o agente enviou mensagem e o lead parou de responder há 2min+
+// Envia UM lembrete por "silêncio" — dedup via metadata source='reativacao_conversa'
 // ============================================
 async function reativarConversasAtivas(supabase: any, zapiConfig: any): Promise<any[]> {
   const now = new Date();
@@ -453,9 +454,8 @@ async function reativarConversasAtivas(supabase: any, zapiConfig: any): Promise<
   const horaManaus = new Date(now.getTime() - 4 * 60 * 60 * 1000).getUTCHours();
   if (horaManaus < 8 || horaManaus >= 20) return results;
 
-  const duasHorasAtras = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
   const quarentaOitoHoras = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
-  const quatroHorasAtras = new Date(now.getTime() - 4 * 60 * 60 * 1000).toISOString();
+  const doisMinutosAtras   = new Date(now.getTime() - 2 * 60 * 1000).toISOString();
 
   const { data: leads } = await supabase
     .from('leads_juridicos')
@@ -466,7 +466,7 @@ async function reativarConversasAtivas(supabase: any, zapiConfig: any): Promise<
 
   for (const lead of leads || []) {
     try {
-      // Não reativar se estiver em atendimento humano
+      // Não enviar se estiver em atendimento humano
       const { data: subscriber } = await supabase
         .from('manychat_subscribers')
         .select('atendimento_humano, subscriber_id')
@@ -481,57 +481,56 @@ async function reativarConversasAtivas(supabase: any, zapiConfig: any): Promise<
         .eq('lead_id', lead.id)
         .gte('created_at', quarentaOitoHoras)
         .order('created_at', { ascending: false })
-        .limit(15);
+        .limit(20);
 
       if (!mensagens || mensagens.length < 2) continue;
 
       const ultima = mensagens[0];
+
+      // Última mensagem deve ser do agente
       const ultimaFoiDoAgente = ultima.direcao === 'saida' || ultima.direcao === 'outbound';
-      const passouDuasHoras = new Date(ultima.created_at) < new Date(duasHorasAtras);
-      const clienteJaRespondeu = mensagens.some((m: any) => m.direcao === 'entrada' || m.direcao === 'inbound');
+      if (!ultimaFoiDoAgente) continue;
 
-      if (!ultimaFoiDoAgente || !passouDuasHoras || !clienteJaRespondeu) continue;
+      // Passou pelo menos 2 minutos desde a mensagem do agente
+      if (new Date(ultima.created_at) >= new Date(doisMinutosAtras)) continue;
 
-      // Pular só se o pipeline de follow-up ainda está rodando para este lead
-      // (processFollowups já cuida disso). Se automation_active = false, a conversa
-      // pode ter parado no meio — reativação deve agir.
-      const { data: fuRecord } = await supabase
-        .from('traffic_followups')
-        .select('id, automation_active, status')
-        .eq('lead_id', lead.id)
-        .maybeSingle();
-      if (fuRecord?.automation_active) continue;
+      // Cliente já respondeu pelo menos uma vez (conversa ativa, não opt-in frio)
+      const clienteJaRespondeu = mensagens.some(
+        (m: any) => m.direcao === 'entrada' || m.direcao === 'inbound'
+      );
+      if (!clienteJaRespondeu) continue;
 
-      // Não reativar se já enviamos mensagem nas últimas 4h
-      const { data: msgRecente } = await supabase
+      // Já enviamos um lembrete DESDE esta mensagem do agente? (dedup por silêncio)
+      const { data: lembreteEnviado } = await supabase
         .from('manychat_mensagens')
         .select('id')
         .eq('lead_id', lead.id)
         .eq('direcao', 'saida')
-        .gte('created_at', quatroHorasAtras)
+        .filter('metadata->>source', 'eq', 'reativacao_conversa')
+        .gte('created_at', ultima.created_at)
         .limit(1);
-      if (msgRecente?.length) continue;
+      if (lembreteEnviado?.length) continue;
 
       const agentData = await getAgentPrompt(supabase, lead.id);
-      const mensagemReativacao = await gerarMensagemIA(supabase, lead, '15min') ||
-        `${(lead.nome || 'Cliente').split(' ')[0]}, tudo bem? 😊 Vi que você estava me contando sobre sua situação. Posso continuar te ajudando?`;
+      const mensagemLembrete = await gerarMensagemIA(supabase, lead, '15min') ||
+        `${(lead.nome || 'Cliente').split(' ')[0]}, tudo bem? 😊 Ainda está aqui? É só me responder que continuo seu atendimento agora mesmo!`;
 
-      const sendResult = await sendText(zapiConfig, lead.telefone, mensagemReativacao);
+      const sendResult = await sendText(zapiConfig, lead.telefone, mensagemLembrete);
       if (sendResult.success) {
         const sid = subscriber?.subscriber_id || `zapi_${normalizePhone(lead.telefone)}`;
         await supabase.from('manychat_mensagens').insert({
           subscriber_id: sid,
-          subscriber_nome: `${agentData?.agentName || 'Isa'} (Reativação)`,
-          lead_id: lead.id, conteudo: mensagemReativacao,
+          subscriber_nome: `${agentData?.agentName || 'Isa'} (Lembrete)`,
+          lead_id: lead.id, conteudo: mensagemLembrete,
           direcao: 'saida', tipo: 'text', canal: 'whatsapp',
           metadata: { source: 'reativacao_conversa', agent: agentData?.agentKey || 'isa_triagem' },
         });
-        results.push({ lead_id: lead.id, nome: lead.nome, action: 'reativado' });
-        console.log(`[Reativação] ✅ ${lead.nome}`);
-        await sleep(5000);
+        results.push({ lead_id: lead.id, nome: lead.nome, action: 'lembrete_enviado' });
+        console.log(`[Lembrete] ✅ ${lead.nome} — silêncio desde ${ultima.created_at}`);
+        await sleep(3000);
       }
     } catch (err: any) {
-      console.error('[Reativação] Erro:', err.message);
+      console.error('[Lembrete] Erro:', err.message);
     }
   }
   return results;
@@ -810,6 +809,14 @@ serve(async (req: Request) => {
     };
 
     switch (action) {
+      case 'lembretes': {
+        // Cron dedicado a cada 2min — só verifica silêncio de conversa ativa
+        const r = await reativarConversasAtivas(supabase, zapiConfig);
+        return new Response(
+          JSON.stringify({ success: true, lembretes: r.length }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
       case 'enroll': {
         const { lead_id, telefone, subscriber_id } = body;
         const result = await enrollLead(supabase, lead_id, telefone, subscriber_id);
