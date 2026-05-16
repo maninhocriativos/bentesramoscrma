@@ -96,56 +96,44 @@ function detectarTribunal(numeroProcesso: string): string | null {
   return null;
 }
 
-// Formata data de diferentes formatos possíveis da API DataJud
+// Converte Date para dd/mm/yyyy no fuso de Manaus (UTC-4)
+function formatDateManaus(date: Date): string {
+  const m = new Date(date.getTime() - 4 * 60 * 60 * 1000); // UTC-4
+  const day   = m.getUTCDate().toString().padStart(2, '0');
+  const month = (m.getUTCMonth() + 1).toString().padStart(2, '0');
+  const year  = m.getUTCFullYear();
+  return (year >= 1900 && year <= 2100) ? `${day}/${month}/${year}` : 'Não informado';
+}
+
+// Formata data de diferentes formatos da API DataJud
 function formatarData(dataStr: string | null | undefined): string {
   if (!dataStr) return 'Não informado';
-  
   try {
-    let date: Date | null = null;
-    
-    // Se for número (timestamp em milissegundos)
-    if (typeof dataStr === 'number' || !isNaN(Number(dataStr))) {
-      const timestamp = Number(dataStr);
-      if (timestamp > 0 && timestamp < 4102444800000) {
-        date = new Date(timestamp);
-      }
+    const str = String(dataStr).trim();
+
+    // Número (timestamp em ms) — só aceita como number, não como string
+    if (typeof dataStr === 'number') {
+      return formatDateManaus(new Date(dataStr));
     }
-    
-    // Formato ISO: 2023-10-17T00:00:00.000Z
-    if (!date && typeof dataStr === 'string' && dataStr.includes('-')) {
-      const datePart = dataStr.split('T')[0];
-      const parts = datePart.split('-');
-      if (parts.length === 3) {
-        const year = parseInt(parts[0]);
-        const month = parseInt(parts[1]) - 1;
-        const day = parseInt(parts[2]);
-        if (year >= 1900 && year <= 2100 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
-          date = new Date(year, month, day);
-        }
-      }
+
+    // Somente data sem hora: YYYY-MM-DD → exibir como-está (já é data brasileira)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      const [y, m, d] = str.split('-');
+      return `${d.padStart(2,'0')}/${m.padStart(2,'0')}/${y}`;
     }
-    
-    // Formato brasileiro: dd/mm/yyyy
-    if (!date && typeof dataStr === 'string' && dataStr.includes('/')) {
-      const parts = dataStr.split('/');
-      if (parts.length === 3) {
-        const day = parseInt(parts[0]);
-        const month = parseInt(parts[1]) - 1;
-        const year = parseInt(parts[2]);
-        if (year >= 1900 && year <= 2100) {
-          date = new Date(year, month, day);
-        }
-      }
+
+    // ISO com hora (tem 'T'): 2023-10-17T00:00:00.000Z → converter para Manaus
+    if (str.includes('T')) {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) return formatDateManaus(d);
     }
-    
-    if (date && !isNaN(date.getTime())) {
-      const day = date.getDate().toString().padStart(2, '0');
-      const month = (date.getMonth() + 1).toString().padStart(2, '0');
-      const year = date.getFullYear();
-      if (year >= 1900 && year <= 2100) {
-        return `${day}/${month}/${year}`;
-      }
-    }
+
+    // Formato brasileiro: dd/mm/yyyy → já está correto
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) return str;
+
+    // Fallback genérico
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return formatDateManaus(d);
   } catch { /* ignore */ }
   return String(dataStr);
 }
@@ -477,6 +465,20 @@ serve(async (req) => {
             resumo: `Atualização do processo ${proc.numero_processo}`,
             detalhes: `Status: ${novoStatus}. ${houveMudanca ? 'Movimentação recente.' : 'Sem novas movimentações.'} Freq: ${frequencia} dias.`,
             direcao: 'saida',
+          });
+
+          // Registrar no chat (manychat_mensagens) para aparecer na timeline do lead
+          const phoneClean = (lead.telefone || '').replace(/\D/g, '');
+          const phoneE164  = phoneClean.length <= 11 ? '55' + phoneClean : phoneClean;
+          await supabase.from('manychat_mensagens').insert({
+            subscriber_id:   `zapi_${phoneE164}`,
+            subscriber_nome: 'Bentes & Ramos (Processos)',
+            lead_id:         proc.cliente_id,
+            conteudo:        mensagem,
+            direcao:         'saida',
+            tipo:            'text',
+            canal:           'whatsapp',
+            metadata: { source: 'processo_monitor', numero_processo: proc.numero_processo, status: novoStatus },
           });
 
           console.log(`[Monitor] ✅ Enviado para ${lead.nome} (${proc.numero_processo}) — ${(enviadosHoje ?? 0) + 1}/${MAX_POR_DIA} hoje`);
