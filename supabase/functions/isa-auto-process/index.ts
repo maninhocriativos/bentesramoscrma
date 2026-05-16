@@ -1325,7 +1325,7 @@ async function getLeadState(supabase: any, leadId: string): Promise<string | nul
   const { data: lead } = await supabase.from('leads_juridicos').select('lead_state, status, is_lost, tipo_origem, fonte_trafego, canal_origem, created_at, linha_whatsapp, isa_ativa, empresa_tag').eq('id', leadId).single();
   if (!lead) return null;
   if (lead.is_lost) return 'LOST';
-  if (['Contrato Assinado', 'Ganho', 'Contrato Fechado'].includes(lead.status)) return 'BLOCKED';
+  if (['Contrato Assinado', 'Ganho', 'Contrato Fechado', 'Perdido'].includes(lead.status)) return 'BLOCKED';
   if (lead.isa_ativa === false || lead.linha_whatsapp === 'bentes_ramos_antigo') return 'BENTES_RAMOS';
   if (lead.linha_whatsapp === 'trafego_isa') return lead.lead_state || 'NEW';
   const tipoOrigem = lead.tipo_origem || 'indefinido';
@@ -1681,6 +1681,10 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ success: false, error: 'Lead nao encontrado' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Lead já é cliente se tem processo ativo ou status de contrato/encerrado
+    const leadJaECliente = (contexto.processos?.length > 0) ||
+      ['Contrato Assinado', 'Ganho', 'Contrato Fechado'].includes(contexto.lead.status || '');
+
     const docsInferidos = inferirDocumentosDaMensagem(mensagemProcessada, tipo_mensagem, media_url);
     if (docsInferidos.length > 0) {
       for (const docType of docsInferidos) {
@@ -1711,9 +1715,13 @@ serve(async (req: Request) => {
         .maybeSingle();
 
       if (!prevSpecialistMsg) {
-        const introMsg = AGENT_INTROS[agentKeyBefore];
+        const introMsg = leadJaECliente
+          ? (agentKeyBefore === 'isa_bancario'
+              ? 'Olá! 😊 Sou a *Melissa*, especialista em Direito Bancário do escritório *Bentes & Ramos*!\n\nVi que você já é cliente. Como posso te ajudar hoje?'
+              : 'Olá! 😊 Sou a *Jerusa*, especialista em Direito Aéreo do escritório *Bentes & Ramos*!\n\nVi que você já é cliente. Como posso te ajudar hoje?')
+          : AGENT_INTROS[agentKeyBefore];
         if (introMsg) {
-          console.log(`[Isa Routing] 📣 Primeiro contato de ${AGENT_DISPLAY_NAMES[agentKeyBefore]} — enviando intro`);
+          console.log(`[Isa Routing] 📣 Primeiro contato de ${AGENT_DISPLAY_NAMES[agentKeyBefore]} — enviando intro (cliente=${leadJaECliente ? 'existente' : 'novo'})`);
           const introSend = await enviarRespostaZapi(supabase, subscriber_id, introMsg);
           if (introSend.success) {
             await supabase.from('manychat_mensagens').insert({
@@ -1788,9 +1796,10 @@ serve(async (req: Request) => {
     }
 
     // ── Fallback de roteamento ─────────────────────────────────────────────────
-    // Se a IA identificou a área jurídica mas NÃO incluiu transicionar_agente
-    // nas ações (ou as ações falharam), forçamos a transferência agora.
-    if (!transferredToAgent && agentKeyBefore === 'isa_triagem') {
+    // Só ativa quando a IA NÃO gerou resposta (caso de roteamento puro sem texto).
+    // Se a IA gerou uma resposta, ela deliberadamente escolheu não transferir ainda
+    // e devemos respeitar essa decisão — evita transferência em "Oi", "Obrigada" etc.
+    if (!transferredToAgent && agentKeyBefore === 'isa_triagem' && !resultado.resposta?.trim()) {
       const area = resultado.analise?.area_juridica;
       const agentTarget = area === 'bancario' ? 'isa_bancario'
                         : area === 'aereo'    ? 'isa_aereo'
@@ -1879,8 +1888,12 @@ serve(async (req: Request) => {
         }
       }
 
-      // Intro da especialista após 2s
-      const introMsg = AGENT_INTROS[newAgent];
+      // Intro da especialista após 2s — contextual se lead já é cliente
+      const introMsg = leadJaECliente
+        ? (newAgent === 'isa_bancario'
+            ? 'Olá! 😊 Sou a *Melissa*, especialista em Direito Bancário do escritório *Bentes & Ramos*!\n\nVi que você já é cliente. Como posso te ajudar hoje?'
+            : 'Olá! 😊 Sou a *Jerusa*, especialista em Direito Aéreo do escritório *Bentes & Ramos*!\n\nVi que você já é cliente. Como posso te ajudar hoje?')
+        : AGENT_INTROS[newAgent];
       if (introMsg) {
         await new Promise<void>(r => setTimeout(r, 2000));
         const introSend = await enviarRespostaZapi(supabase, subscriber_id, introMsg);

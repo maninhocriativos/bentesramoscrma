@@ -69,30 +69,28 @@ async function enviarSequenciaFollowup(
   const n = (nome || 'Cliente').split(' ')[0];
 
   if (stage === '15min') {
-    // Sequência anti-bloqueio: esperar 6-10s entre cada mensagem
-    const a1 = await sendAudio(zapiConfig, telefone, AUDIO_1_URL);
+    const a1 = await sendWithRetry(() => sendAudio(zapiConfig, telefone, AUDIO_1_URL));
     await sleep(8000);
-    await sendText(zapiConfig, telefone, TEXTO_FOLLOWUP_1);
+    await sendWithRetry(() => sendText(zapiConfig, telefone, TEXTO_FOLLOWUP_1));
     await sleep(9000);
-    const a2 = await sendAudio(zapiConfig, telefone, AUDIO_2_URL);
+    const a2 = await sendWithRetry(() => sendAudio(zapiConfig, telefone, AUDIO_2_URL));
     await sleep(7000);
-    const btn = await sendButtonList(zapiConfig, telefone, LGPD_BUTTONS_MESSAGE(n), FOLLOWUP_BUTTONS);
-    // Considera sucesso se pelo menos uma das mensagens chegou
+    const btn = await sendWithRetry(() => sendButtonList(zapiConfig, telefone, LGPD_BUTTONS_MESSAGE(n), FOLLOWUP_BUTTONS));
     return a1.success || a2.success || btn.success;
   }
 
   if (stage === '24h') {
-    const img = await sendImage(zapiConfig, telefone, PROVA_SOCIAL_IMAGE_URL, PROVA_SOCIAL_TEXTO(n));
-    if (!img.success) await sendText(zapiConfig, telefone, PROVA_SOCIAL_TEXTO(n));
+    const img = await sendWithRetry(() => sendImage(zapiConfig, telefone, PROVA_SOCIAL_IMAGE_URL, PROVA_SOCIAL_TEXTO(n)));
+    if (!img.success) await sendWithRetry(() => sendText(zapiConfig, telefone, PROVA_SOCIAL_TEXTO(n)));
     await sleep(7000);
-    const btn = await sendButtonList(zapiConfig, telefone, LGPD_BUTTONS_MESSAGE(n), FOLLOWUP_BUTTONS);
+    const btn = await sendWithRetry(() => sendButtonList(zapiConfig, telefone, LGPD_BUTTONS_MESSAGE(n), FOLLOWUP_BUTTONS));
     return img.success || btn.success;
   }
 
   // 44h — encerramento + botões
-  await sendText(zapiConfig, telefone, mensagemIA);
+  await sendWithRetry(() => sendText(zapiConfig, telefone, mensagemIA));
   await sleep(7000);
-  const btn = await sendButtonList(zapiConfig, telefone, LGPD_BUTTONS_MESSAGE(n), FOLLOWUP_BUTTONS);
+  const btn = await sendWithRetry(() => sendButtonList(zapiConfig, telefone, LGPD_BUTTONS_MESSAGE(n), FOLLOWUP_BUTTONS));
   return btn.success;
 }
 
@@ -107,6 +105,19 @@ function calculateNextMessageTime(stage: string): Date {
 }
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
+
+// Retry simples: tenta uma vez, aguarda delay e tenta de novo se falhar
+async function sendWithRetry<T extends { success: boolean }>(
+  fn: () => Promise<T>,
+  retryDelayMs = 3000,
+): Promise<T> {
+  const result = await fn();
+  if (!result.success) {
+    await sleep(retryDelayMs);
+    return fn();
+  }
+  return result;
+}
 
 // ============================================
 // MENSAGEM LGPD OPT-IN (nutrição)
@@ -273,11 +284,30 @@ async function processFollowups(supabase: any, zapiConfig: any): Promise<any[]> 
 
       if (enviado) {
         const subscriberNome = agentData ? `${agentData.agentName} (Follow-up)` : 'Isa (Follow-up)';
-        await supabase.from('manychat_mensagens').insert({
-          subscriber_id: fu.subscriber_id, subscriber_nome: subscriberNome,
-          lead_id: lead.id, conteudo: mensagem, direcao: 'saida', tipo: 'text', canal: 'whatsapp',
-          metadata: { source: 'traffic_followup', stage: nextStage, stage_label: stageLabel, agent: agentData?.agentKey || 'isa_triagem', ia_generated: !!OPENAI_API_KEY },
-        });
+        const metaBase = { source: 'traffic_followup', stage: nextStage, stage_label: stageLabel, agent: agentData?.agentKey || 'isa_triagem' };
+
+        // Estágio 15min: áudio1 + texto fixo + áudio2 + botões
+        if (nextStage === '15min') {
+          await supabase.from('manychat_mensagens').insert([
+            { subscriber_id: fu.subscriber_id, subscriber_nome: subscriberNome, lead_id: lead.id, conteudo: '[Áudio de follow-up]', direcao: 'saida', tipo: 'audio', canal: 'whatsapp', metadata: { ...metaBase, part: 'audio_1' } },
+            { subscriber_id: fu.subscriber_id, subscriber_nome: subscriberNome, lead_id: lead.id, conteudo: TEXTO_FOLLOWUP_1, direcao: 'saida', tipo: 'text', canal: 'whatsapp', metadata: { ...metaBase, part: 'texto' } },
+            { subscriber_id: fu.subscriber_id, subscriber_nome: subscriberNome, lead_id: lead.id, conteudo: '[Áudio de follow-up]', direcao: 'saida', tipo: 'audio', canal: 'whatsapp', metadata: { ...metaBase, part: 'audio_2' } },
+          ]);
+        // Estágio 24h: imagem de prova social + botões
+        } else if (nextStage === '24h') {
+          await supabase.from('manychat_mensagens').insert({
+            subscriber_id: fu.subscriber_id, subscriber_nome: subscriberNome,
+            lead_id: lead.id, conteudo: PROVA_SOCIAL_TEXTO(lead.nome), direcao: 'saida', tipo: 'image', canal: 'whatsapp',
+            metadata: { ...metaBase, image_url: PROVA_SOCIAL_IMAGE_URL },
+          });
+        // Estágio 44h: mensagem IA de encerramento
+        } else {
+          await supabase.from('manychat_mensagens').insert({
+            subscriber_id: fu.subscriber_id, subscriber_nome: subscriberNome,
+            lead_id: lead.id, conteudo: mensagem, direcao: 'saida', tipo: 'text', canal: 'whatsapp',
+            metadata: { ...metaBase, ia_generated: !!OPENAI_API_KEY },
+          });
+        }
 
         const subsequente = STAGES_CONFIG[nextStage]?.next;
         const stagesSent = { ...(fu.stages_sent || {}), [nextStage]: { at: now.toISOString() } };
