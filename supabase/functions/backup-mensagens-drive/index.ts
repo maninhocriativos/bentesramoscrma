@@ -162,12 +162,39 @@ function groupByMonth(msgs: Record<string, unknown>[]): Map<string, Record<strin
   return map;
 }
 
-// ─── Backup de TXT dos leads (otimizado: queries em lote) ────────────────
+// ─── Buscar/criar subpasta no Drive ──────────────────────────────────────
+async function ensureSubfolder(
+  accessToken: string, parentId: string, folderName: string,
+  folderCache: Map<string, string>,
+): Promise<string> {
+  if (folderCache.has(folderName)) return folderCache.get(folderName)!;
+  // Buscar pasta existente
+  const q = encodeURIComponent(`'${parentId}' in parents and name='${folderName.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`, {
+    headers: { 'Authorization': `Bearer ${accessToken}` },
+  });
+  const data = await res.json();
+  if (data.files?.length > 0) {
+    folderCache.set(folderName, data.files[0].id);
+    return data.files[0].id;
+  }
+  // Criar pasta
+  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: folderName, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] }),
+  });
+  const created = await createRes.json();
+  folderCache.set(folderName, created.id);
+  return created.id;
+}
+
+// ─── Backup de TXT dos leads ──────────────────────────────────────────────
 async function backupLeadTxts(
   supabase: ReturnType<typeof createClient>,
-  accessToken: string, folderId: string,
+  accessToken: string, rootFolderId: string,
   existingFiles: Map<string, string>,
-  allMsgs: Record<string, unknown>[],   // todas as mensagens já buscadas
+  allMsgs: Record<string, unknown>[],
   onlyLeadIds?: string[],
 ): Promise<{ total: number; criados: number; atualizados: number }> {
   // Agrupar mensagens por lead_id em memória
@@ -182,19 +209,24 @@ async function backupLeadTxts(
   const leadIds = onlyLeadIds ?? [...msgsByLead.keys()];
   if (leadIds.length === 0) return { total: 0, criados: 0, atualizados: 0 };
 
-  // Buscar info de todos os leads de uma vez
-  const { data: leadsData } = await supabase
-    .from('leads_juridicos')
-    .select('id, nome, telefone, status, area_juridica')
-    .in('id', leadIds);
+  // Buscar nomes dos leads em lotes de 50 (evita limite de URL)
   const leadsMap = new Map<string, Record<string, unknown>>();
-  for (const l of (leadsData ?? []) as Record<string, unknown>[]) {
-    leadsMap.set(String(l.id), l);
+  const BATCH_LEADS = 50;
+  for (let i = 0; i < leadIds.length; i += BATCH_LEADS) {
+    const slice = leadIds.slice(i, i + BATCH_LEADS);
+    const { data } = await supabase
+      .from('leads_juridicos')
+      .select('id, nome, telefone, status, area_juridica')
+      .in('id', slice);
+    for (const l of (data ?? []) as Record<string, unknown>[]) {
+      leadsMap.set(String(l.id), l);
+    }
   }
 
+  const folderCache = new Map<string, string>();
   let criados = 0;
   let atualizados = 0;
-  const CONCURRENT = 10;
+  const CONCURRENT = 5;
 
   for (let i = 0; i < leadIds.length; i += CONCURRENT) {
     const batch = leadIds.slice(i, i + CONCURRENT);
@@ -203,12 +235,25 @@ async function backupLeadTxts(
         const msgs = msgsByLead.get(leadId) ?? [];
         if (msgs.length === 0) return;
         const lead = leadsMap.get(leadId) ?? null;
-        const nome = String(lead?.nome || 'Lead_Sem_Nome');
-        const fileName = `lead_${leadId}_${sanitizeNome(nome)}.txt`;
-        const content  = buildConversaTxt(lead, msgs);
-        const wasExisting = existingFiles.has(fileName);
-        await upsertDriveFile(accessToken, folderId, fileName, content, 'text/plain; charset=utf-8', existingFiles);
-        if (wasExisting) atualizados++; else criados++;
+        const nome = String(lead?.nome || '').trim() || `Lead ${leadId.slice(0, 8)}`;
+        const folderName = sanitizeNome(nome).replace(/_/g, ' ');
+
+        // Criar/encontrar subpasta com o nome do lead
+        const subFolderId = await ensureSubfolder(accessToken, rootFolderId, folderName, folderCache);
+
+        // Upsert conversa.txt dentro da pasta do lead
+        const fileKey = `${subFolderId}/conversa.txt`;
+        const content = buildConversaTxt(lead, msgs);
+        const wasExisting = existingFiles.has(fileKey);
+
+        if (wasExisting) {
+          await updateDriveFile(accessToken, existingFiles.get(fileKey)!, content, 'text/plain; charset=utf-8');
+          atualizados++;
+        } else {
+          const newId = await createDriveFile(accessToken, subFolderId, 'conversa.txt', content, 'text/plain; charset=utf-8');
+          existingFiles.set(fileKey, newId);
+          criados++;
+        }
       } catch (e) {
         console.error(`[Backup] Erro no lead ${leadId}:`, e);
       }
