@@ -77,3 +77,13 @@ jobs:
         run: supabase functions deploy backup-mensagens-drive --project-ref qgenaltkjtlvwfgykpxq
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy google-calendar-auth
+        run: supabase functions deploy google-calendar-auth --project-ref qgenaltkjtlvwfgykpxq
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy calendar-sync
+        run: supabase functions deploy calendar-sync --project-ref qgenaltkjtlvwfgykpxq
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
