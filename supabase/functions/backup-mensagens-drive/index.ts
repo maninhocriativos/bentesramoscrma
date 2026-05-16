@@ -153,7 +153,7 @@ function buildConversaTxt(lead: Record<string, unknown> | null, msgs: Record<str
     `Lead ID:   ${lead?.id ?? '-'}`,
     `Telefone:  ${lead?.telefone ?? '-'}`,
     `Status:    ${lead?.status ?? '-'}`,
-    `Área:      ${lead?.area_juridica ?? '-'}`,
+    `Tipo Ação: ${lead?.tipo_acao ?? '-'}`,
     `Mensagens: ${msgs.length}`,
     `Atualizado:${new Date().toLocaleString('pt-BR', { timeZone: 'America/Manaus' })}`,
     sep,
@@ -325,11 +325,13 @@ serve(async (req: Request) => {
       const to   = from + CHUNK_SIZE - 1;
 
       // Buscar página de leads
-      const { data: leadsPage } = await supabase
+      const { data: leadsPage, error: leadsErr } = await supabase
         .from('leads_juridicos')
-        .select('id, nome, telefone, status, area_juridica')
+        .select('id, nome, telefone, status, tipo_acao')
         .order('id')
         .range(from, to);
+
+      if (leadsErr) console.error('[Chunk] Erro ao buscar leads:', leadsErr);
 
       if (!leadsPage || leadsPage.length === 0) {
         return new Response(JSON.stringify({ success: true, done: true, total_leads: total }), {
@@ -407,7 +409,7 @@ serve(async (req: Request) => {
       const leadsMap = new Map<string, Record<string, unknown>>();
       for (let i = 0; i < leadIds.length; i += 50) {
         const slice = leadIds.slice(i, i + 50);
-        const { data } = await supabase.from('leads_juridicos').select('id, nome, telefone, status, area_juridica').in('id', slice);
+        const { data } = await supabase.from('leads_juridicos').select('id, nome, telefone, status, tipo_acao').in('id', slice);
         for (const l of (data ?? []) as Record<string, unknown>[]) leadsMap.set(String(l.id), l);
       }
 
@@ -452,7 +454,7 @@ serve(async (req: Request) => {
 
       const leadsMap = new Map<string, Record<string, unknown>>();
       for (let i = 0; i < leadsAtivos.length; i += 50) {
-        const { data } = await supabase.from('leads_juridicos').select('id, nome, telefone, status, area_juridica').in('id', leadsAtivos.slice(i, i + 50));
+        const { data } = await supabase.from('leads_juridicos').select('id, nome, telefone, status, tipo_acao').in('id', leadsAtivos.slice(i, i + 50));
         for (const l of (data ?? []) as Record<string, unknown>[]) leadsMap.set(String(l.id), l);
       }
 
