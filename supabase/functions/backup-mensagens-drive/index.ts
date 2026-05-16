@@ -194,21 +194,25 @@ async function backupLeadTxts(
 
   let criados = 0;
   let atualizados = 0;
+  const CONCURRENT = 10;
 
-  for (const leadId of leadIds) {
-    try {
-      const msgs = msgsByLead.get(leadId) ?? [];
-      if (msgs.length === 0) continue;
-      const lead = leadsMap.get(leadId) ?? null;
-      const nome = String(lead?.nome || 'Lead_Sem_Nome');
-      const fileName = `lead_${leadId}_${sanitizeNome(nome)}.txt`;
-      const content  = buildConversaTxt(lead, msgs);
-      const wasExisting = existingFiles.has(fileName);
-      await upsertDriveFile(accessToken, folderId, fileName, content, 'text/plain; charset=utf-8', existingFiles);
-      if (wasExisting) atualizados++; else criados++;
-    } catch (e) {
-      console.error(`[Backup] Erro no lead ${leadId}:`, e);
-    }
+  for (let i = 0; i < leadIds.length; i += CONCURRENT) {
+    const batch = leadIds.slice(i, i + CONCURRENT);
+    await Promise.all(batch.map(async (leadId) => {
+      try {
+        const msgs = msgsByLead.get(leadId) ?? [];
+        if (msgs.length === 0) return;
+        const lead = leadsMap.get(leadId) ?? null;
+        const nome = String(lead?.nome || 'Lead_Sem_Nome');
+        const fileName = `lead_${leadId}_${sanitizeNome(nome)}.txt`;
+        const content  = buildConversaTxt(lead, msgs);
+        const wasExisting = existingFiles.has(fileName);
+        await upsertDriveFile(accessToken, folderId, fileName, content, 'text/plain; charset=utf-8', existingFiles);
+        if (wasExisting) atualizados++; else criados++;
+      } catch (e) {
+        console.error(`[Backup] Erro no lead ${leadId}:`, e);
+      }
+    }));
   }
 
   return { total: leadIds.length, criados, atualizados };
