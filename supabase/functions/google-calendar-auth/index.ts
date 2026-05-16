@@ -41,26 +41,23 @@ serve(async (req) => {
     if (pathname.endsWith('/callback')) {
       const code  = url.searchParams.get('code');
       const error = url.searchParams.get('error');
+      const state = url.searchParams.get('state'); // user_id
 
-      console.log('[callback] code:', code ? 'present' : 'missing', '| error:', error);
+      console.log('[callback] code:', code ? 'present' : 'missing', '| error:', error, '| state:', state);
 
-      // ── Erro do Google ────────────────────────────────────────────────────
       if (error) {
-        const redirectUrl = `${CRM_URL}/google-auth-callback?google_auth=error&reason=${encodeURIComponent(error)}`;
-        return Response.redirect(redirectUrl, 302);
+        return Response.redirect(`${CRM_URL}/google-auth-callback?google_auth=error&reason=${encodeURIComponent(error)}`, 302);
       }
 
       if (!code) {
-        const redirectUrl = `${CRM_URL}/google-auth-callback?google_auth=error&reason=no_code`;
-        return Response.redirect(redirectUrl, 302);
+        return Response.redirect(`${CRM_URL}/google-auth-callback?google_auth=error&reason=no_code`, 302);
       }
 
       if (!clientId || !clientSecret) {
-        const redirectUrl = `${CRM_URL}/google-auth-callback?google_auth=error&reason=no_credentials`;
-        return Response.redirect(redirectUrl, 302);
+        return Response.redirect(`${CRM_URL}/google-auth-callback?google_auth=error&reason=no_credentials`, 302);
       }
 
-      // ── Trocar code por tokens ────────────────────────────────────────────
+      // Trocar code por tokens
       console.log('[callback] Exchanging code for tokens...');
       const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
@@ -78,24 +75,29 @@ serve(async (req) => {
       console.log('[callback] Token exchange:', tokenRes.ok ? 'success' : 'failed', tokens.error || '');
 
       if (!tokenRes.ok) {
-        const redirectUrl = `${CRM_URL}/google-auth-callback?google_auth=error&reason=${encodeURIComponent(tokens.error_description || tokens.error || 'token_exchange_failed')}`;
-        return Response.redirect(redirectUrl, 302);
+        return Response.redirect(`${CRM_URL}/google-auth-callback?google_auth=error&reason=${encodeURIComponent(tokens.error_description || tokens.error || 'token_exchange_failed')}`, 302);
       }
 
-      // ── Redirecionar de volta ao CRM com os tokens na URL ─────────────────
-      // Os tokens são passados como parâmetros para o CRM processar
-      const params = new URLSearchParams({
-        google_auth:    'success',
-        access_token:   tokens.access_token,
-        refresh_token:  tokens.refresh_token || '',
-        expires_in:     String(tokens.expires_in || 3600),
-        token_type:     tokens.token_type || 'Bearer',
-        scope:          tokens.scope || '',
-      });
+      // Salvar tokens diretamente no banco usando service role
+      if (state) {
+        const expiresAt = new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString();
+        const { error: dbErr } = await supabase
+          .from('google_calendar_tokens')
+          .upsert({
+            user_id:       state,
+            access_token:  tokens.access_token,
+            refresh_token: tokens.refresh_token || null,
+            expires_at:    expiresAt,
+          }, { onConflict: 'user_id' });
 
-      const redirectUrl = `${CRM_URL}/google-auth-callback?${params.toString()}`;
-      console.log('[callback] Redirecting to CRM...');
-      return Response.redirect(redirectUrl, 302);
+        if (dbErr) {
+          console.error('[callback] Error saving tokens:', dbErr);
+          return Response.redirect(`${CRM_URL}/google-auth-callback?google_auth=error&reason=db_error`, 302);
+        }
+        console.log('[callback] Tokens saved to DB for user:', state);
+      }
+
+      return Response.redirect(`${CRM_URL}/google-auth-callback?google_auth=success`, 302);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -108,6 +110,19 @@ serve(async (req) => {
         }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
+      // Extrair user_id do JWT de autorização
+      let userId = '';
+      const authHeader = req.headers.get('Authorization');
+      if (authHeader) {
+        try {
+          const jwt = authHeader.replace('Bearer ', '');
+          const { data } = await supabase.auth.getUser(jwt);
+          userId = data.user?.id || '';
+        } catch {}
+      }
+
+      console.log('[get_auth_url] userId:', userId, '| redirect_uri:', REDIRECT_URI);
+
       const scope = 'https://www.googleapis.com/auth/calendar.events';
       const authUrl =
         `https://accounts.google.com/o/oauth2/v2/auth` +
@@ -116,9 +131,9 @@ serve(async (req) => {
         `&response_type=code` +
         `&scope=${encodeURIComponent(scope)}` +
         `&access_type=offline` +
-        `&prompt=consent`;
+        `&prompt=consent` +
+        `&state=${encodeURIComponent(userId)}`;
 
-      console.log('[get_auth_url] redirect_uri:', REDIRECT_URI);
       return new Response(JSON.stringify({ authUrl, redirect_uri: REDIRECT_URI }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

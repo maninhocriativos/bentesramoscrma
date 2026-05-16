@@ -8,19 +8,11 @@ export default function GoogleAuthCallback() {
     const googleAuth = params.get('google_auth');
 
     if (googleAuth === 'success') {
-      const tokens = {
-        access_token:  params.get('access_token')  || '',
-        refresh_token: params.get('refresh_token') || '',
-        expires_in:    parseInt(params.get('expires_in') || '3600', 10),
-      };
-
-      // Enviar tokens para a janela pai (AgendaPage)
+      // Tokens já foram salvos no banco pelo servidor
       if (window.opener) {
-        window.opener.postMessage({ type: 'google-oauth-success', tokens }, '*');
+        window.opener.postMessage({ type: 'google-calendar-connected' }, '*');
         setTimeout(() => window.close(), 500);
       } else {
-        // Fallback: salvar no sessionStorage e redirecionar
-        sessionStorage.setItem('google_oauth_tokens', JSON.stringify(tokens));
         window.location.href = '/agenda';
       }
     } else if (googleAuth === 'error') {

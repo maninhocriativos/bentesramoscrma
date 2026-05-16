@@ -28,65 +28,31 @@ export function useGoogleCalendar() {
 
   useEffect(() => { checkConnection(); }, [checkConnection]);
 
-  // ── Salvar tokens (reutilizado em múltiplos lugares) ─────────────────────────
-  const saveTokens = useCallback(async (accessToken: string, refreshToken: string, expiresIn: number) => {
-    if (!user) return;
-    const { error } = await supabase
-      .from('google_calendar_tokens')
-      .upsert({
-        user_id:       user.id,
-        access_token:  accessToken,
-        refresh_token: refreshToken || null,
-        expires_at:    new Date(Date.now() + expiresIn * 1000).toISOString(),
-      }, { onConflict: 'user_id' });
-    if (error) throw error;
-    setIsConnected(true);
-  }, [user]);
-
   // ── Ouvir postMessage do popup /google-auth-callback ────────────────────────
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
-      if (event.data?.type === 'google-oauth-success' && user) {
-        try {
-          const { access_token, refresh_token, expires_in } = event.data.tokens;
-          await saveTokens(access_token, refresh_token, expires_in || 3600);
-          toast.success('Google Calendar conectado! Sincronizando...');
-          setTimeout(() => syncFull(), 1500);
-        } catch (err) {
-          console.error(err);
-          toast.error('Erro ao salvar conexão com Google Calendar');
-        }
+      if (event.data?.type === 'google-calendar-connected') {
+        // Tokens já salvos no banco pelo servidor — só recarregar estado
+        await checkConnection();
+        toast.success('Google Calendar conectado! Sincronizando...');
+        setTimeout(() => syncFull(), 1500);
       } else if (event.data?.type === 'google-oauth-error') {
         toast.error(`Erro ao conectar: ${event.data.error}`);
       }
     };
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [user, saveTokens]);
-
-  // ── Fallback: capturar tokens do sessionStorage (caso popup não funcione) ───
-  useEffect(() => {
-    if (!user) return;
-    const stored = sessionStorage.getItem('google_oauth_tokens');
-    if (!stored) return;
-    sessionStorage.removeItem('google_oauth_tokens');
-    try {
-      const { access_token, refresh_token, expires_in } = JSON.parse(stored);
-      saveTokens(access_token, refresh_token, expires_in || 3600)
-        .then(() => {
-          toast.success('Google Calendar conectado! Sincronizando...');
-          setTimeout(() => syncFull(), 1500);
-        })
-        .catch(() => toast.error('Erro ao salvar tokens do Google'));
-    } catch { /* ignore */ }
-  }, [user, saveTokens]);
+  }, [checkConnection]);
 
   // ── Iniciar OAuth — abre popup ───────────────────────────────────────────────
   const connect = async () => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-auth?action=get_auth_url`,
-        { method: 'GET', headers: { 'Content-Type': 'application/json' } }
+        { method: 'GET', headers }
       );
       const result = await res.json();
       if (result.error) { toast.error(result.error); return; }
