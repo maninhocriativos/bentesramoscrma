@@ -108,9 +108,11 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    const serviceEmail  = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_EMAIL');
-    const privateKey    = Deno.env.get('GOOGLE_PRIVATE_KEY')?.replace(/\\n/g, '\n');
-    const folderId      = Deno.env.get('GOOGLE_DRIVE_FOLDER_ID');
+    const serviceEmail  = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_EMAIL')?.trim();
+    const privateKey    = Deno.env.get('GOOGLE_PRIVATE_KEY')
+      ?.replace(/^["'\s]+|["',\s]+$/g, '')  // strip surrounding quotes/commas if pasted from JSON
+      ?.replace(/\\n/g, '\n');
+    const folderId      = Deno.env.get('GOOGLE_DRIVE_FOLDER_ID')?.trim();
 
     if (!serviceEmail || !privateKey || !folderId) {
       return new Response(
