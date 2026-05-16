@@ -114,6 +114,11 @@ serve(async (req: Request) => {
       ?.replace(/\\n/g, '\n');
     const folderId      = Deno.env.get('GOOGLE_DRIVE_FOLDER_ID')?.trim();
 
+    console.log('[Debug] email:', JSON.stringify(serviceEmail));
+    console.log('[Debug] folderId:', JSON.stringify(folderId));
+    console.log('[Debug] key starts:', privateKey?.slice(0, 40));
+    console.log('[Debug] key length:', privateKey?.length);
+
     if (!serviceEmail || !privateKey || !folderId) {
       return new Response(
         JSON.stringify({ error: 'Variáveis GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY e GOOGLE_DRIVE_FOLDER_ID são obrigatórias' }),
