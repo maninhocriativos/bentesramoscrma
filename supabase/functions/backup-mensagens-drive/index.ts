@@ -6,47 +6,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// ─── JWT para Google Service Account (RS256) ───────────────────────────────
-async function signJWT(privateKeyPem: string, payload: Record<string, unknown>): Promise<string> {
-  const header = { alg: 'RS256', typ: 'JWT' };
-  const b64url = (obj: unknown) =>
-    btoa(JSON.stringify(obj)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-
-  const signingInput = `${b64url(header)}.${b64url(payload)}`;
-
-  const pemBody = privateKeyPem
-    .replace(/-----BEGIN PRIVATE KEY-----/, '')
-    .replace(/-----END PRIVATE KEY-----/, '')
-    .replace(/\s/g, '');
-  const keyBuffer = Uint8Array.from(atob(pemBody), c => c.charCodeAt(0));
-
-  const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8', keyBuffer,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false, ['sign'],
-  );
-
-  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, new TextEncoder().encode(signingInput));
-  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)))
-    .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-
-  return `${signingInput}.${sigB64}`;
-}
-
-async function getAccessToken(email: string, privateKey: string): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  const jwt = await signJWT(privateKey, {
-    iss: email,
-    scope: 'https://www.googleapis.com/auth/drive',
-    aud: 'https://oauth2.googleapis.com/token',
-    iat: now,
-    exp: now + 3600,
-  });
-
+// ─── OAuth com refresh token (conta real Google) ───────────────────────────
+async function getAccessToken(clientId: string, clientSecret: string, refreshToken: string): Promise<string> {
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+    }).toString(),
   });
 
   const data = await res.json();
@@ -108,20 +78,14 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    const serviceEmail  = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_EMAIL')?.trim();
-    const privateKey    = Deno.env.get('GOOGLE_PRIVATE_KEY')
-      ?.replace(/^["'\s]+|["',\s]+$/g, '')  // strip surrounding quotes/commas if pasted from JSON
-      ?.replace(/\\n/g, '\n');
-    const folderId      = Deno.env.get('GOOGLE_DRIVE_FOLDER_ID')?.trim();
+    const clientId     = Deno.env.get('GOOGLE_CLIENT_ID')?.trim();
+    const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')?.trim();
+    const refreshToken = Deno.env.get('GOOGLE_REFRESH_TOKEN')?.trim();
+    const folderId     = Deno.env.get('GOOGLE_DRIVE_FOLDER_ID')?.trim();
 
-    console.log('[Debug] email:', JSON.stringify(serviceEmail));
-    console.log('[Debug] folderId:', JSON.stringify(folderId));
-    console.log('[Debug] key starts:', privateKey?.slice(0, 40));
-    console.log('[Debug] key length:', privateKey?.length);
-
-    if (!serviceEmail || !privateKey || !folderId) {
+    if (!clientId || !clientSecret || !refreshToken || !folderId) {
       return new Response(
-        JSON.stringify({ error: 'Variáveis GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY e GOOGLE_DRIVE_FOLDER_ID são obrigatórias' }),
+        JSON.stringify({ error: 'Variáveis GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN e GOOGLE_DRIVE_FOLDER_ID são obrigatórias' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -152,7 +116,7 @@ serve(async (req: Request) => {
     const csv = rows.join('\r\n');
 
     // Upload para Drive
-    const accessToken = await getAccessToken(serviceEmail, privateKey);
+    const accessToken = await getAccessToken(clientId, clientSecret, refreshToken);
     const fileName    = `mensagens_${hoje}.csv`;
     const fileId      = await uploadToDrive(accessToken, folderId, fileName, csv);
 
