@@ -1788,7 +1788,7 @@ const ManyChatInboxContent = () => {
                     );
                   })()}
                 </div>
-                <div className="flex items-center gap-1.5 mt-0.5 overflow-hidden max-h-[16px] md:max-h-none">
+                <div className="flex items-center gap-1.5 mt-0.5 overflow-hidden max-h-[16px] md:max-h-none relative z-10">
                   <ActivityIndicator subscriber={selectedSubscriber} showText />
                   {isTyping(selectedSubscriber.subscriber_id) && <span className="text-[11px] md:text-xs text-[#00A884] font-medium animate-pulse">digitando...</span>}
                   <div className="hidden md:contents">
@@ -1811,7 +1811,7 @@ const ManyChatInboxContent = () => {
                       active:scale-95 transition-all duration-150"
                   >
                     <XCircle className="h-3.5 w-3.5 shrink-0" />
-                    <span className="hidden sm:inline">Perdido</span>
+                    <span className="hidden lg:inline">Perdido</span>
                   </Button>
                 )}
 
@@ -1826,8 +1826,7 @@ const ManyChatInboxContent = () => {
                     active:scale-95 transition-all duration-150"
                 >
                   <BadgeCheck className="h-3.5 w-3.5 shrink-0" />
-                  <span className="hidden sm:inline">Contrato Fechado</span>
-                  <span className="sm:hidden">Contrato</span>
+                  <span className="hidden lg:inline">Contrato Fechado</span>
                 </Button>
 
                 {selectedSubscriber.telefone && (
