@@ -37,7 +37,7 @@ async function getAccessToken(email: string, privateKey: string): Promise<string
   const now = Math.floor(Date.now() / 1000);
   const jwt = await signJWT(privateKey, {
     iss: email,
-    scope: 'https://www.googleapis.com/auth/drive.file',
+    scope: 'https://www.googleapis.com/auth/drive',
     aud: 'https://oauth2.googleapis.com/token',
     iat: now,
     exp: now + 3600,
