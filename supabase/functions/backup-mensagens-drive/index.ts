@@ -129,7 +129,7 @@ function sanitizeNome(nome: string): string {
 }
 
 // ─── Buscar mensagens paginado ─────────────────────────────────────────────
-async function fetchMessages(supabase: ReturnType<typeof createClient>, from?: string, to?: string, leadId?: string) {
+async function fetchMessages(supabase: ReturnType<typeof createClient>, from?: string, to?: string, leadId?: string, leadIds?: string[]) {
   const all: Record<string, unknown>[] = [];
   let offset = 0;
   while (true) {
@@ -138,9 +138,10 @@ async function fetchMessages(supabase: ReturnType<typeof createClient>, from?: s
       .select('id, created_at, lead_id, subscriber_id, subscriber_nome, conteudo, direcao, tipo, canal')
       .order('created_at', { ascending: true })
       .range(offset, offset + PAGE_SIZE - 1);
-    if (from)   q = q.gte('created_at', from);
-    if (to)     q = q.lte('created_at', to);
-    if (leadId) q = q.eq('lead_id', leadId);
+    if (from)    q = q.gte('created_at', from);
+    if (to)      q = q.lte('created_at', to);
+    if (leadId)  q = q.eq('lead_id', leadId);
+    if (leadIds) q = q.in('lead_id', leadIds);
     const { data, error } = await q;
     if (error) throw error;
     if (!data || data.length === 0) break;
@@ -161,23 +162,34 @@ function groupByMonth(msgs: Record<string, unknown>[]): Map<string, Record<strin
   return map;
 }
 
-// ─── Backup de TXT dos leads ──────────────────────────────────────────────
+// ─── Backup de TXT dos leads (otimizado: queries em lote) ────────────────
 async function backupLeadTxts(
   supabase: ReturnType<typeof createClient>,
   accessToken: string, folderId: string,
   existingFiles: Map<string, string>,
+  allMsgs: Record<string, unknown>[],   // todas as mensagens já buscadas
   onlyLeadIds?: string[],
 ): Promise<{ total: number; criados: number; atualizados: number }> {
-  // Determinar quais leads processar
-  let leadIds: string[];
-  if (onlyLeadIds) {
-    leadIds = onlyLeadIds;
-  } else {
-    const { data } = await supabase
-      .from('manychat_mensagens')
-      .select('lead_id')
-      .not('lead_id', 'is', null);
-    leadIds = [...new Set(((data ?? []) as Record<string, unknown>[]).map(r => String(r.lead_id)))];
+  // Agrupar mensagens por lead_id em memória
+  const msgsByLead = new Map<string, Record<string, unknown>[]>();
+  for (const m of allMsgs) {
+    if (!m.lead_id) continue;
+    const lid = String(m.lead_id);
+    if (!msgsByLead.has(lid)) msgsByLead.set(lid, []);
+    msgsByLead.get(lid)!.push(m);
+  }
+
+  const leadIds = onlyLeadIds ?? [...msgsByLead.keys()];
+  if (leadIds.length === 0) return { total: 0, criados: 0, atualizados: 0 };
+
+  // Buscar info de todos os leads de uma vez
+  const { data: leadsData } = await supabase
+    .from('leads_juridicos')
+    .select('id, nome, telefone, status, area_juridica')
+    .in('id', leadIds);
+  const leadsMap = new Map<string, Record<string, unknown>>();
+  for (const l of (leadsData ?? []) as Record<string, unknown>[]) {
+    leadsMap.set(String(l.id), l);
   }
 
   let criados = 0;
@@ -185,14 +197,12 @@ async function backupLeadTxts(
 
   for (const leadId of leadIds) {
     try {
-      const { data: lead } = await supabase.from('leads_juridicos').select('id, nome, telefone, status, area_juridica').eq('id', leadId).maybeSingle();
-      const msgs = await fetchMessages(supabase, undefined, undefined, leadId);
+      const msgs = msgsByLead.get(leadId) ?? [];
       if (msgs.length === 0) continue;
-
-      const nome = String((lead as Record<string, unknown>)?.nome || 'Lead_Sem_Nome');
+      const lead = leadsMap.get(leadId) ?? null;
+      const nome = String(lead?.nome || 'Lead_Sem_Nome');
       const fileName = `lead_${leadId}_${sanitizeNome(nome)}.txt`;
-      const content  = buildConversaTxt(lead as Record<string, unknown>, msgs);
-
+      const content  = buildConversaTxt(lead, msgs);
       const wasExisting = existingFiles.has(fileName);
       await upsertDriveFile(accessToken, folderId, fileName, content, 'text/plain; charset=utf-8', existingFiles);
       if (wasExisting) atualizados++; else criados++;
@@ -240,7 +250,7 @@ serve(async (req: Request) => {
         console.log(`[Backup] CSV ${fileName} — ${msgs.length} msgs`);
       }
 
-      const txtStats = await backupLeadTxts(supabase, accessToken, folderId, existingFiles);
+      const txtStats = await backupLeadTxts(supabase, accessToken, folderId, existingFiles, todas);
       console.log(`[Backup] TXTs: ${txtStats.criados} criados, ${txtStats.atualizados} atualizados`);
 
       return new Response(
@@ -251,20 +261,24 @@ serve(async (req: Request) => {
     } else {
       // ── Backup diário: CSV 24h + TXT dos leads com atividade recente ─────
       const desde = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const msgs  = await fetchMessages(supabase, desde);
-      console.log(`[Backup] ${msgs.length} mensagens nas últimas 24h`);
+      // Para os TXTs, busca todas as mensagens de todos os leads ativos (histórico completo)
+      const msgs24h  = await fetchMessages(supabase, desde);
+      console.log(`[Backup] ${msgs24h.length} mensagens nas últimas 24h`);
 
       // CSV diário
       const csvFileName = `mensagens_${hoje}.csv`;
-      await upsertDriveFile(accessToken, folderId, csvFileName, buildCsv(msgs), 'text/csv; charset=utf-8', existingFiles);
+      await upsertDriveFile(accessToken, folderId, csvFileName, buildCsv(msgs24h), 'text/csv; charset=utf-8', existingFiles);
 
-      // TXT apenas dos leads com atividade nas últimas 24h
-      const leadsAtivos = [...new Set(msgs.filter(m => m.lead_id).map(m => String(m.lead_id)))];
-      const txtStats = await backupLeadTxts(supabase, accessToken, folderId, existingFiles, leadsAtivos);
+      // TXT: leads com atividade recente → busca histórico completo desses leads
+      const leadsAtivos = [...new Set(msgs24h.filter(m => m.lead_id).map(m => String(m.lead_id)))];
+      const todasMsgsLeadsAtivos = leadsAtivos.length > 0
+        ? await fetchMessages(supabase, undefined, undefined, undefined, leadsAtivos)
+        : [];
+      const txtStats = await backupLeadTxts(supabase, accessToken, folderId, existingFiles, todasMsgsLeadsAtivos, leadsAtivos);
       console.log(`[Backup] ✅ CSV diário + ${txtStats.criados} TXTs criados, ${txtStats.atualizados} atualizados`);
 
       return new Response(
-        JSON.stringify({ success: true, csv: csvFileName, txt: txtStats, total_mensagens: msgs.length }),
+        JSON.stringify({ success: true, csv: csvFileName, txt: txtStats, total_mensagens: msgs24h.length }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
