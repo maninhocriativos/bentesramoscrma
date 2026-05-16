@@ -8,6 +8,7 @@ const corsHeaders = {
 
 const COLS = ['id', 'created_at', 'lead_id', 'subscriber_id', 'subscriber_nome', 'conteudo', 'direcao', 'tipo', 'canal'];
 const PAGE_SIZE = 1000;
+const CHUNK_SIZE = 20;
 
 // ─── OAuth ─────────────────────────────────────────────────────────────────
 async function getAccessToken(clientId: string, clientSecret: string, refreshToken: string): Promise<string> {
@@ -21,7 +22,7 @@ async function getAccessToken(clientId: string, clientSecret: string, refreshTok
   return data.access_token;
 }
 
-// ─── Listar arquivos na pasta do Drive ────────────────────────────────────
+// ─── Drive helpers ─────────────────────────────────────────────────────────
 async function listDriveFiles(accessToken: string, folderId: string): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   let pageToken = '';
@@ -39,11 +40,13 @@ async function listDriveFiles(accessToken: string, folderId: string): Promise<Ma
   return map;
 }
 
-// ─── Criar arquivo no Drive ────────────────────────────────────────────────
-async function createDriveFile(accessToken: string, folderId: string, fileName: string, content: string, mimeType: string): Promise<string> {
+async function createDriveFile(accessToken: string, folderId: string, fileName: string, content: string | Uint8Array, mimeType: string): Promise<string> {
   const boundary = '----Boundary9MA5ZWxkTrZu1gX';
   const meta = JSON.stringify({ name: fileName, parents: [folderId] });
-  const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n${content}\r\n--${boundary}--`;
+  const isBytes = content instanceof Uint8Array;
+  const bodyContent = isBytes ? btoa(String.fromCharCode(...content)) : content;
+  const transferEncoding = isBytes ? 'Content-Transfer-Encoding: base64\r\n' : '';
+  const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n${transferEncoding}\r\n${bodyContent}\r\n--${boundary}--`;
   const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
@@ -54,12 +57,11 @@ async function createDriveFile(accessToken: string, folderId: string, fileName: 
   return result.id as string;
 }
 
-// ─── Atualizar arquivo existente no Drive (sobrescreve) ───────────────────
-async function updateDriveFile(accessToken: string, fileId: string, content: string, mimeType: string): Promise<void> {
+async function updateDriveFile(accessToken: string, fileId: string, content: string | Uint8Array, mimeType: string): Promise<void> {
   const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
     method: 'PATCH',
     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': mimeType },
-    body: content,
+    body: content as unknown as BodyInit,
   });
   if (!res.ok) {
     const err = await res.json();
@@ -67,35 +69,84 @@ async function updateDriveFile(accessToken: string, fileId: string, content: str
   }
 }
 
-// ─── Criar ou sobrescrever arquivo ────────────────────────────────────────
 async function upsertDriveFile(
   accessToken: string, folderId: string, fileName: string, content: string,
   mimeType: string, existingFiles: Map<string, string>,
 ): Promise<string> {
   const existingId = existingFiles.get(fileName);
-  if (existingId) {
-    await updateDriveFile(accessToken, existingId, content, mimeType);
-    return existingId;
-  }
+  if (existingId) { await updateDriveFile(accessToken, existingId, content, mimeType); return existingId; }
   const newId = await createDriveFile(accessToken, folderId, fileName, content, mimeType);
   existingFiles.set(fileName, newId);
   return newId;
 }
 
+async function ensureSubfolder(accessToken: string, parentId: string, folderName: string, folderCache: Map<string, string>): Promise<string> {
+  const cacheKey = `${parentId}::${folderName}`;
+  if (folderCache.has(cacheKey)) return folderCache.get(cacheKey)!;
+  const q = encodeURIComponent(`'${parentId}' in parents and name='${folderName.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+  const data = await res.json();
+  if (data.files?.length > 0) { folderCache.set(cacheKey, data.files[0].id); return data.files[0].id; }
+  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: folderName, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] }),
+  });
+  const created = await createRes.json();
+  if (!created.id) throw new Error(`Falha ao criar pasta "${folderName}": ${JSON.stringify(created)}`);
+  folderCache.set(cacheKey, created.id);
+  return created.id;
+}
+
+// ─── Helpers de texto ──────────────────────────────────────────────────────
+function sanitizeNome(nome: string): string {
+  return nome
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9\s_\-]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 50);
+}
+
+function getNomeLead(lead: Record<string, unknown> | null, msgs: Record<string, unknown>[], leadId: string): string {
+  const fromLead = String(lead?.nome || '').trim();
+  if (fromLead) return fromLead;
+  // Fallback: nome do contato nas mensagens de entrada
+  const fromMsg = msgs.find(m => m.direcao === 'entrada' && m.subscriber_nome);
+  if (fromMsg) return String(fromMsg.subscriber_nome).trim();
+  return `Lead ${leadId.slice(0, 8)}`;
+}
+
+function getExtFromUrl(url: string, contentType: string): string {
+  const extFromUrl = url.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mp3', 'ogg', 'pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(extFromUrl)) return extFromUrl;
+  if (contentType.includes('jpeg') || contentType.includes('jpg')) return 'jpg';
+  if (contentType.includes('png')) return 'png';
+  if (contentType.includes('gif')) return 'gif';
+  if (contentType.includes('webp')) return 'webp';
+  if (contentType.includes('mp4')) return 'mp4';
+  if (contentType.includes('mp3') || contentType.includes('mpeg')) return 'mp3';
+  if (contentType.includes('ogg')) return 'ogg';
+  if (contentType.includes('pdf')) return 'pdf';
+  if (contentType.includes('msword')) return 'doc';
+  if (contentType.includes('wordprocessingml')) return 'docx';
+  return 'bin';
+}
+
 // ─── CSV ───────────────────────────────────────────────────────────────────
 function csvCell(val: unknown): string {
   if (val === null || val === undefined) return '';
-  const s = String(val).replace(/"/g, '""');
-  return `"${s}"`;
+  return `"${String(val).replace(/"/g, '""')}"`;
 }
 function buildCsv(msgs: Record<string, unknown>[]): string {
   return [COLS.join(','), ...msgs.map(m => COLS.map(c => csvCell(m[c])).join(','))].join('\r\n');
 }
 
-// ─── TXT de conversa por lead ─────────────────────────────────────────────
-function buildConversaTxt(lead: Record<string, unknown> | null, msgs: Record<string, unknown>[]): string {
-  const nome = String(lead?.nome || 'Lead Sem Nome');
-  const sep  = '='.repeat(60);
+// ─── TXT de conversa ──────────────────────────────────────────────────────
+const TIPOS_MIDIA = ['image', 'video', 'audio', 'file', 'document', 'sticker'];
+
+function buildConversaTxt(lead: Record<string, unknown> | null, msgs: Record<string, unknown>[], nome: string): string {
+  const sep = '='.repeat(60);
   const lines = [
     `CONVERSA: ${nome}`,
     sep,
@@ -112,7 +163,12 @@ function buildConversaTxt(lead: Record<string, unknown> | null, msgs: Record<str
     const dt  = new Date(String(msg.created_at)).toLocaleString('pt-BR', { timeZone: 'America/Manaus' });
     const dir = msg.direcao === 'saida' ? '→' : '←';
     const rem = msg.direcao === 'saida' ? String(msg.subscriber_nome || 'Bot') : nome;
-    const txt = String(msg.conteudo || '[mídia]');
+    const tipo = String(msg.tipo || 'text');
+    const isMedia = TIPOS_MIDIA.includes(tipo);
+    const conteudo = String(msg.conteudo || '');
+    const txt = isMedia
+      ? `[${tipo.toUpperCase()}] ${conteudo || '(sem URL)'}`
+      : (conteudo || '[vazio]');
     lines.push(`[${dt}] ${dir} ${rem}`);
     lines.push(`   ${txt}`);
     lines.push('');
@@ -120,16 +176,84 @@ function buildConversaTxt(lead: Record<string, unknown> | null, msgs: Record<str
   return lines.join('\n');
 }
 
-function sanitizeNome(nome: string): string {
-  return nome
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-zA-Z0-9\s_-]/g, '')
-    .replace(/\s+/g, '_')
-    .slice(0, 50);
+// ─── Backup de mídias ─────────────────────────────────────────────────────
+async function backupMediaFiles(
+  accessToken: string, leadFolderId: string,
+  msgs: Record<string, unknown>[],
+  folderCache: Map<string, string>,
+): Promise<{ saved: number; errors: number }> {
+  const mediaMsgs = msgs.filter(m => {
+    const tipo = String(m.tipo || '');
+    const conteudo = String(m.conteudo || '');
+    return TIPOS_MIDIA.includes(tipo) && conteudo.startsWith('http');
+  });
+  if (mediaMsgs.length === 0) return { saved: 0, errors: 0 };
+
+  const mediaFolderId = await ensureSubfolder(accessToken, leadFolderId, 'Midias', folderCache);
+  const existingMedia = await listDriveFiles(accessToken, mediaFolderId);
+
+  let saved = 0;
+  let errors = 0;
+
+  for (const msg of mediaMsgs) {
+    const url = String(msg.conteudo);
+    const ts = String(msg.created_at || '').replace(/[:.]/g, '-').slice(0, 19);
+    const tipo = String(msg.tipo || 'file');
+    try {
+      const mediaRes = await fetch(url, { signal: AbortSignal.timeout(20000) });
+      if (!mediaRes.ok) { errors++; continue; }
+      const contentType = mediaRes.headers.get('content-type') || '';
+      const ext = getExtFromUrl(url, contentType);
+      const fileName = `${ts}_${tipo}.${ext}`;
+      if (existingMedia.has(fileName)) { saved++; continue; } // já existe
+      const bytes = new Uint8Array(await mediaRes.arrayBuffer());
+      await createDriveFile(accessToken, mediaFolderId, fileName, bytes, contentType || 'application/octet-stream');
+      existingMedia.set(fileName, 'new');
+      saved++;
+    } catch {
+      errors++;
+    }
+  }
+  return { saved, errors };
+}
+
+// ─── Backup de uma pasta de lead ──────────────────────────────────────────
+async function backupLeadFolder(
+  accessToken: string, rootFolderId: string,
+  folderCache: Map<string, string>,
+  leadId: string,
+  lead: Record<string, unknown> | null,
+  msgs: Record<string, unknown>[],
+  includeMedia: boolean,
+): Promise<{ criado: boolean; midias: { saved: number; errors: number } }> {
+  if (msgs.length === 0) return { criado: false, midias: { saved: 0, errors: 0 } };
+
+  const nome = getNomeLead(lead, msgs, leadId);
+  const folderName = sanitizeNome(nome) || `Lead ${leadId.slice(0, 8)}`;
+
+  const subFolderId = await ensureSubfolder(accessToken, rootFolderId, folderName, folderCache);
+  const existingInFolder = await listDriveFiles(accessToken, subFolderId);
+
+  const content = buildConversaTxt(lead, msgs, nome);
+  const existingTxtId = existingInFolder.get('conversa.txt');
+  let criado = false;
+  if (existingTxtId) {
+    await updateDriveFile(accessToken, existingTxtId, content, 'text/plain; charset=utf-8');
+  } else {
+    await createDriveFile(accessToken, subFolderId, 'conversa.txt', content, 'text/plain; charset=utf-8');
+    criado = true;
+  }
+
+  let midias = { saved: 0, errors: 0 };
+  if (includeMedia) {
+    midias = await backupMediaFiles(accessToken, subFolderId, msgs, folderCache);
+  }
+
+  return { criado, midias };
 }
 
 // ─── Buscar mensagens paginado ─────────────────────────────────────────────
-async function fetchMessages(supabase: ReturnType<typeof createClient>, from?: string, to?: string, leadId?: string, leadIds?: string[]) {
+async function fetchMessages(supabase: ReturnType<typeof createClient>, from?: string, to?: string, leadIds?: string[]) {
   const all: Record<string, unknown>[] = [];
   let offset = 0;
   while (true) {
@@ -138,10 +262,9 @@ async function fetchMessages(supabase: ReturnType<typeof createClient>, from?: s
       .select('id, created_at, lead_id, subscriber_id, subscriber_nome, conteudo, direcao, tipo, canal')
       .order('created_at', { ascending: true })
       .range(offset, offset + PAGE_SIZE - 1);
-    if (from)    q = q.gte('created_at', from);
-    if (to)      q = q.lte('created_at', to);
-    if (leadId)  q = q.eq('lead_id', leadId);
-    if (leadIds) q = q.in('lead_id', leadIds);
+    if (from)     q = q.gte('created_at', from);
+    if (to)       q = q.lte('created_at', to);
+    if (leadIds)  q = q.in('lead_id', leadIds);
     const { data, error } = await q;
     if (error) throw error;
     if (!data || data.length === 0) break;
@@ -162,113 +285,12 @@ function groupByMonth(msgs: Record<string, unknown>[]): Map<string, Record<strin
   return map;
 }
 
-// ─── Buscar/criar subpasta no Drive ──────────────────────────────────────
-async function ensureSubfolder(
-  accessToken: string, parentId: string, folderName: string,
-  folderCache: Map<string, string>,
-): Promise<string> {
-  if (folderCache.has(folderName)) return folderCache.get(folderName)!;
-  // Buscar pasta existente
-  const q = encodeURIComponent(`'${parentId}' in parents and name='${folderName.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
-  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`, {
-    headers: { 'Authorization': `Bearer ${accessToken}` },
-  });
-  const data = await res.json();
-  if (data.files?.length > 0) {
-    folderCache.set(folderName, data.files[0].id);
-    return data.files[0].id;
-  }
-  // Criar pasta
-  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: folderName, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] }),
-  });
-  const created = await createRes.json();
-  folderCache.set(folderName, created.id);
-  return created.id;
-}
-
-// ─── Backup de TXT dos leads ──────────────────────────────────────────────
-async function backupLeadTxts(
-  supabase: ReturnType<typeof createClient>,
-  accessToken: string, rootFolderId: string,
-  existingFiles: Map<string, string>,
-  allMsgs: Record<string, unknown>[],
-  onlyLeadIds?: string[],
-): Promise<{ total: number; criados: number; atualizados: number }> {
-  // Agrupar mensagens por lead_id em memória
-  const msgsByLead = new Map<string, Record<string, unknown>[]>();
-  for (const m of allMsgs) {
-    if (!m.lead_id) continue;
-    const lid = String(m.lead_id);
-    if (!msgsByLead.has(lid)) msgsByLead.set(lid, []);
-    msgsByLead.get(lid)!.push(m);
-  }
-
-  const leadIds = onlyLeadIds ?? [...msgsByLead.keys()];
-  if (leadIds.length === 0) return { total: 0, criados: 0, atualizados: 0 };
-
-  // Buscar nomes dos leads em lotes de 50 (evita limite de URL)
-  const leadsMap = new Map<string, Record<string, unknown>>();
-  const BATCH_LEADS = 50;
-  for (let i = 0; i < leadIds.length; i += BATCH_LEADS) {
-    const slice = leadIds.slice(i, i + BATCH_LEADS);
-    const { data } = await supabase
-      .from('leads_juridicos')
-      .select('id, nome, telefone, status, area_juridica')
-      .in('id', slice);
-    for (const l of (data ?? []) as Record<string, unknown>[]) {
-      leadsMap.set(String(l.id), l);
-    }
-  }
-
-  const folderCache = new Map<string, string>();
-  let criados = 0;
-  let atualizados = 0;
-  const CONCURRENT = 5;
-
-  for (let i = 0; i < leadIds.length; i += CONCURRENT) {
-    const batch = leadIds.slice(i, i + CONCURRENT);
-    await Promise.all(batch.map(async (leadId) => {
-      try {
-        const msgs = msgsByLead.get(leadId) ?? [];
-        if (msgs.length === 0) return;
-        const lead = leadsMap.get(leadId) ?? null;
-        const nome = String(lead?.nome || '').trim() || `Lead ${leadId.slice(0, 8)}`;
-        const folderName = sanitizeNome(nome).replace(/_/g, ' ');
-
-        // Criar/encontrar subpasta com o nome do lead
-        const subFolderId = await ensureSubfolder(accessToken, rootFolderId, folderName, folderCache);
-
-        // Upsert conversa.txt dentro da pasta do lead
-        const fileKey = `${subFolderId}/conversa.txt`;
-        const content = buildConversaTxt(lead, msgs);
-        const wasExisting = existingFiles.has(fileKey);
-
-        if (wasExisting) {
-          await updateDriveFile(accessToken, existingFiles.get(fileKey)!, content, 'text/plain; charset=utf-8');
-          atualizados++;
-        } else {
-          const newId = await createDriveFile(accessToken, subFolderId, 'conversa.txt', content, 'text/plain; charset=utf-8');
-          existingFiles.set(fileKey, newId);
-          criados++;
-        }
-      } catch (e) {
-        console.error(`[Backup] Erro no lead ${leadId}:`, e);
-      }
-    }));
-  }
-
-  return { total: leadIds.length, criados, atualizados };
-}
-
 // ─── Main ──────────────────────────────────────────────────────────────────
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    const supabase     = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     const clientId     = Deno.env.get('GOOGLE_CLIENT_ID')?.trim();
     const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')?.trim();
     const refreshToken = Deno.env.get('GOOGLE_REFRESH_TOKEN')?.trim();
@@ -278,59 +300,176 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ error: 'Secrets do Google não configurados' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const body       = await req.json().catch(() => ({})) as Record<string, unknown>;
-    const fullBackup = body.full_backup === true;
-    const hoje       = new Date().toISOString().slice(0, 10);
+    const body        = await req.json().catch(() => ({})) as Record<string, unknown>;
+    const fullBackup  = body.full_backup === true;
+    const chunkBackup = body.chunk_backup === true;
+    const chunkIndex  = Number(body.chunk_index ?? 0);
+    const includeMedia = body.include_media !== false; // padrão: true
+    const hoje        = new Date().toISOString().slice(0, 10);
 
-    const accessToken   = await getAccessToken(clientId, clientSecret, refreshToken);
-    const existingFiles = await listDriveFiles(accessToken, folderId);
+    const accessToken = await getAccessToken(clientId, clientSecret, refreshToken);
+    const folderCache = new Map<string, string>();
 
+    // ════════════════════════════════════════════════════════════════
+    // CHUNK BACKUP — 20 leads por chamada, processa histórico completo
+    // ════════════════════════════════════════════════════════════════
+    if (chunkBackup) {
+      // Contar total de leads com mensagens
+      const { count: totalLeads } = await supabase
+        .from('leads_juridicos')
+        .select('id', { count: 'exact', head: true });
+
+      const total = totalLeads ?? 0;
+      const totalChunks = Math.ceil(total / CHUNK_SIZE);
+      const from = chunkIndex * CHUNK_SIZE;
+      const to   = from + CHUNK_SIZE - 1;
+
+      // Buscar página de leads
+      const { data: leadsPage } = await supabase
+        .from('leads_juridicos')
+        .select('id, nome, telefone, status, area_juridica')
+        .order('id')
+        .range(from, to);
+
+      if (!leadsPage || leadsPage.length === 0) {
+        return new Response(JSON.stringify({ success: true, done: true, total_leads: total }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const leadIds = leadsPage.map((l: Record<string, unknown>) => String(l.id));
+      const leadsMap = new Map(leadsPage.map((l: Record<string, unknown>) => [String(l.id), l]));
+
+      // Buscar todas as mensagens destes leads
+      const msgs = await fetchMessages(supabase, undefined, undefined, leadIds);
+      const msgsByLead = new Map<string, Record<string, unknown>[]>();
+      for (const m of msgs) {
+        if (!m.lead_id) continue;
+        const lid = String(m.lead_id);
+        if (!msgsByLead.has(lid)) msgsByLead.set(lid, []);
+        msgsByLead.get(lid)!.push(m);
+      }
+
+      let criados = 0; let atualizados = 0; let midiasSalvas = 0; let midiasErros = 0;
+
+      for (const leadId of leadIds) {
+        try {
+          const leadMsgs = msgsByLead.get(leadId) ?? [];
+          const lead = leadsMap.get(leadId) as Record<string, unknown> | undefined ?? null;
+          const result = await backupLeadFolder(accessToken, folderId, folderCache, leadId, lead, leadMsgs, includeMedia);
+          if (result.criado) criados++; else if (leadMsgs.length > 0) atualizados++;
+          midiasSalvas += result.midias.saved;
+          midiasErros  += result.midias.errors;
+        } catch (e) {
+          console.error(`[Chunk] Erro lead ${leadId}:`, e);
+        }
+      }
+
+      const isDone = (chunkIndex + 1) >= totalChunks;
+      return new Response(JSON.stringify({
+        success: true,
+        chunk_index: chunkIndex,
+        leads_processados: leadsPage.length,
+        total_leads: total,
+        total_chunks: totalChunks,
+        next_chunk: isDone ? null : chunkIndex + 1,
+        done: isDone,
+        txt: { criados, atualizados },
+        midias: { salvas: midiasSalvas, erros: midiasErros },
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // FULL BACKUP — pode dar timeout em bases grandes
+    // ════════════════════════════════════════════════════════════════
     if (fullBackup) {
-      // ── Exportação completa: CSV por mês + TXT por lead ──────────────────
       console.log('[Backup] Iniciando exportação completa...');
-      const todas   = await fetchMessages(supabase);
-      const porMes  = groupByMonth(todas);
+      const todas  = await fetchMessages(supabase);
+      const porMes = groupByMonth(todas);
+      const existingFiles = await listDriveFiles(accessToken, folderId);
       const csvFiles: { fileName: string; total: number }[] = [];
 
       for (const [mes, msgs] of Array.from(porMes.entries()).sort()) {
         const fileName = `mensagens_${mes}.csv`;
         await upsertDriveFile(accessToken, folderId, fileName, buildCsv(msgs), 'text/csv; charset=utf-8', existingFiles);
         csvFiles.push({ fileName, total: msgs.length });
-        console.log(`[Backup] CSV ${fileName} — ${msgs.length} msgs`);
       }
 
-      const txtStats = await backupLeadTxts(supabase, accessToken, folderId, existingFiles, todas);
-      console.log(`[Backup] TXTs: ${txtStats.criados} criados, ${txtStats.atualizados} atualizados`);
+      const msgsByLead = new Map<string, Record<string, unknown>[]>();
+      for (const m of todas) {
+        if (!m.lead_id) continue;
+        const lid = String(m.lead_id);
+        if (!msgsByLead.has(lid)) msgsByLead.set(lid, []);
+        msgsByLead.get(lid)!.push(m);
+      }
 
-      return new Response(
-        JSON.stringify({ success: true, full_backup: true, csv: csvFiles, txt: txtStats, total_mensagens: todas.length }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
+      const leadIds = [...msgsByLead.keys()];
+      const leadsMap = new Map<string, Record<string, unknown>>();
+      for (let i = 0; i < leadIds.length; i += 50) {
+        const slice = leadIds.slice(i, i + 50);
+        const { data } = await supabase.from('leads_juridicos').select('id, nome, telefone, status, area_juridica').in('id', slice);
+        for (const l of (data ?? []) as Record<string, unknown>[]) leadsMap.set(String(l.id), l);
+      }
 
-    } else {
-      // ── Backup diário: CSV 24h + TXT dos leads com atividade recente ─────
-      const desde = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      // Para os TXTs, busca todas as mensagens de todos os leads ativos (histórico completo)
-      const msgs24h  = await fetchMessages(supabase, desde);
-      console.log(`[Backup] ${msgs24h.length} mensagens nas últimas 24h`);
+      let criados = 0; let atualizados = 0;
+      for (let i = 0; i < leadIds.length; i += 5) {
+        await Promise.all(leadIds.slice(i, i + 5).map(async (leadId) => {
+          try {
+            const lead = leadsMap.get(leadId) ?? null;
+            const r = await backupLeadFolder(accessToken, folderId, folderCache, leadId, lead, msgsByLead.get(leadId) ?? [], false);
+            if (r.criado) criados++; else atualizados++;
+          } catch (e) { console.error(`[Full] Erro lead ${leadId}:`, e); }
+        }));
+      }
 
-      // CSV diário
-      const csvFileName = `mensagens_${hoje}.csv`;
-      await upsertDriveFile(accessToken, folderId, csvFileName, buildCsv(msgs24h), 'text/csv; charset=utf-8', existingFiles);
-
-      // TXT: leads com atividade recente → busca histórico completo desses leads
-      const leadsAtivos = [...new Set(msgs24h.filter(m => m.lead_id).map(m => String(m.lead_id)))];
-      const todasMsgsLeadsAtivos = leadsAtivos.length > 0
-        ? await fetchMessages(supabase, undefined, undefined, undefined, leadsAtivos)
-        : [];
-      const txtStats = await backupLeadTxts(supabase, accessToken, folderId, existingFiles, todasMsgsLeadsAtivos, leadsAtivos);
-      console.log(`[Backup] ✅ CSV diário + ${txtStats.criados} TXTs criados, ${txtStats.atualizados} atualizados`);
-
-      return new Response(
-        JSON.stringify({ success: true, csv: csvFileName, txt: txtStats, total_mensagens: msgs24h.length }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
+      return new Response(JSON.stringify({ success: true, full_backup: true, csv: csvFiles, txt: { criados, atualizados }, total_mensagens: todas.length }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+
+    // ════════════════════════════════════════════════════════════════
+    // BACKUP DIÁRIO — últimas 24h + atualiza TXTs dos leads ativos
+    // ════════════════════════════════════════════════════════════════
+    const desde = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const msgs24h = await fetchMessages(supabase, desde);
+    console.log(`[Backup] ${msgs24h.length} mensagens nas últimas 24h`);
+
+    const existingFiles = await listDriveFiles(accessToken, folderId);
+    const csvFileName = `mensagens_${hoje}.csv`;
+    await upsertDriveFile(accessToken, folderId, csvFileName, buildCsv(msgs24h), 'text/csv; charset=utf-8', existingFiles);
+
+    const leadsAtivos = [...new Set(msgs24h.filter(m => m.lead_id).map(m => String(m.lead_id)))];
+    let criados = 0; let atualizados = 0; let midiasSalvas = 0;
+
+    if (leadsAtivos.length > 0) {
+      const todasMsgs = await fetchMessages(supabase, undefined, undefined, leadsAtivos);
+      const msgsByLead = new Map<string, Record<string, unknown>[]>();
+      for (const m of todasMsgs) {
+        if (!m.lead_id) continue;
+        const lid = String(m.lead_id);
+        if (!msgsByLead.has(lid)) msgsByLead.set(lid, []);
+        msgsByLead.get(lid)!.push(m);
+      }
+
+      const leadsMap = new Map<string, Record<string, unknown>>();
+      for (let i = 0; i < leadsAtivos.length; i += 50) {
+        const { data } = await supabase.from('leads_juridicos').select('id, nome, telefone, status, area_juridica').in('id', leadsAtivos.slice(i, i + 50));
+        for (const l of (data ?? []) as Record<string, unknown>[]) leadsMap.set(String(l.id), l);
+      }
+
+      for (let i = 0; i < leadsAtivos.length; i += 5) {
+        await Promise.all(leadsAtivos.slice(i, i + 5).map(async (leadId) => {
+          try {
+            const lead = leadsMap.get(leadId) ?? null;
+            const r = await backupLeadFolder(accessToken, folderId, folderCache, leadId, lead, msgsByLead.get(leadId) ?? [], includeMedia);
+            if (r.criado) criados++; else atualizados++;
+            midiasSalvas += r.midias.saved;
+          } catch (e) { console.error(`[Diário] Erro lead ${leadId}:`, e); }
+        }));
+      }
+    }
+
+    return new Response(JSON.stringify({ success: true, csv: csvFileName, txt: { total: leadsAtivos.length, criados, atualizados }, midias: { salvas: midiasSalvas }, total_mensagens: msgs24h.length }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
