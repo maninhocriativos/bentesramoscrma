@@ -989,21 +989,20 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
         if (!subscriberId) return { success: false, message: 'Subscriber ID não disponível para enviar vídeo' };
         const supabaseLocal = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
         const VIDEOS_INSS = [
-          { num: 1, titulo: '📹 Como acessar o extrato de empréstimo no Meu INSS', url: 'https://drive.google.com/file/d/16TzO0QybAi32O3xFU8LphBrrQR7JtvQm/view?usp=sharing' },
-          { num: 2, titulo: '📹 Como criar código de acesso no Meu INSS', url: 'https://drive.google.com/file/d/1Sy28fDE--TOm_7h2n9qjsGSFqt9Y1Nbv/view?usp=sharing' },
-          { num: 3, titulo: '📹 Como recuperar seu acesso ao GOV.br', url: 'https://drive.google.com/file/d/1NiGr6qCVqmF4NjxNw-fdHzvBb3ycUnOv/view?usp=sharing' },
+          { num: 1, titulo: 'Como acessar o extrato de empréstimo no Meu INSS', url: 'https://drive.google.com/uc?export=download&id=16TzO0QybAi32O3xFU8LphBrrQR7JtvQm&confirm=t' },
+          { num: 2, titulo: 'Como criar código de acesso no Meu INSS', url: 'https://drive.google.com/uc?export=download&id=1Sy28fDE--TOm_7h2n9qjsGSFqt9Y1Nbv&confirm=t' },
+          { num: 3, titulo: 'Como recuperar seu acesso ao GOV.br', url: 'https://drive.google.com/uc?export=download&id=1NiGr6qCVqmF4NjxNw-fdHzvBb3ycUnOv&confirm=t' },
         ];
         const num = Math.max(1, Math.min(3, Number(video_numero) || 1));
         const video = VIDEOS_INSS[num - 1];
-        const videoMsg = `${video.titulo}:\n${video.url}`;
-        const textSend = await enviarRespostaZapi(supabaseLocal, subscriberId, videoMsg);
+        const textSend = await enviarVideoZapi(supabaseLocal, subscriberId, video.url, video.titulo);
         if (textSend.success) {
           await supabaseLocal.from('manychat_mensagens').insert({
             subscriber_id: subscriberId,
             subscriber_nome: 'Melissa',
             canal: 'whatsapp',
-            conteudo: videoMsg,
-            tipo: 'text',
+            conteudo: `[Vídeo] ${video.titulo}`,
+            tipo: 'video',
             direcao: 'saida',
             lead_id,
             metadata: { auto_gerada: true, source: 'isa', agent: 'isa_bancario', tipo: 'video_inss', video_numero: num },
@@ -1176,6 +1175,44 @@ async function enviarImagemZapi(supabaseClient: any, subscriberId: string, image
     return { success: response.ok && !result.error };
   } catch (err) {
     console.error('❌ Erro ao enviar imagem Z-API:', err);
+    return { success: false };
+  }
+}
+
+async function enviarVideoZapi(supabaseClient: any, subscriberId: string, videoUrl: string, caption: string): Promise<{ success: boolean }> {
+  try {
+    const { data: subscriber } = await supabaseClient.from('manychat_subscribers').select('telefone, linha_whatsapp, lead_id').eq('subscriber_id', subscriberId).maybeSingle();
+    if (!subscriber?.telefone) return { success: false };
+    const isTrafficLine = subscriber.linha_whatsapp === 'trafego_isa';
+    let useTrafficInstance = isTrafficLine;
+    if (!useTrafficInstance && subscriber.lead_id) {
+      const { data: lead } = await supabaseClient.from('leads_juridicos').select('linha_whatsapp, tipo_origem, fonte_trafego').eq('id', subscriber.lead_id).maybeSingle();
+      useTrafficInstance = lead?.linha_whatsapp === 'trafego_isa' || lead?.tipo_origem === 'trafego' || lead?.fonte_trafego?.includes('facebook');
+    }
+    let instanceId: string | undefined;
+    let token: string | undefined;
+    let clientToken: string | undefined;
+    if (useTrafficInstance) {
+      const { data: ti } = await supabaseClient.from('zapi_instances').select('instance_id, token, client_token').eq('is_active', true).ilike('phone_number', '%85888190%').maybeSingle();
+      if (ti) { instanceId = ti.instance_id; token = ti.token; clientToken = ti.client_token; }
+    }
+    if (!instanceId) {
+      const { data: di } = await supabaseClient.from('zapi_instances').select('instance_id, token, client_token').eq('is_active', true).eq('is_default', true).maybeSingle();
+      if (di) { instanceId = di.instance_id; token = di.token; clientToken = di.client_token; }
+    }
+    if (!instanceId || !token) return { success: false };
+    let cleanPhone = subscriber.telefone.replace(/\D/g, '');
+    if (cleanPhone.length === 10 || cleanPhone.length === 11) cleanPhone = '55' + cleanPhone;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (clientToken) headers['Client-Token'] = clientToken;
+    const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-video`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ phone: cleanPhone, video: videoUrl, caption }),
+    });
+    const result = await response.json();
+    return { success: response.ok && !result.error };
+  } catch (err) {
+    console.error('❌ Erro ao enviar vídeo Z-API:', err);
     return { success: false };
   }
 }
