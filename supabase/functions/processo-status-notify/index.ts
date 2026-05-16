@@ -283,21 +283,21 @@ serve(async (req) => {
       .update({ ultima_notificacao_at: new Date().toISOString() })
       .eq("id", processoId);
 
-    // Registrar na tabela de mensagens
+    // Registrar na tabela de mensagens (subscriber_id = zapi_<phone> para aparecer no chat)
     await supabase.from("manychat_mensagens").insert({
-      subscriber_id: `lead_${cliente.id}`,
-      lead_id: cliente.id,
-      conteudo: textoMensagem,
-      direcao: "saida",
-      tipo: "text",
-      canal: "whatsapp",
-      subscriber_nome: cliente.nome,
+      subscriber_id:   `zapi_${telefone}`,
+      lead_id:         cliente.id,
+      conteudo:        textoMensagem,
+      direcao:         "saida",
+      tipo:            "text",
+      canal:           "whatsapp",
+      subscriber_nome: "Bentes & Ramos (Processos)",
       metadata: {
-        source: "processo_notify",
-        processo_id: processoId,
+        source:          "processo_notify",
+        processo_id:     processoId,
         tipo_notificacao: tipo,
-        message_id: zapiResult.messageId,
-        instance_name: instance.instanceName,
+        message_id:      zapiResult.messageId,
+        instance_name:   instance.instanceName,
       },
     });
 
