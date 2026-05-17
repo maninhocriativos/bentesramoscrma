@@ -26,7 +26,7 @@ const STAGES_CONFIG: Record<string, { delay_minutes: number; label: string; next
 const AGENT_NAMES: Record<string, string> = {
   isa_triagem:  'Isa',
   isa_bancario: 'Melissa',
-  isa_aereo:    'Jerusa',
+  isa_aereo:    'Gerusa',
 };
 
 // ============================================
