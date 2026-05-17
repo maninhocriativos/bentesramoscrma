@@ -62,7 +62,7 @@ export function ChatInterno() {
   const { user }   = useAuth();
   const { perfil } = usePerfil();
   const bottomRef  = useRef<HTMLDivElement>(null);
-  const inputRef   = useRef<HTMLInputElement>(null);
+  const inputRef   = useRef<HTMLTextAreaElement>(null);
 
   // Supplementary: fetch perfis for mention dropdown (may fail due to RLS — that's OK)
   const fetchPerfis = useCallback(async () => {
@@ -131,17 +131,30 @@ export function ChatInterno() {
     }
   }, [open, mensagens.length]);
 
+  const resetTextareaHeight = () => {
+    if (inputRef.current) inputRef.current.style.height = '36px';
+  };
+
   const handleSend = async () => {
     const t = texto.trim();
     if (!t) return;
     setTexto('');
     setMencoes([]);
     setShowAt(false);
+    resetTextareaHeight();
     await enviar(t, mencoes.map(m => m.id));
+  };
+
+  const adjustTextareaHeight = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 90)}px`;
   };
 
   const handleInputChange = (val: string) => {
     setTexto(val);
+    setTimeout(adjustTextareaHeight, 0);
     const lastAt = val.lastIndexOf('@');
     if (lastAt !== -1 && (lastAt === 0 || val[lastAt - 1] === ' ')) {
       setAtQuery(val.slice(lastAt + 1).toLowerCase());
@@ -345,6 +358,7 @@ export function ChatInterno() {
                                 borderBottomRightRadius: isMe ? 4 : 16,
                                 borderBottomLeftRadius:  isMe ? 16 : 4,
                                 wordBreak: 'break-word',
+                                whiteSpace: 'pre-wrap',
                               }}>
                               <MsgText content={m.conteudo} />
                               {mentionsMe && !isMe && (
@@ -413,7 +427,7 @@ export function ChatInterno() {
                 </div>
               )}
 
-              <div className="flex gap-2 items-center">
+              <div className="flex gap-2 items-end">
                 <button
                   onClick={() => {
                     setTexto(t => t.endsWith(' ') || t === '' ? t + '@' : t + ' @');
@@ -423,23 +437,35 @@ export function ChatInterno() {
                   }}
                   title="Mencionar alguém"
                   className="h-9 w-9 rounded-xl flex items-center justify-center transition-all hover:opacity-80 shrink-0"
-                  style={{ background: `${BROWN}12`, border: `1px solid ${GOLD}25` }}>
+                  style={{ background: `${BROWN}12`, border: `1px solid ${GOLD}25`, marginBottom: 0 }}>
                   <AtSign style={{ width: 14, height: 14, color: BROWN }} />
                 </button>
 
-                <input
+                <textarea
                   ref={inputRef}
                   value={texto}
+                  rows={1}
                   onChange={e => handleInputChange(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === 'Escape') { setShowAt(false); return; }
                     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
                   }}
-                  placeholder="Mensagem para a equipe..."
+                  placeholder="Mensagem para a equipe... (Shift+Enter para nova linha)"
                   style={{
-                    flex: 1, height: 36, borderRadius: 12,
-                    border: `1px solid ${GOLD}35`, padding: '0 12px',
-                    fontSize: 13, outline: 'none', background: '#faf9f7', color: '#1c1917',
+                    flex: 1,
+                    minHeight: 36,
+                    maxHeight: 90,
+                    borderRadius: 12,
+                    border: `1px solid ${GOLD}35`,
+                    padding: '8px 12px',
+                    fontSize: 13,
+                    outline: 'none',
+                    background: '#faf9f7',
+                    color: '#1c1917',
+                    resize: 'none',
+                    lineHeight: 1.45,
+                    overflowY: 'auto',
+                    fontFamily: 'inherit',
                   }}
                 />
                 <button
