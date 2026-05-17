@@ -2,11 +2,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Download, UserPlus, RefreshCw, TrendingDown, AlertTriangle, Search, CalendarDays, Scale } from "lucide-react";
+import { Download, UserPlus, RefreshCw, TrendingDown, AlertTriangle, Search, CalendarDays, Scale, FileSpreadsheet } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { toast } from "sonner";
 import type { AnaliseConfig, AnaliseResultado } from "@/types/extratos";
 import { gerarLaudoPdf } from "@/lib/extratoLaudoPdf";
+import { gerarLaudoExcel } from "@/lib/extratoLaudoExcel";
 
 interface Props {
   resultado: AnaliseResultado;
@@ -68,6 +69,15 @@ export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
   const handlePdf = () => {
     gerarLaudoPdf(resultado, config);
     toast.success("PDF gerado com sucesso!");
+  };
+
+  const handleExcel = async () => {
+    try {
+      await gerarLaudoExcel(resultado, config);
+      toast.success("Excel gerado com sucesso!");
+    } catch (err: any) {
+      toast.error("Erro ao gerar Excel: " + err.message);
+    }
   };
 
   const chartData = (() => {
@@ -245,6 +255,9 @@ export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
       <div className="flex flex-col sm:flex-row gap-3">
         <Button onClick={handlePdf} className="flex-1">
           <Download className="h-4 w-4 mr-2" /> Baixar Laudo em PDF
+        </Button>
+        <Button onClick={handleExcel} variant="outline" className="flex-1 border-green-600 text-green-700 hover:bg-green-50">
+          <FileSpreadsheet className="h-4 w-4 mr-2" /> Baixar em Excel
         </Button>
         <Button variant="secondary" onClick={handleEnviarCRM} className="flex-1">
           <UserPlus className="h-4 w-4 mr-2" /> Enviar para CRM como Lead
