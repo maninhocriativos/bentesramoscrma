@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { useMetaFormLeads, useMetaFormChat } from '@/hooks/useMetaFormLeads';
-import { MetaFormLead, MetaFormLeadStatus } from '@/types/metaFormLeads';
+import { MetaFormLead, MetaFormLeadStatus, LeadClassificacao } from '@/types/metaFormLeads';
 import {
   Search, RefreshCw, Download, ChevronRight, Phone, Mail,
   Clock, CheckCircle, XCircle, Sparkles, Zap, Users,
@@ -32,6 +32,13 @@ const STATUS_CFG: Record<MetaFormLeadStatus, { label: string; color: string; bg:
   em_atendimento: { label: 'Em Atendimento', color: T.amber,  bg: T.amberBg,  border: '#fcd34d', Icon: Clock,        dot: '#f59e0b' },
   concluido:      { label: 'Concluído',      color: T.green,  bg: T.greenBg,  border: '#6ee7b7', Icon: CheckCircle,  dot: '#22c55e' },
   perdido:        { label: 'Perdido',        color: T.red,    bg: T.redBg,    border: '#fca5a5', Icon: XCircle,      dot: '#ef4444' },
+};
+
+// ── Configuração de classificação ─────────────────────────────────────────────
+const CLASS_CFG: Record<LeadClassificacao, { label: string; color: string; bg: string; border: string }> = {
+  quente: { label: '🔥 Quente', color: '#b91c1c', bg: '#fef2f2', border: '#fecaca' },
+  medio:  { label: '🌡️ Médio',  color: '#b45309', bg: '#fffbeb', border: '#fcd34d' },
+  frio:   { label: '🧊 Frio',   color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe' },
 };
 
 // Gradientes por inicial do nome
@@ -104,10 +111,22 @@ function KpiCard({ label, value, Icon, accent, sub }: any) {
   );
 }
 
+// ── Source badge helper ───────────────────────────────────────────────────────
+function sourceBadge(lead: MetaFormLead, selected: boolean) {
+  if (lead.source === 'meta_webhook') {
+    return { label: '🎯 Meta Direto', color: '#7c3aed', bg: selected ? '#f5f3ffcc' : '#f5f3ff', border: '#ddd6fe' };
+  }
+  if (lead.source === 'meta' || !!lead.form_id) {
+    return { label: '📋 Meta', color: T.purple, bg: selected ? '#f5f3ffcc' : T.purpleBg, border: '#ddd6fe' };
+  }
+  return { label: '📊 Sheets', color: T.green, bg: selected ? '#f0fdf4cc' : T.greenBg, border: '#bbf7d0' };
+}
+
 // ── Lead Card ─────────────────────────────────────────────────────────────────
 function LeadCard({ lead, selected, onClick }: { lead: MetaFormLead; selected: boolean; onClick: () => void }) {
   const cfg = STATUS_CFG[lead.status];
-  const isMeta = lead.source === 'meta' || !!lead.form_id;
+  const src = sourceBadge(lead, selected);
+  const classCfg = lead.classificacao ? CLASS_CFG[lead.classificacao] : null;
   const displayName = lead.nome?.trim() && lead.nome !== '..' ? lead.nome : 'Sem nome';
   const timeAgo = formatDistanceToNow(new Date(lead.created_at), { addSuffix: true, locale: ptBR });
 
@@ -137,9 +156,14 @@ function LeadCard({ lead, selected, onClick }: { lead: MetaFormLead; selected: b
             <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, color: cfg.color, background: selected ? `${cfg.bg}cc` : cfg.bg, border: `1px solid ${cfg.border}` }}>
               {cfg.label}
             </span>
-            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, color: isMeta ? T.purple : T.green, background: selected ? (isMeta ? '#f5f3ffcc' : '#f0fdf4cc') : (isMeta ? T.purpleBg : T.greenBg), border: `1px solid ${isMeta ? '#ddd6fe' : '#bbf7d0'}` }}>
-              {isMeta ? '📋 Meta' : '📊 Sheets'}
+            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, color: src.color, background: src.bg, border: `1px solid ${src.border}` }}>
+              {src.label}
             </span>
+            {classCfg && (
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, color: classCfg.color, background: selected ? `${classCfg.bg}cc` : classCfg.bg, border: `1px solid ${classCfg.border}` }}>
+                {classCfg.label}
+              </span>
+            )}
           </div>
         </div>
         <ChevronRight size={14} style={{ color: selected ? T.douradoLight : T.mutedLight, flexShrink: 0, marginTop: 2 }} />
@@ -180,9 +204,10 @@ function Detalhe({ lead, onStatus, onBack, dispararISA }: {
   const { toast } = useToast();
 
   const cfg = STATUS_CFG[lead.status];
+  const classCfg = lead.classificacao ? CLASS_CFG[lead.classificacao] : null;
   const displayName = lead.nome?.trim() && lead.nome !== '..' ? lead.nome : 'Sem nome';
   const primeiroNome = displayName === 'Sem nome' ? 'você' : displayName.split(' ')[0];
-  const isMeta = lead.source === 'meta' || !!lead.form_id;
+  const src = sourceBadge(lead, false);
   const msgPadrao = `Olá ${primeiroNome}! 👋 Recebi seu contato e estou aqui para te ajudar com suas dúvidas jurídicas. Me conta um pouco mais sobre o que você precisa! 😊`;
 
   const handleDisparar = async () => {
@@ -215,7 +240,10 @@ function Detalhe({ lead, onStatus, onBack, dispararISA }: {
             <div style={{ fontSize: 18, fontWeight: 900, color: '#fff', letterSpacing: '-0.02em', marginBottom: 6 }}>{displayName}</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99, color: cfg.color, background: cfg.bg }}>{cfg.label}</span>
-              <span style={{ fontSize: 10, padding: '3px 10px', borderRadius: 99, fontWeight: 600, background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.8)' }}>{isMeta ? '📋 Meta' : '📊 Sheets'}</span>
+              <span style={{ fontSize: 10, padding: '3px 10px', borderRadius: 99, fontWeight: 600, background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.8)' }}>{src.label}</span>
+              {classCfg && (
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 99, color: classCfg.color, background: classCfg.bg, border: `1px solid ${classCfg.border}` }}>{classCfg.label}</span>
+              )}
             </div>
           </div>
         </div>
@@ -366,18 +394,20 @@ export default function MetaLeadsPage() {
   const { leads, loading, syncing, syncError, fetchLeads, syncFromMeta, updateLeadStatus, dispararISAManual } = useMetaFormLeads();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<MetaFormLeadStatus | 'all'>('all');
+  const [filterClass, setFilterClass] = useState<LeadClassificacao | 'all'>('all');
   const [selectedLead, setSelectedLead] = useState<MetaFormLead | null>(null);
   const { toast } = useToast();
 
   const filtered = useMemo(() => {
     let r = [...leads];
     if (filterStatus !== 'all') r = r.filter(l => l.status === filterStatus);
+    if (filterClass !== 'all') r = r.filter(l => l.classificacao === filterClass);
     if (search.trim()) {
       const s = search.toLowerCase();
       r = r.filter(l => (l.nome?.toLowerCase() || '').includes(s) || (l.email?.toLowerCase() || '').includes(s) || (l.telefone || '').includes(search));
     }
     return r;
-  }, [leads, filterStatus, search]);
+  }, [leads, filterStatus, filterClass, search]);
 
   const kpis = useMemo(() => ({
     total: leads.length,
@@ -395,8 +425,27 @@ export default function MetaLeadsPage() {
 
   const exportCSV = () => {
     if (!filtered.length) return;
-    const rows = filtered.map(l => [l.nome || '', l.telefone || '', l.email || '', STATUS_CFG[l.status].label, l.source === 'meta' ? 'Meta' : 'Sheets', format(new Date(l.created_at), 'dd/MM/yyyy HH:mm')]);
-    const csv = [['Nome', 'Telefone', 'Email', 'Status', 'Fonte', 'Data'], ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
+    const headers = ['Nome', 'Telefone', 'Email', 'Status', 'Origem', 'Classifica\u00e7\u00e3o', 'Problema do Voo', 'Tempo Prejudicado', 'Teve Preju\u00edzo', 'Comprovantes', 'Campanha', 'Conjunto', 'An\u00fancio', 'Data'];
+    const rows = filtered.map(l => {
+      const ff = (l.form_fields || {}) as Record<string, any>;
+      return [
+        l.nome || '',
+        l.telefone || '',
+        l.email || '',
+        STATUS_CFG[l.status].label,
+        l.source === 'meta_webhook' ? 'Meta Direto' : l.source === 'meta' ? 'Meta' : 'Sheets',
+        l.classificacao || '',
+        ff['Problema do Voo'] || '',
+        ff['Tempo Prejudicado'] || '',
+        ff['Teve Preju\u00edzo'] || '',
+        ff['Comprovantes'] || '',
+        l.campaign_name || '',
+        l.adset_name || '',
+        l.ad_name || '',
+        format(new Date(l.created_at), 'dd/MM/yyyy HH:mm'),
+      ];
+    });
+    const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -467,23 +516,39 @@ export default function MetaLeadsPage() {
           </div>
 
           {/* Busca + Filtros */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-              <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: T.muted }} />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nome, telefone ou email..."
-                style={{ width: '100%', padding: '10px 12px 10px 36px', borderRadius: 10, border: `1.5px solid ${T.border}`, background: T.cream, fontSize: 12, color: T.marrom, outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
-                onFocus={e => e.target.style.borderColor = T.dourado}
-                onBlur={e => e.target.style.borderColor = T.border}
-              />
-              {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: T.muted, padding: 2 }}><X size={13} /></button>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
+                <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: T.muted }} />
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nome, telefone ou email..."
+                  style={{ width: '100%', padding: '10px 12px 10px 36px', borderRadius: 10, border: `1.5px solid ${T.border}`, background: T.cream, fontSize: 12, color: T.marrom, outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
+                  onFocus={e => (e.target as HTMLInputElement).style.borderColor = T.dourado}
+                  onBlur={e => (e.target as HTMLInputElement).style.borderColor = T.border}
+                />
+                {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: T.muted, padding: 2 }}><X size={13} /></button>}
+              </div>
+              {/* Filtro status */}
+              <div style={{ display: 'flex', gap: 4, background: T.cream, borderRadius: 11, padding: '3px', border: `1px solid ${T.border}`, flexShrink: 0 }}>
+                {(['all', 'novo', 'em_atendimento', 'concluido', 'perdido'] as const).map(s => {
+                  const active = filterStatus === s;
+                  const cfg = s !== 'all' ? STATUS_CFG[s] : null;
+                  return (
+                    <button key={s} onClick={() => setFilterStatus(s)} style={{ padding: '7px 14px', borderRadius: 8, border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: active ? T.white : 'transparent', color: active ? (cfg ? cfg.color : T.marrom) : T.muted, boxShadow: active ? '0 2px 8px rgba(30,16,8,0.12)' : 'none', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
+                      {s === 'all' ? 'Todos' : cfg!.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 4, background: T.cream, borderRadius: 11, padding: '3px', border: `1px solid ${T.border}`, flexShrink: 0 }}>
-              {(['all', 'novo', 'em_atendimento', 'concluido', 'perdido'] as const).map(s => {
-                const active = filterStatus === s;
-                const cfg = s !== 'all' ? STATUS_CFG[s] : null;
+            {/* Filtro classificação */}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Classificação:</span>
+              {(['all', 'quente', 'medio', 'frio'] as const).map(c => {
+                const active = filterClass === c;
+                const cls = c !== 'all' ? CLASS_CFG[c] : null;
                 return (
-                  <button key={s} onClick={() => setFilterStatus(s)} style={{ padding: '7px 14px', borderRadius: 8, border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: active ? T.white : 'transparent', color: active ? (cfg ? cfg.color : T.marrom) : T.muted, boxShadow: active ? '0 2px 8px rgba(30,16,8,0.12)' : 'none', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
-                    {s === 'all' ? 'Todos' : cfg!.label}
+                  <button key={c} onClick={() => setFilterClass(c)} style={{ padding: '4px 12px', borderRadius: 99, border: active && cls ? `1.5px solid ${cls.border}` : `1px solid ${T.border}`, fontSize: 10, fontWeight: 700, cursor: 'pointer', background: active ? (cls ? cls.bg : T.white) : 'transparent', color: active ? (cls ? cls.color : T.marrom) : T.muted, transition: 'all 0.12s', whiteSpace: 'nowrap' }}>
+                    {c === 'all' ? 'Todos' : cls!.label}
                   </button>
                 );
               })}

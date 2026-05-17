@@ -7,6 +7,14 @@ const ZAPI_INSTANCE = '3EDDF959BC2B81F86B410203B614D70E';
 const ZAPI_TOKEN = 'EB4D1716F4FB661310E9DE33';
 const ZAPI_BASE = `https://api.z-api.io/instances/${ZAPI_INSTANCE}/token/${ZAPI_TOKEN}`;
 
+function mapAereoStatus(status: string | null): MetaFormLeadStatus {
+  if (!status || status === 'novo') return 'novo';
+  if (status === 'em_atendimento') return 'em_atendimento';
+  if (status === 'concluido' || status === 'convertido') return 'concluido';
+  if (status === 'perdido' || status === 'descartado') return 'perdido';
+  return 'novo';
+}
+
 export function useMetaFormLeads() {
   const [leads, setLeads] = useState<MetaFormLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,9 +28,10 @@ export function useMetaFormLeads() {
   const fetchLeads = useCallback(async () => {
     if (!initialLoadDone.current) setLoading(true);
     try {
-      const [metaResult, leadsResult] = await Promise.all([
+      const [metaResult, leadsResult, aereoResult] = await Promise.all([
         supabase.from('meta_form_leads').select('*').order('created_at', { ascending: false }),
         supabase.from('leads_juridicos').select('*').eq('tipo_origem', 'trafego').order('created_at', { ascending: false }),
+        supabase.from('meta_leads_aereo').select('*').order('created_at', { ascending: false }),
       ]);
 
       if (metaResult.error) throw metaResult.error;
@@ -57,9 +66,45 @@ export function useMetaFormLeads() {
           last_contact_at: l.last_contact_at,
           created_at: l.created_at,
           updated_at: l.updated_at || l.created_at,
+          _source_table: 'meta_form_leads' as const,
         }));
 
-      const allLeads = [...metaLeads, ...extraLeads];
+      // Leads diretos da Meta via webhook (nova tabela)
+      const aereoLeads: MetaFormLead[] = ((aereoResult.data || []) as any[])
+        .map((row: any) => ({
+          id: row.id,
+          meta_lead_id: row.lead_id_meta || `aereo_${row.id}`,
+          form_id: row.form_id,
+          ad_id: row.ad_id,
+          ad_name: row.ad_name,
+          campaign_id: row.campaign_id,
+          campaign_name: row.campaign_name,
+          adset_id: row.adset_id,
+          adset_name: row.adset_name,
+          created_time: row.created_at,
+          nome: row.nome,
+          telefone: row.telefone,
+          email: row.email,
+          form_fields: {
+            'Problema do Voo': row.problema_voo,
+            'Tempo Prejudicado': row.tempo_prejudicado,
+            'Teve Prejuízo': row.teve_prejuizo,
+            'Comprovantes': row.comprovantes,
+          },
+          raw: row.raw_payload || {},
+          status: mapAereoStatus(row.status),
+          source: 'meta_webhook',
+          dedupe_key: null,
+          linked_lead_id: null,
+          last_contact_at: null,
+          created_at: row.created_at,
+          updated_at: row.updated_at || row.created_at,
+          classificacao: row.classificacao,
+          origem: row.origem,
+          _source_table: 'meta_leads_aereo' as const,
+        }));
+
+      const allLeads = [...metaLeads, ...extraLeads, ...aereoLeads];
       allLeads.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setLeads(allLeads);
     } catch (err: any) {
@@ -129,6 +174,46 @@ export function useMetaFormLeads() {
         (payload) => {
           const l = payload.new as MetaFormLead;
           setLeads(prev => prev.map(x => x.id === l.id ? l : x));
+        }
+      )
+      // Leads diretos Meta Webhook — sem auto-disparo (webhook já disparou)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'meta_leads_aereo' },
+        (payload) => {
+          const row = payload.new as any;
+          const newLead: MetaFormLead = {
+            id: row.id,
+            meta_lead_id: row.lead_id_meta || `aereo_${row.id}`,
+            form_id: row.form_id, ad_id: row.ad_id, ad_name: row.ad_name,
+            campaign_id: row.campaign_id, campaign_name: row.campaign_name,
+            adset_id: row.adset_id, adset_name: row.adset_name,
+            created_time: row.created_at, nome: row.nome, telefone: row.telefone,
+            email: row.email,
+            form_fields: {
+              'Problema do Voo': row.problema_voo,
+              'Tempo Prejudicado': row.tempo_prejudicado,
+              'Teve Prejuízo': row.teve_prejuizo,
+              'Comprovantes': row.comprovantes,
+            },
+            raw: row.raw_payload || {},
+            status: mapAereoStatus(row.status),
+            source: 'meta_webhook', dedupe_key: null, linked_lead_id: null,
+            last_contact_at: null, created_at: row.created_at,
+            updated_at: row.updated_at || row.created_at,
+            classificacao: row.classificacao, origem: row.origem,
+            _source_table: 'meta_leads_aereo',
+          };
+          setLeads(prev => prev.some(x => x.id === newLead.id) ? prev : [newLead, ...prev]);
+        }
+      )
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'meta_leads_aereo' },
+        (payload) => {
+          const row = payload.new as any;
+          setLeads(prev => prev.map(x => x.id === row.id
+            ? { ...x, status: mapAereoStatus(row.status), classificacao: row.classificacao }
+            : x
+          ));
         }
       )
       .subscribe();
@@ -213,23 +298,36 @@ export function useMetaFormLeads() {
 
   const updateLeadStatus = async (leadId: string, status: MetaFormLeadStatus) => {
     try {
-      const updates: any = { status, updated_at: new Date().toISOString() };
-      if (status === 'em_atendimento') updates.last_contact_at = new Date().toISOString();
-      await supabase.from('meta_form_leads').update(updates).eq('id', leadId);
       const lead = leads.find(l => l.id === leadId);
-      const targetId = lead?.linked_lead_id || leadId;
-      let ljStatus: string;
-      const ljUpdates: any = { updated_at: new Date().toISOString() };
-      switch (status) {
-        case 'novo': ljStatus = 'Lead Frio'; break;
-        case 'em_atendimento': ljStatus = 'Em Atendimento'; ljUpdates.last_contact_at = new Date().toISOString(); break;
-        case 'concluido': ljStatus = 'Ganho'; break;
-        case 'perdido': ljStatus = 'Perdido'; ljUpdates.is_lost = true; ljUpdates.lost_at = new Date().toISOString(); break;
-        default: ljStatus = 'Em Atendimento';
+      const isAereo = lead?._source_table === 'meta_leads_aereo';
+      const now = new Date().toISOString();
+
+      if (isAereo) {
+        // Lead direto da Meta: atualiza apenas meta_leads_aereo
+        await supabase.from('meta_leads_aereo')
+          .update({ status, updated_at: now })
+          .eq('id', leadId);
+      } else {
+        // Lead legado: atualiza meta_form_leads + leads_juridicos
+        const updates: any = { status, updated_at: now };
+        if (status === 'em_atendimento') updates.last_contact_at = now;
+        await supabase.from('meta_form_leads').update(updates).eq('id', leadId);
+
+        const targetId = lead?.linked_lead_id || leadId;
+        let ljStatus: string;
+        const ljUpdates: any = { updated_at: now };
+        switch (status) {
+          case 'novo':           ljStatus = 'Lead Frio'; break;
+          case 'em_atendimento': ljStatus = 'Em Atendimento'; ljUpdates.last_contact_at = now; break;
+          case 'concluido':      ljStatus = 'Ganho'; break;
+          case 'perdido':        ljStatus = 'Perdido'; ljUpdates.is_lost = true; ljUpdates.lost_at = now; break;
+          default:               ljStatus = 'Em Atendimento';
+        }
+        ljUpdates.status = ljStatus;
+        await supabase.from('leads_juridicos').update(ljUpdates).eq('id', targetId);
       }
-      ljUpdates.status = ljStatus;
-      await supabase.from('leads_juridicos').update(ljUpdates).eq('id', targetId);
-      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, ...updates } : l));
+
+      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status } : l));
       toast({ title: 'Status atualizado' });
     } catch (err: any) {
       toast({ title: 'Erro ao atualizar status', description: err.message, variant: 'destructive' });

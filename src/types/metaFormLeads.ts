@@ -1,4 +1,5 @@
 export type MetaFormLeadStatus = 'novo' | 'em_atendimento' | 'concluido' | 'perdido';
+export type LeadClassificacao = 'quente' | 'medio' | 'frio';
 
 export interface MetaFormLead {
   id: string;
@@ -23,6 +24,10 @@ export interface MetaFormLead {
   last_contact_at: string | null;
   created_at: string;
   updated_at: string;
+  // Campos adicionais para leads Meta Webhook (meta_leads_aereo)
+  classificacao?: LeadClassificacao | null;
+  origem?: string | null;
+  _source_table?: 'meta_form_leads' | 'meta_leads_aereo';
 }
 
 export interface CrmConversation {
