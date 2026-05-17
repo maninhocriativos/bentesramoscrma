@@ -448,7 +448,7 @@ export default function Auth() {
             <p className="text-xs text-muted-foreground/50">
               Ao continuar, você concorda com nossos termos
             </p>
-            <div className="flex justify-center gap-4 text-xs flex-wrap">
+            <div className="flex justify-center gap-4 text-xs">
               <a href="/politica-privacidade" className="text-muted-foreground/60 hover:text-foreground transition-colors" target="_blank" rel="noopener noreferrer">
                 Política de Privacidade
               </a>
