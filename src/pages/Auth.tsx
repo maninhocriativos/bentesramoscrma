@@ -448,13 +448,17 @@ export default function Auth() {
             <p className="text-xs text-muted-foreground/50">
               Ao continuar, você concorda com nossos termos
             </p>
-            <div className="flex justify-center gap-4 text-xs">
+            <div className="flex justify-center gap-4 text-xs flex-wrap">
               <a href="/politica-privacidade" className="text-muted-foreground/60 hover:text-foreground transition-colors" target="_blank" rel="noopener noreferrer">
                 Política de Privacidade
               </a>
               <span className="text-border">•</span>
               <a href="/termos-servico" className="text-muted-foreground/60 hover:text-foreground transition-colors" target="_blank" rel="noopener noreferrer">
                 Termos de Serviço
+              </a>
+              <span className="text-border">•</span>
+              <a href="/exclusao-de-dados" className="text-muted-foreground/60 hover:text-foreground transition-colors" target="_blank" rel="noopener noreferrer">
+                Exclusão de Dados
               </a>
             </div>
           </div>

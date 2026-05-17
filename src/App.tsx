@@ -30,6 +30,7 @@ const Auth                     = lazy(() => import("./pages/Auth"));
 const NotFound                 = lazy(() => import("./pages/NotFound"));
 const PoliticaPrivacidadePage  = lazy(() => import("./pages/PoliticaPrivacidadePage"));
 const TermosServicoPage        = lazy(() => import("./pages/TermosServicoPage"));
+const ExclusaoDadosPage        = lazy(() => import("./pages/ExclusaoDadosPage"));
 const InstallPage              = lazy(() => import("./pages/InstallPage"));
 const PeticoesPage             = lazy(() => import("./pages/PeticoesPage"));
 const PeticaoEditarPage        = lazy(() => import("./pages/PeticaoEditarPage"));
@@ -75,6 +76,7 @@ function AppRoutes() {
           <Route path="/auth"                  element={<Auth />} />
           <Route path="/politica-privacidade"  element={<PoliticaPrivacidadePage />} />
           <Route path="/termos-servico"        element={<TermosServicoPage />} />
+          <Route path="/exclusao-de-dados"     element={<ExclusaoDadosPage />} />
           <Route path="/install"              element={<InstallPage />} />
           <Route path="/google-auth-callback" element={<GoogleAuthCallback />} />
 
