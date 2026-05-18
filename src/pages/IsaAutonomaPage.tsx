@@ -418,7 +418,7 @@ export default function IsaAutonomaPage() {
 
                 {/* Botão conversar */}
                 <Button
-                  onClick={() => navigate('/assistente')}
+                  onClick={() => navigate('/assistente?agent=isa')}
                   size="sm"
                   className="w-full gap-2 text-[#1a0e08] font-semibold"
                   style={{ background: `linear-gradient(90deg, ${GOLD}, #e8c07d)` }}
@@ -471,7 +471,7 @@ export default function IsaAutonomaPage() {
 
                 {/* Botão conversar */}
                 <Button
-                  onClick={() => navigate('/assistente')}
+                  onClick={() => navigate('/assistente?agent=donna')}
                   size="sm"
                   className="w-full gap-2 text-[#080d1a] font-semibold"
                   style={{ background: `linear-gradient(90deg, ${BLUE_A}, #7aa8e8)` }}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, MessageSquare, Brain, Zap, ListTodo,
   Settings, Cpu,
@@ -114,7 +114,10 @@ type View = 'grid' | 'isa-chat' | 'isa-metrics' | 'donna-chat';
 
 export default function AssistentePage() {
   const navigate = useNavigate();
-  const [view, setView] = useState<View>('grid');
+  const [searchParams] = useSearchParams();
+  const agentParam = searchParams.get('agent');
+  const initialView: View = agentParam === 'isa' ? 'isa-chat' : agentParam === 'donna' ? 'donna-chat' : 'grid';
+  const [view, setView] = useState<View>(initialView);
 
   if (view === 'isa-chat')    return <IsaView        onBack={() => setView('grid')} />;
   if (view === 'isa-metrics') return <IsaMetricsView onBack={() => setView('grid')} />;
