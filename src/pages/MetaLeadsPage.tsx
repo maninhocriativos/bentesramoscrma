@@ -316,20 +316,22 @@ function Detalhe({ lead, onStatus, onBack, dispararISA }: {
           </div>
         </div>
 
-        {/* Chat */}
-        <button onClick={() => navigate(`/chat?lead_id=${lead.linked_lead_id || lead.id}`)} style={{ width: '100%', padding: '13px 16px', borderRadius: 14, background: T.white, border: `1px solid ${T.border}`, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 1px 4px rgba(30,16,8,0.05)', transition: 'all 0.15s' }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 14px rgba(30,16,8,0.1)'; (e.currentTarget as HTMLElement).style.borderColor = T.dourado + '60'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 1px 4px rgba(30,16,8,0.05)'; (e.currentTarget as HTMLElement).style.borderColor = T.border; }}
-        >
-          <div style={{ width: 38, height: 38, borderRadius: 10, background: `${T.dourado}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <MessageCircle size={17} style={{ color: T.dourado }} />
-          </div>
-          <div style={{ textAlign: 'left', flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: T.marrom }}>Abrir no Chat</div>
-            <div style={{ fontSize: 11, color: T.muted }}>Ver histórico completo</div>
-          </div>
-          <ChevronRight size={15} style={{ color: T.mutedLight }} />
-        </button>
+        {/* Chat — só para leads com linked_lead_id (não para meta_leads_aereo) */}
+        {lead.linked_lead_id && (
+          <button onClick={() => navigate(`/chat?lead_id=${lead.linked_lead_id}`)} style={{ width: '100%', padding: '13px 16px', borderRadius: 14, background: T.white, border: `1px solid ${T.border}`, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 1px 4px rgba(30,16,8,0.05)', transition: 'all 0.15s' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 14px rgba(30,16,8,0.1)'; (e.currentTarget as HTMLElement).style.borderColor = T.dourado + '60'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 1px 4px rgba(30,16,8,0.05)'; (e.currentTarget as HTMLElement).style.borderColor = T.border; }}
+          >
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: `${T.dourado}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <MessageCircle size={17} style={{ color: T.dourado }} />
+            </div>
+            <div style={{ textAlign: 'left', flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: T.marrom }}>Abrir no Chat</div>
+              <div style={{ fontSize: 11, color: T.muted }}>Ver histórico completo</div>
+            </div>
+            <ChevronRight size={15} style={{ color: T.mutedLight }} />
+          </button>
+        )}
 
         {/* Campanha */}
         {(lead.campaign_name || lead.ad_name || lead.adset_name) && (

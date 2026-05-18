@@ -146,3 +146,6 @@ verify_jwt = false
 
 [functions.campaign-optin-dispatch]
 verify_jwt = false
+
+[functions.meta-leads-aereo-webhook]
+verify_jwt = false
