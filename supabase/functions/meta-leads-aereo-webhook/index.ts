@@ -6,7 +6,29 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ── Classificação do lead ────────────────────────────────────────────────────
+// ── Detecta tipo do formulário pelos campos recebidos ────────────────────────
+function detectarTipoForm(campos: Record<string, string>): "aereo" | "bancario" | "generico" {
+  const keys = Object.keys(campos).join(" ").toLowerCase();
+  const vals = Object.values(campos).join(" ").toLowerCase();
+  const texto = keys + " " + vals;
+
+  if (
+    texto.includes("problema_voo") || texto.includes("tempo_prejudicado") ||
+    texto.includes("teve_prejuizo") || texto.includes("comprovantes") ||
+    texto.includes("voo") || texto.includes("aéreo") || texto.includes("aereo") ||
+    texto.includes("cancelado") || texto.includes("embarque")
+  ) return "aereo";
+
+  if (
+    texto.includes("banco") || texto.includes("bancari") || texto.includes("cobrad") ||
+    texto.includes("consigna") || texto.includes("inss") || texto.includes("contrato") ||
+    texto.includes("extrato") || texto.includes("produto") || texto.includes("cobran")
+  ) return "bancario";
+
+  return "generico";
+}
+
+// ── Classificação do lead aéreo ──────────────────────────────────────────────
 function classificarLead(data: {
   problema_voo?: string | null;
   tempo_prejudicado?: string | null;
@@ -18,7 +40,6 @@ function classificarLead(data: {
   const pr = (data.teve_prejuizo || "").toLowerCase();
   const c = (data.comprovantes || "").toLowerCase();
 
-  // QUENTE
   const isQuente =
     p.includes("cancelado") ||
     p.includes("conexão") || p.includes("conexao") ||
@@ -30,7 +51,6 @@ function classificarLead(data: {
 
   if (isQuente) return "quente";
 
-  // MÉDIO
   const isMedio =
     t.includes("2 a 4") ||
     c.includes("poucos") ||
@@ -51,7 +71,6 @@ function normalizarTelefone(telefone: string): string {
 
 // ── Busca instância Z-API ────────────────────────────────────────────────────
 async function getZapiInstance(supabase: any) {
-  // Tenta tabela zapi_instances primeiro
   const { data: inst } = await supabase
     .from("zapi_instances")
     .select("*")
@@ -61,7 +80,6 @@ async function getZapiInstance(supabase: any) {
 
   if (inst?.instance_id && inst?.token) return inst;
 
-  // Fallback: integrations_config
   const { data: cfg } = await supabase
     .from("integrations_config")
     .select("config_json")
@@ -83,11 +101,7 @@ async function getZapiInstance(supabase: any) {
 }
 
 // ── Envio Z-API ──────────────────────────────────────────────────────────────
-async function enviarZapi(
-  supabase: any,
-  telefone: string,
-  mensagem: string
-): Promise<string> {
+async function enviarZapi(supabase: any, telefone: string, mensagem: string): Promise<string> {
   try {
     const inst = await getZapiInstance(supabase);
     if (!inst?.instance_id || !inst?.token) return "erro";
@@ -107,29 +121,32 @@ async function enviarZapi(
   }
 }
 
-// ── Mensagens por classificação ──────────────────────────────────────────────
-function mensagemPorClassificacao(classificacao: string, primeiroNome: string): string | null {
-  if (classificacao === "quente") {
+// ── Primeira mensagem da ISA por tipo de formulário ──────────────────────────
+// ISA é a recepcionista que filtra e roteia para Gerusa (aéreo) ou Melissa (bancário)
+function mensagemIsa(tipo: "aereo" | "bancario" | "generico", nome: string): string {
+  if (tipo === "aereo") {
     return (
-      `Olá ${primeiroNome}, recebemos sua pré-análise sobre problema com voo.\n\n` +
-      `Pelo que você informou, seu caso merece uma análise mais detalhada.\n\n` +
-      `Para agilizar, envie por aqui os comprovantes que tiver:\n` +
-      `1. Passagem ou localizador\n` +
-      `2. Cartão de embarque, se tiver\n` +
-      `3. Prints ou e-mails da companhia\n` +
-      `4. Comprovantes de gastos\n` +
-      `5. Provas do prejuízo causado\n\n` +
-      `Não precisa ter tudo. Envie o que tiver disponível.`
+      `Olá ${nome}! 👋 Sou a ISA, assistente virtual do escritório Bentes Ramos.\n\n` +
+      `Vi que você preencheu nosso formulário sobre um problema com voo. Fico feliz que entrou em contato! ✈️\n\n` +
+      `A Gerusa, nossa especialista em Direito Aéreo, vai analisar seu caso com prioridade.\n\n` +
+      `Para agilizarmos sua análise, me conta: *o que exatamente aconteceu com o seu voo?*`
     );
   }
-  if (classificacao === "medio") {
+
+  if (tipo === "bancario") {
     return (
-      `Olá ${primeiroNome}, recebemos suas informações sobre o problema com seu voo.\n\n` +
-      `Sua situação precisa de uma análise com mais detalhes. Se tiver passagem, localizador, ` +
-      `prints ou e-mails da companhia, envie por aqui para nossa equipe verificar.`
+      `Olá ${nome}! 👋 Sou a ISA, assistente virtual do escritório Bentes Ramos.\n\n` +
+      `Vi que você preencheu nosso formulário sobre cobranças do banco. Entendo que essa situação é muito chata! 🏦\n\n` +
+      `A Melissa, nossa especialista em Direito Bancário, vai verificar seu caso.\n\n` +
+      `Para agilizarmos, me conta: *qual banco e qual tipo de cobrança está te incomodando?*`
     );
   }
-  return null; // frio: sem disparo automático
+
+  return (
+    `Olá ${nome}! 👋 Sou a ISA, assistente virtual do escritório Bentes Ramos.\n\n` +
+    `Vi que você entrou em contato com a gente. Nossa equipe jurídica especializada vai analisar seu caso! ⚖️\n\n` +
+    `Para eu te direcionar para o especialista certo, me conta: *o que aconteceu e como posso te ajudar?*`
+  );
 }
 
 // ── Handler principal ────────────────────────────────────────────────────────
@@ -164,20 +181,19 @@ serve(async (req: Request) => {
     try {
       const body = await req.json();
 
-      // Extrai leadgen_id do payload
       const entry = body?.entry?.[0];
       const changes = entry?.changes?.[0];
       const leadgenId = changes?.value?.leadgen_id;
 
       if (!leadgenId) {
-        console.log("[meta-leads-aereo-webhook] Payload sem leadgen_id:", JSON.stringify(body));
+        console.log("[meta-webhook] Payload sem leadgen_id:", JSON.stringify(body));
         return new Response(
           JSON.stringify({ success: false, error: "leadgen_id não encontrado" }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // Deduplicação: verifica se já existe
+      // Deduplicação
       const { data: existing } = await supabase
         .from("meta_leads_aereo")
         .select("id, classificacao, zapi_status")
@@ -186,66 +202,59 @@ serve(async (req: Request) => {
 
       if (existing) {
         return new Response(
-          JSON.stringify({
-            success: true,
-            lead_id: existing.id,
-            classificacao: existing.classificacao,
-            zapi_status: existing.zapi_status,
-            duplicate: true,
-          }),
+          JSON.stringify({ success: true, lead_id: existing.id, classificacao: existing.classificacao, zapi_status: existing.zapi_status, duplicate: true }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // Busca dados completos na Graph API
+      // Busca dados na Graph API
       const graphRes = await fetch(
         `https://graph.facebook.com/v20.0/${leadgenId}?access_token=${META_ACCESS_TOKEN}`
       );
       const graphData = await graphRes.json();
 
       if (graphData.error) {
-        console.error("[meta-leads-aereo-webhook] Graph API error:", graphData.error);
+        console.error("[meta-webhook] Graph API error:", graphData.error);
         return new Response(
           JSON.stringify({ success: false, error: graphData.error.message }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // Mapeia campos do formulário
+      // Mapeia campos
       const fieldData: Record<string, string> = {};
       for (const f of graphData.field_data || []) {
         fieldData[f.name] = f.values?.[0] || "";
       }
 
-      const nome = fieldData["full_name"] || fieldData["nome"] || null;
-      const telefone = fieldData["phone_number"] || fieldData["telefone"] || null;
-      const email = fieldData["email"] || null;
-      const problema_voo = fieldData["problema_voo"] || null;
+      const nome       = fieldData["full_name"] || fieldData["nome_completo"] || fieldData["nome"] || null;
+      const telefone   = fieldData["phone_number"] || fieldData["telefone"] || null;
+      const email      = fieldData["email"] || null;
+      const problema_voo      = fieldData["problema_voo"] || null;
       const tempo_prejudicado = fieldData["tempo_prejudicado"] || null;
-      const teve_prejuizo = fieldData["teve_prejuizo"] || null;
-      const comprovantes = fieldData["comprovantes"] || null;
+      const teve_prejuizo     = fieldData["teve_prejuizo"] || null;
+      const comprovantes      = fieldData["comprovantes"] || null;
 
-      // Classificação
+      const campaign_id   = changes?.value?.campaign_id   || graphData.campaign_id   || null;
+      const campaign_name = changes?.value?.campaign_name || graphData.campaign_name || null;
+      const adset_id      = changes?.value?.adset_id      || graphData.ad_set_id     || null;
+      const adset_name    = changes?.value?.adset_name    || graphData.ad_set_name   || null;
+      const ad_id         = changes?.value?.ad_id         || graphData.ad_id         || null;
+      const ad_name       = changes?.value?.ad_name       || graphData.ad_name       || null;
+      const form_id       = changes?.value?.form_id       || graphData.form_id       || null;
+
       const classificacao = classificarLead({ problema_voo, tempo_prejudicado, teve_prejuizo, comprovantes });
-
-      // Dados da campanha (vêm do changes.value ou do graphData)
-      const campaign_id    = changes?.value?.campaign_id    || graphData.campaign_id    || null;
-      const campaign_name  = changes?.value?.campaign_name  || graphData.campaign_name  || null;
-      const adset_id       = changes?.value?.adset_id       || graphData.ad_set_id      || null;
-      const adset_name     = changes?.value?.adset_name     || graphData.ad_set_name    || null;
-      const ad_id          = changes?.value?.ad_id          || graphData.ad_id          || null;
-      const ad_name        = changes?.value?.ad_name        || graphData.ad_name        || null;
-      const form_id        = changes?.value?.form_id        || graphData.form_id        || null;
+      const tipoForm      = detectarTipoForm(fieldData);
 
       let zapiStatus = telefone ? "nao_enviado" : "sem_telefone";
 
-      // Salva no Supabase
+      // Salva no banco
       const { data: saved, error: saveErr } = await supabase
         .from("meta_leads_aereo")
         .insert({
           nome, telefone, email,
           problema_voo, tempo_prejudicado, teve_prejuizo, comprovantes,
-          classificacao,
+          classificacao, origem: tipoForm,
           campaign_id, campaign_name, adset_id, adset_name, ad_id, ad_name, form_id,
           lead_id_meta: leadgenId,
           status: "novo",
@@ -256,7 +265,7 @@ serve(async (req: Request) => {
         .single();
 
       if (saveErr) {
-        console.error("[meta-leads-aereo-webhook] Erro ao salvar:", saveErr);
+        console.error("[meta-webhook] Erro ao salvar:", saveErr);
         return new Response(
           JSON.stringify({ success: false, error: saveErr.message }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -265,30 +274,31 @@ serve(async (req: Request) => {
 
       const savedId = saved?.id;
 
-      // Envio Z-API apenas para quente e médio
-      if (telefone && (classificacao === "quente" || classificacao === "medio")) {
+      // ISA dispara para TODOS os leads com telefone — sem exceção por classificação
+      if (telefone) {
         const primeiroNome = nome ? nome.split(" ")[0] : "você";
-        const mensagem = mensagemPorClassificacao(classificacao, primeiroNome);
+        const mensagem = mensagemIsa(tipoForm, primeiroNome);
+        zapiStatus = await enviarZapi(supabase, telefone, mensagem);
 
-        if (mensagem) {
-          zapiStatus = await enviarZapi(supabase, telefone, mensagem);
-          if (savedId) {
-            await supabase
-              .from("meta_leads_aereo")
-              .update({ zapi_status: zapiStatus, status: zapiStatus === "enviado" ? "em_atendimento" : "novo" })
-              .eq("id", savedId);
-          }
+        if (savedId) {
+          await supabase
+            .from("meta_leads_aereo")
+            .update({
+              zapi_status: zapiStatus,
+              status: zapiStatus === "enviado" ? "em_atendimento" : "novo",
+            })
+            .eq("id", savedId);
         }
       }
 
-      console.log(`[meta-leads-aereo-webhook] Lead salvo: ${savedId} | ${classificacao} | zapi: ${zapiStatus}`);
+      console.log(`[meta-webhook] Lead salvo: ${savedId} | tipo: ${tipoForm} | ${classificacao} | zapi: ${zapiStatus}`);
 
       return new Response(
-        JSON.stringify({ success: true, lead_id: savedId, classificacao, zapi_status: zapiStatus }),
+        JSON.stringify({ success: true, lead_id: savedId, tipo: tipoForm, classificacao, zapi_status: zapiStatus }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     } catch (err: any) {
-      console.error("[meta-leads-aereo-webhook] Erro:", err);
+      console.error("[meta-webhook] Erro:", err);
       return new Response(
         JSON.stringify({ success: false, error: err.message }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
