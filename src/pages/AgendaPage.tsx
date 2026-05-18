@@ -11,7 +11,7 @@ import { useCompromissos } from '@/hooks/useCompromissos';
 import { useIntimacoes } from '@/hooks/useIntimacoes';
 import { Compromisso, ConfirmacaoStatus } from '@/types/compromissos';
 import {
-  Loader2, Plus, Filter, Settings, Search, List, CalendarDays, FileText, X,
+  Loader2, Plus, Filter, Search, List, CalendarDays, FileText, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -180,10 +180,6 @@ function AgendaPage() {
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-
-            <Button variant="outline" size="icon" className="h-8 w-8 rounded-xl" style={{ borderColor: 'rgba(201,169,110,0.25)' }}>
-              <Settings className="h-3.5 w-3.5 text-muted-foreground" />
-            </Button>
 
             <GoogleCalendarConnect />
 

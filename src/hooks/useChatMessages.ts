@@ -97,7 +97,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
       
       setMessages(uniqueMessages);
     } catch (error) {
-      console.error('[useChatMessages] Erro ao carregar mensagens:', error);
+      // silent — subscriber pode não ter mensagens ainda
     } finally {
       setIsLoading(false);
     }
@@ -132,12 +132,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
           onNewMessageRef.current?.(newMsg);
         }
       )
-      .subscribe((status, err) => {
-        console.log(`[useChatMessages] Realtime ${channelName}: ${status}`, err || '');
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.warn('[useChatMessages] Channel error, will reconnect via polling');
-        }
-      });
+      .subscribe();
 
     let pollActive = true;
     const pollInterval = setInterval(async () => {
@@ -195,7 +190,6 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
         })
         .eq('id', leadId);
 
-      console.log('[useChatMessages] ISA reativada');
       toast({ title: '🤖 ISA reativada', description: 'A ISA voltou a atender automaticamente.' });
       return true;
     } catch (err) {
@@ -270,7 +264,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
         .single();
 
       if (saveError) {
-        console.error('[useChatMessages] Erro ao salvar mensagem:', saveError);
+        // mensagem enviada mas não salva localmente — realtime irá sincronizar
       }
 
       // Substitui mensagem otimista pela real
@@ -293,7 +287,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
         try {
           await supabase
             .from('manychat_subscribers')
-            .update({ 
+            .update({
               atendimento_humano: true,
               atendimento_humano_desde: new Date().toISOString(),
             })
@@ -301,15 +295,13 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
 
           await supabase
             .from('leads_juridicos')
-            .update({ 
+            .update({
               isa_ativa: false,
               owner_tipo: 'humano',
             })
             .eq('id', options.leadId);
-
-          console.log('[useChatMessages] ISA pausada — atendente humano assumiu');
-        } catch (err) {
-          console.error('[useChatMessages] Erro ao pausar ISA:', err);
+        } catch {
+          // não bloqueia envio de mensagem
         }
       }
 
@@ -325,7 +317,6 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
         messageId: zapiResult?.messageId || zapiResult?.data?.messageId 
       };
     } catch (error: any) {
-      console.error('[useChatMessages] Erro ao enviar:', error);
       setMessages(prev => prev.filter(m => m.id !== tempId));
       return { success: false, error: error.message };
     } finally {

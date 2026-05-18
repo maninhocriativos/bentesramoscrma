@@ -41,9 +41,9 @@ export function useLeads() {
     fetchLeads();
   }, [fetchLeads]);
 
-  // Refresh silencioso a cada 5 minutos
+  // Refresh silencioso a cada 15 minutos (realtime cobre atualizações em tempo real)
   useEffect(() => {
-    const interval = setInterval(fetchLeads, 300_000);
+    const interval = setInterval(fetchLeads, 900_000);
     return () => clearInterval(interval);
   }, [fetchLeads]);
 

@@ -146,8 +146,8 @@ export default function IsaAutonomaPage() {
         setStats({ leadsClassificados, interacoesRegistradas, tarefasCriadas, compromissosCriados, acoesAprovadas, acoesRejeitadas });
         setRecentActions(events.slice(0, 30) as RecentAction[]);
       }
-    } catch (error) {
-      console.error('Erro ao buscar dados:', error);
+    } catch {
+      // silent — dados serão exibidos como vazio
     } finally {
       setLoading(false);
     }
