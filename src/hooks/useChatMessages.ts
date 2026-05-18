@@ -192,8 +192,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
 
       toast({ title: '🤖 ISA reativada', description: 'A ISA voltou a atender automaticamente.' });
       return true;
-    } catch (err) {
-      console.error('[useChatMessages] Erro ao reativar ISA:', err);
+    } catch {
       toast({ title: 'Erro ao reativar ISA', variant: 'destructive' });
       return false;
     }

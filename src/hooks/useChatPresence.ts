@@ -60,7 +60,6 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
         setTypingUsers(typing);
       })
       .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-        console.log('🟢 Usuário entrou:', key, newPresences);
         if (newPresences && newPresences.length > 0) {
           const presence = newPresences[0] as any;
           setOnlineUsers(prev => ({
@@ -76,7 +75,6 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
         }
       })
       .on('presence', { event: 'leave' }, ({ key }) => {
-        console.log('🔴 Usuário saiu:', key);
         setOnlineUsers(prev => {
           const updated = { ...prev };
           if (updated[key]) {

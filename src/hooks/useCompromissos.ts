@@ -70,7 +70,6 @@ export function useCompromissos() {
 
   // ─── Buscar todos os compromissos (paginado — supera o limite de 1000 do PostgREST) ──
   const fetchCompromissos = useCallback(async () => {
-    console.log('[useCompromissos] Fetching compromissos...');
 
     const PAGE = 1000;
     const all: Compromisso[] = [];
@@ -84,7 +83,6 @@ export function useCompromissos() {
         .range(page * PAGE, (page + 1) * PAGE - 1);
 
       if (error) {
-        console.error('[useCompromissos] Fetch error:', error);
         toast({
           title: 'Erro ao carregar compromissos',
           description: error.message,
@@ -100,7 +98,6 @@ export function useCompromissos() {
       page++;
     }
 
-    console.log(`[useCompromissos] Loaded ${all.length} compromissos`);
     setCompromissos(all);
     setLoading(false);
   }, [toast]);
@@ -118,15 +115,10 @@ export function useCompromissos() {
     // Subscreve realtime
     const channel = supabase
       .channel(`compromissos-realtime-${Date.now()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'compromissos' }, (payload) => {
-        console.log('[useCompromissos] Realtime event:', payload.eventType, (payload.new as any)?.id || (payload.old as any)?.id);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'compromissos' }, () => {
         fetchCompromissos();
       })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('[useCompromissos] Realtime SUBSCRIBED');
-        }
-      });
+      .subscribe();
 
     channelRef.current = channel;
 
@@ -142,8 +134,6 @@ export function useCompromissos() {
   const createCompromisso = async (
     payload: Omit<Compromisso, 'id' | 'created_at' | 'updated_at'>
   ): Promise<{ data?: Compromisso; error?: any }> => {
-    console.log('[useCompromissos] Creating:', payload);
-
     // Tentar pegar o usuário atual e setar como responsável (caso esteja vazio)
     let finalPayload: any = { ...payload };
     if (!finalPayload.responsavel_id) {
@@ -160,7 +150,6 @@ export function useCompromissos() {
       .single();
 
     if (error) {
-      console.error('[useCompromissos] Create error:', error);
       toast({
         title: 'Erro ao criar compromisso',
         description: error.message,
@@ -168,8 +157,6 @@ export function useCompromissos() {
       });
       return { error };
     }
-
-    console.log('[useCompromissos] Created:', data?.id, '| data_inicio:', data?.data_inicio);
 
     // ✅ FIX importante: ATUALIZA o estado local imediatamente
     // Não espera o realtime — adiciona direto na lista
@@ -206,8 +193,6 @@ export function useCompromissos() {
     id: string,
     updates: Partial<Compromisso>
   ): Promise<{ error: any }> => {
-    console.log('[useCompromissos] Updating:', id, updates);
-
     const { data, error } = await supabase
       .from('compromissos')
       .update(updates)
@@ -216,7 +201,6 @@ export function useCompromissos() {
       .single();
 
     if (error) {
-      console.error('[useCompromissos] Update error:', error);
       toast({
         title: 'Erro ao atualizar compromisso',
         description: error.message,
@@ -242,8 +226,6 @@ export function useCompromissos() {
 
   // ─── Deletar compromisso ────────────────────────────────────────────────────
   const deleteCompromisso = async (id: string): Promise<{ error: any }> => {
-    console.log('[useCompromissos] Deleting:', id);
-
     const comp = compromissos.find(c => c.id === id);
     const googleEventId = (comp as any)?.google_event_id;
 
@@ -253,7 +235,6 @@ export function useCompromissos() {
       .eq('id', id);
 
     if (error) {
-      console.error('[useCompromissos] Delete error:', error);
       toast({
         title: 'Erro ao excluir compromisso',
         description: error.message,
