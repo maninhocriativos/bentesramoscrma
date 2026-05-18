@@ -162,10 +162,14 @@ function buildMessage(processo: any, cliente: any): string {
     for (const mov of movimentos) {
       const dataFormatada = mov.dataHora ? formatarData(mov.dataHora) : "";
       const traducao = traduzirMovimento(mov.nome || "");
+      const raw = (mov.complemento || "").trim();
+      const detalhe = raw && raw.toLowerCase() !== (mov.nome || "").toLowerCase()
+        ? `\n     📄 _${raw.length > 200 ? raw.slice(0, 200) + "…" : raw}_`
+        : "";
       if (dataFormatada) {
-        movimentosTexto += `  ▸ ${traducao}\n     _${dataFormatada}_\n\n`;
+        movimentosTexto += `  ▸ ${traducao}${detalhe}\n     _${dataFormatada}_\n\n`;
       } else {
-        movimentosTexto += `  ▸ ${traducao}\n\n`;
+        movimentosTexto += `  ▸ ${traducao}${detalhe}\n\n`;
       }
     }
   } else {
