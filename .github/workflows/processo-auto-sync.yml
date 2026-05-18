@@ -10,7 +10,7 @@ on:
       max:
         description: 'Máximo de processos por execução'
         required: false
-        default: '50'
+        default: '15'
       force_all:
         description: 'Forçar atualização de todos (true/false)'
         required: false
