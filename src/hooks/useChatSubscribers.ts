@@ -142,8 +142,8 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
       } else {
         setSubscribers(enrichedSubs);
       }
-    } catch (error) {
-      console.error('[useChatSubscribers] Erro ao carregar subscribers:', error);
+    } catch {
+      // silent — será tentado no próximo poll
     } finally {
       setIsLoading(false);
     }
@@ -154,18 +154,17 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
     loadSubscribers();
   }, [loadSubscribers]);
 
-  // Polling fallback only — no focus/visibility refetch
+  // Polling fallback — realtime cobre atualizações em tempo real
   useEffect(() => {
     const pollInterval = setInterval(() => {
       loadSubscribers();
-    }, 300000);
+    }, 900000);
 
     return () => clearInterval(pollInterval);
   }, [loadSubscribers]);
 
   // Realtime subscription (primary update mechanism)
   useEffect(() => {
-    console.log('[useChatSubscribers] Configurando realtime...');
     
     const channel = supabase
       .channel('chat-subscribers-realtime')
@@ -215,7 +214,6 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
         description: 'Lista de contatos atualizada'
       });
     } catch (error: any) {
-      console.error('[useChatSubscribers] Sync error:', error);
       toast({ title: 'Erro na sincronização', description: error.message, variant: 'destructive' });
     } finally {
       setIsSyncing(false);

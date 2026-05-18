@@ -108,7 +108,6 @@ export function useMetaFormLeads() {
       allLeads.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setLeads(allLeads);
     } catch (err: any) {
-      console.error('[useMetaFormLeads] Error:', err);
       toast({ title: 'Erro ao carregar leads', description: err.message, variant: 'destructive' });
     } finally {
       initialLoadDone.current = true;
@@ -234,8 +233,8 @@ export function useMetaFormLeads() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: numeroFinal, message: mensagem }),
       });
-    } catch (err) {
-      console.error('[ISA] Erro no disparo automático:', err);
+    } catch {
+      // silent — não bloqueia fluxo do lead
     }
   };
 
