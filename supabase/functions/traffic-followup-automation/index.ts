@@ -220,6 +220,26 @@ async function processFollowups(supabase: any, zapiConfig: any): Promise<any[]> 
     return results;
   }
 
+  // ── Limpeza de leads presos: completaram 44h mas nunca foram para nutrição ──
+  const { data: stuck } = await supabase
+    .from('traffic_followups')
+    .select('*, lead:leads_juridicos(id, nome, telefone, status, tipo_origem, isa_agent)')
+    .eq('current_stage', '44h')
+    .eq('status', 'in_progress')
+    .eq('automation_active', false)
+    .limit(10);
+
+  for (const fu of stuck || []) {
+    const lead = fu.lead;
+    if (!lead) { await supabase.from('traffic_followups').update({ status: 'archived' }).eq('id', fu.id); continue; }
+    if (['Ganho', 'Perdido', 'Contrato Assinado', 'Contrato Fechado'].includes(lead.status)) {
+      await supabase.from('traffic_followups').update({ status: 'archived' }).eq('id', fu.id);
+    } else {
+      await moverParaNutricao(supabase, fu, lead, zapiConfig);
+      results.push({ lead_id: lead.id, nome: lead.nome, action: 'cleanup_to_nutricao' });
+    }
+  }
+
   const { data: pendentes, error } = await supabase
     .from('traffic_followups')
     .select('*, lead:leads_juridicos(id, nome, telefone, status, tipo_origem, isa_agent)')
@@ -230,7 +250,7 @@ async function processFollowups(supabase: any, zapiConfig: any): Promise<any[]> 
     .limit(20);
 
   if (error) { console.error('[Followup] Query error:', error); return results; }
-  console.log(`[Followup] ${pendentes?.length || 0} follow-ups pendentes`);
+  console.log(`[Followup] ${pendentes?.length || 0} follow-ups pendentes (stuck cleanup: ${stuck?.length || 0})`);
 
   for (const fu of pendentes || []) {
     try {
@@ -326,6 +346,12 @@ async function processFollowups(supabase: any, zapiConfig: any): Promise<any[]> 
         results.push({ lead_id: lead.id, nome: lead.nome, stage: nextStage, success: true });
         console.log(`[Followup] ✅ ${nextStage} enviado para ${lead.nome}`);
         await sleep(7000);
+
+        // Estágio final enviado → mover para nutrição imediatamente
+        if (!subsequente) {
+          await moverParaNutricao(supabase, { ...fu, current_stage: nextStage, stages_sent: stagesSent }, lead, zapiConfig);
+          results.push({ lead_id: lead.id, nome: lead.nome, action: 'moved_to_nutricao' });
+        }
       } else {
         console.error(`[Followup] ❌ Falha ao enviar: ${lead.nome}`);
       }
