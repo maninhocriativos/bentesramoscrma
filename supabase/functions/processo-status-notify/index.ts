@@ -147,7 +147,77 @@ async function resolveInstance(supabase: any, cliente: any) {
   return null;
 }
 
-function buildMessage(processo: any, cliente: any): string {
+async function explicarMovimentosComIA(
+  movimentos: any[],
+  numProcesso: string,
+  nomeCliente: string,
+): Promise<string | null> {
+  const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+  if (!OPENAI_API_KEY || movimentos.length === 0) return null;
+
+  const movsCtx = movimentos.map((m, i) => {
+    const data = m.dataHora || "data não informada";
+    const tipo = m.nome || "Movimentação";
+    const detalhe = (m.complemento || "").trim();
+    return `Movimentação ${i + 1} (${data}):\n  Tipo: ${tipo}\n  Conteúdo: ${detalhe || "sem detalhes adicionais"}`;
+  }).join("\n\n");
+
+  try {
+    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        max_tokens: 500,
+        temperature: 0.4,
+        messages: [
+          {
+            role: "system",
+            content:
+              "Você é a Isa, assistente jurídica do escritório Bentes Ramos Advogados. " +
+              "Explique movimentações processuais em linguagem simples e acolhedora para clientes leigos, " +
+              "sem jargão técnico. Seja clara, direta e empática. " +
+              "Para cada movimentação diga: o que aconteceu, o que isso significa para o cliente, e se há algo que ele precise fazer. " +
+              "Use emojis moderadamente. Formato: lista com ▸ para cada item. Máximo 3 linhas por movimentação.",
+          },
+          {
+            role: "user",
+            content:
+              `Processo: ${numProcesso}\nCliente: ${nomeCliente}\n\n` +
+              `Explique as seguintes movimentações recentes:\n\n${movsCtx}`,
+          },
+        ],
+      }),
+    });
+
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    const texto = json.choices?.[0]?.message?.content?.trim();
+    return texto || null;
+  } catch {
+    return null;
+  }
+}
+
+function buildMovimentosTemplate(movimentos: any[]): string {
+  let texto = "\n─────────────────\n\n📌 *Movimentações recentes:*\n\n";
+  for (const mov of movimentos) {
+    const dataFormatada = mov.dataHora ? formatarData(mov.dataHora) : "";
+    const traducao = traduzirMovimento(mov.nome || "");
+    const raw = (mov.complemento || "").trim();
+    const detalhe = raw && raw.toLowerCase() !== (mov.nome || "").toLowerCase()
+      ? `\n     📄 _${raw.length > 200 ? raw.slice(0, 200) + "…" : raw}_`
+      : "";
+    if (dataFormatada) {
+      texto += `  ▸ ${traducao}${detalhe}\n     _${dataFormatada}_\n\n`;
+    } else {
+      texto += `  ▸ ${traducao}${detalhe}\n\n`;
+    }
+  }
+  return texto;
+}
+
+async function buildMessage(processo: any, cliente: any): Promise<string> {
   const nomeCliente = (cliente.nome || "").split(" ")[0] || "";
   const saudacao = nomeCliente ? `Olá, ${nomeCliente}!` : "Olá!";
   const numProcesso = processo.numero_processo || "N/A";
@@ -158,19 +228,11 @@ function buildMessage(processo: any, cliente: any): string {
   let movimentosTexto = "";
 
   if (movimentos.length > 0) {
-    movimentosTexto = "\n─────────────────\n\n📌 *Movimentações recentes:*\n\n";
-    for (const mov of movimentos) {
-      const dataFormatada = mov.dataHora ? formatarData(mov.dataHora) : "";
-      const traducao = traduzirMovimento(mov.nome || "");
-      const raw = (mov.complemento || "").trim();
-      const detalhe = raw && raw.toLowerCase() !== (mov.nome || "").toLowerCase()
-        ? `\n     📄 _${raw.length > 200 ? raw.slice(0, 200) + "…" : raw}_`
-        : "";
-      if (dataFormatada) {
-        movimentosTexto += `  ▸ ${traducao}${detalhe}\n     _${dataFormatada}_\n\n`;
-      } else {
-        movimentosTexto += `  ▸ ${traducao}${detalhe}\n\n`;
-      }
+    const explicacaoIA = await explicarMovimentosComIA(movimentos, numProcesso, nomeCliente);
+    if (explicacaoIA) {
+      movimentosTexto = `\n─────────────────\n\n📌 *O que aconteceu no seu processo:*\n\n${explicacaoIA}\n\n`;
+    } else {
+      movimentosTexto = buildMovimentosTemplate(movimentos);
     }
   } else {
     movimentosTexto =
@@ -257,7 +319,7 @@ serve(async (req) => {
     }
 
     // Montar mensagem
-    const textoMensagem = mensagem || buildMessage(processo, cliente);
+    const textoMensagem = mensagem || await buildMessage(processo, cliente);
 
     // Enviar via Z-API
     const zapiUrl = `https://api.z-api.io/instances/${instance.instanceId}/token/${instance.token}/send-text`;
