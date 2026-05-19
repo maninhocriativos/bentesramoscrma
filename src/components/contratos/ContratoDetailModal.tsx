@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   FileSignature, Clock, CheckCircle2, XCircle, AlertCircle,
   ExternalLink, MessageSquare, Loader2, AlertTriangle,
   Calendar, Mail, User, FileText, Phone, Copy, Ban,
-  Send, RefreshCw, Megaphone,
+  Send, Megaphone, Link2, Search,
 } from 'lucide-react';
 import { ContratoComStatus } from '@/pages/ContratosPage';
 import { cn } from '@/lib/utils';
@@ -110,6 +111,18 @@ export function ContratoDetailModal({ contrato, isOpen, onClose, onRefresh }: Co
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [markingTrafego, setMarkingTrafego] = useState(false);
 
+  // ── Vincular Lead ────────────────────────────────────────────────────────
+  const [showVincular, setShowVincular] = useState(false);
+  const [vincularSearch, setVincularSearch] = useState('');
+  const [sugestoes, setSugestoes] = useState<Array<{
+    id: string; nome: string | null; email: string | null;
+    telefone: string | null; tipo_origem: string | null;
+    matchType: 'telefone' | 'email' | 'nome' | 'busca';
+  }>>([]);
+  const [loadingSugestoes, setLoadingSugestoes] = useState(false);
+  const [vinculandoId, setVinculandoId] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ── Buscar dados do signatário e lead ────────────────────────────────────
   const { data: leadInfo, isLoading } = useQuery({
     queryKey: ['contrato-lead-info', contrato?.key],
@@ -162,6 +175,90 @@ export function ContratoDetailModal({ contrato, isOpen, onClose, onRefresh }: Co
   const signerEmail = contrato.leadEmail       || reminder?.signer_email || lead?.email || csFirst?.email;
   const signerPhone = reminder?.signer_phone   || lead?.telefone         || csFirst?.phone_number;
   const signLink    = reminder?.contract_link  || contrato.linkContrato;
+
+  // ── buscarLeads ───────────────────────────────────────────────────────────
+  const buscarLeads = async (texto?: string) => {
+    setLoadingSugestoes(true);
+    try {
+      const found: typeof sugestoes = [];
+      const seen = new Set<string>();
+      const add = (l: any, type: typeof sugestoes[0]['matchType']) => {
+        if (!seen.has(l.id)) {
+          seen.add(l.id);
+          found.push({ id: l.id, nome: l.nome, email: l.email, telefone: l.telefone, tipo_origem: l.tipo_origem, matchType: type });
+        }
+      };
+
+      if (texto && texto.length >= 2) {
+        const [{ data: byNome }, { data: byEmail }, { data: byFone }] = await Promise.all([
+          supabase.from('leads_juridicos').select('id, nome, email, telefone, tipo_origem').ilike('nome', `%${texto}%`).limit(5),
+          supabase.from('leads_juridicos').select('id, nome, email, telefone, tipo_origem').ilike('email', `%${texto}%`).limit(3),
+          supabase.from('leads_juridicos').select('id, nome, email, telefone, tipo_origem').ilike('telefone', `%${texto}%`).limit(3),
+        ]);
+        for (const l of byNome || []) add(l, 'nome');
+        for (const l of byEmail || []) add(l, 'email');
+        for (const l of byFone || []) add(l, 'telefone');
+      } else {
+        // Auto-sugestões por telefone → email → nome do signatário
+        if (signerPhone) {
+          const norm = signerPhone.replace(/\D/g, '').slice(-8);
+          if (norm.length >= 8) {
+            const { data } = await supabase.from('leads_juridicos').select('id, nome, email, telefone, tipo_origem').ilike('telefone', `%${norm}`).limit(5);
+            for (const l of data || []) add(l, 'telefone');
+          }
+        }
+        if (signerEmail) {
+          const { data } = await supabase.from('leads_juridicos').select('id, nome, email, telefone, tipo_origem').eq('email', signerEmail).limit(3);
+          for (const l of data || []) add(l, 'email');
+        }
+        if (signerName && found.length < 5) {
+          const firstName = signerName.split(' ')[0];
+          if (firstName.length >= 3) {
+            const { data } = await supabase.from('leads_juridicos').select('id, nome, email, telefone, tipo_origem').ilike('nome', `${firstName}%`).limit(5);
+            for (const l of data || []) add(l, 'nome');
+          }
+        }
+      }
+      setSugestoes(found.slice(0, 8));
+    } catch (err: any) {
+      toast({ title: 'Erro ao buscar leads', description: err.message, variant: 'destructive' });
+    } finally {
+      setLoadingSugestoes(false);
+    }
+  };
+
+  // ── handleVincularLead ────────────────────────────────────────────────────
+  const handleVincularLead = async (leadId: string) => {
+    if (!contrato.key) return;
+    setVinculandoId(leadId);
+    try {
+      // Atualiza se já existe, insere se não
+      const { data: updated, error: updateErr } = await supabase
+        .from('contract_reminders')
+        .update({ lead_id: leadId })
+        .eq('document_key', contrato.key)
+        .select('id');
+      if (updateErr) throw updateErr;
+
+      if (!updated || updated.length === 0) {
+        const { error: insertErr } = await supabase
+          .from('contract_reminders')
+          .insert({ document_key: contrato.key, lead_id: leadId, document_name: contrato.leadNome });
+        if (insertErr) throw insertErr;
+      }
+
+      toast({ title: 'Lead vinculado!', description: 'O lead foi vinculado a este contrato.' });
+      queryClient.invalidateQueries({ queryKey: ['contrato-lead-info', contrato.key] });
+      setShowVincular(false);
+      setSugestoes([]);
+      setVincularSearch('');
+      onRefresh?.();
+    } catch (err: any) {
+      toast({ title: 'Erro ao vincular', description: err.message, variant: 'destructive' });
+    } finally {
+      setVinculandoId(null);
+    }
+  };
 
   // ── Copiar link ──────────────────────────────────────────────────────────
   const handleCopyLink = () => {
@@ -264,6 +361,18 @@ export function ContratoDetailModal({ contrato, isOpen, onClose, onRefresh }: Co
           .eq('email', signerEmail)
           .maybeSingle();
         leadId = found?.id ?? null;
+      }
+
+      if (!leadId && signerPhone) {
+        const norm = signerPhone.replace(/\D/g, '').slice(-8);
+        if (norm.length >= 8) {
+          const { data: found } = await supabase
+            .from('leads_juridicos')
+            .select('id')
+            .ilike('telefone', `%${norm}`)
+            .maybeSingle();
+          leadId = found?.id ?? null;
+        }
       }
 
       if (!leadId && signerName) {
@@ -419,6 +528,92 @@ export function ContratoDetailModal({ contrato, isOpen, onClose, onRefresh }: Co
                         })
                       : null}
                   />
+                </div>
+              )}
+            </div>
+
+            {/* ── Vincular Lead ── */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-[10px] font-semibold text-[#3d2b1f]/40 uppercase tracking-widest">Vincular Lead</p>
+                <button
+                  onClick={() => {
+                    const next = !showVincular;
+                    setShowVincular(next);
+                    if (next) { setSugestoes([]); setVincularSearch(''); buscarLeads(); }
+                    else { if (debounceRef.current) clearTimeout(debounceRef.current); setSugestoes([]); setVincularSearch(''); }
+                  }}
+                  className="flex items-center gap-1 text-[11px] text-[#c9a96e]/60 hover:text-[#c9a96e] transition-colors"
+                >
+                  <Link2 className="h-3 w-3" />
+                  {showVincular ? 'Fechar' : lead ? 'Trocar' : 'Vincular'}
+                </button>
+              </div>
+
+              {showVincular && (
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40 pointer-events-none" />
+                    <Input
+                      placeholder="Nome, email ou telefone..."
+                      value={vincularSearch}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setVincularSearch(val);
+                        if (debounceRef.current) clearTimeout(debounceRef.current);
+                        debounceRef.current = setTimeout(() => buscarLeads(val), 400);
+                      }}
+                      className="pl-8 h-8 text-xs"
+                    />
+                  </div>
+
+                  {loadingSugestoes && (
+                    <div className="flex items-center justify-center py-3">
+                      <Loader2 className="h-4 w-4 animate-spin text-[#c9a96e]/50" />
+                    </div>
+                  )}
+
+                  {!loadingSugestoes && sugestoes.length === 0 && vincularSearch.length >= 2 && (
+                    <p className="text-xs text-muted-foreground/50 text-center py-2">Nenhum lead encontrado</p>
+                  )}
+
+                  {!loadingSugestoes && sugestoes.length === 0 && vincularSearch.length < 2 && (
+                    <p className="text-[11px] text-muted-foreground/40 text-center py-1">Sugestões automáticas por telefone, email e nome</p>
+                  )}
+
+                  {sugestoes.map(s => (
+                    <div
+                      key={s.id}
+                      className="flex items-center gap-2 p-2.5 rounded-xl border border-[#c9a96e]/15 bg-[#faf8f5] dark:bg-[#2a1f14]/30 hover:border-[#c9a96e]/30 transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                          <span className="text-xs font-medium text-foreground truncate">{s.nome || '—'}</span>
+                          <span className={cn(
+                            'text-[9px] px-1 py-0.5 rounded font-semibold shrink-0',
+                            s.matchType === 'telefone' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                            s.matchType === 'email'    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                                                         'bg-[#c9a96e]/15 text-[#3d2b1f] dark:text-[#c9a96e]'
+                          )}>
+                            {s.matchType === 'telefone' ? 'Fone' : s.matchType === 'email' ? 'Email' : 'Nome'}
+                          </span>
+                          {s.tipo_origem === 'trafego' && (
+                            <span className="text-[9px] px-1 py-0.5 rounded font-semibold bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 shrink-0">Tráfego</span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground/60 truncate">{s.email || s.telefone || ''}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleVincularLead(s.id)}
+                        disabled={!!vinculandoId}
+                        className="h-7 px-2.5 text-[11px] text-[#c9a96e] hover:bg-[#c9a96e]/10 shrink-0"
+                      >
+                        {vinculandoId === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Vincular'}
+                      </Button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
