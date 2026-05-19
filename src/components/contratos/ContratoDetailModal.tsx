@@ -115,18 +115,35 @@ export function ContratoDetailModal({ contrato, isOpen, onClose, onRefresh }: Co
     queryKey: ['contrato-lead-info', contrato?.key],
     queryFn: async () => {
       if (!contrato?.key) return null;
-      const { data: reminder } = await supabase
-        .from('contract_reminders')
-        .select('lead_id, signer_name, signer_email, signer_phone, document_name, reminder_stage, last_reminder_at, next_reminder_at, contract_link')
-        .eq('document_key', contrato.key)
-        .maybeSingle();
-      if (!reminder?.lead_id) return { reminder, lead: null };
-      const { data: lead } = await supabase
-        .from('leads_juridicos')
-        .select('id, nome, email, telefone, tipo_acao, lead_state, canal_origem, cpf, rg')
-        .eq('id', reminder.lead_id)
-        .maybeSingle();
-      return { reminder, lead };
+
+      // Busca em paralelo: contract_reminders + detalhes do doc no Clicksign
+      const [{ data: reminder }, csResult] = await Promise.all([
+        supabase
+          .from('contract_reminders')
+          .select('lead_id, signer_name, signer_email, signer_phone, document_name, reminder_stage, last_reminder_at, next_reminder_at, contract_link')
+          .eq('document_key', contrato.key)
+          .maybeSingle(),
+        supabase.functions.invoke('clicksign', {
+          body: { action: 'get_document', document_key: contrato.key },
+        }),
+      ]);
+
+      // Signatários vindos diretamente da API do Clicksign
+      const csSigners: any[] = csResult.data?.document?.signers
+        || csResult.data?.signers
+        || [];
+
+      let lead = null;
+      if (reminder?.lead_id) {
+        const { data } = await supabase
+          .from('leads_juridicos')
+          .select('id, nome, email, telefone, tipo_acao, lead_state, canal_origem, cpf, rg')
+          .eq('id', reminder.lead_id)
+          .maybeSingle();
+        lead = data;
+      }
+
+      return { reminder, lead, csSigners };
     },
     enabled: isOpen && !!contrato?.key,
     staleTime: 30000,
@@ -140,9 +157,10 @@ export function ContratoDetailModal({ contrato, isOpen, onClose, onRefresh }: Co
   const lead = leadInfo?.lead;
   const reminder = leadInfo?.reminder;
 
-  const signerName  = contrato.signatarioNome || reminder?.signer_name  || lead?.nome;
-  const signerEmail = contrato.leadEmail       || reminder?.signer_email || lead?.email;
-  const signerPhone = reminder?.signer_phone   || lead?.telefone;
+  const csFirst     = (leadInfo?.csSigners || [])[0];
+  const signerName  = contrato.signatarioNome || reminder?.signer_name  || lead?.nome  || csFirst?.name;
+  const signerEmail = contrato.leadEmail       || reminder?.signer_email || lead?.email || csFirst?.email;
+  const signerPhone = reminder?.signer_phone   || lead?.telefone         || csFirst?.phone_number;
   const signLink    = reminder?.contract_link  || contrato.linkContrato;
 
   // ── Copiar link ──────────────────────────────────────────────────────────
@@ -337,38 +355,72 @@ export function ContratoDetailModal({ contrato, isOpen, onClose, onRefresh }: Co
           {/* ── Conteúdo ── */}
           <div className="px-5 py-4 space-y-5">
 
-            {/* Signatário */}
+            {/* Signatário(s) */}
             <div>
-              <p className="text-[10px] font-semibold text-[#3d2b1f]/40 uppercase tracking-widest mb-2">Signatário</p>
-              <div className="rounded-xl border border-[#c9a96e]/15 bg-[#faf8f5] dark:bg-[#2a1f14]/30 px-3 divide-y divide-[#c9a96e]/8">
-                <InfoRow
-                  icon={<User className="h-3.5 w-3.5" />}
-                  label="Nome"
-                  value={signerName}
-                />
-                <InfoRow
-                  icon={<Mail className="h-3.5 w-3.5" />}
-                  label="Email"
-                  value={signerEmail}
-                  onCopy={signerEmail ? () => { navigator.clipboard.writeText(signerEmail); toast({ title: 'Email copiado!' }); } : undefined}
-                />
-                <InfoRow
-                  icon={<Phone className="h-3.5 w-3.5" />}
-                  label="Telefone"
-                  value={signerPhone}
-                  onCopy={signerPhone ? () => { navigator.clipboard.writeText(signerPhone); toast({ title: 'Telefone copiado!' }); } : undefined}
-                />
-                <InfoRow
-                  icon={<Calendar className="h-3.5 w-3.5" />}
-                  label="Atualização"
-                  value={contrato.lastUpdate
-                    ? new Date(contrato.lastUpdate).toLocaleDateString('pt-BR', {
-                        day: '2-digit', month: '2-digit', year: '2-digit',
-                        hour: '2-digit', minute: '2-digit',
-                      })
-                    : null}
-                />
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-semibold text-[#3d2b1f]/40 uppercase tracking-widest">
+                  {(leadInfo?.csSigners?.length ?? 0) > 1 ? `Signatários (${leadInfo!.csSigners.length})` : 'Signatário'}
+                </p>
+                {isLoading && <Loader2 className="h-3 w-3 animate-spin text-[#c9a96e]/40" />}
               </div>
+
+              {/* Quando temos múltiplos signatários via Clicksign API */}
+              {(leadInfo?.csSigners?.length ?? 0) > 1 ? (
+                <div className="space-y-2">
+                  {leadInfo!.csSigners.map((s: any, i: number) => (
+                    <div key={i} className="rounded-xl border border-[#c9a96e]/15 bg-[#faf8f5] dark:bg-[#2a1f14]/30 px-3 divide-y divide-[#c9a96e]/8">
+                      <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Nome" value={s.name} />
+                      <InfoRow
+                        icon={<Mail className="h-3.5 w-3.5" />}
+                        label="Email"
+                        value={s.email}
+                        onCopy={s.email ? () => { navigator.clipboard.writeText(s.email); toast({ title: 'Email copiado!' }); } : undefined}
+                      />
+                      {s.phone_number && (
+                        <InfoRow
+                          icon={<Phone className="h-3.5 w-3.5" />}
+                          label="Telefone"
+                          value={s.phone_number}
+                          onCopy={() => { navigator.clipboard.writeText(s.phone_number); toast({ title: 'Telefone copiado!' }); }}
+                        />
+                      )}
+                      <InfoRow
+                        icon={<Calendar className="h-3.5 w-3.5" />}
+                        label={s.signed_at ? 'Assinou em' : 'Pendente'}
+                        value={s.signed_at
+                          ? new Date(s.signed_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+                          : 'Aguardando assinatura'}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-[#c9a96e]/15 bg-[#faf8f5] dark:bg-[#2a1f14]/30 px-3 divide-y divide-[#c9a96e]/8">
+                  <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Nome" value={signerName} />
+                  <InfoRow
+                    icon={<Mail className="h-3.5 w-3.5" />}
+                    label="Email"
+                    value={signerEmail}
+                    onCopy={signerEmail ? () => { navigator.clipboard.writeText(signerEmail); toast({ title: 'Email copiado!' }); } : undefined}
+                  />
+                  <InfoRow
+                    icon={<Phone className="h-3.5 w-3.5" />}
+                    label="Telefone"
+                    value={signerPhone}
+                    onCopy={signerPhone ? () => { navigator.clipboard.writeText(signerPhone); toast({ title: 'Telefone copiado!' }); } : undefined}
+                  />
+                  <InfoRow
+                    icon={<Calendar className="h-3.5 w-3.5" />}
+                    label="Atualização"
+                    value={contrato.lastUpdate
+                      ? new Date(contrato.lastUpdate).toLocaleDateString('pt-BR', {
+                          day: '2-digit', month: '2-digit', year: '2-digit',
+                          hour: '2-digit', minute: '2-digit',
+                        })
+                      : null}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Lead vinculado */}
