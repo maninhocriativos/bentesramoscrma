@@ -178,6 +178,7 @@ export function EditUserModal({ user, open, onOpenChange, onSave }: EditUserModa
                 <SelectItem value="Gerente">Gerente</SelectItem>
                 <SelectItem value="Advogado">Advogado</SelectItem>
                 <SelectItem value="Secretaria">Secretaria</SelectItem>
+                <SelectItem value="Estagiário">Estagiário</SelectItem>
               </SelectContent>
             </Select>
           </div>

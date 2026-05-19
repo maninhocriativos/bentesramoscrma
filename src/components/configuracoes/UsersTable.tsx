@@ -100,6 +100,8 @@ export function UsersTable() {
         return 'bg-secondary text-secondary-foreground border-secondary';
       case 'Secretaria':
         return 'bg-muted text-muted-foreground border-muted';
+      case 'Estagiário':
+        return 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700';
       default:
         return 'bg-muted text-muted-foreground border-muted';
     }

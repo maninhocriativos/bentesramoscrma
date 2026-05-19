@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, ReactNode } fro
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
-type AppRole = 'Administrador' | 'Gerente' | 'Advogado' | 'Secretaria';
+type AppRole = 'Administrador' | 'Gerente' | 'Advogado' | 'Secretaria' | 'Estagiário';
 
 export interface Perfil {
   id: string;
@@ -24,6 +24,7 @@ interface PerfilContextValue {
   isGerente: boolean;
   isAdvogado: boolean;
   isSecretaria: boolean;
+  isEstagiario: boolean;
   canDelete: boolean;
   canAccessSettings: boolean;
   canAccessProcessos: boolean;
@@ -79,7 +80,7 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
     if (!rolesResult.error && rolesResult.data && rolesResult.data.length > 0) {
       userRoles = rolesResult.data.map(r => r.role as AppRole);
     } else if (perfilData?.cargo) {
-      const validRoles: AppRole[] = ['Administrador', 'Gerente', 'Advogado', 'Secretaria'];
+      const validRoles: AppRole[] = ['Administrador', 'Gerente', 'Advogado', 'Secretaria', 'Estagiário'];
       const cargoAsRole = perfilData.cargo as AppRole;
       if (validRoles.includes(cargoAsRole)) {
         userRoles = [cargoAsRole];
@@ -137,12 +138,13 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
   const isGerente    = roles.includes('Gerente');
   const isAdvogado   = roles.includes('Advogado');
   const isSecretaria = roles.includes('Secretaria');
+  const isEstagiario = roles.includes('Estagiário');
 
   const canDelete           = isAdmin || isGerente;
   const canAccessSettings   = isAdmin;
-  const canAccessProcessos  = isAdmin || isGerente || isAdvogado || isSecretaria;
-  const canAccessLeads      = isAdmin || isGerente || isAdvogado || isSecretaria;
-  const canAccessDashboard  = isAdmin || isGerente || isAdvogado || isSecretaria;
+  const canAccessProcessos  = isAdmin || isGerente || isAdvogado || isSecretaria || isEstagiario;
+  const canAccessLeads      = isAdmin || isGerente || isAdvogado || isSecretaria || isEstagiario;
+  const canAccessDashboard  = isAdmin || isGerente || isAdvogado || isSecretaria || isEstagiario;
   const canAccessAgenda     = true;
   const canAccessTarefas    = true;
   const canAccessFinanceiro = isAdmin || isGerente;
@@ -159,7 +161,7 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
   return (
     <PerfilContext.Provider value={{
       perfil, loading, cargo, roles,
-      isAdmin, isGerente, isAdvogado, isSecretaria,
+      isAdmin, isGerente, isAdvogado, isSecretaria, isEstagiario,
       canDelete, canAccessSettings, canAccessProcessos, canAccessLeads,
       canAccessDashboard, canAccessAgenda, canAccessTarefas, canAccessFinanceiro,
       needsOnboarding, fullName, pagePermissions, canAccessPage, updatePerfil, refetch,
@@ -174,7 +176,7 @@ export function usePerfil(): PerfilContextValue {
   if (!context) {
     return {
       perfil: null, loading: true, cargo: 'Secretaria', roles: [],
-      isAdmin: false, isGerente: false, isAdvogado: false, isSecretaria: false,
+      isAdmin: false, isGerente: false, isAdvogado: false, isSecretaria: false, isEstagiario: false,
       canDelete: false, canAccessSettings: false, canAccessProcessos: false,
       canAccessLeads: false, canAccessDashboard: false, canAccessAgenda: true,
       canAccessTarefas: true, canAccessFinanceiro: false, needsOnboarding: false,

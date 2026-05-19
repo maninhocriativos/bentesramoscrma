@@ -173,6 +173,16 @@ export default function ConfiguracoesPage() {
                       Acesso operacional: pode cadastrar e editar leads e processos, mas não pode excluir. Sem acesso às configurações.
                     </p>
                   </div>
+
+                  <div className="p-5 rounded-xl bg-gradient-to-br from-violet-50 to-violet-50/30 border border-violet-200 shadow-soft dark:from-violet-950/20 dark:to-violet-950/10 dark:border-violet-800">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-3 h-3 rounded-full bg-violet-400"></div>
+                      <h4 className="font-semibold text-violet-700 dark:text-violet-300">Estagiário</h4>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Acesso supervisionado: mesma base da Secretaria, com acesso controlado por tela individualmente pelo administrador.
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
