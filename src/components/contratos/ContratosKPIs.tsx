@@ -146,7 +146,7 @@ export function ContratosKPIs({ data, onRefresh, onSendContract, refreshing = fa
         {/* ── Ações ── */}
         <div className="flex sm:flex-col items-center gap-2 shrink-0 w-full sm:w-auto">
           {trafegoFinalizados > 0 && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200 dark:bg-blue-950/30 dark:border-blue-800 mr-auto sm:mr-0">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200 dark:bg-blue-950/30 dark:border-blue-800 mr-auto sm:mr-0" title="Total de contratos originados por tráfego pago">
               <Megaphone className="h-3.5 w-3.5 text-blue-600" />
               <span className="text-sm font-semibold text-blue-700 dark:text-blue-400">{trafegoFinalizados}</span>
               <span className="text-[10px] text-blue-600/70">Tráfego</span>
