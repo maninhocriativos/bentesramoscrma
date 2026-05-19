@@ -1145,6 +1145,41 @@ serve(async (req: Request) => {
           }
         }
         } // end isaEscEnabled check
+      } else if (!humanAttendanceActive && isLeadBlocked && leadId) {
+        // ============================================
+        // CLIENTE COM CONTRATO — veio pela linha de tráfego
+        // Rota para isa-escritorio-reply para responder sobre processos
+        // ============================================
+        const lockKeyContrato = `isa_esc_lead_${leadId}`;
+        const { data: existingContratoLock } = await supabase
+          .from('system_events').select('id').eq('tipo', 'isa_processing_lock')
+          .eq('dados->>lock_key', lockKeyContrato)
+          .gte('created_at', new Date(Date.now() - 15000).toISOString()).maybeSingle();
+
+        if (!existingContratoLock) {
+          await supabase.from('system_events').insert({
+            tipo: 'isa_processing_lock', fonte: 'zapi_webhook',
+            dados: { lock_key: lockKeyContrato, lead_id: leadId, message_id: normalized.messageId }
+          });
+          try {
+            const { data: escResp } = await supabase.functions.invoke('isa-escritorio-reply', {
+              body: {
+                lead_id: leadId,
+                mensagem: normalized.message,
+                subscriber_id: gerarSubscriberId(normalized.phone),
+                subscriber_nome: normalized.name || lead?.nome || normalized.phone,
+                instance_id: zapiConfig?.instance_id,
+                instance_name: zapiConfig?.name,
+                zapi_instance_id: zapiConfig?.instance_id,
+                zapi_token: zapiConfig?.token,
+                zapi_client_token: zapiConfig?.client_token,
+              },
+            });
+            console.log(`[Z-API Webhook] 🏢 Cliente contrato ${leadId} → isa-escritorio-reply:`, escResp?.respondeu);
+          } catch (e: any) {
+            console.error('[Z-API Webhook] Erro isa-escritorio-reply (contrato):', e.message);
+          }
+        }
       } else {
         if (humanAttendanceActive) {
           console.log(`[Z-API Webhook] 👤 Human attendance active for lead ${leadId}, skipping Isa`);

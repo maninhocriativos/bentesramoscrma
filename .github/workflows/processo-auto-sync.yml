@@ -25,7 +25,7 @@ jobs:
     steps:
       - name: Disparar processo-auto-sync
         run: |
-          MAX="${{ github.event.inputs.max || '50' }}"
+          MAX="${{ github.event.inputs.max || '15' }}"
           FORCE="${{ github.event.inputs.force_all || 'false' }}"
 
           echo "Disparando sync: max=$MAX, force_all=$FORCE"
