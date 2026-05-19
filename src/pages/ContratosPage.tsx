@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { ContratosKPIs } from '@/components/contratos/ContratosKPIs';
+import { ContratosAnalytics } from '@/components/contratos/ContratosAnalytics';
 import { ContratosTable } from '@/components/contratos/ContratosTable';
 import { ModelosContratos } from '@/components/contratos/ModelosContratos';
 import { EnviarKitModal } from '@/components/contratos/EnviarKitModal';
@@ -115,6 +116,27 @@ export default function ContratosPage() {
         }
       }
 
+      // Fallback: match by signer email for docs whose lead_id is missing in contract_reminders
+      const emailsWithoutLead = documents
+        .filter((doc: any) => {
+          const k = doc?.key;
+          return k && !leadIdByDocKey.has(k) && doc.signers?.[0]?.email;
+        })
+        .map((doc: any) => doc.signers[0].email as string);
+      const uniqueEmailsWithoutLead = [...new Set(emailsWithoutLead)].filter(Boolean);
+      const tipoOrigemByEmail = new Map<string, string>();
+      if (uniqueEmailsWithoutLead.length > 0) {
+        const { data: leadsByEmail } = await supabase
+          .from('leads_juridicos')
+          .select('id, email, tipo_origem, origem')
+          .in('email', uniqueEmailsWithoutLead);
+        for (const l of (leadsByEmail || []) as any[]) {
+          if (!l.email) continue;
+          const isTraffic = l.tipo_origem === 'trafego' || (l.origem || '').includes('Tráfego');
+          tipoOrigemByEmail.set(l.email, isTraffic ? 'trafego' : (l.tipo_origem || 'escritorio'));
+        }
+      }
+
       const mappedContracts: ContratoComStatus[] = documents.map((doc: any) => {
         const key: string | undefined = doc?.key;
         const linkContrato =
@@ -128,7 +150,9 @@ export default function ContratosPage() {
         const categoria = pathParts.length > 1 ? pathParts[0] : null;
         const leadEmail = doc.signers?.[0]?.email || null;
         const leadId = key ? leadIdByDocKey.get(key) : undefined;
-        const tipoOrigem = leadId ? tipoOrigemByLeadId.get(leadId) || null : null;
+        const tipoOrigem = leadId
+          ? (tipoOrigemByLeadId.get(leadId) || null)
+          : (leadEmail ? (tipoOrigemByEmail.get(leadEmail) || null) : null);
         return {
           id: key,
           key,
@@ -214,6 +238,9 @@ export default function ContratosPage() {
           </div>
         ) : (
           <>
+            {/* Analytics de Contratos */}
+            <ContratosAnalytics contratos={contratos} />
+
             {/* KPIs com gráfico */}
             <ContratosKPIs
               data={kpiData}
