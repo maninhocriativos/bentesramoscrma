@@ -257,6 +257,19 @@ export function ContratoDetailModal({ contrato, isOpen, onClose, onRefresh }: Co
         leadId = found?.id ?? null;
       }
 
+      // Último fallback: extrai o nome do título do documento ("Kit - Nome Cliente")
+      if (!leadId) {
+        const nomeDoTitulo = contrato.leadNome.replace(/^Kit\s*[-–—]\s*/i, '').trim();
+        if (nomeDoTitulo.length > 3) {
+          const { data: found } = await supabase
+            .from('leads_juridicos')
+            .select('id')
+            .ilike('nome', nomeDoTitulo)
+            .maybeSingle();
+          leadId = found?.id ?? null;
+        }
+      }
+
       if (!leadId) {
         toast({
           title: 'Lead não encontrado',
