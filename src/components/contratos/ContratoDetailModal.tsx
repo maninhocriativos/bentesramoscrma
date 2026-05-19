@@ -5,7 +5,7 @@ import {
   FileSignature, Clock, CheckCircle2, XCircle, AlertCircle,
   ExternalLink, MessageSquare, Loader2, AlertTriangle,
   Calendar, Mail, User, FileText, Phone, Copy, Ban,
-  Send, RefreshCw,
+  Send, RefreshCw, Megaphone,
 } from 'lucide-react';
 import { ContratoComStatus } from '@/pages/ContratosPage';
 import { cn } from '@/lib/utils';
@@ -108,6 +108,7 @@ export function ContratoDetailModal({ contrato, isOpen, onClose, onRefresh }: Co
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
   const [cancelingDoc, setCancelingDoc] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [markingTrafego, setMarkingTrafego] = useState(false);
 
   // ── Buscar dados do signatário e lead ────────────────────────────────────
   const { data: leadInfo, isLoading } = useQuery({
@@ -228,6 +229,61 @@ export function ContratoDetailModal({ contrato, isOpen, onClose, onRefresh }: Co
     } finally {
       setCancelingDoc(false);
       setShowCancelConfirm(false);
+    }
+  };
+
+  // ── Marcar / desmarcar como tráfego ─────────────────────────────────────
+  const handleToggleTrafego = async () => {
+    setMarkingTrafego(true);
+    const novoValor = contrato.tipoOrigem === 'trafego' ? null : 'trafego';
+    try {
+      let leadId: string | null = leadInfo?.reminder?.lead_id ?? null;
+
+      if (!leadId && signerEmail) {
+        const { data: found } = await supabase
+          .from('leads_juridicos')
+          .select('id')
+          .eq('email', signerEmail)
+          .maybeSingle();
+        leadId = found?.id ?? null;
+      }
+
+      if (!leadId && signerName) {
+        const { data: found } = await supabase
+          .from('leads_juridicos')
+          .select('id')
+          .ilike('nome', signerName)
+          .maybeSingle();
+        leadId = found?.id ?? null;
+      }
+
+      if (!leadId) {
+        toast({
+          title: 'Lead não encontrado',
+          description: 'Não foi possível vincular o contrato a um lead. Verifique se o lead está cadastrado.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from('leads_juridicos')
+        .update({ tipo_origem: novoValor })
+        .eq('id', leadId);
+      if (error) throw error;
+
+      toast({
+        title: novoValor === 'trafego' ? 'Marcado como Tráfego' : 'Origem removida',
+        description: novoValor === 'trafego'
+          ? 'O lead foi marcado como tráfego pago.'
+          : 'A marcação de tráfego foi removida.',
+      });
+      onRefresh?.();
+      onClose();
+    } catch (err: any) {
+      toast({ title: 'Erro ao atualizar', description: err.message, variant: 'destructive' });
+    } finally {
+      setMarkingTrafego(false);
     }
   };
 
@@ -393,7 +449,27 @@ export function ContratoDetailModal({ contrato, isOpen, onClose, onRefresh }: Co
             )}
 
             {/* Ações principais */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Marcar/desmarcar tráfego */}
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  'h-8 gap-1.5 text-xs',
+                  contrato.tipoOrigem === 'trafego'
+                    ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                    : 'border-blue-200 text-blue-600 hover:bg-blue-50'
+                )}
+                onClick={handleToggleTrafego}
+                disabled={markingTrafego}
+              >
+                {markingTrafego
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <Megaphone className="h-3.5 w-3.5" />
+                }
+                {contrato.tipoOrigem === 'trafego' ? 'Tráfego (ativo)' : 'Tráfego'}
+              </Button>
+
               {/* Cancelar (só se cancelável) */}
               {isCancelable && (
                 <Button
