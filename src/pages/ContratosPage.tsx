@@ -116,25 +116,16 @@ export default function ContratosPage() {
         }
       }
 
-      // Fallback: match by signer email for docs whose lead_id is missing in contract_reminders
-      const emailsWithoutLead = documents
-        .filter((doc: any) => {
-          const k = doc?.key;
-          return k && !leadIdByDocKey.has(k) && doc.signers?.[0]?.email;
-        })
-        .map((doc: any) => doc.signers[0].email as string);
-      const uniqueEmailsWithoutLead = [...new Set(emailsWithoutLead)].filter(Boolean);
-      const tipoOrigemByEmail = new Map<string, string>();
-      if (uniqueEmailsWithoutLead.length > 0) {
-        const { data: leadsByEmail } = await supabase
-          .from('leads_juridicos')
-          .select('id, email, tipo_origem, origem')
-          .in('email', uniqueEmailsWithoutLead);
-        for (const l of (leadsByEmail || []) as any[]) {
-          if (!l.email) continue;
-          const isTraffic = l.tipo_origem === 'trafego' || (l.origem || '').includes('Tráfego');
-          tipoOrigemByEmail.set(l.email, isTraffic ? 'trafego' : (l.tipo_origem || 'escritorio'));
-        }
+      // Busca todos os leads de tráfego para matching por email e nome
+      const { data: trafegoLeadsData } = await supabase
+        .from('leads_juridicos')
+        .select('nome, email')
+        .or('tipo_origem.eq.trafego,origem.ilike.*Tráfego*');
+      const trafegoEmailSet = new Set<string>();
+      const trafegoNomeSet  = new Set<string>();
+      for (const l of (trafegoLeadsData || []) as any[]) {
+        if (l.email) trafegoEmailSet.add(l.email.toLowerCase().trim());
+        if (l.nome)  trafegoNomeSet.add(l.nome.toLowerCase().trim());
       }
 
       const mappedContracts: ContratoComStatus[] = documents.map((doc: any) => {
@@ -150,9 +141,16 @@ export default function ContratosPage() {
         const categoria = pathParts.length > 1 ? pathParts[0] : null;
         const leadEmail = doc.signers?.[0]?.email || null;
         const leadId = key ? leadIdByDocKey.get(key) : undefined;
-        const tipoOrigem = leadId
-          ? (tipoOrigemByLeadId.get(leadId) || null)
-          : (leadEmail ? (tipoOrigemByEmail.get(leadEmail) || null) : null);
+
+        // Determina origem: via lead_id → email → nome extraído do filename
+        const tipoOrigem = (() => {
+          if (leadId && tipoOrigemByLeadId.has(leadId)) return tipoOrigemByLeadId.get(leadId)!;
+          if (leadEmail && trafegoEmailSet.has(leadEmail.toLowerCase().trim())) return 'trafego';
+          const nomeFull = (doc.filename?.replace(/\.[^/.]+$/, '') || '');
+          const nomeCliente = nomeFull.replace(/^Kit\s*[-–—]\s*/i, '').trim().toLowerCase();
+          if (nomeCliente.length > 3 && trafegoNomeSet.has(nomeCliente)) return 'trafego';
+          return null;
+        })();
         return {
           id: key,
           key,
