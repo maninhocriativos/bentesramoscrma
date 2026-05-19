@@ -82,19 +82,24 @@ const menuSections: MenuSection[] = [
 
 export function AppSidebar() {
   const location = useLocation();
-  const { 
-    canAccessSettings, 
-    canAccessProcessos, 
-    canAccessLeads, 
-    canAccessDashboard, 
+  const {
+    canAccessSettings,
+    canAccessProcessos,
+    canAccessLeads,
+    canAccessDashboard,
     canAccessFinanceiro,
+    canAccessPage,
     cargo,
     fullName,
   } = usePerfil();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === 'collapsed';
 
-  const canShow = (visibility: MenuItemVisibility) => {
+  const canShow = (visibility: MenuItemVisibility, url: string) => {
+    // Check individual page permission first
+    const pageId = url.replace(/^\//, '');
+    if (!canAccessPage(pageId)) return false;
+    // Then check role-based visibility
     if (visibility === 'admin-only') return canAccessSettings;
     if (visibility === 'processos-only') return canAccessProcessos;
     if (visibility === 'leads-only') return canAccessLeads;
@@ -134,7 +139,7 @@ export function AppSidebar() {
       
       <SidebarContent className="px-3 py-1 overflow-y-auto scrollbar-thin scrollbar-thumb-sidebar-accent/40 scrollbar-track-transparent">
         {menuSections.map((section) => {
-          const visibleItems = section.items.filter(item => canShow(item.visibility));
+          const visibleItems = section.items.filter(item => canShow(item.visibility, item.url));
           if (visibleItems.length === 0) return null;
 
           return (

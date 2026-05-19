@@ -34,6 +34,8 @@ interface PerfilContextValue {
   canAccessFinanceiro: boolean;
   needsOnboarding: boolean;
   fullName: string | null;
+  pagePermissions: Record<string, boolean>;
+  canAccessPage: (pageId: string) => boolean;
   updatePerfil: (data: Partial<Perfil>) => Promise<{ error: Error | null }>;
   refetch: () => Promise<void>;
 }
@@ -46,6 +48,7 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles]                 = useState<AppRole[]>([]);
   const [loading, setLoading]             = useState(true);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [pagePermissions, setPagePermissions] = useState<Record<string, boolean>>({});
 
   // Controla se já houve carga inicial — após isso loading nunca mais vira true
   const initialLoadDone = useRef(false);
@@ -58,9 +61,10 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
       setLoading(true);
     }
 
-    const [perfilResult, rolesResult] = await Promise.all([
+    const [perfilResult, rolesResult, permsResult] = await Promise.all([
       supabase.from('perfis').select('*').eq('id', userId).maybeSingle(),
       supabase.from('user_roles').select('role').eq('user_id', userId),
+      supabase.from('user_page_permissions' as any).select('page_id, enabled').eq('user_id', userId),
     ]);
 
     let perfilData: Perfil | null = null;
@@ -83,6 +87,14 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
     }
 
     setRoles(userRoles);
+
+    // Page permissions
+    const permsMap: Record<string, boolean> = {};
+    for (const p of (permsResult as any)?.data || []) {
+      permsMap[p.page_id] = p.enabled;
+    }
+    setPagePermissions(permsMap);
+
     initialLoadDone.current = true;
     setLoading(false);
   };
@@ -135,6 +147,12 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
   const canAccessTarefas    = true;
   const canAccessFinanceiro = isAdmin || isGerente;
 
+  // Admins always bypass per-page restrictions
+  const canAccessPage = (pageId: string): boolean => {
+    if (isAdmin) return true;
+    return pagePermissions[pageId] ?? true;
+  };
+
   const cargo    = perfil?.cargo || (roles[0] as string) || 'Secretaria';
   const fullName = perfil?.nome ? `${perfil.nome}${perfil.sobrenome ? ' ' + perfil.sobrenome : ''}` : null;
 
@@ -144,7 +162,7 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
       isAdmin, isGerente, isAdvogado, isSecretaria,
       canDelete, canAccessSettings, canAccessProcessos, canAccessLeads,
       canAccessDashboard, canAccessAgenda, canAccessTarefas, canAccessFinanceiro,
-      needsOnboarding, fullName, updatePerfil, refetch,
+      needsOnboarding, fullName, pagePermissions, canAccessPage, updatePerfil, refetch,
     }}>
       {children}
     </PerfilContext.Provider>
@@ -160,7 +178,7 @@ export function usePerfil(): PerfilContextValue {
       canDelete: false, canAccessSettings: false, canAccessProcessos: false,
       canAccessLeads: false, canAccessDashboard: false, canAccessAgenda: true,
       canAccessTarefas: true, canAccessFinanceiro: false, needsOnboarding: false,
-      fullName: null,
+      fullName: null, pagePermissions: {}, canAccessPage: () => true,
       updatePerfil: async () => ({ error: new Error('PerfilProvider not mounted') }),
       refetch: async () => {},
     };

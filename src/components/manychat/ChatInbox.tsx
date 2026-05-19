@@ -1788,7 +1788,7 @@ const ManyChatInboxContent = () => {
                     );
                   })()}
                 </div>
-                <div className="flex items-center gap-1.5 mt-0.5 overflow-hidden max-h-[16px] md:max-h-none relative z-10">
+                <div className="flex items-center gap-1.5 mt-0.5 overflow-hidden max-h-[16px] md:max-h-none">
                   <ActivityIndicator subscriber={selectedSubscriber} showText />
                   {isTyping(selectedSubscriber.subscriber_id) && <span className="text-[11px] md:text-xs text-[#00A884] font-medium animate-pulse">digitando...</span>}
                   <div className="hidden md:contents">
