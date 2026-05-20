@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
@@ -165,6 +165,8 @@ const ManyChatInboxContent = () => {
   const [leadPerdidoLoading, setLeadPerdidoLoading]     = useState(false);
   const [editingLeadName, setEditingLeadName]           = useState(false);
   const [editingLeadNameValue, setEditingLeadNameValue] = useState("");
+  const [hasMoreMessages, setHasMoreMessages]           = useState(false);
+  const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
 
   // ─── Hooks ──────────────────────────────────────────────────────────────────
 
@@ -187,6 +189,11 @@ const ManyChatInboxContent = () => {
   const bumpTimerRef             = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastReadRef              = useRef<Record<string, string>>({});
   const messagesEndRef           = useRef<HTMLDivElement>(null);
+  const messagesContainerRef     = useRef<HTMLDivElement>(null);
+  const oldestMsgCursorRef       = useRef<string | null>(null);
+  const isPrependingRef          = useRef(false);
+  const beforePrependScrollRef   = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
+  const isLoadingMoreRef         = useRef(false);
   const fileInputRef             = useRef<HTMLInputElement>(null);
   const nameInputRef             = useRef<HTMLInputElement>(null);
   const nameSavingRef            = useRef(false);
@@ -537,7 +544,16 @@ const ManyChatInboxContent = () => {
     ].sort(compareMessagesChronological);
   };
 
-  useEffect(() => { scrollToBottom(); }, [messages]);
+  useEffect(() => { if (!isPrependingRef.current) scrollToBottom(); }, [messages]);
+
+  // Restaura posição do scroll ao fazer prepend de mensagens antigas
+  useLayoutEffect(() => {
+    if (beforePrependScrollRef.current && messagesContainerRef.current) {
+      const { scrollHeight: prevH, scrollTop: prevT } = beforePrependScrollRef.current;
+      messagesContainerRef.current.scrollTop = prevT + (messagesContainerRef.current.scrollHeight - prevH);
+      beforePrependScrollRef.current = null;
+    }
+  }, [messages]);
 
   useEffect(() => {
     const leadId = searchParams.get("lead_id");
@@ -762,6 +778,8 @@ const ManyChatInboxContent = () => {
       if (cachedMessages && cachedMessages.length > 0) {
         const sortedCache = [...cachedMessages].sort(compareMessagesChronological);
         setMessages(sortedCache);
+        oldestMsgCursorRef.current = sortedCache.length > 0 ? sortedCache[0].created_at : null;
+        setHasMoreMessages(sortedCache.length >= 80);
         dedupKeysRef.current = new Set(sortedCache.map(m => getMessageDedupeKey(m)));
         sortedCache.forEach(m => dedupKeysRef.current.add(`db_${m.id}`));
         setIsLoadingMessages(false);
@@ -921,15 +939,23 @@ const ManyChatInboxContent = () => {
       const leadId = currentSub?.lead_id;
       const idsArray = buildPossibleSubscriberIds(subscriberId, phoneClean);
       const idsFilter = idsArray.map(id => `subscriber_id.eq.${id}`).join(",");
+      const PAGE_SIZE = 80;
+      setHasMoreMessages(false);
+      oldestMsgCursorRef.current = null;
       let query = supabase.from("manychat_mensagens" as any).select("*").order("created_at", { ascending: false });
       if (leadId) query = query.or(`${idsFilter},lead_id.eq.${leadId}`);
       else query = query.or(idsFilter);
-      if (!loadAll) query = query.limit(1000);
+      if (!loadAll) query = query.limit(PAGE_SIZE);
       const { data, error } = await query;
       if (error) throw error;
       const messagesMap = new Map<string, Message>();
       (data as any[])?.forEach(msg => { const key = getMessageDedupeKey(msg); if (!messagesMap.has(key)) messagesMap.set(key, msg as Message); });
       const uniqueMessages = Array.from(messagesMap.values()).sort(compareMessagesChronological);
+      if (!loadAll) {
+        const hasMore = uniqueMessages.length >= PAGE_SIZE;
+        setHasMoreMessages(hasMore);
+        oldestMsgCursorRef.current = uniqueMessages.length > 0 ? uniqueMessages[0].created_at : null;
+      }
       messagesCacheRef.current.set(subscriberId, uniqueMessages);
       messageCacheTimestampRef.current.set(subscriberId, Date.now());
       dedupKeysRef.current = new Set(uniqueMessages.map(m => getMessageDedupeKey(m)));
@@ -953,6 +979,65 @@ const ManyChatInboxContent = () => {
       });
     } catch (error) { console.error("Erro ao carregar mensagens:", error); }
     finally { setIsLoadingMessages(false); }
+  };
+
+  // ─── loadMoreMessages — carrega mensagens mais antigas ao subir o scroll ──────
+
+  const loadMoreMessages = async () => {
+    if (isLoadingMoreRef.current || !oldestMsgCursorRef.current) return;
+    const sub = selectedSubscriberRef.current;
+    if (!sub) return;
+
+    isLoadingMoreRef.current = true;
+    setIsLoadingMoreMessages(true);
+    isPrependingRef.current = true;
+
+    if (messagesContainerRef.current) {
+      beforePrependScrollRef.current = {
+        scrollHeight: messagesContainerRef.current.scrollHeight,
+        scrollTop:    messagesContainerRef.current.scrollTop,
+      };
+    }
+
+    try {
+      const PAGE_SIZE = 80;
+      const phoneClean = sub.telefone?.replace(/\D/g, "") || "";
+      const idsArray   = buildPossibleSubscriberIds(sub.subscriber_id, phoneClean);
+      const idsFilter  = idsArray.map(id => `subscriber_id.eq.${id}`).join(",");
+      let query = supabase
+        .from("manychat_mensagens" as any)
+        .select("*")
+        .lt("created_at", oldestMsgCursorRef.current!)
+        .order("created_at", { ascending: false })
+        .limit(PAGE_SIZE);
+      if (sub.lead_id) query = query.or(`${idsFilter},lead_id.eq.${sub.lead_id}`);
+      else             query = query.or(idsFilter);
+
+      const { data, error } = await query;
+      if (error || !data || (data as any[]).length === 0) {
+        setHasMoreMessages(false);
+        return;
+      }
+
+      const olderMsgs = (data as Message[]).sort(compareMessagesChronological);
+      oldestMsgCursorRef.current = olderMsgs[0].created_at;
+      setHasMoreMessages((data as any[]).length >= PAGE_SIZE);
+
+      setMessages(prev => {
+        const existingIds = new Set(prev.map(m => m.id));
+        const newOld = olderMsgs.filter(m => !existingIds.has(m.id));
+        if (newOld.length === 0) return prev;
+        const combined = [...newOld, ...prev];
+        messagesCacheRef.current.set(sub.subscriber_id, combined);
+        return combined;
+      });
+    } catch (err) {
+      console.error("[loadMoreMessages]", err);
+    } finally {
+      setIsLoadingMoreMessages(false);
+      isLoadingMoreRef.current = false;
+      setTimeout(() => { isPrependingRef.current = false; }, 50);
+    }
   };
 
   const assignConversation = async (memberId: string) => {
@@ -1941,13 +2026,22 @@ const ManyChatInboxContent = () => {
             <ConversationSearch open={showConversationSearch} onClose={() => setShowConversationSearch(false)} messages={messages} onHighlight={handleSearchHighlight} isDark={isDark} themeClasses={themeClasses} />
 
             {/* Mensagens */}
-            <div className={`flex-1 overflow-y-auto overflow-x-hidden px-4 md:px-16 lg:px-[63px] py-4 ${themeClasses.bg}`}>
+            <div
+              ref={messagesContainerRef}
+              onScroll={(e) => { if (e.currentTarget.scrollTop < 200 && !isLoadingMoreRef.current) loadMoreMessages(); }}
+              className={`flex-1 overflow-y-auto overflow-x-hidden px-4 md:px-16 lg:px-[63px] py-4 ${themeClasses.bg}`}
+            >
               {isLoadingMessages ? (
                 <div className="h-full flex items-center justify-center"><RefreshCw className={`h-8 w-8 animate-spin ${themeClasses.secondaryText}`} /></div>
               ) : messages.length === 0 ? (
                 <div className="h-full flex items-center justify-center"><div className={`${isDark ? "bg-[#332F24]" : "bg-[#FCF4CB]"} rounded-xl px-6 py-4 max-w-md shadow-lg`}><p className={`text-[13px] ${themeClasses.secondaryText} text-center`}>🔒 As mensagens são protegidas com criptografia de ponta a ponta.</p></div></div>
               ) : (
                 <div className="space-y-1 max-w-[750px] mx-auto">
+                  {isLoadingMoreMessages && (
+                    <div className="flex justify-center py-3">
+                      <RefreshCw className={`h-4 w-4 animate-spin ${themeClasses.secondaryText}`} />
+                    </div>
+                  )}
                   {messages.filter(m => !deletedForMeIds.has(m.id) && !(m as any).deleted_for_all).sort(compareMessagesChronological).map((message, index, filteredMsgs) => {
                     const dateLabel = getDateLabel(filteredMsgs, index);
                     const isOutgoing = message.direcao === "saida";
