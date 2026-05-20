@@ -228,19 +228,26 @@ SE O ASSUNTO NÃO FOR JURÍDICO (ex: limpeza, serviços, produtos, outros):
   4. Comprovante do problema (cobrança indevida, negativação, cláusula abusiva, etc.)
 
 ⚠️ REGRA ABSOLUTA — IDENTIFICAÇÃO DE DOCUMENTOS (NUNCA ALUCINÉ):
-- Ao receber uma IMAGEM: olhe visualmente o que é. RG → marcar_doc_recebido doc_type="rg_frente" ou "rg_verso". CNH → "cnh_frente". CPF → "cpf". Outro documento de identidade → "rg".
+- Ao receber uma IMAGEM: olhe visualmente o que é. RG → marcar_doc_recebido doc_type="rg_frente" ou "rg_verso". CNH → "cnh_frente". CPF → "cpf". Outro documento de identidade → "rg_frente".
 - Ao receber um PDF ou arquivo: provavelmente é contrato ou extrato → marcar_doc_recebido doc_type="contrato_ou_extrato".
 - NUNCA diga que recebeu um documento que NÃO está em DOCUMENTOS RECEBIDOS e NÃO foi enviado NESTA mensagem.
 - NUNCA suponha que recebeu mais de um documento de uma vez, salvo se o cliente enviou múltiplos arquivos.
 - Após confirmar o documento recebido: peça o PRÓXIMO pendente (apenas um).
 
+✅ IDENTIDADE COMPLETA — quando parar de pedir documentos de identidade:
+- CNH frente recebida = identidade COMPLETA. Marque "cnh_frente" E chame também marcar_doc_recebido com doc_type="rg_verso" para fechar o item do checklist. NÃO peça mais nenhum documento de identidade.
+- CPF recebido + RG frente recebido = identidade COMPLETA. O CPF contém todos os dados pessoais necessários. Chame também marcar_doc_recebido com doc_type="rg_verso" para fechar o checklist. Avance para pedir o contrato/extrato.
+- RG frente + qualquer documento com CPF visível = identidade COMPLETA.
+- Se o cliente JÁ ENVIOU cpf E rg_frente (mesmo em ordens diferentes), NÃO peça mais o rg_verso. Avance para o próximo documento da lista.
+
 🔄 FLUXO CORRETO (um documento por vez):
 1. Entender o caso + confirmar que pode ajudar
-2. Pedir RG ou CNH (um só, primeiro)
-3. Receber RG/CNH → marcar → pedir CPF
-4. Receber CPF → marcar → pedir contrato/extrato do banco
-5. Receber contrato → marcar → pedir comprovante do problema
-6. Ao receber todos: transicionar_estado to_state="DOCS_PENDING"
+2. Pedir documento de identidade (RG frente OU CNH)
+3. Receber RG frente → marcar → pedir CPF (se ainda não recebido)
+4. Receber CPF → marcar rg_verso como recebido também → pedir contrato/extrato do banco
+5. Receber CNH frente → marcar cnh_frente + rg_verso → pedir contrato/extrato do banco
+6. Receber contrato → marcar → pedir comprovante do problema
+7. Ao receber todos: transicionar_estado to_state="DOCS_PENDING"
 - NUNCA encerre a conversa sem tentar fechar o contrato.
 
 📋 CLIENTES SEM CONTRATO — NÃO aposentados/pensionistas/servidores:
@@ -888,18 +895,56 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
           cnh: 'CNH recebida (verificar frente e verso)',
           comprovante_residencia: 'Comprovante de residencia',
         };
+        const now = new Date().toISOString();
         const { data, error } = await supabase.from('lead_docs_checklist').upsert({
           lead_id,
           doc_type: normalizedDocType,
           doc_label: labels[normalizedDocType] || normalizedDocType,
           is_required: true,
           received: true,
-          received_at: new Date().toISOString(),
+          received_at: now,
           file_id: file_id || null,
           notes: notes || null,
-          updated_at: new Date().toISOString(),
+          updated_at: now,
         }, { onConflict: 'lead_id,doc_type' }).select().single();
         if (error) throw error;
+
+        // ── Regra de identidade completa ────────────────────────────────────
+        // CNH frente = identidade completa (não precisa de verso do RG)
+        // CPF + RG frente = identidade completa (não precisa de rg_verso)
+        // Quando essa condição for atingida, fecha automaticamente o rg_verso no checklist
+        const identityCompleteDocs = ['cnh_frente', 'cnh', 'cnh_verso'];
+        const autoCloseRgVerso = identityCompleteDocs.includes(normalizedDocType);
+
+        if (!autoCloseRgVerso && ['cpf', 'rg_frente'].includes(normalizedDocType)) {
+          // Verifica se o outro documento de identidade já foi recebido
+          const otherDoc = normalizedDocType === 'cpf' ? 'rg_frente' : 'cpf';
+          const { data: otherReceived } = await supabase
+            .from('lead_docs_checklist')
+            .select('received')
+            .eq('lead_id', lead_id)
+            .eq('doc_type', otherDoc)
+            .eq('received', true)
+            .maybeSingle();
+          if (otherReceived) {
+            // CPF + RG frente recebidos → fecha rg_verso automaticamente
+            await supabase.from('lead_docs_checklist').upsert({
+              lead_id, doc_type: 'rg_verso', doc_label: 'RG - verso (dispensado: CPF recebido)',
+              is_required: true, received: true, received_at: now, notes: 'Auto: CPF + RG frente = identificação completa', updated_at: now,
+            }, { onConflict: 'lead_id,doc_type' });
+          }
+        }
+
+        if (autoCloseRgVerso) {
+          // CNH recebida → fecha rg_verso e cnh_verso no checklist
+          for (const closeDoc of ['rg_verso', 'cnh_verso']) {
+            await supabase.from('lead_docs_checklist').upsert({
+              lead_id, doc_type: closeDoc, doc_label: labels[closeDoc] || closeDoc,
+              is_required: true, received: true, received_at: now, notes: 'Auto: CNH = identificação completa', updated_at: now,
+            }, { onConflict: 'lead_id,doc_type' });
+          }
+        }
+
         const { data: pending } = await supabase.from('lead_docs_checklist').select('id').eq('lead_id', lead_id).eq('is_required', true).eq('received', false);
         const allReceived = !pending || pending.length === 0;
         await supabase.from('system_events').insert({ tipo: 'documento', fonte: 'isa_auto', acao: 'doc_recebido', lead_id, dados: { doc_type: normalizedDocType, all_docs_received: allReceived, notes }, processado: true });
@@ -1544,8 +1589,8 @@ ROTEAMENTO (apenas quando agente=isa_triagem):
 MELISSA - OBJETIVO EM BANCARIO:
 - Analisar a conversa e documentos antes de pedir qualquer coisa.
 - Se contrato/extrato ja foi recebido, confirme e solicite apenas o proximo item faltante.
-- Para analise bancaria, priorize: contrato ou extrato, comprovante do problema/desconto, documento com foto frente e verso (RG ou CNH) e dados minimos para contrato.
-- RG ou CNH sempre precisa de frente e verso. Se so houver um lado, peca somente o lado faltante.
+- Para analise bancaria, priorize: contrato ou extrato, comprovante do problema/desconto, documento de identidade (RG frente OU CNH) + CPF.
+- CPF + RG frente = identificação completa. CNH frente = identificação completa sozinha. Nunca exija o verso do RG se o CPF já foi recebido.
 - Se o lead pedir para analisar contrato, nao pergunte novamente banco/produto se o documento ou historico ja indicarem isso.
 
 FOLLOW-UP CONTEXTUAL — REGRAS (somente leads de tráfego):
