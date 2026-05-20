@@ -181,6 +181,60 @@ async function buscarProcesso(numeroProcesso: string, tribunal: string): Promise
   return await response.json();
 }
 
+// Valida se o processo pertence ao escritório comparando OABs do DataJud
+// com os OABs cadastrados em office_settings e perfis.
+// Retorna true se confirmar, ou true como fallback quando os dados não estão disponíveis.
+async function pertenceAoEscritorio(processoDataJud: any, supabase: any): Promise<boolean> {
+  const [{ data: settings }, { data: perfis }] = await Promise.all([
+    supabase.from('office_settings').select('oab_number, oab_state').maybeSingle(),
+    supabase.from('perfis').select('oab_numero, oab_uf').not('oab_numero', 'is', null),
+  ]);
+
+  const oabsEscritorio: string[] = [];
+  if (settings?.oab_number) {
+    const num = String(settings.oab_number).replace(/\D/g, '');
+    const uf  = (settings.oab_state || 'AM').toUpperCase();
+    if (num) oabsEscritorio.push(`${num}${uf}`);
+  }
+  for (const p of (perfis || [])) {
+    if (p.oab_numero) {
+      const num = String(p.oab_numero).replace(/\D/g, '');
+      const uf  = (p.oab_uf || 'AM').toUpperCase();
+      if (num) oabsEscritorio.push(`${num}${uf}`);
+    }
+  }
+
+  if (oabsEscritorio.length === 0) {
+    console.warn('[Monitor] Nenhuma OAB configurada — aceitando processo sem validação extra');
+    return true;
+  }
+
+  // Extrair OABs dos advogados retornados pelo DataJud
+  const partes: any[] = processoDataJud.partes || [];
+  const oabsNoProcesso: string[] = [];
+  for (const parte of partes) {
+    const advs = [...(parte.advogados || []), ...(parte.representantes || []), ...(parte.procuradores || [])];
+    for (const adv of advs) {
+      for (const oab of (adv.oabs || [])) {
+        const num = String(oab.numero || '').replace(/\D/g, '');
+        const uf  = (oab.uf || '').toUpperCase();
+        if (num) oabsNoProcesso.push(`${num}${uf}`);
+      }
+    }
+  }
+
+  if (oabsNoProcesso.length === 0) {
+    // DataJud não retornou advogados — confia no flag nosso_processo
+    return true;
+  }
+
+  const pertence = oabsNoProcesso.some(oab => oabsEscritorio.includes(oab));
+  if (!pertence) {
+    console.warn(`[Monitor] ⚠️ Processo com advogados [${oabsNoProcesso.join(', ')}] não bate com escritório [${oabsEscritorio.join(', ')}]`);
+  }
+  return pertence;
+}
+
 // Formata mensagem de atualização para o lead
 function formatarMensagemAtualizacao(processo: any, nomeCliente: string): string {
   const status = determinarStatus(processo);
@@ -428,6 +482,18 @@ serve(async (req) => {
         }
 
         const processoAtualizado = resultado.hits.hits[0]._source;
+
+        // Validar se o processo é realmente do escritório pelo OAB
+        const ehNosso = await pertenceAoEscritorio(processoAtualizado, supabase);
+        if (!ehNosso) {
+          console.log(`[Monitor] ⛔ Processo ${proc.numero_processo} não pertence ao escritório (OAB não bate). Marcando nosso_processo=false.`);
+          await supabase.from('processos').update({ nosso_processo: false }).eq('id', proc.id);
+          return new Response(
+            JSON.stringify({ success: true, enviados: 0, motivo: 'processo_outro_escritorio', numero: proc.numero_processo }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         const novoStatus = determinarStatus(processoAtualizado);
 
         // Verificar se houve movimentação recente
@@ -517,7 +583,8 @@ serve(async (req) => {
         `)
         .not('status', 'in', '("Arquivado","Perdido","Transitado em Julgado")')
         .not('numero_processo', 'is', null)
-        .not('cliente_id', 'is', null);
+        .not('cliente_id', 'is', null)
+        .eq('nosso_processo', true);
 
       if (!processos || processos.length === 0) {
         return new Response(JSON.stringify({ success: true, enviados: 0, message: 'Nenhum processo ativo' }), {
