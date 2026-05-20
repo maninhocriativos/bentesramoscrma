@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { useDocumentos } from '@/hooks/useDocumentos';
 import { useLeads } from '@/hooks/useLeads';
-import { useAuth } from '@/hooks/useAuth';
+import { usePerfil } from '@/hooks/usePerfil';
 import { DocumentoUploadModal } from '@/components/documentos/DocumentoUploadModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,6 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-const ADMIN_USER_ID = '5c775450-665f-4f43-99cb-efb6167d4e20';
 const ANON_KEY = 'sb_publishable__O6J3-8NscavVIOhuxsD4w_kZwkZ7pi';
 
 interface DriveFile {
@@ -36,7 +35,7 @@ interface DriveFile {
 interface Crumb { id: string; name: string; }
 
 export default function DocumentosPage() {
-  const { user } = useAuth();
+  const { canAccessSettings: isAdmin } = usePerfil();
   const { toast: toastHook } = useToast();
   const { documentos, loading: localLoading, uploadDocumento } = useDocumentos();
   const { leads } = useLeads();
@@ -54,20 +53,16 @@ export default function DocumentosPage() {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [isOperating, setIsOperating] = useState(false);
 
+  // Busca o token do Drive compartilhado do escritório via edge function
+  // (service role no servidor — não depende de RLS, funciona para todos os usuários)
   const getAdminToken = useCallback(async (): Promise<string | null> => {
     try {
-      const { data } = await (supabase as any).from('google_drive_tokens').select('*').eq('user_id', ADMIN_USER_ID).maybeSingle();
-      if (!data) return null;
-      const expired = data.expires_at && new Date(data.expires_at) < new Date();
-      if (expired && data.refresh_token) {
-        const { data: r } = await supabase.functions.invoke('google-drive', { body: { action: 'refresh', refresh_token: data.refresh_token }, headers: { apikey: ANON_KEY } });
-        if (r?.access_token) {
-          await (supabase as any).from('google_drive_tokens').update({ access_token: r.access_token, expires_at: new Date(Date.now() + (r.expires_in || 3600) * 1000).toISOString() }).eq('user_id', ADMIN_USER_ID);
-          return r.access_token;
-        }
-        return null;
-      }
-      return data.access_token;
+      const { data } = await supabase.functions.invoke('google-drive', {
+        body: { action: 'get_office_token' },
+        headers: { apikey: ANON_KEY },
+      });
+      if (data?.connected && data?.access_token) return data.access_token;
+      return null;
     } catch { return null; }
   }, []);
 
@@ -159,8 +154,6 @@ export default function DocumentosPage() {
     if (mime.includes('sheet') || mime.includes('excel')) return <FileSpreadsheet className="h-4 w-4 text-emerald-400 shrink-0" />;
     return <File className="h-4 w-4 text-muted-foreground/50 shrink-0" />;
   };
-
-  const isAdmin = user?.id === ADMIN_USER_ID;
 
   return (
     <AppLayout>

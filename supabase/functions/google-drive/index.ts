@@ -171,6 +171,46 @@ serve(async (req) => {
         return new Response(JSON.stringify(tokens), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
+      // Retorna o token de Drive compartilhado do escritório (admin).
+      // Usa service role — qualquer usuário autenticado pode chamar sem expor o token raw via RLS.
+      if (postAction === 'get_office_token') {
+        const OFFICE_USER_ID = Deno.env.get('DRIVE_OFFICE_USER_ID') || '5c775450-665f-4f43-99cb-efb6167d4e20';
+        const { data: tokenRow } = await supabase
+          .from('google_drive_tokens')
+          .select('access_token, refresh_token, expires_at')
+          .eq('user_id', OFFICE_USER_ID)
+          .maybeSingle();
+
+        if (!tokenRow) {
+          return new Response(JSON.stringify({ connected: false }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const expired = tokenRow.expires_at && new Date(tokenRow.expires_at) < new Date();
+        let accessToken = tokenRow.access_token;
+
+        if (expired && tokenRow.refresh_token && clientId && clientSecret) {
+          const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ refresh_token: tokenRow.refresh_token, client_id: clientId, client_secret: clientSecret, grant_type: 'refresh_token' }),
+          });
+          const refreshed = await tokenRes.json();
+          if (refreshed.access_token) {
+            accessToken = refreshed.access_token;
+            await supabase.from('google_drive_tokens').update({
+              access_token: refreshed.access_token,
+              expires_at: new Date(Date.now() + (refreshed.expires_in || 3600) * 1000).toISOString(),
+            }).eq('user_id', OFFICE_USER_ID);
+          }
+        }
+
+        return new Response(JSON.stringify({ connected: true, access_token: accessToken }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       const accessToken = body.access_token;
       if (!accessToken) {
         return new Response(JSON.stringify({ error: 'Token de acesso não fornecido' }), {
