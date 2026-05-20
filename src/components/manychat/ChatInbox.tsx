@@ -625,12 +625,22 @@ const ManyChatInboxContent = () => {
 
   // ─── Realtime channels ──────────────────────────────────────────────────────
 
+  // Ref para rastrear o canal ativo — garante cleanup correto mesmo após reconexões
+  const activeMessagesChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
   useEffect(() => {
     let isSubscribed = true;
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const setupMessagesChannel = () => {
-      const channel = supabase.channel(`manychat-msgs-${user?.id || "anon"}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "manychat_mensagens" }, (payload) => {
+      // Remove canal anterior antes de criar novo (evita canais órfãos e conflitos)
+      if (activeMessagesChannelRef.current) {
+        supabase.removeChannel(activeMessagesChannelRef.current);
+        activeMessagesChannelRef.current = null;
+      }
+      // Nome único por montagem: previne conflito se outro tab/sessão usa o mesmo user
+      const channelName = `manychat-msgs-${user?.id || "anon"}-${Date.now()}`;
+      const channel = supabase.channel(channelName).on("postgres_changes", { event: "INSERT", schema: "public", table: "manychat_mensagens" }, (payload) => {
         if (!isSubscribed) return;
         const newMsg = payload.new as Message & { subscriber_id: string; subscriber_nome?: string };
         if (recentMsgIdsRef.current.has(newMsg.id)) return;
@@ -702,7 +712,7 @@ const ManyChatInboxContent = () => {
         if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status) && isSubscribed) {
           if (reconnectTimeout) clearTimeout(reconnectTimeout);
           reconnectTimeout = setTimeout(() => {
-            if (isSubscribed) { supabase.removeChannel(channel); setupMessagesChannel(); }
+            if (isSubscribed) setupMessagesChannel();
           }, 3000);
         } else if (status === "SUBSCRIBED" && isSubscribed) {
           // Reconectou: busca mensagens que chegaram durante o intervalo offline
@@ -735,6 +745,7 @@ const ManyChatInboxContent = () => {
           }
         }
       });
+      activeMessagesChannelRef.current = channel;
       return channel;
     };
 
@@ -762,7 +773,7 @@ const ManyChatInboxContent = () => {
       return channel;
     };
 
-    const messagesChannel = setupMessagesChannel();
+    setupMessagesChannel();
     const subscribersChannel = setupSubscribersChannel();
 
     // Broadcast channel: sincroniza leitura de mensagens entre todos os agentes conectados
@@ -785,12 +796,79 @@ const ManyChatInboxContent = () => {
     return () => {
       isSubscribed = false;
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      supabase.removeChannel(messagesChannel);
+      // Usa o ref para remover o canal ativo atual (pode ter sido trocado por reconexão)
+      if (activeMessagesChannelRef.current) {
+        supabase.removeChannel(activeMessagesChannelRef.current);
+        activeMessagesChannelRef.current = null;
+      }
       supabase.removeChannel(subscribersChannel);
       supabase.removeChannel(readChannel);
       readReceiptsChannelRef.current = null;
     };
   }, [user?.id, playNotificationSound, notifyNewMessage, notifyAssignment]);
+
+  // ─── Fallback 1: ao voltar pra aba, busca msgs que chegaram enquanto estava offline ──
+  useEffect(() => {
+    const handleVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      const sub = selectedSubscriberRef.current;
+      if (!sub) return;
+      const cached = messagesCacheRef.current.get(sub.subscriber_id) || [];
+      const newestAt = cached.length > 0 ? cached[cached.length - 1]?.created_at : null;
+      if (!newestAt) return;
+      const phoneClean = sub.telefone?.replace(/\D/g, '') || '';
+      const idsArray = buildPossibleSubscriberIds(sub.subscriber_id, phoneClean);
+      const idsFilter = idsArray.map((id: string) => `subscriber_id.eq.${id}`).join(',');
+      let q = (supabase.from('manychat_mensagens' as any) as any)
+        .select('*').gt('created_at', newestAt).order('created_at', { ascending: true }).limit(100);
+      if (sub.lead_id) q = q.or(`${idsFilter},lead_id.eq.${sub.lead_id}`);
+      else q = q.or(idsFilter);
+      q.then(({ data }: { data: any }) => {
+        if (!data || (data as any[]).length === 0) return;
+        setMessages((prev: Message[]) => {
+          const ids = new Set(prev.map((m: Message) => m.id));
+          const newMsgs = (data as Message[]).filter((m: Message) => !ids.has(m.id));
+          if (newMsgs.length === 0) return prev;
+          const merged = [...prev, ...newMsgs].sort(compareMessagesChronological);
+          messagesCacheRef.current.set(sub.subscriber_id, merged);
+          return merged;
+        });
+      });
+    };
+    document.addEventListener('visibilitychange', handleVisible);
+    return () => document.removeEventListener('visibilitychange', handleVisible);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Fallback 2: poll silencioso a cada 15s — garante msgs mesmo se realtime morrer ──
+  useEffect(() => {
+    const poll = setInterval(async () => {
+      const sub = selectedSubscriberRef.current;
+      if (!sub) return;
+      const cached = messagesCacheRef.current.get(sub.subscriber_id) || [];
+      const newestAt = cached.length > 0 ? cached[cached.length - 1]?.created_at : null;
+      if (!newestAt) return;
+      try {
+        const phoneClean = sub.telefone?.replace(/\D/g, '') || '';
+        const idsArray = buildPossibleSubscriberIds(sub.subscriber_id, phoneClean);
+        const idsFilter = idsArray.map((id: string) => `subscriber_id.eq.${id}`).join(',');
+        let q = (supabase.from('manychat_mensagens' as any) as any)
+          .select('*').gt('created_at', newestAt).order('created_at', { ascending: true }).limit(50);
+        if (sub.lead_id) q = q.or(`${idsFilter},lead_id.eq.${sub.lead_id}`);
+        else q = q.or(idsFilter);
+        const { data } = await q;
+        if (!data || (data as any[]).length === 0) return;
+        setMessages((prev: Message[]) => {
+          const ids = new Set(prev.map((m: Message) => m.id));
+          const newMsgs = (data as Message[]).filter((m: Message) => !ids.has(m.id));
+          if (newMsgs.length === 0) return prev;
+          const merged = [...prev, ...newMsgs].sort(compareMessagesChronological);
+          messagesCacheRef.current.set(sub.subscriber_id, merged);
+          return merged;
+        });
+      } catch { /* silencioso */ }
+    }, 15_000);
+    return () => clearInterval(poll);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── On select subscriber: load messages + clear unreads ────────────────────
 
