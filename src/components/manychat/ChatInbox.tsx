@@ -628,6 +628,8 @@ const ManyChatInboxContent = () => {
           dedupKeysRef.current.add(`db_${newMsg.id}`);
           setMessages(prev => { const updated = mergeMessageDedup(prev, newMsg as Message); if (currentSubId) { messagesCacheRef.current.set(currentSubId, updated); messageCacheTimestampRef.current.set(currentSubId, Date.now()); } return updated; });
           scrollToBottom();
+          // Mantém lastRead atualizado enquanto a conversa está aberta
+          if (currentSub) saveLastRead(currentSub);
         } else {
           messagesCacheRef.current.delete(newMsg.subscriber_id);
           if (newMsg.direcao === "entrada") {
@@ -695,6 +697,8 @@ const ManyChatInboxContent = () => {
           setSubscribers(prev => { const idx = prev.findIndex(s => s.subscriber_id === updatedSub.subscriber_id); if (idx === -1) return prev; const updated = [...prev]; updated[idx] = { ...updated[idx], ...updatedSub }; return updated; });
           if (selectedSubscriberRef.current?.subscriber_id === updatedSub.subscriber_id) {
             setSelectedSubscriber(prev => prev ? { ...prev, nome: updatedSub.nome || prev.nome, atendimento_humano: updatedSub.atendimento_humano, atendimento_humano_desde: updatedSub.atendimento_humano_desde, lead_id: updatedSub.lead_id || prev.lead_id } : null);
+            // ultima_interacao atualizado pelo DB enquanto conversa está aberta → mantém lastRead atual
+            if (updatedSub.ultima_interacao) saveLastRead(selectedSubscriberRef.current);
           }
         }
       }).subscribe();
