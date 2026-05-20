@@ -572,22 +572,35 @@ serve(async (req: Request) => {
     // ============================================
     const { data: existingSub } = await supabase
       .from('manychat_subscribers')
-      .select('linha_whatsapp, empresa_tag')
+      .select('linha_whatsapp, empresa_tag, nome')
       .eq('subscriber_id', subscriberId)
       .maybeSingle();
-    
-    const isExistingOfficeClient = existingSub?.linha_whatsapp === 'bentes_ramos_antigo' 
+
+    const isExistingOfficeClient = existingSub?.linha_whatsapp === 'bentes_ramos_antigo'
       || existingSub?.empresa_tag === 'BENTES_RAMOS';
-    
+
     // Se já é cliente do escritório, NÃO mudar para tráfego
     const finalLinhaWhatsapp = isExistingOfficeClient ? 'bentes_ramos_antigo' : linhaWhatsapp;
     const finalEmpresaTag = isExistingOfficeClient ? 'BENTES_RAMOS' : empresaTag;
-    
+
+    // ── Proteção de nome customizado ──────────────────────────────────────────
+    // Se o subscriber já tem um nome definido manualmente (não genérico/telefone),
+    // NÃO sobrescreve com o pushname do WhatsApp a cada mensagem.
+    const existingNome = (existingSub?.nome || '').trim();
+    const phoneDigits = (normalized.phone || '').replace(/\D/g, '');
+    const isGenericNome = !existingNome
+      || existingNome === phoneDigits
+      || /^\+?[\d\s\-()+]{7,}$/.test(existingNome)           // parece número de telefone
+      || existingNome.startsWith('zapi_')
+      || existingNome.startsWith('{{')
+      || ['Desconhecido', 'Sem nome', 'Contato', 'desconhecido', 'null', 'undefined'].includes(existingNome);
+    const nomeToSave = isGenericNome ? (normalized.name || normalized.phone) : existingNome;
+
     const { error: subError } = await supabase
       .from('manychat_subscribers')
       .upsert({
         subscriber_id: subscriberId,
-        nome: normalized.name || normalized.phone,
+        nome: nomeToSave,
         telefone: normalized.phone,
         canal: 'whatsapp',
         lead_id: leadId,

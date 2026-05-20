@@ -1204,13 +1204,43 @@ const ManyChatInboxContent = () => {
         .from("manychat_subscribers")
         .update({ nome: trimmed })
         .eq("subscriber_id", sub.subscriber_id);
-      if (subErr) throw subErr;
+      if (subErr) throw new Error(`Erro no chat: ${subErr.message}`);
 
-      if (sub.lead_id) {
+      // Resolve o lead_id: usa o do subscriber ou busca pelo telefone
+      let resolvedLeadId = sub.lead_id || null;
+      if (!resolvedLeadId && sub.telefone) {
+        const phone = sub.telefone.replace(/\D/g, '');
+        const phoneSuffix = phone.slice(-9);
+        // Tenta encontrar o lead pelo telefone
+        const { data: foundLeads } = await supabase
+          .from("leads_juridicos")
+          .select("id, telefone")
+          .or(`telefone.ilike.%${phoneSuffix}`)
+          .limit(5);
+        if (foundLeads?.length === 1) {
+          resolvedLeadId = foundLeads[0].id;
+          // Vincula o subscriber ao lead encontrado
+          await supabase
+            .from("manychat_subscribers")
+            .update({ lead_id: resolvedLeadId })
+            .eq("subscriber_id", sub.subscriber_id);
+        }
+      }
+
+      if (resolvedLeadId) {
         // 2. Atualiza leads_juridicos (página de Leads)
-        await supabase.from("leads_juridicos").update({ nome: trimmed }).eq("id", sub.lead_id);
+        const { error: leadErr } = await supabase
+          .from("leads_juridicos")
+          .update({ nome: trimmed })
+          .eq("id", resolvedLeadId);
+        if (leadErr) console.warn("[saveLeadName] leads_juridicos:", leadErr.message);
+
         // 3. Atualiza processos.nome_cliente (página de Contratos)
-        await supabase.from("processos").update({ nome_cliente: trimmed }).eq("cliente_id", sub.lead_id);
+        const { error: procErr } = await supabase
+          .from("processos")
+          .update({ nome_cliente: trimmed })
+          .eq("cliente_id", resolvedLeadId);
+        if (procErr) console.warn("[saveLeadName] processos:", procErr.message);
       }
 
       // 4. Atualiza nome do contato no Z-API (fire-and-forget, falha silenciosa)
@@ -1236,11 +1266,18 @@ const ManyChatInboxContent = () => {
       }
 
       // 5. Atualiza estado local imediatamente — lista + conversa selecionada
-      setSubscribers(prev => prev.map(s => s.subscriber_id === sub.subscriber_id ? { ...s, nome: trimmed } : s));
-      setSelectedSubscriber(prev => prev?.subscriber_id === sub.subscriber_id ? { ...prev, nome: trimmed } : prev);
-      toast({ title: "Nome atualizado", description: `"${trimmed}" salvo — leads, contratos e WhatsApp sincronizados.` });
-    } catch {
-      toast({ title: "Erro ao salvar nome", description: "Tente novamente.", variant: "destructive" });
+      setSubscribers(prev => prev.map(s => s.subscriber_id === sub.subscriber_id
+        ? { ...s, nome: trimmed, lead_id: s.lead_id || resolvedLeadId || s.lead_id }
+        : s
+      ));
+      setSelectedSubscriber(prev => prev?.subscriber_id === sub.subscriber_id
+        ? { ...prev, nome: trimmed, lead_id: prev.lead_id || resolvedLeadId || prev.lead_id }
+        : prev
+      );
+      const syncedPlaces = resolvedLeadId ? "leads, contratos e WhatsApp" : "chat e WhatsApp";
+      toast({ title: "Nome atualizado", description: `"${trimmed}" salvo em ${syncedPlaces}.` });
+    } catch (err: any) {
+      toast({ title: "Erro ao salvar nome", description: err?.message || "Tente novamente.", variant: "destructive" });
     } finally {
       nameSavingRef.current = false;
     }

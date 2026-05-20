@@ -115,6 +115,19 @@ export function useLeads() {
       toast({ title: 'Erro ao atualizar lead', description: error.message, variant: 'destructive' });
       return { error };
     }
+
+    // Sincroniza nome para manychat_subscribers e processos quando o nome do lead muda
+    if (updates.nome) {
+      await supabase
+        .from('manychat_subscribers')
+        .update({ nome: updates.nome })
+        .eq('lead_id', id);
+      await supabase
+        .from('processos')
+        .update({ nome_cliente: updates.nome })
+        .eq('cliente_id', id);
+    }
+
     return { error: null };
   };
 
