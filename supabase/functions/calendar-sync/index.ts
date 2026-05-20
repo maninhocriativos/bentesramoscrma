@@ -9,6 +9,8 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const MANAUS_TZ = 'America/Manaus';
+// ID do usuário dono do calendário compartilhado do escritório (fallback para usuários sem calendário próprio)
+const OFFICE_CALENDAR_USER_ID = Deno.env.get('CALENDAR_OFFICE_USER_ID') || '5c775450-665f-4f43-99cb-efb6167d4e20';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -104,10 +106,14 @@ serve(async (req) => {
         });
       }
 
-      const accessToken = await getValidAccessToken(supabase, user_id);
+      // Tenta token do usuário; fallback ao calendário compartilhado do escritório
+      let accessToken = await getValidAccessToken(supabase, user_id);
+      if (!accessToken && user_id !== OFFICE_CALENDAR_USER_ID) {
+        accessToken = await getValidAccessToken(supabase, OFFICE_CALENDAR_USER_ID);
+      }
       if (!accessToken) {
-        return new Response(JSON.stringify({ error: 'Token inválido ou expirado' }), {
-          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        return new Response(JSON.stringify({ skipped: true, reason: 'no_calendar_token' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
@@ -401,10 +407,13 @@ serve(async (req) => {
         });
       }
 
-      const accessToken = await getValidAccessToken(supabase, user_id);
+      let accessToken = await getValidAccessToken(supabase, user_id);
+      if (!accessToken && user_id !== OFFICE_CALENDAR_USER_ID) {
+        accessToken = await getValidAccessToken(supabase, OFFICE_CALENDAR_USER_ID);
+      }
       if (!accessToken) {
-        return new Response(JSON.stringify({ error: 'Token inválido' }), {
-          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        return new Response(JSON.stringify({ skipped: true, reason: 'no_calendar_token' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 

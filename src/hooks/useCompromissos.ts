@@ -11,21 +11,10 @@ async function autoSyncToGoogle(compromissoId: string): Promise<void> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-
-    const { data: tokenData } = await supabase
-      .from('google_calendar_tokens')
-      .select('id')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (!tokenData) return;
-
+    // A edge function usa o token do usuário atual; se não tiver, faz fallback
+    // ao calendário compartilhado do escritório — não verificamos aqui no cliente
     await supabase.functions.invoke('calendar-sync', {
-      body: {
-        action: 'push_to_google',
-        user_id: user.id,
-        compromisso_id: compromissoId,
-      },
+      body: { action: 'push_to_google', user_id: user.id, compromisso_id: compromissoId },
     });
   } catch (err) {
     console.warn('[useCompromissos] Google sync failed (non-critical):', err);
@@ -37,21 +26,8 @@ async function autoDeleteFromGoogle(googleEventId: string): Promise<void> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-
-    const { data: tokenData } = await supabase
-      .from('google_calendar_tokens')
-      .select('id')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (!tokenData) return;
-
     await supabase.functions.invoke('calendar-sync', {
-      body: {
-        action: 'delete_from_google',
-        user_id: user.id,
-        google_event_id: googleEventId,
-      },
+      body: { action: 'delete_from_google', user_id: user.id, google_event_id: googleEventId },
     });
   } catch (err) {
     console.warn('[useCompromissos] Google delete failed (non-critical):', err);

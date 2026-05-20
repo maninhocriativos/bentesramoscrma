@@ -11,8 +11,6 @@ import { Upload, HardDrive, Cloud, FileText, X, CheckCircle2, Loader2 } from 'lu
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-const ADMIN_USER_ID = '5c775450-665f-4f43-99cb-efb6167d4e20';
-
 type TipoDoc = 'Petição' | 'Contrato' | 'Procuração' | 'Documento Pessoal' | 'Comprovante' | 'Outros';
 type Destino = 'local' | 'drive' | 'ambos';
 
@@ -57,31 +55,12 @@ export function DocumentoUploadModal({ open, onOpenChange, clienteId, processoId
     if (f) handleFile(f);
   };
 
-  // Get admin Drive token
   const getAdminToken = useCallback(async (): Promise<string | null> => {
     try {
-      const { data } = await (supabase as any)
-        .from('google_drive_tokens')
-        .select('access_token, refresh_token, expires_at')
-        .eq('user_id', ADMIN_USER_ID)
-        .maybeSingle();
-      if (!data) return null;
-      const expired = data.expires_at && new Date(data.expires_at) < new Date();
-      if (expired && data.refresh_token) {
-        const { data: r } = await supabase.functions.invoke('google-drive', {
-          body: { action: 'refresh', refresh_token: data.refresh_token },
-          headers: { 'apikey': 'sb_publishable__O6J3-8NscavVIOhuxsD4w_kZwkZ7pi' },
-        });
-        if (r?.access_token) {
-          await (supabase as any).from('google_drive_tokens').update({
-            access_token: r.access_token,
-            expires_at: new Date(Date.now() + (r.expires_in || 3600) * 1000).toISOString(),
-          }).eq('user_id', ADMIN_USER_ID);
-          return r.access_token;
-        }
-        return null;
-      }
-      return data.access_token;
+      const { data } = await supabase.functions.invoke('google-drive', {
+        body: { action: 'get_office_token' },
+      });
+      return data?.connected && data?.access_token ? data.access_token : null;
     } catch { return null; }
   }, []);
 
