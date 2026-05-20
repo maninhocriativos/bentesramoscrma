@@ -933,6 +933,43 @@ const ManyChatInboxContent = () => {
     return () => clearInterval(poll);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ─── Poll por conversa: usa mesma query do loadMessages (funciona mesmo com
+  // subscriber_id em formato diferente, porque filtra por lead_id também) ────────
+  useEffect(() => {
+    if (!selectedSubscriber) return;
+    const subId = selectedSubscriber.subscriber_id;
+    const interval = setInterval(async () => {
+      const sub = selectedSubscriberRef.current;
+      if (!sub || sub.subscriber_id !== subId) return;
+      const cached = messagesCacheRef.current.get(sub.subscriber_id) || [];
+      const newestAt = cached.length > 0 ? cached[cached.length - 1]?.created_at : null;
+      if (!newestAt) return;
+      try {
+        const phoneClean = sub.telefone?.replace(/\D/g, '') || '';
+        const leadId = sub.lead_id;
+        const idsArray = buildPossibleSubscriberIds(sub.subscriber_id, phoneClean);
+        const idsFilter = idsArray.map((id: string) => `subscriber_id.eq.${id}`).join(',');
+        let q = (supabase.from('manychat_mensagens' as any) as any)
+          .select('*').gt('created_at', newestAt).order('created_at', { ascending: true }).limit(50);
+        if (leadId) q = q.or(`${idsFilter},lead_id.eq.${leadId}`);
+        else q = q.or(idsFilter);
+        const { data } = await q;
+        if (!data || (data as any[]).length === 0) return;
+        setMessages((prev: Message[]) => {
+          const ids = new Set(prev.map((m: Message) => m.id));
+          const newMsgs = (data as Message[]).filter((m: Message) => !ids.has(m.id));
+          if (newMsgs.length === 0) return prev;
+          const merged = [...prev, ...newMsgs].sort(compareMessagesChronological);
+          messagesCacheRef.current.set(sub.subscriber_id, merged);
+          messageCacheTimestampRef.current.set(sub.subscriber_id, Date.now());
+          return merged;
+        });
+        scrollToBottom();
+      } catch { /* silencioso */ }
+    }, 5_000);
+    return () => clearInterval(interval);
+  }, [selectedSubscriber?.subscriber_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ─── On select subscriber: load messages + clear unreads ────────────────────
 
   useEffect(() => {
