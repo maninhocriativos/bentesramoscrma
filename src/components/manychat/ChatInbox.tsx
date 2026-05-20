@@ -866,7 +866,7 @@ const ManyChatInboxContent = () => {
           return merged;
         });
       } catch { /* silencioso */ }
-    }, 15_000);
+    }, 3_000);
     return () => clearInterval(poll);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
