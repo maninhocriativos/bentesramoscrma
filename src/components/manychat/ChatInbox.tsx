@@ -315,16 +315,23 @@ const ManyChatInboxContent = () => {
   };
 
   const hasUnreadHintForSubscriber = (sub: Subscriber) => {
+    // Conversa aberta no momento nunca mostra badge de não lida
+    if (selectedSubscriberRef.current?.subscriber_id === sub.subscriber_id) return false;
     const lr = getLastReadForSubscriber(sub, lastReadRef.current);
     return !!(lr && sub.ultima_interacao && sub.ultima_interacao > lr);
   };
 
   const saveLastRead = useCallback((subscriber: Subscriber | null) => {
     if (!subscriber) return;
-    const now = new Date().toISOString();
+    const clientNow = new Date().toISOString();
+    // Usa o maior valor entre "agora" e ultima_interacao do subscriber
+    // Isso evita falsos "não lidos" quando o servidor está alguns ms à frente do cliente
+    const ts = subscriber.ultima_interacao && subscriber.ultima_interacao > clientNow
+      ? subscriber.ultima_interacao
+      : clientNow;
     const unreadKey = getConversationUnreadKey(subscriber);
-    lastReadRef.current[unreadKey] = now;
-    lastReadRef.current[subscriber.subscriber_id] = now;
+    lastReadRef.current[unreadKey] = ts;
+    lastReadRef.current[subscriber.subscriber_id] = ts;
     try { localStorage.setItem(LAST_READ_KEY, JSON.stringify(lastReadRef.current)); } catch { /* ignore */ }
   }, []);
 
@@ -698,7 +705,10 @@ const ManyChatInboxContent = () => {
           if (selectedSubscriberRef.current?.subscriber_id === updatedSub.subscriber_id) {
             setSelectedSubscriber(prev => prev ? { ...prev, nome: updatedSub.nome || prev.nome, atendimento_humano: updatedSub.atendimento_humano, atendimento_humano_desde: updatedSub.atendimento_humano_desde, lead_id: updatedSub.lead_id || prev.lead_id } : null);
             // ultima_interacao atualizado pelo DB enquanto conversa está aberta → mantém lastRead atual
-            if (updatedSub.ultima_interacao) saveLastRead(selectedSubscriberRef.current);
+            // Passa o subscriber com o ultima_interacao mais recente do DB para cobrir drift de relógio
+            if (updatedSub.ultima_interacao && selectedSubscriberRef.current) {
+              saveLastRead({ ...selectedSubscriberRef.current, ultima_interacao: updatedSub.ultima_interacao });
+            }
           }
         }
       }).subscribe();
@@ -762,10 +772,7 @@ const ManyChatInboxContent = () => {
 
       // ✅ FIX BADGE: zera contadores E lastReadRef síncronos ao mudar de conversa
       const unreadKey = getConversationUnreadKey(selectedSubscriber);
-      const now = new Date().toISOString();
-      lastReadRef.current[unreadKey] = now;
-      lastReadRef.current[selectedSubscriber.subscriber_id] = now;
-      try { localStorage.setItem(LAST_READ_KEY, JSON.stringify(lastReadRef.current)); } catch {}
+      // saveLastRead abaixo já salva com max(now, ultima_interacao) — não duplicar aqui
 
       setUnreadCounts(prev => {
         const newMap = new Map(prev);
@@ -883,6 +890,8 @@ const ManyChatInboxContent = () => {
         const refreshedSelected = uniqueSubscribers.find(s => s.subscriber_id === currentSubId);
         if (refreshedSelected) {
           setSelectedSubscriber(prev => prev ? { ...prev, instance_name: refreshedSelected.instance_name, lead_tipo_origem: refreshedSelected.lead_tipo_origem, nome: refreshedSelected.nome || prev.nome, lead_id: refreshedSelected.lead_id || prev.lead_id } : null);
+          // Ao recarregar subscribers, mantém lastRead atualizado para a conversa aberta
+          saveLastRead(refreshedSelected);
         }
       }
     } catch (error) { console.error("Erro ao carregar subscribers:", error); }
