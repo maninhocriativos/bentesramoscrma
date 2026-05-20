@@ -699,9 +699,40 @@ const ManyChatInboxContent = () => {
           }, 500);
         }
       }).subscribe((status) => {
-        if (status === "CHANNEL_ERROR" && isSubscribed) {
+        if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status) && isSubscribed) {
           if (reconnectTimeout) clearTimeout(reconnectTimeout);
-          reconnectTimeout = setTimeout(() => { if (isSubscribed) { supabase.removeChannel(channel); setupMessagesChannel(); } }, 3000);
+          reconnectTimeout = setTimeout(() => {
+            if (isSubscribed) { supabase.removeChannel(channel); setupMessagesChannel(); }
+          }, 3000);
+        } else if (status === "SUBSCRIBED" && isSubscribed) {
+          // Reconectou: busca mensagens que chegaram durante o intervalo offline
+          const sub = selectedSubscriberRef.current;
+          if (sub) {
+            const cached = messagesCacheRef.current.get(sub.subscriber_id) || [];
+            const newestAt = cached.length > 0 ? cached[cached.length - 1]?.created_at : null;
+            if (!newestAt) return;
+            const phoneClean = sub.telefone?.replace(/\D/g, "") || "";
+            const idsArray = buildPossibleSubscriberIds(sub.subscriber_id, phoneClean);
+            const idsFilter = idsArray.map((id: string) => `subscriber_id.eq.${id}`).join(",");
+            let q = (supabase.from("manychat_mensagens" as any) as any)
+              .select("*")
+              .gt("created_at", newestAt)
+              .order("created_at", { ascending: true })
+              .limit(100);
+            if (sub.lead_id) q = q.or(`${idsFilter},lead_id.eq.${sub.lead_id}`);
+            else q = q.or(idsFilter);
+            q.then(({ data }: { data: any }) => {
+              if (!data || !isSubscribed) return;
+              setMessages((prev: Message[]) => {
+                const existingIds = new Set(prev.map((m: Message) => m.id));
+                const newMsgs = (data as Message[]).filter((m: Message) => !existingIds.has(m.id));
+                if (newMsgs.length === 0) return prev;
+                const merged = [...prev, ...newMsgs].sort(compareMessagesChronological);
+                messagesCacheRef.current.set(sub.subscriber_id, merged);
+                return merged;
+              });
+            });
+          }
         }
       });
       return channel;
