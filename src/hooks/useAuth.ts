@@ -58,7 +58,25 @@ export function useAuth() {
       }
     );
 
-    return () => subscription.unsubscribe();
+    // Quando o usuário volta para a aba após o computador dormir/hibernar,
+    // força renovação do token antes que qualquer query dispare.
+    // Se o refresh token também expirou, faz logout automático.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        supabase.auth.getSession().then(({ data: { session: refreshed }, error }) => {
+          if (error || !refreshed) {
+            supabase.auth.signOut();
+          }
+        });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      subscription.unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const checkUserApproval = async (userId: string): Promise<boolean> => {
