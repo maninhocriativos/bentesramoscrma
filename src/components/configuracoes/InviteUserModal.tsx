@@ -212,10 +212,10 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[420px] p-0 gap-0 overflow-hidden rounded-2xl">
+      <DialogContent className="sm:max-w-[420px] p-0 gap-0 overflow-hidden rounded-2xl flex flex-col max-h-[90vh]">
 
         {/* ── Header ── */}
-        <div className="bg-[#3d2b1f] px-5 pt-5 pb-4">
+        <div className="bg-[#3d2b1f] px-5 pt-5 pb-4 shrink-0">
           <div className="flex items-center gap-3 mb-1">
             <div className="h-9 w-9 rounded-xl bg-[#c9a96e]/20 flex items-center justify-center shrink-0">
               <UserPlus className="h-4.5 w-4.5 text-[#c9a96e]" />
@@ -227,7 +227,8 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
           </div>
         </div>
 
-        {/* ── Conteúdo ── */}
+        {/* ── Conteúdo (scrollável) ── */}
+        <div className="flex-1 overflow-y-auto">
         {inviteLink ? (
           /* ── Estado de sucesso ── */
           <div className="px-5 py-5 space-y-4">
@@ -415,6 +416,7 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
             </div>
           </form>
         )}
+        </div>
       </DialogContent>
     </Dialog>
   );
