@@ -839,32 +839,95 @@ const ManyChatInboxContent = () => {
     return () => document.removeEventListener('visibilitychange', handleVisible);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Fallback 2: poll silencioso a cada 15s — garante msgs mesmo se realtime morrer ──
+  // ─── Fallback global: poll a cada 3s busca QUALQUER msg nova em QUALQUER conversa ──
+  // Funciona mesmo sem realtime, mesmo sem conversa selecionada.
+  // Usa recentMsgIdsRef para evitar processar msg que o realtime já tratou.
+  const lastGlobalPollRef = useRef<string>(new Date(Date.now() - 10_000).toISOString());
+
   useEffect(() => {
     const poll = setInterval(async () => {
-      const sub = selectedSubscriberRef.current;
-      if (!sub) return;
-      const cached = messagesCacheRef.current.get(sub.subscriber_id) || [];
-      const newestAt = cached.length > 0 ? cached[cached.length - 1]?.created_at : null;
-      if (!newestAt) return;
       try {
-        const phoneClean = sub.telefone?.replace(/\D/g, '') || '';
-        const idsArray = buildPossibleSubscriberIds(sub.subscriber_id, phoneClean);
-        const idsFilter = idsArray.map((id: string) => `subscriber_id.eq.${id}`).join(',');
-        let q = (supabase.from('manychat_mensagens' as any) as any)
-          .select('*').gt('created_at', newestAt).order('created_at', { ascending: true }).limit(50);
-        if (sub.lead_id) q = q.or(`${idsFilter},lead_id.eq.${sub.lead_id}`);
-        else q = q.or(idsFilter);
-        const { data } = await q;
+        const since = lastGlobalPollRef.current;
+        lastGlobalPollRef.current = new Date().toISOString();
+
+        const { data } = await (supabase
+          .from('manychat_mensagens' as any)
+          .select('id,subscriber_id,lead_id,conteudo,tipo,direcao,created_at,metadata,subscriber_nome') as any)
+          .gt('created_at', since)
+          .order('created_at', { ascending: true })
+          .limit(100);
+
         if (!data || (data as any[]).length === 0) return;
-        setMessages((prev: Message[]) => {
-          const ids = new Set(prev.map((m: Message) => m.id));
-          const newMsgs = (data as Message[]).filter((m: Message) => !ids.has(m.id));
-          if (newMsgs.length === 0) return prev;
-          const merged = [...prev, ...newMsgs].sort(compareMessagesChronological);
-          messagesCacheRef.current.set(sub.subscriber_id, merged);
-          return merged;
-        });
+
+        // Filtra msgs que o realtime já processou — poll só age quando realtime falha
+        const newMsgs = (data as Message[]).filter(
+          (m: Message) => !recentMsgIdsRef.current.has(m.id)
+        );
+        if (newMsgs.length === 0) return;
+
+        // Marca como processados para evitar loop
+        newMsgs.forEach((m: Message) => recentMsgIdsRef.current.add(m.id));
+
+        const sub = selectedSubscriberRef.current;
+
+        // 1. Adiciona msgs da conversa aberta
+        if (sub) {
+          const convIds = new Set(buildPossibleSubscriberIds(sub.subscriber_id, sub.telefone?.replace(/\D/g, '')));
+          const forConv = newMsgs.filter((m: Message) =>
+            convIds.has((m as any).subscriber_id || '') ||
+            (sub.lead_id && (m as any).lead_id === sub.lead_id)
+          );
+          if (forConv.length > 0) {
+            setMessages((prev: Message[]) => {
+              const ids = new Set(prev.map((x: Message) => x.id));
+              const incoming = forConv.filter((m: Message) => !ids.has(m.id));
+              if (incoming.length === 0) return prev;
+              const merged = [...prev, ...incoming].sort(compareMessagesChronological);
+              messagesCacheRef.current.set(sub.subscriber_id, merged);
+              messageCacheTimestampRef.current.set(sub.subscriber_id, Date.now());
+              return merged;
+            });
+            scrollToBottom();
+          }
+        }
+
+        // 2. Atualiza lista de conversas (preview + ordem + badge)
+        for (const msg of newMsgs) {
+          const matchingSub = findMatchingSubscriber((msg as any).subscriber_id, (msg as any).lead_id);
+          if (!matchingSub) continue;
+
+          // Preview
+          let text = (msg as any).conteudo || '';
+          const tipo = (msg as any).tipo;
+          if (tipo === 'audio') text = '🎤 Áudio';
+          else if (tipo === 'image') text = '📷 Imagem';
+          else if (tipo === 'video') text = '🎥 Vídeo';
+          else if (tipo === 'document') text = '📄 Documento';
+          const prefix = (msg as any).direcao === 'saida' ? 'Você: ' : '';
+          setLastMessagePreviews((prev: Map<string, string>) => {
+            const m = new Map(prev); m.set(matchingSub.subscriber_id, prefix + text); return m;
+          });
+
+          // Bump para o topo e badge de não lida
+          if ((msg as any).direcao === 'entrada') {
+            setSubscribers((prev: typeof subscribers) => {
+              const idx = prev.findIndex(s => s.subscriber_id === matchingSub.subscriber_id);
+              if (idx === -1) return prev;
+              const bumped = { ...prev[idx], ultima_interacao: msg.created_at };
+              return [bumped, ...prev.filter((_: any, i: number) => i !== idx)];
+            });
+            const isOpenConv = sub && (
+              sub.subscriber_id === matchingSub.subscriber_id ||
+              (sub.lead_id && sub.lead_id === matchingSub.lead_id)
+            );
+            if (!isOpenConv) {
+              setUnreadCounts((prev: Map<string, number>) => {
+                const key = getConversationUnreadKey(matchingSub);
+                const m = new Map(prev); m.set(key, (m.get(key) || 0) + 1); return m;
+              });
+            }
+          }
+        }
       } catch { /* silencioso */ }
     }, 3_000);
     return () => clearInterval(poll);
