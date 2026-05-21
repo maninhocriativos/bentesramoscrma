@@ -72,8 +72,10 @@ export function useUsers() {
       .is('accepted_at', null)
       .order('created_at', { ascending: false });
 
-    if (!invitesError && invites) {
+    if (invites) {
       setPendingInvites(invites);
+    } else if (invitesError) {
+      toast({ title: 'Erro ao carregar convites', description: invitesError.message, variant: 'destructive' });
     }
 
     // Merge profiles with roles and separate approved from pending

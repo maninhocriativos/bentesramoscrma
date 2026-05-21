@@ -101,7 +101,12 @@ function formatarProcessos(processos: any[]): string {
 }
 
 // ─── Gerar resposta via OpenAI ────────────────────────────────────────────────
-async function gerarResposta(nomeCliente: string, mensagem: string, processosCtx: string): Promise<string> {
+async function gerarResposta(
+  nomeCliente: string,
+  mensagem: string,
+  processosCtx: string,
+  historico: Array<{ role: 'user' | 'assistant'; content: string }> = []
+): Promise<string> {
   if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY não configurada');
 
   const systemPrompt = `Você é a Isa, assistente virtual do escritório *Bentes & Ramos Advocacia*.
@@ -111,7 +116,7 @@ DADOS DOS PROCESSOS DO CLIENTE (${nomeCliente}):
 ${processosCtx}
 
 COMO FORMATAR A RESPOSTA (WhatsApp):
-- Comece com uma saudação curta usando o primeiro nome do cliente
+- Comece com uma saudação curta usando o primeiro nome do cliente (apenas se for a primeira mensagem)
 - Se houver processos: apresente cada um com este modelo:
 
 *[Número] — [Tipo da ação]*
@@ -125,11 +130,18 @@ COMO FORMATAR A RESPOSTA (WhatsApp):
 - Finalize com: _Posso te ajudar em algo mais?_
 
 REGRAS:
+- Use o histórico da conversa para não repetir informações já dadas nesta sessão
 - Use *negrito* para números de processo, tipo de ação e informações importantes
 - Nunca invente dados, status ou datas que não estão nos dados acima
 - Nunca prometa resultado nem dê parecer jurídico
 - Tom: acolhedor, claro e profissional — sem juridiquês
 - Máximo 8 linhas por processo`;
+
+  const messages: Array<{ role: string; content: string }> = [
+    { role: 'system', content: systemPrompt },
+    ...historico,
+    { role: 'user', content: mensagem },
+  ];
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -139,10 +151,7 @@ REGRAS:
     },
     body: JSON.stringify({
       model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: mensagem },
-      ],
+      messages,
       max_tokens: 900,
       temperature: 0.4,
     }),
@@ -215,8 +224,29 @@ serve(async (req: Request) => {
 
     const processosCtx = formatarProcessos(processos);
 
+    // Buscar histórico recente da conversa (últimas 10 mensagens)
+    const { data: msgHistorico } = await supabase
+      .from('manychat_mensagens')
+      .select('conteudo, direcao, created_at')
+      .eq('lead_id', lead_id)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    const historico: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+    if (msgHistorico && msgHistorico.length > 0) {
+      // Inverte para ordem cronológica, exclui a mensagem atual
+      const msgsOrdenadas = msgHistorico.slice(1).reverse();
+      for (const msg of msgsOrdenadas) {
+        if (!msg.conteudo) continue;
+        historico.push({
+          role: msg.direcao === 'entrada' ? 'user' : 'assistant',
+          content: String(msg.conteudo).substring(0, 300),
+        });
+      }
+    }
+
     // Gerar resposta
-    const resposta = await gerarResposta(nomeCliente, mensagem, processosCtx);
+    const resposta = await gerarResposta(nomeCliente, mensagem, processosCtx, historico);
 
     if (!resposta) {
       console.error('[ISA-ESC] Resposta vazia da IA');

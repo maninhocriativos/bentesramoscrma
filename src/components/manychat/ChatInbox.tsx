@@ -2228,11 +2228,14 @@ const ManyChatInboxContent = () => {
                     <DropdownMenuItem onClick={() => setSendContactModalOpen(true)}>👤 Enviar contato</DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
-                      if (!selectedSubscriber.telefone) return;
+                      if (!selectedSubscriber.telefone) {
+                        toast({ title: "Número não disponível", description: "Este contato não possui telefone registrado para bloquear.", variant: "destructive" });
+                        return;
+                      }
                       if (!window.confirm(`Bloquear ${selectedSubscriber.nome || selectedSubscriber.telefone}?`)) return;
                       const outboundInstanceId = resolveInstanceId(selectedSubscriber);
                       const { data: result, error } = await invokeZapiSend({ to_phone: selectedSubscriber.telefone, type: "block", ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
-                      if (error || !result?.success) toast({ title: "Erro ao bloquear", variant: "destructive" });
+                      if (error || !result?.success) toast({ title: "Erro ao bloquear", description: error?.message || result?.error || "Verifique se a instância Z-API está conectada.", variant: "destructive" });
                       else toast({ title: "🚫 Contato bloqueado" });
                     }}>🚫 Bloquear no WhatsApp</DropdownMenuItem>
                   </DropdownMenuContent>

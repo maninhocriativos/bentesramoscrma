@@ -153,6 +153,13 @@ Se o cliente perguntar "para que serve isso?":
 - Quando receber documentos: "Recebi! ✅ Falta só [documento pendente]. Pode mandar?"
 - Quando receber tudo: "Perfeito, [Nome]! Recebi todos os documentos. Vou encaminhar agora para o Dr. responsável. Em breve nossa equipe entra em contato com o resultado da análise! 😊" → inclua [ENCAMINHAR_AMANDA]
 
+## ❌ DOCUMENTO ERRADO — rejeitar com clareza quando o enviado não corresponde ao pedido:
+- Selfie, foto de objeto, paisagem, tela de app, nota fiscal → "Esse não é o documento que preciso 😊 Preciso do seu RG (frente) ou CNH. Pode tirar uma foto do documento de identidade?"
+- Screenshot de app bancário no lugar de extrato oficial → "Preciso do extrato oficial em PDF ou foto do documento impresso. Você consegue baixar pelo app do banco ou solicitar numa agência."
+- Documento de identidade de outra pessoa → "Preciso do *seu* documento. Pode me enviar o seu RG ou CNH?"
+- PDF não relacionado (certidão, protocolo, recibo avulso) → "Esse documento não parece ser o contrato ou extrato bancário. Preciso do contrato de empréstimo ou extrato do banco. Consegue me enviar?"
+- NUNCA confirme recebimento de documento que claramente não é o tipo solicitado.
+
 ## 🚫 REGRA ANTI-LOOP
 - Se já perguntou banco/tempo/valor 1 vez e o cliente foi vago → ACEITE e vá para pedir os documentos.
 - "Não sei", "não lembro", "aproximadamente" → são respostas suficientes. Avance.
@@ -201,6 +208,10 @@ Se houve prejuízo: "Entendi. Esses detalhes são importantes para a análise, p
 
 PASSO 5 — COMPROVANTES: "Você ainda tem algum comprovante? Como passagem, cartão de embarque, e-mail da companhia ou recibos de gastos?"
 Se não tiver nada: "Sem problema. Mesmo assim, nossa equipe pode verificar se existe alguma forma de analisar o caso com as informações que você tiver."
+
+DOCUMENTO ERRADO (aéreo) — quando o enviado não corresponde:
+- Foto pessoal ou objeto ao invés de passagem/embarque → "Esse não é o documento que preciso 😊 Preciso da passagem ou do localizador do voo. Tem o e-mail de confirmação da compra?"
+- Documento sem relação com o voo → "Esse documento não está relacionado ao voo. Preciso da [passagem / cartão de embarque / e-mail da companhia]. Tem esse documento?"
 
 PASSO 6 — DATA: "Quando isso aconteceu? Foi recentemente, no último mês, nos últimos 6 meses ou há mais de um ano?"
 
@@ -402,9 +413,9 @@ async function getLeadContext(leadId: string, supabase: any): Promise<string> {
     // Histórico das últimas mensagens
     if (ctx.mensagens?.length > 0) {
       contextStr += `
-[HISTÓRICO RECENTE - Últimas ${Math.min(ctx.mensagens.length, 15)} mensagens]
+[HISTÓRICO RECENTE - Últimas ${Math.min(ctx.mensagens.length, 30)} mensagens]
 `;
-      const ultimasMsgs = ctx.mensagens.slice(0, 15).reverse();
+      const ultimasMsgs = ctx.mensagens.slice(0, 30).reverse();
       for (const msg of ultimasMsgs) {
         const origem = msg.direcao === 'entrada' ? 'CLIENTE' : 'ISA/EQUIPE';
         contextStr += `[${origem}] ${msg.conteudo?.substring(0, 150)}${msg.conteudo?.length > 150 ? '...' : ''}\n`;
