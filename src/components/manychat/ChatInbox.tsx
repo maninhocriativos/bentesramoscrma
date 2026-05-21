@@ -1285,6 +1285,7 @@ const ManyChatInboxContent = () => {
         const outboundInstanceId = resolveInstanceId(subscriberSnapshot);
         const { data: zapiResult, error: zapiError } = await invokeZapiSend({ to_phone: subscriberSnapshot.telefone, message: content, type: mediaType || "text", lead_id: subscriberSnapshot.lead_id, file_name: fileName, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
         if (zapiError) throw new Error(zapiError.message || "Erro ao enviar via Z-API");
+        if (!zapiResult?.success) throw new Error(zapiResult?.error || "Z-API: envio não confirmado pela instância");
         const msgId = zapiResult?.messageId;
         // Salva sempre no banco — independente de ter ou não messageId do Z-API
         const { data: savedMsg, error: insertErr } = await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: content, tipo: mediaType || "text", direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", ...(msgId && { message_id: msgId }), ...(fileName && { file_name: fileName }) } } as any).select().single();
@@ -1361,6 +1362,7 @@ const ManyChatInboxContent = () => {
       const outboundInstanceId = resolveInstanceId(subscriberSnapshot);
       const { data: zapiResult, error: zapiError } = await invokeZapiSend({ to_phone: subscriberSnapshot.telefone, message: signed.signedUrl, type: mediaType, lead_id: subscriberSnapshot.lead_id, file_name: originalFileName, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
       if (zapiError) throw new Error(zapiError.message);
+      if (!zapiResult?.success) throw new Error(zapiResult?.error || "Z-API: envio não confirmado pela instância");
       const msgId = zapiResult?.messageId;
       supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: signed.signedUrl, tipo: mediaType, direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", message_id: msgId, file_name: originalFileName } } as any).select().single().then(({ data: savedMsg }) => {
         if (savedMsg) {
@@ -1425,6 +1427,7 @@ const ManyChatInboxContent = () => {
       const signedUrl = signResult.data.signedUrl;
       const { data: zapiResult, error: zapiError } = await invokeZapiSend({ to_phone: subscriberSnapshot.telefone, message: signedUrl, type: "audio", lead_id: subscriberSnapshot.lead_id, file_name: audioFile.name, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
       if (zapiError) throw new Error(zapiError.message);
+      if (!zapiResult?.success) throw new Error(zapiResult?.error || "Z-API: envio não confirmado pela instância");
       const msgId = zapiResult?.messageId;
       supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: signedUrl, tipo: "audio", direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", message_id: msgId, file_name: audioFile.name } } as any).select().single().then(({ data: savedMsg }) => {
         if (savedMsg) {
