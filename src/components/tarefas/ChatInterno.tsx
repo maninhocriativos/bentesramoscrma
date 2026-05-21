@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { MessageSquare, X, Send, ChevronDown, AtSign, Bell } from 'lucide-react';
-import { useChatInterno, decodeMencoes } from '@/hooks/useChatInterno';
+import { MessageSquare, X, Send, ChevronDown, AtSign, Bell, Paperclip, FileText } from 'lucide-react';
+import { useChatInterno, decodeMencoes, decodeAnexo, type ChatAnexo } from '@/hooks/useChatInterno';
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
 import { supabase } from '@/integrations/supabase/client';
@@ -49,20 +49,23 @@ function MsgText({ content }: { content: string }) {
 }
 
 export function ChatInterno() {
-  const [open,        setOpen]        = useState(false);
-  const [texto,       setTexto]       = useState('');
-  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
-  const [perfis,      setPerfis]      = useState<PerfilItem[]>([]);
-  const [mencoes,     setMencoes]     = useState<MencaoInfo[]>([]); // id + name for badge + UUID payload
-  const [showAt,      setShowAt]      = useState(false);
-  const [atQuery,     setAtQuery]     = useState('');
+  const [open,         setOpen]        = useState(false);
+  const [texto,        setTexto]       = useState('');
+  const [onlineUsers,  setOnlineUsers] = useState<OnlineUser[]>([]);
+  const [perfis,       setPerfis]      = useState<PerfilItem[]>([]);
+  const [mencoes,      setMencoes]     = useState<MencaoInfo[]>([]);
+  const [showAt,       setShowAt]      = useState(false);
+  const [atQuery,      setAtQuery]     = useState('');
+  const [pendingFile,  setPendingFile] = useState<{ file: File; name: string } | null>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   const { mensagens, loading, unread, enviar, marcarLido, mencaoNotif, dismissMencao, setChatOpenState } =
     useChatInterno();
-  const { user }   = useAuth();
-  const { perfil } = usePerfil();
-  const bottomRef  = useRef<HTMLDivElement>(null);
-  const inputRef   = useRef<HTMLTextAreaElement>(null);
+  const { user }    = useAuth();
+  const { perfil }  = usePerfil();
+  const bottomRef   = useRef<HTMLDivElement>(null);
+  const inputRef    = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Supplementary: fetch perfis for mention dropdown (may fail due to RLS — that's OK)
   const fetchPerfis = useCallback(async () => {
@@ -135,14 +138,35 @@ export function ChatInterno() {
     if (inputRef.current) inputRef.current.style.height = '36px';
   };
 
+  const handleFileSelect = (e: { target: HTMLInputElement }) => {
+    const f = e.target.files?.[0];
+    if (f) setPendingFile({ file: f, name: f.name });
+    e.target.value = '';
+  };
+
   const handleSend = async () => {
     const t = texto.trim();
-    if (!t) return;
+    if (!t && !pendingFile) return;
+
+    let anexo: ChatAnexo | undefined;
+    if (pendingFile) {
+      setUploadingFile(true);
+      const path = `chat/${user?.id}/${Date.now()}_${pendingFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const { error: upErr } = await supabase.storage.from('documentos').upload(path, pendingFile.file);
+      setUploadingFile(false);
+      if (upErr) {
+        // toast not wired here — just return silently; file stays pending
+        return;
+      }
+      anexo = { name: pendingFile.name, path, mime: pendingFile.file.type, size: pendingFile.file.size };
+    }
+
     setTexto('');
     setMencoes([]);
+    setPendingFile(null);
     setShowAt(false);
     resetTextareaHeight();
-    await enviar(t, mencoes.map(m => m.id));
+    await enviar(t, mencoes.map(m => m.id), anexo);
   };
 
   const adjustTextareaHeight = () => {
@@ -328,6 +352,9 @@ export function ChatInterno() {
                       const { ids: mentionIds } = decodeMencoes(m.conteudo);
                       const mentionsMe = mentionIds.includes(user?.id || '');
 
+                      const msgAnexo = decodeAnexo(m.conteudo);
+                      const { text: msgText } = decodeMencoes(m.conteudo);
+
                       return (
                         <div key={m.id}
                           className={`flex gap-2 ${isMe ? 'flex-row-reverse' : ''} ${sameAsPrev ? 'mt-0.5' : 'mt-2'}`}>
@@ -360,11 +387,36 @@ export function ChatInterno() {
                                 wordBreak: 'break-word',
                                 whiteSpace: 'pre-wrap',
                               }}>
-                              <MsgText content={m.conteudo} />
+                              {msgText && <MsgText content={m.conteudo} />}
                               {mentionsMe && !isMe && (
                                 <span style={{ fontSize: 9, color: GOLD, marginLeft: 4, fontWeight: 700 }}>
                                   • você
                                 </span>
+                              )}
+                              {msgAnexo && (
+                                <button
+                                  onClick={async () => {
+                                    const { data } = await supabase.storage.from('documentos').createSignedUrl(msgAnexo.path, 300);
+                                    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                                  }}
+                                  className="flex items-center gap-2 mt-1.5 rounded-xl px-2.5 py-2 w-full text-left transition-all hover:opacity-80"
+                                  style={{
+                                    background: isMe ? 'rgba(255,255,255,0.1)' : `${BROWN}0d`,
+                                    border: `1px solid ${GOLD}35`,
+                                  }}
+                                >
+                                  <FileText style={{ width: 14, height: 14, color: GOLD, flexShrink: 0 }} />
+                                  <div className="min-w-0">
+                                    <p style={{ fontSize: 11, fontWeight: 600, color: isMe ? GOLD : BROWN }} className="truncate">
+                                      {msgAnexo.name}
+                                    </p>
+                                    <p style={{ fontSize: 9, opacity: 0.5 }}>
+                                      {msgAnexo.size < 1048576
+                                        ? `${(msgAnexo.size / 1024).toFixed(0)} KB`
+                                        : `${(msgAnexo.size / 1048576).toFixed(1)} MB`}
+                                    </p>
+                                  </div>
+                                </button>
                               )}
                             </div>
                             <p style={{
@@ -384,8 +436,8 @@ export function ChatInterno() {
               <div ref={bottomRef} />
             </div>
 
-            {/* Menções selecionadas */}
-            {mencoes.length > 0 && (
+            {/* Menções selecionadas + arquivo pendente */}
+            {(mencoes.length > 0 || pendingFile) && (
               <div className="px-3 pt-2 flex flex-wrap gap-1 shrink-0" style={{ background: 'white' }}>
                 {mencoes.map(m => (
                   <span key={m.id}
@@ -398,6 +450,16 @@ export function ChatInterno() {
                     </button>
                   </span>
                 ))}
+                {pendingFile && (
+                  <span className="flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{ background: `${GOLD}18`, color: BROWN, border: `1px solid ${GOLD}35` }}>
+                    <FileText style={{ width: 10, height: 10 }} />
+                    <span className="max-w-[140px] truncate">{pendingFile.name}</span>
+                    <button onClick={() => setPendingFile(null)} className="hover:opacity-60 shrink-0">
+                      <X style={{ width: 10, height: 10 }} />
+                    </button>
+                  </span>
+                )}
               </div>
             )}
 
@@ -427,6 +489,13 @@ export function ChatInterno() {
                 </div>
               )}
 
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+
               <div className="flex gap-2 items-end">
                 <button
                   onClick={() => {
@@ -437,8 +506,19 @@ export function ChatInterno() {
                   }}
                   title="Mencionar alguém"
                   className="h-9 w-9 rounded-xl flex items-center justify-center transition-all hover:opacity-80 shrink-0"
-                  style={{ background: `${BROWN}12`, border: `1px solid ${GOLD}25`, marginBottom: 0 }}>
+                  style={{ background: `${BROWN}12`, border: `1px solid ${GOLD}25` }}>
                   <AtSign style={{ width: 14, height: 14, color: BROWN }} />
+                </button>
+
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Anexar arquivo"
+                  className="h-9 w-9 rounded-xl flex items-center justify-center transition-all hover:opacity-80 shrink-0"
+                  style={{
+                    background: pendingFile ? `${GOLD}25` : `${BROWN}12`,
+                    border: `1px solid ${pendingFile ? GOLD : `${GOLD}25`}`,
+                  }}>
+                  <Paperclip style={{ width: 14, height: 14, color: pendingFile ? GOLD : BROWN }} />
                 </button>
 
                 <textarea
@@ -450,7 +530,7 @@ export function ChatInterno() {
                     if (e.key === 'Escape') { setShowAt(false); return; }
                     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
                   }}
-                  placeholder="Mensagem para a equipe... (Shift+Enter para nova linha)"
+                  placeholder="Mensagem para a equipe..."
                   style={{
                     flex: 1,
                     minHeight: 36,
@@ -470,10 +550,13 @@ export function ChatInterno() {
                 />
                 <button
                   onClick={handleSend}
-                  disabled={!texto.trim()}
+                  disabled={!texto.trim() && !pendingFile || uploadingFile}
                   className="h-9 w-9 rounded-xl flex items-center justify-center transition-all disabled:opacity-30 shrink-0"
                   style={{ background: BROWN }}>
-                  <Send style={{ width: 14, height: 14, color: GOLD }} />
+                  {uploadingFile
+                    ? <div className="w-3.5 h-3.5 border-2 rounded-full animate-spin" style={{ borderColor: `${GOLD}40`, borderTopColor: GOLD }} />
+                    : <Send style={{ width: 14, height: 14, color: GOLD }} />
+                  }
                 </button>
               </div>
             </div>

@@ -16,7 +16,7 @@ import {
   Folder, File, FileText, Upload, ArrowLeft, Search,
   Loader2, Plus, RefreshCw, ExternalLink, Download,
   Cloud, HardDrive, ChevronRight, Home, FolderOpen,
-  FileImage, FileSpreadsheet,
+  FileImage, FileSpreadsheet, FolderPlus,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -52,6 +52,9 @@ export default function DocumentosPage() {
   const [activeTab, setActiveTab] = useState<'drive' | 'local'>('drive');
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [isOperating, setIsOperating] = useState(false);
+  const [newFolderDialog, setNewFolderDialog] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [creatingFolder, setCreatingFolder] = useState(false);
 
   // Busca o token do Drive compartilhado do escritório via edge function
   // (service role no servidor — não depende de RLS, funciona para todos os usuários)
@@ -109,6 +112,23 @@ export default function DocumentosPage() {
       toast.success(`Pasta "${d.folder_name}" aberta`);
     } catch { toast.error('Erro ao abrir pasta'); }
     finally { setIsOperating(false); }
+  };
+
+  const handleCreateFolder = async () => {
+    const name = newFolderName.trim();
+    if (!name) return;
+    setCreatingFolder(true);
+    try {
+      const d = await callDrive('create_folder', {
+        folder_name: name,
+        parent_id: currentFolderId || 'root',
+      });
+      toast.success(`Pasta "${d.folder_name || name}" criada`);
+      setNewFolderName('');
+      setNewFolderDialog(false);
+      loadFiles(currentFolderId);
+    } catch { toast.error('Erro ao criar pasta'); }
+    finally { setCreatingFolder(false); }
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -319,6 +339,15 @@ export default function DocumentosPage() {
                       <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-muted/50" onClick={() => loadFiles(currentFolderId)} disabled={driveLoading}>
                         <RefreshCw className={`h-3.5 w-3.5 ${driveLoading ? 'animate-spin' : ''}`} />
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 rounded-xl gap-1.5 border-border/40"
+                        onClick={() => setNewFolderDialog(true)}
+                      >
+                        <FolderPlus className="h-3.5 w-3.5" />
+                        Nova Pasta
+                      </Button>
                       {currentFolderId && (
                         <>
                           <input type="file" id="drive-upload" className="hidden" onChange={handleUpload} />
@@ -514,6 +543,46 @@ export default function DocumentosPage() {
         </div>
       </div>
       <DocumentoUploadModal open={uploadModalOpen} onOpenChange={setUploadModalOpen} />
+
+      {/* ── Dialog Nova Pasta ── */}
+      {newFolderDialog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.45)' }}
+          onClick={e => { if (e.target === e.currentTarget) setNewFolderDialog(false); }}
+        >
+          <div className="w-full max-w-sm rounded-2xl bg-card border border-border/40 shadow-2xl p-6">
+            <h2 className="text-base font-bold mb-1">Nova Pasta</h2>
+            <p className="text-xs text-muted-foreground mb-4">
+              {currentFolderId
+                ? `Será criada em: ${breadcrumbs[breadcrumbs.length - 1]?.name || 'pasta atual'}`
+                : 'Será criada na raiz do Drive'}
+            </p>
+            <Input
+              autoFocus
+              placeholder="Nome da pasta"
+              value={newFolderName}
+              onChange={e => setNewFolderName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') setNewFolderDialog(false); }}
+              className="mb-4"
+            />
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" className="rounded-xl" onClick={() => { setNewFolderDialog(false); setNewFolderName(''); }}>
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                className="rounded-xl gap-1.5 bg-[#3d2b1f] hover:bg-[#2d1f16] text-white"
+                onClick={handleCreateFolder}
+                disabled={!newFolderName.trim() || creatingFolder}
+              >
+                {creatingFolder ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderPlus className="h-3.5 w-3.5" />}
+                Criar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }

@@ -16,18 +16,34 @@ export interface MencaoNotif {
   preview: string;
 }
 
-// ── Mention encoding ─────────────────────────────────────────────────────────
-// Text is stored as-is (display names like "@Thiago").
-// UUIDs are appended as "@@[uuid1,uuid2]" only for notification detection.
-export function encodeMencoes(text: string, ids: string[]): string {
-  if (ids.length === 0) return text.trim();
-  return `${text.trim()} @@[${ids.join(',')}]`;
+export interface ChatAnexo {
+  name: string;
+  path: string;
+  mime: string;
+  size: number;
+}
+
+// ── Mention + attachment encoding ────────────────────────────────────────────
+// Text stored as-is. UUIDs appended as "@@[uuid1,uuid2]" for notifications.
+// File attachments appended as " %%ANEXO%%{...json...}" at the very end.
+export function encodeMencoes(text: string, ids: string[], anexo?: ChatAnexo): string {
+  let base = ids.length === 0 ? text.trim() : `${text.trim()} @@[${ids.join(',')}]`;
+  if (anexo) base += ` %%ANEXO%%${JSON.stringify(anexo)}`;
+  return base;
 }
 
 export function decodeMencoes(content: string): { text: string; ids: string[] } {
-  const m = content.match(/^([\s\S]*?)\s*@@\[([^\]]*)\]$/);
+  // Strip file annotation before decoding
+  const stripped = content.replace(/ %%ANEXO%%\{[\s\S]*\}$/, '').trim();
+  const m = stripped.match(/^([\s\S]*?)\s*@@\[([^\]]*)\]$/);
   if (m) return { text: m[1].trim(), ids: m[2].split(',').filter(Boolean) };
-  return { text: content, ids: [] };
+  return { text: stripped, ids: [] };
+}
+
+export function decodeAnexo(content: string): ChatAnexo | undefined {
+  const m = content.match(/ %%ANEXO%%(\{[\s\S]*\})$/);
+  if (!m) return undefined;
+  try { return JSON.parse(m[1]) as ChatAnexo; } catch { return undefined; }
 }
 
 // ── Web Audio notification sound ──────────────────────────────────────────────
@@ -149,9 +165,9 @@ export function useChatInterno() {
     return () => { supabase.removeChannel(ch); };
   }, [user?.id]);
 
-  const enviar = async (conteudo: string, mencoes: string[] = []) => {
-    if (!user || !conteudo.trim()) return;
-    const raw = encodeMencoes(conteudo, mencoes);
+  const enviar = async (conteudo: string, mencoes: string[] = [], anexo?: ChatAnexo) => {
+    if (!user || (!conteudo.trim() && !anexo)) return;
+    const raw = encodeMencoes(conteudo, mencoes, anexo);
     const { data, error } = await supabase
       .from('chat_mensagens')
       .insert({ sender_id: user.id, conteudo: raw })
