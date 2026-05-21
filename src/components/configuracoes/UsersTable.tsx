@@ -27,7 +27,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export function UsersTable() {
-  const { users, pendingApprovals, pendingInvites, loading, updateUserRole, deleteUser, deleteInvite, resendInvite, approveUser, rejectUser, refetch } = useUsers();
+  const { users, pendingApprovals, pendingInvites, loading, updateUserRole, deleteUser, deleteInvite, resendInvite, forceApproveInvite, approveUser, rejectUser, refetch } = useUsers();
   const { user: currentUser } = useAuth();
   const [editingUser, setEditingUser] = useState<UserWithRole | null>(null);
   const [deletingUser, setDeletingUser] = useState<UserWithRole | null>(null);
@@ -37,6 +37,7 @@ export function UsersTable() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [approvingInviteId, setApprovingInviteId] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
   const handleDelete = async () => {
@@ -59,6 +60,12 @@ export function UsersTable() {
     setApprovingId(userId);
     await approveUser(userId);
     setApprovingId(null);
+  };
+
+  const handleForceApproveInvite = async (invite: PendingInvite) => {
+    setApprovingInviteId(invite.id);
+    await forceApproveInvite(invite);
+    setApprovingInviteId(null);
   };
 
   const handleReject = async () => {
@@ -165,6 +172,20 @@ export function UsersTable() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleForceApproveInvite(invite)}
+                          disabled={approvingInviteId === invite.id}
+                          className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-100"
+                          title="Aprovar e ativar usuário"
+                        >
+                          {approvingInviteId === invite.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <UserCheck className="h-4 w-4" />
+                          )}
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"

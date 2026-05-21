@@ -209,6 +209,31 @@ export function useUsers() {
     return true;
   };
 
+  const forceApproveInvite = async (invite: PendingInvite) => {
+    const { data, error } = await supabase.functions.invoke('admin-approve-invite', {
+      body: { email: invite.email, role: invite.role },
+    });
+
+    if (error || !data?.success) {
+      toast({
+        title: 'Erro ao aprovar',
+        description: error?.message || 'Não foi possível aprovar o usuário.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+
+    toast({
+      title: 'Usuário aprovado!',
+      description: data.action === 'approved'
+        ? `${invite.email} aprovado e pode fazer login agora.`
+        : `Conta criada para ${invite.email}. Um email foi enviado com o link de acesso.`,
+    });
+
+    await fetchUsers();
+    return true;
+  };
+
   const resendInvite = async (invite: PendingInvite) => {
     const signupLink = `${window.location.origin}/auth?email=${encodeURIComponent(invite.email)}`;
     
@@ -314,6 +339,7 @@ export function useUsers() {
     deleteUser,
     deleteInvite,
     resendInvite,
+    forceApproveInvite,
     approveUser,
     rejectUser,
     refetch: fetchUsers,
