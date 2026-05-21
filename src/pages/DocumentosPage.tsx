@@ -542,7 +542,15 @@ export default function DocumentosPage() {
           )}
         </div>
       </div>
-      <DocumentoUploadModal open={uploadModalOpen} onOpenChange={setUploadModalOpen} />
+      <DocumentoUploadModal
+        open={uploadModalOpen}
+        onOpenChange={setUploadModalOpen}
+        driveFolder={
+          activeTab === 'drive' && currentFolderId && breadcrumbs.length > 0
+            ? breadcrumbs[breadcrumbs.length - 1]
+            : undefined
+        }
+      />
 
       {/* ── Dialog Nova Pasta ── */}
       {newFolderDialog && (
