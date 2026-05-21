@@ -153,17 +153,18 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
       return;
     }
 
+    // Busca qualquer convite existente (independente de accepted_at) para evitar conflito de unique constraint
     const { data: existingInvite } = await supabase
-      .from('pending_invites').select('id, role')
-      .eq('email', result.data.email).is('accepted_at', null).maybeSingle();
+      .from('pending_invites').select('id, role, accepted_at')
+      .eq('email', result.data.email).maybeSingle();
 
     const signupLink = `${window.location.origin}/auth?email=${encodeURIComponent(result.data.email)}`;
 
     if (existingInvite) {
-      if (existingInvite.role !== result.data.role) {
-        await supabase.from('pending_invites')
-          .update({ role: result.data.role as AppRole }).eq('id', existingInvite.id);
-      }
+      // Atualiza o convite existente (reativa se já estava aceito, troca cargo se necessário)
+      await supabase.from('pending_invites')
+        .update({ role: result.data.role as AppRole, accepted_at: null, invited_by: user?.id })
+        .eq('id', existingInvite.id);
       setIsResend(true);
       setInviteLink(signupLink);
       const emailResult = await sendInviteEmail(result.data.email, result.data.role, signupLink);
