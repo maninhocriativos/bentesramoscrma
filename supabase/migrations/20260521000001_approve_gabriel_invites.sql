@@ -15,15 +15,14 @@ AND email_confirmed_at IS NULL;
 -- 2. Aprova o perfil (resolve "conta não aprovada")
 UPDATE public.perfis
 SET
-  aprovado   = true,
-  cargo      = COALESCE(cargo, 'Estagiário'),
-  updated_at = NOW()
+  aprovado = true,
+  cargo    = COALESCE(cargo, 'Estagiário')
 WHERE email IN (
   'gabrielcesar@bentesramos.adv.br',
   'gabrielcezar@bentesramos.org'
 );
 
--- 3. Garante registro em user_roles
+-- 3. Garante registro em user_roles (sem ON CONFLICT pois não há unique em user_id)
 INSERT INTO public.user_roles (user_id, role)
 SELECT p.id, 'Estagiário'::public.app_role
 FROM public.perfis p
@@ -31,7 +30,9 @@ WHERE p.email IN (
   'gabrielcesar@bentesramos.adv.br',
   'gabrielcezar@bentesramos.org'
 )
-ON CONFLICT (user_id) DO NOTHING;
+AND NOT EXISTS (
+  SELECT 1 FROM public.user_roles ur WHERE ur.user_id = p.id
+);
 
 -- 4. Marca os convites como aceitos
 UPDATE public.pending_invites
