@@ -144,7 +144,7 @@ export function TagSelector({
             Tag
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-80 p-3" align="start">
+        <PopoverContent className="w-80 p-3 z-[200]" align="start" side="bottom" sideOffset={6}>
           <Input
             placeholder="Buscar tag..."
             value={search}
