@@ -1286,23 +1286,22 @@ const ManyChatInboxContent = () => {
         const { data: zapiResult, error: zapiError } = await invokeZapiSend({ to_phone: subscriberSnapshot.telefone, message: content, type: mediaType || "text", lead_id: subscriberSnapshot.lead_id, file_name: fileName, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
         if (zapiError) throw new Error(zapiError.message || "Erro ao enviar via Z-API");
         const msgId = zapiResult?.messageId;
-        if (msgId) {
-          const { data: savedMsg, error: insertErr } = await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: content, tipo: mediaType || "text", direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", message_id: msgId, file_name: fileName } } as any).select().single();
-          if (insertErr?.code === "23505") {
-            const { data: existingMsg } = await supabase.from("manychat_mensagens" as any).select("*").eq("metadata->>message_id", msgId).maybeSingle();
-            if (existingMsg) {
-              const realMsg = existingMsg as Message;
-              dedupKeysRef.current.add(getMessageDedupeKey(realMsg));
-              dedupKeysRef.current.add(`db_${realMsg.id}`);
-              setMessages(prev => { const withoutTemp = prev.filter(m => m.id !== tempId); const updated = mergeMessageDedup(withoutTemp, realMsg); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
-            }
+        // Salva sempre no banco — independente de ter ou não messageId do Z-API
+        const { data: savedMsg, error: insertErr } = await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: content, tipo: mediaType || "text", direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", ...(msgId && { message_id: msgId }), ...(fileName && { file_name: fileName }) } } as any).select().single();
+        if (insertErr?.code === "23505" && msgId) {
+          const { data: existingMsg } = await supabase.from("manychat_mensagens" as any).select("*").eq("metadata->>message_id", msgId).maybeSingle();
+          if (existingMsg) {
+            const realMsg = existingMsg as Message;
+            dedupKeysRef.current.add(getMessageDedupeKey(realMsg));
+            dedupKeysRef.current.add(`db_${realMsg.id}`);
+            setMessages(prev => { const withoutTemp = prev.filter(m => m.id !== tempId); const updated = mergeMessageDedup(withoutTemp, realMsg); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
           }
-          if (savedMsg) {
-            const savedAsMessage = savedMsg as Message;
-            dedupKeysRef.current.add(getMessageDedupeKey(savedAsMessage));
-            dedupKeysRef.current.add(`db_${savedAsMessage.id}`);
-            setMessages(prev => { const withoutTemp = prev.filter(m => m.id !== tempId); const updated = mergeMessageDedup(withoutTemp, savedAsMessage); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
-          }
+        }
+        if (savedMsg) {
+          const savedAsMessage = savedMsg as Message;
+          dedupKeysRef.current.add(getMessageDedupeKey(savedAsMessage));
+          dedupKeysRef.current.add(`db_${savedAsMessage.id}`);
+          setMessages(prev => { const withoutTemp = prev.filter(m => m.id !== tempId); const updated = mergeMessageDedup(withoutTemp, savedAsMessage); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
         }
         if (subscriberSnapshot.lead_id) {
           await supabase.from("interacoes").insert({ cliente_id: subscriberSnapshot.lead_id, tipo: "Chat", resumo: `Mensagem via WhatsApp: ${content.substring(0, 100)}...`, detalhes: content, direcao: "saida", data_interacao: new Date().toISOString() });
