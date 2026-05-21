@@ -81,6 +81,9 @@ export function TagSelector({
     return acc;
   }, {} as Record<string, ChatTag[]>);
 
+  // Categorias estruturadas: só uma tag por vez (swap ao clicar em outra)
+  const SWAP_CATEGORIES = ['origem', 'triagem', 'area'];
+
   const handleTagClick = async (tag: ChatTag) => {
     if (currentTagIds.has(tag.id)) {
       setLoading(true);
@@ -90,6 +93,16 @@ export function TagSelector({
       setReasonDialog({ tag, open: true });
     } else {
       setLoading(true);
+      // Para categorias estruturadas: remove a tag existente da mesma categoria antes de adicionar
+      if (tag.category && SWAP_CATEGORIES.includes(tag.category)) {
+        const sameCatIds = new Set(
+          availableTags.filter(t => t.category === tag.category && t.id !== tag.id).map(t => t.id)
+        );
+        const toRemove = currentTags.filter(st => sameCatIds.has(st.tag_id));
+        for (const st of toRemove) {
+          await onRemoveTag(st.tag_id);
+        }
+      }
       await onAddTag(tag.id);
       setLoading(false);
     }
@@ -124,14 +137,12 @@ export function TagSelector({
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-5 px-2 text-[10px] gap-1 border-dashed border-primary/40 hover:border-primary hover:bg-primary/5 rounded-full font-semibold"
+          <button
+            className="inline-flex items-center gap-1 h-5 px-2 text-[10px] rounded-full font-semibold border border-dashed border-muted-foreground/30 text-muted-foreground hover:border-primary/60 hover:text-primary hover:bg-primary/5 transition-all duration-150 shrink-0"
           >
-            <Plus className="h-2.5 w-2.5 text-primary" />
-            <span className="text-primary">Tag</span>
-          </Button>
+            <Plus className="h-2.5 w-2.5" />
+            Tag
+          </button>
         </PopoverTrigger>
         <PopoverContent className="w-80 p-3" align="start">
           <Input

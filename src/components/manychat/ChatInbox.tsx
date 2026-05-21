@@ -37,6 +37,7 @@ import {
   ArrowLeft, MoreVertical, Smile, Sun, Moon, Menu, Bot, UserRound,
   Instagram, Facebook, MessageCircle, Sparkles, PanelRightClose, Users,
   FileText, Square, Star, Contact, XCircle, BadgeCheck,
+  ExternalLink, Download, Ban, MailOpen, UserPlus2, Archive,
 } from "lucide-react";
 import CalWidget from "./CalWidget";
 import { subDays } from "date-fns";
@@ -2055,7 +2056,7 @@ const ManyChatInboxContent = () => {
         {selectedSubscriber ? (
           <>
             {/* Header Chat */}
-            <div className={`h-[50px] md:min-h-[62px] px-1.5 md:px-4 flex items-center gap-1.5 md:gap-3 backdrop-blur-md border-b ${themeClasses.border} ${isDark ? "bg-gradient-to-r from-[#202C33] to-[#1A252C]" : "bg-gradient-to-r from-[#F0F2F5] to-[#E8EBEE]"}`}>
+            <div className={`min-h-[58px] md:min-h-[68px] px-1.5 md:px-4 flex items-center gap-1.5 md:gap-3 backdrop-blur-md border-b ${themeClasses.border} ${isDark ? "bg-gradient-to-r from-[#202C33] to-[#1A252C]" : "bg-gradient-to-r from-[#F0F2F5] to-[#E8EBEE]"}`}>
               <Button variant="ghost" size="icon" onClick={() => { setSelectedSubscriber(null); setShowMobileChat(false); }} className={`md:hidden h-8 w-8 shrink-0 ${themeClasses.iconColor}`}><ArrowLeft className="h-5 w-5" /></Button>
 
               <div className="relative shrink-0">
@@ -2144,13 +2145,23 @@ const ManyChatInboxContent = () => {
                     );
                   })()}
                 </div>
-                <div className="flex items-center gap-1.5 mt-0.5 overflow-hidden max-h-[16px] md:max-h-none">
+                <div className="flex items-center gap-1.5 mt-[3px] min-w-0 overflow-hidden flex-wrap">
                   <ActivityIndicator subscriber={selectedSubscriber} showText />
-                  {isTyping(selectedSubscriber.subscriber_id) && <span className="text-[11px] md:text-xs text-[#00A884] font-medium animate-pulse">digitando...</span>}
-                  <div className="hidden md:contents">
-                    {getSubscriberTags(selectedSubscriber.subscriber_id).slice(0, 3).map(st => st.tag && <TagBadge key={st.id} tag={st.tag} reason={st.reason} size="sm" showRemove onRemove={() => removeTagFromSubscriber(selectedSubscriber.subscriber_id, st.tag_id)} />)}
-                    <TagSelector subscriberId={selectedSubscriber.subscriber_id} availableTags={availableTags} currentTags={getSubscriberTags(selectedSubscriber.subscriber_id)} onAddTag={(tagId, reason) => addTagToSubscriber(selectedSubscriber.subscriber_id, tagId, reason, selectedSubscriber.lead_id ?? undefined)} onRemoveTag={tagId => removeTagFromSubscriber(selectedSubscriber.subscriber_id, tagId)} onCreateTag={createTag} />
-                  </div>
+                  {isTyping(selectedSubscriber.subscriber_id) && (
+                    <span className="text-[11px] text-[#00A884] font-medium animate-pulse shrink-0">digitando...</span>
+                  )}
+                  {getSubscriberTags(selectedSubscriber.subscriber_id).slice(0, 4).map(st => st.tag && (
+                    <TagBadge key={st.id} tag={st.tag} reason={st.reason} size="sm" showRemove
+                      onRemove={() => removeTagFromSubscriber(selectedSubscriber.subscriber_id, st.tag_id)} />
+                  ))}
+                  <TagSelector
+                    subscriberId={selectedSubscriber.subscriber_id}
+                    availableTags={availableTags}
+                    currentTags={getSubscriberTags(selectedSubscriber.subscriber_id)}
+                    onAddTag={(tagId, reason) => addTagToSubscriber(selectedSubscriber.subscriber_id, tagId, reason, selectedSubscriber.lead_id ?? undefined)}
+                    onRemoveTag={tagId => removeTagFromSubscriber(selectedSubscriber.subscriber_id, tagId)}
+                    onCreateTag={createTag}
+                  />
                 </div>
               </div>
 
@@ -2222,22 +2233,69 @@ const ManyChatInboxContent = () => {
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className={`h-8 w-8 md:h-10 md:w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}><MoreVertical className="h-4 w-4 md:h-5 md:w-5" /></Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-52">
-                    {selectedSubscriber.lead_id && <DropdownMenuItem onClick={() => navigate(`/leads/${selectedSubscriber.lead_id}`)}>📋 Ver Lead no CRM</DropdownMenuItem>}
-                    <DropdownMenuItem onClick={() => setShowConversationSearch(true)}>🔍 Buscar na conversa</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setSendContactModalOpen(true)}>👤 Enviar contato</DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={async () => {
+                  <DropdownMenuContent align="end" className="w-56 py-1.5">
+                    {/* Grupo: Navegação */}
+                    {selectedSubscriber.lead_id && (
+                      <DropdownMenuItem className="gap-2.5 text-[13px] py-2 cursor-pointer" onClick={() => navigate(`/leads/${selectedSubscriber.lead_id}`)}>
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                        Ver Lead no CRM
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem className="gap-2.5 text-[13px] py-2 cursor-pointer" onClick={() => setShowConversationSearch(true)}>
+                      <Search className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                      Buscar na conversa
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="gap-2.5 text-[13px] py-2 cursor-pointer" onClick={() => setSendContactModalOpen(true)}>
+                      <UserPlus2 className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                      Enviar contato
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator className="my-1" />
+
+                    {/* Grupo: Ações na conversa */}
+                    <DropdownMenuItem className="gap-2.5 text-[13px] py-2 cursor-pointer" onClick={() => {
+                      const msgs = messages.map(m => {
+                        const dir = m.direcao === "saida" ? "Você" : (selectedSubscriber.nome || "Cliente");
+                        const data = new Date(m.created_at).toLocaleString("pt-BR", { timeZone: "America/Manaus" });
+                        return `[${data}] ${dir}: ${m.conteudo || ""}`;
+                      }).join("\n");
+                      const blob = new Blob([msgs], { type: "text/plain" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url; a.download = `conversa-${selectedSubscriber.nome || selectedSubscriber.telefone || "contato"}.txt`;
+                      a.click(); URL.revokeObjectURL(url);
+                      toast({ title: "Conversa exportada" });
+                    }}>
+                      <Download className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                      Exportar conversa
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem className="gap-2.5 text-[13px] py-2 cursor-pointer" onClick={() => {
+                      const key = selectedSubscriber.subscriber_id;
+                      setUnreadCounts(prev => { const next = new Map(prev); next.set(key, 1); return next; });
+                      toast({ title: "Marcado como não lido" });
+                    }}>
+                      <MailOpen className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                      Marcar como não lido
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator className="my-1" />
+
+                    {/* Grupo: Ações destrutivas */}
+                    <DropdownMenuItem className="gap-2.5 text-[13px] py-2 cursor-pointer text-destructive focus:text-destructive" onClick={async () => {
                       if (!selectedSubscriber.telefone) {
-                        toast({ title: "Número não disponível", description: "Este contato não possui telefone registrado para bloquear.", variant: "destructive" });
+                        toast({ title: "Número não disponível", description: "Este contato não possui telefone registrado.", variant: "destructive" });
                         return;
                       }
                       if (!window.confirm(`Bloquear ${selectedSubscriber.nome || selectedSubscriber.telefone}?`)) return;
                       const outboundInstanceId = resolveInstanceId(selectedSubscriber);
                       const { data: result, error } = await invokeZapiSend({ to_phone: selectedSubscriber.telefone, type: "block", ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
                       if (error || !result?.success) toast({ title: "Erro ao bloquear", description: error?.message || result?.error || "Verifique se a instância Z-API está conectada.", variant: "destructive" });
-                      else toast({ title: "🚫 Contato bloqueado" });
-                    }}>🚫 Bloquear no WhatsApp</DropdownMenuItem>
+                      else toast({ title: "Contato bloqueado" });
+                    }}>
+                      <Ban className="h-3.5 w-3.5 shrink-0" />
+                      Bloquear no WhatsApp
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
