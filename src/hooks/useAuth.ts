@@ -110,12 +110,26 @@ export function useAuth() {
 
   const signUp = async (email: string, password: string) => {
     const redirectUrl = `${window.location.origin}/`;
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { emailRedirectTo: redirectUrl },
     });
-    return { error };
+    if (error) return { error };
+
+    // Para usuários convidados: confirma email + aprova automaticamente via Edge Function.
+    // Se não houver convite pendente, a função retorna sem fazer nada (aprovação manual).
+    if (data.user) {
+      try {
+        await supabase.functions.invoke('accept-invite', {
+          body: { userId: data.user.id, email },
+        });
+      } catch {
+        // Silencioso — não bloqueia o cadastro se a função falhar
+      }
+    }
+
+    return { error: null };
   };
 
   const signInWithGoogle = async () => {

@@ -98,3 +98,8 @@ jobs:
         run: supabase functions deploy drive-sync --project-ref qgenaltkjtlvwfgykpxq
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy accept-invite
+        run: supabase functions deploy accept-invite --project-ref qgenaltkjtlvwfgykpxq
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
