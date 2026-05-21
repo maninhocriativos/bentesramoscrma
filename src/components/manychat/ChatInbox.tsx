@@ -1288,13 +1288,23 @@ const ManyChatInboxContent = () => {
         const msgId = zapiResult?.messageId;
         // Salva sempre no banco — independente de ter ou não messageId do Z-API
         const { data: savedMsg, error: insertErr } = await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: content, tipo: mediaType || "text", direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", ...(msgId && { message_id: msgId }), ...(fileName && { file_name: fileName }) } } as any).select().single();
-        if (insertErr?.code === "23505" && msgId) {
-          const { data: existingMsg } = await supabase.from("manychat_mensagens" as any).select("*").eq("metadata->>message_id", msgId).maybeSingle();
-          if (existingMsg) {
-            const realMsg = existingMsg as Message;
-            dedupKeysRef.current.add(getMessageDedupeKey(realMsg));
-            dedupKeysRef.current.add(`db_${realMsg.id}`);
-            setMessages(prev => { const withoutTemp = prev.filter(m => m.id !== tempId); const updated = mergeMessageDedup(withoutTemp, realMsg); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+        if (insertErr) {
+          if (insertErr.code === "23505" && msgId) {
+            const { data: existingMsg } = await supabase.from("manychat_mensagens" as any).select("*").eq("metadata->>message_id", msgId).maybeSingle();
+            if (existingMsg) {
+              const realMsg = existingMsg as Message;
+              dedupKeysRef.current.add(getMessageDedupeKey(realMsg));
+              dedupKeysRef.current.add(`db_${realMsg.id}`);
+              setMessages(prev => { const withoutTemp = prev.filter(m => m.id !== tempId); const updated = mergeMessageDedup(withoutTemp, realMsg); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+            }
+          } else {
+            // Erro inesperado no insert — superficia para diagnóstico
+            console.error("[sendMessage] Erro ao salvar mensagem no banco:", insertErr);
+            toast({
+              title: "Mensagem enviada mas não salva",
+              description: `Erro ${insertErr.code}: ${insertErr.message}`,
+              variant: "destructive",
+            });
           }
         }
         if (savedMsg) {
