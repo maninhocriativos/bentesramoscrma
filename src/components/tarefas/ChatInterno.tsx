@@ -67,16 +67,23 @@ export function ChatInterno() {
   const inputRef    = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Supplementary: fetch perfis for mention dropdown (may fail due to RLS — that's OK)
+  // Fetch all perfis including current user — needed to resolve names when RLS blocks the join
   const fetchPerfis = useCallback(async () => {
     const { data } = await supabase
       .from('perfis')
       .select('id, nome, sobrenome')
       .order('nome');
-    if (data) setPerfis((data as PerfilItem[]).filter(p => p.id !== user?.id));
-  }, [user?.id]);
+    if (data) setPerfis(data as PerfilItem[]);
+  }, []);
 
   useEffect(() => { fetchPerfis(); }, [fetchPerfis]);
+
+  // Map id → PerfilItem for O(1) name lookup when join is blocked by RLS
+  const perfilById = useMemo(() => {
+    const map = new Map<string, PerfilItem>();
+    perfis.forEach(p => map.set(p.id, p));
+    return map;
+  }, [perfis]);
 
   // Build dropdown candidates from: perfis table + message senders + online users
   const dropdownCandidates = useMemo<PerfilItem[]>(() => {
@@ -345,8 +352,9 @@ export function ChatInterno() {
 
                     {group.msgs.map((m, i) => {
                       const isMe      = m.sender_id === user?.id;
-                      const nome      = m.perfis?.nome || '?';
-                      const sobrenome = m.perfis?.sobrenome || null;
+                      const fallback  = perfilById.get(m.sender_id);
+                      const nome      = m.perfis?.nome || fallback?.nome || '?';
+                      const sobrenome = m.perfis?.sobrenome ?? fallback?.sobrenome ?? null;
                       const prevMsg   = i > 0 ? group.msgs[i - 1] : null;
                       const sameAsPrev = prevMsg?.sender_id === m.sender_id;
                       const { ids: mentionIds } = decodeMencoes(m.conteudo);

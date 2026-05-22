@@ -43,7 +43,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     <SidebarProvider defaultOpen={true}>
       <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
-        <main className="flex-1 flex flex-col min-h-screen overflow-hidden">
+        <main className="flex-1 flex flex-col min-h-screen overflow-hidden min-w-0">
           {/* Mobile trigger removed - AppHeader handles SidebarTrigger on mobile */}
           <PageTransition>
             {children}
