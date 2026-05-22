@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
@@ -221,6 +221,17 @@ const ManyChatInboxContent = () => {
   const { isOnline, isTyping, setTyping } = useChatPresence(user?.id, fullName || user?.email?.split("@")[0]);
   const { getTeamWithStatus, setCurrentChat, getOnlineCount } = useTeamPresence(user?.id, fullName || user?.email?.split("@")[0]);
   const { playNotificationSound, notifyAssignment, notifyNewMessage, requestNotificationPermission } = useChatNotifications();
+
+  // Mapa subscriber_id → primeiro nome do atendente (excluindo o próprio usuário)
+  const attendingBySub = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const member of getTeamWithStatus()) {
+      if (member.currentChat && member.id !== user?.id) {
+        map.set(member.currentChat, (member.fullName || '').split(' ')[0]);
+      }
+    }
+    return map;
+  }, [getTeamWithStatus, user?.id]);
 
   useEffect(() => { requestNotificationPermission(); }, [requestNotificationPermission]);
 
@@ -2025,12 +2036,7 @@ const ManyChatInboxContent = () => {
                 const isUnreadVisual = hasUnread || hasUnreadHint;
                 const msgPreview = lastMessagePreviews.get(subscriber.subscriber_id);
                 const instanceInfo = getInstanceInfoFromConnectedPhone(subscriber.instance_name);
-                const isAttendingRecent = subscriber.attending_since
-                  ? (Date.now() - new Date(subscriber.attending_since).getTime()) < 15 * 60 * 1000
-                  : false;
-                const attendingNome = isAttendingRecent && subscriber.attending_by !== user?.id
-                  ? subscriber.attending_nome
-                  : null;
+                const attendingNome = attendingBySub.get(subscriber.subscriber_id) ?? null;
 
                 return (
                   <div
