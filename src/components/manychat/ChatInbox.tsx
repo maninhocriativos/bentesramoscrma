@@ -2060,8 +2060,8 @@ const ManyChatInboxContent = () => {
                         </div>
                         {attendingNome && (
                           <div className="flex items-center gap-1 mt-[2px] overflow-hidden">
-                            <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
-                            <p className="text-[10px] font-semibold text-amber-400 truncate leading-tight">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                            <p className="text-[10px] font-semibold text-emerald-400 truncate leading-tight">
                               {attendingNome.split(' ')[0]} atendendo
                             </p>
                           </div>
