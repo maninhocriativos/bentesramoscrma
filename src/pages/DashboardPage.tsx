@@ -53,15 +53,15 @@ function HeroCard({
     )}>
       {/* Accent bar */}
       <div className={cn('h-[3px] w-full', accent)} />
-      <div className="p-6">
-        <div className="flex items-start justify-between mb-4">
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
-          <div className={cn('h-9 w-9 rounded-xl flex items-center justify-center', iconBg)}>
-            <Icon className={cn('h-4.5 w-4.5', iconColor)} style={{ width: 18, height: 18 }} />
+      <div className="p-4 lg:p-6">
+        <div className="flex items-start justify-between mb-3">
+          <p className="text-[10px] lg:text-[11px] font-semibold text-muted-foreground uppercase tracking-wider leading-tight pr-2">{label}</p>
+          <div className={cn('h-8 w-8 lg:h-9 lg:w-9 shrink-0 rounded-xl flex items-center justify-center', iconBg)}>
+            <Icon className={cn('h-4 w-4', iconColor)} />
           </div>
         </div>
-        <p className="text-4xl font-black text-foreground tracking-tight leading-none mb-2">{value}</p>
-        <p className="text-xs text-muted-foreground">{sub}</p>
+        <p className="text-xl lg:text-2xl xl:text-3xl font-black text-foreground tracking-tight leading-none mb-2 break-all">{value}</p>
+        <p className="text-xs text-muted-foreground truncate">{sub}</p>
       </div>
     </div>
   );
