@@ -148,31 +148,14 @@ export function useUsers() {
   };
 
   const deleteUser = async (userId: string) => {
-    // Delete from user_roles first
-    const { error: roleError } = await supabase
-      .from('user_roles')
-      .delete()
-      .eq('user_id', userId);
+    const { data, error } = await supabase.functions.invoke('admin-delete-user', {
+      body: { userId },
+    });
 
-    if (roleError) {
-      toast({
-        title: 'Erro ao remover cargo',
-        description: roleError.message,
-        variant: 'destructive',
-      });
-      return false;
-    }
-
-    // Delete from perfis
-    const { error: perfilError } = await supabase
-      .from('perfis')
-      .delete()
-      .eq('id', userId);
-
-    if (perfilError) {
+    if (error || !data?.success) {
       toast({
         title: 'Erro ao remover usuário',
-        description: perfilError.message,
+        description: error?.message || 'Não foi possível remover o usuário.',
         variant: 'destructive',
       });
       return false;
@@ -180,7 +163,7 @@ export function useUsers() {
 
     toast({
       title: 'Usuário removido',
-      description: 'O acesso do usuário foi revogado.',
+      description: 'Conta removida completamente do sistema.',
     });
 
     await fetchUsers();
