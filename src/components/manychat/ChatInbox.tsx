@@ -95,6 +95,9 @@ interface Subscriber {
   assigned_to?: string;
   lead_tipo_origem?: string;
   instance_name?: string;
+  attending_by?: string | null;
+  attending_nome?: string | null;
+  attending_since?: string | null;
 }
 
 interface Message {
@@ -179,7 +182,7 @@ const ManyChatInboxContent = () => {
 
   const { leadNames } = useLeadNames();
   const { sendMetaEvent } = useMetaCapi();
-  const { attendingMap, setAttending } = useChatAttending(user?.id, fullName ?? 'Usuário');
+  const { setAttending } = useChatAttending(user?.id, fullName ?? 'Usuário');
 
   // ─── Refs ───────────────────────────────────────────────────────────────────
 
@@ -1979,7 +1982,12 @@ const ManyChatInboxContent = () => {
                 const isUnreadVisual = hasUnread || hasUnreadHint;
                 const msgPreview = lastMessagePreviews.get(subscriber.subscriber_id);
                 const instanceInfo = getInstanceInfoFromConnectedPhone(subscriber.instance_name);
-                const attendingUsers = attendingMap.get(subscriber.subscriber_id) ?? [];
+                const isAttendingRecent = subscriber.attending_since
+                  ? (Date.now() - new Date(subscriber.attending_since).getTime()) < 15 * 60 * 1000
+                  : false;
+                const attendingNome = isAttendingRecent && subscriber.attending_by !== user?.id
+                  ? subscriber.attending_nome
+                  : null;
 
                 return (
                   <div
@@ -2050,11 +2058,11 @@ const ManyChatInboxContent = () => {
                             </p>
                           )}
                         </div>
-                        {attendingUsers.length > 0 && (
+                        {attendingNome && (
                           <div className="flex items-center gap-1 mt-[2px] overflow-hidden">
                             <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
                             <p className="text-[10px] font-semibold text-amber-400 truncate leading-tight">
-                              {attendingUsers.map(u => u.nome.split(' ')[0]).join(', ')} atendendo
+                              {attendingNome.split(' ')[0]} atendendo
                             </p>
                           </div>
                         )}

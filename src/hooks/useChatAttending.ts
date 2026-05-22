@@ -1,68 +1,56 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-export interface AttendingUser {
-  userId: string;
-  nome: string;
-}
-
-// subscriber_id → usuários que estão com aquela conversa aberta agora (excluindo self)
-export type AttendingMap = Map<string, AttendingUser[]>;
-
 export function useChatAttending(userId: string | undefined, userNome: string) {
-  const [attendingMap, setAttendingMap] = useState<AttendingMap>(new Map());
-  const channelRef = useRef<any>(null);
-  const readyRef   = useRef(false);
+  const currentSubRef = useRef<string | null>(null);
 
+  // Limpa ao sair da página
   useEffect(() => {
     if (!userId) return;
-
-    const ch = supabase.channel('chat-attending-v1', {
-      config: { presence: { key: userId } },
-    });
-
-    const buildMap = () => {
-      const state = ch.presenceState();
-      const map = new Map<string, AttendingUser[]>();
-      for (const [key, presences] of Object.entries(state)) {
-        if (key === userId) continue;
-        const p = (presences as any[])[0];
-        if (!p?.subscriberId) continue;
-        const sid: string = p.subscriberId;
-        const list = map.get(sid) ?? [];
-        list.push({ userId: p.userId, nome: p.nome ?? 'Usuário' });
-        map.set(sid, list);
-      }
-      setAttendingMap(map);
+    const clear = () => {
+      // sendBeacon para garantir envio mesmo no unload
+      const url = `${(supabase as any).supabaseUrl}/rest/v1/manychat_subscribers?attending_by=eq.${userId}`;
+      const body = JSON.stringify({ attending_by: null, attending_nome: null, attending_since: null });
+      try {
+        navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));
+      } catch { /* fallback silencioso */ }
     };
-
-    ch
-      .on('presence', { event: 'sync' }, buildMap)
-      .on('presence', { event: 'join' }, buildMap)
-      .on('presence', { event: 'leave' }, buildMap)
-      .subscribe((status: string) => {
-        if (status === 'SUBSCRIBED') {
-          readyRef.current  = true;
-          channelRef.current = ch;
-        }
-      });
-
+    window.addEventListener('beforeunload', clear);
     return () => {
-      readyRef.current   = false;
-      channelRef.current = null;
-      supabase.removeChannel(ch);
+      window.removeEventListener('beforeunload', clear);
+      // Limpa ao desmontar componente (troca de página)
+      if (userId) {
+        supabase
+          .from('manychat_subscribers' as any)
+          .update({ attending_by: null, attending_nome: null, attending_since: null } as any)
+          .eq('attending_by', userId)
+          .then(() => {});
+      }
     };
   }, [userId]);
 
   const setAttending = useCallback(async (subscriberId: string | null) => {
-    const ch = channelRef.current;
-    if (!ch || !userId || !readyRef.current) return;
+    if (!userId) return;
+
+    // Limpa atendimento anterior deste usuário
+    await supabase
+      .from('manychat_subscribers' as any)
+      .update({ attending_by: null, attending_nome: null, attending_since: null } as any)
+      .eq('attending_by', userId);
+
+    currentSubRef.current = subscriberId;
+
     if (subscriberId) {
-      await ch.track({ userId, nome: userNome, subscriberId });
-    } else {
-      await ch.untrack();
+      await supabase
+        .from('manychat_subscribers' as any)
+        .update({
+          attending_by: userId,
+          attending_nome: userNome,
+          attending_since: new Date().toISOString(),
+        } as any)
+        .eq('subscriber_id', subscriberId);
     }
   }, [userId, userNome]);
 
-  return { attendingMap, setAttending };
+  return { setAttending };
 }

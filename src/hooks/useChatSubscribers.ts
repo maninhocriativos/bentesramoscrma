@@ -18,6 +18,10 @@ export interface ChatSubscriber {
   assigned_to?: string;
   // Instance info from messages metadata
   instance_name?: string;
+  // Atendimento em tempo real
+  attending_by?: string | null;
+  attending_nome?: string | null;
+  attending_since?: string | null;
 }
 
 export type ConversationFilter = 'all' | 'unread' | 'human' | 'bot' | 'mine';
