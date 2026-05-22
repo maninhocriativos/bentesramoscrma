@@ -116,7 +116,10 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
   };
 
   const handleClose = (o: boolean) => {
-    if (!o) resetForm();
+    if (!o) {
+      if (inviteLink) onSuccess();
+      resetForm();
+    }
     onOpenChange(o);
   };
 
@@ -175,6 +178,7 @@ export function InviteUserModal({ open, onOpenChange, onSuccess }: InviteUserMod
           : 'Não foi possível enviar o email. Copie o link manualmente.',
       });
       setSaving(false);
+      onSuccess();
       return;
     }
 
