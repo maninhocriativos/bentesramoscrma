@@ -2036,7 +2036,17 @@ const ManyChatInboxContent = () => {
                 const isUnreadVisual = hasUnread || hasUnreadHint;
                 const msgPreview = lastMessagePreviews.get(subscriber.subscriber_id);
                 const instanceInfo = getInstanceInfoFromConnectedPhone(subscriber.instance_name);
-                const attendingNome = attendingBySub.get(subscriber.subscriber_id) ?? null;
+                const attendingNome = (() => {
+                  // 1) Presence (tempo real via canal de presença)
+                  const fromPresence = attendingBySub.get(subscriber.subscriber_id);
+                  if (fromPresence) return fromPresence;
+                  // 2) Fallback: campo do banco (cobre quem não tem presence ativo)
+                  if (subscriber.attending_by && subscriber.attending_by !== user?.id && subscriber.attending_since) {
+                    const age = Date.now() - new Date(subscriber.attending_since).getTime();
+                    if (age < 15 * 60 * 1000) return (subscriber.attending_nome || '').split(' ')[0] || null;
+                  }
+                  return null;
+                })();
 
                 return (
                   <div
