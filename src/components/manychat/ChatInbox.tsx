@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { useChatPresence } from "@/hooks/useChatPresence";
 import { useTeamPresence } from "@/hooks/useTeamPresence";
+import { useChatAttending } from "@/hooks/useChatAttending";
 import { useChatNotifications } from "@/hooks/useChatNotifications";
 import { useChatTags } from "@/hooks/useChatTags";
 import { useLeadNames } from "@/hooks/useLeadNames";
@@ -178,6 +179,7 @@ const ManyChatInboxContent = () => {
 
   const { leadNames } = useLeadNames();
   const { sendMetaEvent } = useMetaCapi();
+  const { attendingMap, setAttending } = useChatAttending(user?.id, fullName ?? 'Usuário');
 
   // ─── Refs ───────────────────────────────────────────────────────────────────
 
@@ -485,6 +487,10 @@ const ManyChatInboxContent = () => {
   useEffect(() => { subscribersRef.current = subscribers; }, [subscribers]);
   // Fecha edição de nome ao trocar de conversa
   useEffect(() => { setEditingLeadName(false); nameSavingRef.current = false; }, [selectedSubscriber?.subscriber_id]);
+  // Presence: registra que este usuário está atendendo esta conversa agora
+  useEffect(() => {
+    setAttending(selectedSubscriber?.subscriber_id ?? null);
+  }, [selectedSubscriber?.subscriber_id, setAttending]);
 
   // ─── Scroll & message helpers ───────────────────────────────────────────────
 
@@ -1325,6 +1331,18 @@ const ManyChatInboxContent = () => {
             setSelectedSubscriber(prev => prev ? { ...prev, atendimento_humano: true } : null);
             setSubscribers(prev => prev.map(s => s.subscriber_id === subscriberSnapshot.subscriber_id ? { ...s, atendimento_humano: true } : s));
           } catch {}
+          // Auto-tag "Em Atendimento" na primeira mensagem enviada
+          try {
+            const emAtendimentoTag = availableTags.find(t => t.name === 'Em Atendimento');
+            if (emAtendimentoTag) {
+              const existingSubTags = getSubscriberTags(subscriberSnapshot.subscriber_id);
+              const jaTaggeado = existingSubTags.some(st => st.tag_id === emAtendimentoTag.id);
+              if (!jaTaggeado) {
+                await addTagToSubscriber(subscriberSnapshot.subscriber_id, emAtendimentoTag.id, undefined, subscriberSnapshot.lead_id ?? undefined);
+                await loadSubscriberTags([subscriberSnapshot.subscriber_id]);
+              }
+            }
+          } catch {}
         }
       } catch (error: any) {
         setMessages(prev => { const updated = prev.map(m => m.id === tempId ? { ...m, metadata: { ...((m as any).metadata || {}), send_error: true } } : m); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
@@ -1961,6 +1979,7 @@ const ManyChatInboxContent = () => {
                 const isUnreadVisual = hasUnread || hasUnreadHint;
                 const msgPreview = lastMessagePreviews.get(subscriber.subscriber_id);
                 const instanceInfo = getInstanceInfoFromConnectedPhone(subscriber.instance_name);
+                const attendingUsers = attendingMap.get(subscriber.subscriber_id) ?? [];
 
                 return (
                   <div
@@ -2031,6 +2050,14 @@ const ManyChatInboxContent = () => {
                             </p>
                           )}
                         </div>
+                        {attendingUsers.length > 0 && (
+                          <div className="flex items-center gap-1 mt-[2px] overflow-hidden">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                            <p className="text-[10px] font-semibold text-amber-400 truncate leading-tight">
+                              {attendingUsers.map(u => u.nome.split(' ')[0]).join(', ')} atendendo
+                            </p>
+                          </div>
+                        )}
                       </div>
                       <div className="w-[76px] min-w-[76px] shrink-0 flex flex-col items-end justify-between gap-1">
                         <span className={`text-[12px] leading-tight whitespace-nowrap text-right ${isUnreadVisual ? "text-[#25D366] font-semibold" : themeClasses.secondaryText}`}>{subscriber.ultima_interacao ? formatLastMessageTime(subscriber.ultima_interacao) : ""}</span>
