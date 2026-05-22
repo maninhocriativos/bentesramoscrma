@@ -145,9 +145,9 @@ function DashboardPage() {
                 iconColor="text-[#3d2b1f]"
               />
               <HeroCard
-                label="Faturamento (Valor Causa)"
+                label="Valor em Causa (Processos)"
                 value={formatCurrency(stats.total_valor_causa)}
-                sub="total em pipeline"
+                sub="processos ativos com valor"
                 icon={DollarSign}
                 accent="bg-[#c9a96e]"
                 iconBg="bg-[#c9a96e]/12"
