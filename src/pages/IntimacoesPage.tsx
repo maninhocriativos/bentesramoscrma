@@ -91,11 +91,17 @@ export default function IntimacoesPage() {
   const [selectedIntimacao, setSelectedIntimacao] = useState<Intimacao | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const [lastSyncAt, setLastSyncAt] = useState<Date | null>(() => {
+    const s = localStorage.getItem('intimacoes-last-sync');
+    return s ? new Date(s) : null;
+  });
+  const [tick, setTick] = useState(0);
 
   const oabNumero = officeSettings?.oab_number || (perfil as any)?.oab_numero || '';
   const oabUf = officeSettings?.oab_state || (perfil as any)?.oab_uf || 'AM';
 
   useEffect(() => { if (user) fetchIntimacoes(); }, [user]);
+  useEffect(() => { const t = setInterval(() => setTick(n => n + 1), 60000); return () => clearInterval(t); }, []);
 
   const fetchIntimacoes = async () => {
     setLoading(true);
@@ -111,6 +117,9 @@ export default function IntimacoesPage() {
       const { data, error } = await supabase.functions.invoke('intimacoes-scheduler', { body: { oab_numero: oabNumero, oab_uf: oabUf, advogado_id: user?.id } });
       if (error) throw error;
       if (data?.success) {
+        const syncedAt = new Date();
+        setLastSyncAt(syncedAt);
+        localStorage.setItem('intimacoes-last-sync', syncedAt.toISOString());
         toast.success(data?.deduplicated ? 'Sincronização já estava em andamento' : 'Sincronização iniciada', { description: 'Busca em fila, processada em segundo plano.' });
         window.setTimeout(() => void fetchIntimacoes(), 4000);
       } else toast.error(data?.error || 'Erro ao iniciar sincronização');
@@ -180,6 +189,16 @@ export default function IntimacoesPage() {
   const urgentCount = intimacoes.filter(i => { const u = getUrgencyInfo(i); return u.level === 'urgent' || u.level === 'overdue'; }).length;
   const readPct = intimacoes.length > 0 ? Math.round((readCount / intimacoes.length) * 100) : 0;
 
+  const syncAgoText = (() => {
+    void tick;
+    if (!lastSyncAt) return null;
+    const diff = Math.floor((Date.now() - lastSyncAt.getTime()) / 60000);
+    if (diff < 1) return 'agora mesmo';
+    if (diff < 60) return `há ${diff} min`;
+    const hrs = Math.floor(diff / 60);
+    return hrs === 1 ? 'há 1h' : `há ${hrs}h`;
+  })();
+
   const filtered = intimacoes.filter(i => {
     const s = searchTerm.toLowerCase();
     const ok = !searchTerm || i.processo_cnj?.toLowerCase().includes(s) || i.processo_titulo?.toLowerCase().includes(s) || i.conteudo?.toLowerCase().includes(s) || i.tipo_intimacao?.toLowerCase().includes(s);
@@ -210,15 +229,10 @@ export default function IntimacoesPage() {
           <div className="flex items-center gap-3 min-w-0">
             <SidebarTrigger className="md:hidden shrink-0" />
             <div className="flex items-center gap-3">
-              <div className="relative shrink-0">
+              <div className="shrink-0">
                 <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
                   <Scale className="h-5 w-5 text-primary-foreground" />
                 </div>
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 h-5 min-w-5 px-1 rounded-full bg-rose-500 flex items-center justify-center text-[9px] font-black text-white shadow-sm animate-pulse">
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </span>
-                )}
               </div>
               <div>
                 <h1 className="text-lg md:text-xl font-bold text-foreground leading-none">Intimações</h1>
@@ -226,6 +240,52 @@ export default function IntimacoesPage() {
               </div>
             </div>
           </div>
+
+          {/* Stats widget — centro do header */}
+          {intimacoes.length > 0 && (
+            <div className="hidden md:flex items-stretch gap-0 bg-card border border-border/50 rounded-xl overflow-hidden shadow-sm">
+              <div className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-colors cursor-default border-r border-border/40">
+                <div className="relative">
+                  <div className="h-7 w-7 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
+                    <EyeOff className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+                  </div>
+                  {unreadCount > 0 && <div className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />}
+                </div>
+                <div>
+                  <p className="text-sm font-black text-rose-600 dark:text-rose-400 tabular-nums leading-none">{unreadCount}</p>
+                  <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wide leading-none mt-0.5">não lidas</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-colors cursor-default border-r border-border/40">
+                <div className="h-7 w-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 tabular-nums leading-none">{readCount}</p>
+                  <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wide leading-none mt-0.5">lidas</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-colors cursor-default border-r border-border/40">
+                <div className="h-7 w-7 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                  <Sparkles className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-violet-600 dark:text-violet-400 tabular-nums leading-none">{todayCount}</p>
+                  <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wide leading-none mt-0.5">hoje</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-colors cursor-default">
+                <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <TrendingUp className="h-3.5 w-3.5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-foreground tabular-nums leading-none">{readPct}%</p>
+                  <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wide leading-none mt-0.5">concluído</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-2 shrink-0">
             {oabNumero && (
               <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/8 border border-primary/15">
@@ -233,10 +293,17 @@ export default function IntimacoesPage() {
                 <span className="text-xs font-bold text-foreground">OAB/{oabUf} {oabNumero}</span>
               </div>
             )}
-            <Button onClick={handleSync} disabled={syncing || !oabNumero} className="h-9 md:h-10 text-xs md:text-sm rounded-xl gap-2 shadow-sm shadow-primary/20">
-              <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-              <span className="hidden md:inline">Sincronizar</span>
-            </Button>
+            <div className="flex flex-col items-end gap-0.5">
+              <Button onClick={handleSync} disabled={syncing || !oabNumero} className="h-9 md:h-10 text-xs md:text-sm rounded-xl gap-2 shadow-sm shadow-primary/20">
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+                <span className="hidden md:inline">{syncing ? 'Buscando...' : 'Sincronizar'}</span>
+              </Button>
+              {syncAgoText && (
+                <span className="text-[9px] text-muted-foreground hidden md:block">
+                  Última sync: {syncAgoText}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </header>
