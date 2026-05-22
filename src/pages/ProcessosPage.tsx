@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, lazy, Suspense, memo } from 'react';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { ProcessosTable } from '@/components/processos/ProcessosTable';
 import { useProcessos } from '@/hooks/useProcessos';
@@ -14,7 +15,7 @@ import {
   Loader2, Search, Scale, Plus,
   CheckCircle2, PauseCircle, Archive, Trophy, XCircle,
   RefreshCw, SlidersHorizontal, Upload, Gavel, FileCheck, X,
-  Download, Users, Layers,
+  Download, Users, Layers, UserCheck, CheckSquare,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,9 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
 
 const ProcessoModalExpanded = lazy(() =>
   import('@/components/processos/ProcessoModalExpanded').then(m => ({ default: m.ProcessoModalExpanded }))
@@ -173,9 +177,9 @@ type ViewTab = 'internos' | 'consulta';
 
 function ProcessosPage() {
   const navigate = useNavigate();
-  const { processos, loading } = useProcessos();
+  const { processos, loading, assignCoResponsavel } = useProcessos();
   const { leadNames } = useLeadNames();
-  const { canDelete, canAccessProcessos, loading: perfilLoading } = usePerfil();
+  const { canDelete, canAccessProcessos, loading: perfilLoading, isAdmin, isGerente } = usePerfil();
 
   const [selectedProcesso, setSelectedProcesso] = useState<Processo | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -187,6 +191,21 @@ function ProcessosPage() {
   const [activeView, setActiveView] = useState<ViewTab>('internos');
   const [showImportCsv, setShowImportCsv] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
+
+  // Seleção em lote
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [assignDialog, setAssignDialog] = useState(false);
+  const [assignUserId, setAssignUserId] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [usuarios, setUsuarios] = useState<{ id: string; nome: string | null; sobrenome: string | null }[]>([]);
+
+  useEffect(() => {
+    if (isAdmin || isGerente) {
+      supabase.from('perfis').select('id,nome,sobrenome').eq('aprovado', true).order('nome')
+        .then(({ data }) => setUsuarios(data || []));
+    }
+  }, [isAdmin, isGerente]);
 
   const advogados = useMemo(() => {
     const set = new Set<string>();
@@ -214,6 +233,40 @@ function ProcessosPage() {
     const p = processos.find(x => x.id === processoId);
     if (p) { setSelectedProcesso(p); setIsNew(false); setIsModalOpen(true); }
   }, [processos]);
+
+  const handleToggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleToggleAll = useCallback((ids: string[]) => {
+    setSelectedIds(prev => {
+      const allSelected = ids.every(id => prev.has(id));
+      const next = new Set(prev);
+      if (allSelected) { ids.forEach(id => next.delete(id)); }
+      else { ids.forEach(id => next.add(id)); }
+      return next;
+    });
+  }, []);
+
+  const handleAssign = useCallback(async () => {
+    if (!assignUserId) return;
+    setAssigning(true);
+    await assignCoResponsavel(Array.from(selectedIds), assignUserId);
+    setAssigning(false);
+    setAssignDialog(false);
+    setAssignUserId('');
+    setSelectedIds(new Set());
+    setSelectionMode(false);
+  }, [assignUserId, selectedIds, assignCoResponsavel]);
+
+  const handleExitSelection = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
 
   useEffect(() => {
     if (!perfilLoading && !canAccessProcessos) navigate('/dashboard');
@@ -308,6 +361,17 @@ function ProcessosPage() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {(isAdmin || isGerente) && (
+              <Button
+                variant={selectionMode ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => selectionMode ? handleExitSelection() : setSelectionMode(true)}
+                className="rounded-xl h-9 gap-1.5 text-xs border-border/60"
+              >
+                <CheckSquare className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{selectionMode ? 'Cancelar' : 'Selecionar'}</span>
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -531,6 +595,10 @@ function ProcessosPage() {
               processos={filteredProcessos}
               onProcessoClick={handleProcessoClick}
               leads={leadNames}
+              selectionMode={selectionMode}
+              selectedIds={selectedIds}
+              onToggleSelect={handleToggleSelect}
+              onToggleAll={handleToggleAll}
             />
           )
         ) : (
@@ -559,6 +627,67 @@ function ProcessosPage() {
 
       <ImportProcessosCsvModal isOpen={showImportCsv} onClose={() => setShowImportCsv(false)} />
       <SyncProcessosModal isOpen={showSyncModal} onClose={() => setShowSyncModal(false)} totalProcessos={processos.length} />
+
+      {/* Floating action bar for batch selection */}
+      {selectionMode && selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-2xl bg-card border border-border shadow-2xl shadow-black/20">
+          <span className="text-sm font-bold text-foreground">
+            {selectedIds.size} processo{selectedIds.size !== 1 ? 's' : ''} selecionado{selectedIds.size !== 1 ? 's' : ''}
+          </span>
+          <Button
+            size="sm"
+            className="rounded-xl h-9 gap-2 text-xs"
+            onClick={() => setAssignDialog(true)}
+          >
+            <UserCheck className="h-3.5 w-3.5" />
+            Atribuir co-responsável
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="rounded-xl h-9 text-xs text-muted-foreground"
+            onClick={handleExitSelection}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+
+      {/* Assignment dialog */}
+      <Dialog open={assignDialog} onOpenChange={o => { if (!o) { setAssignDialog(false); setAssignUserId(''); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Atribuir co-responsável</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Selecione o colaborador que será co-responsável pelos {selectedIds.size} processo{selectedIds.size !== 1 ? 's' : ''} selecionados. Ele será notificado automaticamente.
+            </p>
+            <Select value={assignUserId || '__none__'} onValueChange={v => setAssignUserId(v === '__none__' ? '' : v)}>
+              <SelectTrigger className="rounded-xl h-10">
+                <SelectValue placeholder="Selecione o colaborador..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Selecione...</SelectItem>
+                {usuarios.map(u => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.nome}{u.sobrenome ? ` ${u.sobrenome.split(' ')[0]}` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAssignDialog(false); setAssignUserId(''); }} className="rounded-xl">
+              Cancelar
+            </Button>
+            <Button onClick={handleAssign} disabled={!assignUserId || assigning} className="rounded-xl gap-2">
+              {assigning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />}
+              Atribuir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }

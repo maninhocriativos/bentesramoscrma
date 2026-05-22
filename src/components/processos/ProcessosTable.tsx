@@ -9,6 +9,7 @@ import {
   Archive, Trophy, XCircle, Activity, FolderOpen, GitBranch,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const ITEMS_PER_PAGE = 30;
 
@@ -16,6 +17,10 @@ interface ProcessosTableProps {
   processos: Processo[];
   onProcessoClick: (processo: Processo) => void;
   leads: LeadName[];
+  selectionMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
+  onToggleAll?: (ids: string[]) => void;
 }
 
 // ── Status config with inline colors for reliability ──────────────────────────
@@ -87,7 +92,7 @@ const grauLabel = (g: string) => ({
 
 type SortKey = 'cliente' | 'numero' | 'tribunal' | 'data' | 'valor' | 'status';
 
-export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosTableProps) {
+export function ProcessosTable({ processos, onProcessoClick, leads, selectionMode, selectedIds, onToggleSelect, onToggleAll }: ProcessosTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey,     setSortKey]     = useState<SortKey>('cliente');
   const [sortAsc,     setSortAsc]     = useState(true);
@@ -189,6 +194,14 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
         <table className="w-full">
           <thead>
             <tr className="border-b border-border/50 bg-muted/30">
+              {selectionMode && (
+                <th className="w-10 px-3 py-3">
+                  <Checkbox
+                    checked={paginated.length > 0 && paginated.every(p => selectedIds?.has(p.id))}
+                    onCheckedChange={() => onToggleAll?.(paginated.map(p => p.id))}
+                  />
+                </th>
+              )}
               <th className="w-[3px] p-0" />
               <th className="text-left px-5 py-3 w-[24%]"><SortBtn col="cliente"  label="Cliente / Partes" /></th>
               <th className="text-left px-4 py-3 w-[22%]"><SortBtn col="numero"   label="Processo" /></th>
@@ -214,12 +227,22 @@ export function ProcessosTable({ processos, onProcessoClick, leads }: ProcessosT
               const isFilho     = !!(processo as any).processo_pai_id;
               const { ativo, passivo } = getPartes(processo);
 
+              const isSelected = selectedIds?.has(processo.id) ?? false;
               return (
                 <tr
                   key={processo.id}
-                  onClick={() => onProcessoClick(processo)}
-                  className="group cursor-pointer hover:bg-accent/20 transition-colors relative"
+                  onClick={() => selectionMode ? onToggleSelect?.(processo.id) : onProcessoClick(processo)}
+                  className={`group cursor-pointer hover:bg-accent/20 transition-colors relative ${isSelected ? 'bg-primary/5' : ''}`}
                 >
+                  {/* Checkbox column */}
+                  {selectionMode && (
+                    <td className="px-3 py-3.5 w-10 align-middle" onClick={e => e.stopPropagation()}>
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => onToggleSelect?.(processo.id)}
+                      />
+                    </td>
+                  )}
                   {/* Left accent bar — faintly visible, full opacity on hover */}
                   <td className="px-0 py-0 w-[3px] p-0 relative">
                     <div

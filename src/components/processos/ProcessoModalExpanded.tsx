@@ -53,6 +53,7 @@ type ProcessoFormData = {
   data_arquivamento: string; data_encerramento: string; valor_provisionado: string;
   probabilidade: string; monitorar_push: boolean; tipo_orgao_julgador: string;
   sistema_judicial: string; complemento_enderecamento: string;
+  co_responsavel_id: string;
 };
 
 interface ProcessoModalDraft {
@@ -79,7 +80,7 @@ const createEmptyForm = (): ProcessoFormData => ({
   data_citacao: '', data_recebimento: '', data_arquivamento: '',
   data_encerramento: '', valor_provisionado: '', probabilidade: '',
   monitorar_push: true, tipo_orgao_julgador: '', sistema_judicial: '',
-  complemento_enderecamento: '',
+  complemento_enderecamento: '', co_responsavel_id: '',
 });
 
 const STATUS_CONFIG: Record<string, { cls: string; dot: string; barColor: string; icon: React.ElementType }> = {
@@ -640,6 +641,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
         probabilidade: p.probabilidade || '', monitorar_push: p.monitorar_push ?? true,
         tipo_orgao_julgador: p.tipo_orgao_julgador || '', sistema_judicial: p.sistema_judicial || '',
         complemento_enderecamento: p.complemento_enderecamento || '',
+        co_responsavel_id: p.co_responsavel_id || '',
       });
       setPartes(processo.partes_json || []);
       setMovimentos(processo.movimentos_json || []);
@@ -870,6 +872,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
         fase:                      formData.fase                   || null,
         segredo_justica:           formData.segredo_justica,
         monitorar_push:            formData.monitorar_push,
+        co_responsavel_id:         formData.co_responsavel_id || null,
         partes_json:               partes.length > 0    ? partes    : null,
         movimentos_json:           movimentos.length > 0 ? movimentos : null,
         updated_at:                new Date().toISOString(),
@@ -1051,12 +1054,12 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   }, [processo?.id, isNew]);
 
   useEffect(() => {
+    if (membros.length === 0) {
+      supabase.from('perfis').select('id, nome, sobrenome, email').eq('aprovado', true)
+        .then(({ data }) => { if (data) setMembros(data as any); });
+    }
     if (activeTab === 'tarefas') {
       fetchProcessoTarefas();
-      if (membros.length === 0) {
-        supabase.from('perfis').select('id, nome, sobrenome, email').eq('aprovado', true)
-          .then(({ data }) => { if (data) setMembros(data as any); });
-      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, processo?.id]);
@@ -1449,6 +1452,19 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                         </Row2>
                         <Field label="CPF do Cliente" hint="Usado pela Isa para localizar processos">
                           <Input value={formData.cpf_cliente} onChange={e => { let v = e.target.value.replace(/\D/g, '').slice(0, 11); if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4'); else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3'); else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2'); update('cpf_cliente', v); }} className="rounded-xl bg-card h-10" placeholder="000.000.000-00" maxLength={14} />
+                        </Field>
+                        <Field label="Co-responsável" hint="Estagiário ou colaborador que acompanha este processo">
+                          <Select value={formData.co_responsavel_id || '__none__'} onValueChange={v => update('co_responsavel_id', v === '__none__' ? '' : v)}>
+                            <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue placeholder="Nenhum" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Nenhum</SelectItem>
+                              {membros.map(m => (
+                                <SelectItem key={m.id} value={m.id}>
+                                  {m.nome}{m.sobrenome ? ` ${m.sobrenome.split(' ')[0]}` : ''}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </Field>
                       </FieldGroup>
                     </div>

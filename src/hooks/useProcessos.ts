@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { usePerfil } from './usePerfil';
 import { useAuth } from './useAuth';
 
-const PROCESSOS_LIST_SELECT = 'id,numero_processo,numero_complementar,titulo_acao,status,advogado_responsavel,cliente_id,cpf_cliente,nome_cliente,created_at,tribunal,vara_comarca,assunto,valor_causa,data_ajuizamento,data_ultima_atualizacao,orgao_julgador,grau,classe_cnj,status_detalhado,origem_cliente,ultima_consulta_api_at,frequencia_notificacao_dias,notificacao_ativa,ultima_notificacao_at,descricao,marcadores,area,fase,assunto_cnj,segredo_justica,data_distribuicao,data_citacao,data_recebimento,data_arquivamento,data_encerramento,valor_provisionado,probabilidade,monitorar_push,tipo_orgao_julgador,sistema_judicial,complemento_enderecamento,processo_pai_id,partes_json,movimentos_json';
+const PROCESSOS_LIST_SELECT = 'id,numero_processo,numero_complementar,titulo_acao,status,advogado_responsavel,cliente_id,cpf_cliente,nome_cliente,created_at,tribunal,vara_comarca,assunto,valor_causa,data_ajuizamento,data_ultima_atualizacao,orgao_julgador,grau,classe_cnj,status_detalhado,origem_cliente,ultima_consulta_api_at,frequencia_notificacao_dias,notificacao_ativa,ultima_notificacao_at,descricao,marcadores,area,fase,assunto_cnj,segredo_justica,data_distribuicao,data_citacao,data_recebimento,data_arquivamento,data_encerramento,valor_provisionado,probabilidade,monitorar_push,tipo_orgao_julgador,sistema_judicial,complemento_enderecamento,processo_pai_id,partes_json,movimentos_json,co_responsavel_id,co_responsavel:perfis!co_responsavel_id(id,nome,sobrenome)';
 
 // ✅ Normaliza CNJ para uso como chave de deduplicação
 function normalizarCNJ(numero: string | null | undefined): string | null {
@@ -18,15 +18,19 @@ export function useProcessos({ withRealtime = true }: { withRealtime?: boolean }
   const [processos, setProcessos] = useState<Processo[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-  const { perfil, isAdvogado } = usePerfil();
+  const { perfil, isAdvogado, isEstagiario } = usePerfil();
   const { user } = useAuth();
   const initialLoadDone = useRef(false);
 
-  const isAdvogadoRef = useRef(isAdvogado);
-  const perfilNomeRef = useRef(perfil?.nome);
+  const isAdvogadoRef  = useRef(isAdvogado);
+  const isEstagiarioRef = useRef(isEstagiario);
+  const perfilNomeRef  = useRef(perfil?.nome);
+  const userIdRef      = useRef(user?.id);
 
-  useEffect(() => { isAdvogadoRef.current = isAdvogado; }, [isAdvogado]);
-  useEffect(() => { perfilNomeRef.current = perfil?.nome; }, [perfil?.nome]);
+  useEffect(() => { isAdvogadoRef.current   = isAdvogado;   }, [isAdvogado]);
+  useEffect(() => { isEstagiarioRef.current = isEstagiario; }, [isEstagiario]);
+  useEffect(() => { perfilNomeRef.current   = perfil?.nome; }, [perfil?.nome]);
+  useEffect(() => { userIdRef.current       = user?.id;     }, [user?.id]);
 
   const fetchProcessos = useCallback(async () => {
     if (!initialLoadDone.current) setLoading(true);
@@ -36,8 +40,13 @@ export function useProcessos({ withRealtime = true }: { withRealtime?: boolean }
       .select(PROCESSOS_LIST_SELECT)
       .order('created_at', { ascending: false });
 
-    if (isAdvogado && perfil?.nome) {
-      query = query.eq('advogado_responsavel', perfil.nome);
+    if (isEstagiario && user?.id && !isAdvogado) {
+      // Estagiários só veem processos onde são co-responsáveis
+      query = query.eq('co_responsavel_id', user.id);
+    } else if (isAdvogado && perfil?.nome && user?.id) {
+      // Advogados veem processos onde são responsáveis ou co-responsáveis
+      const nome = perfil.nome.replace(/"/g, '');
+      query = query.or(`advogado_responsavel.eq."${nome}",co_responsavel_id.eq.${user.id}`);
     }
 
     const { data, error } = await query;
@@ -50,12 +59,22 @@ export function useProcessos({ withRealtime = true }: { withRealtime?: boolean }
 
     initialLoadDone.current = true;
     setLoading(false);
-  }, [isAdvogado, perfil?.nome, toast]);
+  }, [isAdvogado, isEstagiario, perfil?.nome, user?.id, toast]);
 
   useEffect(() => {
     if (!user) return;
     fetchProcessos();
   }, [user, fetchProcessos]);
+
+  const isVisible = (next: Processo): boolean => {
+    if (isEstagiarioRef.current && !isAdvogadoRef.current) {
+      return (next as any).co_responsavel_id === userIdRef.current;
+    }
+    if (isAdvogadoRef.current && perfilNomeRef.current) {
+      return next.advogado_responsavel === perfilNomeRef.current || (next as any).co_responsavel_id === userIdRef.current;
+    }
+    return true;
+  };
 
   useEffect(() => {
     if (!withRealtime) return;
@@ -63,7 +82,7 @@ export function useProcessos({ withRealtime = true }: { withRealtime?: boolean }
       .channel('processos-realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'processos' }, (payload) => {
         const next = payload.new as Processo;
-        if (isAdvogadoRef.current && perfilNomeRef.current && next.advogado_responsavel !== perfilNomeRef.current) return;
+        if (!isVisible(next)) return;
         setProcessos((prev) => {
           if (prev.some((p) => p.id === next.id)) return prev;
           return [next, ...prev];
@@ -71,7 +90,7 @@ export function useProcessos({ withRealtime = true }: { withRealtime?: boolean }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'processos' }, (payload) => {
         const next = payload.new as Processo;
-        if (isAdvogadoRef.current && perfilNomeRef.current && next.advogado_responsavel !== perfilNomeRef.current) return;
+        if (!isVisible(next)) return;
         setProcessos((prev) => {
           const exists = prev.some((p) => p.id === next.id);
           if (!exists) return [next, ...prev];
@@ -84,6 +103,7 @@ export function useProcessos({ withRealtime = true }: { withRealtime?: boolean }
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [withRealtime]);
 
   const createProcesso = async (processo: Partial<Omit<Processo, 'id' | 'created_at'>>) => {
@@ -175,6 +195,32 @@ export function useProcessos({ withRealtime = true }: { withRealtime?: boolean }
     return { error: null };
   };
 
+  const assignCoResponsavel = async (processoIds: string[], userId: string | null) => {
+    const { error } = await supabase
+      .from('processos')
+      .update({ co_responsavel_id: userId })
+      .in('id', processoIds);
+
+    if (error) {
+      toast({ title: 'Erro ao atribuir co-responsável', description: error.message, variant: 'destructive' });
+      return { error };
+    }
+
+    if (userId && processoIds.length > 0) {
+      await supabase.from('notificacoes_internas').insert({
+        user_id: userId,
+        titulo: 'Você foi designado como co-responsável',
+        mensagem: `Você foi adicionado como co-responsável em ${processoIds.length} processo${processoIds.length > 1 ? 's' : ''}.`,
+        tipo: 'processo',
+        lida: false,
+      });
+    }
+
+    toast({ title: `Co-responsável ${userId ? 'atribuído' : 'removido'} com sucesso!` });
+    await fetchProcessos();
+    return { error: null };
+  };
+
   return {
     processos,
     loading,
@@ -182,5 +228,6 @@ export function useProcessos({ withRealtime = true }: { withRealtime?: boolean }
     createProcesso,
     updateProcesso,
     deleteProcesso,
+    assignCoResponsavel,
   };
 }

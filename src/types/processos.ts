@@ -97,4 +97,8 @@ export interface Processo {
   // Hierarquia
   processo_pai_id: string | null;
   processos_filhos?: Pick<Processo, 'id' | 'numero_processo' | 'titulo_acao' | 'status' | 'fase'>[];
+
+  // Co-responsável
+  co_responsavel_id: string | null;
+  co_responsavel?: { id: string; nome: string | null; sobrenome: string | null } | null;
 }
