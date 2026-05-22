@@ -3,6 +3,40 @@ import { supabase } from '@/integrations/supabase/client';
 import { Honorario, Parcela, Despesa } from '@/types/financeiro';
 import { useToast } from '@/hooks/use-toast';
 
+export interface ProcessoFinanceiro {
+  id: string;
+  nome_cliente: string | null;
+  numero_processo: string | null;
+  advogado_responsavel: string | null;
+  status: string | null;
+  valor_causa: number | null;
+  valor_provisionado: number | null;
+  probabilidade: string | null;
+}
+
+export function useProcessosFinanceiro() {
+  const [processos, setProcessos] = useState<ProcessoFinanceiro[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase
+      .from('processos')
+      .select('id,nome_cliente,numero_processo,advogado_responsavel,status,valor_causa,valor_provisionado,probabilidade')
+      .not('status', 'in', '("Arquivado","Perdido")')
+      .or('valor_causa.not.is.null,valor_provisionado.not.is.null')
+      .order('valor_causa', { ascending: false, nullsFirst: false })
+      .then(({ data }) => {
+        setProcessos((data || []) as ProcessoFinanceiro[]);
+        setLoading(false);
+      });
+  }, []);
+
+  const totalEmCausa      = processos.reduce((s, p) => s + (p.valor_causa || 0), 0);
+  const totalProvisionado = processos.reduce((s, p) => s + (p.valor_provisionado || 0), 0);
+
+  return { processos, loading, totalEmCausa, totalProvisionado };
+}
+
 export function useHonorarios() {
   const [honorarios, setHonorarios] = useState<Honorario[]>([]);
   const [loading, setLoading] = useState(true);
