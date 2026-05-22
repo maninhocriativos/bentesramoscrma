@@ -167,7 +167,7 @@ export function UsersTable() {
                     <TableCell>
                       <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${getRoleBadgeStyles(null, true)}`}>
                         <Clock className="h-3 w-3" />
-                        Pendente
+                        Aguardando criar conta
                       </span>
                     </TableCell>
                     <TableCell>
