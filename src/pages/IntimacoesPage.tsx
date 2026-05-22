@@ -10,7 +10,7 @@ import {
   Clock, AlertTriangle, Eye, FileText, CalendarDays,
   Scale, BookOpen, ChevronRight, ChevronDown,
   MessageSquare, ClipboardList, Copy, ExternalLink,
-  Inbox, EyeOff, Timer, X,
+  Inbox, EyeOff, Timer, X, Sparkles, TrendingUp,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -87,7 +87,7 @@ export default function IntimacoesPage() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterLida, setFilterLida] = useState<'all' | 'unread' | 'read' | 'urgent'>('all');
+  const [filterLida, setFilterLida] = useState<'all' | 'unread' | 'read' | 'urgent' | 'today'>('all');
   const [selectedIntimacao, setSelectedIntimacao] = useState<Intimacao | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
@@ -173,27 +173,33 @@ export default function IntimacoesPage() {
     else await handleMarkRead(id);
   };
 
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const todayCount = intimacoes.filter(i => new Date(i.created_at) >= todayStart).length;
+  const unreadCount = intimacoes.filter(i => !i.lida).length;
+  const readCount = intimacoes.length - unreadCount;
+  const urgentCount = intimacoes.filter(i => { const u = getUrgencyInfo(i); return u.level === 'urgent' || u.level === 'overdue'; }).length;
+  const readPct = intimacoes.length > 0 ? Math.round((readCount / intimacoes.length) * 100) : 0;
+
   const filtered = intimacoes.filter(i => {
     const s = searchTerm.toLowerCase();
     const ok = !searchTerm || i.processo_cnj?.toLowerCase().includes(s) || i.processo_titulo?.toLowerCase().includes(s) || i.conteudo?.toLowerCase().includes(s) || i.tipo_intimacao?.toLowerCase().includes(s);
     if (filterLida === 'unread') return ok && !i.lida;
     if (filterLida === 'read') return ok && i.lida;
     if (filterLida === 'urgent') { const u = getUrgencyInfo(i); return ok && (u.level === 'urgent' || u.level === 'overdue'); }
+    if (filterLida === 'today') return ok && new Date(i.created_at) >= todayStart;
     return ok;
   });
 
-  const unreadCount = intimacoes.filter(i => !i.lida).length;
-  const urgentCount = intimacoes.filter(i => { const u = getUrgencyInfo(i); return u.level === 'urgent' || u.level === 'overdue'; }).length;
-
   const kpis = [
-    { icon: BookOpen, label: 'Total de Publicações', value: intimacoes.length, numClr: 'text-foreground', iconBg: 'bg-primary/10', iconClr: 'text-primary', barClr: 'from-primary to-primary/50' },
-    { icon: AlertTriangle, label: 'Pendentes de Leitura', value: unreadCount, numClr: 'text-rose-600 dark:text-rose-400', iconBg: 'bg-rose-100 dark:bg-rose-900/30', iconClr: 'text-rose-600 dark:text-rose-400', barClr: 'from-rose-500 to-orange-400' },
-    { icon: CheckCircle2, label: 'Já Analisadas', value: intimacoes.length - unreadCount, numClr: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-900/30', iconClr: 'text-emerald-600 dark:text-emerald-400', barClr: 'from-emerald-500 to-teal-400' },
+    { icon: BookOpen, label: 'Total de Publicações', value: intimacoes.length, numClr: 'text-foreground', iconBg: 'bg-primary/10', iconClr: 'text-primary', barClr: 'from-primary to-primary/50', filter: null },
     {
-      icon: Clock, label: 'Últimos 7 Dias',
-      value: intimacoes.filter(i => i.data_intimacao && Date.now() - new Date(i.data_intimacao).getTime() < 604800000).length,
-      numClr: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-900/30', iconClr: 'text-blue-600 dark:text-blue-400', barClr: 'from-blue-500 to-indigo-400'
+      icon: Sparkles, label: 'Chegaram Hoje', value: todayCount,
+      numClr: todayCount > 0 ? 'text-violet-600 dark:text-violet-400' : 'text-muted-foreground',
+      iconBg: 'bg-violet-100 dark:bg-violet-900/30', iconClr: 'text-violet-600 dark:text-violet-400',
+      barClr: 'from-violet-500 to-purple-400', filter: 'today' as const,
     },
+    { icon: AlertTriangle, label: 'Pendentes de Leitura', value: unreadCount, numClr: 'text-rose-600 dark:text-rose-400', iconBg: 'bg-rose-100 dark:bg-rose-900/30', iconClr: 'text-rose-600 dark:text-rose-400', barClr: 'from-rose-500 to-orange-400', filter: 'unread' as const },
+    { icon: CheckCircle2, label: 'Já Analisadas', value: readCount, numClr: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-900/30', iconClr: 'text-emerald-600 dark:text-emerald-400', barClr: 'from-emerald-500 to-teal-400', filter: 'read' as const },
   ];
 
   return (
@@ -250,23 +256,62 @@ export default function IntimacoesPage() {
         )}
 
         {/* KPI CARDS */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           {kpis.map((k, idx) => (
-            <div key={idx} className="group relative overflow-hidden rounded-2xl bg-card border border-border/50 p-5 cursor-default select-none transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+            <button
+              key={idx}
+              onClick={() => k.filter && setFilterLida(k.filter)}
+              className={`group relative overflow-hidden rounded-2xl bg-card border text-left select-none transition-all duration-200 hover:-translate-y-1 hover:shadow-xl p-4 md:p-5
+                ${k.filter && filterLida === k.filter ? 'border-primary/50 ring-2 ring-primary/20 shadow-lg' : 'border-border/50'}`}
+            >
               <div className={`absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r ${k.barClr}`} />
-              <div className={`absolute -bottom-8 -right-8 w-28 h-28 rounded-full bg-gradient-to-br ${k.barClr} opacity-[0.06] group-hover:opacity-[0.12] group-hover:scale-110 transition-all duration-500`} />
-              <div className={`relative h-10 w-10 rounded-xl ${k.iconBg} flex items-center justify-center mb-4`}>
-                <k.icon className={`h-5 w-5 ${k.iconClr}`} />
+              <div className={`absolute -bottom-8 -right-8 w-24 h-24 rounded-full bg-gradient-to-br ${k.barClr} opacity-[0.06] group-hover:opacity-[0.12] group-hover:scale-110 transition-all duration-500`} />
+              <div className="relative flex items-start justify-between mb-3">
+                <div className={`h-9 w-9 rounded-xl ${k.iconBg} flex items-center justify-center`}>
+                  <k.icon className={`h-4 w-4 ${k.iconClr}`} />
+                </div>
+                {idx === 1 && todayCount > 0 && (
+                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 animate-pulse">NOVO</span>
+                )}
+                {idx === 2 && unreadCount > 0 && (
+                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">{Math.round((unreadCount/intimacoes.length)*100)}%</span>
+                )}
+                {idx === 3 && readCount > 0 && (
+                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">{readPct}%</span>
+                )}
               </div>
-              <p className={`relative text-4xl font-black tracking-tight tabular-nums ${k.numClr}`}>
+              <p className={`relative text-3xl lg:text-4xl font-black tracking-tight tabular-nums ${k.numClr}`}>
                 {k.value.toLocaleString('pt-BR')}
               </p>
-              <p className="relative text-[10px] font-semibold text-muted-foreground mt-2 uppercase tracking-widest leading-tight">
+              <p className="relative text-[10px] font-semibold text-muted-foreground mt-1.5 uppercase tracking-widest leading-tight">
                 {k.label}
               </p>
-            </div>
+            </button>
           ))}
         </div>
+
+        {/* PROGRESS BAR */}
+        {intimacoes.length > 0 && (
+          <div className="rounded-2xl bg-card border border-border/50 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+                <span className="text-xs font-semibold text-foreground">Progresso de leitura</span>
+              </div>
+              <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">{readPct}% concluído</span>
+            </div>
+            <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-700"
+                style={{ width: `${readPct}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between mt-1.5">
+              <span className="text-[10px] text-muted-foreground">{readCount} lidas</span>
+              <span className="text-[10px] text-rose-500 font-medium">{unreadCount} pendentes</span>
+            </div>
+          </div>
+        )}
 
         {/* SEARCH + FILTERS */}
         <div className="flex flex-col md:flex-row gap-3">
@@ -284,24 +329,25 @@ export default function IntimacoesPage() {
               </button>
             )}
           </div>
-          <div className="flex items-center gap-1.5 bg-muted/50 rounded-xl p-1 border border-border/40 flex-wrap">
+          <div className="flex items-center gap-1 bg-muted/50 rounded-xl p-1 border border-border/40 flex-wrap">
             {([
-              { key: 'all' as const, label: 'Todas', count: intimacoes.length, icon: Inbox },
-              { key: 'unread' as const, label: 'Não lidas', count: unreadCount, icon: EyeOff },
-              { key: 'read' as const, label: 'Lidas', count: intimacoes.length - unreadCount, icon: Eye },
-              { key: 'urgent' as const, label: 'Prazo urgente', count: urgentCount, icon: AlertTriangle },
+              { key: 'all' as const, label: 'Todas', count: intimacoes.length, icon: Inbox, clr: '' },
+              { key: 'today' as const, label: 'Hoje', count: todayCount, icon: Sparkles, clr: 'text-violet-600' },
+              { key: 'unread' as const, label: 'Não lidas', count: unreadCount, icon: EyeOff, clr: 'text-rose-600' },
+              { key: 'read' as const, label: 'Lidas', count: readCount, icon: Eye, clr: 'text-emerald-600' },
+              { key: 'urgent' as const, label: 'Urgentes', count: urgentCount, icon: AlertTriangle, clr: 'text-amber-600' },
             ]).map(f => (
               <button
                 key={f.key}
                 onClick={() => setFilterLida(f.key)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 select-none whitespace-nowrap
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 select-none whitespace-nowrap
                   ${filterLida === f.key
-                    ? f.key === 'urgent' ? 'bg-rose-600 text-white shadow-sm shadow-rose-500/25' : 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+                    ? f.key === 'urgent' ? 'bg-amber-500 text-white shadow-sm' : f.key === 'today' ? 'bg-violet-600 text-white shadow-sm' : f.key === 'unread' ? 'bg-rose-600 text-white shadow-sm' : f.key === 'read' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-card'}`}
               >
                 <f.icon className="h-3.5 w-3.5 shrink-0" />
                 <span className="hidden sm:inline">{f.label}</span>
-                <span className={`min-w-[18px] text-center text-[10px] font-black px-1.5 py-0.5 rounded-md ${filterLida === f.key ? 'bg-white/25' : 'bg-muted-foreground/15'}`}>
+                <span className={`min-w-[16px] text-center text-[10px] font-black px-1 py-0.5 rounded ${filterLida === f.key ? 'bg-white/25' : 'bg-muted-foreground/15'}`}>
                   {f.count}
                 </span>
               </button>
@@ -310,9 +356,14 @@ export default function IntimacoesPage() {
         </div>
 
         {/* Meta */}
-        <div className="flex items-center justify-between text-[11px] text-muted-foreground px-0.5">
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground px-0.5 flex-wrap gap-1">
           <span className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> Sincronização automática: 08h e 14h · Escavador / Diários Oficiais</span>
-          <span className="font-medium">{filtered.length} de {intimacoes.length} publicações</span>
+          <div className="flex items-center gap-3">
+            {selectedIds.size > 0 && (
+              <span className="font-semibold text-primary">{selectedIds.size} selecionada(s)</span>
+            )}
+            <span className="font-medium">{filtered.length} de {intimacoes.length} publicações</span>
+          </div>
         </div>
 
         {/* LIST */}
@@ -352,8 +403,29 @@ export default function IntimacoesPage() {
               </div>
             </div>
 
-            {/* CARDS */}
-            {filtered.map(intimacao => {
+            {/* CARDS com agrupamento por data */}
+            {(() => {
+              const yesterdayStart = new Date(todayStart); yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+              const weekStart = new Date(todayStart); weekStart.setDate(weekStart.getDate() - 7);
+              const getGroup = (i: Intimacao) => {
+                const d = new Date(i.created_at);
+                if (d >= todayStart) return 'Hoje';
+                if (d >= yesterdayStart) return 'Ontem';
+                if (d >= weekStart) return 'Esta semana';
+                return 'Anteriores';
+              };
+              const groups: Record<string, Intimacao[]> = {};
+              for (const i of filtered) { const g = getGroup(i); (groups[g] = groups[g] || []).push(i); }
+              const order = ['Hoje', 'Ontem', 'Esta semana', 'Anteriores'];
+              return order.filter(g => groups[g]?.length).map(group => (
+                <div key={group}>
+                  <div className="flex items-center gap-2 mb-2 mt-4 first:mt-0">
+                    <div className={`h-2 w-2 rounded-full ${group === 'Hoje' ? 'bg-violet-500 animate-pulse' : group === 'Ontem' ? 'bg-blue-400' : 'bg-muted-foreground/40'}`} />
+                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{group}</span>
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground">{groups[group].length}</span>
+                    <div className="flex-1 h-px bg-border/50" />
+                  </div>
+                  {groups[group].map(intimacao => {
               const urgency = getUrgencyInfo(intimacao);
               const tc = getTypeConfig(intimacao.tipo_intimacao);
               const isExpanded = expandedCards.has(intimacao.id);
@@ -489,6 +561,9 @@ export default function IntimacoesPage() {
                 </div>
               );
             })}
+                </div>
+              ));
+            })()}
           </div>
         )}
       </div>
