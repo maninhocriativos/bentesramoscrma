@@ -1416,8 +1416,12 @@ const ManyChatInboxContent = () => {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
-      const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('webm') ? 'webm' : 'ogg';
+      const mimeType = MediaRecorder.isTypeSupported('audio/ogg;codecs=opus') ? 'audio/ogg;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+        : 'audio/ogg';
+      const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm';
       const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
@@ -1452,15 +1456,27 @@ const ManyChatInboxContent = () => {
     setMessages(prev => { const updated = [...prev, optimisticMessage]; messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
     scrollToBottom();
     try {
-      const ext = audioFile.name.split('.').pop() || 'webm';
+      const ext = audioFile.name.split('.').pop() || 'ogg';
       const filePath = `manychat/${subscriberSnapshot.subscriber_id}/audio_${Date.now()}.${ext}`;
+
+      // Converter para base64 — Z-API recebe direto sem depender de URL assinada
+      const audioBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('Falha ao ler áudio'));
+        reader.readAsDataURL(audioFile);
+      });
+
+      // Upload para o storage (apenas para exibir no CRM)
       const { error: uploadError } = await supabase.storage.from("documentos").upload(filePath, audioFile);
       if (uploadError) throw uploadError;
       const outboundInstanceId = resolveInstanceId(subscriberSnapshot);
       const signResult = await supabase.storage.from("documentos").createSignedUrl(filePath, 60 * 60 * 24 * 30);
       if (signResult.error || !signResult.data?.signedUrl) throw signResult.error;
       const signedUrl = signResult.data.signedUrl;
-      const { data: zapiResult, error: zapiError } = await invokeZapiSend({ to_phone: subscriberSnapshot.telefone, message: signedUrl, type: "audio", lead_id: subscriberSnapshot.lead_id, file_name: audioFile.name, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
+
+      // Envia base64 para Z-API (não a URL assinada — evita problemas de acesso)
+      const { data: zapiResult, error: zapiError } = await invokeZapiSend({ to_phone: subscriberSnapshot.telefone, message: audioBase64, type: "audio", lead_id: subscriberSnapshot.lead_id, file_name: audioFile.name, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
       if (zapiError) throw new Error(zapiError.message);
       if (!zapiResult?.success) throw new Error(zapiResult?.error || "Z-API: envio não confirmado pela instância");
       const msgId = zapiResult?.messageId;
