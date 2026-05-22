@@ -1930,10 +1930,53 @@ const ManyChatInboxContent = () => {
             <h1 className={`text-xl font-semibold ${themeClasses.headerText}`}>Conversas</h1>
           </div>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" onClick={() => setShowTeamPanel(!showTeamPanel)} className={`h-10 w-10 rounded-full relative ${showTeamPanel ? "text-[#00A884] bg-[#00A884]/10" : themeClasses.iconColor} ${themeClasses.hoverBtn}`}>
-              <Users className="h-5 w-5" />
-              {getOnlineCount() > 0 && <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-emerald-500 text-[10px] text-white flex items-center justify-center font-medium">{getOnlineCount()}</span>}
-            </Button>
+            {/* Botão de equipe online — mostra avatares empilhados */}
+            {(() => {
+              const onlineMembers = getTeamWithStatus().filter(m => m.online && m.id !== user?.id);
+              const shown = onlineMembers.slice(0, 3);
+              const extra = onlineMembers.length - 3;
+              return (
+                <button
+                  onClick={() => setShowTeamPanel(!showTeamPanel)}
+                  title={onlineMembers.length > 0 ? `${onlineMembers.length} online: ${onlineMembers.map(m => m.fullName.split(' ')[0]).join(', ')}` : 'Equipe'}
+                  className={`flex items-center gap-1.5 px-2 py-1.5 rounded-xl transition-all ${showTeamPanel ? 'bg-[#00A884]/15' : themeClasses.hoverBtn}`}
+                >
+                  {onlineMembers.length === 0 ? (
+                    <div className={`h-8 w-8 rounded-full flex items-center justify-center ${themeClasses.iconColor}`}>
+                      <Users className="h-5 w-5" />
+                    </div>
+                  ) : (
+                    <div className="flex -space-x-2 items-center">
+                      {shown.map((m, i) => (
+                        <div
+                          key={m.id}
+                          className="h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white border-2 relative shrink-0"
+                          style={{ background: 'linear-gradient(135deg,#00A884,#008069)', borderColor: isDark ? '#111B21' : '#F0F2F5', zIndex: 3 - i }}
+                        >
+                          {m.fullName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
+                          {i === shown.length - 1 && extra <= 0 && (
+                            <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 border border-[#111B21]" />
+                          )}
+                        </div>
+                      ))}
+                      {extra > 0 && (
+                        <div
+                          className="h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold border-2 shrink-0"
+                          style={{ background: isDark ? '#2a3942' : '#E9EDEF', color: isDark ? '#8696A0' : '#667781', borderColor: isDark ? '#111B21' : '#F0F2F5' }}
+                        >
+                          +{extra}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {onlineMembers.length > 0 && (
+                    <span className={`text-[11px] font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-600'} hidden sm:block`}>
+                      {onlineMembers.length} online
+                    </span>
+                  )}
+                </button>
+              );
+            })()}
             <Button variant="ghost" size="icon" onClick={toggleTheme} className={`h-10 w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}>{isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}</Button>
             <Button variant="ghost" size="icon" onClick={syncAllContacts} disabled={isSyncing} className={`h-10 w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}><RefreshCw className={`h-5 w-5 ${isSyncing ? "animate-spin" : ""}`} /></Button>
           </div>
