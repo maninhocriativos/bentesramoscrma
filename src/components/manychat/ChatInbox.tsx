@@ -687,7 +687,7 @@ const ManyChatInboxContent = () => {
         else if (tipo === "document") text = "📄 Documento";
         setLastMessagePreviews(prev => { const newMap = new Map(prev); newMap.set(key, prefix + text); return newMap; });
         if (newMsg.direcao === "entrada") { playNotificationSound(); if (!isCurrentChat) notifyNewMessage(newMsg.subscriber_nome || "Novo contato", newMsg.conteudo?.substring(0, 100) || ""); }
-        pendingBumpsRef.current.set(newMsg.subscriber_id, new Date().toISOString());
+        pendingBumpsRef.current.set(matchingSub?.subscriber_id || newMsg.subscriber_id, new Date().toISOString());
         if (!bumpTimerRef.current) {
           bumpTimerRef.current = setTimeout(() => {
             const bumps = new Map(pendingBumpsRef.current);
@@ -909,14 +909,16 @@ const ManyChatInboxContent = () => {
             const m = new Map(prev); m.set(matchingSub.subscriber_id, prefix + text); return m;
           });
 
-          // Bump para o topo e badge de não lida
+          // Bump para o topo (toda mensagem, entrada ou saída)
+          setSubscribers((prev: typeof subscribers) => {
+            const idx = prev.findIndex(s => s.subscriber_id === matchingSub.subscriber_id);
+            if (idx === -1) return prev;
+            const bumped = { ...prev[idx], ultima_interacao: msg.created_at };
+            return [bumped, ...prev.filter((_: any, i: number) => i !== idx)];
+          });
+
+          // Badge de não lida só para mensagens recebidas
           if ((msg as any).direcao === 'entrada') {
-            setSubscribers((prev: typeof subscribers) => {
-              const idx = prev.findIndex(s => s.subscriber_id === matchingSub.subscriber_id);
-              if (idx === -1) return prev;
-              const bumped = { ...prev[idx], ultima_interacao: msg.created_at };
-              return [bumped, ...prev.filter((_: any, i: number) => i !== idx)];
-            });
             const isOpenConv = sub && (
               sub.subscriber_id === matchingSub.subscriber_id ||
               (sub.lead_id && sub.lead_id === matchingSub.lead_id)
