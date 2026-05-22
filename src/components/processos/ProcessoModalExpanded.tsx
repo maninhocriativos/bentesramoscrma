@@ -287,9 +287,9 @@ function SectionTitle({ icon: Icon, label, color = 'text-primary', bg = 'bg-prim
   );
 }
 function FieldGroup({ children }: { children: React.ReactNode }) { return <div className="bg-muted/20 rounded-2xl p-4 space-y-3 border border-border/30">{children}</div>; }
-function Row2({ children }: { children: React.ReactNode }) { return <div className="grid grid-cols-2 gap-3">{children}</div>; }
-function Row3({ children }: { children: React.ReactNode }) { return <div className="grid grid-cols-3 gap-3">{children}</div>; }
-function Row4({ children }: { children: React.ReactNode }) { return <div className="grid grid-cols-4 gap-2">{children}</div>; }
+function Row2({ children }: { children: React.ReactNode }) { return <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{children}</div>; }
+function Row3({ children }: { children: React.ReactNode }) { return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{children}</div>; }
+function Row4({ children }: { children: React.ReactNode }) { return <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">{children}</div>; }
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
     <div>
@@ -1135,24 +1135,24 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                   style={{ background: `linear-gradient(135deg, ${barColor}, ${barColor}bb)`, boxShadow: `0 4px 12px ${barColor}40` }}>
                   <Scale className="h-5 w-5 text-white" />
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2.5 flex-wrap">
-                    <h2 className="text-sm font-black text-foreground leading-none truncate max-w-[340px]">
+                    <h2 className="text-sm font-black text-foreground leading-none truncate">
                       {isNew ? 'Novo Processo' : (formData.titulo_acao || formData.classe_cnj || 'Detalhes do Processo')}
                     </h2>
                     {!isNew && formData.status && (
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${statusCfg.cls}`}>
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border shrink-0 ${statusCfg.cls}`}>
                         <StatusIcon className="h-3 w-3 shrink-0" />{formData.status}
                       </span>
                     )}
                   </div>
                   {formData.numero_processo && (
-                    <p className="text-[11px] font-mono text-muted-foreground mt-0.5 flex items-center gap-1.5">
+                    <p className="text-[11px] font-mono text-muted-foreground mt-0.5 flex items-center gap-1.5 truncate">
                       <Hash className="h-2.5 w-2.5 shrink-0" />{formData.numero_processo}
                     </p>
                   )}
                   {!isNew && clienteName && (
-                    <p className="text-[11px] text-muted-foreground/70 mt-0.5 flex items-center gap-1 truncate max-w-[360px]">
+                    <p className="text-[11px] text-muted-foreground/70 mt-0.5 flex items-center gap-1 truncate">
                       <Users className="h-2.5 w-2.5 shrink-0" />{clienteName}
                     </p>
                   )}
@@ -1654,10 +1654,10 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                 </ScrollArea>
 
                 {/* Divider */}
-                <div className="w-px bg-border/40 shrink-0" />
+                <div className="hidden lg:block w-px bg-border/40 shrink-0" />
 
                 {/* Partes — largura responsiva, sem overflow */}
-                <div className="w-[300px] xl:w-[340px] shrink-0 flex flex-col overflow-hidden h-full bg-muted/5">
+                <div className="hidden lg:flex w-[300px] xl:w-[340px] shrink-0 flex-col overflow-hidden h-full bg-muted/5">
                   <div className="px-4 pt-3.5 pb-3 border-b border-border/40 shrink-0 bg-card">
                     <div className="flex items-center gap-2">
                       <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
