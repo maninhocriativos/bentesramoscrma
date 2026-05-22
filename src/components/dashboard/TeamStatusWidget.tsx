@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import { useTeamPresence } from '@/hooks/useTeamPresence';
+import { usePresence } from '@/contexts/PresenceContext';
 import { useTarefas } from '@/hooks/useTarefas';
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
@@ -25,9 +25,8 @@ const PRIORIDADE_CONFIG: Record<string, { label: string; dot: string; bg: string
 
 export function TeamStatusWidget() {
   const { user } = useAuth();
-  const { perfil, canAccessSettings } = usePerfil();
-  const userName = [perfil?.nome, perfil?.sobrenome].filter(Boolean).join(' ') || user?.email || '';
-  const { getTeamWithStatus, getOnlineCount } = useTeamPresence(user?.id, userName);
+  const { canAccessSettings } = usePerfil();
+  const { getTeamWithStatus, getOnlineCount } = usePresence();
   const { tarefas } = useTarefas();
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
   const [selectedTarefa, setSelectedTarefa] = useState<Tarefa | null>(null);

@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { useChatPresence } from "@/hooks/useChatPresence";
-import { useTeamPresence } from "@/hooks/useTeamPresence";
+import { usePresence } from "@/contexts/PresenceContext";
 import { useChatAttending } from "@/hooks/useChatAttending";
 import { useChatNotifications } from "@/hooks/useChatNotifications";
 import { useChatTags } from "@/hooks/useChatTags";
@@ -219,7 +219,7 @@ const ManyChatInboxContent = () => {
   // ─── Presence + notifications ────────────────────────────────────────────────
 
   const { isOnline, isTyping, setTyping } = useChatPresence(user?.id, fullName || user?.email?.split("@")[0]);
-  const { getTeamWithStatus, setCurrentChat, getOnlineCount } = useTeamPresence(user?.id, fullName || user?.email?.split("@")[0]);
+  const { getTeamWithStatus, setCurrentChat, getOnlineCount } = usePresence();
   const { playNotificationSound, notifyAssignment, notifyNewMessage, requestNotificationPermission } = useChatNotifications();
 
   // Mapa subscriber_id → primeiro nome do atendente (excluindo o próprio usuário)

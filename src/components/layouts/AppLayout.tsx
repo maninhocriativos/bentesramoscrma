@@ -5,6 +5,7 @@ import { AppSidebar } from '@/components/AppSidebar';
 import { OnboardingModal } from '@/components/onboarding/OnboardingModal';
 import { PageTransition } from '@/components/layouts/PageTransition';
 import { ChatInterno } from '@/components/tarefas/ChatInterno';
+import { PresenceProvider } from '@/contexts/PresenceContext';
 
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
@@ -40,19 +41,21 @@ export function AppLayout({ children }: AppLayoutProps) {
   }
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <div className="min-h-screen flex w-full bg-background">
-        <AppSidebar />
-        <main className="flex-1 flex flex-col min-h-screen overflow-hidden min-w-0">
-          {/* Mobile trigger removed - AppHeader handles SidebarTrigger on mobile */}
-          <PageTransition>
-            {children}
-          </PageTransition>
-        </main>
-      </div>
-      
-      {needsOnboarding && <OnboardingModal />}
-      <ChatInterno />
-    </SidebarProvider>
+    <PresenceProvider>
+      <SidebarProvider defaultOpen={true}>
+        <div className="min-h-screen flex w-full bg-background">
+          <AppSidebar />
+          <main className="flex-1 flex flex-col min-h-screen overflow-hidden min-w-0">
+            {/* Mobile trigger removed - AppHeader handles SidebarTrigger on mobile */}
+            <PageTransition>
+              {children}
+            </PageTransition>
+          </main>
+        </div>
+
+        {needsOnboarding && <OnboardingModal />}
+        <ChatInterno />
+      </SidebarProvider>
+    </PresenceProvider>
   );
 }

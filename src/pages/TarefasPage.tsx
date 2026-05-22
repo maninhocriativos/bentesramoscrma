@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useTarefas, useTimesheet } from '@/hooks/useTarefas';
-import { useTeamPresence } from '@/hooks/useTeamPresence';
+import { usePresence } from '@/contexts/PresenceContext';
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
 import { TarefaModal } from '@/components/tarefas/TarefaModal';
@@ -226,9 +226,7 @@ function KpiCard({ label, value, icon: Icon, accent, bg, suffix = '', highlight 
 // ── Main ─────────────────────────────────────────────────────────────────────
 export default function TarefasPage() {
   const { user }   = useAuth();
-  const { perfil } = usePerfil();
-  const userName = [perfil?.nome, perfil?.sobrenome].filter(Boolean).join(' ') || user?.email || '';
-  const { getTeamWithStatus } = useTeamPresence(user?.id, userName);
+  const { getTeamWithStatus } = usePresence();
   const { canAccessSettings: isAdmin } = usePerfil();
   const { tarefas, loading, updateTarefa, deleteTarefa, fetchTarefas } = useTarefas();
   const { registros, loading: loadingTS } = useTimesheet();
