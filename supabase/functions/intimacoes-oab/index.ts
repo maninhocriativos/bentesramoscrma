@@ -180,19 +180,17 @@ serve(async (req) => {
           }
         }
 
-        // Filtro usando o mesmo CUTOFF de 90 dias (antes era 60 dias — perdia processos)
-        const ativos = processos.filter((p: any) => {
-          const fonte = p.fontes?.find((f: any) => f.tipo === "TRIBUNAL") || p.fontes?.[0];
-          const lastMov = fonte?.data_ultima_movimentacao || p.data_ultima_movimentacao;
-          return !lastMov || lastMov >= CUTOFF;
-        });
+        // Sem filtro de data — verifica todos os processos ativos
+        // A data_ultima_movimentacao do Escavador pode estar desatualizada
+        // e intimações recentes podem existir mesmo em processos com movimentação antiga
+        const ativos = processos;
 
-        console.log(`📋 [V2] ${processos.length} processos total, ${ativos.length} com atividade nos últimos 90 dias`);
+        console.log(`📋 [V2] ${processos.length} processos total — verificando todos`);
 
         // Busca movimentações em batches paralelos de 5 para maximizar velocidade
         let v2Count = 0;
         const PARALLEL_BATCH = 5;
-        const maxProcessos = Math.min(ativos.length, 60); // até 60 processos
+        const maxProcessos = ativos.length; // sem limite — processa todos
 
         for (let i = 0; i < maxProcessos; i += PARALLEL_BATCH) {
           const batch = ativos.slice(i, i + PARALLEL_BATCH);
@@ -206,7 +204,7 @@ serve(async (req) => {
             const procTitulo = `${proc.titulo_polo_ativo || ""} X ${proc.titulo_polo_passivo || ""}`.trim().replace(/^X\s*/, "").replace(/\s*X$/, "");
 
             const movResp = await fetch(
-              `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?limit=30`,
+              `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?limit=50`,
               { headers: esc, signal: AbortSignal.timeout(12000) }
             );
             if (!movResp.ok) return [];
@@ -251,7 +249,14 @@ serve(async (req) => {
       }
 
       // ── Estratégia 3: V1 Escavador — Diário Oficial (5 páginas por termo) ──
-      const searchTerms = [`OAB/${oab_uf} ${oab_numero}`, `OAB ${oab_uf} ${oab_numero}`];
+      // Múltiplas variações de formato para maximizar cobertura das publicações
+      const searchTerms = [
+        `OAB/${oab_uf} ${oab_numero}`,
+        `OAB ${oab_uf} ${oab_numero}`,
+        `OAB/${oab_uf} nº ${oab_numero}`,
+        `OAB n. ${oab_numero}/${oab_uf}`,
+        `${oab_numero}/${oab_uf}`,
+      ];
       let v1Count = 0;
 
       for (const term of searchTerms) {
