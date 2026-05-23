@@ -51,6 +51,9 @@ interface Intimacao {
   lida: boolean;
   lida_em: string | null;
   created_at: string;
+  fonte?: string;
+  raw_json?: Record<string, unknown>;
+  advogado_id?: string | null;
 }
 
 async function copyTextToClipboard(text: string, label = 'Número do processo') {
@@ -645,7 +648,7 @@ export default function IntimacoesPage() {
 
       {/* DETAIL MODAL */}
       <Dialog open={!!selectedIntimacao} onOpenChange={() => setSelectedIntimacao(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0 rounded-2xl border-border/70 bg-background shadow-2xl">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden p-0 gap-0 rounded-2xl border-border/70 bg-background shadow-2xl flex flex-col">
           {selectedIntimacao && (
             <IntimacaoDetailModal
               intimacao={selectedIntimacao}
@@ -655,6 +658,7 @@ export default function IntimacoesPage() {
               onMarkRead={() => { handleMarkRead(selectedIntimacao.id); setSelectedIntimacao({ ...selectedIntimacao, lida: true }); }}
               onGenerateReport={() => handleGenerateReport(selectedIntimacao)}
               onClose={() => setSelectedIntimacao(null)}
+              perfil={perfil}
             />
           )}
         </DialogContent>
@@ -663,10 +667,10 @@ export default function IntimacoesPage() {
   );
 }
 
-function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularPrazos, onMarkRead, onGenerateReport, onClose }: {
+function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularPrazos, onMarkRead, onGenerateReport, onClose, perfil }: {
   intimacao: Intimacao; formatDate: (d: string | null) => string | null; formatDateLong: (d: string | null) => string;
   calcularPrazos: (i: Intimacao) => { dataBase: Date | null; dataConclusao: Date | null; dataFatal: Date | null };
-  onMarkRead: () => void; onGenerateReport: () => void; onClose: () => void;
+  onMarkRead: () => void; onGenerateReport: () => void; onClose: () => void; perfil: any;
 }) {
   const [showFullContent, setShowFullContent] = useState(false);
   const [comentario, setComentario] = useState('');
@@ -684,6 +688,8 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const [prazoFatal, setPrazoFatal] = useState('');
   const [horarioTarefa, setHorarioTarefa] = useState('');
   const [responsavelId, setResponsavelId] = useState('');
+  const [encaminharId, setEncaminharId] = useState('');
+  const [encaminhando, setEncaminhando] = useState(false);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [savingTarefa, setSavingTarefa] = useState(false);
 
@@ -693,7 +699,26 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const prazos = calcularPrazos(intimacao);
   const fmt = (d: Date | null) => d ? format(d, 'dd/MM/yyyy') : '—';
   const conteudo = intimacao.conteudo || '';
-  const displayContent = showFullContent ? conteudo : conteudo.slice(0, 400);
+  const displayContent = showFullContent ? conteudo : conteudo.slice(0, 800);
+
+  const pagina = (intimacao.raw_json as any)?.pagina ?? (intimacao.raw_json as any)?.page ?? null;
+  const nomePesquisado = [perfil?.nome, perfil?.sobrenome].filter(Boolean).join(' ') || `OAB/${intimacao.oab_uf} ${intimacao.oab_numero}`;
+  const createdAt = new Date(intimacao.created_at);
+  const daysAgo = Math.floor((Date.now() - createdAt.getTime()) / 86400000);
+  const createdAgoText = daysAgo === 0 ? 'hoje' : daysAgo === 1 ? '1 dia atrás' : `${daysAgo} dias atrás`;
+
+  const fonteDisplay = (() => {
+    const f = intimacao.fonte || '';
+    if (f === 'datajud') return 'DataJud (Tribunal)';
+    if (f === 'escavador_v2') return 'Escavador';
+    if (f === 'escavador_v1') return intimacao.processo_titulo || 'Diário Oficial';
+    return f || 'Sistema';
+  })();
+
+  const getMemberName = (member: TeamMember) => {
+    const name = [member.nome, member.sobrenome].filter(Boolean).join(' ');
+    return name || member.email || 'Usuário';
+  };
 
   const searchProcessos = async (term: string) => {
     setProcessoSearch(term);
@@ -704,11 +729,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
 
   useEffect(() => {
     const fetchMembers = async () => {
-      const { data } = await supabase
-        .from('perfis')
-        .select('id, nome, sobrenome, email')
-        .eq('aprovado', true)
-        .order('nome', { ascending: true });
+      const { data } = await supabase.from('perfis').select('id, nome, sobrenome, email').eq('aprovado', true).order('nome', { ascending: true });
       setMembers((data as TeamMember[]) || []);
     };
     void fetchMembers();
@@ -718,11 +739,6 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     if (!prazoSeguranca && prazos.dataConclusao) setPrazoSeguranca(format(prazos.dataConclusao, 'yyyy-MM-dd'));
     if (!prazoFatal && prazos.dataFatal) setPrazoFatal(format(prazos.dataFatal, 'yyyy-MM-dd'));
   }, [prazos.dataConclusao, prazos.dataFatal, prazoFatal, prazoSeguranca]);
-
-  const getMemberName = (member: TeamMember) => {
-    const name = [member.nome, member.sobrenome].filter(Boolean).join(' ');
-    return name || member.email || 'Usuario';
-  };
 
   const addCustomTarefa = () => {
     const title = novaTarefa.trim();
@@ -736,7 +752,6 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     if (!selectedTarefaTipo) { toast.error('Selecione ou cadastre o tipo da tarefa'); return; }
     if (!responsavelId) { toast.error('Selecione o responsável pela tarefa'); return; }
     if (!prazoSeguranca || !prazoFatal) { toast.error('Informe o prazo de segurança e o prazo fatal'); return; }
-
     setSavingTarefa(true);
     try {
       const prazoFat = parseISO(prazoFatal);
@@ -750,163 +765,130 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
         horarioTarefa ? `Horário: ${horarioTarefa}` : '',
         conteudo ? `Resumo da publicacao: ${conteudo.slice(0, 700)}` : '',
       ].filter(Boolean);
-
-      const { data, error } = await supabase
-        .from('tarefas')
-        .insert({
-          titulo: selectedTarefaTipo,
-          descricao: descriptionParts.join('\n\n'),
-          responsavel_id: responsavelId,
-          processo_id: linkedProcesso?.id || null,
-          cliente_id: null,
-          prioridade,
-          status: 'Pendente',
-          data_limite: prazoFatal,
-          prazo_seguranca: prazoSeguranca,
-          prazo_fatal: prazoFatal,
-          horario: horarioTarefa || null,
-          data_conclusao: null,
-          entrega_texto: null,
-          entrega_anexo_url: null,
-          entregue_em: null,
-          aprovacao_status: null,
-          aprovacao_nota: null,
-          aprovacao_feedback: null,
-          aprovado_por: null,
-          aprovado_em: null,
-        })
-        .select('id')
-        .single();
+      const { data, error } = await supabase.from('tarefas').insert({
+        titulo: selectedTarefaTipo, descricao: descriptionParts.join('\n\n'),
+        responsavel_id: responsavelId, processo_id: linkedProcesso?.id || null, cliente_id: null,
+        prioridade, status: 'Pendente', data_limite: prazoFatal, prazo_seguranca: prazoSeguranca,
+        prazo_fatal: prazoFatal, horario: horarioTarefa || null, data_conclusao: null,
+        entrega_texto: null, entrega_anexo_url: null, entregue_em: null, aprovacao_status: null,
+        aprovacao_nota: null, aprovacao_feedback: null, aprovado_por: null, aprovado_em: null,
+      }).select('id').single();
       if (error) throw error;
-
       await supabase.from('notificacoes_internas' as any).insert({
-        user_id: responsavelId,
-        titulo: 'Nova tarefa atribuída',
+        user_id: responsavelId, titulo: 'Nova tarefa atribuída',
         mensagem: `${selectedTarefaTipo} - prazo fatal ${format(prazoFat, 'dd/MM/yyyy')}${horarioTarefa ? ` às ${horarioTarefa}` : ''}`,
-        tipo: prioridade === 'Urgente' ? 'alerta' : 'info',
-        lida: false,
-        link: '/tarefas',
-        dados: {
-          source: 'intimacoes',
-          intimacao_id: intimacao.id,
-          tarefa_id: data?.id,
-          prazo_seguranca: prazoSeguranca,
-          prazo_fatal: prazoFatal,
-          horario: horarioTarefa || null,
-        },
+        tipo: prioridade === 'Urgente' ? 'alerta' : 'info', lida: false, link: '/tarefas',
+        dados: { source: 'intimacoes', intimacao_id: intimacao.id, tarefa_id: data?.id, prazo_seguranca: prazoSeguranca, prazo_fatal: prazoFatal, horario: horarioTarefa || null },
       } as any);
-
       setTarefasAdicionadas(prev => prev.includes(selectedTarefaTipo) ? prev : [...prev, selectedTarefaTipo]);
-      setSelectedTarefaTipo('');
-      setHorarioTarefa('');
-      setTarefaModalOpen(false);
+      setSelectedTarefaTipo(''); setHorarioTarefa(''); setTarefaModalOpen(false);
       toast.success('Tarefa criada e atribuída ao responsável');
     } catch (err: any) {
       toast.error('Erro ao criar tarefa', { description: err.message });
-    } finally {
-      setSavingTarefa(false);
-    }
+    } finally { setSavingTarefa(false); }
   };
+
+  const handleEncaminhar = async () => {
+    if (!encaminharId) return;
+    setEncaminhando(true);
+    try {
+      const responsavel = members.find(m => m.id === encaminharId);
+      const prazoData = intimacao.data_intimacao || new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0];
+      const { data: tarefaData, error } = await supabase.from('tarefas').insert({
+        titulo: `${intimacao.tipo_intimacao || 'Intimação'} - ${intimacao.processo_cnj || 'Processo não identificado'}`,
+        descricao: [`Intimação encaminhada para análise.`, `Processo: ${intimacao.processo_cnj || '—'}`, intimacao.tribunal ? `Tribunal: ${intimacao.tribunal}` : '', conteudo ? `\nPublicação:\n${conteudo.slice(0, 700)}` : ''].filter(Boolean).join('\n'),
+        responsavel_id: encaminharId, processo_id: linkedProcesso?.id || null,
+        prioridade: 'Alta', status: 'Pendente', data_limite: prazoData, prazo_fatal: prazoData,
+      }).select('id').single();
+      if (error) throw error;
+      await supabase.from('notificacoes_internas' as any).insert({
+        user_id: encaminharId, titulo: 'Intimação encaminhada',
+        mensagem: `${intimacao.tipo_intimacao || 'Intimação'} encaminhada. Processo: ${intimacao.processo_cnj || '—'}`,
+        tipo: 'info', lida: false, link: '/tarefas',
+        dados: { source: 'intimacoes', intimacao_id: intimacao.id, tarefa_id: tarefaData?.id },
+      } as any);
+      toast.success(`Encaminhado para ${responsavel ? getMemberName(responsavel) : 'responsável'}!`);
+      setEncaminharId('');
+    } catch (err: any) {
+      toast.error('Erro ao encaminhar', { description: err.message });
+    } finally { setEncaminhando(false); }
+  };
+
   return (
     <>
-      <div className="relative overflow-hidden rounded-t-2xl border-b border-border/50 bg-card">
+      {/* HEADER */}
+      <div className="relative shrink-0 border-b border-border/50 bg-card rounded-t-2xl overflow-hidden">
         <div className="absolute inset-x-0 top-0 h-1.5" style={{ background: `linear-gradient(90deg, ${tc.avatarFrom}, ${tc.avatarTo})` }} />
-        <div className="px-7 pb-5 pt-7">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-primary/15 bg-primary/10 px-3 py-1 text-[11px] font-bold text-primary">
-              {intimacao.tipo_intimacao || 'Publicação'}
-            </span>
-            <span className={`rounded-full border px-3 py-1 text-[11px] font-bold ${intimacao.lida ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
-              {intimacao.lida ? 'Lida' : 'Não lida'}
-            </span>
+        <div className="px-6 pt-5 pb-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <span className={`text-[11px] font-bold px-3 py-1 rounded-full ${tc.badge}`}>{intimacao.tipo_intimacao || 'Publicação'}</span>
+                <span className={`text-[11px] font-bold px-3 py-1 rounded-full border ${intimacao.lida ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800/40' : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800/40'}`}>
+                  {intimacao.lida ? 'Lida' : 'Pendente'}
+                </span>
+                {intimacao.tribunal && (
+                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-muted text-muted-foreground border border-border/50">{intimacao.tribunal}</span>
+                )}
+              </div>
+              <h2 className="text-base font-bold text-foreground leading-snug line-clamp-2">
+                {intimacao.processo_titulo || intimacao.tipo_intimacao || 'Publicação'}
+              </h2>
+              {intimacao.processo_cnj && (
+                <button onClick={() => void copyTextToClipboard(intimacao.processo_cnj)} className="mt-1 inline-flex items-center gap-1.5 text-sm font-mono text-muted-foreground hover:text-foreground transition-colors group">
+                  <span>{intimacao.processo_cnj}</span>
+                  <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              )}
+            </div>
+            <button onClick={onClose} className="shrink-0 h-8 w-8 rounded-lg flex items-center justify-center hover:bg-muted/60 transition-colors text-muted-foreground mt-1">
+              <X className="h-4 w-4" />
+            </button>
           </div>
-
-          <div className="space-y-3 pr-8">
-            <h2 className="text-xl font-bold leading-snug text-foreground">
-              {intimacao.processo_titulo || intimacao.tipo_intimacao || 'Publicação'}
-            </h2>
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
+            {!intimacao.lida && (
+              <Button size="sm" className="h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1.5 shadow-sm" onClick={onMarkRead}>
+                <CheckCircle2 className="h-3.5 w-3.5" /> Marcar como lida
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs gap-1.5" onClick={onGenerateReport}>
+              <FileText className="h-3.5 w-3.5" /> Relatório PDF
+            </Button>
             {intimacao.processo_cnj && (
-              <button
-                type="button"
-                onClick={() => void copyTextToClipboard(intimacao.processo_cnj)}
-                className="inline-flex max-w-full items-center gap-2 rounded-xl border border-border/60 bg-muted/35 px-3 py-2 text-left transition-colors hover:bg-muted/60"
-              >
-                <span className="truncate font-mono text-sm font-bold text-foreground">{intimacao.processo_cnj}</span>
-                <Copy className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              </button>
+              <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs gap-1.5" onClick={() => void copyTextToClipboard(intimacao.processo_cnj)}>
+                <Copy className="h-3.5 w-3.5" /> Copiar nº
+              </Button>
             )}
           </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-b border-border/40 bg-muted/15 px-6 py-3">
-        {!intimacao.lida && (
-          <Button size="sm" className="h-8 rounded-lg bg-emerald-600 text-xs text-white shadow-sm hover:bg-emerald-700" onClick={onMarkRead}>
-            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Marcar como lida
-          </Button>
-        )}
-        <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs" onClick={onGenerateReport}>
-          <FileText className="mr-1.5 h-3.5 w-3.5" /> Relatório PDF
-        </Button>
-        {intimacao.processo_cnj && (
-          <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs" onClick={() => void copyTextToClipboard(intimacao.processo_cnj)}>
-            <Copy className="mr-1.5 h-3.5 w-3.5" /> Copiar nº
-          </Button>
-        )}
-      </div>
-
-      <div className="px-6 py-5 space-y-5">
-        {/* Vincular processo */}
-        <div className="border-2 border-primary/15 rounded-xl p-4 bg-primary/[0.02] space-y-3">
-          <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Vincular a processo existente</p>
-          <div className="relative flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Pesquise por nº ou título" value={processoSearch} onChange={e => searchProcessos(e.target.value)} className="pl-10 text-sm rounded-lg" />
-              {showDropdown && processoResults.length > 0 && (
-                <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-xl max-h-48 overflow-y-auto">
-                  {processoResults.map(p => (
-                    <button key={p.id} className="w-full text-left px-3 py-2.5 hover:bg-muted/60 transition-colors border-b border-border/30 last:border-0"
-                      onClick={() => { setLinkedProcesso({ id: p.id, numero: p.numero_processo || '', titulo: p.titulo_acao || '' }); setProcessoSearch(p.numero_processo || ''); setShowDropdown(false); }}>
-                      <p className="text-sm font-mono font-bold text-primary">{p.numero_processo || 'Sem número'}</p>
-                      {p.titulo_acao && <p className="text-xs text-muted-foreground">{p.titulo_acao}</p>}
-                    </button>
-                  ))}
-                </div>
-              )}
+      {/* BODY: two columns */}
+      <div className="flex flex-1 overflow-hidden min-h-0">
+        {/* LEFT: Content + sections */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          {/* Publication text */}
+          <div>
+            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-2">Publicação</p>
+            <div className="bg-muted/30 rounded-xl p-4 border border-border/40">
+              <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                {displayContent}{conteudo.length > 800 && !showFullContent && '...'}
+              </p>
             </div>
-            <Button variant="outline" size="sm" className="h-10 px-4 rounded-lg" disabled={!linkedProcesso} onClick={() => { if (linkedProcesso) toast.success('Processo vinculado!'); }}>Vincular</Button>
+            {conteudo.length > 800 && (
+              <button onClick={() => setShowFullContent(!showFullContent)} className="text-xs text-primary font-bold mt-2 hover:underline">
+                {showFullContent ? '▲ Recolher' : '▼ Ver publicação completa'}
+              </button>
+            )}
           </div>
-          <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 rounded-lg"><Scale className="h-3.5 w-3.5" /> Cadastrar processo</Button>
-            <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg"><Gavel className="h-3.5 w-3.5" /> Cadastrar com IA</Button>
-          </div>
-        </div>
 
-        {/* Processo vinculado */}
-        <div className="border border-border/50 rounded-xl p-4 bg-muted/10">
-          <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-2">Processo vinculado</p>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-mono font-bold text-primary">{linkedProcesso?.numero || intimacao.processo_cnj || 'Não identificado'}</span>
-            {(linkedProcesso || intimacao.processo_cnj) && <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />}
-          </div>
-          {(linkedProcesso?.titulo || intimacao.processo_titulo) && <p className="text-xs text-muted-foreground mt-1">{linkedProcesso?.titulo || intimacao.processo_titulo}</p>}
-          {intimacao.tribunal && <p className="text-xs text-muted-foreground mt-1">Tribunal: <span className="font-semibold text-foreground">{intimacao.tribunal}</span></p>}
-        </div>
-
-        {/* Detalhes */}
-        <div>
-          <p className="text-xs font-black text-foreground mb-4 uppercase tracking-widest">Detalhes da Intimação</p>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div><p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1">Tipo</p><p className="text-sm text-foreground font-semibold">{intimacao.tipo_intimacao || '—'}</p></div>
-              <div><p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1">Fonte</p><p className="text-sm text-foreground font-semibold">Escavador / Diário Oficial</p></div>
-            </div>
-            {/* Prazos */}
+          {/* Prazos */}
+          <div>
+            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-3">Prazos</p>
             <div className="grid grid-cols-3 gap-3">
               {[
                 { label: 'Data Base', value: fmt(prazos.dataBase), accent: false },
-                { label: 'Conclusão Prevista', value: fmt(prazos.dataConclusao), accent: false },
+                { label: 'Conclusão', value: fmt(prazos.dataConclusao), accent: false },
                 { label: 'Data Fatal', value: fmt(prazos.dataFatal), accent: true },
               ].map(item => (
                 <div key={item.label} className={`p-3 rounded-xl border ${item.accent ? 'border-rose-200 bg-rose-50 dark:border-rose-800/40 dark:bg-rose-950/20' : 'border-border/50 bg-muted/20'}`}>
@@ -915,50 +897,12 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                 </div>
               ))}
             </div>
-            {/* Datas originais */}
-            <div className="grid grid-cols-3 gap-4">
-              {[
-                { label: 'Disponibilização', value: formatDate(intimacao.data_disponibilizacao) || '—' },
-                { label: 'Publicação', value: formatDate(intimacao.data_publicacao) || '—' },
-                { label: 'Intimação', value: formatDate(intimacao.data_intimacao) || '—' },
-              ].map(item => (
-                <div key={item.label}>
-                  <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1">{item.label}</p>
-                  <p className="text-sm text-foreground font-medium">{item.value}</p>
-                </div>
-              ))}
-            </div>
-            {/* Descrição */}
-            <div>
-              <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-2">Descrição</p>
-              <div className="bg-muted/30 rounded-xl p-4 border border-border/40">
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{displayContent}{conteudo.length > 400 && !showFullContent && '...'}</p>
-              </div>
-              {conteudo.length > 400 && (
-                <button onClick={() => setShowFullContent(!showFullContent)} className="text-xs text-primary font-bold mt-2 hover:underline">
-                  {showFullContent ? '▲ Recolher' : '▼ Expandir conteúdo completo'}
-                </button>
-              )}
-            </div>
           </div>
-        </div>
 
-        <CollapsibleSection icon={Clock} title="Auditoria">
-          <div className="text-sm text-muted-foreground space-y-1.5">
-            <p>Recebido em: <span className="text-foreground font-semibold">{formatDateLong(intimacao.created_at)}</span></p>
-            {intimacao.lida_em && <p>Lida em: <span className="text-foreground font-semibold">{formatDateLong(intimacao.lida_em)}</span></p>}
-            <p>OAB: <span className="text-foreground font-semibold">{intimacao.oab_numero}/{intimacao.oab_uf}</span></p>
-          </div>
-        </CollapsibleSection>
-
-        <CollapsibleSection icon={FileText} title="Documentos" actions={<Button size="sm" className="h-7 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={e => { e.stopPropagation(); setDocumentoModalOpen(true); }}>Adicionar</Button>}>
-          <p className="text-sm text-muted-foreground">Nenhum documento anexado.</p>
-        </CollapsibleSection>
-
-        <CollapsibleSection icon={ClipboardList} title="Tarefas relacionadas"
-          actions={<Button size="sm" className="h-7 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={e => { e.stopPropagation(); setTarefaModalOpen(true); }}>Adicionar</Button>}
-        >
-          <div className="space-y-3">
+          {/* Tarefas */}
+          <CollapsibleSection icon={ClipboardList} title="Tarefas relacionadas"
+            actions={<Button size="sm" className="h-7 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={e => { e.stopPropagation(); setTarefaModalOpen(true); }}>Adicionar</Button>}
+          >
             {tarefasAdicionadas.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {tarefasAdicionadas.map(t => (
@@ -968,16 +912,163 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                 ))}
               </div>
             ) : <p className="text-sm text-muted-foreground">Nenhuma tarefa relacionada.</p>}
-          </div>
-        </CollapsibleSection>
+          </CollapsibleSection>
 
-        <CollapsibleSection icon={MessageSquare} title="Comentários" defaultOpen>
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground text-right">{2000 - comentario.length} caracteres restantes</p>
-            <Textarea placeholder="Utilize @ para citar outros usuários..." value={comentario} onChange={e => setComentario(e.target.value)} className="resize-none rounded-xl" rows={3} maxLength={2000} />
+          {/* Documentos */}
+          <CollapsibleSection icon={FileText} title="Documentos"
+            actions={<Button size="sm" className="h-7 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={e => { e.stopPropagation(); setDocumentoModalOpen(true); }}>Adicionar</Button>}
+          >
+            <p className="text-sm text-muted-foreground">Nenhum documento anexado.</p>
+          </CollapsibleSection>
+
+          {/* Comentários */}
+          <CollapsibleSection icon={MessageSquare} title="Comentários" defaultOpen>
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground text-right">{2000 - comentario.length} caracteres restantes</p>
+              <Textarea placeholder="Observações sobre esta intimação..." value={comentario} onChange={e => setComentario(e.target.value)} className="resize-none rounded-xl" rows={3} maxLength={2000} />
+            </div>
+          </CollapsibleSection>
+
+          {/* Auditoria */}
+          <CollapsibleSection icon={Clock} title="Auditoria">
+            <div className="text-sm text-muted-foreground space-y-1.5">
+              <p>Recebido em: <span className="text-foreground font-semibold">{formatDateLong(intimacao.created_at)}</span></p>
+              {intimacao.lida_em && <p>Lida em: <span className="text-foreground font-semibold">{formatDateLong(intimacao.lida_em)}</span></p>}
+              <p>OAB: <span className="text-foreground font-semibold">{intimacao.oab_numero}/{intimacao.oab_uf}</span></p>
+            </div>
+          </CollapsibleSection>
+        </div>
+
+        {/* RIGHT SIDEBAR */}
+        <div className="w-72 shrink-0 border-l border-border/40 overflow-y-auto bg-muted/[0.03]">
+          <div className="px-4 py-2">
+            {/* Processo */}
+            <SidebarField label="Processo">
+              {linkedProcesso ? (
+                <div className="space-y-1">
+                  <p className="text-sm font-mono font-bold text-primary">{linkedProcesso.numero}</p>
+                  {linkedProcesso.titulo && <p className="text-xs text-muted-foreground line-clamp-2">{linkedProcesso.titulo}</p>}
+                  <button className="text-xs text-primary hover:underline" onClick={() => setLinkedProcesso(null)}>Remover vínculo</button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {intimacao.processo_cnj
+                    ? <p className="text-sm font-mono text-foreground">{intimacao.processo_cnj}</p>
+                    : <p className="text-sm text-muted-foreground">Nenhum processo vinculado</p>
+                  }
+                  {!intimacao.processo_cnj && (
+                    <p className="text-xs text-primary hover:underline cursor-pointer">Cadastrar um novo processo</p>
+                  )}
+                  <div className="relative">
+                    <Input placeholder="Vincular processo..." value={processoSearch} onChange={e => searchProcessos(e.target.value)} className="h-8 text-xs rounded-lg" />
+                    {showDropdown && processoResults.length > 0 && (
+                      <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-xl max-h-40 overflow-y-auto">
+                        {processoResults.map(p => (
+                          <button key={p.id} className="w-full text-left px-3 py-2 hover:bg-muted/60 transition-colors border-b border-border/30 last:border-0"
+                            onClick={() => { setLinkedProcesso({ id: p.id, numero: p.numero_processo || '', titulo: p.titulo_acao || '' }); setProcessoSearch(''); setShowDropdown(false); }}>
+                            <p className="text-xs font-mono font-bold text-primary">{p.numero_processo || 'Sem número'}</p>
+                            {p.titulo_acao && <p className="text-[10px] text-muted-foreground">{p.titulo_acao}</p>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <Button size="sm" variant="outline" className="h-7 text-xs w-full rounded-lg gap-1.5" onClick={() => toast.info('Vincule um processo na busca acima')}>
+                    Vincular processo
+                  </Button>
+                </div>
+              )}
+            </SidebarField>
+
+            {/* Responsável */}
+            <SidebarField label="Responsável">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                  style={{ background: `linear-gradient(135deg, ${tc.avatarFrom}, ${tc.avatarTo})` }}>
+                  {(perfil?.nome || 'U')[0].toUpperCase()}
+                </div>
+                <span className="text-sm font-medium text-foreground">
+                  {[perfil?.nome, perfil?.sobrenome].filter(Boolean).join(' ') || 'Usuário'}
+                </span>
+              </div>
+            </SidebarField>
+
+            {/* Situação */}
+            <SidebarField label="Situação">
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold ${intimacao.lida ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>
+                {intimacao.lida ? 'Lida' : 'Pendente (1)'}
+              </span>
+            </SidebarField>
+
+            {/* Data de entrega */}
+            <SidebarField label="Data de entrega">
+              {intimacao.data_intimacao ? (
+                <div className="flex items-center gap-1.5">
+                  <CalendarDays className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                  <span className={`text-sm font-semibold ${new Date(intimacao.data_intimacao) < new Date() && !intimacao.lida ? 'text-rose-600 dark:text-rose-400' : 'text-foreground'}`}>
+                    {format(parseISO(intimacao.data_intimacao), "EEE, dd/MM/yyyy", { locale: ptBR })}
+                  </span>
+                </div>
+              ) : <span className="text-sm text-muted-foreground">—</span>}
+            </SidebarField>
+
+            {/* Página */}
+            {pagina !== null && pagina !== undefined && (
+              <SidebarField label="Página">
+                <span className="text-sm text-foreground font-medium">{String(pagina)}</span>
+              </SidebarField>
+            )}
+
+            {/* Nome pesquisado */}
+            <SidebarField label="Nome pesquisado">
+              <span className="text-sm text-foreground">{nomePesquisado}</span>
+            </SidebarField>
+
+            {/* Data da publicação */}
+            <SidebarField label="Data da publicação">
+              {intimacao.data_publicacao ? (
+                <div className="flex items-center gap-1.5">
+                  <CalendarDays className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-sm text-foreground">{formatDate(intimacao.data_publicacao)}</span>
+                </div>
+              ) : <span className="text-sm text-muted-foreground">—</span>}
+            </SidebarField>
+
+            {/* Criado por */}
+            <SidebarField label="Criado por">
+              <div>
+                <p className="text-sm text-foreground font-medium leading-snug">{fonteDisplay}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {format(createdAt, "dd/MM/yyyy HH:mm")} ({createdAgoText})
+                </p>
+              </div>
+            </SidebarField>
           </div>
-        </CollapsibleSection>
+        </div>
       </div>
+
+      {/* FOOTER: Encaminhar */}
+      <div className="shrink-0 border-t border-border/50 bg-muted/20 px-6 py-4">
+        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">Encaminhar</p>
+        <p className="text-[11px] text-muted-foreground mb-3">Encaminhar tarefa</p>
+        <div className="flex items-center gap-3">
+          <Select value={encaminharId} onValueChange={setEncaminharId}>
+            <SelectTrigger className="flex-1 h-9 rounded-lg text-sm">
+              <SelectValue placeholder="Selecione o responsável" />
+            </SelectTrigger>
+            <SelectContent>
+              {members.map(m => (
+                <SelectItem key={m.id} value={m.id}>{getMemberName(m)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button className="h-9 px-6 rounded-lg text-sm shrink-0" disabled={!encaminharId || encaminhando} onClick={handleEncaminhar}>
+            {encaminhando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Encaminhar
+          </Button>
+        </div>
+      </div>
+
       <DocumentoUploadModal open={documentoModalOpen} onOpenChange={setDocumentoModalOpen} processoId={linkedProcesso?.id} />
 
       <Dialog open={tarefaModalOpen} onOpenChange={setTarefaModalOpen}>
@@ -985,7 +1076,6 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-border/40">
             <DialogTitle className="text-base font-semibold">Adicionar tarefa relacionada</DialogTitle>
           </DialogHeader>
-
           <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
             <Popover>
               <PopoverTrigger asChild>
@@ -1001,34 +1091,17 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                   <CommandList>
                     <CommandGroup>
                       {allTarefas.map(t => (
-                        <CommandItem key={t} value={t} onSelect={() => setSelectedTarefaTipo(t)}>
-                          {t}
-                        </CommandItem>
+                        <CommandItem key={t} value={t} onSelect={() => setSelectedTarefaTipo(t)}>{t}</CommandItem>
                       ))}
                     </CommandGroup>
                   </CommandList>
                 </Command>
               </PopoverContent>
             </Popover>
-
             <div className="flex gap-2 border-t border-border/50 pt-3">
-              <Input
-                placeholder="Cadastrar nova tarefa..."
-                value={novaTarefa}
-                onChange={e => setNovaTarefa(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    addCustomTarefa();
-                  }
-                }}
-                className="h-9 rounded-lg"
-              />
-              <Button size="sm" variant="secondary" className="h-9 rounded-lg" onClick={addCustomTarefa}>
-                Cadastrar
-              </Button>
+              <Input placeholder="Cadastrar nova tarefa..." value={novaTarefa} onChange={e => setNovaTarefa(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomTarefa(); } }} className="h-9 rounded-lg" />
+              <Button size="sm" variant="secondary" className="h-9 rounded-lg" onClick={addCustomTarefa}>Cadastrar</Button>
             </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-border/50 pt-3">
               <div className="space-y-1.5">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Prazo de seguranca</p>
@@ -1043,25 +1116,17 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                 <Input type="time" value={horarioTarefa} onChange={e => setHorarioTarefa(e.target.value)} className="h-9 rounded-lg" />
               </div>
             </div>
-
             <div className="space-y-1.5">
               <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Responsavel pela tarefa</p>
               <Select value={responsavelId} onValueChange={setResponsavelId}>
-                <SelectTrigger className="h-9 rounded-lg">
-                  <SelectValue placeholder="Selecione o responsavel" />
-                </SelectTrigger>
+                <SelectTrigger className="h-9 rounded-lg"><SelectValue placeholder="Selecione o responsavel" /></SelectTrigger>
                 <SelectContent>
-                  {members.map(member => (
-                    <SelectItem key={member.id} value={member.id}>{getMemberName(member)}</SelectItem>
-                  ))}
+                  {members.map(member => (<SelectItem key={member.id} value={member.id}>{getMemberName(member)}</SelectItem>))}
                 </SelectContent>
               </Select>
             </div>
-
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" className="h-9 rounded-lg" onClick={() => setTarefaModalOpen(false)}>
-                Cancelar
-              </Button>
+              <Button variant="outline" className="h-9 rounded-lg" onClick={() => setTarefaModalOpen(false)}>Cancelar</Button>
               <Button className="h-9 rounded-lg" disabled={savingTarefa} onClick={handleCreateRelatedTask}>
                 {savingTarefa ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 Criar tarefa relacionada
@@ -1071,6 +1136,15 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function SidebarField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="py-3.5 border-b border-border/30 last:border-0">
+      <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1.5">{label}</p>
+      {children}
+    </div>
   );
 }
 
