@@ -87,7 +87,7 @@ serve(async (req) => {
         job_id: job.id,
         trigger_source: job.trigger_source,
       }),
-      signal: AbortSignal.timeout(90000), // 90s máx — evita worker travado
+      signal: AbortSignal.timeout(150000), // 150s máx — dá margem para batches paralelas
     });
 
     const rawBody = await response.text();

@@ -98,12 +98,7 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const CUTOFF = cutoffDate();
-    // Para filtrar processos ativos: só busca movimentações de processos
-    // com atividade nos últimos 60 dias (evita iterar 200+ processos inativos)
-    const RECENT_CUTOFF = new Date();
-    RECENT_CUTOFF.setDate(RECENT_CUTOFF.getDate() - 60);
-    const recentCutoffStr = RECENT_CUTOFF.toISOString().split("T")[0];
+    const CUTOFF = cutoffDate(); // 90 dias atrás
 
     console.log(`🔍 [Intimações] OAB/${oab_uf} ${oab_numero} | janela: ${CUTOFF}`);
 
@@ -164,86 +159,106 @@ serve(async (req) => {
         "X-Requested-With": "XMLHttpRequest",
       };
 
-      // ── Estratégia 2: V2 Escavador — processos ativos → movimentações ─────────
-      // Busca todos os processos da OAB (página 1, 50 processos) e filtra
-      // apenas os com atividade recente para evitar centenas de chamadas.
+      // ── Estratégia 2: V2 Escavador — todos os processos ativos com paginação ─
       try {
-        const procResp = await fetch(
-          `https://api.escavador.com/api/v2/advogado/processos?oab_numero=${oab_numero}&oab_estado=${oab_uf}&limit=50`,
-          { headers: esc, signal: AbortSignal.timeout(15000) }
-        );
+        // Busca até 3 páginas = 150 processos para garantir cobertura completa
+        const processos: any[] = [];
+        for (let procPage = 1; procPage <= 3; procPage++) {
+          try {
+            const procResp = await fetch(
+              `https://api.escavador.com/api/v2/advogado/processos?oab_numero=${oab_numero}&oab_estado=${oab_uf}&limit=50&page=${procPage}`,
+              { headers: esc, signal: AbortSignal.timeout(15000) }
+            );
+            if (!procResp.ok) break;
+            const procData = await procResp.json();
+            const pageItems: any[] = procData?.items || procData?.data || [];
+            processos.push(...pageItems);
+            console.log(`📋 [V2] Página ${procPage}: ${pageItems.length} processos`);
+            if (pageItems.length < 50) break; // não há mais páginas
+          } catch {
+            break;
+          }
+        }
 
-        if (procResp.ok) {
-          const procData = await procResp.json();
-          const processos: any[] = procData?.items || procData?.data || [];
+        // Filtro usando o mesmo CUTOFF de 90 dias (antes era 60 dias — perdia processos)
+        const ativos = processos.filter((p: any) => {
+          const fonte = p.fontes?.find((f: any) => f.tipo === "TRIBUNAL") || p.fontes?.[0];
+          const lastMov = fonte?.data_ultima_movimentacao || p.data_ultima_movimentacao;
+          return !lastMov || lastMov >= CUTOFF;
+        });
 
-          // Filtrar apenas processos com atividade recente (últimos 60 dias)
-          const ativos = processos.filter((p: any) => {
-            const fonte = p.fontes?.find((f: any) => f.tipo === "TRIBUNAL") || p.fontes?.[0];
-            const lastMov = fonte?.data_ultima_movimentacao || p.data_ultima_movimentacao;
-            return !lastMov || lastMov >= recentCutoffStr;
-          });
+        console.log(`📋 [V2] ${processos.length} processos total, ${ativos.length} com atividade nos últimos 90 dias`);
 
-          console.log(`📋 [V2] ${processos.length} processos, ${ativos.length} com atividade recente`);
+        // Busca movimentações em batches paralelos de 5 para maximizar velocidade
+        let v2Count = 0;
+        const PARALLEL_BATCH = 5;
+        const maxProcessos = Math.min(ativos.length, 60); // até 60 processos
 
-          // Busca movimentações para cada processo ativo (máx 30, timeout 12s cada)
-          let v2Count = 0;
-          for (const proc of ativos.slice(0, 30)) {
+        for (let i = 0; i < maxProcessos; i += PARALLEL_BATCH) {
+          const batch = ativos.slice(i, i + PARALLEL_BATCH);
+
+          const batchResults = await Promise.allSettled(batch.map(async (proc) => {
             const cnj = proc.numero_cnj || proc.numero_processo;
-            if (!cnj) continue;
+            if (!cnj) return [];
 
             const fonteTribunal = proc.fontes?.find((f: any) => f.tipo === "TRIBUNAL") || proc.fontes?.[0];
             const tribunalSigla = fonteTribunal?.sigla || fonteTribunal?.tribunal?.sigla || fonteTribunal?.nome || "";
             const procTitulo = `${proc.titulo_polo_ativo || ""} X ${proc.titulo_polo_passivo || ""}`.trim().replace(/^X\s*/, "").replace(/\s*X$/, "");
 
-            try {
-              const movResp = await fetch(
-                `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?limit=20`,
-                { headers: esc, signal: AbortSignal.timeout(12000) }
-              );
-              if (!movResp.ok) continue;
+            const movResp = await fetch(
+              `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?limit=30`,
+              { headers: esc, signal: AbortSignal.timeout(12000) }
+            );
+            if (!movResp.ok) return [];
 
-              const movData = await movResp.json();
-              for (const mov of (movData?.items || [])) {
-                const movDate = (mov.data || "").split("T")[0];
-                if (movDate && movDate < CUTOFF) continue;
+            const movData = await movResp.json();
+            const found: any[] = [];
 
-                const conteudo = mov.conteudo || "";
-                const tipo = classifyMovimento(conteudo, mov.tipo || "");
-                if (!TIPOS_INTIMACAO.has(tipo)) continue;
+            for (const mov of (movData?.items || [])) {
+              const movDate = (mov.data || "").split("T")[0];
+              if (movDate && movDate < CUTOFF) continue;
 
-                intimacoes.push(makeItem({
-                  cnj,
-                  titulo: procTitulo || fonteTribunal?.capa?.classe || "",
-                  tribunal: mov.fonte?.sigla || tribunalSigla,
-                  tipo, conteudo, dataDisp: movDate || null,
-                  oab_numero, oab_uf, advogado_id,
-                  fonte: "escavador_v2",
-                  raw: mov,
-                }));
+              const conteudo = mov.conteudo || "";
+              const tipo = classifyMovimento(conteudo, mov.tipo || "");
+              if (!TIPOS_INTIMACAO.has(tipo)) continue;
+
+              found.push(makeItem({
+                cnj,
+                titulo: procTitulo || fonteTribunal?.capa?.classe || "",
+                tribunal: mov.fonte?.sigla || tribunalSigla,
+                tipo, conteudo, dataDisp: movDate || null,
+                oab_numero, oab_uf, advogado_id,
+                fonte: "escavador_v2",
+                raw: mov,
+              }));
+            }
+            return found;
+          }));
+
+          for (const result of batchResults) {
+            if (result.status === "fulfilled" && Array.isArray(result.value)) {
+              for (const item of result.value) {
+                intimacoes.push(item);
                 v2Count++;
               }
-            } catch {
-              console.warn(`⚠️ [V2] Timeout/erro processo ${cnj}`);
             }
           }
-          console.log(`📋 [V2] ${v2Count} intimações de processos ativos`);
-        } else {
-          console.warn(`⚠️ [V2] /advogado/processos retornou ${procResp.status}`);
         }
+
+        console.log(`📋 [V2] ${v2Count} intimações de processos ativos`);
       } catch (e) {
         console.warn("⚠️ [V2] Erro geral:", e);
       }
 
-      // ── Estratégia 3: V1 Escavador — Diário Oficial ───────────────────────────
+      // ── Estratégia 3: V1 Escavador — Diário Oficial (5 páginas por termo) ──
       const searchTerms = [`OAB/${oab_uf} ${oab_numero}`, `OAB ${oab_uf} ${oab_numero}`];
       let v1Count = 0;
 
       for (const term of searchTerms) {
-        for (let page = 1; page <= 3; page++) {
+        for (let page = 1; page <= 5; page++) {
           try {
             const url = `https://api.escavador.com/api/v1/busca?q=${encodeURIComponent(term)}&qo=d&limit=50&page=${page}&data_inicio=${CUTOFF}`;
-            const resp = await fetch(url, { headers: esc, signal: AbortSignal.timeout(20000) });
+            const resp = await fetch(url, { headers: esc, signal: AbortSignal.timeout(15000) });
             if (!resp.ok) break;
 
             const data = await resp.json();
@@ -293,7 +308,7 @@ serve(async (req) => {
       );
     }
 
-    // ── Deduplicação em memória — 1 SELECT em vez de N queries ───────────────
+    // ── Deduplicação em memória ───────────────────────────────────────────────
     const { data: existing } = await supabase
       .from("intimacoes")
       .select("id, processo_cnj, tipo_intimacao, data_disponibilizacao, tribunal, data_publicacao, data_intimacao")
