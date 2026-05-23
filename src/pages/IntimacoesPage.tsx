@@ -34,6 +34,8 @@ interface TeamMember {
   nome: string | null;
   sobrenome: string | null;
   email: string | null;
+  oab_numero?: string | null;
+  oab_uf?: string | null;
 }
 
 interface Intimacao {
@@ -734,7 +736,6 @@ export default function IntimacoesPage() {
               calcularPrazos={calcularPrazos}
               onMarkRead={() => { handleMarkRead(selectedIntimacao.id); setSelectedIntimacao({ ...selectedIntimacao, lida: true }); }}
               onGenerateReport={() => handleGenerateReport(selectedIntimacao)}
-              perfil={perfil}
             />
           )}
         </DialogContent>
@@ -743,10 +744,10 @@ export default function IntimacoesPage() {
   );
 }
 
-function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularPrazos, onMarkRead, onGenerateReport, perfil }: {
+function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularPrazos, onMarkRead, onGenerateReport }: {
   intimacao: Intimacao; formatDate: (d: string | null) => string | null; formatDateLong: (d: string | null) => string;
   calcularPrazos: (i: Intimacao) => { dataBase: Date | null; dataConclusao: Date | null; dataFatal: Date | null };
-  onMarkRead: () => void; onGenerateReport: () => void; perfil: any;
+  onMarkRead: () => void; onGenerateReport: () => void;
 }) {
   const [showFullContent, setShowFullContent] = useState(false);
   const [comentario, setComentario] = useState('');
@@ -787,12 +788,14 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
 
   const pagina = (intimacao.raw_json as any)?.pagina ?? (intimacao.raw_json as any)?.page ?? null;
 
-  // Advogado dono da intimação (pelo advogado_id; fallback para o perfil logado)
-  const advogadoIntimacao = members.find((m: TeamMember) => m.id === intimacao.advogado_id) || null;
+  // Advogado dono da intimação: tenta por advogado_id primeiro, depois por OAB (cobre jobs com advogado_id: null)
+  const advogadoIntimacao =
+    members.find((m: TeamMember) => intimacao.advogado_id && m.id === intimacao.advogado_id) ||
+    members.find((m: TeamMember) => m.oab_numero && m.oab_numero === intimacao.oab_numero && (m.oab_uf || 'AM') === intimacao.oab_uf) ||
+    null;
   const nomePesquisado = advogadoIntimacao
     ? getMemberName(advogadoIntimacao)
-    : [perfil?.nome, perfil?.sobrenome].filter(Boolean).join(' ') ||
-      `OAB/${intimacao.oab_uf} ${intimacao.oab_numero}`;
+    : `OAB/${intimacao.oab_uf} ${intimacao.oab_numero}`;
 
   const createdAt = new Date(intimacao.created_at);
   const daysAgo = Math.floor((Date.now() - createdAt.getTime()) / 86400000);
@@ -815,7 +818,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
 
   useEffect(() => {
     const fetchMembers = async () => {
-      const { data } = await supabase.from('perfis').select('id, nome, sobrenome, email').eq('aprovado', true).order('nome', { ascending: true });
+      const { data } = await supabase.from('perfis').select('id, nome, sobrenome, email, oab_numero, oab_uf').eq('aprovado', true).order('nome', { ascending: true });
       setMembers((data as TeamMember[]) || []);
     };
     void fetchMembers();
@@ -1148,10 +1151,10 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
               <div className="flex items-center gap-2">
                 <div className="h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
                   style={{ background: `linear-gradient(135deg, ${tc.avatarFrom}, ${tc.avatarTo})` }}>
-                  {(advogadoIntimacao?.nome || perfil?.nome || 'U')[0].toUpperCase()}
+                  {(advogadoIntimacao?.nome || intimacao.oab_numero || 'U')[0].toUpperCase()}
                 </div>
                 <span className="text-sm font-medium text-foreground">
-                  {advogadoIntimacao ? getMemberName(advogadoIntimacao) : [perfil?.nome, perfil?.sobrenome].filter(Boolean).join(' ') || 'Usuário'}
+                  {advogadoIntimacao ? getMemberName(advogadoIntimacao) : `OAB/${intimacao.oab_uf} ${intimacao.oab_numero}`}
                 </span>
               </div>
             </SidebarField>
