@@ -12,6 +12,8 @@ const ESCAVADOR_API_KEY = Deno.env.get("ESCAVADOR_API_KEY");
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+const TIPOS_INTIMACAO = new Set(["Intimação", "Citação", "Notificação", "Publicação"]);
+
 function cutoffDate(): string {
   const d = new Date();
   d.setDate(d.getDate() - 90);
@@ -32,15 +34,40 @@ function classifyMovimento(conteudo: string, tipo: string): string {
   if (c.includes("intimação") || c.includes("intimacao")) return "Intimação";
   if (c.includes("citação") || c.includes("citacao")) return "Citação";
   if (c.includes("notificação") || c.includes("notificacao")) return "Notificação";
+  if (c.includes("publicação") || c.includes("publicacao")) return "Publicação";
   if (c.includes("despacho")) return "Despacho";
   if (c.includes("sentença") || c.includes("sentenca")) return "Sentença";
   if (c.includes("decisão") || c.includes("decisao")) return "Decisão";
   if (c.includes("audiência") || c.includes("audiencia")) return "Audiência";
-  if (c.includes("edital")) return "Edital";
-  if (c.includes("publicação") || c.includes("publicacao")) return "Publicação";
   if (c.includes("petição") || c.includes("peticao")) return "Petição";
   if (c.includes("recurso")) return "Recurso";
   return "Movimentação";
+}
+
+function makeItem(fields: {
+  cnj: string; titulo: string; tribunal: string; tipo: string;
+  conteudo: string; dataDisp: string | null;
+  oab_numero: string; oab_uf: string; advogado_id: string | null;
+  fonte: string; raw: unknown;
+}) {
+  const { cnj, titulo, tribunal, tipo, conteudo, dataDisp, oab_numero, oab_uf, advogado_id, fonte, raw } = fields;
+  const dataPub = dataDisp ? nextBusinessDay(dataDisp) : null;
+  const dataInt = dataPub ? nextBusinessDay(dataPub) : dataDisp;
+  return {
+    processo_cnj: cnj,
+    processo_titulo: titulo,
+    tribunal,
+    tipo_intimacao: tipo,
+    conteudo: conteudo.slice(0, 5000),
+    data_intimacao: dataInt,
+    data_disponibilizacao: dataDisp,
+    data_publicacao: dataPub,
+    oab_numero,
+    oab_uf,
+    advogado_id,
+    fonte,
+    raw_json: raw,
+  };
 }
 
 serve(async (req) => {
@@ -58,7 +85,7 @@ serve(async (req) => {
       const { data: settings } = await supabase
         .from("office_settings").select("oab_number, oab_state").limit(1).single();
       if (!settings?.oab_number) {
-        return new Response(JSON.stringify({ success: false, error: "OAB não configurada no escritório" }),
+        return new Response(JSON.stringify({ success: false, error: "OAB não configurada" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       oab_numero = settings.oab_number;
@@ -72,23 +99,25 @@ serve(async (req) => {
     }
 
     const CUTOFF = cutoffDate();
-    console.log(`🔍 [Intimações] OAB/${oab_uf} ${oab_numero} | janela: ${CUTOFF} → hoje`);
+    // Para filtrar processos ativos: só busca movimentações de processos
+    // com atividade nos últimos 60 dias (evita iterar 200+ processos inativos)
+    const RECENT_CUTOFF = new Date();
+    RECENT_CUTOFF.setDate(RECENT_CUTOFF.getDate() - 60);
+    const recentCutoffStr = RECENT_CUTOFF.toISOString().split("T")[0];
+
+    console.log(`🔍 [Intimações] OAB/${oab_uf} ${oab_numero} | janela: ${CUTOFF}`);
 
     const intimacoes: any[] = [];
 
-    // ── Estratégia 1: processo_movimentacoes já no banco (DataJud + Escavador) ──
-    // Não faz nenhuma chamada externa — usa dados já sincronizados pelo
-    // processo-auto-sync que roda diariamente via DataJud.
+    // ── Estratégia 1: processo_movimentacoes do banco (DataJud já sincronizado) ─
     {
-      const { data: movs, error: movErr } = await supabase
+      const { data: movs } = await supabase
         .from("processo_movimentacoes")
         .select(`
           id, data_movimento, movimento_titulo, movimento_descricao, hash_unico, origem,
           processos!inner(numero_processo, titulo_acao, tribunal)
         `)
         .gte("data_movimento", CUTOFF)
-        // Pré-filtro no banco: movimentos que são intimações
-        // "Publicação" incluso porque DataJud registra publicações em DJ como "Publicação"
         .or(
           "movimento_titulo.ilike.%intima%," +
           "movimento_titulo.ilike.%cita%," +
@@ -102,131 +131,157 @@ serve(async (req) => {
         .order("data_movimento", { ascending: false })
         .limit(500);
 
-      if (movErr) {
-        console.warn("⚠️ Erro ao buscar movimentações do banco:", movErr.message);
-      } else {
-        console.log(`📊 [DB] ${movs?.length || 0} intimações encontradas`);
+      let dbCount = 0;
+      for (const mov of (movs || [])) {
+        const titulo = (mov.movimento_titulo || "") as string;
+        const descricao = (mov.movimento_descricao || "") as string;
+        const tipo = classifyMovimento(descricao, titulo);
+        if (!TIPOS_INTIMACAO.has(tipo)) continue;
 
-        // Publicação = publicação em Diário Oficial (também é intimação formal)
-        const TIPOS_VALIDOS = new Set(["Intimação", "Citação", "Notificação", "Publicação"]);
+        const proc = mov.processos as any;
+        const dataDisp = mov.data_movimento
+          ? (mov.data_movimento as string).split("T")[0] : null;
 
-        for (const mov of (movs || [])) {
-          const titulo = (mov.movimento_titulo || "") as string;
-          const descricao = (mov.movimento_descricao || "") as string;
-          const tipo = classifyMovimento(descricao, titulo);
-
-          // Manter apenas intimações reais — despachos/sentenças/etc. ficam em Processos
-          if (!TIPOS_VALIDOS.has(tipo)) continue;
-
-          const proc = mov.processos as any;
-          const dataDisp = mov.data_movimento
-            ? (mov.data_movimento as string).split("T")[0]
-            : null;
-          const dataPub = dataDisp ? nextBusinessDay(dataDisp) : null;
-          const dataInt = dataPub ? nextBusinessDay(dataPub) : dataDisp;
-
-          intimacoes.push({
-            processo_cnj: proc?.numero_processo || "",
-            processo_titulo: proc?.titulo_acao || "",
-            tribunal: proc?.tribunal || "",
-            tipo_intimacao: tipo,
-            conteudo: (descricao || titulo).slice(0, 5000),
-            data_intimacao: dataInt,
-            data_disponibilizacao: dataDisp,
-            data_publicacao: dataPub,
-            oab_numero,
-            oab_uf,
-            advogado_id,
-            fonte: (mov.origem as string) || "datajud",
-            raw_json: { hash_unico: mov.hash_unico, titulo },
-          });
-        }
-
-        console.log(`📋 [DB] ${intimacoes.length} itens classificados`);
+        intimacoes.push(makeItem({
+          cnj: proc?.numero_processo || "",
+          titulo: proc?.titulo_acao || "",
+          tribunal: proc?.tribunal || "",
+          tipo, conteudo: descricao || titulo, dataDisp,
+          oab_numero, oab_uf, advogado_id,
+          fonte: (mov.origem as string) || "datajud",
+          raw: { hash_unico: mov.hash_unico, titulo },
+        }));
+        dbCount++;
       }
+      console.log(`📊 [DB] ${dbCount} intimações do banco`);
     }
 
-    // ── Estratégia 2: V1 Escavador — Diário Oficial ───────────────────────────
-    // Complementa com publicações em diários que podem não estar no DataJud.
-    if (ESCAVADOR_API_KEY) {
-      const escavadorHeaders = {
+    if (!ESCAVADOR_API_KEY) {
+      console.warn("⚠️ ESCAVADOR_API_KEY não configurada — pulando busca no Escavador");
+    } else {
+      const esc = {
         Authorization: `Bearer ${ESCAVADOR_API_KEY}`,
         "X-Requested-With": "XMLHttpRequest",
       };
 
-      const searchTerms = [
-        `OAB/${oab_uf} ${oab_numero}`,
-        `OAB ${oab_uf} ${oab_numero}`,
-      ];
+      // ── Estratégia 2: V2 Escavador — processos ativos → movimentações ─────────
+      // Busca todos os processos da OAB (página 1, 50 processos) e filtra
+      // apenas os com atividade recente para evitar centenas de chamadas.
+      try {
+        const procResp = await fetch(
+          `https://api.escavador.com/api/v2/advogado/processos?oab_numero=${oab_numero}&oab_estado=${oab_uf}&limit=50`,
+          { headers: esc, signal: AbortSignal.timeout(15000) }
+        );
+
+        if (procResp.ok) {
+          const procData = await procResp.json();
+          const processos: any[] = procData?.items || procData?.data || [];
+
+          // Filtrar apenas processos com atividade recente (últimos 60 dias)
+          const ativos = processos.filter((p: any) => {
+            const fonte = p.fontes?.find((f: any) => f.tipo === "TRIBUNAL") || p.fontes?.[0];
+            const lastMov = fonte?.data_ultima_movimentacao || p.data_ultima_movimentacao;
+            return !lastMov || lastMov >= recentCutoffStr;
+          });
+
+          console.log(`📋 [V2] ${processos.length} processos, ${ativos.length} com atividade recente`);
+
+          // Busca movimentações para cada processo ativo (máx 30, timeout 12s cada)
+          let v2Count = 0;
+          for (const proc of ativos.slice(0, 30)) {
+            const cnj = proc.numero_cnj || proc.numero_processo;
+            if (!cnj) continue;
+
+            const fonteTribunal = proc.fontes?.find((f: any) => f.tipo === "TRIBUNAL") || proc.fontes?.[0];
+            const tribunalSigla = fonteTribunal?.sigla || fonteTribunal?.tribunal?.sigla || fonteTribunal?.nome || "";
+            const procTitulo = `${proc.titulo_polo_ativo || ""} X ${proc.titulo_polo_passivo || ""}`.trim().replace(/^X\s*/, "").replace(/\s*X$/, "");
+
+            try {
+              const movResp = await fetch(
+                `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?limit=20`,
+                { headers: esc, signal: AbortSignal.timeout(12000) }
+              );
+              if (!movResp.ok) continue;
+
+              const movData = await movResp.json();
+              for (const mov of (movData?.items || [])) {
+                const movDate = (mov.data || "").split("T")[0];
+                if (movDate && movDate < CUTOFF) continue;
+
+                const conteudo = mov.conteudo || "";
+                const tipo = classifyMovimento(conteudo, mov.tipo || "");
+                if (!TIPOS_INTIMACAO.has(tipo)) continue;
+
+                intimacoes.push(makeItem({
+                  cnj,
+                  titulo: procTitulo || fonteTribunal?.capa?.classe || "",
+                  tribunal: mov.fonte?.sigla || tribunalSigla,
+                  tipo, conteudo, dataDisp: movDate || null,
+                  oab_numero, oab_uf, advogado_id,
+                  fonte: "escavador_v2",
+                  raw: mov,
+                }));
+                v2Count++;
+              }
+            } catch {
+              console.warn(`⚠️ [V2] Timeout/erro processo ${cnj}`);
+            }
+          }
+          console.log(`📋 [V2] ${v2Count} intimações de processos ativos`);
+        } else {
+          console.warn(`⚠️ [V2] /advogado/processos retornou ${procResp.status}`);
+        }
+      } catch (e) {
+        console.warn("⚠️ [V2] Erro geral:", e);
+      }
+
+      // ── Estratégia 3: V1 Escavador — Diário Oficial ───────────────────────────
+      const searchTerms = [`OAB/${oab_uf} ${oab_numero}`, `OAB ${oab_uf} ${oab_numero}`];
+      let v1Count = 0;
 
       for (const term of searchTerms) {
-        let page = 1;
-        const maxPages = 3;
-
-        while (page <= maxPages) {
+        for (let page = 1; page <= 3; page++) {
           try {
             const url = `https://api.escavador.com/api/v1/busca?q=${encodeURIComponent(term)}&qo=d&limit=50&page=${page}&data_inicio=${CUTOFF}`;
-            const resp = await fetch(url, {
-              headers: escavadorHeaders,
-              signal: AbortSignal.timeout(20000),
-            });
-
-            if (!resp.ok) {
-              console.warn(`⚠️ V1 "${term}" p${page}: ${resp.status}`);
-              break;
-            }
+            const resp = await fetch(url, { headers: esc, signal: AbortSignal.timeout(20000) });
+            if (!resp.ok) break;
 
             const data = await resp.json();
             const items: any[] = data?.items?.data || data?.items || data?.data || [];
-
             if (items.length === 0) break;
-            console.log(`📋 [V1] "${term}" p${page}: ${items.length} itens`);
 
             for (const item of items) {
               const conteudo = item.texto || item.conteudo || item.content || "";
-              const titulo = item.diario_nome || item.titulo || item.title || "Publicação em Diário Oficial";
+              const titulo = item.diario_nome || item.titulo || "Publicação em Diário Oficial";
               const cnjMatch = conteudo.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
-              const tipoIntimacao = classifyMovimento(conteudo, titulo);
-              const diarioData = item.diario_data || item.data_publicacao || item.data || "";
+              const tipo = classifyMovimento(conteudo, titulo);
+              if (!TIPOS_INTIMACAO.has(tipo)) continue;
 
+              const diarioData = item.diario_data || item.data_publicacao || item.data || "";
               if (diarioData && diarioData < CUTOFF) continue;
 
-              const dataDisp = diarioData || null;
-              const dataPub = dataDisp ? nextBusinessDay(dataDisp) : null;
-              const dataInt = dataPub ? nextBusinessDay(dataPub) : dataDisp;
-
-              intimacoes.push({
-                processo_cnj: cnjMatch ? cnjMatch[1] : "",
-                processo_titulo: titulo,
-                tribunal: item.diario_sigla || item.fonte?.sigla || item.tribunal || "",
-                tipo_intimacao: tipoIntimacao,
-                conteudo: conteudo.slice(0, 5000),
-                data_intimacao: dataInt,
-                data_disponibilizacao: dataDisp,
-                data_publicacao: dataPub,
-                oab_numero,
-                oab_uf,
-                advogado_id,
+              intimacoes.push(makeItem({
+                cnj: cnjMatch ? cnjMatch[1] : "",
+                titulo,
+                tribunal: item.diario_sigla || item.fonte?.sigla || "",
+                tipo, conteudo, dataDisp: diarioData || null,
+                oab_numero, oab_uf, advogado_id,
                 fonte: "escavador_v1",
-                raw_json: item,
-              });
+                raw: item,
+              }));
+              v1Count++;
             }
 
-            const hasNext = !!(
-              data?.links?.next ||
+            const hasNext = !!(data?.links?.next ||
               data?.paginator?.next_page_url ||
-              (data?.paginator && data.paginator.current_page < data.paginator.last_page)
-            );
+              (data?.paginator && data.paginator.current_page < data.paginator.last_page));
             if (!hasNext) break;
-            page++;
-          } catch (e) {
-            console.warn(`⚠️ Erro V1 "${term}" p${page}:`, e);
+          } catch {
             break;
           }
         }
       }
-    } else {
-      console.warn("⚠️ ESCAVADOR_API_KEY não configurada — pulando busca em Diários Oficiais");
+      console.log(`📋 [V1] ${v1Count} intimações do Diário Oficial`);
     }
 
     console.log(`📌 Total bruto: ${intimacoes.length} itens`);
@@ -282,11 +337,9 @@ serve(async (req) => {
       const chunk = toInsert.slice(i, i + CHUNK);
       const { error } = await supabase.from("intimacoes").insert(chunk);
       if (error) {
-        console.warn(`⚠️ Chunk ${Math.floor(i / CHUNK) + 1} falhou:`, error.message);
         for (const item of chunk) {
           const { error: e2 } = await supabase.from("intimacoes").insert(item);
           if (!e2) savedCount++;
-          else console.warn(`⚠️ Item:`, e2.message);
         }
       } else {
         savedCount += chunk.length;
@@ -297,9 +350,7 @@ serve(async (req) => {
     if (savedCount > 0) {
       const { data: adminRoles } = await supabase
         .from("user_roles").select("user_id").in("role", ["Administrador", "Gerente", "Advogado"]);
-
       const userIds = [...new Set((adminRoles || []).map((r: any) => r.user_id as string))];
-
       if (userIds.length > 0) {
         await supabase.from("notificacoes_internas").insert(
           userIds.map((uid) => ({
@@ -308,9 +359,7 @@ serve(async (req) => {
             mensagem: savedCount === 1
               ? `Nova intimação: ${toInsert[0]?.processo_cnj || "Processo não identificado"}`
               : `${savedCount} novas intimações/publicações encontradas.`,
-            tipo: "alerta",
-            lida: false,
-            link: "/intimacoes",
+            tipo: "alerta", lida: false, link: "/intimacoes",
             dados: { source: "intimacoes_oab", count: savedCount },
           }))
         );
@@ -325,7 +374,7 @@ serve(async (req) => {
     );
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Erro desconhecido";
-    console.error("❌ Erro nas intimações:", msg);
+    console.error("❌ Erro:", msg);
     return new Response(JSON.stringify({ success: false, error: msg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
