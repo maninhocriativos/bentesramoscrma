@@ -87,11 +87,14 @@ serve(async (req) => {
           processos!inner(numero_processo, titulo_acao, tribunal)
         `)
         .gte("data_movimento", CUTOFF)
-        // Pré-filtro no banco: somente movimentos com palavra-chave de intimação
+        // Pré-filtro no banco: movimentos que são intimações
+        // "Publicação" incluso porque DataJud registra publicações em DJ como "Publicação"
         .or(
           "movimento_titulo.ilike.%intima%," +
           "movimento_titulo.ilike.%cita%," +
           "movimento_titulo.ilike.%notifica%," +
+          "movimento_titulo.ilike.%publicac%," +
+          "movimento_titulo.ilike.%publicaç%," +
           "movimento_descricao.ilike.%intima%," +
           "movimento_descricao.ilike.%cita%," +
           "movimento_descricao.ilike.%notifica%"
@@ -104,7 +107,8 @@ serve(async (req) => {
       } else {
         console.log(`📊 [DB] ${movs?.length || 0} intimações encontradas`);
 
-        const TIPOS_VALIDOS = new Set(["Intimação", "Citação", "Notificação"]);
+        // Publicação = publicação em Diário Oficial (também é intimação formal)
+        const TIPOS_VALIDOS = new Set(["Intimação", "Citação", "Notificação", "Publicação"]);
 
         for (const mov of (movs || [])) {
           const titulo = (mov.movimento_titulo || "") as string;
