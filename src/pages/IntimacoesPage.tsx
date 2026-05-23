@@ -766,6 +766,11 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const [responsavelId, setResponsavelId] = useState('');
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [savingTarefa, setSavingTarefa] = useState(false);
+  const [analise, setAnalise] = useState<{
+    resumo: string; recomendacao: string;
+    acoes: { titulo: string; descricao: string; prazo_dias: number | null; prioridade: string }[];
+  } | null>(null);
+  const [analisando, setAnalisando] = useState(false);
 
   const TAREFAS = ['Manifestação','Recurso de Apelação','Recurso Especial','Recurso Extraordinário','Recurso Ordinário','Recurso Inominado','Embargos de Declaração','Contrarrazões','Alegações Finais','Memoriais','Agravo de Instrumento','Agravo Interno','Sentença','Acórdão','Sessão de Julgamento','Réplica','Perícia'];
   const allTarefas = [...TAREFAS, ...tarefasCustom];
@@ -820,6 +825,30 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     if (!prazoSeguranca && prazos.dataConclusao) setPrazoSeguranca(format(prazos.dataConclusao, 'yyyy-MM-dd'));
     if (!prazoFatal && prazos.dataFatal) setPrazoFatal(format(prazos.dataFatal, 'yyyy-MM-dd'));
   }, [prazos.dataConclusao, prazos.dataFatal, prazoFatal, prazoSeguranca]);
+
+  const handleAnalisar = async () => {
+    setAnalisando(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('intimacoes-analise', {
+        body: {
+          conteudo,
+          tipo_intimacao: intimacao.tipo_intimacao,
+          tribunal: intimacao.tribunal,
+          processo_cnj: intimacao.processo_cnj,
+          processo_titulo: intimacao.processo_titulo,
+          data_publicacao: intimacao.data_publicacao,
+          data_intimacao: intimacao.data_intimacao,
+        },
+      });
+      if (error) throw error;
+      if (data?.success) setAnalise(data.analise);
+      else throw new Error(data?.error || 'Erro na análise');
+    } catch (err: any) {
+      toast.error('Erro ao analisar com ISA', { description: err.message });
+    } finally {
+      setAnalisando(false);
+    }
+  };
 
   const addCustomTarefa = () => {
     const title = novaTarefa.trim();
@@ -929,6 +958,90 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
               <button onClick={() => setShowFullContent(!showFullContent)} className="text-xs text-primary font-bold mt-2 hover:underline">
                 {showFullContent ? '▲ Recolher' : '▼ Ver publicação completa'}
               </button>
+            )}
+          </div>
+
+          {/* ISA Analysis */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Análise ISA</p>
+              {!analise && (
+                <Button size="sm" className="h-7 text-xs rounded-lg bg-violet-600 hover:bg-violet-700 text-white gap-1.5 shadow-sm" onClick={handleAnalisar} disabled={analisando}>
+                  {analisando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  {analisando ? 'Analisando...' : 'Analisar com ISA'}
+                </Button>
+              )}
+              {analise && (
+                <button className="text-xs text-muted-foreground hover:text-foreground" onClick={() => { setAnalise(null); }}>Refazer análise</button>
+              )}
+            </div>
+
+            {!analise && !analisando && (
+              <div className="bg-muted/20 rounded-xl border border-border/40 border-dashed px-4 py-5 text-center">
+                <Sparkles className="h-6 w-6 text-violet-400 mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">Clique em <span className="font-semibold text-violet-500">Analisar com ISA</span> para obter um resumo inteligente desta intimação, recomendações e ações sugeridas.</p>
+              </div>
+            )}
+
+            {analisando && (
+              <div className="bg-violet-50 dark:bg-violet-950/20 rounded-xl border border-violet-200 dark:border-violet-800/40 px-4 py-6 text-center">
+                <Loader2 className="h-6 w-6 text-violet-500 mx-auto mb-2 animate-spin" />
+                <p className="text-sm font-medium text-violet-700 dark:text-violet-300">ISA está analisando a intimação...</p>
+                <p className="text-xs text-violet-500 dark:text-violet-400 mt-1">Isso pode levar alguns segundos</p>
+              </div>
+            )}
+
+            {analise && (
+              <div className="space-y-3">
+                <div className="bg-muted/30 rounded-xl border border-border/40 p-4 space-y-3">
+                  <div>
+                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1.5">O que aconteceu</p>
+                    <p className="text-sm text-foreground leading-relaxed">{analise.resumo}</p>
+                  </div>
+                  <div className="border-t border-border/30 pt-3">
+                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1.5">O que fazer</p>
+                    <p className="text-sm text-foreground leading-relaxed">{analise.recomendacao}</p>
+                  </div>
+                </div>
+
+                {analise.acoes.length > 0 && (
+                  <div>
+                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-2">Ações sugeridas</p>
+                    <div className="space-y-2">
+                      {analise.acoes.map((acao: { titulo: string; descricao: string; prazo_dias: number | null; prioridade: string }, i: number) => {
+                        const prioColor =
+                          acao.prioridade === 'Urgente' ? 'border-rose-300 bg-rose-50 dark:border-rose-800/40 dark:bg-rose-950/20' :
+                          acao.prioridade === 'Alta' ? 'border-amber-300 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-950/20' :
+                          'border-border/50 bg-muted/20';
+                        const prioBadge =
+                          acao.prioridade === 'Urgente' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300' :
+                          acao.prioridade === 'Alta' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' :
+                          'bg-muted text-muted-foreground';
+                        return (
+                          <div key={i} className={`rounded-xl border p-3 ${prioColor}`}>
+                            <div className="flex items-start justify-between gap-2 mb-1">
+                              <p className="text-sm font-semibold text-foreground leading-tight">{acao.titulo}</p>
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full shrink-0 ${prioBadge}`}>{acao.prioridade}</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground leading-relaxed mb-2">{acao.descricao}</p>
+                            <div className="flex items-center justify-between">
+                              {acao.prazo_dias !== null && (
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Timer className="h-3 w-3" />{acao.prazo_dias} dias úteis
+                                </span>
+                              )}
+                              <Button size="sm" variant="outline" className="h-6 text-[10px] rounded-lg px-2 ml-auto"
+                                onClick={() => { setSelectedTarefaTipo(acao.titulo); setTarefaModalOpen(true); }}>
+                                + Criar tarefa
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
