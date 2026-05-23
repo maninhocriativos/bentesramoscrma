@@ -734,7 +734,6 @@ export default function IntimacoesPage() {
               calcularPrazos={calcularPrazos}
               onMarkRead={() => { handleMarkRead(selectedIntimacao.id); setSelectedIntimacao({ ...selectedIntimacao, lida: true }); }}
               onGenerateReport={() => handleGenerateReport(selectedIntimacao)}
-              onClose={() => setSelectedIntimacao(null)}
               perfil={perfil}
             />
           )}
@@ -744,10 +743,10 @@ export default function IntimacoesPage() {
   );
 }
 
-function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularPrazos, onMarkRead, onGenerateReport, onClose, perfil }: {
+function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularPrazos, onMarkRead, onGenerateReport, perfil }: {
   intimacao: Intimacao; formatDate: (d: string | null) => string | null; formatDateLong: (d: string | null) => string;
   calcularPrazos: (i: Intimacao) => { dataBase: Date | null; dataConclusao: Date | null; dataFatal: Date | null };
-  onMarkRead: () => void; onGenerateReport: () => void; onClose: () => void; perfil: any;
+  onMarkRead: () => void; onGenerateReport: () => void; perfil: any;
 }) {
   const [showFullContent, setShowFullContent] = useState(false);
   const [comentario, setComentario] = useState('');
@@ -765,8 +764,6 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const [prazoFatal, setPrazoFatal] = useState('');
   const [horarioTarefa, setHorarioTarefa] = useState('');
   const [responsavelId, setResponsavelId] = useState('');
-  const [encaminharId, setEncaminharId] = useState('');
-  const [encaminhando, setEncaminhando] = useState(false);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [savingTarefa, setSavingTarefa] = useState(false);
 
@@ -865,62 +862,31 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     } finally { setSavingTarefa(false); }
   };
 
-  const handleEncaminhar = async () => {
-    if (!encaminharId) return;
-    setEncaminhando(true);
-    try {
-      const responsavel = members.find(m => m.id === encaminharId);
-      const prazoData = intimacao.data_intimacao || new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0];
-      const { data: tarefaData, error } = await supabase.from('tarefas').insert({
-        titulo: `${intimacao.tipo_intimacao || 'Intimação'} - ${intimacao.processo_cnj || 'Processo não identificado'}`,
-        descricao: [`Intimação encaminhada para análise.`, `Processo: ${intimacao.processo_cnj || '—'}`, intimacao.tribunal ? `Tribunal: ${intimacao.tribunal}` : '', conteudo ? `\nPublicação:\n${conteudo.slice(0, 700)}` : ''].filter(Boolean).join('\n'),
-        responsavel_id: encaminharId, processo_id: linkedProcesso?.id || null,
-        prioridade: 'Alta', status: 'Pendente', data_limite: prazoData, prazo_fatal: prazoData,
-      }).select('id').single();
-      if (error) throw error;
-      await supabase.from('notificacoes_internas' as any).insert({
-        user_id: encaminharId, titulo: 'Intimação encaminhada',
-        mensagem: `${intimacao.tipo_intimacao || 'Intimação'} encaminhada. Processo: ${intimacao.processo_cnj || '—'}`,
-        tipo: 'info', lida: false, link: '/tarefas',
-        dados: { source: 'intimacoes', intimacao_id: intimacao.id, tarefa_id: tarefaData?.id },
-      } as any);
-      toast.success(`Encaminhado para ${responsavel ? getMemberName(responsavel) : 'responsável'}!`);
-      setEncaminharId('');
-    } catch (err: any) {
-      toast.error('Erro ao encaminhar', { description: err.message });
-    } finally { setEncaminhando(false); }
-  };
-
   return (
     <>
       {/* HEADER */}
       <div className="relative shrink-0 border-b border-border/50 bg-card rounded-t-2xl overflow-hidden">
         <div className="absolute inset-x-0 top-0 h-1.5" style={{ background: `linear-gradient(90deg, ${tc.avatarFrom}, ${tc.avatarTo})` }} />
         <div className="px-6 pt-5 pb-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2 mb-2">
-                <span className={`text-[11px] font-bold px-3 py-1 rounded-full ${tc.badge}`}>{intimacao.tipo_intimacao || 'Publicação'}</span>
-                <span className={`text-[11px] font-bold px-3 py-1 rounded-full border ${intimacao.lida ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800/40' : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800/40'}`}>
-                  {intimacao.lida ? 'Lida' : 'Pendente'}
-                </span>
-                {intimacao.tribunal && (
-                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-muted text-muted-foreground border border-border/50">{intimacao.tribunal}</span>
-                )}
-              </div>
-              <h2 className="text-base font-bold text-foreground leading-snug line-clamp-2">
-                {intimacao.processo_titulo || intimacao.tipo_intimacao || 'Publicação'}
-              </h2>
-              {intimacao.processo_cnj && (
-                <button onClick={() => void copyTextToClipboard(intimacao.processo_cnj)} className="mt-1 inline-flex items-center gap-1.5 text-sm font-mono text-muted-foreground hover:text-foreground transition-colors group">
-                  <span>{intimacao.processo_cnj}</span>
-                  <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </button>
+          <div className="pr-8">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className={`text-[11px] font-bold px-3 py-1 rounded-full ${tc.badge}`}>{intimacao.tipo_intimacao || 'Publicação'}</span>
+              <span className={`text-[11px] font-bold px-3 py-1 rounded-full border ${intimacao.lida ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800/40' : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800/40'}`}>
+                {intimacao.lida ? 'Lida' : 'Pendente'}
+              </span>
+              {intimacao.tribunal && (
+                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-muted text-muted-foreground border border-border/50">{intimacao.tribunal}</span>
               )}
             </div>
-            <button onClick={onClose} className="shrink-0 h-8 w-8 rounded-lg flex items-center justify-center hover:bg-muted/60 transition-colors text-muted-foreground mt-1">
-              <X className="h-4 w-4" />
-            </button>
+            <h2 className="text-base font-bold text-foreground leading-snug line-clamp-2">
+              {intimacao.processo_titulo || intimacao.tipo_intimacao || 'Publicação'}
+            </h2>
+            {intimacao.processo_cnj && (
+              <button onClick={() => void copyTextToClipboard(intimacao.processo_cnj)} className="mt-1 inline-flex items-center gap-1.5 text-sm font-mono text-muted-foreground hover:text-foreground transition-colors group">
+                <span>{intimacao.processo_cnj}</span>
+                <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-2 mt-3 flex-wrap">
             {!intimacao.lida && (
@@ -1121,28 +1087,6 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
               </div>
             </SidebarField>
           </div>
-        </div>
-      </div>
-
-      {/* FOOTER: Encaminhar */}
-      <div className="shrink-0 border-t border-border/50 bg-muted/20 px-6 py-4">
-        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">Encaminhar</p>
-        <p className="text-[11px] text-muted-foreground mb-3">Encaminhar tarefa</p>
-        <div className="flex items-center gap-3">
-          <Select value={encaminharId} onValueChange={setEncaminharId}>
-            <SelectTrigger className="flex-1 h-9 rounded-lg text-sm">
-              <SelectValue placeholder="Selecione o responsável" />
-            </SelectTrigger>
-            <SelectContent>
-              {members.map(m => (
-                <SelectItem key={m.id} value={m.id}>{getMemberName(m)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button className="h-9 px-6 rounded-lg text-sm shrink-0" disabled={!encaminharId || encaminhando} onClick={handleEncaminhar}>
-            {encaminhando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            Encaminhar
-          </Button>
         </div>
       </div>
 
