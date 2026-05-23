@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Apply migrations via Supabase API
+      - name: Apply new migrations via Supabase API
         shell: bash
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -25,9 +25,19 @@ jobs:
           AUTH="Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}"
           FAILED=0
 
+          # Só processa migrations a partir de 2026-05-23 (data de adoção deste workflow)
+          # As anteriores já estavam no banco quando o projeto foi criado
+          CUTOFF="20260523"
+
           for sql_file in $(ls supabase/migrations/*.sql | sort); do
             filename=$(basename "$sql_file")
-            echo "▶ $filename"
+            prefix="${filename:0:8}"
+
+            if [[ "$prefix" < "$CUTOFF" ]]; then
+              continue
+            fi
+
+            echo "▶ Aplicando: $filename"
 
             RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$API" \
               -H "$AUTH" \
@@ -39,12 +49,9 @@ jobs:
 
             if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
               echo "  ✅ OK"
-            elif echo "$BODY" | grep -qE '"42710"|"42P07"|"42701"|"23505"|already exists|duplicate key'; then
-              echo "  ⏭  Já aplicada (ignorado)"
             else
               echo "  ❌ Erro ($HTTP_CODE): $BODY"
               FAILED=1
-              break
             fi
           done
 
