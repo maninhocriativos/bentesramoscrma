@@ -1,0 +1,44 @@
+name: Sync Automático de Intimações
+
+on:
+  schedule:
+    # 08:00 Manaus (UTC-4) = 12:00 UTC
+    - cron: '0 12 * * *'
+    # 14:00 Manaus (UTC-4) = 18:00 UTC
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    name: Sincronizar Intimações (Escavador / Diários Oficiais)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Disparar intimacoes-scheduler
+        run: |
+          echo "Disparando sync de intimações..."
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            --max-time 30 \
+            -X GET \
+            "https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/intimacoes-scheduler" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFnZW5hbHRranRsdndmZ3lrcHhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ5NjYxOTMsImV4cCI6MjA4MDU0MjE5M30.ewhDXc8qxAXdAevO-LMU_HOzu7oGUbj-p6Tj39hyUgg" \
+            -H "Content-Type: application/json")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+
+          echo "HTTP $HTTP_CODE"
+          echo "$BODY" | python3 -m json.tool 2>/dev/null || echo "$BODY"
+
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "202" ]; then
+            echo "ERRO: resposta HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+          QUEUED=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('queued',0))" 2>/dev/null || echo "?")
+          DEDUP=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('deduplicated',0))" 2>/dev/null || echo "?")
+
+          echo ""
+          echo "Resultado: $QUEUED job(s) enfileirado(s) | $DEDUP já em andamento"
