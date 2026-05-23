@@ -99,16 +99,19 @@ export default function IntimacoesPage() {
     return s ? new Date(s) : null;
   });
   const [tick, setTick] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
   const oabNumero = officeSettings?.oab_number || (perfil as any)?.oab_numero || '';
   const oabUf = officeSettings?.oab_state || (perfil as any)?.oab_uf || 'AM';
 
   useEffect(() => { if (user) fetchIntimacoes(); }, [user]);
   useEffect(() => { const t = setInterval(() => setTick(n => n + 1), 60000); return () => clearInterval(t); }, []);
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, filterLida]);
 
   const fetchIntimacoes = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('intimacoes').select('*').order('data_intimacao', { ascending: false });
+    const { data, error } = await supabase.from('intimacoes').select('*').order('created_at', { ascending: false });
     if (error) console.error(error); else setIntimacoes((data as any[]) || []);
     setLoading(false);
   };
@@ -219,6 +222,12 @@ export default function IntimacoesPage() {
     if (filterLida === 'today') return ok && new Date(i.created_at) >= todayStart;
     return ok;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginated = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const pageStart = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const pageEnd = Math.min(safePage * pageSize, filtered.length);
 
   const kpis = [
     { icon: BookOpen, label: 'Total de Publicações', value: intimacoes.length, numClr: 'text-foreground', iconBg: 'bg-primary/10', iconClr: 'text-primary', barClr: 'from-primary to-primary/50', filter: null },
@@ -493,7 +502,7 @@ export default function IntimacoesPage() {
                 return 'Anteriores';
               };
               const groups: Record<string, Intimacao[]> = {};
-              for (const i of filtered) { const g = getGroup(i); (groups[g] = groups[g] || []).push(i); }
+              for (const i of paginated) { const g = getGroup(i); (groups[g] = groups[g] || []).push(i); }
               const order = ['Hoje', 'Ontem', 'Esta semana', 'Anteriores'];
               return order.filter(g => groups[g]?.length).map(group => (
                 <div key={group}>
@@ -642,6 +651,74 @@ export default function IntimacoesPage() {
                 </div>
               ));
             })()}
+
+            {/* PAGINAÇÃO */}
+            {filtered.length > 0 && (
+              <div className="flex items-center justify-between gap-4 pt-4 border-t border-border/40 flex-wrap">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>Registros por página:</span>
+                  <select
+                    value={pageSize}
+                    onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                    className="h-8 rounded-lg border border-border/60 bg-card px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    {[10, 25, 50, 100].map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <span className="text-sm text-muted-foreground mr-2">
+                    {pageStart}–{pageEnd} de {filtered.length}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    disabled={safePage === 1}
+                    className="h-8 w-8 rounded-lg border border-border/50 flex items-center justify-center text-muted-foreground hover:bg-muted/60 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="Primeira página"
+                  >
+                    <span className="text-xs font-bold">«</span>
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={safePage === 1}
+                    className="h-8 w-8 rounded-lg border border-border/50 flex items-center justify-center text-muted-foreground hover:bg-muted/60 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="Página anterior"
+                  >
+                    <ChevronRight className="h-4 w-4 rotate-180" />
+                  </button>
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, idx) => {
+                    const start = Math.max(1, Math.min(safePage - 2, totalPages - 4));
+                    const page = start + idx;
+                    if (page > totalPages) return null;
+                    return (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`h-8 min-w-[2rem] px-2 rounded-lg border text-xs font-semibold transition-colors ${page === safePage ? 'bg-primary text-primary-foreground border-primary' : 'border-border/50 text-muted-foreground hover:bg-muted/60'}`}
+                      >
+                        {page}
+                      </button>
+                    );
+                  })}
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={safePage === totalPages}
+                    className="h-8 w-8 rounded-lg border border-border/50 flex items-center justify-center text-muted-foreground hover:bg-muted/60 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="Próxima página"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={safePage === totalPages}
+                    className="h-8 w-8 rounded-lg border border-border/50 flex items-center justify-center text-muted-foreground hover:bg-muted/60 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="Última página"
+                  >
+                    <span className="text-xs font-bold">»</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
