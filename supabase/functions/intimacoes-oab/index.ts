@@ -87,21 +87,32 @@ serve(async (req) => {
           processos!inner(numero_processo, titulo_acao, tribunal)
         `)
         .gte("data_movimento", CUTOFF)
+        // Pré-filtro no banco: somente movimentos com palavra-chave de intimação
+        .or(
+          "movimento_titulo.ilike.%intima%," +
+          "movimento_titulo.ilike.%cita%," +
+          "movimento_titulo.ilike.%notifica%," +
+          "movimento_descricao.ilike.%intima%," +
+          "movimento_descricao.ilike.%cita%," +
+          "movimento_descricao.ilike.%notifica%"
+        )
         .order("data_movimento", { ascending: false })
         .limit(500);
 
       if (movErr) {
         console.warn("⚠️ Erro ao buscar movimentações do banco:", movErr.message);
       } else {
-        console.log(`📊 [DB] ${movs?.length || 0} movimentações encontradas`);
+        console.log(`📊 [DB] ${movs?.length || 0} intimações encontradas`);
+
+        const TIPOS_VALIDOS = new Set(["Intimação", "Citação", "Notificação"]);
 
         for (const mov of (movs || [])) {
           const titulo = (mov.movimento_titulo || "") as string;
           const descricao = (mov.movimento_descricao || "") as string;
           const tipo = classifyMovimento(descricao, titulo);
 
-          // Incluir tudo exceto movimentações completamente genéricas
-          if (tipo === "Movimentação" && !descricao && !titulo) continue;
+          // Manter apenas intimações reais — despachos/sentenças/etc. ficam em Processos
+          if (!TIPOS_VALIDOS.has(tipo)) continue;
 
           const proc = mov.processos as any;
           const dataDisp = mov.data_movimento
