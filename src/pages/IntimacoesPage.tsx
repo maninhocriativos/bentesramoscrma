@@ -114,15 +114,23 @@ export default function IntimacoesPage() {
     if (!oabNumero) { toast.error('Configure seu número da OAB no perfil'); return; }
     setSyncing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('intimacoes-scheduler', { body: { oab_numero: oabNumero, oab_uf: oabUf, advogado_id: user?.id } });
+      const { data, error } = await supabase.functions.invoke('intimacoes-oab', { body: { oab_numero: oabNumero, oab_uf: oabUf, advogado_id: user?.id } });
       if (error) throw error;
+      const syncedAt = new Date();
+      setLastSyncAt(syncedAt);
+      localStorage.setItem('intimacoes-last-sync', syncedAt.toISOString());
       if (data?.success) {
-        const syncedAt = new Date();
-        setLastSyncAt(syncedAt);
-        localStorage.setItem('intimacoes-last-sync', syncedAt.toISOString());
-        toast.success(data?.deduplicated ? 'Sincronização já estava em andamento' : 'Sincronização iniciada', { description: 'Busca em fila, processada em segundo plano.' });
-        window.setTimeout(() => void fetchIntimacoes(), 4000);
-      } else toast.error(data?.error || 'Erro ao iniciar sincronização');
+        const saved: number = data.saved ?? 0;
+        const updated: number = data.updated ?? 0;
+        if (saved > 0) {
+          toast.success(`${saved} nova(s) intimação(ões) encontrada(s)`, { description: updated > 0 ? `${updated} atualizada(s)` : undefined });
+        } else {
+          toast.success('Sincronização concluída', { description: updated > 0 ? `${updated} intimação(ões) atualizada(s)` : 'Nenhuma novidade no momento.' });
+        }
+        await fetchIntimacoes();
+      } else {
+        toast.error(data?.error || 'Erro ao sincronizar');
+      }
     } catch (err: any) { toast.error('Erro ao sincronizar', { description: err.message }); }
     finally { setSyncing(false); }
   };
