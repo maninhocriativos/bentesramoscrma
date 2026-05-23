@@ -2,8 +2,7 @@
 UPDATE public.perfis
 SET
   oab_numero = '7526',
-  oab_uf     = 'AM',
-  updated_at = NOW()
+  oab_uf     = 'AM'
 WHERE
   LOWER(nome) LIKE '%andrey%'
   AND aprovado = true;
@@ -12,8 +11,7 @@ WHERE
 UPDATE public.perfis
 SET
   oab_numero = NULL,
-  oab_uf     = NULL,
-  updated_at = NOW()
+  oab_uf     = NULL
 WHERE
   LOWER(nome) LIKE '%thiago%'
   AND aprovado = true;
