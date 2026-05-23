@@ -753,7 +753,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const [comentario, setComentario] = useState('');
   const [processoSearch, setProcessoSearch] = useState('');
   const [processoResults, setProcessoResults] = useState<any[]>([]);
-  const [linkedProcesso, setLinkedProcesso] = useState<{ id: string; numero: string; titulo: string } | null>(null);
+  const [linkedProcesso, setLinkedProcesso] = useState<{ id: string | null; numero: string; titulo: string } | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [tarefasAdicionadas, setTarefasAdicionadas] = useState<string[]>([]);
   const [tarefasCustom, setTarefasCustom] = useState<string[]>([]);
@@ -812,8 +812,20 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const searchProcessos = async (term: string) => {
     setProcessoSearch(term);
     if (term.length < 2) { setProcessoResults([]); setShowDropdown(false); return; }
-    const { data } = await supabase.from('processos').select('id,numero_processo,titulo_acao').or(`numero_processo.ilike.%${term}%,titulo_acao.ilike.%${term}%`).limit(8);
-    setProcessoResults((data as any[]) || []); setShowDropdown(true);
+    const { data } = await supabase
+      .from('processos')
+      .select('id, numero_processo, titulo_acao, nome_cliente')
+      .or(`numero_processo.ilike.%${term}%,titulo_acao.ilike.%${term}%,nome_cliente.ilike.%${term}%`)
+      .limit(10);
+    setProcessoResults((data as any[]) || []);
+    setShowDropdown(true);
+  };
+
+  const linkManualProcesso = (numero: string) => {
+    if (!numero.trim()) return;
+    setLinkedProcesso({ id: null, numero: numero.trim(), titulo: '' });
+    setProcessoSearch('');
+    setShowDropdown(false);
   };
 
   useEffect(() => {
@@ -1118,30 +1130,35 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {intimacao.processo_cnj
-                    ? <p className="text-sm font-mono text-foreground">{intimacao.processo_cnj}</p>
-                    : <p className="text-sm text-muted-foreground">Nenhum processo vinculado</p>
-                  }
-                  {!intimacao.processo_cnj && (
-                    <p className="text-xs text-primary hover:underline cursor-pointer">Cadastrar um novo processo</p>
+                  {intimacao.processo_cnj && !processoSearch && (
+                    <p className="text-xs font-mono text-muted-foreground">{intimacao.processo_cnj}</p>
                   )}
                   <div className="relative">
-                    <Input placeholder="Vincular processo..." value={processoSearch} onChange={e => searchProcessos(e.target.value)} className="h-8 text-xs rounded-lg" />
-                    {showDropdown && processoResults.length > 0 && (
-                      <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-xl max-h-40 overflow-y-auto">
+                    <Input
+                      placeholder="Buscar por cliente, nº ou CNJ..."
+                      value={processoSearch}
+                      onChange={e => searchProcessos((e.target as HTMLInputElement).value)}
+                      onKeyDown={e => { if ((e as KeyboardEvent).key === 'Enter') linkManualProcesso(processoSearch); }}
+                      className="h-8 text-xs rounded-lg"
+                    />
+                    {showDropdown && (
+                      <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-xl max-h-48 overflow-y-auto">
                         {processoResults.map(p => (
                           <button key={p.id} className="w-full text-left px-3 py-2 hover:bg-muted/60 transition-colors border-b border-border/30 last:border-0"
-                            onClick={() => { setLinkedProcesso({ id: p.id, numero: p.numero_processo || '', titulo: p.titulo_acao || '' }); setProcessoSearch(''); setShowDropdown(false); }}>
+                            onClick={() => { setLinkedProcesso({ id: p.id, numero: p.numero_processo || '', titulo: p.titulo_acao || p.nome_cliente || '' }); setProcessoSearch(''); setShowDropdown(false); }}>
                             <p className="text-xs font-mono font-bold text-primary">{p.numero_processo || 'Sem número'}</p>
-                            {p.titulo_acao && <p className="text-[10px] text-muted-foreground">{p.titulo_acao}</p>}
+                            {(p.titulo_acao || p.nome_cliente) && <p className="text-[10px] text-muted-foreground line-clamp-1">{p.nome_cliente || p.titulo_acao}</p>}
                           </button>
                         ))}
+                        {processoSearch.length >= 2 && (
+                          <button className="w-full text-left px-3 py-2 hover:bg-primary/10 transition-colors text-xs text-primary font-medium flex items-center gap-1.5 border-t border-border/30"
+                            onClick={() => linkManualProcesso(processoSearch)}>
+                            <span className="text-base leading-none">+</span> Usar "<span className="font-mono">{processoSearch}</span>" como número
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
-                  <Button size="sm" variant="outline" className="h-7 text-xs w-full rounded-lg gap-1.5" onClick={() => toast.info('Vincule um processo na busca acima')}>
-                    Vincular processo
-                  </Button>
                 </div>
               )}
             </SidebarField>
