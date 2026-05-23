@@ -775,8 +775,20 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const conteudo = intimacao.conteudo || '';
   const displayContent = showFullContent ? conteudo : conteudo.slice(0, 800);
 
+  const getMemberName = (member: TeamMember) => {
+    const name = [member.nome, member.sobrenome].filter(Boolean).join(' ');
+    return name || member.email || 'Usuário';
+  };
+
   const pagina = (intimacao.raw_json as any)?.pagina ?? (intimacao.raw_json as any)?.page ?? null;
-  const nomePesquisado = [perfil?.nome, perfil?.sobrenome].filter(Boolean).join(' ') || `OAB/${intimacao.oab_uf} ${intimacao.oab_numero}`;
+
+  // Advogado dono da intimação (pelo advogado_id; fallback para o perfil logado)
+  const advogadoIntimacao = members.find((m: TeamMember) => m.id === intimacao.advogado_id) || null;
+  const nomePesquisado = advogadoIntimacao
+    ? getMemberName(advogadoIntimacao)
+    : [perfil?.nome, perfil?.sobrenome].filter(Boolean).join(' ') ||
+      `OAB/${intimacao.oab_uf} ${intimacao.oab_numero}`;
+
   const createdAt = new Date(intimacao.created_at);
   const daysAgo = Math.floor((Date.now() - createdAt.getTime()) / 86400000);
   const createdAgoText = daysAgo === 0 ? 'hoje' : daysAgo === 1 ? '1 dia atrás' : `${daysAgo} dias atrás`;
@@ -788,11 +800,6 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     if (f === 'escavador_v1') return intimacao.processo_titulo || 'Diário Oficial';
     return f || 'Sistema';
   })();
-
-  const getMemberName = (member: TeamMember) => {
-    const name = [member.nome, member.sobrenome].filter(Boolean).join(' ');
-    return name || member.email || 'Usuário';
-  };
 
   const searchProcessos = async (term: string) => {
     setProcessoSearch(term);
@@ -1028,10 +1035,10 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
               <div className="flex items-center gap-2">
                 <div className="h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
                   style={{ background: `linear-gradient(135deg, ${tc.avatarFrom}, ${tc.avatarTo})` }}>
-                  {(perfil?.nome || 'U')[0].toUpperCase()}
+                  {(advogadoIntimacao?.nome || perfil?.nome || 'U')[0].toUpperCase()}
                 </div>
                 <span className="text-sm font-medium text-foreground">
-                  {[perfil?.nome, perfil?.sobrenome].filter(Boolean).join(' ') || 'Usuário'}
+                  {advogadoIntimacao ? getMemberName(advogadoIntimacao) : [perfil?.nome, perfil?.sobrenome].filter(Boolean).join(' ') || 'Usuário'}
                 </span>
               </div>
             </SidebarField>
