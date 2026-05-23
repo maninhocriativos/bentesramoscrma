@@ -54,17 +54,16 @@ function traduzirMovimento(nome: string): string {
 function formatarData(dateStr: string): string {
   try {
     if (!dateStr || dateStr === "null" || dateStr === "undefined") return "";
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) {
-      const match = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-      if (match) {
-        const d2 = new Date(`${match[3]}-${match[2]}-${match[1]}`);
-        if (!isNaN(d2.getTime())) {
-          return d2.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
-        }
+    // Verificar formato DD/MM/YYYY ANTES de new Date() para evitar interpretação MM/DD americana
+    const brMatch = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (brMatch) {
+      const d = new Date(`${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
       }
-      return "";
     }
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
     return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
   } catch {
     return "";
@@ -156,7 +155,7 @@ async function explicarMovimentosComIA(
   if (!OPENAI_API_KEY || movimentos.length === 0) return null;
 
   const movsCtx = movimentos.map((m, i) => {
-    const data = m.dataHora || "data não informada";
+    const data = m.dataHoraRaw || m.dataHora || "data não informada";
     const tipo = m.nome || "Movimentação";
     const detalhe = (m.complemento || "").trim();
     return `Movimentação ${i + 1} (${data}):\n  Tipo: ${tipo}\n  Conteúdo: ${detalhe || "sem detalhes adicionais"}`;
@@ -202,7 +201,7 @@ async function explicarMovimentosComIA(
 function buildMovimentosTemplate(movimentos: any[]): string {
   let texto = "\n─────────────────\n\n📌 *Movimentações recentes:*\n\n";
   for (const mov of movimentos) {
-    const dataFormatada = mov.dataHora ? formatarData(mov.dataHora) : "";
+    const dataFormatada = formatarData(mov.dataHoraRaw || mov.dataHora || "");
     const traducao = traduzirMovimento(mov.nome || "");
     const raw = (mov.complemento || "").trim();
     const detalhe = raw && raw.toLowerCase() !== (mov.nome || "").toLowerCase()

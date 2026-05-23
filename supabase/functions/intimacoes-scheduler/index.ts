@@ -140,8 +140,11 @@ serve(async (req) => {
 
     const results: Array<{ oab: string; uf: string; jobId?: string; status: string; deduplicated?: boolean }> = [];
 
+    // Só deduplica jobs criados nos últimos 20 minutos — jobs mais antigos são considerados travados
+    const deduplicationWindow = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+
     for (const cred of oabs) {
-      // Check for existing pending/processing job
+      // Check for existing pending/processing job (dentro da janela de 20 min)
       const { data: existingJob } = await supabase
         .from("intimacoes_sync_jobs")
         .select("id, status")
@@ -149,6 +152,7 @@ serve(async (req) => {
         .eq("oab_numero", cred.oabNumero)
         .eq("oab_uf", cred.oabUf)
         .in("status", ["pending", "processing"])
+        .gte("created_at", deduplicationWindow)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
