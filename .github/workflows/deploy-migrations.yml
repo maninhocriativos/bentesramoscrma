@@ -13,14 +13,35 @@ jobs:
   migrate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
-
-      - name: Apply database migrations
-        run: supabase db push --project-ref qgenaltkjtlvwfgykpxq
+      - name: Apply migrations via Supabase API
+        shell: bash
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          PROJECT_REF="qgenaltkjtlvwfgykpxq"
+          FAILED=0
+
+          for sql_file in $(ls supabase/migrations/*.sql | sort); do
+            echo "▶ Applying: $sql_file"
+            SQL=$(cat "$sql_file")
+
+            RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+              "https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query" \
+              -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"query\": $(echo "$SQL" | jq -Rs .)}")
+
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | head -n -1)
+
+            if [ "$HTTP_CODE" != "200" ]; then
+              echo "❌ Failed ($HTTP_CODE): $BODY"
+              FAILED=1
+            else
+              echo "✅ Done: $sql_file"
+            fi
+          done
+
+          exit $FAILED
