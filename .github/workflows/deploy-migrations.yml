@@ -25,34 +25,41 @@ jobs:
           AUTH="Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}"
 
           run_sql() {
-            local sql="$1"
             curl -s -o /dev/null -w "%{http_code}" -X POST "$API" \
               -H "$AUTH" \
               -H "Content-Type: application/json" \
-              -d "{\"query\": $(echo "$sql" | jq -Rs .)}"
+              -d "{\"query\": $(echo "$1" | jq -Rs .)}"
           }
 
-          # Cria tabela de controle se não existir
+          # Cria tabela de controle
           run_sql "CREATE TABLE IF NOT EXISTS _migration_history (
             filename TEXT PRIMARY KEY,
             applied_at TIMESTAMPTZ DEFAULT NOW()
           );"
+
+          # Marca todas as migrations anteriores a 2026-05-23 como já aplicadas
+          # (foram aplicadas quando o projeto foi criado no Lovable/Supabase)
+          for sql_file in $(ls supabase/migrations/*.sql | sort); do
+            filename=$(basename "$sql_file")
+            # Migrations antes de hoje já estavam no banco — registra sem rodar
+            if [[ "$filename" < "20260523" ]]; then
+              run_sql "INSERT INTO _migration_history (filename) VALUES ($(echo "$filename" | jq -Rs .)) ON CONFLICT DO NOTHING;" > /dev/null
+            fi
+          done
 
           FAILED=0
 
           for sql_file in $(ls supabase/migrations/*.sql | sort); do
             filename=$(basename "$sql_file")
 
-            # Verifica se já foi aplicada
+            # Pula se já registrada
             RESULT=$(curl -s -X POST "$API" \
               -H "$AUTH" \
               -H "Content-Type: application/json" \
-              -d "{\"query\": \"SELECT 1 FROM _migration_history WHERE filename = $(echo "$filename" | jq -Rs .) LIMIT 1\"}")
+              -d "{\"query\": \"SELECT filename FROM _migration_history WHERE filename = $(echo "$filename" | jq -Rs .) LIMIT 1\"}")
 
-            COUNT=$(echo "$RESULT" | jq -r '.[0] | length // 0' 2>/dev/null || echo "0")
-
-            if [ "$COUNT" != "0" ] && [ "$COUNT" != "null" ] && echo "$RESULT" | grep -q '"1"'; then
-              echo "⏭ Já aplicada: $filename"
+            if echo "$RESULT" | grep -q "\"$filename\""; then
+              echo "⏭  Já aplicada: $filename"
               continue
             fi
 
@@ -68,9 +75,8 @@ jobs:
             BODY=$(echo "$RESPONSE" | head -n -1)
 
             if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
-              # Registra como aplicada
-              run_sql "INSERT INTO _migration_history (filename) VALUES ($(echo "$filename" | jq -Rs .)) ON CONFLICT DO NOTHING;"
-              echo "✅ Sucesso: $filename"
+              run_sql "INSERT INTO _migration_history (filename) VALUES ($(echo "$filename" | jq -Rs .)) ON CONFLICT DO NOTHING;" > /dev/null
+              echo "✅ Aplicada: $filename"
             else
               echo "❌ Falhou ($HTTP_CODE): $BODY"
               FAILED=1
