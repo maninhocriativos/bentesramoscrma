@@ -87,6 +87,7 @@ serve(async (req) => {
         job_id: job.id,
         trigger_source: job.trigger_source,
       }),
+      signal: AbortSignal.timeout(90000), // 90s máx — evita worker travado
     });
 
     const rawBody = await response.text();

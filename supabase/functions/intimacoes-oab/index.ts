@@ -101,7 +101,7 @@ serve(async (req) => {
       while (page <= maxPages) {
         try {
           const url = `https://api.escavador.com/api/v1/busca?q=${encodeURIComponent(term)}&qo=d&limit=50&page=${page}&data_inicio=${CUTOFF}`;
-          const resp = await fetch(url, { headers: escavadorHeaders });
+          const resp = await fetch(url, { headers: escavadorHeaders, signal: AbortSignal.timeout(25000) });
 
           if (!resp.ok) {
             console.warn(`⚠️ V1 "${term}" p${page}: ${resp.status}`);
