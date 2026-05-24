@@ -175,7 +175,8 @@ serve(async (req) => {
             processos.push(...pageItems);
             console.log(`📋 [V2] Página ${procPage}: ${pageItems.length} processos`);
             if (pageItems.length < 50) break; // não há mais páginas
-          } catch {
+          } catch (err) {
+            console.error(`📋 [V2] Erro na página ${procPage} da Escavador:`, err);
             break;
           }
         }
@@ -302,7 +303,8 @@ serve(async (req) => {
               (data?.items?.next_page_url || data?.items?.current_page < data?.items?.last_page ||
                data?.links?.next || data?.paginator?.next_page_url);
             if (!hasMore) break;
-          } catch {
+          } catch (err) {
+            console.error(`📋 [V1] Erro na paginação Escavador:`, err);
             break;
           }
         }

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchWithTimeout, TIMEOUT } from '../_shared/fetch-helper.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -110,13 +111,15 @@ async function enviarZapi(supabase: any, telefone: string, mensagem: string): Pr
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (inst.client_token) headers["Client-Token"] = inst.client_token;
 
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://api.z-api.io/instances/${inst.instance_id}/token/${inst.token}/send-text`,
-      { method: "POST", headers, body: JSON.stringify({ phone: numero, message: mensagem }) }
+      { method: "POST", headers, body: JSON.stringify({ phone: numero, message: mensagem }) },
+      TIMEOUT.ZAPI,
     );
 
     return res.ok ? "enviado" : "erro";
-  } catch {
+  } catch (err) {
+    console.error("[meta-webhook] Z-API error:", err);
     return "erro";
   }
 }
@@ -208,8 +211,10 @@ serve(async (req: Request) => {
       }
 
       // Busca dados na Graph API
-      const graphRes = await fetch(
-        `https://graph.facebook.com/v20.0/${leadgenId}?access_token=${META_ACCESS_TOKEN}`
+      const graphRes = await fetchWithTimeout(
+        `https://graph.facebook.com/v20.0/${leadgenId}?access_token=${META_ACCESS_TOKEN}`,
+        {},
+        TIMEOUT.META,
       );
       const graphData = await graphRes.json();
 

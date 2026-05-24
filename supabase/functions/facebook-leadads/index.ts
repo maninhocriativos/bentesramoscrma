@@ -1,5 +1,6 @@
 const serve = Deno.serve;
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { fetchWithTimeout, TIMEOUT } from '../_shared/fetch-helper.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -62,10 +63,11 @@ serve(async (req) => {
             if (data) leadId = data.id;
           }
           if (!leadId) {
-            const { data } = await supabase.from('leads_juridicos').insert({
+            const { data, error: insertErr } = await supabase.from('leads_juridicos').insert({
               nome: nome || 'Lead Facebook', telefone, email, status: 'Lead Frio', lead_state: 'NEW',
               origem: 'Facebook', tipo_origem: 'trafego', fonte_trafego: 'facebook_lead_ads'
             }).select('id').single();
+            if (insertErr) console.error('[FB Lead Ads] INSERT manual falhou:', insertErr.message);
             leadId = data?.id;
           }
           results.push({ success: true, lead_id: leadId });
@@ -88,7 +90,11 @@ serve(async (req) => {
             continue;
           }
 
-          const res = await fetch(`https://graph.facebook.com/v20.0/${leadgen_id}?access_token=${accessToken}`);
+          const res = await fetchWithTimeout(
+            `https://graph.facebook.com/v20.0/${leadgen_id}?access_token=${accessToken}`,
+            {},
+            TIMEOUT.META,
+          );
           if (!res.ok) continue;
 
           const leadData = await res.json();
@@ -135,11 +141,17 @@ serve(async (req) => {
             }
           }
           if (!leadId) {
-            const { data } = await supabase.from('leads_juridicos').insert({
+            const { data, error: insertErr } = await supabase.from('leads_juridicos').insert({
               nome: nome || 'Lead Facebook', telefone: phoneNorm, email: email?.toLowerCase(),
               facebook_lead_id: leadgen_id, status: 'Lead Frio', lead_state: 'NEW',
               origem: 'Facebook', tipo_origem: 'trafego', fonte_trafego: 'facebook_lead_ads', canal_origem: 'facebook'
             }).select('id').single();
+            if (insertErr) {
+              console.error('[FB Lead Ads] INSERT lead falhou:', insertErr.message, { leadgen_id });
+              await supabase.from('integration_logs').insert({ provider: 'facebook_leadads', direction: 'inbound', status: 'error', payload_json: { leadgen_id, error: insertErr.message } });
+              processed++;
+              continue;
+            }
             leadId = data?.id;
           }
 

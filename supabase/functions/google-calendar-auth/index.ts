@@ -116,9 +116,12 @@ serve(async (req) => {
       if (authHeader) {
         try {
           const jwt = authHeader.replace('Bearer ', '');
-          const { data } = await supabase.auth.getUser(jwt);
+          const { data, error: authErr } = await supabase.auth.getUser(jwt);
+          if (authErr) console.error('[google-calendar-auth] JWT inválido:', authErr.message);
           userId = data.user?.id || '';
-        } catch {}
+        } catch (err) {
+          console.error('[google-calendar-auth] Erro ao validar JWT:', err);
+        }
       }
 
       console.log('[get_auth_url] userId:', userId, '| redirect_uri:', REDIRECT_URI);

@@ -129,9 +129,12 @@ serve(async (req) => {
         try {
           const userClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
           const jwt = authHeader.replace('Bearer ', '');
-          const { data } = await userClient.auth.getUser(jwt);
+          const { data, error: authErr } = await userClient.auth.getUser(jwt);
+          if (authErr) console.error('[google-drive] JWT inválido:', authErr.message);
           userId = data.user?.id || '';
-        } catch {}
+        } catch (err) {
+          console.error('[google-drive] Erro ao validar JWT:', err);
+        }
       }
 
       const scopes = ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive.readonly'].join(' ');

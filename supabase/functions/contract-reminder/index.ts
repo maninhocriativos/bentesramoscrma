@@ -161,10 +161,9 @@ serve(async (req: Request): Promise<Response> => {
       const resolved = await resolveClicksignSignerLink(documentKey);
       if (resolved) {
         link = resolved;
-        try {
-          await supabase.from('leads_juridicos').update({ link_contrato: link }).eq('id', lead.id);
-          await supabase.from('contract_reminders').update({ contract_link: link, updated_at: new Date().toISOString() }).eq('document_key', documentKey);
-        } catch {}
+        const { error: updateErr } = await supabase.from('leads_juridicos').update({ link_contrato: link }).eq('id', lead.id);
+        if (updateErr) console.error('[Contract Reminder] Falha ao salvar link no lead:', updateErr.message);
+        await supabase.from('contract_reminders').update({ contract_link: link, updated_at: new Date().toISOString() }).eq('document_key', documentKey);
       }
     }
     if (!link && documentKey) link = `https://app.clicksign.com/document/${documentKey}`;
