@@ -266,7 +266,8 @@ export async function sendText(
       {
         method: 'POST',
         headers,
-        body: JSON.stringify({ phone: cleanPhone, message })
+        body: JSON.stringify({ phone: cleanPhone, message }),
+        signal: AbortSignal.timeout(10_000),
       }
     );
 
@@ -321,11 +322,12 @@ export async function sendImage(
       {
         method: 'POST',
         headers,
-        body: JSON.stringify({ 
-          phone: cleanPhone, 
+        body: JSON.stringify({
+          phone: cleanPhone,
           image: imageUrl,
           caption: caption || ''
-        })
+        }),
+        signal: AbortSignal.timeout(10_000),
       }
     );
 
@@ -365,11 +367,12 @@ export async function sendDocument(
       {
         method: 'POST',
         headers,
-        body: JSON.stringify({ 
-          phone: cleanPhone, 
+        body: JSON.stringify({
+          phone: cleanPhone,
           document: documentUrl,
           fileName
-        })
+        }),
+        signal: AbortSignal.timeout(10_000),
       }
     );
 
@@ -408,10 +411,11 @@ export async function sendAudio(
       {
         method: 'POST',
         headers,
-        body: JSON.stringify({ 
-          phone: cleanPhone, 
+        body: JSON.stringify({
+          phone: cleanPhone,
           audio: audioUrl
-        })
+        }),
+        signal: AbortSignal.timeout(10_000),
       }
     );
 
@@ -589,7 +593,7 @@ export async function sendVideo(
     if (config.client_token) headers['Client-Token'] = config.client_token;
     const response = await fetch(
       `https://api.z-api.io/instances/${config.instance_id}/token/${config.token}/send-video`,
-      { method: 'POST', headers, body: JSON.stringify({ phone: cleanPhone, video: videoUrl, caption: caption || '' }) }
+      { method: 'POST', headers, body: JSON.stringify({ phone: cleanPhone, video: videoUrl, caption: caption || '' }), signal: AbortSignal.timeout(10_000) }
     );
     const data = await response.json();
     if (response.ok && !data.error) return { success: true, messageId: data.messageId, provider: 'zapi' };
@@ -615,8 +619,10 @@ export async function sendButtonList(
     const response = await fetch(
       `https://api.z-api.io/instances/${config.instance_id}/token/${config.token}/send-button-list`,
       {
-        method: 'POST', headers,
+        method: 'POST',
+        headers,
         body: JSON.stringify({ phone: cleanPhone, message, buttonList: { buttons } }),
+        signal: AbortSignal.timeout(10_000),
       }
     );
     const data = await response.json();

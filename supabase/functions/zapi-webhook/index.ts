@@ -1,6 +1,6 @@
 const serve = Deno.serve;
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { normalizePhone, gerarSubscriberId, identificarInstanciaOrigem, getZapiConfig, sendText } from '../_shared/zapi-helper.ts';
+import { normalizePhone, gerarSubscriberId, identificarInstanciaOrigem, getZapiConfig, sendText, PHONE_TRAFEGO, PHONE_ESCRITORIO } from '../_shared/zapi-helper.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -29,35 +29,15 @@ interface TrafficSourceResult {
 // Mensagem padrão que vem do anúncio Click to WhatsApp
 const TRAFFIC_MESSAGE_PATTERN = 'quero saber se tenho dinheiro a receber';
 
-// ============================================
-// INSTÂNCIAS DEDICADAS A TRÁFEGO
-// Qualquer mensagem recebida nesses números é automaticamente classificada como tráfego
-// ============================================
-const TRAFFIC_INSTANCE_PHONES = [
-  // Com 9º dígito (padrão)
-  '5592985888190',
-  '92985888190',
-  '985888190',
-
-  // Sem 9º dígito (alguns callbacks da Z-API vêm assim)
-  '559285888190',
-  '9285888190',
-  '85888190',
-
-  // Sufixo “estável” entre as duas variações acima
-  '5888190'
-];
-
-// ============================================
-// INSTÂNCIAS DO ESCRITÓRIO (NÃO SÃO TRÁFEGO)
-// Leads que chegam por esses números são do escritório/contato direto
-// ============================================
-const OFFICE_INSTANCE_PHONES = [
-  '5592991604348',
-  '92991604348',
-  '991604348',
-  '91604348'
-];
+// Matching de instância usando os números canônicos do zapi-helper (fonte única de verdade).
+// PHONE_TRAFEGO = '5592985888190' → sufixo dos últimos 7 dígitos cobre todas variações da Z-API
+// PHONE_ESCRITORIO = '5592991604348' → sufixo dos últimos 8 dígitos cobre todas variações
+function isTrafficInstancePhone(cleanPhone: string): boolean {
+  return cleanPhone === PHONE_TRAFEGO || cleanPhone.endsWith(PHONE_TRAFEGO.slice(-7));
+}
+function isOfficeInstancePhone(cleanPhone: string): boolean {
+  return cleanPhone === PHONE_ESCRITORIO || cleanPhone.endsWith(PHONE_ESCRITORIO.slice(-8));
+}
 
 function detectTrafficSource(body: any, messageContent?: string, instancePhone?: string | null): TrafficSourceResult {
   // ============================================
@@ -65,9 +45,7 @@ function detectTrafficSource(body: any, messageContent?: string, instancePhone?:
   // ============================================
   if (instancePhone) {
     const cleanInstancePhone = instancePhone.replace(/\D/g, '');
-    const isOfficeInstance = OFFICE_INSTANCE_PHONES.some(phone => 
-      cleanInstancePhone === phone || cleanInstancePhone.endsWith(phone)
-    );
+    const isOfficeInstance = isOfficeInstancePhone(cleanInstancePhone);
     
     if (isOfficeInstance) {
       console.log('[Traffic Detection] 📞 Office instance detected - NOT traffic:', {
@@ -84,9 +62,7 @@ function detectTrafficSource(body: any, messageContent?: string, instancePhone?:
   // ============================================
   if (instancePhone) {
     const cleanInstancePhone = instancePhone.replace(/\D/g, '');
-    const isTrafficInstance = TRAFFIC_INSTANCE_PHONES.some(phone => 
-      cleanInstancePhone === phone || cleanInstancePhone.endsWith(phone)
-    );
+    const isTrafficInstance = isTrafficInstancePhone(cleanInstancePhone);
     
     if (isTrafficInstance) {
       console.log('[Traffic Detection] ✅ DETECTED PAID TRAFFIC via TRAFFIC INSTANCE:', {
@@ -554,12 +530,8 @@ serve(async (req: Request) => {
     
     // Determinar linha_whatsapp baseado no número conectado
     const cleanConnPhoneForLine = connectedPhone?.replace(/\D/g, '') || '';
-    const isOfficeNumber = OFFICE_INSTANCE_PHONES.some(phone => 
-      cleanConnPhoneForLine === phone || cleanConnPhoneForLine.endsWith(phone)
-    );
-    const isTrafficNumber = TRAFFIC_INSTANCE_PHONES.some(phone => 
-      cleanConnPhoneForLine === phone || cleanConnPhoneForLine.endsWith(phone)
-    );
+    const isOfficeNumber = isOfficeInstancePhone(cleanConnPhoneForLine);
+    const isTrafficNumber = isTrafficInstancePhone(cleanConnPhoneForLine);
     
     const linhaWhatsapp = isOfficeNumber ? 'bentes_ramos_antigo' : 
                           isTrafficNumber ? 'trafego_isa' : 'indefinido';
@@ -628,9 +600,7 @@ serve(async (req: Request) => {
     // AUTO-TAGGING: Adicionar tag "Bentes Ramos" para contatos do escritório
     // ============================================
     const cleanConnectedPhone = connectedPhone?.replace(/\D/g, '') || '';
-    const isFromOffice = OFFICE_INSTANCE_PHONES.some(phone => 
-      cleanConnectedPhone === phone || cleanConnectedPhone.endsWith(phone)
-    );
+    const isFromOffice = isOfficeInstancePhone(cleanConnectedPhone);
     
     if (isFromOffice) {
       try {
@@ -1044,12 +1014,11 @@ serve(async (req: Request) => {
         // Não usar zapiConfig genérico — buscar explicitamente a instância
         // do escritório pelo phone_number para garantir roteamento correto
         // ============================================
-        const officePhones = ['5592991604348']; // (92) 99160-4348 — "Bentes Ramos" escritório
         const { data: officeInstance } = await supabase
           .from('zapi_instances')
           .select('*')
           .eq('is_active', true)
-          .or(officePhones.map(p => `phone_number.eq.${p}`).join(','))
+          .eq('phone_number', PHONE_ESCRITORIO)
           .maybeSingle();
         
         const officeConfig: any = officeInstance ? {
@@ -1405,7 +1374,8 @@ async function fetchFacebookLeadData(sourceId: string | null): Promise<{
     // Primeiro, tentar buscar leads recentes da página
     // Nota: Isso requer permissões de leads_retrieval na página
     const leadResponse = await fetch(
-      `https://graph.facebook.com/v20.0/${sourceId}?fields=id,field_data,created_time&access_token=${accessToken}`
+      `https://graph.facebook.com/v20.0/${sourceId}?fields=id,field_data,created_time&access_token=${accessToken}`,
+      { signal: AbortSignal.timeout(10_000) }
     );
     
     if (leadResponse.ok) {
@@ -1508,14 +1478,10 @@ async function findOrCreateLead(
   
   // Detectar se é do escritório (número Bentes Ramos)
   const cleanInstancePhone = instancePhone?.replace(/\D/g, '') || '';
-  const isFromOffice = OFFICE_INSTANCE_PHONES.some(phone => 
-    cleanInstancePhone === phone || cleanInstancePhone.endsWith(phone)
-  );
-  
+  const isFromOffice = isOfficeInstancePhone(cleanInstancePhone);
+
   // Detectar se é do número de tráfego
-  const isFromTrafficLine = TRAFFIC_INSTANCE_PHONES.some(phone => 
-    cleanInstancePhone === phone || cleanInstancePhone.endsWith(phone)
-  );
+  const isFromTrafficLine = isTrafficInstancePhone(cleanInstancePhone);
   
   // Se detectamos tráfego pago (via metadados do anúncio Click to WhatsApp OU número de tráfego)
   if (trafficSource.isTraffic || isFromTrafficLine) {
