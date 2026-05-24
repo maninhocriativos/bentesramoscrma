@@ -70,9 +70,23 @@ export function RealtimeLeadsMonitor({ leads, onRefresh }: RealtimeLeadsMonitorP
       .sort((a, b) => b[1] - a[1])
       .slice(0, 4);
 
+    const ORIGENS_TRAFEGO = ['Instagram', 'Google', 'Site', 'Tráfego Pago'];
+    const ORIGENS_ESCRITORIO = ['Escritório', 'Indicação', 'Bentes Ramos', 'WhatsApp Z-API'];
+    const classifyLead = (l: Lead) => {
+      if (l.tipo_origem === 'trafego') return 'trafego';
+      if (l.tipo_origem === 'whatsapp_direto') return 'escritorio';
+      if (ORIGENS_TRAFEGO.includes(l.origem || '')) return 'trafego';
+      if (ORIGENS_ESCRITORIO.includes(l.origem || '')) return 'escritorio';
+      return 'outro';
+    };
+    const hojeTrafico    = leadsHoje.filter(l => classifyLead(l) === 'trafego').length;
+    const hojeEscritorio = leadsHoje.filter(l => classifyLead(l) === 'escritorio').length;
+
     return {
       total: leads.length,
       hoje: leadsHoje.length,
+      hojeTrafico,
+      hojeEscritorio,
       semResposta24h: semResposta24h.length,
       taxaHoje,
       statusResumo,
@@ -121,9 +135,15 @@ export function RealtimeLeadsMonitor({ leads, onRefresh }: RealtimeLeadsMonitorP
             </p>
             <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>Total de leads no CRM</p>
           </div>
-          <div className="text-right">
-            <p style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>+{displayHoje}</p>
-            <p style={{ fontSize: 10, color: '#9ca3af' }}>hoje</p>
+          <div className="text-right shrink-0 space-y-1">
+            <div className="flex items-center justify-end gap-1.5">
+              <span style={{ fontSize: 12, fontWeight: 800, color: '#3b82f6' }}>+{stats.hojeTrafico + (extraLeads > 0 ? extraLeads : 0)}</span>
+              <span style={{ fontSize: 9, color: '#9ca3af', whiteSpace: 'nowrap' }}>tráfego</span>
+            </div>
+            <div className="flex items-center justify-end gap-1.5">
+              <span style={{ fontSize: 12, fontWeight: 800, color: '#c9a96e' }}>+{stats.hojeEscritorio}</span>
+              <span style={{ fontSize: 9, color: '#9ca3af', whiteSpace: 'nowrap' }}>escritório</span>
+            </div>
           </div>
         </div>
 
