@@ -274,8 +274,11 @@ serve(async (req) => {
               const conteudo = item.texto || item.conteudo || item.content || "";
               const titulo = item.diario_nome || item.titulo || "Publicação em Diário Oficial";
               const cnjMatch = conteudo.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
-              const tipo = classifyMovimento(conteudo, titulo);
-              if (!TIPOS_INTIMACAO.has(tipo)) continue;
+
+              // V1 = Diário Oficial: se mencionou a OAB é publicação relevante.
+              // Classifica o tipo; se não reconhecer, usa "Publicação" como padrão.
+              const tipoRaw = classifyMovimento(conteudo, titulo);
+              const tipo = TIPOS_INTIMACAO.has(tipoRaw) ? tipoRaw : "Publicação";
 
               const diarioData = item.diario_data || item.data_publicacao || item.data || "";
               if (diarioData && diarioData < CUTOFF) continue;
@@ -292,10 +295,13 @@ serve(async (req) => {
               v1Count++;
             }
 
-            const hasNext = !!(data?.links?.next ||
-              data?.paginator?.next_page_url ||
-              (data?.paginator && data.paginator.current_page < data.paginator.last_page));
-            if (!hasNext) break;
+            // Verifica se há próxima página pelo número de itens retornados
+            // (a estrutura do paginador V1 fica em data.items.*, não em data.paginator)
+            const hasMore =
+              items.length === 50 &&
+              (data?.items?.next_page_url || data?.items?.current_page < data?.items?.last_page ||
+               data?.links?.next || data?.paginator?.next_page_url);
+            if (!hasMore) break;
           } catch {
             break;
           }
@@ -316,22 +322,30 @@ serve(async (req) => {
     // ── Deduplicação em memória ───────────────────────────────────────────────
     const { data: existing } = await supabase
       .from("intimacoes")
-      .select("id, processo_cnj, tipo_intimacao, data_disponibilizacao, tribunal, data_publicacao, data_intimacao")
+      .select("id, processo_cnj, tipo_intimacao, data_disponibilizacao, tribunal, data_publicacao, data_intimacao, conteudo")
       .eq("oab_numero", oab_numero)
       .eq("oab_uf", oab_uf)
-      .gte("created_at", new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOString());
+      .gte("created_at", new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString());
+
+    // Itens com CNJ: chave por processo+tipo+data (processo identificado com precisão)
+    // Itens sem CNJ (V1/Diário): chave inclui início do conteúdo para distinguir publicações
+    // diferentes no mesmo dia da mesma fonte
+    const dedupeKey = (item: { processo_cnj?: string | null; tipo_intimacao?: string | null; data_disponibilizacao?: string | null; conteudo?: string | null }) => {
+      const date = item.data_disponibilizacao?.slice(0, 10) || "";
+      if (item.processo_cnj) return `cnj|${item.processo_cnj}|${item.tipo_intimacao || ""}|${date}`;
+      return `nocnj|${item.tipo_intimacao || ""}|${date}|${(item.conteudo || "").slice(0, 200)}`;
+    };
 
     const existingMap = new Map<string, any>();
     for (const e of (existing || [])) {
-      const key = `${e.processo_cnj || ""}|${e.tipo_intimacao || ""}|${e.data_disponibilizacao?.slice(0, 10) || ""}`;
-      existingMap.set(key, e);
+      existingMap.set(dedupeKey(e), e);
     }
 
     const toInsert: any[] = [];
     let updatedCount = 0;
 
     for (const int of intimacoes) {
-      const key = `${int.processo_cnj || ""}|${int.tipo_intimacao || ""}|${int.data_disponibilizacao?.slice(0, 10) || ""}`;
+      const key = dedupeKey(int);
       const rec = existingMap.get(key);
 
       if (rec) {
