@@ -87,6 +87,7 @@ export default function LeadDetailPage() {
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
 
     const fetchLead = async () => {
       const { data, error } = await supabase
@@ -94,6 +95,8 @@ export default function LeadDetailPage() {
         .select('*')
         .eq('id', id)
         .single();
+
+      if (cancelled) return;
 
       if (error) {
         console.error('Error fetching lead:', error);
@@ -106,6 +109,7 @@ export default function LeadDetailPage() {
     };
 
     fetchLead();
+    return () => { cancelled = true; };
   }, [id, navigate]);
 
   if (loading) {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -45,10 +45,13 @@ const CHANNEL_ICONS: Record<string, React.ElementType> = {
 export function LeadHistoryTimeline({ leadId, telefone }: LeadHistoryTimelineProps) {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const cancelRef = useRef(false);
 
   useEffect(() => {
+    cancelRef.current = false;
     fetchHistory();
-  }, [leadId, telefone]);
+    return () => { cancelRef.current = true; };
+  }, [leadId, telefone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchHistory = async () => {
     setLoading(true);
@@ -130,11 +133,11 @@ export function LeadHistoryTimeline({ leadId, telefone }: LeadHistoryTimelinePro
 
       // Sort by timestamp desc
       items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      setHistory(items);
+      if (!cancelRef.current) setHistory(items);
     } catch (error) {
       console.error('Error fetching history:', error);
     } finally {
-      setLoading(false);
+      if (!cancelRef.current) setLoading(false);
     }
   };
 

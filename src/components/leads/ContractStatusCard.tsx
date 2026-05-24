@@ -55,7 +55,8 @@ export function ContractStatusCard({ leadId, linkContrato }: ContractStatusCardP
   const documentKey = extractDocumentKey(linkContrato);
 
   useEffect(() => {
-    // Fetch the latest contract-related interaction
+    let cancelled = false;
+
     const fetchContractStatus = async () => {
       const { data, error } = await supabase
         .from('interacoes')
@@ -67,6 +68,7 @@ export function ContractStatusCard({ leadId, linkContrato }: ContractStatusCardP
         .limit(1)
         .maybeSingle();
 
+      if (cancelled) return;
       if (!error && data) {
         const statusMatch = data.resumo.match(/Contrato:\s*(.+)/);
         if (statusMatch) {
@@ -77,6 +79,7 @@ export function ContractStatusCard({ leadId, linkContrato }: ContractStatusCardP
     };
 
     fetchContractStatus();
+    return () => { cancelled = true; };
   }, [leadId]);
 
   const refreshStatus = async () => {

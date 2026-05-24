@@ -19,7 +19,9 @@ export function FinanceiroResumoWidget() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetch = async () => {
+    let active = true;
+
+    const load = async () => {
       const now = new Date();
       const mesInicio = startOfMonth(now).toISOString();
       const mesFim = endOfMonth(now).toISOString();
@@ -32,6 +34,7 @@ export function FinanceiroResumoWidget() {
         supabase.from('parcelas').select('valor').eq('status', 'Pendente').lt('data_vencimento', hoje),
       ]);
 
+      if (!active) return;
       setStats({
         recebidoMes:   (pagas     || []).reduce((s, p) => s + Number(p.valor), 0),
         aReceber:      (pendentes || []).reduce((s, p) => s + Number(p.valor), 0),
@@ -41,9 +44,9 @@ export function FinanceiroResumoWidget() {
       setLoading(false);
     };
 
-    fetch();
-    const interval = setInterval(fetch, 300_000);
-    return () => clearInterval(interval);
+    load();
+    const interval = setInterval(load, 300_000);
+    return () => { active = false; clearInterval(interval); };
   }, []);
 
   const items = [
