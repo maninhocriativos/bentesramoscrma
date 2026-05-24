@@ -15,6 +15,41 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const CLICKSIGN_API_KEY = Deno.env.get("CLICKSIGN_API_KEY");
+
+// Tenta obter um link de assinatura válido a partir do document_key.
+// 1. V1 API: busca request_signature_key em /documents/{key}/lists
+// 2. V3 API: busca signer.url em /envelopes/{key}/signers
+// Retorna o link atual se ambas as tentativas falharem.
+async function refreshContractLink(documentKey: string, currentLink: string): Promise<string> {
+  if (!CLICKSIGN_API_KEY || !documentKey) return currentLink;
+
+  try {
+    const v1 = await fetch(
+      `https://app.clicksign.com/api/v1/documents/${documentKey}/lists?access_token=${CLICKSIGN_API_KEY}`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (v1.ok) {
+      const data = await v1.json();
+      const reqKey = (data?.lists || []).find((l: any) => l.request_signature_key)?.request_signature_key;
+      if (reqKey) return `https://app.clicksign.com/sign/${reqKey}`;
+    }
+  } catch { /* tenta V3 */ }
+
+  try {
+    const v3 = await fetch(
+      `https://app.clicksign.com/api/v3/envelopes/${documentKey}/signers`,
+      { headers: { "Authorization": CLICKSIGN_API_KEY }, signal: AbortSignal.timeout(8000) }
+    );
+    if (v3.ok) {
+      const data = await v3.json();
+      const url = data?.data?.[0]?.attributes?.url;
+      if (url) return url;
+    }
+  } catch { /* devolve o atual */ }
+
+  return currentLink;
+}
 
 // Reminder schedule: 12h, 24h, 48h, 5d (in hours)
 const REMINDER_INTERVALS_HOURS = [12, 24, 48, 120];
@@ -125,7 +160,13 @@ serve(async (req: Request): Promise<Response> => {
       const stage = reminder.reminder_stage;
       const stageName = REMINDER_STAGE_NAMES[stage] || '12h';
       const clientName = lead?.nome?.split(' ')[0] || reminder.signer_name?.split(' ')[0] || 'Cliente';
-      const contractLink = reminder.contract_link;
+      const contractLink = await refreshContractLink(reminder.document_key, reminder.contract_link);
+
+      // Se o link foi atualizado, persiste para não repetir o fetch nos próximos lembretes
+      if (contractLink !== reminder.contract_link) {
+        await supabase.from('contract_reminders').update({ contract_link: contractLink }).eq('id', reminder.id);
+        console.log(`[Contract Reminder] 🔗 Link atualizado: ${contractLink}`);
+      }
 
       let message = '';
       switch (stage) {

@@ -287,10 +287,11 @@ serve(async (req: Request): Promise<Response> => {
     });
     console.log("[generate-kit] Notificações disparadas");
 
-    // ── Buscar URL de assinatura atualizada do signatário ──────────────────
-    // A URL vem no signer após ativação
-    let signLink = signerUrl;
-    if (!signLink) {
+    // ── Buscar URL de assinatura APÓS ativação ────────────────────────────
+    // A URL pré-ativação (signerUrl da criação) pode ser inválida.
+    // Sempre re-buscamos o signer após o envelope estar "running".
+    let signLink: string | null = null;
+    try {
       const signerGetRes = await apiFetch(
         `${CLICKSIGN_BASE_URL}/envelopes/${envelopeId}/signers/${signerId}`,
         { method: "GET", headers: v3Headers }
@@ -299,7 +300,8 @@ serve(async (req: Request): Promise<Response> => {
         const sg = await signerGetRes.json();
         signLink = sg.data?.attributes?.url || null;
       }
-    }
+    } catch { /* ignora */ }
+    if (!signLink) signLink = signerUrl; // fallback: URL de criação
     console.log(`[generate-kit] Link de assinatura: ${signLink}`);
 
     // ═══════════════════════════════════════════════════════════════════════
