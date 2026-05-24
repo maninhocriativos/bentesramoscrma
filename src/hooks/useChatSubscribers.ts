@@ -46,7 +46,7 @@ export function useChatSubscribers({ userId, onNewSubscriber, onSubscriberUpdate
       const { data: subsData, error: subsError } = await supabase
         .from('manychat_subscribers' as any)
         .select('*')
-        .order('ultima_interacao', { ascending: false });
+        .order('ultima_interacao', { ascending: false, nullsFirst: false });
 
       if (subsError) throw subsError;
       

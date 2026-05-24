@@ -86,7 +86,7 @@ export function MovimentosRecentes({ onProcessoSelect }: Props) {
           )
         `)
         .gte('data_movimento', sevenDaysAgo)
-        .order('data_movimento', { ascending: false })
+        .order('data_movimento', { ascending: false, nullsFirst: false })
         .limit(30);
 
       if (error) {

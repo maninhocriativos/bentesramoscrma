@@ -56,20 +56,9 @@ serve(async (req) => {
         );
       }
 
-      // Create manychat_subscriber for chat
-      if (newLead && lead.juridico.telefone) {
-        const subId = `zapi_${lead.juridico.telefone}`;
-        await supabase.from('manychat_subscribers').upsert({
-          subscriber_id: subId,
-          nome: lead.juridico.nome,
-          telefone: lead.juridico.telefone,
-          email: lead.juridico.email,
-          lead_id: newLead.id,
-          canal: 'whatsapp',
-          linha_whatsapp: 'trafego_isa',
-          empresa_tag: 'TRAFEGO',
-        }, { onConflict: 'subscriber_id' });
-      }
+      // Subscriber is NOT created here intentionally — the zapi-webhook creates it
+      // naturally with ultima_interacao set when the lead sends their first message.
+      // Pre-creating subscribers without messages caused ghost entries in the chat UI.
 
       results.inserted++;
     }

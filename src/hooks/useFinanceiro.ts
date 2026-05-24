@@ -172,7 +172,7 @@ export function useDespesas() {
     const { data, error } = await supabase
       .from('despesas')
       .select('*')
-      .order('data_despesa', { ascending: false });
+      .order('data_despesa', { ascending: false, nullsFirst: false });
 
     if (error) {
       toast({ title: 'Erro ao carregar despesas', description: error.message, variant: 'destructive' });

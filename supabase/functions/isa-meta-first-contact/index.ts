@@ -169,6 +169,7 @@ serve(async (req: Request) => {
             linha_whatsapp: 'trafego_isa',
             isa_ativa: true,
             atendimento_humano: false,
+            ultima_interacao: new Date().toISOString(),
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           }, { onConflict: 'subscriber_id', ignoreDuplicates: false });

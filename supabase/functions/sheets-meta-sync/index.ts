@@ -257,7 +257,8 @@ async function syncOriginalSheet(supabase: any) {
           lead_id: leadId,
           canal: 'whatsapp',
           linha_whatsapp: 'trafego_isa',
-        }, { onConflict: 'subscriber_id', ignoreDuplicates: true });
+          ultima_interacao: new Date().toISOString(),
+        }, { onConflict: 'subscriber_id', ignoreDuplicates: false });
 
         try {
           console.log(`[Sheets Sync Original] 🤖 Triggering Isa for lead ${leadId}`);
@@ -562,7 +563,8 @@ async function syncVendaCasadaSheet(supabase: any) {
           lead_id: leadId,
           canal: 'whatsapp',
           linha_whatsapp: 'trafego_isa',
-        }, { onConflict: 'subscriber_id', ignoreDuplicates: true });
+          ultima_interacao: new Date().toISOString(),
+        }, { onConflict: 'subscriber_id', ignoreDuplicates: false });
 
         // VERIFICAÇÃO 6: Mensagem automática Z-API
         try {

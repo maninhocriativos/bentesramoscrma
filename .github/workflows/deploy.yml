@@ -18,6 +18,7 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Deploy analyze-extrato
         run: supabase functions deploy analyze-extrato --project-ref qgenaltkjtlvwfgykpxq

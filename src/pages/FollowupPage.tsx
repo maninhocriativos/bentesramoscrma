@@ -453,7 +453,7 @@ function TabNutricao() {
     const { data } = await supabase
       .from('followup_nutricao')
       .select('*, lead:leads_juridicos(nome)')
-      .order('optin_enviado_em', { ascending: false })
+      .order('optin_enviado_em', { ascending: false, nullsFirst: false })
       .limit(200);
     setLeads((data || []).map((d: any) => ({ ...d, nome: d.lead?.nome || d.telefone })));
     setLoading(false);
