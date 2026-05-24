@@ -113,7 +113,12 @@ export default function IntimacoesPage() {
 
   const fetchIntimacoes = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('intimacoes').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase
+      .from('intimacoes')
+      .select('*')
+      .order('data_publicacao', { ascending: false, nullsFirst: false })
+      .order('data_disponibilizacao', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false });
     if (error) console.error(error); else setIntimacoes((data as any[]) || []);
     setLoading(false);
   };
@@ -492,29 +497,44 @@ export default function IntimacoesPage() {
               </div>
             </div>
 
-            {/* CARDS com agrupamento por data */}
+            {/* CARDS com agrupamento por mês de publicação */}
             {(() => {
-              const yesterdayStart = new Date(todayStart); yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-              const weekStart = new Date(todayStart); weekStart.setDate(weekStart.getDate() - 7);
-              const getGroup = (i: Intimacao) => {
-                const d = new Date(i.created_at);
-                if (d >= todayStart) return 'Hoje';
-                if (d >= yesterdayStart) return 'Ontem';
-                if (d >= weekStart) return 'Esta semana';
-                return 'Anteriores';
+              const currentMonthKey = format(new Date(), 'yyyy-MM');
+              const lastMonthKey = format(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1), 'yyyy-MM');
+
+              const getGroupKey = (i: Intimacao): string => {
+                const dateStr = i.data_publicacao || i.data_disponibilizacao || i.data_intimacao || i.created_at;
+                try { const d = parseISO(dateStr); if (isValid(d)) return format(d, 'yyyy-MM'); } catch { /* */ }
+                return '0000-00';
               };
+              const getGroupLabel = (key: string): string => {
+                if (key === '0000-00') return 'Sem data';
+                try {
+                  const d = parseISO(`${key}-01`);
+                  const l = format(d, 'MMMM yyyy', { locale: ptBR });
+                  return l.charAt(0).toUpperCase() + l.slice(1);
+                } catch { return key; }
+              };
+
               const groups: Record<string, Intimacao[]> = {};
-              for (const i of paginated) { const g = getGroup(i); (groups[g] = groups[g] || []).push(i); }
-              const order = ['Hoje', 'Ontem', 'Esta semana', 'Anteriores'];
-              return order.filter(g => groups[g]?.length).map(group => (
-                <div key={group}>
+              for (const i of paginated) { const k = getGroupKey(i); (groups[k] = groups[k] || []).push(i); }
+              const sortedKeys = Object.keys(groups).sort().reverse();
+
+              return sortedKeys.map(key => {
+                const label = getGroupLabel(key);
+                const dotCls = key === currentMonthKey
+                  ? 'bg-violet-500 animate-pulse'
+                  : key === lastMonthKey ? 'bg-blue-400' : 'bg-muted-foreground/40';
+                const group = label;
+                return (
+                <div key={key}>
                   <div className="flex items-center gap-2 mb-2 mt-4 first:mt-0">
-                    <div className={`h-2 w-2 rounded-full ${group === 'Hoje' ? 'bg-violet-500 animate-pulse' : group === 'Ontem' ? 'bg-blue-400' : 'bg-muted-foreground/40'}`} />
+                    <div className={`h-2 w-2 rounded-full ${dotCls}`} />
                     <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{group}</span>
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground">{groups[group].length}</span>
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground">{groups[key].length}</span>
                     <div className="flex-1 h-px bg-border/50" />
                   </div>
-                  {groups[group].map(intimacao => {
+                  {groups[key].map(intimacao => {
               const urgency = getUrgencyInfo(intimacao);
               const tc = getTypeConfig(intimacao.tipo_intimacao);
               const isExpanded = expandedCards.has(intimacao.id);
@@ -651,7 +671,8 @@ export default function IntimacoesPage() {
               );
             })}
                 </div>
-              ));
+              );
+              });
             })()}
 
             {/* PAGINAÇÃO */}
