@@ -465,6 +465,17 @@ const ManyChatInboxContent = () => {
     if (subs.length === 0) return;
     const leadIds = subs.map(s => s.lead_id).filter(Boolean) as string[];
     const previewMap = new Map<string, string>();
+
+    const buildText = (msg: any) => {
+      const prefix = msg.direcao === "saida" ? "Você: " : "";
+      let text = msg.conteudo || "";
+      if (msg.tipo === "audio") text = "🎤 Áudio";
+      else if (msg.tipo === "image") text = "📷 Imagem";
+      else if (msg.tipo === "video") text = "🎥 Vídeo";
+      else if (msg.tipo === "document") text = "📄 Documento";
+      return prefix + text;
+    };
+
     if (leadIds.length > 0) {
       const { data: messages } = await supabase.from("manychat_mensagens").select("lead_id, subscriber_id, conteudo, tipo, direcao, created_at").in("lead_id", leadIds).order("created_at", { ascending: false }).limit(500);
       if (messages) {
@@ -474,18 +485,27 @@ const ManyChatInboxContent = () => {
           if (seenLeads.has(leadId)) continue;
           seenLeads.add(leadId);
           const sub = subs.find(s => s.lead_id === leadId);
-          if (sub) {
-            const prefix = msg.direcao === "saida" ? "Você: " : "";
-            let text = msg.conteudo || "";
-            if (msg.tipo === "audio") text = "🎤 Áudio";
-            else if (msg.tipo === "image") text = "📷 Imagem";
-            else if (msg.tipo === "video") text = "🎥 Vídeo";
-            else if (msg.tipo === "document") text = "📄 Documento";
-            previewMap.set(sub.subscriber_id, prefix + text);
-          }
+          if (sub) previewMap.set(sub.subscriber_id, buildText(msg));
         }
       }
     }
+
+    // Fallback: query by subscriber_id for subs with no preview yet (no lead_id or no messages linked by lead_id)
+    const missing = subs.filter(s => !previewMap.has(s.subscriber_id));
+    if (missing.length > 0) {
+      const subIds = missing.map(s => s.subscriber_id);
+      const { data: subMessages } = await supabase.from("manychat_mensagens").select("subscriber_id, conteudo, tipo, direcao, created_at").in("subscriber_id", subIds).order("created_at", { ascending: false }).limit(500);
+      if (subMessages) {
+        const seenSubs = new Set<string>();
+        for (const msg of subMessages as any[]) {
+          const subId = msg.subscriber_id as string;
+          if (seenSubs.has(subId)) continue;
+          seenSubs.add(subId);
+          previewMap.set(subId, buildText(msg));
+        }
+      }
+    }
+
     setLastMessagePreviews(previewMap);
   }, []);
 
@@ -1064,7 +1084,7 @@ const ManyChatInboxContent = () => {
     setIsLoading(true);
     try {
       // Limite de 300 para evitar sobrecarga — os mais recentes têm prioridade
-      const { data: subsData, error: subsError } = await supabase.from("manychat_subscribers" as any).select("*").order("ultima_interacao", { ascending: false }).limit(300);
+      const { data: subsData, error: subsError } = await supabase.from("manychat_subscribers" as any).select("*").order("ultima_interacao", { ascending: false, nullsFirst: false }).limit(300);
       if (subsError) throw subsError;
       const rawSubscribers = (subsData as Subscriber[]) || [];
       const leadIds = [...new Set(rawSubscribers.map(s => s.lead_id).filter(Boolean))];
