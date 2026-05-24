@@ -11,6 +11,10 @@ import { Loader2, FileText, FolderOpen, Clock, CheckCircle2, XCircle } from 'luc
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
+function normalizePhone(p: string): string {
+  return p.replace(/\D/g, '').slice(-11);
+}
+
 export interface ContratoClicksign {
   id: string;
   key: string;
@@ -116,16 +120,18 @@ export default function ContratosPage() {
         }
       }
 
-      // Busca todos os leads de tráfego para matching por email e nome
+      // Busca todos os leads de tráfego para matching por telefone, email e nome
       const { data: trafegoLeadsData } = await supabase
         .from('leads_juridicos')
-        .select('nome, email')
+        .select('nome, email, telefone')
         .or('tipo_origem.eq.trafego,origem.ilike.*Tráfego*');
       const trafegoEmailSet = new Set<string>();
       const trafegoNomeSet  = new Set<string>();
+      const trafegoPhoneSet = new Set<string>();
       for (const l of (trafegoLeadsData || []) as any[]) {
-        if (l.email) trafegoEmailSet.add(l.email.toLowerCase().trim());
-        if (l.nome)  trafegoNomeSet.add(l.nome.toLowerCase().trim());
+        if (l.email)    trafegoEmailSet.add(l.email.toLowerCase().trim());
+        if (l.nome)     trafegoNomeSet.add(l.nome.toLowerCase().trim());
+        if (l.telefone) { const n = normalizePhone(l.telefone); if (n.length >= 10) trafegoPhoneSet.add(n); }
       }
 
       const mappedContracts: ContratoComStatus[] = documents.map((doc: any) => {
@@ -142,10 +148,15 @@ export default function ContratosPage() {
         const leadEmail = doc.signers?.[0]?.email || null;
         const leadId = key ? leadIdByDocKey.get(key) : undefined;
 
-        // Determina origem: via lead_id → email → nome extraído do filename
+        // Determina origem: lead_id → email → telefone → nome
         const tipoOrigem = (() => {
           if (leadId && tipoOrigemByLeadId.has(leadId)) return tipoOrigemByLeadId.get(leadId)!;
           if (leadEmail && trafegoEmailSet.has(leadEmail.toLowerCase().trim())) return 'trafego';
+          const rawPhone: string = doc.signers?.[0]?.phone_number || '';
+          if (rawPhone) {
+            const np = normalizePhone(rawPhone);
+            if (np.length >= 10 && trafegoPhoneSet.has(np)) return 'trafego';
+          }
           const nomeFull = (doc.filename?.replace(/\.[^/.]+$/, '') || '');
           const nomeCliente = nomeFull.replace(/^Kit\s*[-–—]\s*/i, '').trim().toLowerCase();
           if (nomeCliente.length > 3 && trafegoNomeSet.has(nomeCliente)) return 'trafego';
