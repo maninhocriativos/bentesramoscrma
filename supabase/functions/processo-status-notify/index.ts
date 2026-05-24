@@ -165,6 +165,7 @@ async function explicarMovimentosComIA(
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
+      signal: AbortSignal.timeout(45_000),
       body: JSON.stringify({
         model: "gpt-4o-mini",
         max_tokens: 500,
@@ -333,6 +334,7 @@ serve(async (req) => {
         phone: telefone,
         message: textoMensagem,
       }),
+      signal: AbortSignal.timeout(10_000),
     });
 
     const zapiResult = await zapiResponse.json();

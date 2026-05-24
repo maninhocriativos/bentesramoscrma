@@ -80,6 +80,7 @@ async function sendZapiFirstContact(supabase: any, telefone: string, nome: strin
       method: 'POST',
       headers,
       body: JSON.stringify({ phone: telefone, message }),
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (res.ok) {
@@ -112,12 +113,12 @@ async function syncOriginalSheet(supabase: any) {
 
   console.log(`[Sheets Sync Original] Fetching from row ${lastRow + 1}...`);
 
-  let res = await fetch(url);
+  let res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
 
   if (!res.ok && res.status === 404) {
     range = encodeURIComponent('A1:Z');
     url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?key=${GOOGLE_SHEETS_API_KEY}`;
-    res = await fetch(url);
+    res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
   }
 
   if (!res.ok) {
@@ -374,27 +375,27 @@ async function syncVendaCasadaSheet(supabase: any) {
   console.log(`[Sheets Sync VendaCasada] Fetching from row ${lastRow + 1}...`);
   console.log(`[Sheets Sync VendaCasada] URL: ${url}`);
 
-  let res = await fetch(url);
+  let res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
 
   // Fallback: try without sheet name if 404 or 400
   if (!res.ok && (res.status === 404 || res.status === 400)) {
     console.log('[Sheets Sync VendaCasada] Sheet name not found, trying without sheet name...');
     url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent('A1:V')}?key=${GOOGLE_SHEETS_API_KEY}`;
-    res = await fetch(url);
+    res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
   }
 
   // Fallback 2: try Página1
   if (!res.ok && (res.status === 404 || res.status === 400)) {
     console.log('[Sheets Sync VendaCasada] Trying Página1...');
     url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent('Página1!A1:V')}?key=${GOOGLE_SHEETS_API_KEY}`;
-    res = await fetch(url);
+    res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
   }
 
   // Fallback 3: try Sheet1
   if (!res.ok && (res.status === 404 || res.status === 400)) {
     console.log('[Sheets Sync VendaCasada] Trying Sheet1...');
     url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent('Sheet1!A1:V')}?key=${GOOGLE_SHEETS_API_KEY}`;
-    res = await fetch(url);
+    res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
   }
 
   if (!res.ok) {
@@ -590,6 +591,7 @@ async function syncVendaCasadaSheet(supabase: any) {
                 method: 'POST',
                 headers: zapiHeaders,
                 body: JSON.stringify({ phone: telefone, message: mensagem }),
+                signal: AbortSignal.timeout(10_000),
               });
               console.log(`[Sheets Sync VendaCasada] Z-API send: ${zapiRes.ok ? '✅' : '❌'} ${zapiRes.status}`);
             } else {

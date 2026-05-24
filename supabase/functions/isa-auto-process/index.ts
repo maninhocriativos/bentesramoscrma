@@ -608,6 +608,7 @@ async function enviarNotificacaoEquipe(
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${RESEND_API_KEY}` },
+      signal: AbortSignal.timeout(10_000),
       body: JSON.stringify({
         from: 'Isa - Bentes & Ramos <onboarding@resend.dev>',
         to: destinatarios,
@@ -733,6 +734,7 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
             body: JSON.stringify({ action: data_especifica ? 'verificar_disponibilidade' : 'buscar_horarios', datetime: data_especifica && horario_especifico ? `${data_especifica}T${horario_especifico}:00` : undefined }),
+            signal: AbortSignal.timeout(30_000),
           });
           const calcomData = await calcomResponse.json();
           if (!calcomData.success) {
@@ -784,6 +786,7 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
             body: JSON.stringify({ action: 'agendar', datetime: dataAgendamento, nome: lead.nome || 'Cliente', email, telefone: lead.telefone, leadId: lead_id, subscriberId, notas: modalidade === 'online' ? 'Atendimento ONLINE' : 'Atendimento PRESENCIAL' }),
+            signal: AbortSignal.timeout(30_000),
           });
           const calcomData = await calcomResponse.json();
           if (!calcomData.success) {
@@ -985,6 +988,7 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
             method: 'POST',
             headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'consultar_para_lead', lead_id, numero_processo }),
+            signal: AbortSignal.timeout(30_000),
           });
           const result = await response.json();
           return result.success ? { success: true, message: result.mensagem, data: result.dados } : { success: false, message: result.mensagem || 'Não foi possível consultar o processo.', data: null };
@@ -1117,6 +1121,7 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${RESEND_API_KEY}` },
               body: JSON.stringify({ from: 'Isa - Bentes & Ramos <onboarding@resend.dev>', to: ['bentes@bentesramos.com.br'], subject: `🔔 Handoff: ${lead?.nome || 'Lead'}`, html: `<h2>Lead direcionado para humano</h2><p><strong>Lead:</strong> ${lead?.nome}</p><p><strong>Motivo:</strong> ${motivo}</p>` }),
+              signal: AbortSignal.timeout(10_000),
             });
           } catch (err) { console.error('Erro ao enviar email de handoff:', err); }
         }
@@ -1203,7 +1208,7 @@ async function enviarRespostaZapi(supabaseClient: any, subscriberId: string, men
     if (cleanPhone.length === 10 || cleanPhone.length === 11) cleanPhone = '55' + cleanPhone;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (clientToken) headers['Client-Token'] = clientToken;
-    const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, { method: 'POST', headers, body: JSON.stringify({ phone: cleanPhone, message: mensagem }) });
+    const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, { method: 'POST', headers, body: JSON.stringify({ phone: cleanPhone, message: mensagem }), signal: AbortSignal.timeout(10_000) });
     const result = await response.json();
     if (!response.ok || result.error) return { success: false };
     return { success: true, messageId: result.messageId || result.id };
@@ -1242,6 +1247,7 @@ async function enviarImagemZapi(supabaseClient: any, subscriberId: string, image
     const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-image`, {
       method: 'POST', headers,
       body: JSON.stringify({ phone: cleanPhone, image: imageUrl, caption }),
+      signal: AbortSignal.timeout(10_000),
     });
     const result = await response.json();
     return { success: response.ok && !result.error };
@@ -1280,6 +1286,7 @@ async function enviarVideoZapi(supabaseClient: any, subscriberId: string, videoU
     const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-video`, {
       method: 'POST', headers,
       body: JSON.stringify({ phone: cleanPhone, video: videoUrl, caption }),
+      signal: AbortSignal.timeout(10_000),
     });
     const result = await response.json();
     return { success: response.ok && !result.error };
@@ -1328,6 +1335,7 @@ async function enviarBotoesZapi(
         message: mensagem,
         buttonActions: botoes.map(b => ({ id: b.id, type: 'REPLY', reply: { title: b.title } })),
       }),
+      signal: AbortSignal.timeout(10_000),
     });
     const result = await response.json();
     if (!response.ok || result.error) { console.error('❌ Z-API botões erro:', result); return { success: false }; }
@@ -1347,14 +1355,14 @@ async function enviarRespostaManyChat(subscriberId: string, mensagem: string): P
 async function transcreverAudio(audioUrl: string): Promise<string | null> {
   if (!OPENAI_API_KEY) return null;
   try {
-    const audioResponse = await fetch(audioUrl);
+    const audioResponse = await fetch(audioUrl, { signal: AbortSignal.timeout(30_000) });
     if (!audioResponse.ok) return null;
     const audioBlob = await audioResponse.blob();
     const formData = new FormData();
     formData.append('file', audioBlob, 'audio.ogg');
     formData.append('model', 'whisper-1');
     formData.append('language', 'pt');
-    const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` }, body: formData });
+    const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` }, body: formData, signal: AbortSignal.timeout(45_000) });
     if (!whisperResponse.ok) return null;
     const result = await whisperResponse.json();
     return result.text || null;
@@ -1392,7 +1400,7 @@ async function analisarPdfComIA(pdfUrl: string): Promise<string | null> {
   const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
   if (!ANTHROPIC_API_KEY) { console.log('⚠️ ANTHROPIC_API_KEY não configurada'); return null; }
   try {
-    const pdfResponse = await fetch(pdfUrl);
+    const pdfResponse = await fetch(pdfUrl, { signal: AbortSignal.timeout(30_000) });
     if (!pdfResponse.ok) { console.error('❌ Não foi possível baixar o PDF:', pdfResponse.status); return null; }
     const pdfBuffer = await pdfResponse.arrayBuffer();
     const bytes = new Uint8Array(pdfBuffer);
@@ -1402,6 +1410,7 @@ async function analisarPdfComIA(pdfUrl: string): Promise<string | null> {
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
+      signal: AbortSignal.timeout(45_000),
       headers: {
         'x-api-key': ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
@@ -1644,6 +1653,7 @@ Responda em JSON:
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
+    signal: AbortSignal.timeout(45_000),
     headers: {
       'x-api-key': ANTHROPIC_KEY_MAIN,
       'anthropic-version': '2023-06-01',

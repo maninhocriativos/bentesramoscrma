@@ -265,6 +265,7 @@ async function sendViaZapi(
         const deleteResponse = await fetch(endpoint, {
           method: 'DELETE',
           headers,
+          signal: AbortSignal.timeout(10_000),
         });
         const deleteData = await parseJsonSafe(deleteResponse);
         console.log('[Z-API Send] Delete Response:', JSON.stringify(deleteData).substring(0, 300));
@@ -296,6 +297,7 @@ async function sendViaZapi(
           method: 'POST',
           headers,
           body: JSON.stringify(editBody),
+          signal: AbortSignal.timeout(10_000),
         });
         const editData = await parseJsonSafe(editResponse);
         console.log('[Z-API Send] Edit Response:', JSON.stringify(editData).substring(0, 300));
@@ -323,6 +325,7 @@ async function sendViaZapi(
           method: 'POST',
           headers,
           body: JSON.stringify(blockBody),
+          signal: AbortSignal.timeout(10_000),
         });
         const blockData = await parseJsonSafe(blockResponse);
         console.log(`[Z-API Send] ${type} Response:`, JSON.stringify(blockData).substring(0, 300));
@@ -351,7 +354,8 @@ async function sendViaZapi(
     const response = await fetch(endpoint, {
       method: 'POST',
       headers,
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
     });
 
     const data = await parseJsonSafe(response);
@@ -393,14 +397,15 @@ async function sendViaFiqon(config: any, phone: string, message: string): Promis
   try {
     const response = await fetch(`${baseUrl}/messages/send`, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         to: cleanPhone,
         text: message
-      })
+      }),
+      signal: AbortSignal.timeout(10_000),
     });
 
     const data = await response.json();
