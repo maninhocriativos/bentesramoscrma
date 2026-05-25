@@ -98,9 +98,22 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Resolve nome do advogado para busca nominal no Diário Oficial
+    let advogadoNome: string | null = null;
+    if (advogado_id) {
+      const { data: perfil } = await supabase
+        .from("perfis")
+        .select("nome, sobrenome")
+        .eq("id", advogado_id)
+        .single();
+      if (perfil?.nome) {
+        advogadoNome = `${perfil.nome} ${perfil.sobrenome || ""}`.trim().toUpperCase();
+      }
+    }
+
     const CUTOFF = cutoffDate(); // 90 dias atrás
 
-    console.log(`🔍 [Intimações] OAB/${oab_uf} ${oab_numero} | janela: ${CUTOFF}`);
+    console.log(`🔍 [Intimações] OAB/${oab_uf} ${oab_numero} | advogado: ${advogadoNome || "desconhecido"} | janela: ${CUTOFF}`);
 
     const intimacoes: any[] = [];
 
@@ -161,9 +174,9 @@ serve(async (req) => {
 
       // ── Estratégia 2: V2 Escavador — todos os processos ativos com paginação ─
       try {
-        // Busca até 3 páginas = 150 processos para garantir cobertura completa
+        // Busca até 5 páginas = 250 processos para garantir cobertura completa
         const processos: any[] = [];
-        for (let procPage = 1; procPage <= 3; procPage++) {
+        for (let procPage = 1; procPage <= 5; procPage++) {
           try {
             const procResp = await fetch(
               `https://api.escavador.com/api/v2/advogado/processos?oab_numero=${oab_numero}&oab_estado=${oab_uf}&limit=50&page=${procPage}`,
@@ -205,7 +218,7 @@ serve(async (req) => {
             const procTitulo = `${proc.titulo_polo_ativo || ""} X ${proc.titulo_polo_passivo || ""}`.trim().replace(/^X\s*/, "").replace(/\s*X$/, "");
 
             const movResp = await fetch(
-              `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?limit=50`,
+              `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?limit=100`,
               { headers: esc, signal: AbortSignal.timeout(12000) }
             );
             if (!movResp.ok) return [];
@@ -250,13 +263,29 @@ serve(async (req) => {
       }
 
       // ── Estratégia 3: V1 Escavador — Diário Oficial (5 páginas por termo) ──
-      // Múltiplas variações de formato para maximizar cobertura das publicações
+      // Busca por número OAB + nome do advogado (muitas publicações referenciam
+      // o nome sem o número OAB — principal motivo de perda vs Advbox)
       const searchTerms = [
         `OAB/${oab_uf} ${oab_numero}`,
         `OAB ${oab_uf} ${oab_numero}`,
         `OAB/${oab_uf} nº ${oab_numero}`,
         `OAB n. ${oab_numero}/${oab_uf}`,
         `${oab_numero}/${oab_uf}`,
+        // Busca nominal — só adiciona se o nome foi resolvido
+        ...(advogadoNome ? (() => {
+          const parts = advogadoNome.split(" ").filter(p => p.length > 2);
+          const first = parts[0] || "";
+          const last = parts[parts.length - 1] || "";
+          const terms: string[] = [advogadoNome]; // nome completo
+          if (parts.length >= 3) {
+            // Ex: "ANDREY BENTES RAMOS" (sem o nome do meio)
+            terms.push(`${first} ${parts.slice(-2).join(" ")}`);
+          }
+          if (first && last && first !== last) {
+            terms.push(`${first} ${last}`); // Ex: "ANDREY RAMOS"
+          }
+          return terms;
+        })() : []),
       ];
       let v1Count = 0;
 
