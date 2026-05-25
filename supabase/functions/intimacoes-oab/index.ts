@@ -172,6 +172,82 @@ serve(async (req) => {
         "X-Requested-With": "XMLHttpRequest",
       };
 
+      // ── Estratégia 1b: V1 Publicações por ID interno do advogado ────────────
+      // O Escavador mantém um ID interno por advogado. Buscar publicações via
+      // esse ID é o método mais completo — é o que sistemas como o Advbox usam.
+      // Passo 1: resolve o ID Escavador do advogado via OAB
+      // Passo 2: busca todas as publicações desse ID com paginação completa
+      let escavadorAdvId: number | null = null;
+      try {
+        const searchUrl = `https://api.escavador.com/api/v1/advogados/busca?q=${encodeURIComponent(`${oab_numero}/${oab_uf}`)}&limit=5`;
+        const searchResp = await fetch(searchUrl, { headers: esc, signal: AbortSignal.timeout(10000) });
+        if (searchResp.ok) {
+          const searchData = await searchResp.json();
+          const advs: any[] = searchData?.items || searchData?.data || searchData?.advogados || [];
+          for (const adv of advs) {
+            const num = String(adv.oab_numero || adv.numero_oab || "").replace(/\D/g, "");
+            const uf = String(adv.oab_uf || adv.estado_oab || adv.uf || "").toUpperCase();
+            if (num === oab_numero && uf === oab_uf) {
+              escavadorAdvId = adv.id || adv.advogado_id || null;
+              break;
+            }
+          }
+          // fallback: pega o primeiro resultado se só veio um
+          if (!escavadorAdvId && advs.length === 1) escavadorAdvId = advs[0]?.id || null;
+        }
+        console.log(`🔎 [V1-id] ID Escavador do advogado: ${escavadorAdvId ?? "não encontrado"}`);
+      } catch (e) {
+        console.warn("⚠️ [V1-id] Erro ao buscar ID do advogado:", e);
+      }
+
+      if (escavadorAdvId) {
+        let idPubCount = 0;
+        try {
+          for (let page = 1; page <= 20; page++) {
+            try {
+              const resp = await fetch(
+                `https://api.escavador.com/api/v1/advogados/${escavadorAdvId}/publicacoes?data_inicio=${CUTOFF}&limit=50&page=${page}`,
+                { headers: esc, signal: AbortSignal.timeout(15000) }
+              );
+              if (!resp.ok) break;
+              const data = await resp.json();
+              const items: any[] = Array.isArray(data?.items) ? data.items
+                : Array.isArray(data?.items?.data) ? data.items.data
+                : Array.isArray(data?.data) ? data.data
+                : [];
+              if (items.length === 0) break;
+
+              for (const item of items) {
+                const conteudo = item.texto || item.conteudo || item.content || "";
+                const titulo = item.diario_nome || item.titulo || "Publicação em Diário Oficial";
+                const cnjMatch = conteudo.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
+                const dataDisp = item.data_disponibilizacao || item.diario_data || item.data_publicacao || item.data || "";
+                if (dataDisp && dataDisp < CUTOFF) continue;
+                const tipoRaw = classifyMovimento(conteudo, titulo);
+                const tipo = TIPOS_INTIMACAO.has(tipoRaw) ? tipoRaw : "Publicação";
+                intimacoes.push(makeItem({
+                  cnj: cnjMatch ? cnjMatch[1] : "",
+                  titulo,
+                  tribunal: item.diario_sigla || item.fonte?.sigla || "",
+                  tipo, conteudo, dataDisp: dataDisp || null,
+                  oab_numero, oab_uf, advogado_id,
+                  fonte: "escavador_v1_id",
+                  raw: item,
+                }));
+                idPubCount++;
+              }
+              if (items.length < 50) break;
+            } catch (err) {
+              console.error(`📋 [V1-id] Erro na página:`, err);
+              break;
+            }
+          }
+          console.log(`📋 [V1-id] ${idPubCount} publicações via ID do advogado`);
+        } catch (e) {
+          console.warn("⚠️ [V1-id] Erro geral:", e);
+        }
+      }
+
       // ── Estratégia 2: V2 Escavador — todos os processos ativos com paginação ─
       try {
         // Busca até 5 páginas = 250 processos para garantir cobertura completa
