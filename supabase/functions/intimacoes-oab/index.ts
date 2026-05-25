@@ -262,57 +262,104 @@ serve(async (req) => {
         console.warn("⚠️ [V2] Erro geral:", e);
       }
 
-      // ── Estratégia 3: V1 Escavador — Diário Oficial (5 páginas por termo) ──
-      // Busca por número OAB + nome do advogado (muitas publicações referenciam
-      // o nome sem o número OAB — principal motivo de perda vs Advbox)
-      const searchTerms = [
+      // ── Estratégia 3: V2 Publicações por OAB — endpoint dedicado ─────────────
+      // Este endpoint retorna TODAS as publicações em Diário Oficial para o OAB,
+      // sem precisar buscar processo a processo. Equivalente ao que o Advbox usa.
+      let v2PubCount = 0;
+      try {
+        for (let page = 1; page <= 20; page++) {
+          try {
+            const resp = await fetch(
+              `https://api.escavador.com/api/v2/advogado/publicacoes?oab_numero=${oab_numero}&oab_estado=${oab_uf}&limit=50&page=${page}&data_inicio=${CUTOFF}`,
+              { headers: esc, signal: AbortSignal.timeout(15000) }
+            );
+            if (!resp.ok) {
+              console.log(`📋 [V2-pub] Status ${resp.status} — endpoint não disponível ou sem resultados`);
+              break;
+            }
+            const data = await resp.json();
+            const items: any[] = data?.items || data?.data || data?.publicacoes || [];
+            if (items.length === 0) break;
+
+            for (const item of items) {
+              const conteudo = item.texto || item.conteudo || item.content || "";
+              const titulo = item.diario_nome || item.titulo || item.fonte_nome || "Publicação em Diário Oficial";
+              const cnjMatch = conteudo.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
+              const dataDisp = item.data_disponibilizacao || item.diario_data || item.data_publicacao || item.data || "";
+              if (dataDisp && dataDisp < CUTOFF) continue;
+              const tipoRaw = classifyMovimento(conteudo, titulo);
+              const tipo = TIPOS_INTIMACAO.has(tipoRaw) ? tipoRaw : "Publicação";
+              intimacoes.push(makeItem({
+                cnj: cnjMatch ? cnjMatch[1] : "",
+                titulo,
+                tribunal: item.tribunal?.sigla || item.fonte?.sigla || item.diario_sigla || "",
+                tipo, conteudo, dataDisp: dataDisp || null,
+                oab_numero, oab_uf, advogado_id,
+                fonte: "escavador_v2_pub",
+                raw: item,
+              }));
+              v2PubCount++;
+            }
+            if (items.length < 50) break;
+          } catch (err) {
+            console.error(`📋 [V2-pub] Erro na página:`, err);
+            break;
+          }
+        }
+        console.log(`📋 [V2-pub] ${v2PubCount} publicações diretas por OAB`);
+      } catch (e) {
+        console.warn("⚠️ [V2-pub] Erro geral:", e);
+      }
+
+      // ── Estratégia 4: V1 Busca no Diário Oficial — por nome e OAB ────────────
+      // Busca textual como fallback / complemento. Prioriza o nome completo do
+      // advogado, que aparece em publicações sem o número OAB.
+      const nameTerms: string[] = [];
+      if (advogadoNome) {
+        nameTerms.push(advogadoNome); // nome completo em maiúsculas
+        const parts = advogadoNome.split(" ").filter((p: string) => p.length > 2);
+        if (parts.length >= 4) {
+          // Ex: "ANDREY BENTES RAMOS" (primeiro + dois últimos)
+          nameTerms.push(`${parts[0]} ${parts.slice(-2).join(" ")}`);
+        }
+        if (parts.length >= 2) {
+          // Ex: "ANDREY RAMOS" (primeiro + último)
+          nameTerms.push(`${parts[0]} ${parts[parts.length - 1]}`);
+        }
+      }
+      const oabTerms = [
         `OAB/${oab_uf} ${oab_numero}`,
         `OAB ${oab_uf} ${oab_numero}`,
-        `OAB/${oab_uf} nº ${oab_numero}`,
-        `OAB n. ${oab_numero}/${oab_uf}`,
         `${oab_numero}/${oab_uf}`,
-        // Busca nominal — só adiciona se o nome foi resolvido
-        ...(advogadoNome ? (() => {
-          const parts = advogadoNome.split(" ").filter(p => p.length > 2);
-          const first = parts[0] || "";
-          const last = parts[parts.length - 1] || "";
-          const terms: string[] = [advogadoNome]; // nome completo
-          if (parts.length >= 3) {
-            // Ex: "ANDREY BENTES RAMOS" (sem o nome do meio)
-            terms.push(`${first} ${parts.slice(-2).join(" ")}`);
-          }
-          if (first && last && first !== last) {
-            terms.push(`${first} ${last}`); // Ex: "ANDREY RAMOS"
-          }
-          return terms;
-        })() : []),
       ];
+      // Nome primeiro (principal) → OAB como complemento
+      const searchTerms = [...nameTerms, ...oabTerms];
       let v1Count = 0;
 
       for (const term of searchTerms) {
         for (let page = 1; page <= 5; page++) {
           try {
-            const url = `https://api.escavador.com/api/v1/busca?q=${encodeURIComponent(term)}&qo=d&limit=50&page=${page}&data_inicio=${CUTOFF}`;
+            // Sem qo=d para não restringir operador de busca
+            const url = `https://api.escavador.com/api/v1/busca?q=${encodeURIComponent(term)}&limit=50&page=${page}&data_inicio=${CUTOFF}`;
             const resp = await fetch(url, { headers: esc, signal: AbortSignal.timeout(15000) });
             if (!resp.ok) break;
 
             const data = await resp.json();
-            const items: any[] = data?.items?.data || data?.items || data?.data || [];
+            // A estrutura do V1 pode variar: items.data (paginado) ou items (array direto)
+            const items: any[] = Array.isArray(data?.items) ? data.items
+              : Array.isArray(data?.items?.data) ? data.items.data
+              : Array.isArray(data?.data) ? data.data
+              : [];
             if (items.length === 0) break;
 
             for (const item of items) {
               const conteudo = item.texto || item.conteudo || item.content || "";
               const titulo = item.diario_nome || item.titulo || "Publicação em Diário Oficial";
               const cnjMatch = conteudo.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
-
-              // V1 = Diário Oficial: se mencionou a OAB é publicação relevante.
-              // Classifica o tipo; se não reconhecer, usa "Publicação" como padrão.
               const tipoRaw = classifyMovimento(conteudo, titulo);
               const tipo = TIPOS_INTIMACAO.has(tipoRaw) ? tipoRaw : "Publicação";
-
               const diarioData = item.diario_data || item.data_publicacao || item.data || "";
               if (diarioData && diarioData < CUTOFF) continue;
-
               intimacoes.push(makeItem({
                 cnj: cnjMatch ? cnjMatch[1] : "",
                 titulo,
@@ -324,21 +371,14 @@ serve(async (req) => {
               }));
               v1Count++;
             }
-
-            // Verifica se há próxima página pelo número de itens retornados
-            // (a estrutura do paginador V1 fica em data.items.*, não em data.paginator)
-            const hasMore =
-              items.length === 50 &&
-              (data?.items?.next_page_url || data?.items?.current_page < data?.items?.last_page ||
-               data?.links?.next || data?.paginator?.next_page_url);
-            if (!hasMore) break;
+            if (items.length < 50) break; // sem mais páginas
           } catch (err) {
-            console.error(`📋 [V1] Erro na paginação Escavador:`, err);
+            console.error(`📋 [V1] Erro:`, err);
             break;
           }
         }
       }
-      console.log(`📋 [V1] ${v1Count} intimações do Diário Oficial`);
+      console.log(`📋 [V1] ${v1Count} publicações no Diário Oficial`);
     }
 
     console.log(`📌 Total bruto: ${intimacoes.length} itens`);
