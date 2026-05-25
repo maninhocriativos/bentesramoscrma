@@ -50,18 +50,20 @@ import {
 
 // ─── Z-API instance routing ───────────────────────────────────────────────────
 
-// REGRA ABSOLUTA: Tráfego → (92) 98588-8190 | Escritório → (92) 99160-4348
-const PHONE_TO_INSTANCE_ID: Record<string, string> = {
-  "85888190":  "3EDDF959BC2B81F86B410203B614D70E", // "Bentes Ramos Trafego" (92) 98588-8190
-  "91604348":  "3EDB5B4FF93662A609ADFAF4F663B13A", // "Bentes Ramos"         (92) 99160-4348 (suffix match)
-  "991604348": "3EDB5B4FF93662A609ADFAF4F663B13A", // "Bentes Ramos"         (92) 99160-4348 (full local)
-};
+// Cache carregado do banco em runtime — sem IDs hardcoded.
+// Populado pelo useEffect de inicialização do ChatInbox.
+let _zapiInstancesCache: { instance_id: string; phone_number: string }[] = [];
 
 function resolveInstanceId(subscriber: { instance_name?: string | null }): string | undefined {
   const phone = subscriber.instance_name?.replace(/\D/g, "");
   if (!phone) return undefined;
-  for (const [suffix, instanceId] of Object.entries(PHONE_TO_INSTANCE_ID)) {
-    if (phone.endsWith(suffix)) return instanceId;
+  for (const inst of _zapiInstancesCache) {
+    const instPhone = (inst.phone_number || "").replace(/\D/g, "");
+    if (!instPhone) continue;
+    // Match por sufixo dos últimos 8 dígitos — cobre todas variações do connectedPhone
+    if (phone === instPhone || phone.endsWith(instPhone.slice(-8)) || instPhone.endsWith(phone.slice(-8))) {
+      return inst.instance_id;
+    }
   }
   return undefined;
 }
@@ -234,6 +236,14 @@ const ManyChatInboxContent = () => {
   }, [getTeamWithStatus, user?.id]);
 
   useEffect(() => { requestNotificationPermission(); }, [requestNotificationPermission]);
+
+  // Carrega instâncias Z-API do banco para roteamento dinâmico (sem IDs hardcoded)
+  useEffect(() => {
+    supabase.from("zapi_instances" as any)
+      .select("instance_id, phone_number")
+      .eq("is_active", true)
+      .then(({ data }) => { if (data) _zapiInstancesCache = data as any; });
+  }, []);
 
   // ─── Theme classes ──────────────────────────────────────────────────────────
 
