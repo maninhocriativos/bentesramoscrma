@@ -60,10 +60,11 @@ async function resolveAllOabs(): Promise<OabCredential[]> {
     }
   }
 
-  // 2. All advogados with OAB configured in perfis
+  // 2. Advogados (cargo = 'Advogado') com OAB configurado — exclui Secretaria/Administrador
   const { data: advogados } = await supabase
     .from("perfis")
     .select("id, oab_numero, oab_uf")
+    .eq("cargo", "Advogado")
     .not("oab_numero", "is", null)
     .neq("oab_numero", "");
 

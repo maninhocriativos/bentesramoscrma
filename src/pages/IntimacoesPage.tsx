@@ -851,8 +851,23 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
 
   useEffect(() => {
     const fetchMembers = async () => {
-      const { data } = await supabase.from('perfis').select('id, nome, sobrenome, email, oab_numero, oab_uf').eq('aprovado', true).order('nome', { ascending: true });
-      setMembers((data as TeamMember[]) || []);
+      const { data } = await supabase
+        .from('perfis')
+        .select('id, nome, sobrenome, email, oab_numero, oab_uf')
+        .eq('aprovado', true)
+        .eq('cargo', 'Advogado')
+        .not('oab_numero', 'is', null)
+        .neq('oab_numero', '')
+        .order('nome', { ascending: true });
+      // Deduplica por oab_numero para eliminar perfis duplicados do mesmo advogado
+      const seen = new Set<string>();
+      const unique = ((data as TeamMember[]) || []).filter(m => {
+        const key = `${m.oab_numero}-${m.oab_uf || 'AM'}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setMembers(unique);
     };
     void fetchMembers();
   }, []);
