@@ -145,6 +145,21 @@ serve(async (req) => {
     const deduplicationWindow = new Date(Date.now() - 20 * 60 * 1000).toISOString();
 
     for (const cred of oabs) {
+      // Reseta jobs travados em 'processing' há mais de 15 minutos.
+      // Um job preso bloqueia o índice UNIQUE e impede novos inserts.
+      await supabase
+        .from("intimacoes_sync_jobs")
+        .update({
+          status: "failed",
+          last_error: "Timeout — job travado em processing por mais de 15 minutos",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("job_type", "fetch_intimacoes")
+        .eq("oab_numero", cred.oabNumero)
+        .eq("oab_uf", cred.oabUf)
+        .eq("status", "processing")
+        .lt("updated_at", new Date(Date.now() - 15 * 60 * 1000).toISOString());
+
       // Check for existing pending/processing job (dentro da janela de 20 min)
       const { data: existingJob } = await supabase
         .from("intimacoes_sync_jobs")
