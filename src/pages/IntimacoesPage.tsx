@@ -137,17 +137,19 @@ export default function IntimacoesPage() {
         const updated: number = data.updated ?? 0;
         const foundToday: number = data.found_today ?? 0;
         const totalFound: number = data.total ?? 0;
+        const latestDate: string = data.latest_date ?? '';
         const byStrategy: Record<string, number> = data.by_strategy ?? {};
         const strategyStr = Object.entries(byStrategy).map(([k, v]) => `${k}:${v}`).join(' · ');
+        const latestInfo = latestDate ? ` · mais recente: ${latestDate}` : '';
         if (saved > 0) {
           toast.success(`${saved} nova(s) intimação(ões)`, {
-            description: `Total encontrado: ${totalFound} | Hoje (${data.today_date ?? ''}): ${foundToday}${updated > 0 ? ` | ${updated} atualizada(s)` : ''}`,
+            description: `Total: ${totalFound} | Hoje: ${foundToday}${latestInfo}${updated > 0 ? ` | ${updated} atualizada(s)` : ''}`,
           });
         } else {
           toast.success('Sincronização concluída', {
             description: foundToday > 0
-              ? `${foundToday} publicações de hoje já no banco · Total: ${totalFound}`
-              : `Nenhuma publicação de hoje nas APIs · Total: ${totalFound}${strategyStr ? ` (${strategyStr})` : ''}`,
+              ? `${foundToday} publicações de hoje já no banco · Total: ${totalFound}${latestInfo}`
+              : `Nenhuma de hoje nas APIs · Total: ${totalFound}${latestInfo}${strategyStr ? ` · ${strategyStr}` : ''}`,
           });
         }
         await fetchIntimacoes();

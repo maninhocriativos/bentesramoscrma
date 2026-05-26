@@ -460,7 +460,12 @@ serve(async (req) => {
     // Contagem de publicações de hoje encontradas pelas APIs
     const todayStr = new Date().toISOString().split("T")[0];
     const foundToday = intimacoes.filter(i => (i.data_disponibilizacao || "").startsWith(todayStr)).length;
-    console.log(`📌 Total bruto: ${intimacoes.length} itens | ${foundToday} com data_disponibilizacao de hoje (${todayStr})`);
+    const latestDate = intimacoes
+      .map(i => i.data_disponibilizacao || "")
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? null;
+    console.log(`📌 Total bruto: ${intimacoes.length} itens | ${foundToday} com data_disponibilizacao de hoje (${todayStr}) | mais recente: ${latestDate}`);
 
     if (intimacoes.length === 0) {
       return new Response(
@@ -574,6 +579,7 @@ serve(async (req) => {
         updated: updatedCount,
         found_today: foundToday,
         today_date: todayStr,
+        latest_date: latestDate,
         by_strategy: byStrategyRaw,
         new_by_strategy: newByStrategy,
       }),
