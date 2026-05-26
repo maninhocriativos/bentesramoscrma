@@ -135,10 +135,20 @@ export default function IntimacoesPage() {
       if (data?.success) {
         const saved: number = data.saved ?? 0;
         const updated: number = data.updated ?? 0;
+        const foundToday: number = data.found_today ?? 0;
+        const totalFound: number = data.total ?? 0;
+        const byStrategy: Record<string, number> = data.by_strategy ?? {};
+        const strategyStr = Object.entries(byStrategy).map(([k, v]) => `${k}:${v}`).join(' · ');
         if (saved > 0) {
-          toast.success(`${saved} nova(s) intimação(ões) encontrada(s)`, { description: updated > 0 ? `${updated} atualizada(s)` : undefined });
+          toast.success(`${saved} nova(s) intimação(ões)`, {
+            description: `Total encontrado: ${totalFound} | Hoje (${data.today_date ?? ''}): ${foundToday}${updated > 0 ? ` | ${updated} atualizada(s)` : ''}`,
+          });
         } else {
-          toast.success('Sincronização concluída', { description: updated > 0 ? `${updated} intimação(ões) atualizada(s)` : 'Nenhuma novidade no momento.' });
+          toast.success('Sincronização concluída', {
+            description: foundToday > 0
+              ? `${foundToday} publicações de hoje já no banco · Total: ${totalFound}`
+              : `Nenhuma publicação de hoje nas APIs · Total: ${totalFound}${strategyStr ? ` (${strategyStr})` : ''}`,
+          });
         }
         await fetchIntimacoes();
       } else {
