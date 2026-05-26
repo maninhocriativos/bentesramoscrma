@@ -204,7 +204,13 @@ export default function IntimacoesPage() {
   };
 
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-  const todayCount = intimacoes.filter(i => new Date(i.created_at) >= todayStart).length;
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  // Conta por data_disponibilizacao (quando publicado no Diário Oficial) — igual ao Advbox
+  const todayCount = intimacoes.filter(i =>
+    (i.data_disponibilizacao && i.data_disponibilizacao.startsWith(todayStr)) ||
+    (i.data_publicacao && i.data_publicacao.startsWith(todayStr)) ||
+    (!i.data_disponibilizacao && !i.data_publicacao && new Date(i.created_at) >= todayStart)
+  ).length;
   const unreadCount = intimacoes.filter(i => !i.lida).length;
   const readCount = intimacoes.length - unreadCount;
   const urgentCount = intimacoes.filter(i => { const u = getUrgencyInfo(i); return u.level === 'urgent' || u.level === 'overdue'; }).length;
@@ -226,7 +232,11 @@ export default function IntimacoesPage() {
     if (filterLida === 'unread') return ok && !i.lida;
     if (filterLida === 'read') return ok && i.lida;
     if (filterLida === 'urgent') { const u = getUrgencyInfo(i); return ok && (u.level === 'urgent' || u.level === 'overdue'); }
-    if (filterLida === 'today') return ok && new Date(i.created_at) >= todayStart;
+    if (filterLida === 'today') return ok && (
+      (i.data_disponibilizacao && i.data_disponibilizacao.startsWith(todayStr)) ||
+      (i.data_publicacao && i.data_publicacao.startsWith(todayStr)) ||
+      (!i.data_disponibilizacao && !i.data_publicacao && new Date(i.created_at) >= todayStart)
+    );
     return ok;
   });
 

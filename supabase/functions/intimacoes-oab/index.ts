@@ -457,22 +457,33 @@ serve(async (req) => {
       console.log(`📋 [V1] ${v1Count} publicações no Diário Oficial`);
     }
 
-    console.log(`📌 Total bruto: ${intimacoes.length} itens`);
+    // Contagem de publicações de hoje encontradas pelas APIs
+    const todayStr = new Date().toISOString().split("T")[0];
+    const foundToday = intimacoes.filter(i => (i.data_disponibilizacao || "").startsWith(todayStr)).length;
+    console.log(`📌 Total bruto: ${intimacoes.length} itens | ${foundToday} com data_disponibilizacao de hoje (${todayStr})`);
 
     if (intimacoes.length === 0) {
       return new Response(
-        JSON.stringify({ success: true, total: 0, saved: 0, updated: 0 }),
+        JSON.stringify({ success: true, total: 0, saved: 0, updated: 0, by_strategy: {} }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    // Agrupa por fonte para breakdown no response
+    const byStrategyRaw: Record<string, number> = {};
+    for (const i of intimacoes) {
+      byStrategyRaw[i.fonte] = (byStrategyRaw[i.fonte] || 0) + 1;
+    }
+
     // ── Deduplicação em memória ───────────────────────────────────────────────
+    // Limit alto para não perder registros em escritórios com muitas intimações
     const { data: existing } = await supabase
       .from("intimacoes")
       .select("id, processo_cnj, tipo_intimacao, data_disponibilizacao, tribunal, data_publicacao, data_intimacao, conteudo")
       .eq("oab_numero", oab_numero)
       .eq("oab_uf", oab_uf)
-      .gte("created_at", new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString());
+      .gte("created_at", new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString())
+      .limit(5000);
 
     // Itens com CNJ: chave por processo+tipo+data (processo identificado com precisão)
     // Itens sem CNJ (V1/Diário): chave inclui início do conteúdo para distinguir publicações
@@ -547,10 +558,25 @@ serve(async (req) => {
       }
     }
 
-    console.log(`✅ ${savedCount} novas | ${updatedCount} atualizadas`);
+    // Breakdown por estratégia no toInsert
+    const newByStrategy: Record<string, number> = {};
+    for (const i of toInsert) {
+      newByStrategy[i.fonte] = (newByStrategy[i.fonte] || 0) + 1;
+    }
+
+    console.log(`✅ ${savedCount} novas | ${updatedCount} atualizadas | hoje=${foundToday} | por fonte:`, JSON.stringify(byStrategyRaw));
 
     return new Response(
-      JSON.stringify({ success: true, total: intimacoes.length, saved: savedCount, updated: updatedCount }),
+      JSON.stringify({
+        success: true,
+        total: intimacoes.length,
+        saved: savedCount,
+        updated: updatedCount,
+        found_today: foundToday,
+        today_date: todayStr,
+        by_strategy: byStrategyRaw,
+        new_by_strategy: newByStrategy,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
