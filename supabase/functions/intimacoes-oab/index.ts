@@ -172,32 +172,64 @@ serve(async (req) => {
         "X-Requested-With": "XMLHttpRequest",
       };
 
+      // Helper: extrai array de qualquer estrutura de resposta Escavador
+      function parseItems(data: any): any[] {
+        const candidates = [
+          data?.items,
+          data?.items?.data,
+          data?.data,
+          data?.publicacoes,
+          data?.publicacoes?.data,
+          data?.result,
+          data?.result?.data,
+          data?.records,
+          data?.movimentacoes,
+        ];
+        return candidates.find((c) => Array.isArray(c) && c.length > 0) ?? [];
+      }
+
       // ── Estratégia 1b: V1 Publicações por ID interno do advogado ────────────
-      // O Escavador mantém um ID interno por advogado. Buscar publicações via
-      // esse ID é o método mais completo — é o que sistemas como o Advbox usam.
-      // Passo 1: resolve o ID Escavador do advogado via OAB
-      // Passo 2: busca todas as publicações desse ID com paginação completa
       let escavadorAdvId: number | null = null;
       try {
-        const searchUrl = `https://api.escavador.com/api/v1/advogados/busca?q=${encodeURIComponent(`${oab_numero}/${oab_uf}`)}&limit=5`;
-        const searchResp = await fetch(searchUrl, { headers: esc, signal: AbortSignal.timeout(10000) });
-        if (searchResp.ok) {
+        // Tenta múltiplas queries para encontrar o ID: por OAB e por nome
+        const idSearchTerms: string[] = [
+          `${oab_numero}/${oab_uf}`,
+          `${oab_numero} ${oab_uf}`,
+        ];
+        if (advogadoNome) idSearchTerms.push(advogadoNome);
+
+        for (const term of idSearchTerms) {
+          if (escavadorAdvId) break;
+          const searchUrl = `https://api.escavador.com/api/v1/advogados/busca?q=${encodeURIComponent(term)}&limit=10`;
+          const searchResp = await fetch(searchUrl, { headers: esc, signal: AbortSignal.timeout(10000) });
+          if (!searchResp.ok) {
+            console.warn(`⚠️ [V1-id] busca "${term}" → HTTP ${searchResp.status}`);
+            continue;
+          }
           const searchData = await searchResp.json();
-          const advs: any[] = searchData?.items || searchData?.data || searchData?.advogados || [];
+          // Log da estrutura raw para diagnóstico (somente primeira vez)
+          if (term === idSearchTerms[0]) {
+            console.log(`🔎 [V1-id] raw keys: ${Object.keys(searchData || {}).join(", ")}`);
+          }
+          const advs: any[] = parseItems(searchData);
           for (const adv of advs) {
-            const num = String(adv.oab_numero || adv.numero_oab || "").replace(/\D/g, "");
-            const uf = String(adv.oab_uf || adv.estado_oab || adv.uf || "").toUpperCase();
+            const num = String(adv.oab_numero || adv.numero_oab || adv.numero || "").replace(/\D/g, "");
+            const uf = String(adv.oab_uf || adv.estado_oab || adv.uf || adv.estado || "").toUpperCase();
             if (num === oab_numero && uf === oab_uf) {
-              escavadorAdvId = adv.id || adv.advogado_id || null;
+              escavadorAdvId = adv.id || adv.advogado_id || adv.entity_id || adv.pessoa_id || null;
+              console.log(`✅ [V1-id] OAB match via "${term}" → id=${escavadorAdvId}`);
               break;
             }
           }
-          // fallback: pega o primeiro resultado se só veio um
-          if (!escavadorAdvId && advs.length === 1) escavadorAdvId = advs[0]?.id || null;
+          // fallback: único resultado → assume que é o advogado correto
+          if (!escavadorAdvId && advs.length === 1) {
+            escavadorAdvId = advs[0]?.id || advs[0]?.advogado_id || advs[0]?.entity_id || null;
+            console.log(`✅ [V1-id] único resultado via "${term}" → id=${escavadorAdvId}`);
+          }
         }
-        console.log(`🔎 [V1-id] ID Escavador do advogado: ${escavadorAdvId ?? "não encontrado"}`);
+        if (!escavadorAdvId) console.warn("⚠️ [V1-id] ID do advogado não encontrado em nenhuma query");
       } catch (e) {
-        console.warn("⚠️ [V1-id] Erro ao buscar ID do advogado:", e);
+        console.warn("⚠️ [V1-id] Erro ao buscar ID:", e);
       }
 
       if (escavadorAdvId) {
@@ -206,15 +238,17 @@ serve(async (req) => {
           for (let page = 1; page <= 20; page++) {
             try {
               const resp = await fetch(
-                `https://api.escavador.com/api/v1/advogados/${escavadorAdvId}/publicacoes?data_inicio=${CUTOFF}&limit=50&page=${page}`,
+                `https://api.escavador.com/api/v1/advogados/${escavadorAdvId}/publicacoes?data_inicio=${CUTOFF}&limit=50&page=${page}&order_direction=desc`,
                 { headers: esc, signal: AbortSignal.timeout(15000) }
               );
-              if (!resp.ok) break;
+              if (!resp.ok) {
+                const errText = await resp.text().catch(() => "");
+                console.warn(`⚠️ [V1-id] publicacoes p${page} → HTTP ${resp.status}: ${errText.slice(0, 200)}`);
+                break;
+              }
               const data = await resp.json();
-              const items: any[] = Array.isArray(data?.items) ? data.items
-                : Array.isArray(data?.items?.data) ? data.items.data
-                : Array.isArray(data?.data) ? data.data
-                : [];
+              if (page === 1) console.log(`🔎 [V1-id] publicacoes raw keys: ${Object.keys(data || {}).join(", ")}`);
+              const items: any[] = parseItems(data);
               if (items.length === 0) break;
 
               for (const item of items) {
@@ -228,7 +262,7 @@ serve(async (req) => {
                 intimacoes.push(makeItem({
                   cnj: cnjMatch ? cnjMatch[1] : "",
                   titulo,
-                  tribunal: item.diario_sigla || item.fonte?.sigla || "",
+                  tribunal: item.diario_sigla || item.fonte?.sigla || item.tribunal?.sigla || "",
                   tipo, conteudo, dataDisp: dataDisp || null,
                   oab_numero, oab_uf, advogado_id,
                   fonte: "escavador_v1_id",
@@ -248,9 +282,8 @@ serve(async (req) => {
         }
       }
 
-      // ── Estratégia 2: V2 Escavador — todos os processos ativos com paginação ─
+      // ── Estratégia 2: V2 Escavador — todos os processos + movimentações recentes
       try {
-        // Busca até 5 páginas = 250 processos para garantir cobertura completa
         const processos: any[] = [];
         for (let procPage = 1; procPage <= 5; procPage++) {
           try {
@@ -260,30 +293,23 @@ serve(async (req) => {
             );
             if (!procResp.ok) break;
             const procData = await procResp.json();
-            const pageItems: any[] = procData?.items || procData?.data || [];
+            const pageItems: any[] = parseItems(procData);
             processos.push(...pageItems);
             console.log(`📋 [V2] Página ${procPage}: ${pageItems.length} processos`);
-            if (pageItems.length < 50) break; // não há mais páginas
+            if (pageItems.length < 50) break;
           } catch (err) {
-            console.error(`📋 [V2] Erro na página ${procPage} da Escavador:`, err);
+            console.error(`📋 [V2] Erro na página ${procPage}:`, err);
             break;
           }
         }
 
-        // Sem filtro de data — verifica todos os processos ativos
-        // A data_ultima_movimentacao do Escavador pode estar desatualizada
-        // e intimações recentes podem existir mesmo em processos com movimentação antiga
-        const ativos = processos;
+        console.log(`📋 [V2] ${processos.length} processos total`);
 
-        console.log(`📋 [V2] ${processos.length} processos total — verificando todos`);
-
-        // Busca movimentações em batches paralelos de 5 para maximizar velocidade
         let v2Count = 0;
         const PARALLEL_BATCH = 5;
-        const maxProcessos = ativos.length; // sem limite — processa todos
 
-        for (let i = 0; i < maxProcessos; i += PARALLEL_BATCH) {
-          const batch = ativos.slice(i, i + PARALLEL_BATCH);
+        for (let i = 0; i < processos.length; i += PARALLEL_BATCH) {
+          const batch = processos.slice(i, i + PARALLEL_BATCH);
 
           const batchResults = await Promise.allSettled(batch.map(async (proc) => {
             const cnj = proc.numero_cnj || proc.numero_processo;
@@ -293,8 +319,9 @@ serve(async (req) => {
             const tribunalSigla = fonteTribunal?.sigla || fonteTribunal?.tribunal?.sigla || fonteTribunal?.nome || "";
             const procTitulo = `${proc.titulo_polo_ativo || ""} X ${proc.titulo_polo_passivo || ""}`.trim().replace(/^X\s*/, "").replace(/\s*X$/, "");
 
+            // data_inicio filtra server-side + order_direction=desc garante as mais recentes primeiro
             const movResp = await fetch(
-              `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?limit=100`,
+              `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(cnj)}/movimentacoes?limit=100&data_inicio=${CUTOFF}&order_direction=desc`,
               { headers: esc, signal: AbortSignal.timeout(12000) }
             );
             if (!movResp.ok) return [];
@@ -302,18 +329,18 @@ serve(async (req) => {
             const movData = await movResp.json();
             const found: any[] = [];
 
-            for (const mov of (movData?.items || [])) {
-              const movDate = (mov.data || "").split("T")[0];
+            for (const mov of parseItems(movData)) {
+              const movDate = (mov.data || mov.data_publicacao || "").split("T")[0];
               if (movDate && movDate < CUTOFF) continue;
 
-              const conteudo = mov.conteudo || "";
-              const tipo = classifyMovimento(conteudo, mov.tipo || "");
+              const conteudo = mov.conteudo || mov.texto || "";
+              const tipo = classifyMovimento(conteudo, mov.tipo || mov.titulo || "");
               if (!TIPOS_INTIMACAO.has(tipo)) continue;
 
               found.push(makeItem({
                 cnj,
                 titulo: procTitulo || fonteTribunal?.capa?.classe || "",
-                tribunal: mov.fonte?.sigla || tribunalSigla,
+                tribunal: mov.fonte?.sigla || mov.tribunal?.sigla || tribunalSigla,
                 tipo, conteudo, dataDisp: movDate || null,
                 oab_numero, oab_uf, advogado_id,
                 fonte: "escavador_v2",
@@ -333,28 +360,28 @@ serve(async (req) => {
           }
         }
 
-        console.log(`📋 [V2] ${v2Count} intimações de processos ativos`);
+        console.log(`📋 [V2] ${v2Count} intimações de movimentações`);
       } catch (e) {
         console.warn("⚠️ [V2] Erro geral:", e);
       }
 
       // ── Estratégia 3: V2 Publicações por OAB — endpoint dedicado ─────────────
-      // Este endpoint retorna TODAS as publicações em Diário Oficial para o OAB,
-      // sem precisar buscar processo a processo. Equivalente ao que o Advbox usa.
       let v2PubCount = 0;
       try {
         for (let page = 1; page <= 20; page++) {
           try {
             const resp = await fetch(
-              `https://api.escavador.com/api/v2/advogado/publicacoes?oab_numero=${oab_numero}&oab_estado=${oab_uf}&limit=50&page=${page}&data_inicio=${CUTOFF}`,
+              `https://api.escavador.com/api/v2/advogado/publicacoes?oab_numero=${oab_numero}&oab_estado=${oab_uf}&limit=50&page=${page}&data_inicio=${CUTOFF}&order_direction=desc`,
               { headers: esc, signal: AbortSignal.timeout(15000) }
             );
             if (!resp.ok) {
-              console.log(`📋 [V2-pub] Status ${resp.status} — endpoint não disponível ou sem resultados`);
+              const errText = await resp.text().catch(() => "");
+              console.log(`📋 [V2-pub] HTTP ${resp.status}: ${errText.slice(0, 200)}`);
               break;
             }
             const data = await resp.json();
-            const items: any[] = data?.items || data?.data || data?.publicacoes || [];
+            if (page === 1) console.log(`🔎 [V2-pub] raw keys: ${Object.keys(data || {}).join(", ")}`);
+            const items: any[] = parseItems(data);
             if (items.length === 0) break;
 
             for (const item of items) {
