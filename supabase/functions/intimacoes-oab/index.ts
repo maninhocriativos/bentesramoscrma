@@ -695,6 +695,139 @@ serve(async (req) => {
       console.warn("⚠️ [DJe-TJAM] Erro geral:", e);
     }
 
+    // ── Estratégia 7: JusBrasil DJe — agrega DJe de todos os tribunais BR ────
+    // JusBrasil indexa publicações de praticamente todos os tribunais com
+    // latência de horas (muito mais rápido que o Escavador). Acesso público,
+    // sem autenticação. Complementa os dados do TJAM com outros tribunais.
+    try {
+      // Termos de busca: nome completo primeiro, OAB como fallback
+      const jbTerms = advogadoNome
+        ? [advogadoNome, `OAB/${oab_uf} ${oab_numero}`]
+        : [`OAB/${oab_uf} ${oab_numero}`];
+
+      let jbCount = 0;
+
+      for (const term of jbTerms) {
+        try {
+          const jbUrl =
+            `https://www.jusbrasil.com.br/diarios/busca/?` +
+            `q=${encodeURIComponent(term)}&periodo=semana`;
+
+          const jbResp = await fetch(jbUrl, {
+            headers: {
+              "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+              "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
+              "Accept-Language": "pt-BR,pt;q=0.9",
+              "Referer": "https://www.jusbrasil.com.br/",
+            },
+            signal: AbortSignal.timeout(15000),
+          });
+
+          console.log(`🔎 [JusBrasil] "${term}" → HTTP ${jbResp.status}`);
+          if (!jbResp.ok) continue;
+
+          const html = await jbResp.text();
+
+          // 1) Tenta JSON embutido pelo Next.js (__NEXT_DATA__)
+          const nextMatch = html.match(
+            /<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i
+          );
+          if (nextMatch) {
+            try {
+              const pageData = JSON.parse(nextMatch[1]);
+              const results: any[] =
+                pageData?.props?.pageProps?.searchResults ??
+                pageData?.props?.pageProps?.results ??
+                pageData?.props?.pageProps?.diarios ??
+                [];
+
+              for (const item of results) {
+                const conteudo = item.texto ?? item.content ?? item.snippet ?? "";
+                const titulo =
+                  item.titulo ?? item.title ?? item.diario ?? "Publicação JusBrasil";
+                const dataRaw =
+                  item.data ?? item.date ?? item.dataPublicacao ?? "";
+                let dataDisp: string | null = null;
+                if (dataRaw) {
+                  const d = new Date(dataRaw);
+                  if (!isNaN(d.getTime())) dataDisp = d.toISOString().split("T")[0];
+                }
+                if (dataDisp && dataDisp < CUTOFF) continue;
+
+                const cnjMatch = conteudo.match(
+                  /(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/
+                );
+                const tipo = classifyMovimento(conteudo, titulo);
+
+                intimacoes.push(makeItem({
+                  cnj: cnjMatch?.[1] ?? "",
+                  titulo,
+                  tribunal: item.tribunal ?? item.sigla ?? "",
+                  tipo: TIPOS_INTIMACAO.has(tipo) ? tipo : "Publicação",
+                  conteudo: conteudo.slice(0, 5000),
+                  dataDisp,
+                  oab_numero, oab_uf, advogado_id,
+                  fonte: "jusbrasil",
+                  raw: { term, titulo, dataRaw },
+                }));
+                jbCount++;
+              }
+            } catch (_) { /* JSON mal-formado — usa fallback HTML */ }
+          }
+
+          // 2) Fallback: extrai CNJ diretamente do HTML
+          if (jbCount === 0) {
+            const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+            const cnjRe = /\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/g;
+            const allCnjs = [...new Set([...text.matchAll(cnjRe)].map(m => m[0]))];
+
+            // Tenta extrair a data mais próxima no texto
+            const brDateRe = /(\d{2})\/(\d{2})\/(\d{4})/;
+            const brDateMatch = text.match(brDateRe);
+            let dataDisp: string | null = null;
+            if (brDateMatch) {
+              dataDisp = `${brDateMatch[3]}-${brDateMatch[2]}-${brDateMatch[1]}`;
+              if (dataDisp < CUTOFF) dataDisp = null;
+            }
+
+            const seenCnj = new Set<string>();
+            for (const cnj of allCnjs) {
+              if (seenCnj.has(cnj)) continue;
+              seenCnj.add(cnj);
+
+              const idx = text.indexOf(cnj);
+              const snippet = text.slice(Math.max(0, idx - 150), idx + 2000).trim();
+              const tipo = classifyMovimento(snippet, "Publicação");
+
+              intimacoes.push(makeItem({
+                cnj,
+                titulo: "Publicação JusBrasil",
+                tribunal: "",
+                tipo: TIPOS_INTIMACAO.has(tipo) ? tipo : "Publicação",
+                conteudo: snippet.slice(0, 5000),
+                dataDisp,
+                oab_numero, oab_uf, advogado_id,
+                fonte: "jusbrasil",
+                raw: { term, cnj },
+              }));
+              jbCount++;
+            }
+          }
+
+          // Se encontrou resultados, não repete com o próximo termo
+          if (jbCount > 0) break;
+        } catch (err) {
+          console.warn(`⚠️ [JusBrasil] Erro "${term}":`, err);
+        }
+      }
+
+      console.log(`📋 [JusBrasil] ${jbCount} publicações encontradas`);
+    } catch (e) {
+      console.warn("⚠️ [JusBrasil] Erro geral:", e);
+    }
+
     // Contagem de publicações de hoje encontradas pelas APIs
     const todayStr = new Date().toISOString().split("T")[0];
     const foundToday = intimacoes.filter(i => (i.data_disponibilizacao || "").startsWith(todayStr)).length;
