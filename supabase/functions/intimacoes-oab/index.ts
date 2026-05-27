@@ -439,17 +439,15 @@ serve(async (req) => {
 
     // ── Estratégia 5: DataJud CNJ — publicações e intimações do DJe ────────────
     // DataJud é a base oficial do CNJ alimentada pelo próprio tribunal.
-    // Usamos somente movimentos que correspondem a publicações no DJe
-    // ou intimações formais — excluindo atualizações processuais genéricas.
+    // Query simplificada: busca processos com o advogado (OAB) atualizados nos
+    // últimos 90 dias — sem filtrar por código de movimento no Elasticsearch,
+    // pois o TJAM pode não preencher os códigos CNJ padrão (11009, 60, 106…).
+    // O filtro client-side abaixo extrai apenas movimentos de DJe/intimação.
     //
-    // Códigos CNJ (TPU) relevantes:
-    //   11009 = Publicação no DJe
-    //   60    = Citação
-    //   106   = Intimação
-    //   108   = Notificação
-    //   11010 = Intimação por Carta
-    //   11012 = Citação por Edital
-    // Nomes mapeados em português para match textual quando código não está disponível.
+    // Códigos CNJ (TPU) para filtro client-side:
+    //   11009 = Publicação no DJe   |  60  = Citação
+    //   106   = Intimação           |  108 = Notificação
+    //   11010 = Intimação por Carta |  11012 = Citação por Edital
     try {
       const datajudKey = Deno.env.get("DATAJUD_API_KEY")
         ?? "cDZHYzlZa0JadVREZDJCendFbzFob2s6SDJmQnRuMHFmSW0tWXZnWGpYcU1JZw==";
@@ -459,6 +457,8 @@ serve(async (req) => {
       // Codigos CNJ de publicação no DJe / intimação / citação / notificação
       const CODIGOS_DJE = new Set([11009, 11010, 11011, 11012, 60, 106, 108, 230]);
 
+      // Query simplificada: apenas por OAB + janela de 90 dias
+      // O filtro de movimentos é feito client-side para não depender dos códigos do TJAM
       const djBody = {
         query: {
           bool: {
@@ -477,27 +477,6 @@ serve(async (req) => {
                           ],
                         },
                       },
-                    },
-                  },
-                },
-              },
-              // Filtra por processos com movimentos recentes de publicação
-              {
-                nested: {
-                  path: "movimentos",
-                  query: {
-                    bool: {
-                      should: [
-                        // Por código CNJ (mais confiável)
-                        { terms: { "movimentos.codigo": [...CODIGOS_DJE] } },
-                        // Por nome (fallback quando código não corresponde)
-                        { match: { "movimentos.nome": "DJe" } },
-                        { match: { "movimentos.nome": "publicação" } },
-                        { match: { "movimentos.nome": "intimação" } },
-                        { match: { "movimentos.nome": "citação" } },
-                        { match: { "movimentos.nome": "notificação" } },
-                      ],
-                      minimum_should_match: 1,
                     },
                   },
                 },
@@ -536,6 +515,15 @@ serve(async (req) => {
         let djCount = 0;
 
         console.log(`🔎 [DataJud] ${hits.length} processos encontrados no ${tjIndex}`);
+
+        // Diagnóstico: loga os códigos/nomes dos movimentos do primeiro processo
+        // para calibrar filtros futuros caso o TJAM use códigos não padrão
+        if (hits.length > 0) {
+          const sampleMovs = ((hits[0]._source?.movimentos as any[]) ?? []).slice(0, 10);
+          console.log(`🔎 [DataJud] amostra movimentos p0: ${JSON.stringify(
+            sampleMovs.map((m: any) => ({ c: m.codigo, n: m.nome?.slice(0, 30) }))
+          )}`);
+        }
 
         for (const hit of hits) {
           const proc = hit._source;
