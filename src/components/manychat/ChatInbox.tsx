@@ -97,9 +97,25 @@ interface Subscriber {
   assigned_to?: string;
   lead_tipo_origem?: string;
   instance_name?: string;
+  // Presença em tempo real (limpa quando sai)
   attending_by?: string | null;
   attending_nome?: string | null;
   attending_since?: string | null;
+  // Histórico permanente de atendimento
+  last_attended_by?: string | null;
+  last_attended_nome?: string | null;
+  last_attended_at?: string | null;
+}
+
+interface AtendimentoLogEntry {
+  id: string;
+  subscriber_id: string;
+  user_id: string;
+  user_nome: string;
+  previous_user_id: string | null;
+  previous_user_nome: string | null;
+  action: 'primeiro_atendimento' | 'assumiu' | 'retomou';
+  created_at: string;
 }
 
 interface Message {
@@ -174,6 +190,9 @@ const ManyChatInboxContent = () => {
   const [editingLeadNameValue, setEditingLeadNameValue] = useState("");
   const [hasMoreMessages, setHasMoreMessages]           = useState(false);
   const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
+
+  // ─── Log de atendimento ─────────────────────────────────────────────────────
+  const [atendimentoLog, setAtendimentoLog] = useState<AtendimentoLogEntry[]>([]);
 
   // ─── Hooks ──────────────────────────────────────────────────────────────────
 
@@ -535,6 +554,40 @@ const ManyChatInboxContent = () => {
   useEffect(() => {
     setAttending(selectedSubscriber?.subscriber_id ?? null);
   }, [selectedSubscriber?.subscriber_id, setAttending]);
+
+  // ─── Log de atendimento: carrega histórico e escuta novos eventos em realtime ──
+  useEffect(() => {
+    if (!selectedSubscriber?.subscriber_id) {
+      setAtendimentoLog([]);
+      return;
+    }
+    const subId = selectedSubscriber.subscriber_id;
+
+    // Carrega histórico (últimos 100 eventos)
+    supabase
+      .from('chat_atendimento_log' as any)
+      .select('*')
+      .eq('subscriber_id', subId)
+      .order('created_at', { ascending: true })
+      .limit(100)
+      .then(({ data }) => {
+        if (data) setAtendimentoLog(data as AtendimentoLogEntry[]);
+      });
+
+    // Escuta novos eventos em tempo real (outro usuário abre a conversa)
+    const ch = supabase
+      .channel(`atendimento-log-${subId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'chat_atendimento_log', filter: `subscriber_id=eq.${subId}` },
+        (payload) => {
+          setAtendimentoLog(prev => [...prev, payload.new as AtendimentoLogEntry]);
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(ch); };
+  }, [selectedSubscriber?.subscriber_id]);
 
   // ─── Scroll & message helpers ───────────────────────────────────────────────
 
@@ -2164,25 +2217,29 @@ const ManyChatInboxContent = () => {
                           )}
                         </div>
                       </div>
-                      <div className="w-[76px] min-w-[76px] shrink-0 flex flex-col items-end justify-between gap-1">
+                      <div className="w-[76px] min-w-[76px] shrink-0 flex flex-col items-end gap-1">
                         <span className={`text-[12px] leading-tight whitespace-nowrap text-right ${isUnreadVisual ? "text-[#25D366] font-semibold" : themeClasses.secondaryText}`}>{subscriber.ultima_interacao ? formatLastMessageTime(subscriber.ultima_interacao) : ""}</span>
-                        {/* Badge fixo: quem está atendendo agora */}
-                        {attendingNome ? (
-                          <span className="flex items-center gap-1 bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold px-1.5 py-[3px] rounded-full leading-none whitespace-nowrap border border-emerald-500/30">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                            {attendingNome.split(' ')[0]}
-                          </span>
-                        ) : (
-                          <div className="flex items-center justify-end gap-1.5 min-h-[20px] w-full">
-                            {hasUnread ? (
-                              <span className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center shadow-sm">{unreadCount > 99 ? "99+" : unreadCount}</span>
-                            ) : hasUnreadHint ? (
-                              <span className="h-[9px] w-[9px] rounded-full bg-[#25D366]" />
-                            ) : null}
-                          </div>
-                        )}
-                        {/* Quando há badge de atendente E mensagens não lidas, mostra badge abaixo */}
-                        {attendingNome && (hasUnread || hasUnreadHint) && (
+                        {/* Badge permanente: ao vivo (verde+pulso) ou último atendente (cinza) */}
+                        {(() => {
+                          const liveNome = attendingNome;
+                          const lastNome = (subscriber as any).last_attended_nome as string | null | undefined;
+                          const displayNome = liveNome || lastNome;
+                          if (!displayNome) return null;
+                          const firstName = displayNome.split(' ')[0];
+                          const isLive = !!liveNome;
+                          return (
+                            <span className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-[3px] rounded-full leading-none whitespace-nowrap border ${
+                              isLive
+                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                : 'bg-slate-500/15 text-slate-400 border-slate-500/20'
+                            }`}>
+                              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-slate-400'}`} />
+                              {firstName}
+                            </span>
+                          );
+                        })()}
+                        {/* Contador de não lidas */}
+                        {(hasUnread || hasUnreadHint) && (
                           <div className="flex items-center justify-end gap-1.5 w-full">
                             {hasUnread ? (
                               <span className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center shadow-sm">{unreadCount > 99 ? "99+" : unreadCount}</span>
@@ -2478,37 +2535,90 @@ const ManyChatInboxContent = () => {
                       <RefreshCw className={`h-4 w-4 animate-spin ${themeClasses.secondaryText}`} />
                     </div>
                   )}
-                  {messages.filter(m => !deletedForMeIds.has(m.id) && !(m as any).deleted_for_all).sort(compareMessagesChronological).map((message, index, filteredMsgs) => {
-                    const dateLabel = getDateLabel(filteredMsgs, index);
-                    const isOutgoing = message.direcao === "saida";
-                    const isStarred = starredMessageIds.has(message.id);
-                    const isHighlighted = highlightedMessageId === message.id;
-                    return (
-                      <div key={message.id} id={`msg-${message.id}`} className={`transition-colors duration-700 rounded-lg ${isHighlighted ? (isDark ? "bg-[#00A884]/10" : "bg-[#00A884]/08") : ""}`}>
-                        {dateLabel && <div className="flex justify-center my-4"><span className={`px-4 py-1.5 rounded-lg ${isDark ? "bg-[#1F2C34]" : "bg-white"} text-[12px] ${themeClasses.secondaryText} shadow-sm font-medium`}>{dateLabel}</span></div>}
-                        <div className={`flex ${isOutgoing ? "justify-end pr-2" : "justify-start pl-2"} mb-[3px]`}>
-                          <div className={`group relative max-w-[75%] md:max-w-[65%] rounded-xl px-2.5 md:px-3 pt-2 pb-2 shadow-sm transition-all hover:shadow-md ${isOutgoing ? themeClasses.messageSent : themeClasses.messageReceived} ${isHighlighted ? "ring-2 ring-[#00A884]/60" : ""}`} style={{ borderTopLeftRadius: !isOutgoing ? "4px" : undefined, borderTopRightRadius: isOutgoing ? "4px" : undefined }}>
-                            <MessageContextMenu messageId={message.id} messageContent={message.conteudo} messageType={(message as any).tipo || "text"} isOutgoing={isOutgoing} isStarred={isStarred} isPinned={selectedSubscriber ? pinnedMessagesBySubscriber[selectedSubscriber.subscriber_id] === message.id : false} isSelected={selectedMessageIds.has(message.id)} isDark={isDark} isEdited={!!(message as any).metadata?.edited} onStar={handleStarMessage} onUnstar={handleUnstarMessage} onPin={handlePinMessage} onUnpin={handleUnpinMessage} onSelect={handleSelectMessage} onReport={handleReportMessage} onDeleteForMe={handleDeleteForMe} onDeleteForAll={handleDeleteForAll} onForward={handleOpenForward} onReply={handleReplyMessage} onEdit={handleStartEdit} />
-                            {editingMessageId === message.id ? (
-                              <div className="flex flex-col min-w-[260px] max-w-[420px]">
-                                <textarea value={editingText} onChange={e => setEditingText(e.target.value)} className={`w-full px-3 py-2 text-[14.2px] resize-none border-0 outline-none ${isDark ? "bg-[#2A3942] text-[#E9EDEF]" : "bg-[#F0F2F5] text-[#111B21]"}`} rows={Math.min(Math.max(editingText.split("\n").length, 2), 8)} autoFocus onKeyDown={e => { if (e.key === "Escape") handleCancelEdit(); if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleConfirmEdit(); } }} />
-                                <div className="flex items-center justify-end gap-2 mt-2">
-                                  <button onClick={handleCancelEdit} className="text-[12px] px-3 py-1 rounded-full hover:bg-black/5">Cancelar</button>
-                                  <button onClick={handleConfirmEdit} className="text-[12px] px-4 py-1 rounded-full bg-[#00A884] text-white">Salvar</button>
+                  {(() => {
+                    // ── Timeline mesclada: mensagens + logs de atendimento ──
+                    const filteredMsgs = messages
+                      .filter(m => !deletedForMeIds.has(m.id) && !(m as any).deleted_for_all)
+                      .sort(compareMessagesChronological);
+
+                    type TItem =
+                      | { kind: 'msg'; m: Message; idx: number }
+                      | { kind: 'log'; l: AtendimentoLogEntry };
+
+                    const sortedLogs = [...atendimentoLog].sort(
+                      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                    );
+
+                    // Merge em O(n+m) mantendo ordem cronológica
+                    const timeline: TItem[] = [];
+                    let mi = 0, li = 0;
+                    while (mi < filteredMsgs.length || li < sortedLogs.length) {
+                      const mt = mi < filteredMsgs.length ? new Date(filteredMsgs[mi].created_at).getTime() : Infinity;
+                      const lt = li < sortedLogs.length ? new Date(sortedLogs[li].created_at).getTime() : Infinity;
+                      if (mt <= lt) { timeline.push({ kind: 'msg', m: filteredMsgs[mi], idx: mi }); mi++; }
+                      else          { timeline.push({ kind: 'log', l: sortedLogs[li] }); li++; }
+                    }
+
+                    return timeline.map((item) => {
+                      // ── Evento de atendimento (sistema) ──
+                      if (item.kind === 'log') {
+                        const log = item.l;
+                        const hora = formatMessageTime(log.created_at);
+                        const dataPt = new Date(log.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+                        const primeiroNome = (n: string) => n.split(' ')[0];
+                        let texto = '';
+                        if (log.action === 'primeiro_atendimento') {
+                          texto = `Atendimento iniciado por ${primeiroNome(log.user_nome)}`;
+                        } else {
+                          texto = log.previous_user_nome
+                            ? `${primeiroNome(log.user_nome)} assumiu o atendimento de ${primeiroNome(log.previous_user_nome)}`
+                            : `${primeiroNome(log.user_nome)} assumiu o atendimento`;
+                        }
+                        return (
+                          <div key={`log-${log.id}`} className="flex justify-center my-3 px-2">
+                            <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium shadow-sm ${isDark ? 'bg-[#1F2C34] text-[#8696A0]' : 'bg-white text-[#667781]'}`}>
+                              <UserRound className="h-3 w-3 shrink-0 opacity-70" />
+                              {texto}
+                              <span className="opacity-60">·</span>
+                              {hora} {dataPt}
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      // ── Mensagem normal ──
+                      const { m: message, idx: index } = item;
+                      const dateLabel = getDateLabel(filteredMsgs, index);
+                      const isOutgoing = message.direcao === "saida";
+                      const isStarred = starredMessageIds.has(message.id);
+                      const isHighlighted = highlightedMessageId === message.id;
+                      return (
+                        <div key={message.id} id={`msg-${message.id}`} className={`transition-colors duration-700 rounded-lg ${isHighlighted ? (isDark ? "bg-[#00A884]/10" : "bg-[#00A884]/08") : ""}`}>
+                          {dateLabel && <div className="flex justify-center my-4"><span className={`px-4 py-1.5 rounded-lg ${isDark ? "bg-[#1F2C34]" : "bg-white"} text-[12px] ${themeClasses.secondaryText} shadow-sm font-medium`}>{dateLabel}</span></div>}
+                          <div className={`flex ${isOutgoing ? "justify-end pr-2" : "justify-start pl-2"} mb-[3px]`}>
+                            <div className={`group relative max-w-[75%] md:max-w-[65%] rounded-xl px-2.5 md:px-3 pt-2 pb-2 shadow-sm transition-all hover:shadow-md ${isOutgoing ? themeClasses.messageSent : themeClasses.messageReceived} ${isHighlighted ? "ring-2 ring-[#00A884]/60" : ""}`} style={{ borderTopLeftRadius: !isOutgoing ? "4px" : undefined, borderTopRightRadius: isOutgoing ? "4px" : undefined }}>
+                              <MessageContextMenu messageId={message.id} messageContent={message.conteudo} messageType={(message as any).tipo || "text"} isOutgoing={isOutgoing} isStarred={isStarred} isPinned={selectedSubscriber ? pinnedMessagesBySubscriber[selectedSubscriber.subscriber_id] === message.id : false} isSelected={selectedMessageIds.has(message.id)} isDark={isDark} isEdited={!!(message as any).metadata?.edited} onStar={handleStarMessage} onUnstar={handleUnstarMessage} onPin={handlePinMessage} onUnpin={handleUnpinMessage} onSelect={handleSelectMessage} onReport={handleReportMessage} onDeleteForMe={handleDeleteForMe} onDeleteForAll={handleDeleteForAll} onForward={handleOpenForward} onReply={handleReplyMessage} onEdit={handleStartEdit} />
+                              {editingMessageId === message.id ? (
+                                <div className="flex flex-col min-w-[260px] max-w-[420px]">
+                                  <textarea value={editingText} onChange={e => setEditingText(e.target.value)} className={`w-full px-3 py-2 text-[14.2px] resize-none border-0 outline-none ${isDark ? "bg-[#2A3942] text-[#E9EDEF]" : "bg-[#F0F2F5] text-[#111B21]"}`} rows={Math.min(Math.max(editingText.split("\n").length, 2), 8)} autoFocus onKeyDown={e => { if (e.key === "Escape") handleCancelEdit(); if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleConfirmEdit(); } }} />
+                                  <div className="flex items-center justify-end gap-2 mt-2">
+                                    <button onClick={handleCancelEdit} className="text-[12px] px-3 py-1 rounded-full hover:bg-black/5">Cancelar</button>
+                                    <button onClick={handleConfirmEdit} className="text-[12px] px-4 py-1 rounded-full bg-[#00A884] text-white">Salvar</button>
+                                  </div>
                                 </div>
+                              ) : renderMessage(message)}
+                              <div className="flex items-center justify-end gap-1 mt-1">
+                                {isStarred && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />}
+                                {(message as any).metadata?.edited && <span className={`text-[11px] italic ${isOutgoing ? themeClasses.messageTime : themeClasses.secondaryText}`}>editada</span>}
+                                <span className={`text-[11px] ${isOutgoing ? themeClasses.messageTime : themeClasses.secondaryText}`}>{formatMessageTime(message.created_at)}</span>
+                                {isOutgoing && <CheckCheck className="h-4 w-4 text-[#53BDEB]" />}
                               </div>
-                            ) : renderMessage(message)}
-                            <div className="flex items-center justify-end gap-1 mt-1">
-                              {isStarred && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />}
-                              {(message as any).metadata?.edited && <span className={`text-[11px] italic ${isOutgoing ? themeClasses.messageTime : themeClasses.secondaryText}`}>editada</span>}
-                              <span className={`text-[11px] ${isOutgoing ? themeClasses.messageTime : themeClasses.secondaryText}`}>{formatMessageTime(message.created_at)}</span>
-                              {isOutgoing && <CheckCheck className="h-4 w-4 text-[#53BDEB]" />}
                             </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    });
+                  })()}
                   <div ref={messagesEndRef} />
                 </div>
               )}

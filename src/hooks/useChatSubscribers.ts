@@ -18,10 +18,14 @@ export interface ChatSubscriber {
   assigned_to?: string;
   // Instance info from messages metadata
   instance_name?: string;
-  // Atendimento em tempo real
+  // Atendimento em tempo real (limpa quando usuário sai)
   attending_by?: string | null;
   attending_nome?: string | null;
   attending_since?: string | null;
+  // Último atendente permanente (não limpa ao sair)
+  last_attended_by?: string | null;
+  last_attended_nome?: string | null;
+  last_attended_at?: string | null;
 }
 
 export type ConversationFilter = 'all' | 'unread' | 'human' | 'bot' | 'mine';
