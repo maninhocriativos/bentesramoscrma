@@ -618,9 +618,15 @@ serve(async (req) => {
         });
       }
 
-      // Termo de busca: primeiros dois nomes do advogado OU OAB
+      // Termo de busca: no DJe TJAM o nome aparece completo (ex: "ANDREY BENTES RAMOS")
+      // Usar nome completo ou as últimas 2 palavras (sobrenome) que costumam ser consecutivas
+      // Ex: "BENTES RAMOS" match > "ANDREY RAMOS" (não consecutivas no DJe)
       const djeTerm = advogadoNome
-        ? advogadoNome.split(" ").slice(0, 2).join(" ")
+        ? (() => {
+            const parts = advogadoNome.trim().split(/\s+/).filter(Boolean);
+            if (parts.length <= 3) return advogadoNome; // nome curto: usa completo
+            return parts.slice(-2).join(" "); // nome longo: últimas 2 palavras (sobrenome)
+          })()
         : `OAB/${oab_uf} ${oab_numero}`;
 
       let djeCount = 0;
@@ -671,100 +677,108 @@ serve(async (req) => {
         // Continua sem sessão — muitos tribunais permitem acesso sem cookie
       }
 
-      // ── Passo 2: POST consultaAvancada.do por data e caderno ─────────────────
-      // Cadernos: 2 = Judiciário Capital, 3 = Judiciário Interior
-      const CADERNOS = [2, 3];
+      // ── Passo 2: POST consultaAvancada.do — busca num intervalo de datas ────
+      // Usa cdCaderno=-11 (todos os cadernos) em uma única requisição por período
+      // Hidden fields obrigatórios descobertos na inspeção do form:
+      //   dtInicioOficial = "06/06/2008" (data mínima do sistema DJe TJAM)
+      //   dtLimiteFim     = data de hoje em ISO YYYY-MM-DD
+      // pagina = "" (vazio, como no form original)
 
-      for (const dt of djesForDates) {
-        for (const cdCaderno of CADERNOS) {
-          try {
-            const formData = new URLSearchParams({
-              "dadosConsulta.pesquisaLivre": djeTerm,
-              "dadosConsulta.dtInicio": dt.br,
-              "dadosConsulta.dtFim": dt.br,
-              "dadosConsulta.cdCaderno": String(cdCaderno),
-              "pagina": "1",
-            });
+      const todayIso = new Date().toISOString().split("T")[0];
+      // Período: do dia mais antigo até hoje (cobre os 3 dias úteis de uma vez)
+      const dtInicio = djesForDates.at(-1)?.br ?? djesForDates[0]?.br ?? "";
+      const dtFim = djesForDates[0]?.br ?? "";
 
-            const cookieHeader: Record<string, string> = jsessionId
-              ? { "Cookie": `JSESSIONID=${jsessionId}` }
-              : {};
+      if (dtInicio && dtFim) {
+        try {
+          const formData = new URLSearchParams({
+            "dadosConsulta.pesquisaLivre": djeTerm,
+            "dadosConsulta.dtInicio": dtInicio,
+            "dadosConsulta.dtFim": dtFim,
+            "dadosConsulta.cdCaderno": "-11",  // todos os cadernos
+            "pagina": "",
+            "dtInicioOficial": "06/06/2008",
+            "dtLimiteFim": todayIso,
+          });
 
-            const postResp = await fetch(consultaUrl, {
-              method: "POST",
-              headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
-                "Accept-Language": "pt-BR,pt;q=0.9",
-                "Referer": `${ESAJ_BASE}/cdje/index.do`,
-                "Origin": ESAJ_BASE,
-                ...cookieHeader,
-              },
-              body: formData.toString(),
-              redirect: "follow",
-              signal: AbortSignal.timeout(20000),
-            });
+          const cookieHeader: Record<string, string> = jsessionId
+            ? { "Cookie": `JSESSIONID=${jsessionId}` }
+            : {};
 
-            const contentLen = parseInt(postResp.headers.get("content-length") ?? "0", 10);
-            console.log(`🔎 [DJe-TJAM] ${dt.br} caderno=${cdCaderno} → HTTP ${postResp.status} (~${Math.round(contentLen / 1024)}KB)`);
+          const postResp = await fetch(consultaUrl, {
+            method: "POST",
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+              "Content-Type": "application/x-www-form-urlencoded",
+              "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
+              "Accept-Language": "pt-BR,pt;q=0.9",
+              "Referer": `${ESAJ_BASE}/cdje/index.do`,
+              "Origin": ESAJ_BASE,
+              ...cookieHeader,
+            },
+            body: formData.toString(),
+            redirect: "follow",
+            signal: AbortSignal.timeout(20000),
+          });
 
-            if (!postResp.ok) continue;
+          const htmlSize = parseInt(postResp.headers.get("content-length") ?? "0", 10);
+          console.log(`🔎 [DJe-TJAM] ${dtInicio}→${dtFim} cdCaderno=-11 → HTTP ${postResp.status} (~${Math.round(htmlSize / 1024)}KB)`);
 
+          if (!postResp.ok) {
+            console.warn(`⚠️ [DJe-TJAM] HTTP ${postResp.status}`);
+          } else {
             const html = await postResp.text();
 
-            // Verifica ausência de resultados
-            if (
-              html.includes("Nenhuma publicação") ||
-              html.includes("Nenhum registro") ||
-              html.includes("nenhum resultado") ||
-              html.length < 2000
-            ) {
-              console.log(`📋 [DJe-TJAM] ${dt.br} caderno=${cdCaderno}: sem publicações`);
-              continue;
+            // TJAM retorna "Não foi encontrado nenhum registro correspondente a busca realizada!"
+            const semResultado =
+              /nenhum registro/i.test(html) ||
+              /nenhuma publica/i.test(html) ||
+              /nenhum resultado/i.test(html);
+
+            if (semResultado) {
+              console.log(`📋 [DJe-TJAM] "${djeTerm}" sem publicações em ${dtInicio}→${dtFim}`);
+            } else {
+              // Texto puro: remove scripts/estilos/tags + decodifica entidades
+              const text = html
+                .replace(/<script[\s\S]*?<\/script>/gi, " ")
+                .replace(/<style[\s\S]*?<\/style>/gi, " ")
+                .replace(/<[^>]+>/g, " ")
+                .replace(/&nbsp;/g, " ")
+                .replace(/&amp;/g, "&")
+                .replace(/&lt;/g, "<")
+                .replace(/&gt;/g, ">")
+                .replace(/\s+/g, " ");
+
+              // Extrai todos os CNJs únicos do texto
+              const cnjRe = /\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/g;
+              const allCnjs = [...new Set([...text.matchAll(cnjRe)].map(m => m[0]))];
+              console.log(`📋 [DJe-TJAM] "${djeTerm}": ${allCnjs.length} CNJs em ${dtInicio}→${dtFim}`);
+
+              for (const cnj of allCnjs) {
+                // Extrai até 2000 chars em torno do CNJ como trecho da publicação
+                const idx = text.indexOf(cnj);
+                const snippet = text.slice(Math.max(0, idx - 300), idx + 2000).trim();
+                const tipo = classifyMovimento(snippet, "Publicação");
+
+                intimacoes.push(makeItem({
+                  cnj,
+                  titulo: `DJe TJAM ${dtFim}`,
+                  tribunal: "TJAM",
+                  tipo: TIPOS_INTIMACAO.has(tipo) ? tipo : "Publicação",
+                  conteudo: snippet.slice(0, 5000),
+                  dataDisp: djesForDates[0]?.iso ?? todayIso, // data mais recente
+                  oab_numero,
+                  oab_uf,
+                  advogado_id,
+                  fonte: "dje_tjam",
+                  raw: { dtInicio, dtFim, searchTerm: djeTerm, cnj },
+                }));
+                djeCount++;
+              }
             }
-
-            // Texto puro: remove tags + decodifica entidades básicas
-            const text = html
-              .replace(/<script[\s\S]*?<\/script>/gi, " ")
-              .replace(/<style[\s\S]*?<\/style>/gi, " ")
-              .replace(/<[^>]+>/g, " ")
-              .replace(/&nbsp;/g, " ")
-              .replace(/&amp;/g, "&")
-              .replace(/&lt;/g, "<")
-              .replace(/&gt;/g, ">")
-              .replace(/\s+/g, " ");
-
-            // Extrai todos os CNJs únicos do texto
-            const cnjRe = /\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/g;
-            const allCnjs = [...new Set([...text.matchAll(cnjRe)].map(m => m[0]))];
-            console.log(`📋 [DJe-TJAM] ${dt.br} caderno=${cdCaderno}: ${allCnjs.length} CNJs`);
-
-            for (const cnj of allCnjs) {
-              // Extrai até 2000 chars em torno do CNJ como trecho da publicação
-              const idx = text.indexOf(cnj);
-              const snippet = text.slice(Math.max(0, idx - 300), idx + 2000).trim();
-              const tipo = classifyMovimento(snippet, "Publicação");
-              const cadernoNome = cdCaderno === 2 ? "Capital" : "Interior";
-
-              intimacoes.push(makeItem({
-                cnj,
-                titulo: `DJe TJAM ${dt.br} - Caderno ${cadernoNome}`,
-                tribunal: "TJAM",
-                tipo: TIPOS_INTIMACAO.has(tipo) ? tipo : "Publicação",
-                conteudo: snippet.slice(0, 5000),
-                dataDisp: dt.iso,
-                oab_numero,
-                oab_uf,
-                advogado_id,
-                fonte: "dje_tjam",
-                raw: { date: dt.iso, searchTerm: djeTerm, cnj, caderno: cdCaderno },
-              }));
-              djeCount++;
-            }
-          } catch (err) {
-            console.warn(`⚠️ [DJe-TJAM] Erro ${dt.br} caderno=${cdCaderno}:`, err);
           }
+        } catch (err) {
+          console.warn(`⚠️ [DJe-TJAM] Erro na busca:`, err);
         }
       }
 
