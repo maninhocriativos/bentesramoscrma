@@ -16,7 +16,7 @@ WITH andrey AS (
   WHERE cargo = 'Advogado'
     AND oab_numero IS NOT NULL
     AND aprovado = true
-  ORDER BY created_at ASC
+  ORDER BY id ASC
   LIMIT 1
 )
 UPDATE public.intimacoes i
