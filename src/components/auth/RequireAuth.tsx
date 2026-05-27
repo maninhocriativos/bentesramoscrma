@@ -13,9 +13,10 @@ const ROLE_RULES: Record<string, (p: ReturnType<typeof usePerfil>) => boolean> =
   'conferencia-extratos': p => p.canAccessFinanceiro,
   'processos':          p => p.canAccessProcessos,
   'intimacoes':         p => p.canAccessProcessos,
-  'leads':              p => p.canAccessLeads,
-  'meta-leads':         p => p.canAccessLeads,
-  'dashboard':          p => p.canAccessDashboard,
+  'leads':               p => p.canAccessLeads,
+  'meta-leads':          p => p.canAccessLeads,
+  // NÃO adicionar 'dashboard' aqui — rota de fallback para todos os usuários
+  // autenticados. Bloqueá-la causa loop infinito de redirect.
 };
 
 export default function RequireAuth() {

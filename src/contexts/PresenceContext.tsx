@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef, Re
 import { supabase } from '@/integrations/supabase/client';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { useAuth } from '@/hooks/useAuth';
-import { usePerfil } from '@/hooks/usePerfil';
+import { usePerfil } from '@/contexts/PerfilContext';
 
 interface TeamMember {
   id: string;
@@ -10,6 +10,7 @@ interface TeamMember {
   sobrenome: string | null;
   cargo: string | null;
   email: string | null;
+  last_seen_at: string | null;
 }
 
 interface PresenceEntry {
@@ -44,6 +45,13 @@ export function usePresence() {
   return useContext(PresenceContext);
 }
 
+// Considera online se last_seen_at for há menos de 10 minutos
+const ONLINE_THRESHOLD_MS = 10 * 60 * 1000;
+function isRecentlySeen(lastSeenAt: string | null): boolean {
+  if (!lastSeenAt) return false;
+  return Date.now() - new Date(lastSeenAt).getTime() < ONLINE_THRESHOLD_MS;
+}
+
 export function PresenceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { fullName } = usePerfil();
@@ -53,16 +61,40 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const userNameRef = useRef<string>('Usuário');
   userNameRef.current = fullName || user?.email?.split('@')[0] || 'Usuário';
 
-  // Carrega membros da equipe uma vez
-  useEffect(() => {
+  // Carrega membros da equipe (inclui last_seen_at para presença por heartbeat)
+  const fetchTeam = useCallback(() => {
     supabase
       .from('perfis')
-      .select('id, nome, sobrenome, cargo, email')
+      .select('id, nome, sobrenome, cargo, email, last_seen_at')
       .eq('aprovado', true)
       .then(({ data }) => { if (data) setTeamMembers(data as TeamMember[]); });
   }, []);
 
-  // Canal de presença — vive enquanto o usuário estiver logado (AppLayout montado)
+  useEffect(() => {
+    fetchTeam();
+    // Re-fetch da lista a cada 3 minutos para atualizar last_seen_at dos membros
+    const interval = setInterval(fetchTeam, 3 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [fetchTeam]);
+
+  // Heartbeat: atualiza last_seen_at no banco a cada 3 minutos + imediatamente ao logar
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const updateLastSeen = () => {
+      supabase
+        .from('perfis')
+        .update({ last_seen_at: new Date().toISOString() } as any)
+        .eq('id', user.id)
+        .then(() => {});
+    };
+
+    updateLastSeen(); // imediato ao montar
+    const heartbeat = setInterval(updateLastSeen, 3 * 60 * 1000);
+    return () => clearInterval(heartbeat);
+  }, [user?.id]);
+
+  // Canal de presença Realtime — para updates imediatos (join/leave)
   useEffect(() => {
     if (!user?.id) return;
 
@@ -85,14 +117,16 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     ch
       .on('presence', { event: 'sync' }, applySync)
       .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-        if (!newPresences?.length) return;
-        const p = newPresences[0] as any;
+        const presArr = newPresences as any[];
+        if (!presArr?.length) return;
+        const p = presArr[0] as any;
         setOnlineTeam(prev => ({
           ...prev,
           [key]: { online: true, currentChat: p.currentChat, userName: p.userName || 'Usuário' },
         }));
       })
       .on('presence', { event: 'leave' }, ({ key }) => {
+        // Não marca offline imediatamente — deixa o heartbeat (last_seen_at) decidir
         setOnlineTeam(prev => {
           if (!prev[key]) return prev;
           return { ...prev, [key]: { ...prev[key], online: false } };
@@ -124,26 +158,29 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const isTeamMemberOnline = useCallback((id: string) =>
-    onlineTeam[id]?.online || false
-  , [onlineTeam]);
+  // Online = Realtime ativo OU last_seen_at nos últimos 10 minutos
+  const isTeamMemberOnline = useCallback((id: string) => {
+    if (onlineTeam[id]?.online) return true;
+    const member = teamMembers.find(m => m.id === id);
+    return isRecentlySeen(member?.last_seen_at ?? null);
+  }, [onlineTeam, teamMembers]);
 
   const getTeamMemberChat = useCallback((id: string) =>
     onlineTeam[id]?.currentChat
   , [onlineTeam]);
 
   const getOnlineCount = useCallback(() =>
-    Object.values(onlineTeam).filter(m => m.online).length
-  , [onlineTeam]);
+    teamMembers.filter(m => isTeamMemberOnline(m.id)).length
+  , [teamMembers, isTeamMemberOnline]);
 
   const getTeamWithStatus = useCallback((): TeamMemberWithStatus[] =>
     teamMembers.map(m => ({
       ...m,
-      online: onlineTeam[m.id]?.online || false,
+      online: isTeamMemberOnline(m.id),
       currentChat: onlineTeam[m.id]?.currentChat,
       fullName: [m.nome, m.sobrenome].filter(Boolean).join(' ') || m.email || 'Usuário',
     }))
-  , [teamMembers, onlineTeam]);
+  , [teamMembers, isTeamMemberOnline, onlineTeam]);
 
   return (
     <PresenceContext.Provider value={{ setCurrentChat, getTeamWithStatus, getOnlineCount, isTeamMemberOnline, getTeamMemberChat }}>
