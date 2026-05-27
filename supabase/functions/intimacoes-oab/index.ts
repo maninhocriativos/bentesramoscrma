@@ -484,6 +484,222 @@ serve(async (req) => {
       console.log(`📋 [V1] ${v1Count} publicações no Diário Oficial`);
     }
 
+    // ── Estratégia 5: DataJud CNJ — dados quase em tempo real do tribunal ────
+    // O DataJud é a base oficial do CNJ atualizada diretamente pelos tribunais,
+    // independente do ciclo de indexação do Escavador.
+    try {
+      const datajudKey = Deno.env.get("DATAJUD_API_KEY")
+        ?? "cDZHYzlZa0JadVREZDJCendFbzFob2s6SDJmQnRuMHFmSW0tWXZnWGpYcU1JZw==";
+
+      // Mapeia UF do OAB para o índice DataJud. Ex: AM → api-publica-tjam
+      const tjIndex = `api-publica-tj${oab_uf.toLowerCase()}`;
+
+      const djBody = {
+        query: {
+          bool: {
+            must: [
+              {
+                nested: {
+                  path: "partes",
+                  query: {
+                    nested: {
+                      path: "partes.advogados",
+                      query: {
+                        bool: {
+                          must: [
+                            { term: { "partes.advogados.OABNumero": oab_numero } },
+                            { term: { "partes.advogados.OABEstado": oab_uf } },
+                          ],
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              {
+                range: { dataHoraUltimaAtualizacao: { gte: `now-90d` } },
+              },
+            ],
+          },
+        },
+        size: 100,
+        _source: [
+          "numeroProcesso", "movimentos", "classeProcessual",
+          "tribunal", "dataHoraUltimaAtualizacao",
+        ],
+        sort: [{ dataHoraUltimaAtualizacao: { order: "desc" } }],
+      };
+
+      const djResp = await fetch(
+        `https://api-publica.datajud.cnj.jus.br/${tjIndex}/_search`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `ApiKey ${datajudKey}`,
+          },
+          body: JSON.stringify(djBody),
+          signal: AbortSignal.timeout(15000),
+        }
+      );
+
+      if (!djResp.ok) {
+        const errTxt = await djResp.text().catch(() => "");
+        console.warn(`⚠️ [DataJud] HTTP ${djResp.status}: ${errTxt.slice(0, 200)}`);
+      } else {
+        const djData = await djResp.json();
+        const hits: any[] = djData?.hits?.hits ?? [];
+        let djCount = 0;
+
+        for (const hit of hits) {
+          const proc = hit._source;
+          const cnj = (proc.numeroProcesso as string) ?? "";
+          const procTribunal = proc.tribunal?.sigla ?? oab_uf;
+          const classeNome = proc.classeProcessual?.nome ?? "";
+
+          for (const mov of (proc.movimentos as any[]) ?? []) {
+            const movNome = String(mov.nome ?? "").toLowerCase();
+            const movData = String(mov.dataHora ?? "").split("T")[0];
+
+            if (movData && movData < CUTOFF) continue;
+
+            const isIntimacao =
+              movNome.includes("intima") ||
+              movNome.includes("cita") ||
+              movNome.includes("notifica") ||
+              movNome.includes("publica");
+            if (!isIntimacao) continue;
+
+            const complemento = ((mov.complementosTabelados as any[]) ?? [])
+              .map((c: any) => c.valor ?? "")
+              .filter(Boolean)
+              .join(" | ");
+            const conteudo = `${mov.nome ?? ""} ${complemento}`.trim();
+            const tipo = classifyMovimento(conteudo, mov.nome ?? "");
+
+            intimacoes.push(makeItem({
+              cnj,
+              titulo: classeNome || cnj,
+              tribunal: procTribunal,
+              tipo: TIPOS_INTIMACAO.has(tipo) ? tipo : "Intimação",
+              conteudo,
+              dataDisp: movData || null,
+              oab_numero,
+              oab_uf,
+              advogado_id,
+              fonte: "datajud_cnj",
+              raw: { nome: mov.nome, dataHora: mov.dataHora, cnj },
+            }));
+            djCount++;
+          }
+        }
+
+        console.log(`📋 [DataJud] ${djCount} movimentos | ${hits.length} processos | índice: ${tjIndex}`);
+      }
+    } catch (e) {
+      console.warn("⚠️ [DataJud] Erro:", e);
+    }
+
+    // ── Estratégia 6: DJe TJAM direto via ESAJ ──────────────────────────────
+    // Acessa o portal público do TJAM para publicações do dia atual e dos 2
+    // dias úteis anteriores — cobrindo exatamente o gap do Escavador (≈2-3 dias).
+    try {
+      // Monta lista dos últimos 3 dias úteis
+      const djesForDates: Array<{ iso: string; br: string }> = [];
+      for (let d = 0; d <= 5 && djesForDates.length < 3; d++) {
+        const dt = new Date();
+        dt.setDate(dt.getDate() - d);
+        if (dt.getDay() === 0 || dt.getDay() === 6) continue; // pula fds
+        const iso = dt.toISOString().split("T")[0];
+        if (iso < CUTOFF) break;
+        djesForDates.push({
+          iso,
+          br: `${String(dt.getDate()).padStart(2, "0")}/${String(dt.getMonth() + 1).padStart(2, "0")}/${dt.getFullYear()}`,
+        });
+      }
+
+      // Termo de busca: primeiros dois nomes do advogado OU OAB
+      const djeTerm = advogadoNome
+        ? advogadoNome.split(" ").slice(0, 2).join(" ")
+        : `OAB/${oab_uf} ${oab_numero}`;
+
+      let djeCount = 0;
+
+      for (const dt of djesForDates) {
+        try {
+          // URL padrão ESAJ para DJe caderno judicial
+          const djeUrl =
+            `https://consultasaj.tjam.jus.br/cdjpublico/listaPublicacoesDetalhadas.do` +
+            `?cdCaderno=2&dtDiario=${encodeURIComponent(dt.br)}` +
+            `&nmAdvogado=${encodeURIComponent(djeTerm)}&nuSeqpagina=1`;
+
+          const djeResp = await fetch(djeUrl, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+              "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+              "Accept-Language": "pt-BR,pt;q=0.9",
+            },
+            signal: AbortSignal.timeout(12000),
+          });
+
+          console.log(`🔎 [DJe-TJAM] ${dt.br} → HTTP ${djeResp.status}`);
+          if (!djeResp.ok) continue;
+
+          const html = await djeResp.text();
+
+          // Sem resultado — vários textos possíveis
+          if (
+            html.includes("Nenhuma publicação") ||
+            html.includes("nenhum resultado") ||
+            html.length < 1000
+          ) {
+            console.log(`📋 [DJe-TJAM] ${dt.br} sem publicações`);
+            continue;
+          }
+
+          // Remove tags HTML para trabalhar com texto puro
+          const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+
+          // Encontra CNJ numbers no texto
+          const cnjRe = /\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/g;
+          const allCnjs = [...new Set([...text.matchAll(cnjRe)].map(m => m[0]))];
+          console.log(`📋 [DJe-TJAM] ${dt.br}: ${allCnjs.length} CNJs encontrados`);
+
+          const seenCnj = new Set<string>();
+          for (const cnj of allCnjs) {
+            if (seenCnj.has(cnj)) continue;
+            seenCnj.add(cnj);
+
+            // Extrai ~2000 chars em torno do CNJ como conteúdo da publicação
+            const idx = text.indexOf(cnj);
+            const snippet = text.slice(Math.max(0, idx - 200), idx + 2000).trim();
+            const tipo = classifyMovimento(snippet, "Publicação");
+
+            intimacoes.push(makeItem({
+              cnj,
+              titulo: `DJe TJAM ${dt.br}`,
+              tribunal: "TJAM",
+              tipo: TIPOS_INTIMACAO.has(tipo) ? tipo : "Publicação",
+              conteudo: snippet.slice(0, 5000),
+              dataDisp: dt.iso,
+              oab_numero,
+              oab_uf,
+              advogado_id,
+              fonte: "dje_tjam",
+              raw: { date: dt.iso, searchTerm: djeTerm, cnj },
+            }));
+            djeCount++;
+          }
+        } catch (err) {
+          console.warn(`⚠️ [DJe-TJAM] Erro ${dt.br}:`, err);
+        }
+      }
+
+      console.log(`📋 [DJe-TJAM] Total: ${djeCount} publicações diretas do DJe`);
+    } catch (e) {
+      console.warn("⚠️ [DJe-TJAM] Erro geral:", e);
+    }
+
     // Contagem de publicações de hoje encontradas pelas APIs
     const todayStr = new Date().toISOString().split("T")[0];
     const foundToday = intimacoes.filter(i => (i.data_disponibilizacao || "").startsWith(todayStr)).length;
