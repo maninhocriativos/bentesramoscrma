@@ -2163,24 +2163,34 @@ const ManyChatInboxContent = () => {
                             </p>
                           )}
                         </div>
-                        {attendingNome && (
-                          <div className="flex items-center gap-1 mt-[2px] overflow-hidden">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                            <p className="text-[10px] font-semibold text-emerald-400 truncate leading-tight">
-                              {attendingNome.split(' ')[0]} atendendo
-                            </p>
-                          </div>
-                        )}
                       </div>
                       <div className="w-[76px] min-w-[76px] shrink-0 flex flex-col items-end justify-between gap-1">
                         <span className={`text-[12px] leading-tight whitespace-nowrap text-right ${isUnreadVisual ? "text-[#25D366] font-semibold" : themeClasses.secondaryText}`}>{subscriber.ultima_interacao ? formatLastMessageTime(subscriber.ultima_interacao) : ""}</span>
-                        <div className="flex items-center justify-end gap-1.5 min-h-[20px] w-full">
-                          {hasUnread ? (
-                            <span className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center shadow-sm">{unreadCount > 99 ? "99+" : unreadCount}</span>
-                          ) : hasUnreadHint ? (
-                            <span className="h-[9px] w-[9px] rounded-full bg-[#25D366]" />
-                          ) : null}
-                        </div>
+                        {/* Badge fixo: quem está atendendo agora */}
+                        {attendingNome ? (
+                          <span className="flex items-center gap-1 bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold px-1.5 py-[3px] rounded-full leading-none whitespace-nowrap border border-emerald-500/30">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                            {attendingNome.split(' ')[0]}
+                          </span>
+                        ) : (
+                          <div className="flex items-center justify-end gap-1.5 min-h-[20px] w-full">
+                            {hasUnread ? (
+                              <span className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center shadow-sm">{unreadCount > 99 ? "99+" : unreadCount}</span>
+                            ) : hasUnreadHint ? (
+                              <span className="h-[9px] w-[9px] rounded-full bg-[#25D366]" />
+                            ) : null}
+                          </div>
+                        )}
+                        {/* Quando há badge de atendente E mensagens não lidas, mostra badge abaixo */}
+                        {attendingNome && (hasUnread || hasUnreadHint) && (
+                          <div className="flex items-center justify-end gap-1.5 w-full">
+                            {hasUnread ? (
+                              <span className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-bold flex items-center justify-center shadow-sm">{unreadCount > 99 ? "99+" : unreadCount}</span>
+                            ) : (
+                              <span className="h-[9px] w-[9px] rounded-full bg-[#25D366]" />
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
