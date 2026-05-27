@@ -449,8 +449,11 @@ serve(async (req) => {
     //   106   = Intimação           |  108 = Notificação
     //   11010 = Intimação por Carta |  11012 = Citação por Edital
     try {
-      const datajudKey = Deno.env.get("DATAJUD_API_KEY")
+      const datajudKeyEnv = Deno.env.get("DATAJUD_API_KEY");
+      const datajudKey = datajudKeyEnv
         ?? "cDZHYzlZa0JadVREZDJCendFbzFob2s6SDJmQnRuMHFmSW0tWXZnWGpYcU1JZw==";
+      // Log para diagnóstico: mostra se a env var está definida
+      console.log(`🔑 [DataJud] chave: ${datajudKeyEnv ? "DATAJUD_API_KEY definida (" + datajudKey.slice(0, 8) + "...)" : "usando fallback hardcoded (vai falhar 401)"}`);
 
       const tjIndex = `api-publica-tj${oab_uf.toLowerCase()}`;
 
