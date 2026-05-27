@@ -695,12 +695,13 @@ serve(async (req) => {
       console.warn("⚠️ [DJe-TJAM] Erro geral:", e);
     }
 
-    // ── Estratégia 7: JusBrasil DJe — agrega DJe de todos os tribunais BR ────
-    // JusBrasil indexa publicações de praticamente todos os tribunais com
-    // latência de horas (muito mais rápido que o Escavador). Acesso público,
-    // sem autenticação. Complementa os dados do TJAM com outros tribunais.
+    // ── Estratégia 7: JusBrasil DJe — agrega DJe de múltiplos tribunais ────────
+    // JusBrasil indexa DJAM + TRT-11 + outros tribunais.
+    // Estrutura de dados: Apollo GraphQL embutido em __NEXT_DATA__ →
+    //   ROOT_QUERY.root.searchHaystackSerp({...}).content.components[].components[]
+    //     .fields: { url, id, date (ms), title, author.name, body (snippet texto) }
+    // Nota: indexação do DJAM pode ter atraso de dias a semanas vs portal oficial.
     try {
-      // Termos de busca: nome completo primeiro, OAB como fallback
       const jbTerms = advogadoNome
         ? [advogadoNome, `OAB/${oab_uf} ${oab_numero}`]
         : [`OAB/${oab_uf} ${oab_numero}`];
@@ -710,8 +711,8 @@ serve(async (req) => {
       for (const term of jbTerms) {
         try {
           const jbUrl =
-            `https://www.jusbrasil.com.br/diarios/busca/?` +
-            `q=${encodeURIComponent(term)}&periodo=semana`;
+            `https://www.jusbrasil.com.br/diarios/busca?` +
+            `q=${encodeURIComponent(term)}&ordenacao=data`;
 
           const jbResp = await fetch(jbUrl, {
             headers: {
@@ -730,94 +731,83 @@ serve(async (req) => {
 
           const html = await jbResp.text();
 
-          // 1) Tenta JSON embutido pelo Next.js (__NEXT_DATA__)
           const nextMatch = html.match(
             /<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i
           );
-          if (nextMatch) {
-            try {
-              const pageData = JSON.parse(nextMatch[1]);
-              const results: any[] =
-                pageData?.props?.pageProps?.searchResults ??
-                pageData?.props?.pageProps?.results ??
-                pageData?.props?.pageProps?.diarios ??
-                [];
-
-              for (const item of results) {
-                const conteudo = item.texto ?? item.content ?? item.snippet ?? "";
-                const titulo =
-                  item.titulo ?? item.title ?? item.diario ?? "Publicação JusBrasil";
-                const dataRaw =
-                  item.data ?? item.date ?? item.dataPublicacao ?? "";
-                let dataDisp: string | null = null;
-                if (dataRaw) {
-                  const d = new Date(dataRaw);
-                  if (!isNaN(d.getTime())) dataDisp = d.toISOString().split("T")[0];
-                }
-                if (dataDisp && dataDisp < CUTOFF) continue;
-
-                const cnjMatch = conteudo.match(
-                  /(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/
-                );
-                const tipo = classifyMovimento(conteudo, titulo);
-
-                intimacoes.push(makeItem({
-                  cnj: cnjMatch?.[1] ?? "",
-                  titulo,
-                  tribunal: item.tribunal ?? item.sigla ?? "",
-                  tipo: TIPOS_INTIMACAO.has(tipo) ? tipo : "Publicação",
-                  conteudo: conteudo.slice(0, 5000),
-                  dataDisp,
-                  oab_numero, oab_uf, advogado_id,
-                  fonte: "jusbrasil",
-                  raw: { term, titulo, dataRaw },
-                }));
-                jbCount++;
-              }
-            } catch (_) { /* JSON mal-formado — usa fallback HTML */ }
+          if (!nextMatch) {
+            console.warn("⚠️ [JusBrasil] __NEXT_DATA__ não encontrado");
+            continue;
           }
 
-          // 2) Fallback: extrai CNJ diretamente do HTML
-          if (jbCount === 0) {
-            const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-            const cnjRe = /\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/g;
-            const allCnjs = [...new Set([...text.matchAll(cnjRe)].map(m => m[0]))];
+          const pageData = JSON.parse(nextMatch[1]);
+          // Navega até a raiz Apollo
+          const apolloRoot =
+            pageData?.props?.pageProps?.__APOLLO_STATE__?.ROOT_QUERY?.root ?? {};
 
-            // Tenta extrair a data mais próxima no texto
-            const brDateRe = /(\d{2})\/(\d{2})\/(\d{4})/;
-            const brDateMatch = text.match(brDateRe);
+          // Encontra a chave searchHaystackSerp (contém os parâmetros da busca)
+          const serpKey = Object.keys(apolloRoot).find(k =>
+            k.includes("searchHaystackSerp")
+          );
+          if (!serpKey) {
+            console.warn("⚠️ [JusBrasil] serpKey não encontrado");
+            continue;
+          }
+
+          const allItems: any[] = (
+            apolloRoot[serpKey]?.content?.components ?? []
+          ).flatMap((g: any) => g.components ?? []);
+
+          console.log(`🔎 [JusBrasil] "${term}" → ${allItems.length} itens`);
+
+          for (const item of allItems) {
+            const f = item.fields ?? {};
+            // date é Unix timestamp em ms
+            const dateMs = f.date;
             let dataDisp: string | null = null;
-            if (brDateMatch) {
-              dataDisp = `${brDateMatch[3]}-${brDateMatch[2]}-${brDateMatch[1]}`;
-              if (dataDisp < CUTOFF) dataDisp = null;
+            if (dateMs) {
+              const d = new Date(dateMs);
+              if (!isNaN(d.getTime())) dataDisp = d.toISOString().split("T")[0];
             }
+            if (dataDisp && dataDisp < CUTOFF) continue;
 
-            const seenCnj = new Set<string>();
-            for (const cnj of allCnjs) {
-              if (seenCnj.has(cnj)) continue;
-              seenCnj.add(cnj);
+            // body contém o snippet do texto (com tags HTML)
+            const conteudo = (f.body ?? f.snippet ?? "")
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+            const titulo = (f.title ?? "")
+              .replace(/<[^>]+>/g, "")
+              .trim() || "Publicação JusBrasil";
+            const tribunal =
+              f.author?.name ?? f.tribunal ?? "";
 
-              const idx = text.indexOf(cnj);
-              const snippet = text.slice(Math.max(0, idx - 150), idx + 2000).trim();
-              const tipo = classifyMovimento(snippet, "Publicação");
+            // CNJ pode estar parcialmente mascarado (ex: XXXXX-56.2026.8.04.0001)
+            // Tenta capturar mesmo com prefixo mascarado
+            const cnjFull = conteudo.match(
+              /(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/
+            );
+            const cnjPartial = conteudo.match(
+              /[Xx\d]{5,7}-(\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/
+            );
+            const cnj = cnjFull?.[1] ?? (cnjPartial ? `?????-${cnjPartial[1]}` : "");
 
-              intimacoes.push(makeItem({
-                cnj,
-                titulo: "Publicação JusBrasil",
-                tribunal: "",
-                tipo: TIPOS_INTIMACAO.has(tipo) ? tipo : "Publicação",
-                conteudo: snippet.slice(0, 5000),
-                dataDisp,
-                oab_numero, oab_uf, advogado_id,
-                fonte: "jusbrasil",
-                raw: { term, cnj },
-              }));
-              jbCount++;
-            }
+            const tipo = classifyMovimento(conteudo, titulo);
+
+            intimacoes.push(makeItem({
+              cnj,
+              titulo,
+              tribunal,
+              tipo: TIPOS_INTIMACAO.has(tipo) ? tipo : "Publicação",
+              conteudo: conteudo.slice(0, 5000),
+              dataDisp,
+              oab_numero, oab_uf, advogado_id,
+              fonte: "jusbrasil",
+              raw: { term, titulo, url: f.url, dateMs },
+            }));
+            jbCount++;
           }
 
-          // Se encontrou resultados, não repete com o próximo termo
-          if (jbCount > 0) break;
+          if (jbCount > 0) break; // não repete com próximo termo
         } catch (err) {
           console.warn(`⚠️ [JusBrasil] Erro "${term}":`, err);
         }
