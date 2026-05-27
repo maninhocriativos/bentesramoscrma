@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useMemo, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -149,8 +149,11 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
   const canAccessTarefas    = true;
   const canAccessFinanceiro = isAdmin || isGerente;
 
-  // Admins always bypass per-page restrictions
+  // Admins always bypass per-page restrictions.
+  // Durante loading, retorna true para não bloquear prematuramente.
+  // Após loading: se não há entrada na tabela para a página, permite acesso (opt-out).
   const canAccessPage = (pageId: string): boolean => {
+    if (loading) return true;
     if (isAdmin) return true;
     return pagePermissions[pageId] ?? true;
   };
@@ -158,14 +161,25 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
   const cargo    = perfil?.cargo || (roles[0] as string) || 'Secretaria';
   const fullName = perfil?.nome ? `${perfil.nome}${perfil.sobrenome ? ' ' + perfil.sobrenome : ''}` : null;
 
+  // Memoiza o value para evitar re-renders em cascata em todos os consumers
+  // quando qualquer estado do PerfilProvider muda
+  const value = useMemo<PerfilContextValue>(() => ({
+    perfil, loading, cargo, roles,
+    isAdmin, isGerente, isAdvogado, isSecretaria, isEstagiario,
+    canDelete, canAccessSettings, canAccessProcessos, canAccessLeads,
+    canAccessDashboard, canAccessAgenda, canAccessTarefas, canAccessFinanceiro,
+    needsOnboarding, fullName, pagePermissions, canAccessPage, updatePerfil, refetch,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [
+    perfil, loading, cargo, roles,
+    isAdmin, isGerente, isAdvogado, isSecretaria, isEstagiario,
+    canDelete, canAccessSettings, canAccessProcessos, canAccessLeads,
+    canAccessDashboard, canAccessAgenda, canAccessTarefas, canAccessFinanceiro,
+    needsOnboarding, fullName, pagePermissions,
+  ]);
+
   return (
-    <PerfilContext.Provider value={{
-      perfil, loading, cargo, roles,
-      isAdmin, isGerente, isAdvogado, isSecretaria, isEstagiario,
-      canDelete, canAccessSettings, canAccessProcessos, canAccessLeads,
-      canAccessDashboard, canAccessAgenda, canAccessTarefas, canAccessFinanceiro,
-      needsOnboarding, fullName, pagePermissions, canAccessPage, updatePerfil, refetch,
-    }}>
+    <PerfilContext.Provider value={value}>
       {children}
     </PerfilContext.Provider>
   );

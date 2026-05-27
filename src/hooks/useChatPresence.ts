@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
@@ -19,7 +19,13 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
 
+  // Usa ref para o nome — evita recriar o canal toda vez que o nome muda
+  // (o nome pode ser carregado assincronamente pelo PerfilContext)
+  const userNameRef = useRef(currentUserName);
+  userNameRef.current = currentUserName;
+
   useEffect(() => {
+    // Canal só depende do userId — se o userId não mudou, não recria
     if (!currentUserId) return;
 
     const presenceChannel = supabase.channel('chat-presence', {
@@ -34,7 +40,7 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
       .on('presence', { event: 'sync' }, () => {
         const state = presenceChannel.presenceState();
         const users: UserPresence = {};
-        
+
         Object.entries(state).forEach(([key, presences]) => {
           if (presences && presences.length > 0) {
             const presence = presences[0] as any;
@@ -47,15 +53,12 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
             };
           }
         });
-        
+
         setOnlineUsers(users);
-        
-        // Update typing users
+
         const typing = new Set<string>();
         Object.entries(users).forEach(([key, presence]) => {
-          if (presence.typing) {
-            typing.add(key);
-          }
+          if (presence.typing) typing.add(key);
         });
         setTypingUsers(typing);
       })
@@ -78,11 +81,7 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
         setOnlineUsers(prev => {
           const updated = { ...prev };
           if (updated[key]) {
-            updated[key] = {
-              ...updated[key],
-              online: false,
-              lastSeen: new Date().toISOString(),
-            };
+            updated[key] = { ...updated[key], online: false, lastSeen: new Date().toISOString() };
           }
           return updated;
         });
@@ -97,7 +96,7 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
           await presenceChannel.track({
             online_at: new Date().toISOString(),
             typing: false,
-            userName: currentUserName,
+            userName: userNameRef.current, // lê o nome mais recente via ref
           });
         }
       });
@@ -107,17 +106,17 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
     return () => {
       supabase.removeChannel(presenceChannel);
     };
-  }, [currentUserId, currentUserName]);
+  }, [currentUserId]); // ✅ Só depende do ID — nome vai via ref
 
   const setTyping = useCallback(async (isTyping: boolean) => {
     if (channel) {
       await channel.track({
         online_at: new Date().toISOString(),
         typing: isTyping,
-        userName: currentUserName,
+        userName: userNameRef.current,
       });
     }
-  }, [channel, currentUserName]);
+  }, [channel]);
 
   const isOnline = useCallback((subscriberId: string) => {
     return onlineUsers[subscriberId]?.online || false;

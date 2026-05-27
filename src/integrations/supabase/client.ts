@@ -67,7 +67,7 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, 
   },
   realtime: {
     params: {
-      eventsPerSecond: 2,
+      eventsPerSecond: 10,
     },
   },
   global: {
