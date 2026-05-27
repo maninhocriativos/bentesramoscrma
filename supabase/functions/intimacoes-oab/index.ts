@@ -595,13 +595,18 @@ serve(async (req) => {
       console.warn("⚠️ [DataJud] Erro:", e);
     }
 
-    // ── Estratégia 6: DJe TJAM direto via ESAJ ──────────────────────────────
-    // Acessa o portal público do TJAM para publicações do dia atual e dos 2
-    // dias úteis anteriores — cobrindo exatamente o gap do Escavador (≈2-3 dias).
+    // ── Estratégia 6: DJe TJAM direto via ESAJ cdje ────────────────────────────
+    // Fluxo de sessão obrigatório no ESAJ:
+    //   1. GET /cdje/index.do  → obtém JSESSIONID (cookie) + action do form
+    //   2. POST /cdje/consultaAvancada.do;jsessionid=XXX → busca por nome no DJe
+    // Cadernos: 2 = Judiciário Capital | 3 = Judiciário Interior
+    // Cobre hoje + 2 dias úteis anteriores = gap do Escavador (≈2-3 dias).
     try {
+      const ESAJ_BASE = "https://consultasaj.tjam.jus.br";
+
       // Monta lista dos últimos 3 dias úteis
       const djesForDates: Array<{ iso: string; br: string }> = [];
-      for (let d = 0; d <= 5 && djesForDates.length < 3; d++) {
+      for (let d = 0; d <= 7 && djesForDates.length < 3; d++) {
         const dt = new Date();
         dt.setDate(dt.getDate() - d);
         if (dt.getDay() === 0 || dt.getDay() === 6) continue; // pula fds
@@ -620,77 +625,150 @@ serve(async (req) => {
 
       let djeCount = 0;
 
+      // ── Passo 1: GET index.do → JSESSIONID + formAction ──────────────────────
+      let jsessionId = "";
+      let consultaUrl = `${ESAJ_BASE}/cdje/consultaAvancada.do`;
+
+      try {
+        const indexResp = await fetch(`${ESAJ_BASE}/cdje/index.do`, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
+            "Accept-Language": "pt-BR,pt;q=0.9",
+          },
+          redirect: "follow",
+          signal: AbortSignal.timeout(12000),
+        });
+
+        console.log(`🔎 [DJe-TJAM] GET index.do → HTTP ${indexResp.status}`);
+
+        if (indexResp.ok) {
+          // Extrai JSESSIONID do header Set-Cookie
+          const setCookieHeader = indexResp.headers.get("set-cookie") ?? "";
+          const jMatch = setCookieHeader.match(/JSESSIONID=([^;,\s]+)/i);
+          jsessionId = jMatch?.[1] ?? "";
+
+          const indexHtml = await indexResp.text();
+
+          // Extrai action do formulário de busca avançada
+          const actionMatch = indexHtml.match(/action=["']([^"']*consultaAvancada[^"']*)["']/i);
+          if (actionMatch) {
+            const rawAction = actionMatch[1]
+              .replace(/&amp;/g, "&")
+              .replace(/&#59;/g, ";");
+            consultaUrl = rawAction.startsWith("http")
+              ? rawAction
+              : `${ESAJ_BASE}${rawAction.startsWith("/") ? rawAction : `/cdje/${rawAction}`}`;
+          } else if (jsessionId) {
+            // Se não encontrou action no HTML, constrói manualmente com jsessionid na URL
+            consultaUrl = `${ESAJ_BASE}/cdje/consultaAvancada.do;jsessionid=${jsessionId}`;
+          }
+
+          console.log(`🔎 [DJe-TJAM] JSESSIONID=${jsessionId ? "✓" : "✗"} | consultaUrl=${consultaUrl}`);
+        }
+      } catch (initErr) {
+        console.warn("⚠️ [DJe-TJAM] Erro no GET index.do:", initErr);
+        // Continua sem sessão — muitos tribunais permitem acesso sem cookie
+      }
+
+      // ── Passo 2: POST consultaAvancada.do por data e caderno ─────────────────
+      // Cadernos: 2 = Judiciário Capital, 3 = Judiciário Interior
+      const CADERNOS = [2, 3];
+
       for (const dt of djesForDates) {
-        try {
-          // URL padrão ESAJ para DJe caderno judicial
-          const djeUrl =
-            `https://consultasaj.tjam.jus.br/cdjpublico/listaPublicacoesDetalhadas.do` +
-            `?cdCaderno=2&dtDiario=${encodeURIComponent(dt.br)}` +
-            `&nmAdvogado=${encodeURIComponent(djeTerm)}&nuSeqpagina=1`;
+        for (const cdCaderno of CADERNOS) {
+          try {
+            const formData = new URLSearchParams({
+              "dadosConsulta.pesquisaLivre": djeTerm,
+              "dadosConsulta.dtInicio": dt.br,
+              "dadosConsulta.dtFim": dt.br,
+              "dadosConsulta.cdCaderno": String(cdCaderno),
+              "pagina": "1",
+            });
 
-          const djeResp = await fetch(djeUrl, {
-            headers: {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-              "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
-              "Accept-Language": "pt-BR,pt;q=0.9",
-            },
-            signal: AbortSignal.timeout(12000),
-          });
+            const cookieHeader: Record<string, string> = jsessionId
+              ? { "Cookie": `JSESSIONID=${jsessionId}` }
+              : {};
 
-          console.log(`🔎 [DJe-TJAM] ${dt.br} → HTTP ${djeResp.status}`);
-          if (!djeResp.ok) continue;
+            const postResp = await fetch(consultaUrl, {
+              method: "POST",
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
+                "Accept-Language": "pt-BR,pt;q=0.9",
+                "Referer": `${ESAJ_BASE}/cdje/index.do`,
+                "Origin": ESAJ_BASE,
+                ...cookieHeader,
+              },
+              body: formData.toString(),
+              redirect: "follow",
+              signal: AbortSignal.timeout(20000),
+            });
 
-          const html = await djeResp.text();
+            const contentLen = parseInt(postResp.headers.get("content-length") ?? "0", 10);
+            console.log(`🔎 [DJe-TJAM] ${dt.br} caderno=${cdCaderno} → HTTP ${postResp.status} (~${Math.round(contentLen / 1024)}KB)`);
 
-          // Sem resultado — vários textos possíveis
-          if (
-            html.includes("Nenhuma publicação") ||
-            html.includes("nenhum resultado") ||
-            html.length < 1000
-          ) {
-            console.log(`📋 [DJe-TJAM] ${dt.br} sem publicações`);
-            continue;
+            if (!postResp.ok) continue;
+
+            const html = await postResp.text();
+
+            // Verifica ausência de resultados
+            if (
+              html.includes("Nenhuma publicação") ||
+              html.includes("Nenhum registro") ||
+              html.includes("nenhum resultado") ||
+              html.length < 2000
+            ) {
+              console.log(`📋 [DJe-TJAM] ${dt.br} caderno=${cdCaderno}: sem publicações`);
+              continue;
+            }
+
+            // Texto puro: remove tags + decodifica entidades básicas
+            const text = html
+              .replace(/<script[\s\S]*?<\/script>/gi, " ")
+              .replace(/<style[\s\S]*?<\/style>/gi, " ")
+              .replace(/<[^>]+>/g, " ")
+              .replace(/&nbsp;/g, " ")
+              .replace(/&amp;/g, "&")
+              .replace(/&lt;/g, "<")
+              .replace(/&gt;/g, ">")
+              .replace(/\s+/g, " ");
+
+            // Extrai todos os CNJs únicos do texto
+            const cnjRe = /\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/g;
+            const allCnjs = [...new Set([...text.matchAll(cnjRe)].map(m => m[0]))];
+            console.log(`📋 [DJe-TJAM] ${dt.br} caderno=${cdCaderno}: ${allCnjs.length} CNJs`);
+
+            for (const cnj of allCnjs) {
+              // Extrai até 2000 chars em torno do CNJ como trecho da publicação
+              const idx = text.indexOf(cnj);
+              const snippet = text.slice(Math.max(0, idx - 300), idx + 2000).trim();
+              const tipo = classifyMovimento(snippet, "Publicação");
+              const cadernoNome = cdCaderno === 2 ? "Capital" : "Interior";
+
+              intimacoes.push(makeItem({
+                cnj,
+                titulo: `DJe TJAM ${dt.br} - Caderno ${cadernoNome}`,
+                tribunal: "TJAM",
+                tipo: TIPOS_INTIMACAO.has(tipo) ? tipo : "Publicação",
+                conteudo: snippet.slice(0, 5000),
+                dataDisp: dt.iso,
+                oab_numero,
+                oab_uf,
+                advogado_id,
+                fonte: "dje_tjam",
+                raw: { date: dt.iso, searchTerm: djeTerm, cnj, caderno: cdCaderno },
+              }));
+              djeCount++;
+            }
+          } catch (err) {
+            console.warn(`⚠️ [DJe-TJAM] Erro ${dt.br} caderno=${cdCaderno}:`, err);
           }
-
-          // Remove tags HTML para trabalhar com texto puro
-          const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-
-          // Encontra CNJ numbers no texto
-          const cnjRe = /\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/g;
-          const allCnjs = [...new Set([...text.matchAll(cnjRe)].map(m => m[0]))];
-          console.log(`📋 [DJe-TJAM] ${dt.br}: ${allCnjs.length} CNJs encontrados`);
-
-          const seenCnj = new Set<string>();
-          for (const cnj of allCnjs) {
-            if (seenCnj.has(cnj)) continue;
-            seenCnj.add(cnj);
-
-            // Extrai ~2000 chars em torno do CNJ como conteúdo da publicação
-            const idx = text.indexOf(cnj);
-            const snippet = text.slice(Math.max(0, idx - 200), idx + 2000).trim();
-            const tipo = classifyMovimento(snippet, "Publicação");
-
-            intimacoes.push(makeItem({
-              cnj,
-              titulo: `DJe TJAM ${dt.br}`,
-              tribunal: "TJAM",
-              tipo: TIPOS_INTIMACAO.has(tipo) ? tipo : "Publicação",
-              conteudo: snippet.slice(0, 5000),
-              dataDisp: dt.iso,
-              oab_numero,
-              oab_uf,
-              advogado_id,
-              fonte: "dje_tjam",
-              raw: { date: dt.iso, searchTerm: djeTerm, cnj },
-            }));
-            djeCount++;
-          }
-        } catch (err) {
-          console.warn(`⚠️ [DJe-TJAM] Erro ${dt.br}:`, err);
         }
       }
 
-      console.log(`📋 [DJe-TJAM] Total: ${djeCount} publicações diretas do DJe`);
+      console.log(`📋 [DJe-TJAM] Total: ${djeCount} publicações diretas do DJe TJAM`);
     } catch (e) {
       console.warn("⚠️ [DJe-TJAM] Erro geral:", e);
     }
