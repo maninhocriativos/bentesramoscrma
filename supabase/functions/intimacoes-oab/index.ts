@@ -117,53 +117,6 @@ serve(async (req) => {
 
     const intimacoes: any[] = [];
 
-    // ── Estratégia 1: processo_movimentacoes do banco (DataJud já sincronizado) ─
-    {
-      const { data: movs } = await supabase
-        .from("processo_movimentacoes")
-        .select(`
-          id, data_movimento, movimento_titulo, movimento_descricao, hash_unico, origem,
-          processos!inner(numero_processo, titulo_acao, tribunal)
-        `)
-        .gte("data_movimento", CUTOFF)
-        .or(
-          "movimento_titulo.ilike.%intima%," +
-          "movimento_titulo.ilike.%cita%," +
-          "movimento_titulo.ilike.%notifica%," +
-          "movimento_titulo.ilike.%publicac%," +
-          "movimento_titulo.ilike.%publicaç%," +
-          "movimento_descricao.ilike.%intima%," +
-          "movimento_descricao.ilike.%cita%," +
-          "movimento_descricao.ilike.%notifica%"
-        )
-        .order("data_movimento", { ascending: false })
-        .limit(500);
-
-      let dbCount = 0;
-      for (const mov of (movs || [])) {
-        const titulo = (mov.movimento_titulo || "") as string;
-        const descricao = (mov.movimento_descricao || "") as string;
-        const tipo = classifyMovimento(descricao, titulo);
-        if (!TIPOS_INTIMACAO.has(tipo)) continue;
-
-        const proc = mov.processos as any;
-        const dataDisp = mov.data_movimento
-          ? (mov.data_movimento as string).split("T")[0] : null;
-
-        intimacoes.push(makeItem({
-          cnj: proc?.numero_processo || "",
-          titulo: proc?.titulo_acao || "",
-          tribunal: proc?.tribunal || "",
-          tipo, conteudo: descricao || titulo, dataDisp,
-          oab_numero, oab_uf, advogado_id,
-          fonte: (mov.origem as string) || "datajud",
-          raw: { hash_unico: mov.hash_unico, titulo },
-        }));
-        dbCount++;
-      }
-      console.log(`📊 [DB] ${dbCount} intimações do banco`);
-    }
-
     if (!ESCAVADOR_API_KEY) {
       console.warn("⚠️ ESCAVADOR_API_KEY não configurada — pulando busca no Escavador");
     } else {
@@ -484,15 +437,27 @@ serve(async (req) => {
       console.log(`📋 [V1] ${v1Count} publicações no Diário Oficial`);
     }
 
-    // ── Estratégia 5: DataJud CNJ — dados quase em tempo real do tribunal ────
-    // O DataJud é a base oficial do CNJ atualizada diretamente pelos tribunais,
-    // independente do ciclo de indexação do Escavador.
+    // ── Estratégia 5: DataJud CNJ — publicações e intimações do DJe ────────────
+    // DataJud é a base oficial do CNJ alimentada pelo próprio tribunal.
+    // Usamos somente movimentos que correspondem a publicações no DJe
+    // ou intimações formais — excluindo atualizações processuais genéricas.
+    //
+    // Códigos CNJ (TPU) relevantes:
+    //   11009 = Publicação no DJe
+    //   60    = Citação
+    //   106   = Intimação
+    //   108   = Notificação
+    //   11010 = Intimação por Carta
+    //   11012 = Citação por Edital
+    // Nomes mapeados em português para match textual quando código não está disponível.
     try {
       const datajudKey = Deno.env.get("DATAJUD_API_KEY")
         ?? "cDZHYzlZa0JadVREZDJCendFbzFob2s6SDJmQnRuMHFmSW0tWXZnWGpYcU1JZw==";
 
-      // Mapeia UF do OAB para o índice DataJud. Ex: AM → api-publica-tjam
       const tjIndex = `api-publica-tj${oab_uf.toLowerCase()}`;
+
+      // Codigos CNJ de publicação no DJe / intimação / citação / notificação
+      const CODIGOS_DJE = new Set([11009, 11010, 11011, 11012, 60, 106, 108, 230]);
 
       const djBody = {
         query: {
@@ -516,9 +481,28 @@ serve(async (req) => {
                   },
                 },
               },
+              // Filtra por processos com movimentos recentes de publicação
               {
-                range: { dataHoraUltimaAtualizacao: { gte: `now-90d` } },
+                nested: {
+                  path: "movimentos",
+                  query: {
+                    bool: {
+                      should: [
+                        // Por código CNJ (mais confiável)
+                        { terms: { "movimentos.codigo": [...CODIGOS_DJE] } },
+                        // Por nome (fallback quando código não corresponde)
+                        { match: { "movimentos.nome": "DJe" } },
+                        { match: { "movimentos.nome": "publicação" } },
+                        { match: { "movimentos.nome": "intimação" } },
+                        { match: { "movimentos.nome": "citação" } },
+                        { match: { "movimentos.nome": "notificação" } },
+                      ],
+                      minimum_should_match: 1,
+                    },
+                  },
+                },
               },
+              { range: { dataHoraUltimaAtualizacao: { gte: "now-90d" } } },
             ],
           },
         },
@@ -551,6 +535,8 @@ serve(async (req) => {
         const hits: any[] = djData?.hits?.hits ?? [];
         let djCount = 0;
 
+        console.log(`🔎 [DataJud] ${hits.length} processos encontrados no ${tjIndex}`);
+
         for (const hit of hits) {
           const proc = hit._source;
           const cnj = (proc.numeroProcesso as string) ?? "";
@@ -558,43 +544,52 @@ serve(async (req) => {
           const classeNome = proc.classeProcessual?.nome ?? "";
 
           for (const mov of (proc.movimentos as any[]) ?? []) {
+            const movCodigo = Number(mov.codigo ?? 0);
             const movNome = String(mov.nome ?? "").toLowerCase();
             const movData = String(mov.dataHora ?? "").split("T")[0];
 
             if (movData && movData < CUTOFF) continue;
 
-            const isIntimacao =
+            // Aceita apenas movimentos de publicação DJe / intimação / citação / notificação
+            const isDjeOuIntimacao =
+              CODIGOS_DJE.has(movCodigo) ||
+              movNome.includes("dje") ||
+              movNome.includes("diário") ||
+              movNome.includes("diario") ||
+              movNome.includes("publicaç") ||
+              movNome.includes("publicac") ||
               movNome.includes("intima") ||
-              movNome.includes("cita") ||
-              movNome.includes("notifica") ||
-              movNome.includes("publica");
-            if (!isIntimacao) continue;
+              movNome.includes("citaç") ||
+              movNome.includes("citac") ||
+              movNome.includes("notifica");
+            if (!isDjeOuIntimacao) continue;
 
-            const complemento = ((mov.complementosTabelados as any[]) ?? [])
-              .map((c: any) => c.valor ?? "")
+            // Monta conteúdo com complemento (pode conter texto do DJe)
+            const complementos = ((mov.complementosTabelados as any[]) ?? [])
+              .map((c: any) => `${c.nome ?? ""}: ${c.valor ?? ""}`.trim())
               .filter(Boolean)
               .join(" | ");
-            const conteudo = `${mov.nome ?? ""} ${complemento}`.trim();
+            const conteudo = [mov.nome, complementos].filter(Boolean).join(" — ");
             const tipo = classifyMovimento(conteudo, mov.nome ?? "");
 
             intimacoes.push(makeItem({
               cnj,
               titulo: classeNome || cnj,
               tribunal: procTribunal,
-              tipo: TIPOS_INTIMACAO.has(tipo) ? tipo : "Intimação",
+              tipo: TIPOS_INTIMACAO.has(tipo) ? tipo : "Publicação",
               conteudo,
               dataDisp: movData || null,
               oab_numero,
               oab_uf,
               advogado_id,
               fonte: "datajud_cnj",
-              raw: { nome: mov.nome, dataHora: mov.dataHora, cnj },
+              raw: { codigo: mov.codigo, nome: mov.nome, dataHora: mov.dataHora, cnj },
             }));
             djCount++;
           }
         }
 
-        console.log(`📋 [DataJud] ${djCount} movimentos | ${hits.length} processos | índice: ${tjIndex}`);
+        console.log(`📋 [DataJud] ${djCount} pub/intimações | ${hits.length} processos | ${tjIndex}`);
       }
     } catch (e) {
       console.warn("⚠️ [DataJud] Erro:", e);
