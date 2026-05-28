@@ -2353,17 +2353,18 @@ const ManyChatInboxContent = () => {
                     );
                   })()}
                 </div>
-                <div className="flex items-center gap-1.5 mt-[3px] min-w-0 overflow-hidden">
+                {/* Linha 2: status + tags — separados para não comprimir */}
+                <div className="flex items-center gap-1.5 mt-[3px] min-w-0 overflow-hidden flex-wrap">
                   <ActivityIndicator subscriber={selectedSubscriber} showText />
                   {isTyping(selectedSubscriber.subscriber_id) && (
                     <span className="text-[11px] text-[#00A884] font-medium animate-pulse shrink-0">digitando...</span>
                   )}
-                  <div className="flex items-center gap-1 overflow-x-auto scrollbar-none shrink-1 min-w-0">
-                    {getSubscriberTags(selectedSubscriber.subscriber_id).slice(0, 3).map(st => st.tag && (
-                      <TagBadge key={st.id} tag={st.tag} reason={st.reason} size="sm" showRemove
-                        onRemove={() => removeTagFromSubscriber(selectedSubscriber.subscriber_id, st.tag_id)} />
-                    ))}
-                  </div>
+                </div>
+                <div className="flex items-center gap-1 mt-[2px] min-w-0 flex-wrap">
+                  {getSubscriberTags(selectedSubscriber.subscriber_id).map(st => st.tag && (
+                    <TagBadge key={st.id} tag={st.tag} reason={st.reason} size="sm" showRemove
+                      onRemove={() => removeTagFromSubscriber(selectedSubscriber.subscriber_id, st.tag_id)} />
+                  ))}
                   <TagSelector
                     subscriberId={selectedSubscriber.subscriber_id}
                     availableTags={availableTags}

@@ -13,14 +13,24 @@ async function tryRefreshToken(): Promise<string | null> {
 
   _refreshPromise = (async () => {
     try {
-      const { data } = await _client!.auth.refreshSession();
-      if (data?.session) return data.session.access_token;
+      // Tenta até 3 vezes com backoff exponencial antes de deslogar
+      // Evita logout inesperado por falha transitória de rede
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const { data } = await _client!.auth.refreshSession();
+          if (data?.session) return data.session.access_token;
+        } catch {
+          // falha de rede — aguarda antes de tentar novamente
+        }
+        if (attempt < 3) {
+          await new Promise(r => setTimeout(r, attempt * 1000));
+        }
+      }
 
-      // Refresh token também expirou → força logout limpo
+      // Só desloga após 3 tentativas falharem
       await _client!.auth.signOut();
       return null;
     } finally {
-      // Libera lock após 5 s para permitir nova tentativa se necessário
       setTimeout(() => { _refreshPromise = null; }, 5000);
     }
   })();
