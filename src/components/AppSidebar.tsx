@@ -1,9 +1,9 @@
-import { 
-  LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft, 
-  DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare, 
-  Sparkles, Webhook, Zap, BookOpen, FormInput, History, FileEdit, Gavel, GraduationCap, Calculator, TrendingUp
+import {
+  LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft,
+  DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare,
+  Sparkles, Webhook, Zap, BookOpen, FormInput, History, FileEdit, Gavel, GraduationCap, Calculator, TrendingUp, LogOut
 } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Sidebar,
   SidebarContent,
@@ -18,6 +18,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { usePerfil } from '@/hooks/usePerfil';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import logo from '@/assets/logo-bentes-ramos.png';
 import { cn } from '@/lib/utils';
@@ -92,8 +93,15 @@ export function AppSidebar() {
     cargo,
     fullName,
   } = usePerfil();
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === 'collapsed';
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/auth');
+  };
 
   const canShow = (visibility: MenuItemVisibility, url: string) => {
     // Check individual page permission first
@@ -193,20 +201,33 @@ export function AppSidebar() {
         isCollapsed && "p-2"
       )}>
         <div className={cn(
-          "flex items-center gap-2.5 rounded-lg bg-sidebar-accent/30 px-3 py-2.5",
+          "flex items-center gap-2 rounded-lg bg-sidebar-accent/30 px-3 py-2.5",
           isCollapsed && "justify-center px-2"
         )}>
           <div className="h-7 w-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
           </div>
           {!isCollapsed && (
-            <div className="flex flex-col min-w-0">
+            <div className="flex flex-col min-w-0 flex-1">
               <span className="text-xs font-medium text-sidebar-foreground truncate">
                 {fullName || 'Usuário'}
               </span>
               <span className="text-[10px] text-primary/80 font-medium">{cargo}</span>
             </div>
           )}
+          {/* Botão de logout — visível em todas as telas */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleSignOut}
+            title="Sair"
+            className={cn(
+              "h-7 w-7 shrink-0 text-sidebar-foreground/60 hover:text-red-500 hover:bg-red-500/10 transition-colors",
+              isCollapsed && "h-8 w-8"
+            )}
+          >
+            <LogOut className="h-3.5 w-3.5" />
+          </Button>
         </div>
       </SidebarFooter>
     </Sidebar>
