@@ -32,11 +32,28 @@ CREATE INDEX IF NOT EXISTS idx_chat_atendimento_log_subscriber
 -- 3. RLS
 ALTER TABLE public.chat_atendimento_log ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Authenticated users can read atendimento log"
-  ON public.chat_atendimento_log FOR SELECT TO authenticated USING (true);
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'chat_atendimento_log' AND policyname = 'Authenticated users can read atendimento log'
+  ) THEN
+    CREATE POLICY "Authenticated users can read atendimento log"
+      ON public.chat_atendimento_log FOR SELECT TO authenticated USING (true);
+  END IF;
+END $$;
 
-CREATE POLICY "Authenticated users can insert atendimento log"
-  ON public.chat_atendimento_log FOR INSERT TO authenticated WITH CHECK (true);
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'chat_atendimento_log' AND policyname = 'Authenticated users can insert atendimento log'
+  ) THEN
+    CREATE POLICY "Authenticated users can insert atendimento log"
+      ON public.chat_atendimento_log FOR INSERT TO authenticated WITH CHECK (true);
+  END IF;
+END $$;
 
--- 4. Realtime para que todos os usuários online vejam novos logs ao vivo
-ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_atendimento_log;
+-- 4. Realtime (idempotente — ignora se já estiver na publicação)
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_atendimento_log;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
