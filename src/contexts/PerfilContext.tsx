@@ -123,6 +123,34 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
     fetchData(userId);
   }, [user?.id]); // ✅ Depende do ID, não do objeto inteiro
 
+  // Escuta mudanças em user_page_permissions para este usuário em tempo real.
+  // Quando o admin alterar permissões, o efeito é imediato sem precisar relogar.
+  useEffect(() => {
+    if (!user?.id) return;
+    const uid = user.id;
+
+    const ch = supabase
+      .channel(`user-perms-${uid}`)
+      .on(
+        'postgres_changes' as any,
+        { event: '*', schema: 'public', table: 'user_page_permissions', filter: `user_id=eq.${uid}` },
+        () => {
+          supabase
+            .from('user_page_permissions' as any)
+            .select('page_id, enabled')
+            .eq('user_id', uid)
+            .then(({ data: rows }) => {
+              const map: Record<string, boolean> = {};
+              for (const p of (rows as any[]) || []) map[p.page_id] = p.enabled;
+              setPagePermissions(map);
+            });
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(ch); };
+  }, [user?.id]);
+
   const updatePerfil = async (data: Partial<Perfil>) => {
     if (!user) return { error: new Error('User not authenticated') };
     const { error } = await supabase.from('perfis').update(data).eq('id', user.id);
