@@ -1,5 +1,10 @@
-import { format, isToday, isYesterday } from 'date-fns';
+import { isToday, isYesterday } from 'date-fns';
+import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
+
+// Fuso horário fixo de Manaus — todos os horários do chat são exibidos
+// neste fuso independente da configuração do dispositivo do usuário.
+const TZ = 'America/Manaus';
 import { ChatSubscriber } from '@/hooks/useChatSubscribers';
 
 /**
@@ -94,43 +99,47 @@ export function getInitials(sub: ChatSubscriber): string {
 }
 
 /**
- * Format message time
+ * Format message time — sempre no fuso de Manaus (UTC-4)
  */
 export function formatMessageTime(dateStr: string): string {
-  return format(new Date(dateStr), "HH:mm");
+  return formatInTimeZone(new Date(dateStr), TZ, 'HH:mm');
 }
 
 /**
- * Format last message time for conversation list
+ * Format last message time for conversation list — sempre no fuso de Manaus
  */
 export function formatLastMessageTime(dateStr: string): string {
   const date = new Date(dateStr);
-  if (isToday(date)) return format(date, "HH:mm");
-  if (isYesterday(date)) return "Ontem";
-  return format(date, "dd/MM/yyyy");
+  const zoned = toZonedTime(date, TZ);
+  if (isToday(zoned)) return formatInTimeZone(date, TZ, 'HH:mm');
+  if (isYesterday(zoned)) return 'Ontem';
+  return formatInTimeZone(date, TZ, 'dd/MM/yyyy');
 }
 
 /**
- * Get date label for message groups
+ * Get date label for message groups — sempre no fuso de Manaus
  */
 export function getDateLabel(msgs: { created_at: string }[], index: number): string | null {
+  const toDate = (s: string) => toZonedTime(new Date(s), TZ);
+
   if (index === 0) {
-    const date = new Date(msgs[0].created_at);
-    if (isToday(date)) return 'HOJE';
-    if (isYesterday(date)) return 'ONTEM';
-    return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }).toUpperCase();
+    const zoned = toDate(msgs[0].created_at);
+    if (isToday(zoned)) return 'HOJE';
+    if (isYesterday(zoned)) return 'ONTEM';
+    return formatInTimeZone(new Date(msgs[0].created_at), TZ, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }).toUpperCase();
   }
-  
-  const currentDate = new Date(msgs[index].created_at).toDateString();
-  const prevDate = new Date(msgs[index - 1].created_at).toDateString();
-  
-  if (currentDate !== prevDate) {
-    const date = new Date(msgs[index].created_at);
-    if (isToday(date)) return 'HOJE';
-    if (isYesterday(date)) return 'ONTEM';
-    return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }).toUpperCase();
+
+  // Compara datas no fuso de Manaus (não UTC)
+  const currentDay = formatInTimeZone(new Date(msgs[index].created_at), TZ, 'yyyy-MM-dd');
+  const prevDay    = formatInTimeZone(new Date(msgs[index - 1].created_at), TZ, 'yyyy-MM-dd');
+
+  if (currentDay !== prevDay) {
+    const zoned = toDate(msgs[index].created_at);
+    if (isToday(zoned)) return 'HOJE';
+    if (isYesterday(zoned)) return 'ONTEM';
+    return formatInTimeZone(new Date(msgs[index].created_at), TZ, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }).toUpperCase();
   }
-  
+
   return null;
 }
 

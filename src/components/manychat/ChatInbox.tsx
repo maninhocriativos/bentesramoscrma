@@ -2564,7 +2564,7 @@ const ManyChatInboxContent = () => {
                       if (item.kind === 'log') {
                         const log = item.l;
                         const hora = formatMessageTime(log.created_at);
-                        const dataPt = new Date(log.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+                        const dataPt = formatInTimeZone(new Date(log.created_at), 'America/Manaus', 'dd/MM/yy');
                         const primeiroNome = (n: string) => n.split(' ')[0];
                         let texto = '';
                         if (log.action === 'primeiro_atendimento') {
