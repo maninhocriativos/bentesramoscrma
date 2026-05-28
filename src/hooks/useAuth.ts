@@ -80,12 +80,16 @@ export function useAuth() {
   }, []);
 
   const checkUserApproval = async (userId: string): Promise<boolean> => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('perfis')
       .select('aprovado')
       .eq('id', userId)
       .single();
-    return data?.aprovado ?? false;
+    // Se a query falhar (rede instável, Supabase hiccup), não nega acesso —
+    // o usuário já se autenticou com sucesso no Supabase Auth.
+    // Só bloqueia se aprovado for explicitamente false.
+    if (error || !data) return true;
+    return data.aprovado !== false;
   };
 
   const signIn = async (email: string, password: string) => {

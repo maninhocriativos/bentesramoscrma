@@ -144,7 +144,7 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
   const canAccessSettings   = isAdmin;
   const canAccessProcessos  = isAdmin || isGerente || isAdvogado || isSecretaria || isEstagiario;
   const canAccessLeads      = isAdmin || isGerente || isAdvogado || isSecretaria || isEstagiario;
-  const canAccessDashboard  = isAdmin || isGerente || isAdvogado || isSecretaria || isEstagiario;
+  const canAccessDashboard  = isAdmin || isGerente || isAdvogado || isSecretaria; // Estagiários → /chat
   const canAccessAgenda     = true;
   const canAccessTarefas    = true;
   const canAccessFinanceiro = isAdmin || isGerente;
