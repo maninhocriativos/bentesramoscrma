@@ -246,33 +246,59 @@ export function TagSelector({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={newTagDialog} onOpenChange={setNewTagDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Criar nova tag</DialogTitle>
+      <Dialog open={newTagDialog} onOpenChange={(o) => { setNewTagDialog(o); if (!o) { setNewTagName(''); setNewTagColor('blue'); } }}>
+        <DialogContent className="sm:max-w-sm p-0 gap-0 overflow-hidden rounded-2xl">
+          <DialogHeader className="px-5 pt-5 pb-3">
+            <DialogTitle className="text-base">Nova tag personalizada</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="tag-name">Nome da tag</Label>
+
+          <div className="px-5 pb-2 space-y-4">
+            {/* Preview ao vivo */}
+            <div className="flex items-center justify-center py-3 rounded-xl bg-muted/40 border border-border/50">
+              {newTagName.trim() ? (
+                <span className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-semibold border',
+                  TAG_COLORS[newTagColor]?.bg,
+                  TAG_COLORS[newTagColor]?.text,
+                  TAG_COLORS[newTagColor]?.border,
+                )}>
+                  <Sparkles className="h-3 w-3" />
+                  {newTagName}
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground/50">pré-visualização da tag</span>
+              )}
+            </div>
+
+            {/* Nome */}
+            <div className="space-y-1.5">
+              <Label htmlFor="tag-name" className="text-xs font-medium text-muted-foreground">Nome</Label>
               <Input
                 id="tag-name"
-                placeholder="Ex: Cliente Premium"
+                placeholder="Ex: Cliente VIP"
                 value={newTagName}
                 onChange={(e) => setNewTagName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && newTagName.trim()) handleCreateTag(); }}
+                className="rounded-xl h-9 text-sm"
+                autoFocus
               />
             </div>
-            <div>
-              <Label>Cor</Label>
-              <div className="flex flex-wrap gap-2 mt-2">
+
+            {/* Cor */}
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground">Cor</Label>
+              <div className="grid grid-cols-6 gap-2">
                 {Object.entries(TAG_COLORS).map(([color, classes]) => (
                   <button
                     key={color}
                     onClick={() => setNewTagColor(color)}
                     className={cn(
-                      'w-7 h-7 rounded-full border-2 transition-all',
+                      'h-8 rounded-lg border-2 transition-all duration-150 hover:scale-105',
                       classes.bg,
                       classes.border,
-                      newTagColor === color && 'ring-2 ring-primary ring-offset-2 scale-110',
+                      newTagColor === color
+                        ? 'ring-2 ring-primary ring-offset-1 scale-105 shadow-sm'
+                        : 'opacity-60 hover:opacity-100',
                     )}
                     title={color}
                   />
@@ -280,12 +306,18 @@ export function TagSelector({
               </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setNewTagDialog(false)}>
+
+          <DialogFooter className="px-5 py-3 border-t border-border/40 gap-2">
+            <Button variant="outline" size="sm" onClick={() => setNewTagDialog(false)} className="rounded-xl flex-1">
               Cancelar
             </Button>
-            <Button onClick={handleCreateTag} disabled={!newTagName.trim() || loading}>
-              Criar
+            <Button
+              size="sm"
+              onClick={handleCreateTag}
+              disabled={!newTagName.trim() || loading}
+              className="rounded-xl flex-1"
+            >
+              {loading ? 'Criando…' : 'Criar tag'}
             </Button>
           </DialogFooter>
         </DialogContent>
