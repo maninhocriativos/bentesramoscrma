@@ -19,10 +19,13 @@ const ROLE_RULES: Record<string, (p: ReturnType<typeof usePerfil>) => boolean> =
   'meta-leads':          p => p.canAccessLeads,
 };
 
-// Rota padrão por cargo quando uma página está bloqueada.
-// Estagiários vão para /chat (não têm dashboard).
-// Demais vão para /dashboard.
-function defaultRedirect(perfil: ReturnType<typeof usePerfil>): string {
+// Rota padrão quando uma página está bloqueada.
+// Ordem de prioridade: /chat → /bem-vindo (fallback universal anti-loop)
+// Nunca redireciona para /dashboard se o próprio dashboard está bloqueado.
+function defaultRedirect(perfil: ReturnType<typeof usePerfil>, blockedPage: string): string {
+  // Se a página bloqueada já é o destino padrão, usa fallback para evitar loop infinito
+  if (blockedPage === 'dashboard') return '/chat';
+  if (blockedPage === 'chat')      return '/bem-vindo';
   return perfil.isEstagiario ? '/chat' : '/dashboard';
 }
 
@@ -45,12 +48,12 @@ export default function RequireAuth() {
   // 1. Checa regra de cargo (admin-only, financeiro-only, etc.)
   const roleRule = ROLE_RULES[pageId];
   if (roleRule && !roleRule(perfil)) {
-    return <Navigate to={defaultRedirect(perfil)} replace />;
+    return <Navigate to={defaultRedirect(perfil, pageId)} replace />;
   }
 
   // 2. Checa permissão individual por página (tabela user_page_permissions)
   if (pageId && !perfil.canAccessPage(pageId)) {
-    return <Navigate to={defaultRedirect(perfil)} replace />;
+    return <Navigate to={defaultRedirect(perfil, pageId)} replace />;
   }
 
   return <Outlet />;
