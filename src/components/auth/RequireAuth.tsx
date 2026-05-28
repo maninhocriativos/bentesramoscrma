@@ -3,9 +3,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePerfil } from "@/contexts/PerfilContext";
 import { AppLoadingScreen } from "@/components/ui/AppLoadingScreen";
 
-// Regras baseadas em cargo — espelham exatamente o AppSidebar
-const ROLE_RULES: Record<string, (p: ReturnType<typeof usePerfil>) => boolean> = {
-  // dashboard bloqueado para Estagiários — redirect vai para /chat (ver abaixo)
+// Regras padrão por cargo — aplicadas SOMENTE quando não há permissão
+// explícita do admin na tabela user_page_permissions.
+// Admin pode sobrescrever qualquer regra via Configurações → Usuários.
+const ROLE_DEFAULTS: Record<string, (p: ReturnType<typeof usePerfil>) => boolean> = {
   'dashboard':            p => p.canAccessDashboard,
   'configuracoes':        p => p.canAccessSettings,
   'historico-acessos':   p => p.canAccessSettings,
@@ -19,14 +20,10 @@ const ROLE_RULES: Record<string, (p: ReturnType<typeof usePerfil>) => boolean> =
   'meta-leads':          p => p.canAccessLeads,
 };
 
-// Rota padrão quando uma página está bloqueada.
-// Ordem de prioridade: /chat → /bem-vindo (fallback universal anti-loop)
-// Nunca redireciona para /dashboard se o próprio dashboard está bloqueado.
 function defaultRedirect(perfil: ReturnType<typeof usePerfil>, blockedPage: string): string {
-  // Se a página bloqueada já é o destino padrão, usa fallback para evitar loop infinito
   if (blockedPage === 'dashboard') return '/chat';
   if (blockedPage === 'chat')      return '/bem-vindo';
-  return perfil.isEstagiario ? '/chat' : '/dashboard';
+  return perfil.canAccessDashboard ? '/dashboard' : '/chat';
 }
 
 export default function RequireAuth() {
@@ -42,17 +39,23 @@ export default function RequireAuth() {
     return <Navigate to="/auth" replace state={{ from: location }} />;
   }
 
-  // Extrai o pageId da rota atual (ex: /financeiro/detalhe → "financeiro")
   const pageId = location.pathname.replace(/^\//, '').split('/')[0];
 
-  // 1. Checa regra de cargo (admin-only, financeiro-only, etc.)
-  const roleRule = ROLE_RULES[pageId];
-  if (roleRule && !roleRule(perfil)) {
+  // Se o admin definiu explicitamente esta página como true para este usuário,
+  // ignora as regras de cargo e permite o acesso.
+  const explicitPermission = perfil.pagePermissions[pageId];
+  if (explicitPermission === true) {
+    return <Outlet />;
+  }
+
+  // Se o admin bloqueou explicitamente → bloqueia
+  if (explicitPermission === false) {
     return <Navigate to={defaultRedirect(perfil, pageId)} replace />;
   }
 
-  // 2. Checa permissão individual por página (tabela user_page_permissions)
-  if (pageId && !perfil.canAccessPage(pageId)) {
+  // Sem permissão explícita: aplica regra padrão por cargo
+  const roleDefault = ROLE_DEFAULTS[pageId];
+  if (roleDefault && !roleDefault(perfil)) {
     return <Navigate to={defaultRedirect(perfil, pageId)} replace />;
   }
 

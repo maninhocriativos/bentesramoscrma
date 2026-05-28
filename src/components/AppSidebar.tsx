@@ -90,6 +90,7 @@ export function AppSidebar() {
     canAccessDashboard,
     canAccessFinanceiro,
     canAccessPage,
+    pagePermissions,
     cargo,
     fullName,
   } = usePerfil();
@@ -104,13 +105,18 @@ export function AppSidebar() {
   };
 
   const canShow = (visibility: MenuItemVisibility, url: string) => {
-    // Check individual page permission first
     const pageId = url.replace(/^\//, '');
+    const explicit = pagePermissions[pageId];
+
+    // Permissão explícita do admin tem prioridade absoluta
+    if (explicit === true)  return true;
+    if (explicit === false) return false;
+
+    // Sem permissão explícita: aplica regra padrão por cargo
     if (!canAccessPage(pageId)) return false;
-    // Then check role-based visibility
-    if (visibility === 'admin-only') return canAccessSettings;
+    if (visibility === 'admin-only')     return canAccessSettings;
     if (visibility === 'processos-only') return canAccessProcessos;
-    if (visibility === 'leads-only') return canAccessLeads;
+    if (visibility === 'leads-only')     return canAccessLeads;
     if (visibility === 'dashboard-only') return canAccessDashboard;
     if (visibility === 'financeiro-only') return canAccessFinanceiro;
     return true;

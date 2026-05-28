@@ -98,6 +98,16 @@ export function EditUserModal({ user, open, onOpenChange, onSave }: EditUserModa
 
   const isTargetAdmin = selectedRole === 'Administrador';
 
+  // Retorna o padrão de acesso por cargo quando não há permissão explícita salva
+  const defaultForCargo = (pageId: string): boolean => {
+    if (isTargetAdmin) return true;
+    const adminOnly = ['configuracoes', 'historico-acessos', 'api-hub', 'api-docs'];
+    if (adminOnly.includes(pageId)) return false;
+    if (pageId === 'dashboard') return ['Gerente', 'Advogado'].includes(selectedRole);
+    if (pageId === 'financeiro' || pageId === 'conferencia-extratos') return selectedRole === 'Gerente';
+    return true;
+  };
+
   const togglePage = (pageId: string, value: boolean) => {
     setPermissions(prev => ({ ...prev, [pageId]: value }));
   };
@@ -128,7 +138,7 @@ export function EditUserModal({ user, open, onOpenChange, onSave }: EditUserModa
           g.pages.map(p => ({
             user_id: user.id,
             page_id: p.id,
-            enabled: permissions[p.id] ?? true,
+            enabled: p.id in permissions ? permissions[p.id] : defaultForCargo(p.id),
             updated_at: new Date().toISOString(),
           }))
         );
@@ -228,7 +238,7 @@ export function EditUserModal({ user, open, onOpenChange, onSave }: EditUserModa
                     </p>
                     <div className="rounded-xl border border-border/60 overflow-hidden divide-y divide-border/40">
                       {group.pages.map(page => {
-                        const enabled = permissions[page.id] ?? true;
+                        const enabled = page.id in permissions ? permissions[page.id] : defaultForCargo(page.id);
                         return (
                           <div key={page.id} className="flex items-center justify-between px-3 py-2.5 bg-card hover:bg-muted/30 transition-colors">
                             <span className="text-sm">{page.label}</span>
