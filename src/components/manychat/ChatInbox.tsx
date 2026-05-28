@@ -142,7 +142,7 @@ const PINNED_MESSAGES_KEY  = "chat_pinned_messages_v1";
 const ManyChatInboxContent = () => {
   const { toast } = useToast();
   const { user } = useAuth();
-  const { fullName } = usePerfil();
+  const { fullName, canAccessDashboard, canAccessFinanceiro, canAccessSettings, canAccessLeads, canAccessProcessos } = usePerfil();
   const { theme, toggleTheme } = useChatTheme();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -2024,17 +2024,16 @@ const ManyChatInboxContent = () => {
                 <Button variant="ghost" size="icon" className={`h-10 w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}><Menu className="h-5 w-5" /></Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48">
-                <DropdownMenuItem onClick={() => navigate("/dashboard")}>Dashboard</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate("/leads")}>Leads</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate("/processos")}>Processos</DropdownMenuItem>
+                {canAccessDashboard  && <DropdownMenuItem onClick={() => navigate("/dashboard")}>Dashboard</DropdownMenuItem>}
+                {canAccessLeads      && <DropdownMenuItem onClick={() => navigate("/leads")}>CRM de Leads</DropdownMenuItem>}
+                {canAccessProcessos  && <DropdownMenuItem onClick={() => navigate("/processos")}>Processos</DropdownMenuItem>}
                 <DropdownMenuItem onClick={() => navigate("/tarefas")}>Tarefas</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate("/agenda")}>Agenda</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate("/financeiro")}>Financeiro</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate("/contratos")}>Contratos</DropdownMenuItem>
+                {canAccessFinanceiro && <><DropdownMenuSeparator /><DropdownMenuItem onClick={() => navigate("/financeiro")}>Financeiro</DropdownMenuItem></>}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => navigate("/assistente")}>Isa Assistente</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate("/configuracoes")}>Configurações</DropdownMenuItem>
+                {canAccessSettings   && <DropdownMenuItem onClick={() => navigate("/configuracoes")}>Configurações</DropdownMenuItem>}
               </DropdownMenuContent>
             </DropdownMenu>
             <h1 className={`text-xl font-semibold ${themeClasses.headerText}`}>Conversas</h1>
