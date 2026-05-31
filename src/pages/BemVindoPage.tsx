@@ -7,7 +7,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import {
   GraduationCap, Search, Users, Scale, CheckSquare, CalendarDays,
   DollarSign, FileText, FileSignature, FileEdit, Bot, MessageSquare,
-  LayoutDashboard, Zap, Play, ChevronRight, BookOpen
+  LayoutDashboard, Zap, Play, ChevronRight, BookOpen, ClipboardList, ArrowLeft,
+  Copy, Check, AlertCircle, CheckCircle2, XCircle, Download, ExternalLink
 } from 'lucide-react';
 
 interface Tutorial {
@@ -18,6 +19,7 @@ interface Tutorial {
   category: string;
   color: string;
   steps: string[];
+  hasDetailedView?: boolean;
 }
 
 const tutorials: Tutorial[] = [
@@ -197,20 +199,522 @@ const tutorials: Tutorial[] = [
       'Monitore as conversas em andamento e intervenha quando necessário.',
     ],
   },
+  {
+    id: 'guia-venda-casada',
+    title: 'Guia de Atendimento — Venda Casada',
+    description: 'Scripts prontos, objeções, fluxo e cadência para leads de venda casada bancária, seguro prestamista, contrato consignado, aposentados e pensionistas. Cobrança indevida.',
+    icon: ClipboardList,
+    category: 'Gestão',
+    color: 'text-cyan-600 bg-cyan-50 dark:bg-cyan-950/30',
+    steps: [],
+    hasDetailedView: true,
+  },
 ];
 
 const categories = ['Todos', 'Principal', 'Gestão', 'Inteligência'];
+
+function GuiaVendaCasadaView({ onBack }: { onBack: () => void }) {
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
+
+  const toggleSection = (sectionId: string) => {
+    const newSections = new Set(openSections);
+    if (newSections.has(sectionId)) {
+      newSections.delete(sectionId);
+    } else {
+      newSections.add(sectionId);
+    }
+    setOpenSections(newSections);
+  };
+
+  const copyToClipboard = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      console.error('Erro ao copiar:', err);
+    }
+  };
+
+  const ChevronDown = ChevronRight;
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      {/* Header com botão voltar */}
+      <div className="flex items-center justify-between gap-4 sticky top-16 z-30 bg-card/80 backdrop-blur-md -mx-4 px-4 py-3 md:-mx-6 md:px-6 border-b border-border">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span className="hidden sm:inline">Voltar</span>
+        </button>
+        <div className="text-center min-w-0">
+          <h1 className="text-base md:text-lg font-bold text-foreground truncate">
+            Guia de Atendimento — Venda Casada
+          </h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-xs rounded-lg">
+            Bancário
+          </Badge>
+          <Badge variant="outline" className="text-xs rounded-lg hidden sm:inline-flex">
+            Contrato
+          </Badge>
+        </div>
+      </div>
+
+      {/* Bloco de destaque */}
+      <Card className="border-cyan-200 dark:border-cyan-800 bg-cyan-50/50 dark:bg-cyan-950/20">
+        <CardContent className="p-4 md:p-6">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-cyan-600 shrink-0 mt-0.5" />
+            <div className="space-y-2">
+              <p className="font-semibold text-sm text-cyan-900 dark:text-cyan-100">
+                Frase-âncora central
+              </p>
+              <p className="text-sm text-cyan-800 dark:text-cyan-200">
+                O contrato é o documento principal. O extrato ajuda depois, mas é no contrato que aparece se houve seguro, pacote, proteção financeira ou produto embutido.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Fluxo ideal */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-bold text-foreground">Fluxo ideal do atendimento</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            { num: 1, desc: 'Lead chegou do anúncio' },
+            { num: 2, desc: 'Confirmar se é aposentado, pensionista ou beneficiário do INSS' },
+            { num: 3, desc: 'Identificar o banco' },
+            { num: 4, desc: 'Solicitar o contrato do empréstimo' },
+            { num: 5, desc: 'Se não tiver contrato, enviar tutorial para localizar' },
+            { num: 6, desc: 'Receber contrato' },
+            { num: 7, desc: 'Solicitar documentos complementares' },
+            { num: 8, desc: 'Análise de viabilidade' },
+            { num: 9, desc: 'Formalização, se houver indícios' },
+            { num: 10, desc: 'Encerramento profissional, se não houver viabilidade' },
+          ].map((item) => (
+            <div key={item.num} className="flex items-start gap-3">
+              <span className="flex items-center justify-center h-6 w-6 rounded-full bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 text-xs font-bold shrink-0">
+                {item.num}
+              </span>
+              <span className="text-sm text-foreground pt-0.5">{item.desc}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Mensagens prontas */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-bold text-foreground">Mensagens prontas por momento</h2>
+        <div className="space-y-2">
+          {[
+            {
+              id: 'msg-inicial',
+              title: 'Mensagem inicial',
+              when: 'Imediatamente quando o lead chega',
+              text: 'Olá, tudo bem? Sou da equipe de análise do escritório. Você pediu informações sobre possíveis cobranças em empréstimos, como seguro prestamista, proteção financeira, pacote de benefícios ou venda casada. Para verificar se existe algo irregular, o documento mais importante é o contrato do empréstimo. É nele que aparece se o banco colocou algum seguro, pacote ou cobrança junto do consignado. Você tem o contrato em mãos ou consegue acessar pelo aplicativo do banco ou Meu INSS?',
+            },
+            {
+              id: 'msg-qualificacao',
+              title: 'Qualificação',
+              when: 'Assim que o lead responde "quero saber", "tenho empréstimo" ou algo parecido',
+              text: 'Antes de analisarmos, preciso confirmar duas informações rápidas: 1. Você é aposentado, pensionista ou recebe benefício do INSS? 2. Qual banco aparece no seu empréstimo? Com isso eu já consigo te orientar melhor sobre como localizar o contrato.',
+            },
+            {
+              id: 'msg-pedido-direto',
+              title: 'Pedido direto do contrato',
+              when: 'Depois que o lead confirma que possui empréstimo ou benefício',
+              text: 'Perfeito. Então o primeiro passo é enviar o contrato do empréstimo. Pode ser foto, print ou PDF. O importante é aparecer: nome do banco, valor contratado, parcelas, CET, assinatura/aceite e se existe seguro, pacote, proteção financeira ou serviço adicional. Envie o contrato por aqui para iniciarmos a análise.',
+            },
+            {
+              id: 'msg-por-que-contrato',
+              title: 'Por que precisa do contrato?',
+              when: 'Quando o lead questiona ou tenta apenas contar o caso',
+              text: 'Porque o contrato é onde aparece o que o banco colocou na operação. O extrato mostra o desconto. Mas o contrato mostra se havia seguro, pacote, proteção financeira, assistência ou venda casada embutida no empréstimo. Sem o contrato, a análise fica incompleta.',
+            },
+            {
+              id: 'msg-sem-contrato',
+              title: 'Lead sem contrato',
+              when: 'Quando diz que perdeu, não recebeu ou não sabe localizar',
+              text: 'Sem problema, muita gente não tem o contrato em mãos. Mas ele pode ser localizado pelo aplicativo do banco, Meu INSS, e-mail usado na contratação, WhatsApp onde recebeu a proposta ou atendimento/SAC do banco. Me diga qual é o banco do empréstimo que eu te oriento pelo caminho mais fácil.',
+            },
+            {
+              id: 'msg-sem-tempo',
+              title: 'Lead sem tempo',
+              when: 'Quando usa falta de tempo para adiar',
+              text: 'Entendo. Você não precisa resolver tudo agora. Só preciso que envie o contrato ou um print do empréstimo. Isso leva menos de 2 minutos e já permite iniciar a verificação. Pode mandar uma foto simples pelo celular.',
+            },
+            {
+              id: 'msg-enrolado',
+              title: 'Lead enrolado - versão forte',
+              when: 'Depois de uma ou duas tentativas leves',
+              text: 'Vou ser direto: enquanto o contrato não for enviado, seu caso não anda. Se existe seguro, pacote ou cobrança embutida, isso pode estar no contrato. Você pode deixar para depois e continuar sem resposta, ou pode enviar uma foto agora e tirar essa dúvida.',
+            },
+            {
+              id: 'msg-medo-processo',
+              title: 'Medo de processo',
+              when: 'Quando o lead trava com a ideia de ação',
+              text: 'Entendo. Mas nesse momento ninguém está falando em processo. Primeiro é só análise do contrato. Se houver indício de irregularidade, o escritório explica as possibilidades e você decide se quer seguir ou não. Analisar o contrato não te obriga a entrar com ação.',
+            },
+            {
+              id: 'msg-medo-beneficio',
+              title: 'Medo de perder benefício',
+              when: 'Quando o lead tem receio de mexer com banco/INSS',
+              text: 'Pode ficar tranquilo. Questionar uma cobrança bancária não cancela aposentadoria, pensão ou benefício. A análise é sobre o contrato do empréstimo e possíveis cobranças vinculadas a ele. O benefício continua sendo seu direito.',
+            },
+            {
+              id: 'msg-sem-dinheiro',
+              title: 'Lead sem dinheiro para advogado',
+              when: 'Quando antecipa preocupação financeira',
+              text: 'Entendo. Mas antes de falar sobre contratação, precisamos saber se existe viabilidade. Não faz sentido discutir valores sem analisar o contrato. Envie o contrato primeiro. Se houver indício de irregularidade, a equipe explica os próximos passos com clareza.',
+            },
+            {
+              id: 'msg-extrato-antes',
+              title: 'Lead mandou extrato antes do contrato',
+              when: 'Quando envia extrato, contracheque ou print de desconto',
+              text: 'Recebi, obrigado. Esse documento ajuda a identificar descontos. Agora precisamos do contrato do empréstimo, porque é nele que aparece se o banco incluiu seguro, pacote, proteção financeira ou outro produto junto da operação. Você consegue buscar no aplicativo do banco ou no Meu INSS?',
+            },
+            {
+              id: 'msg-incompleto',
+              title: 'Contrato incompleto',
+              when: 'Quando faltam páginas importantes',
+              text: 'Recebi, obrigado. Mas ainda preciso das páginas onde aparecem: valor total financiado, número de parcelas, CET, seguros, tarifas, pacote de benefícios, assinatura ou aceite. Envie essas páginas para a análise ficar completa.',
+            },
+            {
+              id: 'msg-ilegivel',
+              title: 'Foto ilegível',
+              when: 'Quando imagem está escura, cortada ou borrada',
+              text: 'Recebi, mas a imagem ficou difícil de ler. Para a análise ser correta, preciso que envie novamente com a página inteira, em local claro e sem cortar as bordas. Pode mandar uma foto simples, desde que o texto esteja legível.',
+            },
+            {
+              id: 'msg-viavel',
+              title: 'Caso com indício de viabilidade',
+              when: 'Depois da análise inicial interna',
+              text: 'A equipe analisou o contrato e identificou pontos que precisam de análise jurídica mais profunda. Existem indícios relacionados a seguro, pacote, proteção financeira ou tarifa. O próximo passo é formalizar o atendimento para que o escritório possa verificar as medidas cabíveis. Importante: isso não é promessa de resultado. Significa que existem elementos suficientes para avançar tecnicamente. Posso te encaminhar os próximos passos?',
+            },
+            {
+              id: 'msg-nao-viavel',
+              title: 'Caso sem viabilidade',
+              when: 'Após análise negativa',
+              text: 'A equipe analisou o contrato e, neste momento, não encontrou elementos suficientes para seguir com ação. Mesmo assim, recomendamos acompanhar seus contratos e descontos. Se aparecer novo empréstimo, seguro, tarifa, pacote ou cobrança que você não reconhece, pode enviar para nova verificação.',
+            },
+            {
+              id: 'msg-final',
+              title: 'Follow-up final',
+              when: 'Depois de 3 a 5 dias sem resposta',
+              text: 'Como ainda não recebemos o contrato, vou pausar seu atendimento por enquanto. Quando quiser retomar, envie o contrato do empréstimo ou um print do Meu INSS mostrando o consignado. Sem esse documento, não existe análise segura.',
+            },
+          ].map((msg) => (
+            <div key={msg.id} className="border border-border rounded-lg overflow-hidden">
+              <button
+                onClick={() => toggleSection(msg.id)}
+                className="w-full flex items-center justify-between gap-3 p-4 hover:bg-accent transition-colors"
+              >
+                <div className="text-left min-w-0">
+                  <p className="font-semibold text-sm text-foreground">{msg.title}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{msg.when}</p>
+                </div>
+                <ChevronRight
+                  className={`h-4 w-4 text-muted-foreground/40 shrink-0 transition-transform ${
+                    openSections.has(msg.id) ? 'rotate-90' : ''
+                  }`}
+                />
+              </button>
+              {openSections.has(msg.id) && (
+                <div className="border-t border-border bg-muted/30 p-4 space-y-3 animate-fade-in">
+                  <p className="text-sm text-foreground whitespace-pre-wrap">{msg.text}</p>
+                  <button
+                    onClick={() => copyToClipboard(msg.text, msg.id)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                      copiedId === msg.id
+                        ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400'
+                        : 'bg-primary/10 text-primary hover:bg-primary/20'
+                    }`}
+                  >
+                    {copiedId === msg.id ? (
+                      <>
+                        <Check className="h-3 w-3" />
+                        Copiado!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3" />
+                        Copiar mensagem
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Cadência follow-up */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-bold text-foreground">Cadência para leads sem resposta</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            {
+              id: 'fu-30min',
+              tempo: '30 minutos',
+              nivel: 'Leve',
+              msg: 'Oi, só reforçando: para verificar se houve cobrança indevida, precisamos do contrato do empréstimo. Pode enviar foto, PDF ou print do contrato por aqui.',
+            },
+            {
+              id: 'fu-3h',
+              tempo: '2 a 3 horas',
+              nivel: 'Médio',
+              msg: 'Ainda estou aguardando o contrato. Sem ele, não conseguimos confirmar se houve seguro prestamista, proteção financeira, pacote de benefícios ou venda casada. Pode me mandar o que tiver, mesmo que seja só uma foto.',
+            },
+            {
+              id: 'fu-6h',
+              tempo: 'Fim do dia',
+              nivel: 'Firme',
+              msg: 'Passando para te lembrar: o contrato é o documento que mostra o que o banco colocou no seu empréstimo. Sem ele, você continua sem saber se aceitou apenas o consignado ou se veio algum seguro, pacote ou cobrança junto. Se conseguir, envie ainda hoje uma foto ou PDF.',
+            },
+            {
+              id: 'fu-d1',
+              tempo: 'Dia seguinte',
+              nivel: 'Reabertura',
+              msg: 'Bom dia. Ontem você pediu análise sobre possível cobrança no empréstimo. Conseguiu localizar o contrato? Esse documento é essencial para verificar se o banco colocou seguro, pacote, proteção financeira ou outro produto junto do consignado.',
+            },
+            {
+              id: 'fu-d2',
+              tempo: '48 horas',
+              nivel: 'Forte',
+              msg: 'Vou ser bem direto: sem o contrato, seu atendimento não avança. Se houver cobrança indevida, ela pode estar justamente nas cláusulas ou nos valores do contrato. Você quer que eu te envie o passo a passo para localizar pelo Meu INSS ou pelo aplicativo do banco?',
+            },
+            {
+              id: 'fu-final',
+              tempo: '3 a 5 dias',
+              nivel: 'Encerramento',
+              msg: 'Como ainda não recebemos o contrato, vou pausar seu atendimento por enquanto. Quando quiser retomar, envie o contrato do empréstimo ou um print do Meu INSS mostrando o consignado. Sem esse documento, não existe análise segura.',
+            },
+          ].map((item) => (
+            <Card key={item.id} className="border-border">
+              <CardContent className="p-4 space-y-3">
+                <div>
+                  <p className="font-semibold text-sm text-foreground">{item.tempo}</p>
+                  <Badge variant="secondary" className="text-xs mt-1">
+                    {item.nivel}
+                  </Badge>
+                </div>
+                <p className="text-sm text-foreground">{item.msg}</p>
+                <button
+                  onClick={() => copyToClipboard(item.msg, item.id)}
+                  className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                    copiedId === item.id
+                      ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400'
+                      : 'bg-primary/10 text-primary hover:bg-primary/20'
+                  }`}
+                >
+                  {copiedId === item.id ? (
+                    <>
+                      <Check className="h-3 w-3" />
+                      Copiado!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3 w-3" />
+                      Copiar
+                    </>
+                  )}
+                </button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* Tutoriais rápidos */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-bold text-foreground">Tutoriais rápidos</h2>
+        <div className="space-y-2">
+          {[
+            {
+              id: 'tut-meu-inss',
+              title: 'Como buscar pelo Meu INSS',
+              content: '1. Abra o aplicativo Meu INSS.\n2. Entre com CPF e senha do Gov.br.\n3. Na busca, digite "Extrato de Empréstimo".\n4. Selecione o benefício.\n5. Veja os empréstimos ativos.\n6. Tire print da tela onde aparece o banco, número do contrato, valor da parcela, prazo e data.\n7. Se aparecer opção de baixar contrato ou detalhes, envie também.',
+            },
+            {
+              id: 'tut-app-banco',
+              title: 'Como procurar no aplicativo do banco',
+              content: 'No aplicativo do banco, procure por uma destas opções:\n- Empréstimos\n- Consignado\n- Meus contratos\n- Detalhes do contrato\n- Documentos\n- Comprovantes\n- Seguros\n- Proteção financeira\n\nQuando encontrar, baixe o PDF ou tire prints das telas. Precisamos ver principalmente: valor liberado, parcelas, CET, seguro, tarifas, pacote e assinatura/aceite.',
+            },
+            {
+              id: 'tut-solicitar-banco',
+              title: 'Como solicitar contrato ao banco',
+              content: 'Mensagem para copiar e enviar ao banco:\n\n"Olá. Solicito a cópia integral do contrato do meu empréstimo consignado, incluindo termo de adesão, CET, eventuais seguros, proteção financeira, pacote de benefícios, gravação ou comprovante de aceite digital. Também solicito o demonstrativo completo dos valores financiados e descontos vinculados ao contrato."\n\nSe perguntarem o motivo:\n"Preciso conferir as informações do meu contrato e os produtos vinculados à operação."',
+            },
+            {
+              id: 'tut-fotografar',
+              title: 'Como fotografar contrato corretamente',
+              content: '1. Coloque o contrato em local claro.\n2. Tire foto da página inteira.\n3. Não corte cabeçalho nem rodapé.\n4. Envie todas as páginas.\n5. Confira se dá para ler antes de mandar.\n6. Se tiver muitas páginas, envie primeiro as partes onde aparecem valores, seguro, tarifas, pacote, CET e assinatura.',
+            },
+            {
+              id: 'tut-procurar-contrato',
+              title: 'O que procurar dentro do contrato',
+              content: 'Procure por nomes como:\n\nSeguro/proteção: seguro prestamista, seguro vida, proteção financeira, prêmio de seguro, adesão a seguro\n\nPacotes/assistências: pacote de benefícios, assistência funeral, assistência residencial, clube de vantagens, produto adicional\n\nTarifas/custos: tarifa bancária, tarifa de cadastro, tarifa de serviços, cesta de serviços, valor financiado com seguro\n\nAceite/contratação: assinatura, aceite digital, termo de adesão, gravação, autorização de desconto\n\nSe aparecer qualquer um desses nomes, tire foto dessa parte e envie agora.',
+            },
+          ].map((tut) => (
+            <div key={tut.id} className="border border-border rounded-lg overflow-hidden">
+              <button
+                onClick={() => toggleSection(tut.id)}
+                className="w-full flex items-center justify-between gap-3 p-4 hover:bg-accent transition-colors"
+              >
+                <p className="font-semibold text-sm text-foreground text-left">{tut.title}</p>
+                <ChevronRight
+                  className={`h-4 w-4 text-muted-foreground/40 shrink-0 transition-transform ${
+                    openSections.has(tut.id) ? 'rotate-90' : ''
+                  }`}
+                />
+              </button>
+              {openSections.has(tut.id) && (
+                <div className="border-t border-border bg-muted/30 p-4 animate-fade-in">
+                  <p className="text-sm text-foreground whitespace-pre-wrap">{tut.content}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Checklist documentos */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-bold text-foreground">Checklist de documentos</h2>
+        <div className="space-y-2">
+          {[
+            { priority: 1, name: 'Contrato do empréstimo', highlight: true },
+            { priority: 2, name: 'Documento pessoal + CPF' },
+            { priority: 3, name: 'Comprovante de residência' },
+            { priority: 4, name: 'Extrato de empréstimo do Meu INSS' },
+            { priority: 5, name: 'Extrato bancário' },
+            { priority: 6, name: 'Contracheque ou extrato de pagamento do benefício' },
+          ].map((doc) => (
+            <div
+              key={doc.priority}
+              className={`flex items-center gap-3 p-3 rounded-lg border ${
+                doc.highlight
+                  ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/20'
+                  : 'border-border'
+              }`}
+            >
+              <Badge variant={doc.highlight ? 'default' : 'secondary'} className="shrink-0">
+                P{doc.priority}
+              </Badge>
+              <span className={`text-sm font-medium ${doc.highlight ? 'text-green-900 dark:text-green-100' : 'text-foreground'}`}>
+                {doc.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Frases */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-bold text-foreground">Frases recomendadas</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <h3 className="font-semibold text-sm text-green-700 dark:text-green-400">Usar ✓</h3>
+            <ul className="text-sm text-foreground space-y-1">
+              {[
+                'pode haver cobrança indevida',
+                'precisamos analisar o contrato',
+                'se houver viabilidade',
+                'sem o contrato não existe análise segura',
+                'a análise não obriga a entrar com ação',
+                'o escritório orienta os próximos passos',
+              ].map((phrase, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+                  <span>{phrase}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="space-y-2">
+            <h3 className="font-semibold text-sm text-red-700 dark:text-red-400">Evitar ✗</h3>
+            <ul className="text-sm text-foreground space-y-1">
+              {[
+                'causa ganha',
+                'indenização garantida',
+                'você vai receber dinheiro',
+                'todo aposentado tem direito',
+                'o banco roubou você',
+                'assine para garantir',
+              ].map((phrase, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <XCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                  <span>{phrase}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* PDF */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-bold text-foreground">Material completo em PDF</h2>
+        <Card className="border-border">
+          <CardContent className="p-4 md:p-6">
+            <p className="text-sm text-muted-foreground mb-4">
+              Baixe ou abra o guia completo para consultar offline ou compartilhar internamente com a equipe.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <a
+                href="/tutoriais/guia-completo-atendimento-venda-casada.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                <FileText className="h-4 w-4" />
+                <span>Abrir PDF</span>
+                <ExternalLink className="h-3 w-3" />
+              </a>
+              <a
+                href="/tutoriais/guia-completo-atendimento-venda-casada.pdf"
+                download
+                className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/80 transition-colors"
+              >
+                <Download className="h-4 w-4" />
+                <span>Baixar PDF</span>
+              </a>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+    </div>
+  );
+}
 
 export default function BemVindoPage() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [expandedTutorial, setExpandedTutorial] = useState<string | null>(null);
+  const [currentView, setCurrentView] = useState<'list' | 'guia-venda-casada'>('list');
 
   const filtered = tutorials.filter((t) => {
     const matchSearch = !search || t.title.toLowerCase().includes(search.toLowerCase()) || t.description.toLowerCase().includes(search.toLowerCase());
     const matchCat = selectedCategory === 'Todos' || t.category === selectedCategory;
     return matchSearch && matchCat;
   });
+
+  if (currentView === 'guia-venda-casada') {
+    return (
+      <AppLayout>
+        <div className="flex-1 p-4 md:p-6">
+          <GuiaVendaCasadaView onBack={() => setCurrentView('list')} />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -284,7 +788,13 @@ export default function BemVindoPage() {
                 className={`cursor-pointer transition-all hover:shadow-md group ${
                   isExpanded ? 'ring-2 ring-primary/20 shadow-md' : ''
                 }`}
-                onClick={() => setExpandedTutorial(isExpanded ? null : tutorial.id)}
+                onClick={() => {
+                  if (tutorial.hasDetailedView) {
+                    setCurrentView('guia-venda-casada');
+                  } else {
+                    setExpandedTutorial(isExpanded ? null : tutorial.id);
+                  }
+                }}
               >
                 <CardContent className="p-5">
                   <div className="flex items-start gap-3 mb-3">
