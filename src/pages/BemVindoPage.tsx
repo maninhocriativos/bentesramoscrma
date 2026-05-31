@@ -240,51 +240,58 @@ function GuiaVendaCasadaView({ onBack }: { onBack: () => void }) {
   const ChevronDown = ChevronRight;
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header com botão voltar */}
-      <div className="flex items-center justify-between gap-4 sticky top-16 z-30 bg-card/80 backdrop-blur-md -mx-4 px-4 py-3 md:-mx-6 md:px-6 border-b border-border">
+    <div className="space-y-8 animate-fade-in">
+      {/* Header com botão voltar - Premium */}
+      <div className="flex items-center justify-between gap-4 sticky top-16 z-30 bg-gradient-to-r from-card/95 via-card/90 to-card/95 backdrop-blur-xl -mx-4 px-4 py-4 md:-mx-6 md:px-6 border-b border-border/50 shadow-sm">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent transition-colors"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-all duration-200"
         >
           <ArrowLeft className="h-4 w-4" />
           <span className="hidden sm:inline">Voltar</span>
         </button>
-        <div className="text-center min-w-0">
-          <h1 className="text-base md:text-lg font-bold text-foreground truncate">
+        <div className="text-center min-w-0 flex-1">
+          <h1 className="text-lg md:text-xl font-bold bg-gradient-to-r from-cyan-600 to-cyan-500 dark:from-cyan-400 dark:to-cyan-300 bg-clip-text text-transparent truncate">
             Guia de Atendimento — Venda Casada
           </h1>
+          <p className="text-xs text-muted-foreground mt-1">Protocolo operacional para atendimento bancário</p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-xs rounded-lg">
+          <Badge variant="default" className="text-xs rounded-md bg-cyan-600 hover:bg-cyan-700">
             Bancário
           </Badge>
-          <Badge variant="outline" className="text-xs rounded-lg hidden sm:inline-flex">
+          <Badge variant="secondary" className="text-xs rounded-md hidden sm:inline-flex">
             Contrato
           </Badge>
         </div>
       </div>
 
-      {/* Bloco de destaque */}
-      <Card className="border-cyan-200 dark:border-cyan-800 bg-cyan-50/50 dark:bg-cyan-950/20">
-        <CardContent className="p-4 md:p-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-cyan-600 shrink-0 mt-0.5" />
-            <div className="space-y-2">
-              <p className="font-semibold text-sm text-cyan-900 dark:text-cyan-100">
-                Frase-âncora central
-              </p>
-              <p className="text-sm text-cyan-800 dark:text-cyan-200">
-                O contrato é o documento principal. O extrato ajuda depois, mas é no contrato que aparece se houve seguro, pacote, proteção financeira ou produto embutido.
-              </p>
+      {/* Bloco de destaque - Premium */}
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-to-r from-cyan-600/10 via-cyan-500/5 to-transparent rounded-2xl blur-2xl" />
+        <Card className="relative border-cyan-300/50 dark:border-cyan-700/50 bg-gradient-to-br from-cyan-50/80 via-white dark:from-cyan-950/30 dark:via-card to-white dark:to-card shadow-lg hover:shadow-xl transition-shadow duration-300">
+          <CardContent className="p-6 md:p-8">
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-xl bg-cyan-100 dark:bg-cyan-900/40">
+                <AlertCircle className="h-6 w-6 text-cyan-700 dark:text-cyan-300" />
+              </div>
+              <div className="space-y-3">
+                <p className="font-bold text-sm uppercase tracking-wider text-cyan-900 dark:text-cyan-200">
+                  ⚡ Frase-âncora central
+                </p>
+                <p className="text-base leading-relaxed font-semibold text-foreground">
+                  O contrato é o documento principal. O extrato ajuda depois, mas é no contrato que aparece se houve seguro, pacote, proteção financeira ou produto embutido.
+                </p>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Fluxo ideal */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-bold text-foreground">Fluxo ideal do atendimento</h2>
+      <section className="space-y-4 pt-4">
+        <div className="border-t border-border/30" />
+        <h2 className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">Fluxo ideal do atendimento</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
             { num: 1, desc: 'Lead chegou do anúncio' },
@@ -309,8 +316,9 @@ function GuiaVendaCasadaView({ onBack }: { onBack: () => void }) {
       </section>
 
       {/* Mensagens prontas */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-bold text-foreground">Mensagens prontas por momento</h2>
+      <section className="space-y-4 pt-4">
+        <div className="border-t border-border/30" />
+        <h2 className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">Mensagens prontas por momento</h2>
         <div className="space-y-2">
           {[
             {
@@ -430,20 +438,20 @@ function GuiaVendaCasadaView({ onBack }: { onBack: () => void }) {
                   <p className="text-sm text-foreground whitespace-pre-wrap">{msg.text}</p>
                   <button
                     onClick={() => copyToClipboard(msg.text, msg.id)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
                       copiedId === msg.id
-                        ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400'
-                        : 'bg-primary/10 text-primary hover:bg-primary/20'
+                        ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-md'
+                        : 'bg-gradient-to-r from-cyan-500 to-cyan-600 text-white hover:from-cyan-600 hover:to-cyan-700 shadow-md hover:shadow-lg hover:-translate-y-0.5'
                     }`}
                   >
                     {copiedId === msg.id ? (
                       <>
-                        <Check className="h-3 w-3" />
+                        <Check className="h-4 w-4" />
                         Copiado!
                       </>
                     ) : (
                       <>
-                        <Copy className="h-3 w-3" />
+                        <Copy className="h-4 w-4" />
                         Copiar mensagem
                       </>
                     )}
@@ -456,8 +464,9 @@ function GuiaVendaCasadaView({ onBack }: { onBack: () => void }) {
       </section>
 
       {/* Cadência follow-up */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-bold text-foreground">Cadência para leads sem resposta</h2>
+      <section className="space-y-4 pt-4">
+        <div className="border-t border-border/30" />
+        <h2 className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">Cadência para leads sem resposta</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
             {
@@ -508,20 +517,20 @@ function GuiaVendaCasadaView({ onBack }: { onBack: () => void }) {
                 <p className="text-sm text-foreground">{item.msg}</p>
                 <button
                   onClick={() => copyToClipboard(item.msg, item.id)}
-                  className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                  className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
                     copiedId === item.id
-                      ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400'
-                      : 'bg-primary/10 text-primary hover:bg-primary/20'
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-md'
+                      : 'bg-gradient-to-r from-cyan-500 to-cyan-600 text-white hover:from-cyan-600 hover:to-cyan-700 shadow-md hover:shadow-lg hover:-translate-y-0.5'
                   }`}
                 >
                   {copiedId === item.id ? (
                     <>
-                      <Check className="h-3 w-3" />
+                      <Check className="h-4 w-4" />
                       Copiado!
                     </>
                   ) : (
                     <>
-                      <Copy className="h-3 w-3" />
+                      <Copy className="h-4 w-4" />
                       Copiar
                     </>
                   )}
@@ -533,8 +542,9 @@ function GuiaVendaCasadaView({ onBack }: { onBack: () => void }) {
       </section>
 
       {/* Tutoriais rápidos */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-bold text-foreground">Tutoriais rápidos</h2>
+      <section className="space-y-4 pt-4">
+        <div className="border-t border-border/30" />
+        <h2 className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">Tutoriais rápidos</h2>
         <div className="space-y-2">
           {[
             {
@@ -586,8 +596,9 @@ function GuiaVendaCasadaView({ onBack }: { onBack: () => void }) {
       </section>
 
       {/* Checklist documentos */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-bold text-foreground">Checklist de documentos</h2>
+      <section className="space-y-4 pt-4">
+        <div className="border-t border-border/30" />
+        <h2 className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">Checklist de documentos</h2>
         <div className="space-y-2">
           {[
             { priority: 1, name: 'Contrato do empréstimo', highlight: true },
@@ -617,8 +628,9 @@ function GuiaVendaCasadaView({ onBack }: { onBack: () => void }) {
       </section>
 
       {/* Frases */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-bold text-foreground">Frases recomendadas</h2>
+      <section className="space-y-4 pt-4">
+        <div className="border-t border-border/30" />
+        <h2 className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">Frases recomendadas</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <h3 className="font-semibold text-sm text-green-700 dark:text-green-400">Usar ✓</h3>
@@ -660,8 +672,9 @@ function GuiaVendaCasadaView({ onBack }: { onBack: () => void }) {
       </section>
 
       {/* PDF */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-bold text-foreground">Material completo em PDF</h2>
+      <section className="space-y-4 pt-4">
+        <div className="border-t border-border/30" />
+        <h2 className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">Material completo em PDF</h2>
         <Card className="border-border">
           <CardContent className="p-4 md:p-6">
             <p className="text-sm text-muted-foreground mb-4">
@@ -672,7 +685,7 @@ function GuiaVendaCasadaView({ onBack }: { onBack: () => void }) {
                 href="/tutoriais/guia-completo-atendimento-venda-casada.pdf"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                className="flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-gradient-to-r from-cyan-600 to-cyan-700 text-white text-sm font-semibold hover:from-cyan-700 hover:to-cyan-800 shadow-md hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5"
               >
                 <FileText className="h-4 w-4" />
                 <span>Abrir PDF</span>
@@ -681,7 +694,7 @@ function GuiaVendaCasadaView({ onBack }: { onBack: () => void }) {
               <a
                 href="/tutoriais/guia-completo-atendimento-venda-casada.pdf"
                 download
-                className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/80 transition-colors"
+                className="flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-sm font-semibold hover:from-emerald-700 hover:to-emerald-800 shadow-md hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5"
               >
                 <Download className="h-4 w-4" />
                 <span>Baixar PDF</span>
