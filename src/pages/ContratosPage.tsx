@@ -8,12 +8,14 @@ import { ModelosContratos } from '@/components/contratos/ModelosContratos';
 import { EnviarKitModal } from '@/components/contratos/EnviarKitModal';
 import { ZapsignContratosKPIs } from '@/components/contratos/ZapsignContratosKPIs';
 import { ZapsignContratosTable } from '@/components/contratos/ZapsignContratosTable';
+import { CriarContratoZapsignModal } from '@/components/contratos/CriarContratoZapsignModal';
 import { useZapsignContratos } from '@/hooks/useZapsignContratos';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, FileText, FolderOpen, Clock, CheckCircle2, XCircle, Zap } from 'lucide-react';
+import { Loader2, FileText, FolderOpen, Clock, CheckCircle2, XCircle, Zap, Plus, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 function normalizePhone(p: string): string {
   return p.replace(/\D/g, '').slice(-11);
@@ -86,6 +88,7 @@ export default function ContratosPage() {
   const [activeTab, setActiveTab] = useState('todos');
   const [enviarModalOpen, setEnviarModalOpen] = useState(false);
   const [provider, setProvider] = useState<'clicksign' | 'zapsign'>('clicksign');
+  const [criarZapsignOpen, setCriarZapsignOpen] = useState(false);
 
   // Hook para Zapsign
   const { contratos: contratosZapsign, isLoading: loadingZapsign, refetch: refetchZapsign } = useZapsignContratos();
@@ -333,6 +336,29 @@ export default function ContratosPage() {
                   isLoading={loadingZapsign}
                 />
 
+                {/* Ações Zapsign */}
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => setCriarZapsignOpen(true)}
+                      size="sm"
+                      className="bg-cyan-600 hover:bg-cyan-700 text-white gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Criar Contrato
+                    </Button>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => refetchZapsign()}
+                    className="text-muted-foreground gap-2"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Atualizar
+                  </Button>
+                </div>
+
                 {/* Tabs Zapsign */}
                 <div className="flex gap-1 overflow-x-auto pb-0.5">
                   {TABS_ZAPSIGN.map(tab => {
@@ -417,6 +443,12 @@ export default function ContratosPage() {
         isOpen={enviarModalOpen}
         onClose={() => setEnviarModalOpen(false)}
         onSuccess={handleRefresh}
+      />
+
+      <CriarContratoZapsignModal
+        isOpen={criarZapsignOpen}
+        onClose={() => setCriarZapsignOpen(false)}
+        onSuccess={() => refetchZapsign()}
       />
     </AppLayout>
   );

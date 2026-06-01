@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -55,12 +55,16 @@ export function CriarContratoZapsignModal({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Carregar modelos quando modal abre
+  useEffect(() => {
+    if (isOpen) loadModelos();
+  }, [isOpen]);
+
   const loadModelos = async () => {
     try {
       const { data } = await supabase
         .from('modelos_contratos')
-        .select('*')
-        .eq('tipo', 'zapsign')
+        .select('id, nome, descricao, arquivo_url')
+        .in('tipo', ['zapsign', 'clicksign'])
         .order('nome');
       setModelos(data || []);
     } catch (error) {

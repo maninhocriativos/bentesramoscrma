@@ -99,16 +99,16 @@ export function useZapsignContratos(
 
   // Realtime subscription para atualizações locais
   useEffect(() => {
-    const subscription = supabase
-      .from('contract_reminders_zapsign')
-      .on('*', () => {
-        refetch();
-      })
+    const channel = supabase
+      .channel('zapsign-contracts-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'contract_reminders_zapsign' },
+        () => { refetch(); }
+      )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(subscription);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [refetch]);
 
   return {
