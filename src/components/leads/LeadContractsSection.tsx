@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import {
   FileSignature, Clock, CheckCircle2, XCircle, ExternalLink,
   MessageSquare, Loader2, AlertTriangle, Calendar, Zap, Plus,
-  Building2,
+  Building2, MessageCircle,
 } from 'lucide-react';
 import { useLeadContracts, ContractReminder } from '@/hooks/useLeadContracts';
 import { useQuery } from '@tanstack/react-query';
@@ -79,9 +79,37 @@ export function LeadContractsSection({ leadId, leadNome, leadEmail, leadPhone }:
   const { data: clicksignContracts, isLoading: loadingClicksign, refetch: refetchClicksign } = useLeadContracts(leadId);
   const { data: zapsignContracts,   isLoading: loadingZapsign,   refetch: refetchZapsign }   = useLeadZapsignContracts(leadId);
   const { toast } = useToast();
-  const [sendingReminder, setSendingReminder] = useState<string | null>(null);
-  const [activeProvider, setActiveProvider]   = useState<'clicksign' | 'zapsign'>('clicksign');
-  const [criarZapsignOpen, setCriarZapsignOpen] = useState(false);
+  const [sendingReminder, setSendingReminder]       = useState<string | null>(null);
+  const [sendingZapsignReminder, setSendingZapsignReminder] = useState<string | null>(null);
+  const [activeProvider, setActiveProvider]         = useState<'clicksign' | 'zapsign'>('clicksign');
+  const [criarZapsignOpen, setCriarZapsignOpen]     = useState(false);
+
+  const sendZapsignReminder = async (contract: any, type: 'soft' | 'urgent') => {
+    setSendingZapsignReminder(`${contract.id}-${type}`);
+    try {
+      const { data, error } = await supabase.functions.invoke('zapsign-reminder', {
+        body: {
+          documentId: contract.document_id,
+          documentName: contract.document_name,
+          reminderType: type,
+          leadId: contract.lead_id,
+        },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast({
+          title: type === 'urgent' ? '⚠️ Cobrança urgente enviada!' : '✅ Lembrete enviado!',
+          description: `WhatsApp enviado para ${contract.signer_name || leadNome}`,
+        });
+      } else {
+        throw new Error(data?.error || 'Erro ao enviar');
+      }
+    } catch (err: any) {
+      toast({ title: 'Erro ao enviar lembrete', description: err.message, variant: 'destructive' });
+    } finally {
+      setSendingZapsignReminder(null);
+    }
+  };
 
   const sendManualReminder = async (contract: ContractReminder, type: 'soft' | 'urgent') => {
     setSendingReminder(contract.id);
@@ -309,7 +337,32 @@ export function LeadContractsSection({ leadId, leadNome, leadEmail, leadPhone }:
                       {/* Ações */}
                       {isPending && (
                         <div className="flex items-center gap-2 mt-3 pt-2 border-t border-cyan-100">
-                          <span className="text-xs text-muted-foreground">Aguardando assinatura</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-7 gap-1 border-cyan-200 hover:border-cyan-400"
+                            onClick={() => sendZapsignReminder(contract, 'soft')}
+                            disabled={sendingZapsignReminder?.startsWith(contract.id)}
+                          >
+                            {sendingZapsignReminder === `${contract.id}-soft`
+                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                              : <MessageCircle className="h-3 w-3 text-cyan-600" />
+                            }
+                            Lembrar
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-7 gap-1 text-amber-600 border-amber-200 hover:border-amber-400"
+                            onClick={() => sendZapsignReminder(contract, 'urgent')}
+                            disabled={sendingZapsignReminder?.startsWith(contract.id)}
+                          >
+                            {sendingZapsignReminder === `${contract.id}-urgent`
+                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                              : <AlertTriangle className="h-3 w-3" />
+                            }
+                            Urgente
+                          </Button>
                         </div>
                       )}
                     </div>

@@ -10,12 +10,18 @@ import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, ExternalLink, Search, ChevronLeft, ChevronRight, Zap, Building2, HelpCircle } from 'lucide-react';
+import { Loader2, ExternalLink, Search, ChevronLeft, ChevronRight, Zap, Building2, HelpCircle, MessageCircle, AlertTriangle, MoreHorizontal, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { ContratoZapsignComStatus, TipoOrigemZapsign } from '@/hooks/useZapsignContratos';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface ZapsignContratosTableProps {
   contratos: ContratoZapsignComStatus[];
@@ -52,10 +58,41 @@ function OrigemBadge({ origem }: { origem: TipoOrigemZapsign }) {
 }
 
 export function ZapsignContratosTable({ contratos, isLoading, activeTab }: ZapsignContratosTableProps) {
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm]     = useState('');
   const [origemFilter, setOrigemFilter] = useState<string>('todas');
   const [page, setPage]                 = useState(1);
   const [pageSize, setPageSize]         = useState(10);
+  const [sendingReminder, setSendingReminder] = useState<string | null>(null);
+
+  const sendReminder = async (contrato: ContratoZapsignComStatus, type: 'soft' | 'urgent') => {
+    setSendingReminder(`${contrato.id}-${type}`);
+    try {
+      const signUrl = contrato.signers?.[0]?.sign_url;
+      const { data, error } = await supabase.functions.invoke('zapsign-reminder', {
+        body: {
+          documentId: contrato.id,
+          documentName: contrato.name,
+          reminderType: type,
+          signUrl,
+          leadId: contrato.leadId,
+        },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast({
+          title: type === 'urgent' ? '⚠️ Cobrança urgente enviada!' : '✅ Lembrete enviado!',
+          description: `WhatsApp enviado para ${contrato.leadNome || contrato.signers?.[0]?.name}`,
+        });
+      } else {
+        throw new Error(data?.error || 'Erro ao enviar');
+      }
+    } catch (err: any) {
+      toast({ title: 'Erro ao enviar lembrete', description: err.message, variant: 'destructive' });
+    } finally {
+      setSendingReminder(null);
+    }
+  };
 
   // Filtra por aba ativa
   const byTab = useMemo(() => contratos.filter(c => {
@@ -274,21 +311,65 @@ export function ZapsignContratosTable({ contratos, isLoading, activeTab }: Zapsi
                       : '—'}
                   </TableCell>
 
-                  {/* Link */}
+                  {/* Ações */}
                   <TableCell className="text-right">
-                    {c.signers?.[0]?.sign_url ? (
-                      <a
-                        href={c.signers[0].sign_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center h-7 w-7 rounded-lg hover:bg-muted transition-colors"
-                        title="Abrir link de assinatura"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
-                      </a>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          disabled={sendingReminder?.startsWith(c.id)}
+                        >
+                          {sendingReminder?.startsWith(c.id)
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            : <MoreHorizontal className="h-3.5 w-3.5" />
+                          }
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-52">
+                        {/* Lembretes — só para contratos pendentes */}
+                        {c.statusLocal === 'Aguardando Assinatura' && (
+                          <>
+                            <DropdownMenuItem
+                              onClick={() => sendReminder(c, 'soft')}
+                              className="gap-2 cursor-pointer"
+                            >
+                              <MessageCircle className="h-4 w-4 text-blue-500" />
+                              <div>
+                                <p className="text-sm font-medium">Lembrete WhatsApp</p>
+                                <p className="text-xs text-muted-foreground">Mensagem amigável</p>
+                              </div>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => sendReminder(c, 'urgent')}
+                              className="gap-2 cursor-pointer"
+                            >
+                              <AlertTriangle className="h-4 w-4 text-amber-500" />
+                              <div>
+                                <p className="text-sm font-medium">Cobrança Urgente</p>
+                                <p className="text-xs text-muted-foreground">Tom mais assertivo</p>
+                              </div>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                          </>
+                        )}
+                        {/* Abrir documento */}
+                        {c.signers?.[0]?.sign_url && (
+                          <DropdownMenuItem asChild>
+                            <a
+                              href={c.signers[0].sign_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="gap-2 cursor-pointer"
+                            >
+                              <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                              Abrir documento
+                            </a>
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))}
