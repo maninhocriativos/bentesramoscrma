@@ -17,6 +17,7 @@ import {
   TEMPLATES_DISPONIVEIS,
   ENVELOPE_PRESETS,
   getTemplateInfo,
+  gerarMarkdown,
   type CampoTemplate,
 } from '@/integrations/zapsign/templateFields';
 
@@ -138,19 +139,23 @@ export function CriarContratoZapsignModal({
         cpf:   campos.cpf?.replace(/\D/g, '') || undefined,
       }];
 
-      let documentResponse: any;
-      const action = templatesAtivos.length > 1 ? 'create_envelope' : 'create_from_template';
-
-      const { data, error } = await supabase.functions.invoke('zapsign', {
-        body: {
-          action,
-          template_key:        templatesAtivos.length === 1 ? templatesAtivos[0] : undefined,
-          templates_keys:      templatesAtivos.length > 1  ? templatesAtivos      : undefined,
-          campos_preenchidos:  campos,
-          signers,
-          expires_in_days: parseInt(expiresInDays),
-        },
+      // Gerar markdowns no frontend (antes de chamar a edge function)
+      const docsGerados = templatesAtivos.map(key => {
+        const info = getTemplateInfo(key);
+        return {
+          name: `${info?.nome || key} - ${campos.nome_completo}`,
+          markdown_text: gerarMarkdown(key, campos),
+        };
       });
+
+      let documentResponse: any;
+      const action = docsGerados.length > 1 ? 'create_envelope' : 'create_from_template';
+
+      const invokeBody = docsGerados.length === 1
+        ? { action, name: docsGerados[0].name, markdown_text: docsGerados[0].markdown_text, signers, expires_in_days: parseInt(expiresInDays) }
+        : { action, docs: docsGerados, signers, expires_in_days: parseInt(expiresInDays) };
+
+      const { data, error } = await supabase.functions.invoke('zapsign', { body: invokeBody });
 
       if (error) throw error;
       if (data?.error) throw new Error(data.error.message || 'Erro na Zapsign');
