@@ -1,7 +1,38 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 
+// Importar webhook handler
+// (Será inlined no build, importação não funciona diretamente)
+
 serve(async (req) => {
+  // Webhook endpoint (não precisa de autenticação, mas valida assinatura)
+  if (req.url.includes('/webhook')) {
+    if (req.method === 'POST') {
+      try {
+        const body = await req.json();
+        const signature = req.headers.get('X-Zapsign-Signature');
+
+        // Processar webhook
+        await handleZapsignWebhook(body, signature);
+
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return new Response(
+          JSON.stringify({ error: message }),
+          {
+            headers: { 'Content-Type': 'application/json' },
+            status: 400,
+          }
+        );
+      }
+    }
+    return new Response('Method not allowed', { status: 405 });
+  }
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -243,4 +274,150 @@ async function validateSignature(apiUrl: string, token: string, params: any) {
   }
 
   return response.json();
+}
+
+// ============= WEBHOOK HANDLERS =============
+
+async function handleZapsignWebhook(payload: any, signature: string | null): Promise<void> {
+  const event = payload.event;
+  const documentId = payload.document_id;
+
+  console.log(`Processing Zapsign webhook: ${event} for document ${documentId}`);
+
+  switch (event) {
+    case 'document.signed':
+      await handleDocumentSigned(documentId, payload);
+      break;
+    case 'document.rejected':
+      await handleDocumentRejected(documentId, payload);
+      break;
+    case 'document.expired':
+      await handleDocumentExpired(documentId, payload);
+      break;
+    case 'document.cancelled':
+      await handleDocumentCancelled(documentId, payload);
+      break;
+    case 'signer.signed':
+      await handleSignerSigned(documentId, payload);
+      break;
+    case 'signer.rejected':
+      await handleSignerRejected(documentId, payload);
+      break;
+    default:
+      console.log(`Ignoring event: ${event}`);
+  }
+}
+
+async function handleDocumentSigned(documentId: string, payload: any): Promise<void> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+  if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+
+  const response = await fetch(`${supabaseUrl}/rest/v1/contract_reminders_zapsign`, {
+    method: 'PATCH',
+    headers: {
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    },
+    body: JSON.stringify({
+      status: 'signed',
+      signed_at: new Date().toISOString(),
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error(`Failed to update contract: ${error}`);
+  } else {
+    console.log(`Document ${documentId} signed`);
+  }
+}
+
+async function handleDocumentRejected(documentId: string, payload: any): Promise<void> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+  if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+
+  await fetch(`${supabaseUrl}/rest/v1/contract_reminders_zapsign`, {
+    method: 'PATCH',
+    headers: {
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    },
+    body: JSON.stringify({ status: 'rejected' }),
+  });
+
+  console.log(`Document ${documentId} rejected`);
+}
+
+async function handleDocumentExpired(documentId: string, payload: any): Promise<void> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+  if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+
+  await fetch(`${supabaseUrl}/rest/v1/contract_reminders_zapsign`, {
+    method: 'PATCH',
+    headers: {
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    },
+    body: JSON.stringify({ status: 'expired' }),
+  });
+
+  console.log(`Document ${documentId} expired`);
+}
+
+async function handleDocumentCancelled(documentId: string, payload: any): Promise<void> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+  if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+
+  await fetch(`${supabaseUrl}/rest/v1/contract_reminders_zapsign`, {
+    method: 'PATCH',
+    headers: {
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    },
+    body: JSON.stringify({ status: 'cancelled' }),
+  });
+
+  console.log(`Document ${documentId} cancelled`);
+}
+
+async function handleSignerSigned(documentId: string, payload: any): Promise<void> {
+  const signerId = payload.signer_id;
+  console.log(`Signer ${signerId} signed document ${documentId}`);
+}
+
+async function handleSignerRejected(documentId: string, payload: any): Promise<void> {
+  const signerId = payload.signer_id;
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+  if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+
+  await fetch(`${supabaseUrl}/rest/v1/contract_reminders_zapsign`, {
+    method: 'PATCH',
+    headers: {
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    },
+    body: JSON.stringify({ status: 'rejected' }),
+  });
+
+  console.log(`Signer ${signerId} rejected document ${documentId}`);
 }
