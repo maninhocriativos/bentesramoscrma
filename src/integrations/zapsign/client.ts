@@ -61,8 +61,7 @@ export class ZapsignClient {
     return this.callEdgeFunction<CreateDocumentResponse>('create_document', {
       name: request.name,
       signers: request.signers,
-      file_url: request.file_url,
-      template_id: request.template_id,
+      file_url: request.file_url,   // edge function converte para url_pdf
       expires_in_days: request.expires_in_days || 7,
       metadata: request.metadata,
     });

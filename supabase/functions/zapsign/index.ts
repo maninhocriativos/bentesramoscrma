@@ -1,423 +1,250 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
-// Importar webhook handler
-// (Será inlined no build, importação não funciona diretamente)
+// URL base correta da API Zapsign (v1)
+const ZAPSIGN_BASE = 'https://api.zapsign.com.br/api/v1';
 
 serve(async (req) => {
-  // Webhook endpoint (não precisa de autenticação, mas valida assinatura)
-  if (req.url.includes('/webhook')) {
-    if (req.method === 'POST') {
-      try {
-        const body = await req.json();
-        const signature = req.headers.get('X-Zapsign-Signature');
-
-        // Processar webhook
-        await handleZapsignWebhook(body, signature);
-
-        return new Response(JSON.stringify({ success: true }), {
-          headers: { 'Content-Type': 'application/json' },
-          status: 200,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return new Response(
-          JSON.stringify({ error: message }),
-          {
-            headers: { 'Content-Type': 'application/json' },
-            status: 400,
-          }
-        );
-      }
-    }
-    return new Response('Method not allowed', { status: 405 });
-  }
-
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
+  }
+
+  // Webhook endpoint — POST /zapsign/webhook
+  if (req.url.includes('/webhook') && req.method === 'POST') {
+    try {
+      const body = await req.json();
+      const signature = req.headers.get('X-Zapsign-Signature');
+      await handleZapsignWebhook(body, signature);
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      return new Response(JSON.stringify({ error: msg }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
   }
 
   try {
     const { action, ...params } = await req.json();
 
-    // Obter token dos secrets
     const token = Deno.env.get('ZAPSIGN_API_TOKEN');
-    if (!token) {
-      throw new Error('ZAPSIGN_API_TOKEN não configurado nos secrets');
-    }
-
-    const apiUrl = 'https://api.zapsign.com.br';
+    if (!token) throw new Error('ZAPSIGN_API_TOKEN não configurado nos secrets');
 
     let result;
-
     switch (action) {
-      case 'list_documents':
-        result = await listDocuments(apiUrl, token, params);
-        break;
-
-      case 'get_document':
-        result = await getDocument(apiUrl, token, params);
-        break;
-
-      case 'create_document':
-        result = await createDocument(apiUrl, token, params);
-        break;
-
-      case 'send_document':
-        result = await sendDocument(apiUrl, token, params);
-        break;
-
-      case 'cancel_document':
-        result = await cancelDocument(apiUrl, token, params);
-        break;
-
-      case 'get_sign_url':
-        result = await getSignUrl(apiUrl, token, params);
-        break;
-
-      case 'validate_signature':
-        result = await validateSignature(apiUrl, token, params);
-        break;
-
-      default:
-        throw new Error(`Ação desconhecida: ${action}`);
+      case 'list_documents':   result = await listDocuments(token, params);   break;
+      case 'get_document':     result = await getDocument(token, params);     break;
+      case 'create_document':  result = await createDocument(token, params);  break;
+      case 'cancel_document':  result = await cancelDocument(token, params);  break;
+      case 'get_sign_url':     result = await getSignUrl(token, params);      break;
+      default: throw new Error(`Ação desconhecida: ${action}`);
     }
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
+    console.error('[Zapsign]', message);
     return new Response(
-      JSON.stringify({
-        error: { code: 'ZAPSIGN_ERROR', message },
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      }
+      JSON.stringify({ error: { code: 'ZAPSIGN_ERROR', message } }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
     );
   }
 });
 
-// Implementações das ações
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-async function listDocuments(apiUrl: string, token: string, params: any) {
-  const { page = 1, per_page = 20 } = params;
-
-  const response = await fetch(`${apiUrl}/docs/?page=${page}&per_page=${per_page}`, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(`Zapsign API: ${error.message || 'Erro ao listar documentos'}`);
-  }
-
-  return response.json();
+function headers(token: string) {
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
 }
 
-async function getDocument(apiUrl: string, token: string, params: any) {
+async function zapsignFetch(token: string, path: string, method = 'GET', body?: any) {
+  const url = `${ZAPSIGN_BASE}${path}`;
+  console.log(`[Zapsign] ${method} ${url}`);
+
+  const res = await fetch(url, {
+    method,
+    headers: headers(token),
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const text = await res.text();
+  let data: any;
+  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+
+  if (!res.ok) {
+    const msg = data?.detail || data?.message || data?.non_field_errors?.[0] || text || 'Erro na API Zapsign';
+    console.error(`[Zapsign] ${res.status} ${url}: ${msg}`);
+    throw new Error(`Zapsign ${res.status}: ${msg}`);
+  }
+
+  return data;
+}
+
+// ── Ações ─────────────────────────────────────────────────────────────────────
+
+async function listDocuments(token: string, params: any) {
+  const page     = params.page     || 1;
+  const per_page = params.per_page || 20;
+  // Zapsign usa offset-based pagination
+  const offset = (page - 1) * per_page;
+  const data = await zapsignFetch(token, `/docs/?limit=${per_page}&offset=${offset}`);
+
+  // Normalizar resposta
+  const docs = data.results || data.documents || data || [];
+  return {
+    documents: Array.isArray(docs) ? docs.map(normalizeDoc) : [],
+    total: data.count || docs.length,
+    page,
+    per_page,
+  };
+}
+
+async function getDocument(token: string, params: any) {
   const { document_id } = params;
   if (!document_id) throw new Error('document_id é obrigatório');
-
-  const response = await fetch(`${apiUrl}/docs/${document_id}/`, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(`Zapsign API: ${error.message || 'Erro ao obter documento'}`);
-  }
-
-  return response.json();
+  const data = await zapsignFetch(token, `/docs/${document_id}/`);
+  return normalizeDoc(data);
 }
 
-async function createDocument(apiUrl: string, token: string, params: any) {
-  const { name, signers, file_url, template_id, expires_in_days, metadata } =
-    params;
+async function createDocument(token: string, params: any) {
+  const { name, signers, file_url, expires_in_days, metadata } = params;
 
-  if (!name || !signers?.length) {
-    throw new Error('name e signers são obrigatórios');
-  }
+  if (!name)             throw new Error('name é obrigatório');
+  if (!signers?.length)  throw new Error('signers é obrigatório');
+  if (!file_url)         throw new Error('file_url é obrigatório');
 
+  // Montar body conforme docs Zapsign
   const body: any = {
     name,
-    signers,
-    expires_in_days: expires_in_days || 7,
+    url_pdf: file_url,           // campo correto: url_pdf (não file_url)
+    signers: signers.map((s: any) => ({
+      name:  s.name,
+      email: s.email || undefined,
+      // Telefone: separar DDI e número
+      phone_country: s.phone ? '55' : undefined,
+      phone_number:  s.phone ? s.phone.replace(/\D/g, '').slice(-11) : undefined,
+      cpf: s.cpf || undefined,
+      auth_mode: 'assinaturaTela',   // assinatura por tela (padrão/mais simples)
+      send_automatic_email: true,
+      lock_email: false,
+    })),
   };
 
-  if (file_url) body.file_url = file_url;
-  if (template_id) body.template_id = template_id;
-  if (metadata) body.metadata = metadata;
+  if (expires_in_days) body.expires_in_days = expires_in_days;
+  if (metadata?.lead_id) body.external_id = metadata.lead_id;
 
-  const response = await fetch(`${apiUrl}/docs/`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(
-      `Zapsign API: ${error.message || 'Erro ao criar documento'}`
-    );
-  }
-
-  return response.json();
+  const data = await zapsignFetch(token, '/docs/', 'POST', body);
+  return normalizeDoc(data);
 }
 
-async function sendDocument(apiUrl: string, token: string, params: any) {
+async function cancelDocument(token: string, params: any) {
   const { document_id } = params;
   if (!document_id) throw new Error('document_id é obrigatório');
-
-  const response = await fetch(`${apiUrl}/docs/${document_id}/send/`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({}),
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(`Zapsign API: ${error.message || 'Erro ao enviar documento'}`);
-  }
-
+  // Zapsign usa DELETE para cancelar documento
+  await zapsignFetch(token, `/docs/${document_id}/`, 'DELETE');
   return { success: true };
 }
 
-async function cancelDocument(apiUrl: string, token: string, params: any) {
-  const { document_id } = params;
-  if (!document_id) throw new Error('document_id é obrigatório');
-
-  const response = await fetch(`${apiUrl}/docs/${document_id}/cancel/`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({}),
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(
-      `Zapsign API: ${error.message || 'Erro ao cancelar documento'}`
-    );
-  }
-
-  return { success: true };
-}
-
-async function getSignUrl(apiUrl: string, token: string, params: any) {
+async function getSignUrl(token: string, params: any) {
   const { document_id, signer_id } = params;
-  if (!document_id || !signer_id) {
-    throw new Error('document_id e signer_id são obrigatórios');
-  }
+  if (!document_id) throw new Error('document_id é obrigatório');
 
-  const response = await fetch(
-    `${apiUrl}/docs/${document_id}/signers/${signer_id}/sign_url/`,
-    {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+  // Se tiver signer_id, buscar URL específica; senão buscar o documento
+  const data = await getDocument(token, { document_id });
+  const signer = signer_id
+    ? data.signers?.find((s: any) => s.id === signer_id)
+    : data.signers?.[0];
+
+  const sign_url = signer?.sign_url || signer?.token || null;
+  return { sign_url };
+}
+
+// ── Normalizar documento da API para formato interno ──────────────────────────
+
+function normalizeDoc(doc: any) {
+  const signers = (doc.signers || []).map((s: any) => ({
+    id:        s.token || s.id,
+    name:      s.name,
+    email:     s.email,
+    phone:     s.phone_number ? `55${s.phone_number}` : undefined,
+    status:    mapSignerStatus(s),
+    signed_at: s.signed_at || null,
+    sign_url:  s.sign_url || null,
+  }));
+
+  return {
+    id:         doc.token || doc.id,
+    name:       doc.name,
+    status:     mapDocStatus(doc),
+    created_at: doc.created_at,
+    updated_at: doc.last_update_date || doc.updated_at || doc.created_at,
+    expires_at: doc.expiration_date || null,
+    signers,
+  };
+}
+
+function mapDocStatus(doc: any): string {
+  if (doc.deleted)  return 'cancelled';
+  if (doc.signed)   return 'signed';
+  const status = doc.status?.toLowerCase() || '';
+  if (status === 'pending')  return 'pending';
+  if (status === 'signed')   return 'signed';
+  if (status === 'deleted')  return 'cancelled';
+  if (status === 'expired')  return 'expired';
+  return 'pending';
+}
+
+function mapSignerStatus(signer: any): string {
+  if (signer.signed_at || signer.status?.toLowerCase() === 'signed') return 'signed';
+  return 'pending';
+}
+
+// ── Webhook handlers ──────────────────────────────────────────────────────────
+
+async function handleZapsignWebhook(payload: any, _signature: string | null) {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  // Zapsign envia o objeto do documento diretamente no webhook
+  const docToken = payload.token || payload.document_id;
+  const event    = payload.event_action || payload.event || '';
+
+  console.log(`[Zapsign Webhook] event=${event} doc=${docToken}`);
+
+  if (!docToken) return;
+
+  if (event.includes('signed') || payload.signed) {
+    await supabase.from('contract_reminders_zapsign')
+      .update({ status: 'signed', signed_at: new Date().toISOString() })
+      .eq('document_id', docToken);
+
+    // Atualizar lead
+    const { data: contract } = await supabase.from('contract_reminders_zapsign')
+      .select('lead_id').eq('document_id', docToken).maybeSingle();
+    if (contract?.lead_id) {
+      await supabase.from('leads_juridicos')
+        .update({ status: 'Contrato Assinado' })
+        .eq('id', contract.lead_id);
     }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(`Zapsign API: ${error.message || 'Erro ao obter URL de assinatura'}`);
+  } else if (event.includes('deleted') || event.includes('cancelled')) {
+    await supabase.from('contract_reminders_zapsign')
+      .update({ status: 'cancelled' })
+      .eq('document_id', docToken);
+  } else if (event.includes('expired')) {
+    await supabase.from('contract_reminders_zapsign')
+      .update({ status: 'expired' })
+      .eq('document_id', docToken);
   }
-
-  return response.json();
-}
-
-async function validateSignature(apiUrl: string, token: string, params: any) {
-  const { document_id, signer_id, cpf } = params;
-  if (!document_id || !signer_id || !cpf) {
-    throw new Error('document_id, signer_id e cpf são obrigatórios');
-  }
-
-  const response = await fetch(
-    `${apiUrl}/docs/${document_id}/signers/${signer_id}/validate/`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ cpf }),
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(
-      `Zapsign API: ${error.message || 'Erro ao validar assinatura'}`
-    );
-  }
-
-  return response.json();
-}
-
-// ============= WEBHOOK HANDLERS =============
-
-async function handleZapsignWebhook(payload: any, signature: string | null): Promise<void> {
-  const event = payload.event;
-  const documentId = payload.document_id;
-
-  console.log(`Processing Zapsign webhook: ${event} for document ${documentId}`);
-
-  switch (event) {
-    case 'document.signed':
-      await handleDocumentSigned(documentId, payload);
-      break;
-    case 'document.rejected':
-      await handleDocumentRejected(documentId, payload);
-      break;
-    case 'document.expired':
-      await handleDocumentExpired(documentId, payload);
-      break;
-    case 'document.cancelled':
-      await handleDocumentCancelled(documentId, payload);
-      break;
-    case 'signer.signed':
-      await handleSignerSigned(documentId, payload);
-      break;
-    case 'signer.rejected':
-      await handleSignerRejected(documentId, payload);
-      break;
-    default:
-      console.log(`Ignoring event: ${event}`);
-  }
-}
-
-async function handleDocumentSigned(documentId: string, payload: any): Promise<void> {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-
-  if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
-
-  const response = await fetch(`${supabaseUrl}/rest/v1/contract_reminders_zapsign`, {
-    method: 'PATCH',
-    headers: {
-      'apikey': supabaseKey,
-      'Authorization': `Bearer ${supabaseKey}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal',
-    },
-    body: JSON.stringify({
-      status: 'signed',
-      signed_at: new Date().toISOString(),
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    console.error(`Failed to update contract: ${error}`);
-  } else {
-    console.log(`Document ${documentId} signed`);
-  }
-}
-
-async function handleDocumentRejected(documentId: string, payload: any): Promise<void> {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-
-  if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
-
-  await fetch(`${supabaseUrl}/rest/v1/contract_reminders_zapsign`, {
-    method: 'PATCH',
-    headers: {
-      'apikey': supabaseKey,
-      'Authorization': `Bearer ${supabaseKey}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal',
-    },
-    body: JSON.stringify({ status: 'rejected' }),
-  });
-
-  console.log(`Document ${documentId} rejected`);
-}
-
-async function handleDocumentExpired(documentId: string, payload: any): Promise<void> {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-
-  if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
-
-  await fetch(`${supabaseUrl}/rest/v1/contract_reminders_zapsign`, {
-    method: 'PATCH',
-    headers: {
-      'apikey': supabaseKey,
-      'Authorization': `Bearer ${supabaseKey}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal',
-    },
-    body: JSON.stringify({ status: 'expired' }),
-  });
-
-  console.log(`Document ${documentId} expired`);
-}
-
-async function handleDocumentCancelled(documentId: string, payload: any): Promise<void> {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-
-  if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
-
-  await fetch(`${supabaseUrl}/rest/v1/contract_reminders_zapsign`, {
-    method: 'PATCH',
-    headers: {
-      'apikey': supabaseKey,
-      'Authorization': `Bearer ${supabaseKey}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal',
-    },
-    body: JSON.stringify({ status: 'cancelled' }),
-  });
-
-  console.log(`Document ${documentId} cancelled`);
-}
-
-async function handleSignerSigned(documentId: string, payload: any): Promise<void> {
-  const signerId = payload.signer_id;
-  console.log(`Signer ${signerId} signed document ${documentId}`);
-}
-
-async function handleSignerRejected(documentId: string, payload: any): Promise<void> {
-  const signerId = payload.signer_id;
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-
-  if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
-
-  await fetch(`${supabaseUrl}/rest/v1/contract_reminders_zapsign`, {
-    method: 'PATCH',
-    headers: {
-      'apikey': supabaseKey,
-      'Authorization': `Bearer ${supabaseKey}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal',
-    },
-    body: JSON.stringify({ status: 'rejected' }),
-  });
-
-  console.log(`Signer ${signerId} rejected document ${documentId}`);
 }
