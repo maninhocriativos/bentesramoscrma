@@ -14,8 +14,13 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, ExternalLink, Search, ChevronLeft, ChevronRight, Zap, Building2, HelpCircle, MessageCircle, AlertTriangle, MoreHorizontal, Clock } from 'lucide-react';
+import { Loader2, ExternalLink, Search, ChevronLeft, ChevronRight, Zap, Building2, HelpCircle, MessageCircle, AlertTriangle, MoreHorizontal, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { ContratoZapsignComStatus, TipoOrigemZapsign } from '@/hooks/useZapsignContratos';
@@ -64,6 +69,37 @@ export function ZapsignContratosTable({ contratos, isLoading, activeTab }: Zapsi
   const [page, setPage]                 = useState(1);
   const [pageSize, setPageSize]         = useState(10);
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const handleDelete = async (contratoId: string) => {
+    setDeletingId(contratoId);
+    try {
+      // Cancelar na Zapsign
+      const { data, error } = await supabase.functions.invoke('zapsign', {
+        body: { action: 'cancel_document', document_id: contratoId },
+      });
+      if (error) throw new Error(error.message);
+
+      // Atualizar status local
+      await supabase
+        .from('contract_reminders_zapsign')
+        .update({ status: 'cancelled' })
+        .eq('document_id', contratoId);
+
+      toast({ title: 'Contrato cancelado', description: 'Documento cancelado na Zapsign' });
+    } catch (err: any) {
+      // Se falhar na Zapsign, apenas cancela localmente
+      await supabase
+        .from('contract_reminders_zapsign')
+        .update({ status: 'cancelled' })
+        .eq('document_id', contratoId);
+      toast({ title: 'Cancelado localmente', description: 'Não foi possível cancelar na Zapsign, mas o registro foi atualizado' });
+    } finally {
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+    }
+  };
 
   const sendReminder = async (contrato: ContratoZapsignComStatus, type: 'soft' | 'urgent') => {
     setSendingReminder(`${contrato.id}-${type}`);
@@ -368,6 +404,20 @@ export function ZapsignContratosTable({ contratos, isLoading, activeTab }: Zapsi
                             </a>
                           </DropdownMenuItem>
                         )}
+
+                        {/* Cancelar */}
+                        {!['Cancelado','Rejeitado','Expirado','Assinado'].includes(c.statusLocal) && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => setConfirmDeleteId(c.id)}
+                              className="gap-2 cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Cancelar contrato
+                            </DropdownMenuItem>
+                          </>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -377,6 +427,30 @@ export function ZapsignContratosTable({ contratos, isLoading, activeTab }: Zapsi
           </Table>
         </div>
       )}
+
+      {/* Dialog de confirmação de cancelamento */}
+      <AlertDialog open={!!confirmDeleteId} onOpenChange={() => setConfirmDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar contrato?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O documento será cancelado na Zapsign e o signatário não poderá mais assinar.
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => confirmDeleteId && handleDelete(confirmDeleteId)}
+              disabled={!!deletingId}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deletingId ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Cancelar contrato
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Paginação */}
       {filtered.length > 0 && (

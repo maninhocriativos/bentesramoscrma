@@ -185,30 +185,37 @@ export function CriarContratoZapsignModal({
       if (data?.error) throw new Error(data.error.message || JSON.stringify(data.error));
       documentResponse = data;
 
-      // Salvar registro local para cada doc do envelope
-      const docsParaSalvar = documentResponse.envelope_docs || [documentResponse];
-      for (const doc of docsParaSalvar) {
-        await supabase.from('contract_reminders_zapsign').insert({
-          document_id:   doc.id,
-          document_name: doc.name,
-          lead_id:       leadId || null,
-          signer_name:   campos.nome_completo,
-          signer_email:  leadEmail || null,
-          signer_phone:  campos.telefone_contato || leadPhone || null,
-          signer_cpf:    campos.cpf?.replace(/\D/g, '') || null,
-          status:        'pending',
-          background_check_status: 'pending',
-          contract_link: doc.signers?.[0]?.sign_url || doc.id,
-          sent_at:       enviarAosCriar ? new Date().toISOString() : null,
-        });
-      }
+      // Envelope: salvar apenas o doc principal com link único
+      const envelopeDocs: any[] = documentResponse.envelope_docs || [documentResponse];
+      const mainDoc = envelopeDocs[0];
+      const envelopeId = envelopeDocs.length > 1 ? crypto.randomUUID() : null;
 
-      const totalDocs = documentResponse.total_docs || 1;
+      // Salvar doc principal com o link de assinatura
+      await supabase.from('contract_reminders_zapsign').insert({
+        document_id:   mainDoc.id,
+        document_name: envelopeDocs.length > 1
+          ? `Envelope (${envelopeDocs.length} docs) - ${campos.nome_completo}`
+          : mainDoc.name,
+        lead_id:       leadId || null,
+        signer_name:   campos.nome_completo,
+        signer_email:  leadEmail || null,
+        signer_phone:  campos.telefone_contato || leadPhone || null,
+        signer_cpf:    campos.cpf?.replace(/\D/g, '') || null,
+        status:        'pending',
+        background_check_status: 'pending',
+        contract_link: mainDoc.signers?.[0]?.sign_url || mainDoc.id,
+        sent_at:       enviarAosCriar ? new Date().toISOString() : null,
+        metadata:      envelopeDocs.length > 1 ? { envelope_docs: envelopeDocs.map((d: any) => ({ id: d.id, name: d.name, sign_url: d.signers?.[0]?.sign_url })) } : {},
+      } as any);
+
+      const totalDocs = envelopeDocs.length;
       toast({
         title: totalDocs > 1
           ? `✅ Envelope criado! ${totalDocs} documentos`
           : '✅ Contrato criado!',
-        description: `Link de assinatura enviado para ${campos.nome_completo}`,
+        description: totalDocs > 1
+          ? `1 link com ${totalDocs} documentos enviado para ${campos.nome_completo}`
+          : `Link de assinatura enviado para ${campos.nome_completo}`,
       });
 
       onSuccess?.();

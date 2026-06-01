@@ -89,10 +89,17 @@ function hoje(): string {
   return `${d.getDate()} de ${meses[d.getMonth()]} de ${d.getFullYear()}`;
 }
 
-const CAB = `**BENTES RAMOS ADVOCACIA E CONSULTORIA JURÍDICA**
-Rua Salvador, 120, Sala 708 – Vieiralves Business Center – Adrianópolis, Manaus/AM – CEP 69057-040
-(92) 3343-6173 | (92) 98223-7330 / (92) 99160-4348
+// Logo hospedado no próprio projeto (público)
+const LOGO_URL = 'https://bentesramoscrma.lovable.app/images/logo-bentes-ramos-header.jpg';
+
+const CAB = `<div style="text-align:center;margin-bottom:16px"><img src="${LOGO_URL}" alt="Bentes Ramos" style="max-width:220px;height:auto"/></div>
+
+<div style="text-align:center;font-size:11px;color:#555;margin-bottom:8px">
+<strong>BENTES RAMOS ADVOCACIA E CONSULTORIA JURÍDICA</strong><br/>
+Rua Salvador, 120, Sala 708 – Vieiralves Business Center – Adrianópolis, Manaus/AM – CEP 69057-040<br/>
+(92) 3343-6173 | (92) 98223-7330 / (92) 99160-4348<br/>
 juridico@bentesramos.adv.br | www.bentesramos.com.br
+</div>
 
 ---
 
