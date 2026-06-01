@@ -214,7 +214,12 @@ export default function LeadDetailPage() {
         </Card>
 
         {/* Contracts Section */}
-        <LeadContractsSection leadId={lead.id} leadNome={lead.nome || undefined} />
+        <LeadContractsSection
+          leadId={lead.id}
+          leadNome={lead.nome || undefined}
+          leadEmail={lead.email || undefined}
+          leadPhone={lead.telefone || undefined}
+        />
 
         {/* Tabs */}
         <Tabs defaultValue="interacoes" className="w-full">

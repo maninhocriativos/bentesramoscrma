@@ -17,6 +17,7 @@ interface UploadModeloModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUpload: (file: File, nome: string, descricao: string, categoria: string) => Promise<any>;
+  titulo?: string;
 }
 
 const CATEGORIAS = [
@@ -33,7 +34,7 @@ const CATEGORIAS = [
   'Outro',
 ];
 
-export function UploadModeloModal({ isOpen, onClose, onUpload }: UploadModeloModalProps) {
+export function UploadModeloModal({ isOpen, onClose, onUpload, titulo }: UploadModeloModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
@@ -71,7 +72,7 @@ export function UploadModeloModal({ isOpen, onClose, onUpload }: UploadModeloMod
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Enviar Modelo de Contrato</DialogTitle>
+          <DialogTitle>{titulo || 'Enviar Modelo de Contrato'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">

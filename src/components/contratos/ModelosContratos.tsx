@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { FileText, Download, Eye, Plus, Scale, Building2, Users, Car, Home, Briefcase, Trash2, Loader2, ExternalLink, FileSignature } from 'lucide-react';
+import { FileText, Download, Eye, Plus, Scale, Building2, Users, Car, Home, Briefcase, Trash2, Loader2, ExternalLink, FileSignature, Zap } from 'lucide-react';
 import { useModelosContratos, ModeloContrato as DBModeloContrato } from '@/hooks/useModelosContratos';
 import { UploadModeloModal } from './UploadModeloModal';
 import { usePerfil } from '@/hooks/usePerfil';
@@ -135,19 +135,21 @@ export function ModelosContratos() {
   const { canDelete } = usePerfil();
   const [selectedModelo, setSelectedModelo] = useState<ModeloPadrao | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState<'clicksign' | 'zapsign' | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Group custom models
-  const { customContratos, customProcuracoes } = useMemo(() => {
+  // Group custom models by tipo e tipo de documento
+  const { customContratos, customProcuracoes, customZapsign } = useMemo(() => {
     const contratos: DBModeloContrato[] = [];
     const procuracoes: DBModeloContrato[] = [];
+    const zapsign: DBModeloContrato[] = [];
     modelos.forEach(m => {
-      if (isProcuracao(m)) procuracoes.push(m);
+      if ((m as any).tipo === 'zapsign') zapsign.push(m);
+      else if (isProcuracao(m)) procuracoes.push(m);
       else contratos.push(m);
     });
-    return { customContratos: contratos, customProcuracoes: procuracoes };
+    return { customContratos: contratos, customProcuracoes: procuracoes, customZapsign: zapsign };
   }, [modelos]);
 
   // Group default models
@@ -181,6 +183,7 @@ export function ModelosContratos() {
     customModels: DBModeloContrato[],
     defaultModels: ModeloPadrao[],
     uploadLabel: string,
+    uploadTipo: 'clicksign' | 'zapsign' = 'clicksign',
   ) => (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -191,7 +194,7 @@ export function ModelosContratos() {
             <p className="text-xs text-muted-foreground">{subtitle}</p>
           </div>
         </div>
-        <Button size="sm" onClick={() => setUploadOpen(true)}>
+        <Button size="sm" onClick={() => setUploadOpen(uploadTipo)}>
           <Plus className="h-4 w-4 mr-1" /> {uploadLabel}
         </Button>
       </div>
@@ -268,7 +271,78 @@ export function ModelosContratos() {
         customProcuracoes,
         defaultProcuracoes,
         'Enviar Procuração',
+        'clicksign',
       )}
+
+      {/* Divider */}
+      <div className="border-t border-border" />
+
+      {/* Zapsign Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-cyan-100 text-cyan-600">
+              <Zap className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold flex items-center gap-2">
+                Modelos Zapsign
+                <span className="text-xs bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded-full font-medium">Novo</span>
+              </h3>
+              <p className="text-xs text-muted-foreground">Modelos de contrato para assinatura digital via Zapsign</p>
+            </div>
+          </div>
+          <Button size="sm" onClick={() => setUploadOpen('zapsign')} className="bg-cyan-600 hover:bg-cyan-700 text-white">
+            <Plus className="h-4 w-4 mr-1" /> Upload Zapsign
+          </Button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : customZapsign.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {customZapsign.map(m => (
+              <Card key={m.id} className="hover:shadow-md transition-shadow border-cyan-200">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="p-2 bg-cyan-100 rounded-lg text-cyan-600">
+                      <Zap className="h-5 w-5" />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs bg-cyan-50 text-cyan-700 border border-cyan-200 px-2 py-0.5 rounded-full">Zapsign</span>
+                      <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{m.categoria}</span>
+                    </div>
+                  </div>
+                  <CardTitle className="text-sm mt-3">{m.nome}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-xs text-muted-foreground line-clamp-2">{m.descricao || m.arquivo_nome}</p>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" className="flex-1 text-xs" asChild>
+                      <a href={m.arquivo_url} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-3.5 w-3.5 mr-1" /> Visualizar
+                      </a>
+                    </Button>
+                    {canDelete && (
+                      <Button variant="outline" size="sm" onClick={() => setDeleteId(m.id)} className="text-destructive hover:text-destructive px-2">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="border border-dashed border-cyan-200 rounded-lg py-10 text-center bg-cyan-50/20">
+            <Zap className="h-8 w-8 mx-auto text-cyan-300 mb-2" />
+            <p className="text-sm text-muted-foreground">Nenhum modelo Zapsign enviado</p>
+            <p className="text-xs text-muted-foreground mt-1">Faça upload de PDFs para usar na criação de contratos</p>
+          </div>
+        )}
+      </div>
 
       {/* Preview Dialog */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
@@ -294,7 +368,14 @@ export function ModelosContratos() {
       </Dialog>
 
       {/* Upload Modal */}
-      <UploadModeloModal isOpen={uploadOpen} onClose={() => setUploadOpen(false)} onUpload={uploadModelo} />
+      <UploadModeloModal
+        isOpen={uploadOpen !== null}
+        onClose={() => setUploadOpen(null)}
+        onUpload={(file, nome, descricao, categoria) =>
+          uploadModelo(file, nome, descricao, categoria, uploadOpen || 'clicksign')
+        }
+        titulo={uploadOpen === 'zapsign' ? 'Upload Modelo Zapsign' : undefined}
+      />
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>

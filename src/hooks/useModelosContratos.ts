@@ -10,6 +10,7 @@ export interface ModeloContrato {
   categoria: string;
   arquivo_url: string;
   arquivo_nome: string;
+  tipo: 'clicksign' | 'zapsign';
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -48,7 +49,8 @@ export function useModelosContratos() {
     file: File,
     nome: string,
     descricao: string,
-    categoria: string
+    categoria: string,
+    tipo: 'clicksign' | 'zapsign' = 'clicksign'
   ) => {
     if (!user) {
       toast({
@@ -87,6 +89,7 @@ export function useModelosContratos() {
           categoria,
           arquivo_url: urlData.signedUrl,
           arquivo_nome: file.name,
+          tipo,
           created_by: user.id,
         })
         .select()
