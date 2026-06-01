@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Zap, Loader2, AlertCircle, Send, User, Mail, Phone, CreditCard,
-  Calendar, ChevronDown, ChevronUp, Package, FileText, CheckCircle2, X,
+  Calendar, ChevronDown, ChevronUp, Package, FileText, CheckCircle2, MapPin,
 } from 'lucide-react';
 import {
   TEMPLATES_DISPONIVEIS,
@@ -55,6 +55,7 @@ export function CriarContratoZapsignModal({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [expiresInDays, setExpiresInDays] = useState('7');
   const [enviarAosCriar, setEnviarAosCriar] = useState(true);
+  const [buscandoCep, setBuscandoCep] = useState(false);
 
   // Templates a usar (template único ou lista do envelope)
   const templatesAtivos = useMemo(() => {
@@ -110,6 +111,29 @@ export function CriarContratoZapsignModal({
   const updateCampo = (id: string, value: string) => {
     setCampos(prev => ({ ...prev, [id]: value }));
     if (errors[id]) setErrors(prev => { const e = { ...prev }; delete e[id]; return e; });
+    // Buscar CEP automaticamente quando tiver 8 dígitos
+    if (id === 'cep') {
+      const digits = value.replace(/\D/g, '');
+      if (digits.length === 8) buscarCep(digits);
+    }
+  };
+
+  const buscarCep = async (cep: string) => {
+    setBuscandoCep(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        setCampos(prev => ({
+          ...prev,
+          endereco:   data.logradouro || prev.endereco,
+          bairro:     data.bairro     || prev.bairro,
+          cidade_uf:  data.localidade ? `${data.localidade}/${data.uf}` : prev.cidade_uf,
+        }));
+      }
+    } catch { /* silencia erros de CEP */ } finally {
+      setBuscandoCep(false);
+    }
   };
 
   const validate = (): boolean => {
@@ -157,8 +181,8 @@ export function CriarContratoZapsignModal({
 
       const { data, error } = await supabase.functions.invoke('zapsign', { body: invokeBody });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error.message || 'Erro na Zapsign');
+      if (error) throw new Error(error.message || JSON.stringify(error));
+      if (data?.error) throw new Error(data.error.message || JSON.stringify(data.error));
       documentResponse = data;
 
       // Salvar registro local para cada doc do envelope
@@ -433,9 +457,20 @@ export function CriarContratoZapsignModal({
                     <div className="grid grid-cols-2 gap-3">
                       {camposEndereco.map(campo => (
                         <div key={campo.id} className={cn('space-y-1', ['endereco'].includes(campo.id) && 'col-span-2')}>
-                          <Label className="text-xs font-medium">
+                          <Label className="text-xs font-medium flex items-center gap-1">
+                            {campo.id === 'cep' && <MapPin className="h-3 w-3 text-muted-foreground" />}
                             {campo.label}
                             {campo.obrigatorio && <span className="text-red-500 ml-1">*</span>}
+                            {campo.id === 'cep' && buscandoCep && (
+                              <span className="ml-auto text-cyan-600 flex items-center gap-1 text-[10px]">
+                                <Loader2 className="h-3 w-3 animate-spin" /> Buscando...
+                              </span>
+                            )}
+                            {campo.id === 'cep' && !buscandoCep && campos.cep?.replace(/\D/g, '').length === 8 && campos.endereco && (
+                              <span className="ml-auto text-emerald-600 flex items-center gap-1 text-[10px]">
+                                <CheckCircle2 className="h-3 w-3" /> Endereço encontrado
+                              </span>
+                            )}
                           </Label>
                           {renderCampo(campo)}
                           <FieldError id={campo.id} />
