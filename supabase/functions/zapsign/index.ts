@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import { ZAPSIGN_TEMPLATES, getTemplate } from './templates.ts';
 
 // URL base correta da API Zapsign (v1)
 const ZAPSIGN_BASE = 'https://api.zapsign.com.br/api/v1';
@@ -39,8 +40,11 @@ serve(async (req) => {
       case 'list_documents':   result = await listDocuments(token, params);   break;
       case 'get_document':     result = await getDocument(token, params);     break;
       case 'create_document':  result = await createDocument(token, params);  break;
-      case 'cancel_document':  result = await cancelDocument(token, params);  break;
-      case 'get_sign_url':     result = await getSignUrl(token, params);      break;
+      case 'cancel_document':         result = await cancelDocument(token, params);        break;
+      case 'get_sign_url':            result = await getSignUrl(token, params);           break;
+      case 'create_from_template':    result = await createFromTemplate(token, params);   break;
+      case 'create_envelope':         result = await createEnvelope(token, params);       break;
+      case 'list_templates':          result = listTemplates();                           break;
       default: throw new Error(`Ação desconhecida: ${action}`);
     }
 
@@ -206,6 +210,113 @@ function mapDocStatus(doc: any): string {
 function mapSignerStatus(signer: any): string {
   if (signer.signed_at || signer.status?.toLowerCase() === 'signed') return 'signed';
   return 'pending';
+}
+
+// ── Gerar documento a partir de template interno ──────────────────────────────
+
+function listTemplates() {
+  return Object.values(ZAPSIGN_TEMPLATES).map(t => ({
+    key: t.key,
+    nome: t.nome,
+    campos: t.campos,
+  }));
+}
+
+async function createFromTemplate(token: string, params: any) {
+  const { template_key, campos_preenchidos, signers, expires_in_days } = params;
+  if (!template_key) throw new Error('template_key é obrigatório');
+  if (!campos_preenchidos) throw new Error('campos_preenchidos é obrigatório');
+
+  const template = getTemplate(template_key);
+  if (!template) throw new Error(`Template "${template_key}" não encontrado`);
+
+  // Gerar o markdown com os dados preenchidos
+  const markdownContent = template.gerarMarkdown(campos_preenchidos);
+
+  // Criar documento no Zapsign com o markdown gerado
+  const body: any = {
+    name: `${template.nome} - ${campos_preenchidos.nome_completo || 'Cliente'}`,
+    markdown_text: markdownContent,
+    signers: (signers || []).map((s: any) => ({
+      name:  s.name,
+      email: s.email || undefined,
+      phone_country: s.phone ? '55' : undefined,
+      phone_number:  s.phone ? s.phone.replace(/\D/g, '').slice(-11) : undefined,
+      cpf: s.cpf || undefined,
+      auth_mode: 'assinaturaTela',
+      send_automatic_email: true,
+      lock_email: false,
+    })),
+  };
+
+  if (expires_in_days) body.expires_in_days = expires_in_days;
+
+  const data = await zapsignFetch(token, '/docs/', 'POST', body);
+  return normalizeDoc(data);
+}
+
+// ── Envelope: criar múltiplos docs e agrupar num link ────────────────────────
+
+async function createEnvelope(token: string, params: any) {
+  const { templates_keys, campos_preenchidos, signers, expires_in_days } = params;
+
+  if (!templates_keys?.length) throw new Error('templates_keys é obrigatório (array)');
+  if (!campos_preenchidos) throw new Error('campos_preenchidos é obrigatório');
+
+  const results: any[] = [];
+  let mainDocId: string | null = null;
+
+  for (let i = 0; i < templates_keys.length; i++) {
+    const key = templates_keys[i];
+    const template = getTemplate(key);
+    if (!template) throw new Error(`Template "${key}" não encontrado`);
+
+    const markdownContent = template.gerarMarkdown(campos_preenchidos);
+
+    const body: any = {
+      name: `${template.nome} - ${campos_preenchidos.nome_completo || 'Cliente'}`,
+      markdown_text: markdownContent,
+      signers: (signers || []).map((s: any) => ({
+        name:  s.name,
+        email: s.email || undefined,
+        phone_country: s.phone ? '55' : undefined,
+        phone_number:  s.phone ? s.phone.replace(/\D/g, '').slice(-11) : undefined,
+        cpf: s.cpf || undefined,
+        auth_mode: 'assinaturaTela',
+        send_automatic_email: i === 0, // só notifica no primeiro
+        lock_email: false,
+      })),
+    };
+
+    if (expires_in_days) body.expires_in_days = expires_in_days;
+
+    const data = await zapsignFetch(token, '/docs/', 'POST', body);
+    const doc = normalizeDoc(data);
+    results.push(doc);
+
+    if (i === 0) {
+      mainDocId = doc.id;
+    } else if (mainDocId) {
+      // Anexar documentos extras ao primeiro (envelope)
+      try {
+        await zapsignFetch(token, `/docs/${mainDocId}/extra-docs/`, 'POST', {
+          name: template.nome,
+          doc_token: doc.id,
+        });
+      } catch (e) {
+        console.warn(`[Zapsign] Não foi possível anexar doc ${doc.id} ao envelope:`, e);
+      }
+    }
+  }
+
+  // Retornar o documento principal com todos os extras
+  const mainDoc = results[0];
+  return {
+    ...mainDoc,
+    envelope_docs: results,
+    total_docs: results.length,
+    sign_url: mainDoc?.signers?.[0]?.sign_url,
+  };
 }
 
 // ── Webhook handlers ──────────────────────────────────────────────────────────
