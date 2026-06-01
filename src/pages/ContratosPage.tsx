@@ -6,10 +6,14 @@ import { ContratosAnalytics } from '@/components/contratos/ContratosAnalytics';
 import { ContratosTable } from '@/components/contratos/ContratosTable';
 import { ModelosContratos } from '@/components/contratos/ModelosContratos';
 import { EnviarKitModal } from '@/components/contratos/EnviarKitModal';
+import { ZapsignContratosKPIs } from '@/components/contratos/ZapsignContratosKPIs';
+import { ZapsignContratosTable } from '@/components/contratos/ZapsignContratosTable';
+import { useZapsignContratos } from '@/hooks/useZapsignContratos';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, FileText, FolderOpen, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { Loader2, FileText, FolderOpen, Clock, CheckCircle2, XCircle, Zap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
 function normalizePhone(p: string): string {
   return p.replace(/\D/g, '').slice(-11);
@@ -58,12 +62,20 @@ const mapClicksignStatus = (doc: any): string => {
   return 'Documento Enviado';
 };
 
-const TABS = [
+const TABS_CLICKSIGN = [
   { id: 'todos',       label: 'Todos',       icon: FileText,     color: 'text-[#c9a96e]'  },
   { id: 'em-processo', label: 'Em Processo', icon: Clock,        color: 'text-amber-500'  },
   { id: 'finalizados', label: 'Finalizados', icon: CheckCircle2, color: 'text-emerald-500' },
   { id: 'cancelados',  label: 'Cancelados',  icon: XCircle,      color: 'text-zinc-400'   },
   { id: 'modelos',     label: 'Modelos',     icon: FolderOpen,   color: 'text-[#c9a96e]'  },
+];
+
+const TABS_ZAPSIGN = [
+  { id: 'zapsign-todos',           label: 'Todos',           icon: FileText,     color: 'text-cyan-600'  },
+  { id: 'zapsign-em-assinatura',   label: 'Em Assinatura',   icon: Clock,        color: 'text-amber-500'  },
+  { id: 'zapsign-assinados',       label: 'Assinados',       icon: CheckCircle2, color: 'text-emerald-500' },
+  { id: 'zapsign-cancelados',      label: 'Cancelados',      icon: XCircle,      color: 'text-zinc-400'   },
+  { id: 'zapsign-modelos',         label: 'Modelos',         icon: FolderOpen,   color: 'text-cyan-600'  },
 ];
 
 export default function ContratosPage() {
@@ -73,6 +85,10 @@ export default function ContratosPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('todos');
   const [enviarModalOpen, setEnviarModalOpen] = useState(false);
+  const [provider, setProvider] = useState<'clicksign' | 'zapsign'>('clicksign');
+
+  // Hook para Zapsign
+  const { contratos: contratosZapsign, isLoading: loadingZapsign, refetch: refetchZapsign } = useZapsignContratos();
 
   const fetchContractsFromClicksign = useCallback(async (showLoading = true, showToast = false) => {
     if (showLoading) setLoading(true);
@@ -233,12 +249,38 @@ export default function ContratosPage() {
     }
   };
 
+  // Determinar se estamos em aba Zapsign
+  const isZapsignTab = activeTab.startsWith('zapsign-');
+  const isLoading = isZapsignTab ? loadingZapsign : loading;
+
+  // Renderização para Zapsign
+  const renderZapsignContent = () => {
+    if (activeTab === 'zapsign-modelos') {
+      return <ModelosContratos />;
+    }
+    return (
+      <ZapsignContratosTable
+        contratos={contratosZapsign}
+        isLoading={loadingZapsign}
+        activeTab={activeTab}
+      />
+    );
+  };
+
+  // Renderização para Clicksign
+  const renderClicksignContent = () => {
+    if (activeTab === 'modelos') {
+      return <ModelosContratos />;
+    }
+    return <ContratosTable contratos={filteredContratos} onRefresh={handleRefresh} />;
+  };
+
   return (
     <AppLayout>
       <AppHeader title="Contratos" />
 
       <div className="flex-1 px-4 md:px-6 lg:px-8 py-5 space-y-5 animate-fade-in overflow-auto">
-        {loading ? (
+        {isLoading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-4">
             <div className="h-14 w-14 rounded-2xl bg-[#c9a96e]/10 flex items-center justify-center">
               <Loader2 className="h-7 w-7 animate-spin text-[#c9a96e]" />
@@ -247,56 +289,126 @@ export default function ContratosPage() {
           </div>
         ) : (
           <>
-            {/* Analytics de Contratos */}
-            <ContratosAnalytics contratos={contratos} />
-
-            {/* KPIs com gráfico */}
-            <ContratosKPIs
-              data={kpiData}
-              onRefresh={handleRefresh}
-              onSendContract={() => setEnviarModalOpen(true)}
-              refreshing={refreshing}
-            />
-
-            {/* Tabs */}
-            <div className="flex gap-1 overflow-x-auto pb-0.5">
-              {TABS.map(tab => {
-                const Icon = tab.icon;
-                const count = getTabCount(tab.id);
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={cn(
-                      'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all',
-                      isActive
-                        ? 'bg-[#3d2b1f] text-[#c9a96e] shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-[#c9a96e]/8'
-                    )}
-                  >
-                    <Icon className={cn('h-4 w-4 shrink-0', isActive ? 'text-[#c9a96e]' : tab.color)} />
-                    <span className="hidden sm:inline">{tab.label}</span>
-                    {count !== null && (
-                      <span className={cn(
-                        'text-[11px] px-1.5 py-0.5 rounded-full font-semibold min-w-[20px] text-center',
-                        isActive
-                          ? 'bg-[#c9a96e]/20 text-[#c9a96e]'
-                          : 'bg-muted text-muted-foreground'
-                      )}>
-                        {count}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+            {/* Seletor de Provider */}
+            <div className="flex gap-2 items-center">
+              <button
+                onClick={() => {
+                  setProvider('clicksign');
+                  setActiveTab('todos');
+                }}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                  provider === 'clicksign'
+                    ? 'bg-[#c9a96e] text-white shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-[#c9a96e]/10'
+                )}
+              >
+                <FileText className="h-4 w-4" />
+                Clicksign
+              </button>
+              <button
+                onClick={() => {
+                  setProvider('zapsign');
+                  setActiveTab('zapsign-todos');
+                }}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                  provider === 'zapsign'
+                    ? 'bg-cyan-600 text-white shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-cyan-600/10'
+                )}
+              >
+                <Zap className="h-4 w-4" />
+                Zapsign
+                <Badge variant="outline" className="ml-1 text-xs">Nova</Badge>
+              </button>
             </div>
 
-            {/* Conteúdo da tab */}
-            {activeTab === 'modelos'
-              ? <ModelosContratos />
-              : <ContratosTable contratos={filteredContratos} onRefresh={handleRefresh} />
-            }
+            {/* Conteúdo específico do provider */}
+            {isZapsignTab ? (
+              <>
+                {/* Zapsign Analytics e KPIs */}
+                <ZapsignContratosKPIs
+                  contratos={contratosZapsign}
+                  isLoading={loadingZapsign}
+                />
+
+                {/* Tabs Zapsign */}
+                <div className="flex gap-1 overflow-x-auto pb-0.5">
+                  {TABS_ZAPSIGN.map(tab => {
+                    const Icon = tab.icon;
+                    const isActive = activeTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={cn(
+                          'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all',
+                          isActive
+                            ? 'bg-cyan-600/20 text-cyan-600 shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-cyan-600/8'
+                        )}
+                      >
+                        <Icon className={cn('h-4 w-4 shrink-0', isActive ? 'text-cyan-600' : tab.color)} />
+                        <span className="hidden sm:inline">{tab.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Conteúdo Zapsign */}
+                {renderZapsignContent()}
+              </>
+            ) : (
+              <>
+                {/* Clicksign Analytics e KPIs */}
+                <ContratosAnalytics contratos={contratos} />
+
+                <ContratosKPIs
+                  data={kpiData}
+                  onRefresh={handleRefresh}
+                  onSendContract={() => setEnviarModalOpen(true)}
+                  refreshing={refreshing}
+                />
+
+                {/* Tabs Clicksign */}
+                <div className="flex gap-1 overflow-x-auto pb-0.5">
+                  {TABS_CLICKSIGN.map(tab => {
+                    const Icon = tab.icon;
+                    const count = getTabCount(tab.id);
+                    const isActive = activeTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={cn(
+                          'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all',
+                          isActive
+                            ? 'bg-[#3d2b1f] text-[#c9a96e] shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-[#c9a96e]/8'
+                        )}
+                      >
+                        <Icon className={cn('h-4 w-4 shrink-0', isActive ? 'text-[#c9a96e]' : tab.color)} />
+                        <span className="hidden sm:inline">{tab.label}</span>
+                        {count !== null && (
+                          <span className={cn(
+                            'text-[11px] px-1.5 py-0.5 rounded-full font-semibold min-w-[20px] text-center',
+                            isActive
+                              ? 'bg-[#c9a96e]/20 text-[#c9a96e]'
+                              : 'bg-muted text-muted-foreground'
+                          )}>
+                            {count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Conteúdo Clicksign */}
+                {renderClicksignContent()}
+              </>
+            )}
           </>
         )}
       </div>
