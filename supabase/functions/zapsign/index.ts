@@ -34,13 +34,12 @@ serve(async (req) => {
 
     let result: any;
     switch (action) {
-      case 'list_documents':      result = await listDocuments(token, params);      break;
-      case 'get_document':        result = await getDocument(token, params);        break;
-      case 'create_document':     result = await createDocument(token, params);     break;
-      case 'create_from_template':result = await createFromMarkdown(token, params); break;
-      case 'create_envelope':     result = await createEnvelope(token, params);     break;
-      case 'cancel_document':     result = await cancelDocument(token, params);     break;
-      case 'get_sign_url':        result = await getSignUrl(token, params);         break;
+      case 'list_documents':  result = await listDocuments(token, params);  break;
+      case 'get_document':    result = await getDocument(token, params);    break;
+      case 'create_document': result = await createDocument(token, params); break;
+      case 'create_envelope': result = await createEnvelope(token, params); break;
+      case 'cancel_document': result = await cancelDocument(token, params); break;
+      case 'get_sign_url':    result = await getSignUrl(token, params);     break;
       default: throw new Error(`Ação desconhecida: ${action}`);
     }
 
@@ -155,26 +154,10 @@ async function createDocument(token: string, params: any) {
   return normalizeDoc(data);
 }
 
-// Criar documento a partir de markdown gerado no frontend
-async function createFromMarkdown(token: string, params: any) {
-  const { name, markdown_text, signers, expires_in_days } = params;
-  if (!name || !markdown_text || !signers?.length) {
-    throw new Error('name, markdown_text e signers são obrigatórios');
-  }
-  const body = {
-    name,
-    markdown_text,
-    signers: buildSigners(signers),
-    expires_in_days: expires_in_days || 7,
-  };
-  const data = await zapsignFetch(token, '/docs/', 'POST', body);
-  return normalizeDoc(data);
-}
-
 // Envelope: múltiplos docs em um link (via extra-docs)
 async function createEnvelope(token: string, params: any) {
   const { docs, signers, expires_in_days } = params;
-  // docs = [{ name, markdown_text }, ...]
+  // docs = [{ name, file_url }, ...]
   if (!docs?.length || !signers?.length) {
     throw new Error('docs e signers são obrigatórios');
   }
@@ -182,20 +165,19 @@ async function createEnvelope(token: string, params: any) {
   const results: any[] = [];
 
   for (let i = 0; i < docs.length; i++) {
-    const { name, markdown_text } = docs[i];
+    const { name, file_url } = docs[i];
     const body = {
       name,
-      markdown_text,
+      url_pdf: file_url,
       signers: buildSigners(signers.map((s: any) => ({
         ...s,
-        send_automatic_email: i === 0, // só notifica no primeiro
+        send_automatic_email: i === 0,
       }))),
       expires_in_days: expires_in_days || 7,
     };
     const data = await zapsignFetch(token, '/docs/', 'POST', body);
     results.push(normalizeDoc(data));
 
-    // Anexar docs extras ao primeiro (cria envelope)
     if (i > 0 && results[0]?.id) {
       try {
         await zapsignFetch(token, `/docs/${results[0].id}/extra-docs/`, 'POST', {
