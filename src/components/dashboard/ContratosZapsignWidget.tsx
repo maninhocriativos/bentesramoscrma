@@ -29,7 +29,7 @@ export function ContratosZapsignWidget() {
       (c) => c.tipoOrigem === 'trafego' && c.statusLocal === 'Assinado'
     ).length;
     const bentesRamosAssinados = contratos.filter(
-      (c) => c.tipoOrigem === 'bentes_ramos' && c.statusLocal === 'Assinado'
+      (c) => c.tipoOrigem === 'escritorio' && c.statusLocal === 'Assinado'
     ).length;
 
     const taxaConversao =

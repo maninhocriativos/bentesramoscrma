@@ -29,38 +29,18 @@ export function ZapsignContratosKPIs({
     ).length;
 
     // Separado por origem
-    const trafegoTotal = contratos.filter(
-      (c) => c.tipoOrigem === 'trafego'
-    ).length;
-    const bentesRamosTotal = contratos.filter(
-      (c) => c.tipoOrigem === 'bentes_ramos'
-    ).length;
-
-    const trafegoAssinados = contratos.filter(
-      (c) => c.tipoOrigem === 'trafego' && c.statusLocal === 'Assinado'
-    ).length;
-    const bentesRamosAssinados = contratos.filter(
-      (c) => c.tipoOrigem === 'bentes_ramos' && c.statusLocal === 'Assinado'
-    ).length;
-
-    const trafegoTaxaConversao =
-      trafegoTotal > 0 ? ((trafegoAssinados / trafegoTotal) * 100).toFixed(1) : '0';
-    const bentesRamosTaxaConversao =
-      bentesRamosTotal > 0
-        ? ((bentesRamosAssinados / bentesRamosTotal) * 100).toFixed(1)
-        : '0';
+    const trafegoTotal     = contratos.filter(c => c.tipoOrigem === 'trafego').length;
+    const escritorioTotal  = contratos.filter(c => c.tipoOrigem === 'escritorio').length;
+    const trafegoAssinados    = contratos.filter(c => c.tipoOrigem === 'trafego'    && c.statusLocal === 'Assinado').length;
+    const escritorioAssinados = contratos.filter(c => c.tipoOrigem === 'escritorio' && c.statusLocal === 'Assinado').length;
+    const trafegoTaxa    = trafegoTotal    > 0 ? ((trafegoAssinados    / trafegoTotal)    * 100).toFixed(1) : '0';
+    const escritorioTaxa = escritorioTotal > 0 ? ((escritorioAssinados / escritorioTotal) * 100).toFixed(1) : '0';
 
     return {
-      total,
-      emAssinatura,
-      assinados,
-      cancelados,
-      trafegoTotal,
-      bentesRamosTotal,
-      trafegoAssinados,
-      bentesRamosAssinados,
-      trafegoTaxaConversao,
-      bentesRamosTaxaConversao,
+      total, emAssinatura, assinados, cancelados,
+      trafegoTotal, escritorioTotal,
+      trafegoAssinados, escritorioAssinados,
+      trafegoTaxa, escritorioTaxa,
     };
   }, [contratos]);
 
@@ -136,70 +116,56 @@ export function ZapsignContratosKPIs({
       {/* Breakdown por origem */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* Tráfego */}
-        <Card className="border-border">
+        <Card className="border-blue-200 bg-gradient-to-br from-blue-50/60 to-background">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Contratos - Tráfego</CardTitle>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-blue-100">
+                <svg className="h-3.5 w-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+              </span>
+              Cliente de Tráfego
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-muted-foreground">Total</span>
-                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                    {stats.trafegoTotal}
-                  </Badge>
-                </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Total</span>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">{stats.trafegoTotal}</Badge>
               </div>
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-muted-foreground">Assinados</span>
-                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                    {stats.trafegoAssinados}
-                  </Badge>
-                </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Assinados</span>
+                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">{stats.trafegoAssinados}</Badge>
               </div>
-              <div className="pt-2 border-t">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Taxa de Conversão</span>
-                  <span className="text-lg font-bold text-blue-600">
-                    {stats.trafegoTaxaConversao}%
-                  </span>
-                </div>
+              <div className="pt-2 border-t flex items-center justify-between">
+                <span className="text-xs font-medium">Taxa de Conversão</span>
+                <span className="text-xl font-bold text-blue-600">{stats.trafegoTaxa}%</span>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Bentes Ramos */}
-        <Card className="border-border">
+        {/* Escritório */}
+        <Card className="border-purple-200 bg-gradient-to-br from-purple-50/60 to-background">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Contratos - Bentes Ramos</CardTitle>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-purple-100">
+                <svg className="h-3.5 w-3.5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+              </span>
+              Cliente do Escritório
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-muted-foreground">Total</span>
-                  <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-                    {stats.bentesRamosTotal}
-                  </Badge>
-                </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Total</span>
+                <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">{stats.escritorioTotal}</Badge>
               </div>
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-muted-foreground">Assinados</span>
-                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                    {stats.bentesRamosAssinados}
-                  </Badge>
-                </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Assinados</span>
+                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">{stats.escritorioAssinados}</Badge>
               </div>
-              <div className="pt-2 border-t">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Taxa de Conversão</span>
-                  <span className="text-lg font-bold text-purple-600">
-                    {stats.bentesRamosTaxaConversao}%
-                  </span>
-                </div>
+              <div className="pt-2 border-t flex items-center justify-between">
+                <span className="text-xs font-medium">Taxa de Conversão</span>
+                <span className="text-xl font-bold text-purple-600">{stats.escritorioTaxa}%</span>
               </div>
             </div>
           </CardContent>
