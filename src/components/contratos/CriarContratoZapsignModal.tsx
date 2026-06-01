@@ -17,7 +17,7 @@ import {
   TEMPLATES_DISPONIVEIS,
   ENVELOPE_PRESETS,
   getTemplateInfo,
-  getTemplatePdfUrl,
+  gerarMarkdownComDados,
   type CampoTemplate,
 } from '@/integrations/zapsign/templateFields';
 
@@ -163,21 +163,21 @@ export function CriarContratoZapsignModal({
         cpf:   campos.cpf?.replace(/\D/g, '') || undefined,
       }];
 
-      // Preparar documentos com URLs dos PDFs
+      // Gerar markdowns com dados substituídos
       const docsGerados = templatesAtivos.map(key => {
         const info = getTemplateInfo(key);
-        const pdfUrl = getTemplatePdfUrl(key);
+        const markdown = gerarMarkdownComDados(key, campos);
         return {
           name: `${info?.nome || key} - ${campos.nome_completo}`,
-          file_url: pdfUrl,
+          markdown_text: markdown,
         };
       });
 
       let documentResponse: any;
-      const action = docsGerados.length > 1 ? 'create_envelope' : 'create_document';
+      const action = docsGerados.length > 1 ? 'create_envelope' : 'create_from_template';
 
       const invokeBody = docsGerados.length === 1
-        ? { action, name: docsGerados[0].name, file_url: docsGerados[0].file_url, signers, expires_in_days: parseInt(expiresInDays) }
+        ? { action, name: docsGerados[0].name, markdown_text: docsGerados[0].markdown_text, signers, expires_in_days: parseInt(expiresInDays) }
         : { action: 'create_envelope', docs: docsGerados, signers, expires_in_days: parseInt(expiresInDays) };
 
       const { data, error } = await supabase.functions.invoke('zapsign', { body: invokeBody });
