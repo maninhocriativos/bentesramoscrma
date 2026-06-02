@@ -155,11 +155,11 @@ async function createDocument(token: string, params: any) {
   return normalizeDoc(data);
 }
 
-// Criar documento a partir de markdown ou HTML
+// Criar documento a partir de markdown, HTML ou .docx (base64)
 async function createFromMarkdown(token: string, params: any) {
-  const { name, markdown_text, html_text, signers, expires_in_days } = params;
-  if (!name || (!markdown_text && !html_text) || !signers?.length) {
-    throw new Error('name, (markdown_text ou html_text) e signers são obrigatórios');
+  const { name, markdown_text, html_text, base64_docx, signers, expires_in_days } = params;
+  if (!name || (!markdown_text && !html_text && !base64_docx) || !signers?.length) {
+    throw new Error('name, (markdown_text, html_text ou base64_docx) e signers são obrigatórios');
   }
   const body: any = {
     name,
@@ -167,8 +167,10 @@ async function createFromMarkdown(token: string, params: any) {
     expires_in_days: expires_in_days || 7,
   };
 
-  // Suporta tanto markdown quanto HTML
-  if (html_text) {
+  // Prioridade: .docx (layout exato do escritório) > HTML > markdown
+  if (base64_docx) {
+    body.base64_docx = base64_docx;
+  } else if (html_text) {
     body.html_text = html_text;
   } else if (markdown_text) {
     body.markdown_text = markdown_text;
@@ -189,7 +191,7 @@ async function createEnvelope(token: string, params: any) {
   const results: any[] = [];
 
   for (let i = 0; i < docs.length; i++) {
-    const { name, markdown_text, html_text } = docs[i];
+    const { name, markdown_text, html_text, base64_docx } = docs[i];
     const body: any = {
       name,
       signers: buildSigners(signers.map((s: any) => ({
@@ -199,8 +201,10 @@ async function createEnvelope(token: string, params: any) {
       expires_in_days: expires_in_days || 7,
     };
 
-    // Suporta tanto markdown quanto HTML
-    if (html_text) {
+    // Prioridade: .docx (layout exato) > HTML > markdown
+    if (base64_docx) {
+      body.base64_docx = base64_docx;
+    } else if (html_text) {
       body.html_text = html_text;
     } else if (markdown_text) {
       body.markdown_text = markdown_text;

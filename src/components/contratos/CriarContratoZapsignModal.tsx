@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { validateCPF } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -14,12 +13,14 @@ import {
   Calendar, ChevronDown, ChevronUp, Package, FileText, CheckCircle2, MapPin,
 } from 'lucide-react';
 import {
-  TEMPLATES_DISPONIVEIS,
-  ENVELOPE_PRESETS,
-  getTemplateInfo,
-  gerarMarkdownComDados,
-  type CampoTemplate,
-} from '@/integrations/zapsign/templateFields';
+  TEMPLATES_DOCX,
+  ENVELOPE_PRESETS_DOCX,
+  getTemplateDocx,
+  getCamposDocx,
+  preencherDocxBase64,
+  dataPorExtenso,
+  type CampoTemplateDocx,
+} from '@/integrations/zapsign/docxTemplates';
 
 interface Props {
   isOpen: boolean;
@@ -61,7 +62,7 @@ export function CriarContratoZapsignModal({
   const templatesAtivos = useMemo(() => {
     if (modo === 'template') return templateKey ? [templateKey] : [];
     if (envelopePreset) {
-      const preset = ENVELOPE_PRESETS.find(p => p.id === envelopePreset);
+      const preset = ENVELOPE_PRESETS_DOCX.find(p => p.id === envelopePreset);
       return preset?.templates || [];
     }
     return customTemplates;
@@ -70,11 +71,9 @@ export function CriarContratoZapsignModal({
   // Campos necessários (união de todos os templates selecionados)
   const camposNecessarios = useMemo(() => {
     const todosIds = new Set<string>();
-    const resultado: CampoTemplate[] = [];
+    const resultado: CampoTemplateDocx[] = [];
     for (const key of templatesAtivos) {
-      const info = getTemplateInfo(key);
-      if (!info) continue;
-      for (const campo of info.campos) {
+      for (const campo of getCamposDocx(key)) {
         if (!todosIds.has(campo.id)) {
           todosIds.add(campo.id);
           resultado.push(campo);
@@ -89,9 +88,9 @@ export function CriarContratoZapsignModal({
     if (!isOpen) return;
     setCampos(prev => ({
       ...prev,
-      nome_completo: leadNome || '',
-      cpf: leadCpf || '',
-      telefone_contato: leadPhone || '',
+      NOME_COMPLETO: leadNome || '',
+      CPF: leadCpf || '',
+      TELEFONE: leadPhone || '',
     }));
   }, [isOpen, leadNome, leadEmail, leadPhone, leadCpf]);
 
@@ -112,7 +111,7 @@ export function CriarContratoZapsignModal({
     setCampos(prev => ({ ...prev, [id]: value }));
     if (errors[id]) setErrors(prev => { const e = { ...prev }; delete e[id]; return e; });
     // Buscar CEP automaticamente quando tiver 8 dígitos
-    if (id === 'cep') {
+    if (id === 'CEP') {
       const digits = value.replace(/\D/g, '');
       if (digits.length === 8) buscarCep(digits);
     }
@@ -126,9 +125,10 @@ export function CriarContratoZapsignModal({
       if (!data.erro) {
         setCampos(prev => ({
           ...prev,
-          endereco:   data.logradouro || prev.endereco,
-          bairro:     data.bairro     || prev.bairro,
-          cidade_uf:  data.localidade ? `${data.localidade}/${data.uf}` : prev.cidade_uf,
+          ENDERECO: data.logradouro || prev.ENDERECO,
+          BAIRRO:   data.bairro     || prev.BAIRRO,
+          CIDADE:   data.localidade || prev.CIDADE,
+          UF:       data.uf         || prev.UF,
         }));
       }
     } catch { /* silencia erros de CEP */ } finally {
@@ -156,52 +156,51 @@ export function CriarContratoZapsignModal({
     if (!validate()) return;
     setLoading(true);
     try {
+      const nomeCliente = campos.NOME_COMPLETO;
       const signers = [{
-        name:  campos.nome_completo,
+        name:  nomeCliente,
         email: leadEmail || undefined,
-        phone: campos.telefone_contato || leadPhone || undefined,
-        cpf:   campos.cpf?.replace(/\D/g, '') || undefined,
+        phone: campos.TELEFONE || leadPhone || undefined,
+        cpf:   campos.CPF?.replace(/\D/g, '') || undefined,
       }];
 
-      // Gerar HTMLs com dados substituídos
-      const docsGerados = templatesAtivos.map(key => {
-        const info = getTemplateInfo(key);
-        const html = gerarMarkdownComDados(key, campos);
+      // Preenche os .docx do escritório no cliente (docxtemplater) e converte
+      // cada um para base64 — a Zapsign converte mantendo o layout exato.
+      const dadosComData = { ...campos, DATA: dataPorExtenso() };
+      const docsGerados = await Promise.all(templatesAtivos.map(async key => {
+        const info = getTemplateDocx(key);
+        const { base64 } = await preencherDocxBase64(info!.arquivo, dadosComData);
         return {
-          name: `${info?.nome || key} - ${campos.nome_completo}`,
-          html_text: html,
+          name: `${info?.nome || key} - ${nomeCliente}`,
+          base64_docx: base64,
         };
-      });
-
-      let documentResponse: any;
-      const action = docsGerados.length > 1 ? 'create_envelope' : 'create_from_template';
+      }));
 
       const invokeBody = docsGerados.length === 1
-        ? { action, name: docsGerados[0].name, html_text: docsGerados[0].html_text, signers, expires_in_days: parseInt(expiresInDays) }
+        ? { action: 'create_from_template', name: docsGerados[0].name, base64_docx: docsGerados[0].base64_docx, signers, expires_in_days: parseInt(expiresInDays) }
         : { action: 'create_envelope', docs: docsGerados, signers, expires_in_days: parseInt(expiresInDays) };
 
       const { data, error } = await supabase.functions.invoke('zapsign', { body: invokeBody });
 
       if (error) throw new Error(error.message || JSON.stringify(error));
       if (data?.error) throw new Error(data.error.message || JSON.stringify(data.error));
-      documentResponse = data;
+      const documentResponse: any = data;
 
       // Envelope: salvar apenas o doc principal com link único
       const envelopeDocs: any[] = documentResponse.envelope_docs || [documentResponse];
       const mainDoc = envelopeDocs[0];
-      const envelopeId = envelopeDocs.length > 1 ? crypto.randomUUID() : null;
 
       // Salvar doc principal com o link de assinatura
       await supabase.from('contract_reminders_zapsign').insert({
         document_id:   mainDoc.id,
         document_name: envelopeDocs.length > 1
-          ? `Envelope (${envelopeDocs.length} docs) - ${campos.nome_completo}`
+          ? `Envelope (${envelopeDocs.length} docs) - ${nomeCliente}`
           : mainDoc.name,
         lead_id:       leadId || null,
-        signer_name:   campos.nome_completo,
+        signer_name:   nomeCliente,
         signer_email:  leadEmail || null,
-        signer_phone:  campos.telefone_contato || leadPhone || null,
-        signer_cpf:    campos.cpf?.replace(/\D/g, '') || null,
+        signer_phone:  campos.TELEFONE || leadPhone || null,
+        signer_cpf:    campos.CPF?.replace(/\D/g, '') || null,
         status:        'pending',
         background_check_status: 'pending',
         contract_link: mainDoc.signers?.[0]?.sign_url || mainDoc.id,
@@ -215,8 +214,8 @@ export function CriarContratoZapsignModal({
           ? `✅ Envelope criado! ${totalDocs} documentos`
           : '✅ Contrato criado!',
         description: totalDocs > 1
-          ? `1 link com ${totalDocs} documentos enviado para ${campos.nome_completo}`
-          : `Link de assinatura enviado para ${campos.nome_completo}`,
+          ? `1 link com ${totalDocs} documentos enviado para ${nomeCliente}`
+          : `Link de assinatura enviado para ${nomeCliente}`,
       });
 
       onSuccess?.();
@@ -246,36 +245,23 @@ export function CriarContratoZapsignModal({
   };
 
   // Agrupar campos por categoria
-  const camposPessoais  = camposNecessarios.filter(c => ['nome_completo','cpf','rg','orgao_rg','nacionalidade','estado_civil','profissao'].includes(c.id));
-  const camposEndereco  = camposNecessarios.filter(c => ['endereco','numero_end','bairro','cidade_uf','cep'].includes(c.id));
+  const camposPessoais  = camposNecessarios.filter(c => ['NOME_COMPLETO','CPF','RG','NACIONALIDADE','NATURALIDADE','ESTADO_CIVIL','PROFISSAO'].includes(c.id));
+  const camposEndereco  = camposNecessarios.filter(c => ['ENDERECO','NUMERO','BAIRRO','CIDADE','UF','CEP'].includes(c.id));
   const camposEspecificos = camposNecessarios.filter(c => !camposPessoais.find(p => p.id === c.id) && !camposEndereco.find(p => p.id === c.id));
 
   const FieldError = ({ id }: { id: string }) => errors[id]
     ? <p className="flex items-center gap-1 text-xs text-red-500 mt-1"><AlertCircle className="h-3 w-3" /> {errors[id]}</p>
     : null;
 
-  const renderCampo = (campo: CampoTemplate) => {
+  const renderCampo = (campo: CampoTemplateDocx) => {
     const val = campos[campo.id] || '';
     const baseClass = cn('h-9 text-sm', errors[campo.id] && 'border-red-500');
-
-    if (campo.tipo === 'area') {
-      return (
-        <Textarea
-          value={val}
-          onChange={e => updateCampo(campo.id, e.target.value)}
-          placeholder={campo.placeholder}
-          disabled={loading}
-          className={cn('text-sm resize-none', errors[campo.id] && 'border-red-500')}
-          rows={2}
-        />
-      );
-    }
 
     return (
       <Input
         value={val}
         onChange={e => updateCampo(campo.id, campo.tipo === 'cpf' ? e.target.value.replace(/\D/g, '').slice(0, 11) : e.target.value)}
-        placeholder={campo.placeholder || campo.default}
+        placeholder={campo.default}
         disabled={loading}
         className={cn(baseClass, campo.tipo === 'cpf' && 'font-mono tracking-wider')}
         maxLength={campo.tipo === 'cpf' ? 11 : undefined}
@@ -337,7 +323,7 @@ export function CriarContratoZapsignModal({
               <div className="space-y-2">
                 <SectionTitle>Modelo de Documento</SectionTitle>
                 <div className="grid grid-cols-1 gap-2">
-                  {TEMPLATES_DISPONIVEIS.map(t => (
+                  {TEMPLATES_DOCX.map(t => (
                     <button
                       key={t.key}
                       type="button"
@@ -362,7 +348,7 @@ export function CriarContratoZapsignModal({
 
                 {/* Presets */}
                 <div className="grid grid-cols-1 gap-2">
-                  {ENVELOPE_PRESETS.map(preset => (
+                  {ENVELOPE_PRESETS_DOCX.map(preset => (
                     <button
                       key={preset.id}
                       type="button"
@@ -399,7 +385,7 @@ export function CriarContratoZapsignModal({
 
                 {showCustom && (
                   <div className="grid grid-cols-1 gap-2 pl-2">
-                    {TEMPLATES_DISPONIVEIS.map(t => (
+                    {TEMPLATES_DOCX.map(t => (
                       <label key={t.key} className="flex items-center gap-3 cursor-pointer px-3 py-2 rounded-lg hover:bg-muted/40">
                         <input
                           type="checkbox"
@@ -416,7 +402,7 @@ export function CriarContratoZapsignModal({
                 {templatesAtivos.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     {templatesAtivos.map(key => {
-                      const info = getTemplateInfo(key);
+                      const info = getTemplateDocx(key);
                       return (
                         <Badge key={key} variant="outline" className="text-xs bg-cyan-50 text-cyan-700 border-cyan-200 gap-1">
                           <FileText className="h-3 w-3" />
@@ -440,10 +426,10 @@ export function CriarContratoZapsignModal({
                     <SectionTitle>Dados do Cliente</SectionTitle>
                     <div className="grid grid-cols-2 gap-3">
                       {camposPessoais.map(campo => (
-                        <div key={campo.id} className={cn('space-y-1', ['nome_completo','profissao','estado_civil'].includes(campo.id) && 'col-span-2')}>
+                        <div key={campo.id} className={cn('space-y-1', ['NOME_COMPLETO','PROFISSAO'].includes(campo.id) && 'col-span-2')}>
                           <Label className="text-xs font-medium flex items-center gap-1">
-                            {campo.id === 'nome_completo' && <User className="h-3 w-3 text-muted-foreground" />}
-                            {campo.id === 'cpf' && <CreditCard className="h-3 w-3 text-muted-foreground" />}
+                            {campo.id === 'NOME_COMPLETO' && <User className="h-3 w-3 text-muted-foreground" />}
+                            {campo.id === 'CPF' && <CreditCard className="h-3 w-3 text-muted-foreground" />}
                             {campo.label}
                             {campo.obrigatorio && <span className="text-red-500">*</span>}
                             {campo.origem === 'lead' && (
@@ -464,17 +450,17 @@ export function CriarContratoZapsignModal({
                     <SectionTitle>Endereço</SectionTitle>
                     <div className="grid grid-cols-2 gap-3">
                       {camposEndereco.map(campo => (
-                        <div key={campo.id} className={cn('space-y-1', ['endereco'].includes(campo.id) && 'col-span-2')}>
+                        <div key={campo.id} className={cn('space-y-1', ['ENDERECO'].includes(campo.id) && 'col-span-2')}>
                           <Label className="text-xs font-medium flex items-center gap-1">
-                            {campo.id === 'cep' && <MapPin className="h-3 w-3 text-muted-foreground" />}
+                            {campo.id === 'CEP' && <MapPin className="h-3 w-3 text-muted-foreground" />}
                             {campo.label}
                             {campo.obrigatorio && <span className="text-red-500 ml-1">*</span>}
-                            {campo.id === 'cep' && buscandoCep && (
+                            {campo.id === 'CEP' && buscandoCep && (
                               <span className="ml-auto text-cyan-600 flex items-center gap-1 text-[10px]">
                                 <Loader2 className="h-3 w-3 animate-spin" /> Buscando...
                               </span>
                             )}
-                            {campo.id === 'cep' && !buscandoCep && campos.cep?.replace(/\D/g, '').length === 8 && campos.endereco && (
+                            {campo.id === 'CEP' && !buscandoCep && campos.CEP?.replace(/\D/g, '').length === 8 && campos.ENDERECO && (
                               <span className="ml-auto text-emerald-600 flex items-center gap-1 text-[10px]">
                                 <CheckCircle2 className="h-3 w-3" /> Endereço encontrado
                               </span>
@@ -494,9 +480,9 @@ export function CriarContratoZapsignModal({
                     <SectionTitle>Dados do Processo</SectionTitle>
                     <div className="grid grid-cols-2 gap-3">
                       {camposEspecificos.map(campo => (
-                        <div key={campo.id} className={cn('space-y-1', ['reu','numeros_contratos'].includes(campo.id) && 'col-span-2')}>
+                        <div key={campo.id} className={cn('space-y-1', ['REU'].includes(campo.id) && 'col-span-2')}>
                           <Label className="text-xs font-medium flex items-center gap-1">
-                            {campo.id === 'telefone_contato' && <Phone className="h-3 w-3 text-muted-foreground" />}
+                            {campo.id === 'TELEFONE' && <Phone className="h-3 w-3 text-muted-foreground" />}
                             {campo.label}
                             {campo.obrigatorio && <span className="text-red-500 ml-0.5">*</span>}
                           </Label>
