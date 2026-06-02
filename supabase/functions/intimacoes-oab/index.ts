@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+// Importar novas estratégias
+import { fetchFromDOU } from "./strategies/dou-api.ts";
+import { fetchFromTJAM } from "./strategies/tjam-scraping.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -776,6 +780,22 @@ serve(async (req) => {
       console.log(`📋 [DJe-TJAM] Total: ${djeCount} publicações diretas do DJe TJAM`);
     } catch (e) {
       console.warn("⚠️ [DJe-TJAM] Erro geral:", e);
+    }
+
+    // ── Estratégia 3: DOU API (sem auth, histórico completo) ───────────────────
+    try {
+      console.log(`\n🌐 [Estratégias adicionais] Iniciando DOU API + TJAM Scraping`);
+
+      const douItems = await fetchFromDOU(oab_numero, oab_uf, advogado_id, advogadoNome);
+      intimacoes.push(...douItems);
+      console.log(`✅ DOU: ${douItems.length} publicações`);
+
+      const tjamItems = await fetchFromTJAM(oab_numero, oab_uf, advogado_id, advogadoNome);
+      intimacoes.push(...tjamItems);
+      console.log(`✅ TJAM: ${tjamItems.length} publicações`);
+
+    } catch (e) {
+      console.warn("⚠️ [DOU/TJAM] Erro geral:", e);
     }
 
     // Contagem de publicações de hoje encontradas pelas APIs
