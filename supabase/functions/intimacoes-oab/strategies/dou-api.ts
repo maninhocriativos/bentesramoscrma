@@ -1,7 +1,8 @@
-// DOU API Integration - Busca publicações no Diário Oficial da União
+// DOU Web Scraping - Busca publicações no Diário Oficial da União
+// Web scraping do site público (API rejeita requisições diretas)
 // Sem autenticação, histórico completo, sem limite de 90 dias
 
-const DOU_API = "https://api.in.gov.br/api/v1/diarios";
+const DOU_BUSCA = "https://www.in.gov.br/consulta";
 
 interface DOUPublicacao {
   id?: string;
@@ -65,83 +66,77 @@ export async function fetchFromDOU(
   oab_numero: string,
   oab_uf: string,
   _advogado_id: string | null = null,
-  advogadoNome?: string | null
+  _advogadoNome?: string | null
 ): Promise<any[]> {
   const intimacoes: any[] = [];
-  let found = 0;
 
   try {
-    console.log(`🔍 [DOU] Buscando por OAB/${oab_uf} ${oab_numero}`);
+    console.log(`🔍 [DOU] Tentando web scraping do Diário Oficial da União`);
 
-    // Estratégia 1: Buscar por OAB formatado
-    const queries = [
-      `OAB ${oab_numero}/${oab_uf}`,
-      `OAB ${oab_numero} ${oab_uf}`,
-      oab_numero,
-    ];
+    // Tenta acessar a página de busca da DOU
+    const resp = await fetch(DOU_BUSCA, {
+      signal: AbortSignal.timeout(15000),
+    });
 
-    if (advogadoNome) {
-      queries.push(advogadoNome);
+    if (!resp.ok) {
+      console.warn(`⚠️ [DOU] HTTP ${resp.status} ao acessar ${DOU_BUSCA}`);
+      return intimacoes;
     }
 
-    for (const query of queries) {
-      try {
-        const url = `${DOU_API}?q=${encodeURIComponent(query)}&limit=100&offset=0`;
-        console.log(`🔎 [DOU] Query: "${query}"`);
+    const html = await resp.text();
 
-        const resp = await fetch(url, {
-          method: "GET",
-          signal: AbortSignal.timeout(15000),
-        });
+    // Busca por padrões no HTML
+    // Procura por menções de OAB e CNJ
+    const oabPattern = new RegExp(oab_numero.replace(/\D/g, ""), "gi");
+    const cnjPattern = /\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/g;
 
-        if (!resp.ok) {
-          console.warn(`⚠️ [DOU] HTTP ${resp.status} para query "${query}"`);
-          continue;
-        }
+    const foundOABs = html.match(oabPattern) || [];
+    const foundCNJs = html.match(cnjPattern) || [];
 
-        const data = await resp.json();
-        const items = data?.diarios || data?.results || data?.data || [];
+    console.log(`📄 [DOU] Menções de OAB: ${foundOABs.length}, CNJs: ${foundCNJs.length}`);
 
-        if (!Array.isArray(items)) {
-          console.warn(`⚠️ [DOU] Resposta inválida para "${query}"`);
-          continue;
-        }
+    if (foundOABs.length > 0 || foundCNJs.length > 0) {
+      // Extrai seção relevante do HTML
+      const text = html
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/\s+/g, " ");
 
-        console.log(`📄 [DOU] ${items.length} resultados para "${query}"`);
+      // Se encontrou CNJs, cria um item para cada um
+      for (const cnj of foundCNJs.slice(0, 10)) {
+        // Pega contexto ao redor do CNJ
+        const idx = text.indexOf(cnj);
+        const contextStart = Math.max(0, idx - 500);
+        const contextEnd = Math.min(text.length, idx + 1000);
+        const context = text.substring(contextStart, contextEnd);
 
-        for (const item of items) {
-          const conteudo = item.descricao || item.conteudo || item.texto || "";
-          const titulo = item.titulo || "Publicação DOU";
-          const dataDisp = item.data_publicacao || item.data || "";
+        // Tenta extrair data
+        const dateMatch = context.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
+        const dataPublicacao = dateMatch ? dateMatch[1] : null;
 
-          // Extrai CNJ se existir no conteúdo
-          const cnjMatch = conteudo.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
-
-          const tipo = classifyMovimento(conteudo, titulo);
-
-          intimacoes.push(makeItem({
-            cnj: cnjMatch ? cnjMatch[1] : "",
-            titulo,
-            tribunal: "DOU",
-            tipo,
-            conteudo,
-            dataDisp: dataDisp || null,
-            oab_numero,
-            oab_uf,
-            advogado_id: _advogado_id,
-            raw: item,
-          }));
-
-          found++;
-        }
-      } catch (err) {
-        console.error(`❌ [DOU] Erro na query "${query}":`, err);
+        intimacoes.push(makeItem({
+          cnj,
+          titulo: `Publicação DOU - OAB ${oab_numero}/${oab_uf}`,
+          tribunal: "DOU",
+          tipo: "Publicação",
+          conteudo: context.slice(0, 5000),
+          dataDisp: dataPublicacao,
+          oab_numero,
+          oab_uf,
+          advogado_id: _advogado_id,
+          raw: { method: "dou_scraping", context_length: context.length },
+        }));
       }
     }
 
-    console.log(`📋 [DOU] ${found} publicações encontradas`);
-  } catch (e) {
-    console.error("❌ [DOU] Erro geral:", e);
+    console.log(`✅ [DOU] ${intimacoes.length} publicações extraídas`);
+  } catch (err) {
+    console.error("❌ [DOU] Erro:", err);
   }
 
   return intimacoes;
