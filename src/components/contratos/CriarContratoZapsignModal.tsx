@@ -163,13 +163,13 @@ export function CriarContratoZapsignModal({
         cpf:   campos.cpf?.replace(/\D/g, '') || undefined,
       }];
 
-      // Gerar markdowns com dados substituídos
+      // Gerar HTMLs com dados substituídos
       const docsGerados = templatesAtivos.map(key => {
         const info = getTemplateInfo(key);
-        const markdown = gerarMarkdownComDados(key, campos);
+        const html = gerarMarkdownComDados(key, campos);
         return {
           name: `${info?.nome || key} - ${campos.nome_completo}`,
-          markdown_text: markdown,
+          html_text: html,
         };
       });
 
@@ -177,7 +177,7 @@ export function CriarContratoZapsignModal({
       const action = docsGerados.length > 1 ? 'create_envelope' : 'create_from_template';
 
       const invokeBody = docsGerados.length === 1
-        ? { action, name: docsGerados[0].name, markdown_text: docsGerados[0].markdown_text, signers, expires_in_days: parseInt(expiresInDays) }
+        ? { action, name: docsGerados[0].name, html_text: docsGerados[0].html_text, signers, expires_in_days: parseInt(expiresInDays) }
         : { action: 'create_envelope', docs: docsGerados, signers, expires_in_days: parseInt(expiresInDays) };
 
       const { data, error } = await supabase.functions.invoke('zapsign', { body: invokeBody });

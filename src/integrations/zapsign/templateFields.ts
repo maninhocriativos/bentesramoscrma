@@ -1,6 +1,8 @@
 // Templates Zapsign — usando PDFs originais (não markdown)
 // Apenas renderiza campos para seleção e preenchimento
 
+import { HTML_TEMPLATES } from './html-templates';
+
 export interface CampoTemplate {
   id: string;
   label: string;
@@ -113,56 +115,57 @@ export const ENVELOPE_PRESETS = [
   },
 ];
 
-// Gerar markdown com placeholders substituídos
+// Gerar HTML com placeholders substituídos
 export function gerarMarkdownComDados(templateKey: string, dados: Record<string, string>): string {
   const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
   const hoje = new Date();
   const data = `${hoje.getDate()} de ${meses[hoje.getMonth()]} de ${hoje.getFullYear()}`;
 
-  // Simulação dos templates em markdown (em produção virão de markdown-templates.ts)
-  // Por enquanto, retorna markdown simples com placeholders
-  let template = '';
+  const templateFn = HTML_TEMPLATES[templateKey as keyof typeof HTML_TEMPLATES];
 
-  switch (templateKey) {
-    case 'declaracao-nao-contratacao':
-      template = `# DECLARAÇÃO DE NÃO CONTRATAÇÃO DE EMPRÉSTIMO\n\nEu, {{nome_completo}}, {{nacionalidade}}, {{estado_civil}}, {{profissao}}, detentor(a) da cédula de identidade n° {{rg}} {{orgao_rg}} e do CPF n° {{cpf}}, residente e domiciliado(a) na {{endereco}}, n° {{numero_end}}, bairro: {{bairro}}, {{cidade_uf}}, Cep: {{cep}}, **DECLARO** para os devidos fins de direito, sob as penas da lei, que as informações prestadas e documentos que apresentei ao escritório jurídico, referente a **NÃO CONTRATAÇÃO DOS EMPRÉSTIMOS {{numeros_contratos}}**, vinculados ao **{{banco}}**, indevidamente averbados em meu benefício previdenciário n° {{numero_beneficio}}, são verdadeiras.\n\n{{data}}.\n\n_______________________________________________\n**{{nome_completo}}**`;
-      break;
-    case 'declaracao-falso-advogado':
-      template = `# DECLARAÇÃO DE CIÊNCIA E ORIENTAÇÃO - Falso Advogado\n\nEu, {{nome_completo}}, {{nacionalidade}}, {{estado_civil}}, {{profissao}}, detentor(a) da cédula de identidade n° {{rg}} {{orgao_rg}} e do CPF n° {{cpf}}, residente e domiciliado(a) na {{endereco}}, n° {{numero_end}}, bairro: {{bairro}}, {{cidade_uf}}, Cep: {{cep}}, declaro que fui informado(a) e orientado(a) sobre o golpe do "falso advogado".\n\n{{data}}.\n\n_______________________________________________\n**{{nome_completo}}**`;
-      break;
-    case 'declaracao-hipossuficiencia':
-      template = `# DECLARAÇÃO DE HIPOSSUFICIÊNCIA\n\nEu, {{nome_completo}}, {{nacionalidade}}, {{estado_civil}}, {{profissao}}, detentor(a) da cédula de identidade n° {{rg}} {{orgao_rg}} e do CPF n° {{cpf}}, residente e domiciliado(a) na {{endereco}}, n° {{numero_end}}, bairro: {{bairro}}, {{cidade_uf}}, Cep: {{cep}}, DECLARO, com base no artigo 5°, inciso LXXIV da CF/88 que não posso arcar com custas processuais sem prejuízo do meu sustento.\n\n{{data}}.\n\n_______________________________________________\n**{{nome_completo}}**`;
-      break;
-    case 'contrato-honorarios':
-      template = `# CONTRATO DE PRESTAÇÃO DE SERVIÇOS ADVOCATÍCIOS\n\n**CONTRATANTE:** {{nome_completo}}, {{nacionalidade}}, {{estado_civil}}, {{profissao}}, detentor(a) da cédula de identidade n° {{rg}} {{orgao_rg}} e do CPF n° {{cpf}}, residente e domiciliado(a) na {{endereco}}, n° {{numero_end}}, bairro: {{bairro}}, {{cidade_uf}}, Cep: {{cep}}.\n\n**Objeto:** Ação judicial em face de **{{reu}}**, referente ao contrato **{{contrato_reu}}**.\n\n**Telefone:** {{telefone_contato}}\n\n**Honorários:** {{percentual_honorarios}}% em caso de êxito.\n\n{{data}}.\n\n_______________________________________________\n**{{nome_completo}} - CONTRATANTE**`;
-      break;
-    case 'procuracao':
-      template = `# INSTRUMENTO DE PROCURAÇÃO\n\n**OUTORGANTE:** {{nome_completo}}, {{nacionalidade}}, {{estado_civil}}, {{profissao}}, detentor(a) da cédula de identidade n° {{rg}} {{orgao_rg}} e do CPF n° {{cpf}}, residente e domiciliado(a) na {{endereco}}, n° {{numero_end}}, bairro: {{bairro}}, {{cidade_uf}}, Cep: {{cep}}.\n\n**Poderes:** Para ingressar com ação judicial em face de **{{reu}}**, referente ao contrato **{{contrato_reu}}, com poderes especiais para confessar, desistir, transigir e firmar acordos.\n\n{{data}}.\n\n_______________________________________________\n**{{nome_completo}}**`;
-      break;
+  if (!templateFn) {
+    throw new Error(`Template não encontrado: ${templateKey}`);
+  }
+
+  let html = templateFn(dados);
+
+  // Calcular percentual por extenso
+  let percentualExtenso = '';
+  const percentual = dados.percentual_honorarios || '40';
+  const numeros = ['zero', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove',
+    'dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove',
+    'vinte', 'vinte e um', 'vinte e dois', 'vinte e três', 'vinte e quatro', 'vinte e cinco',
+    'vinte e seis', 'vinte e sete', 'vinte e oito', 'vinte e nove', 'trinta', 'trinta e um',
+    'trinta e dois', 'trinta e três', 'trinta e quatro', 'trinta e cinco', 'trinta e seis',
+    'trinta e sete', 'trinta e oito', 'trinta e nove', 'quarenta'];
+  if (parseInt(percentual) >= 0 && parseInt(percentual) <= 40) {
+    percentualExtenso = numeros[parseInt(percentual)] || percentual;
+  } else {
+    percentualExtenso = percentual;
   }
 
   // Substituir placeholders
-  let resultado = template;
-  resultado = resultado.replace(/{{data}}/g, data);
-  resultado = resultado.replace(/{{nome_completo}}/g, dados.nome_completo || '');
-  resultado = resultado.replace(/{{nacionalidade}}/g, dados.nacionalidade || 'brasileiro(a)');
-  resultado = resultado.replace(/{{estado_civil}}/g, dados.estado_civil || '');
-  resultado = resultado.replace(/{{profissao}}/g, dados.profissao || '');
-  resultado = resultado.replace(/{{rg}}/g, dados.rg || '');
-  resultado = resultado.replace(/{{orgao_rg}}/g, dados.orgao_rg || 'SSP/AM');
-  resultado = resultado.replace(/{{cpf}}/g, dados.cpf || '');
-  resultado = resultado.replace(/{{endereco}}/g, dados.endereco || '');
-  resultado = resultado.replace(/{{numero_end}}/g, dados.numero_end || '');
-  resultado = resultado.replace(/{{bairro}}/g, dados.bairro || '');
-  resultado = resultado.replace(/{{cidade_uf}}/g, dados.cidade_uf || 'Manaus/AM');
-  resultado = resultado.replace(/{{cep}}/g, dados.cep || '');
-  resultado = resultado.replace(/{{numeros_contratos}}/g, dados.numeros_contratos || '');
-  resultado = resultado.replace(/{{banco}}/g, dados.banco || '');
-  resultado = resultado.replace(/{{numero_beneficio}}/g, dados.numero_beneficio || '');
-  resultado = resultado.replace(/{{telefone_contato}}/g, dados.telefone_contato || '');
-  resultado = resultado.replace(/{{reu}}/g, dados.reu || '');
-  resultado = resultado.replace(/{{contrato_reu}}/g, dados.contrato_reu || '');
-  resultado = resultado.replace(/{{percentual_honorarios}}/g, dados.percentual_honorarios || '40');
+  html = html.replace(/{{data}}/g, data);
+  html = html.replace(/{{nome_completo}}/g, dados.nome_completo || '');
+  html = html.replace(/{{nacionalidade}}/g, dados.nacionalidade || 'brasileiro(a)');
+  html = html.replace(/{{estado_civil}}/g, dados.estado_civil || '');
+  html = html.replace(/{{profissao}}/g, dados.profissao || '');
+  html = html.replace(/{{rg}}/g, dados.rg || '');
+  html = html.replace(/{{orgao_rg}}/g, dados.orgao_rg || 'SSP/AM');
+  html = html.replace(/{{cpf}}/g, dados.cpf || '');
+  html = html.replace(/{{endereco}}/g, dados.endereco || '');
+  html = html.replace(/{{numero_end}}/g, dados.numero_end || '');
+  html = html.replace(/{{bairro}}/g, dados.bairro || '');
+  html = html.replace(/{{cidade_uf}}/g, dados.cidade_uf || 'Manaus/AM');
+  html = html.replace(/{{cep}}/g, dados.cep || '');
+  html = html.replace(/{{numeros_contratos}}/g, dados.numeros_contratos || '');
+  html = html.replace(/{{banco}}/g, dados.banco || '');
+  html = html.replace(/{{numero_beneficio}}/g, dados.numero_beneficio || '');
+  html = html.replace(/{{telefone_contato}}/g, dados.telefone_contato || '');
+  html = html.replace(/{{reu}}/g, dados.reu || '');
+  html = html.replace(/{{contrato_reu}}/g, dados.contrato_reu || '');
+  html = html.replace(/{{percentual_honorarios}}/g, percentual);
+  html = html.replace(/{{percentual_honorarios_extenso}}/g, percentualExtenso);
 
-  return resultado;
+  return html;
 }

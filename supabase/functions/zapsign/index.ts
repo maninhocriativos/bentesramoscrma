@@ -155,18 +155,25 @@ async function createDocument(token: string, params: any) {
   return normalizeDoc(data);
 }
 
-// Criar documento a partir de markdown
+// Criar documento a partir de markdown ou HTML
 async function createFromMarkdown(token: string, params: any) {
-  const { name, markdown_text, signers, expires_in_days } = params;
-  if (!name || !markdown_text || !signers?.length) {
-    throw new Error('name, markdown_text e signers são obrigatórios');
+  const { name, markdown_text, html_text, signers, expires_in_days } = params;
+  if (!name || (!markdown_text && !html_text) || !signers?.length) {
+    throw new Error('name, (markdown_text ou html_text) e signers são obrigatórios');
   }
-  const body = {
+  const body: any = {
     name,
-    markdown_text,
     signers: buildSigners(signers),
     expires_in_days: expires_in_days || 7,
   };
+
+  // Suporta tanto markdown quanto HTML
+  if (html_text) {
+    body.html_text = html_text;
+  } else if (markdown_text) {
+    body.markdown_text = markdown_text;
+  }
+
   const data = await zapsignFetch(token, '/docs/', 'POST', body);
   return normalizeDoc(data);
 }
@@ -174,7 +181,7 @@ async function createFromMarkdown(token: string, params: any) {
 // Envelope: múltiplos docs em um link (via extra-docs)
 async function createEnvelope(token: string, params: any) {
   const { docs, signers, expires_in_days } = params;
-  // docs = [{ name, markdown_text }, ...]
+  // docs = [{ name, markdown_text | html_text }, ...]
   if (!docs?.length || !signers?.length) {
     throw new Error('docs e signers são obrigatórios');
   }
@@ -182,16 +189,23 @@ async function createEnvelope(token: string, params: any) {
   const results: any[] = [];
 
   for (let i = 0; i < docs.length; i++) {
-    const { name, markdown_text } = docs[i];
-    const body = {
+    const { name, markdown_text, html_text } = docs[i];
+    const body: any = {
       name,
-      markdown_text,
       signers: buildSigners(signers.map((s: any) => ({
         ...s,
         send_automatic_email: i === 0,
       }))),
       expires_in_days: expires_in_days || 7,
     };
+
+    // Suporta tanto markdown quanto HTML
+    if (html_text) {
+      body.html_text = html_text;
+    } else if (markdown_text) {
+      body.markdown_text = markdown_text;
+    }
+
     const data = await zapsignFetch(token, '/docs/', 'POST', body);
     results.push(normalizeDoc(data));
 
