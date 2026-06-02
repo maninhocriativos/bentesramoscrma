@@ -2,7 +2,6 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 // Importar novas estratégias
-import { fetchFromDOU } from "./strategies/dou-api.ts";
 import { fetchFromTJAM } from "./strategies/tjam-scraping.ts";
 
 const corsHeaders = {
@@ -242,14 +241,22 @@ serve(async (req) => {
       // ── Estratégia 2: V2 Escavador — todos os processos + movimentações recentes
       try {
         const processos: any[] = [];
+        console.log(`\n🔍 [V2] Buscando processos para OAB ${oab_numero}/${oab_uf}`);
         for (let procPage = 1; procPage <= 5; procPage++) {
           try {
-            const procResp = await fetch(
-              `https://api.escavador.com/api/v2/advogado/processos?oab_numero=${oab_numero}&oab_estado=${oab_uf}&limit=50&page=${procPage}`,
-              { headers: esc, signal: AbortSignal.timeout(15000) }
-            );
-            if (!procResp.ok) break;
+            const procUrl = `https://api.escavador.com/api/v2/advogado/processos?oab_numero=${oab_numero}&oab_estado=${oab_uf}&limit=50&page=${procPage}`;
+            console.log(`📨 [V2] GET ${procUrl}`);
+            const procResp = await fetch(procUrl, { headers: esc, signal: AbortSignal.timeout(15000) });
+
+            if (!procResp.ok) {
+              const errBody = await procResp.text().catch(() => "");
+              console.warn(`⚠️ [V2] HTTP ${procResp.status} - ${errBody.slice(0, 300)}`);
+              break;
+            }
+
             const procData = await procResp.json();
+            console.log(`🔎 [V2] Resposta p${procPage} keys: ${Object.keys(procData || {}).join(", ")}`);
+
             const pageItems: any[] = parseItems(procData);
             processos.push(...pageItems);
             console.log(`📋 [V2] Página ${procPage}: ${pageItems.length} processos`);
@@ -782,20 +789,16 @@ serve(async (req) => {
       console.warn("⚠️ [DJe-TJAM] Erro geral:", e);
     }
 
-    // ── Estratégia 3: DOU API (sem auth, histórico completo) ───────────────────
+    // ── Estratégia 3: TJAM Scraping (fallback) ────────────────────────────────
     try {
-      console.log(`\n🌐 [Estratégias adicionais] Iniciando DOU API + TJAM Scraping`);
-
-      const douItems = await fetchFromDOU(oab_numero, oab_uf, advogado_id, advogadoNome);
-      intimacoes.push(...douItems);
-      console.log(`✅ DOU: ${douItems.length} publicações`);
+      console.log(`\n🌐 [TJAM Scraping] Tentando busca adicional`);
 
       const tjamItems = await fetchFromTJAM(oab_numero, oab_uf, advogado_id, advogadoNome);
       intimacoes.push(...tjamItems);
-      console.log(`✅ TJAM: ${tjamItems.length} publicações`);
+      console.log(`✅ TJAM Scraping: ${tjamItems.length} publicações`);
 
     } catch (e) {
-      console.warn("⚠️ [DOU/TJAM] Erro geral:", e);
+      console.warn("⚠️ [TJAM Scraping] Erro geral:", e);
     }
 
     // Contagem de publicações de hoje encontradas pelas APIs
