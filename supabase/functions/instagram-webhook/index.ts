@@ -80,6 +80,10 @@ Deno.serve(async (req) => {
         return new Response("ignored", { status: 200, headers: corsHeaders });
       }
 
+      let recebidas = 0;
+      let salvas = 0;
+      const erros: string[] = [];
+
       for (const entry of body.entry || []) {
         const eventos = entry.messaging || [];
         for (const ev of eventos) {
@@ -115,13 +119,15 @@ Deno.serve(async (req) => {
             ? `@${profile.username}`
             : profile?.name || "Instagram User";
 
+          recebidas++;
           const { texto, tipo } = descreverMensagem(message);
 
           // Upsert do contato
-          await supabase.from("manychat_subscribers").upsert(
-            { subscriber_id: subscriberId, nome, canal: "instagram" },
+          const { error: subErr } = await supabase.from("manychat_subscribers").upsert(
+            { subscriber_id: subscriberId, nome, canal: "instagram", ultima_interacao: new Date().toISOString() },
             { onConflict: "subscriber_id", ignoreDuplicates: false },
           );
+          if (subErr) erros.push(`subscriber: ${subErr.message}`);
 
           // Insere a mensagem
           const { error: msgErr } = await supabase.from("manychat_mensagens").insert({
@@ -142,14 +148,20 @@ Deno.serve(async (req) => {
           });
 
           if (msgErr) {
+            erros.push(`mensagem: ${msgErr.message}`);
             console.error("[IG Webhook] Erro ao salvar mensagem:", msgErr);
           } else {
+            salvas++;
             console.log(`[IG Webhook] ✅ ${isEcho ? "saída" : "entrada"} salva de ${nome}: ${texto.slice(0, 60)}`);
           }
         }
       }
 
-      return new Response("EVENT_RECEIVED", { status: 200, headers: corsHeaders });
+      // Retorna diagnóstico no corpo (a Meta só exige status 200)
+      return new Response(
+        JSON.stringify({ status: "EVENT_RECEIVED", recebidas, salvas, erros }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     } catch (e) {
       console.error("[IG Webhook] Erro:", e);
       // Responder 200 mesmo em erro evita reenvios em loop da Meta

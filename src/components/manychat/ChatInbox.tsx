@@ -1197,12 +1197,17 @@ const ManyChatInboxContent = () => {
         const hasRealPhone = cleanPhone.length >= 10 || validPhoneInId;
         const hasHistoryByLead = !!sub.lead_id && instanceByLeadId.has(sub.lead_id);
         const hasHistoryBySubscriber = instanceBySubscriberId.has(sub.subscriber_id);
-        if (!hasRealPhone && !hasHistoryByLead && !hasHistoryBySubscriber) continue;
+        // Canais sociais (Instagram/Facebook) não têm telefone — sempre passam
+        const isSocial = sub.canal === "instagram" || sub.canal === "facebook";
+        if (!hasRealPhone && !hasHistoryByLead && !hasHistoryBySubscriber && !isSocial) continue;
         const subWithOrigem = { ...sub, lead_tipo_origem: sub.lead_id ? leadsMap.get(sub.lead_id) : undefined, instance_name: sub.instance_name || (sub.lead_id ? instanceByLeadId.get(sub.lead_id) : undefined) || instanceBySubscriberId.get(sub.subscriber_id) || undefined };
         const phoneClean = cleanPhone || (validPhoneInId ? rawSubscriberId : "");
         const normalizedPhone = phoneClean.startsWith("55") ? phoneClean : phoneClean.length >= 8 ? "55" + phoneClean : phoneClean;
         const phoneSuffix = normalizedPhone.slice(-9);
-        const dedupeKey = sub.lead_id || (phoneSuffix.length >= 9 ? `phone_${phoneSuffix}` : sub.subscriber_id);
+        // Social: nunca agrupa por telefone — usa o próprio subscriber_id como chave
+        const dedupeKey = isSocial
+          ? sub.subscriber_id
+          : (sub.lead_id || (phoneSuffix.length >= 9 ? `phone_${phoneSuffix}` : sub.subscriber_id));
         const existing = deduplicatedMap.get(dedupeKey);
         if (!existing) deduplicatedMap.set(dedupeKey, subWithOrigem);
         else {
