@@ -1388,6 +1388,22 @@ const ManyChatInboxContent = () => {
     const subscriberSnapshot = { ...selectedSubscriber };
     (async () => {
       try {
+        // Instagram: envia via Graph API (instagram-send já registra no banco;
+        // a mensagem salva volta pelo realtime e substitui o otimista).
+        if ((subscriberSnapshot as any).canal === "instagram") {
+          const { data: igResult, error: igError } = await supabase.functions.invoke("instagram-send", {
+            body: { subscriber_id: subscriberSnapshot.subscriber_id, text: content },
+          });
+          if (igError) throw new Error(igError.message || "Erro ao enviar no Instagram");
+          if (!igResult?.success) throw new Error(igResult?.error || "Instagram: envio não confirmado");
+          setMessages(prev => {
+            const updated = prev.filter(m => m.id !== tempId);
+            messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated);
+            return updated;
+          });
+          return;
+        }
+
         const outboundInstanceId = resolveInstanceId(subscriberSnapshot);
         const { data: zapiResult, error: zapiError } = await invokeZapiSend({ to_phone: subscriberSnapshot.telefone, message: content, type: mediaType || "text", lead_id: subscriberSnapshot.lead_id, file_name: fileName, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
         if (zapiError) throw new Error(zapiError.message || "Erro ao enviar via Z-API");

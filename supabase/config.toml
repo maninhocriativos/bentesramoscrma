@@ -149,3 +149,9 @@ verify_jwt = false
 
 [functions.meta-leads-aereo-webhook]
 verify_jwt = false
+
+[functions.instagram-webhook]
+verify_jwt = false
+
+[functions.instagram-send]
+verify_jwt = false
