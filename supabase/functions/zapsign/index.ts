@@ -86,6 +86,68 @@ async function zapsignFetch(token: string, path: string, method = 'GET', body?: 
   return data;
 }
 
+// ── Conversão .docx → PDF (CloudConvert) ──────────────────────────────────────
+// Garante fidelidade total ao layout do escritório (cabeçalho/rodapé/logo),
+// que a conversão interna da Zapsign descarta. Recebe base64 do .docx e
+// devolve base64 do PDF.
+async function convertDocxToPdf(base64Docx: string): Promise<string> {
+  const ccToken = Deno.env.get('CLOUDCONVERT_API_KEY');
+  if (!ccToken) {
+    throw new Error('CLOUDCONVERT_API_KEY não configurado — necessário para converter .docx em PDF');
+  }
+
+  const ccHeaders = {
+    'Authorization': `Bearer ${ccToken}`,
+    'Content-Type': 'application/json',
+  };
+
+  // 1) Cria job com import(base64) → convert(pdf) → export(url)
+  const jobResp = await fetch('https://api.cloudconvert.com/v2/jobs', {
+    method: 'POST',
+    headers: ccHeaders,
+    body: JSON.stringify({
+      tasks: {
+        'import-doc': { operation: 'import/base64', file: base64Docx, filename: 'documento.docx' },
+        'convert-doc': { operation: 'convert', input: 'import-doc', input_format: 'docx', output_format: 'pdf' },
+        'export-doc': { operation: 'export/url', input: 'convert-doc' },
+      },
+    }),
+  });
+  const jobData = await jobResp.json();
+  if (!jobResp.ok) {
+    throw new Error(`CloudConvert job: ${JSON.stringify(jobData).slice(0, 300)}`);
+  }
+  const jobId = jobData?.data?.id;
+  if (!jobId) throw new Error('CloudConvert: job sem id');
+
+  // 2) Aguarda o job concluir (endpoint síncrono /wait)
+  const waitResp = await fetch(`https://api.cloudconvert.com/v2/jobs/${jobId}/wait`, {
+    headers: ccHeaders,
+    signal: AbortSignal.timeout(90000),
+  });
+  const waitData = await waitResp.json();
+  if (!waitResp.ok || waitData?.data?.status !== 'finished') {
+    throw new Error(`CloudConvert wait: ${JSON.stringify(waitData).slice(0, 300)}`);
+  }
+
+  // 3) URL do PDF exportado
+  const exportTask = (waitData.data.tasks || []).find(
+    (t: any) => t.operation === 'export/url' && t.status === 'finished',
+  );
+  const fileUrl = exportTask?.result?.files?.[0]?.url;
+  if (!fileUrl) throw new Error('CloudConvert: PDF não disponível no export');
+
+  // 4) Baixa o PDF e converte para base64
+  const pdfResp = await fetch(fileUrl, { signal: AbortSignal.timeout(60000) });
+  const pdfBuffer = new Uint8Array(await pdfResp.arrayBuffer());
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < pdfBuffer.length; i += chunk) {
+    binary += String.fromCharCode(...pdfBuffer.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
 function buildSigners(signers: any[]) {
   return signers.map((s: any) => ({
     name:  s.name,
@@ -167,9 +229,10 @@ async function createFromMarkdown(token: string, params: any) {
     expires_in_days: expires_in_days || 7,
   };
 
-  // Prioridade: .docx (layout exato do escritório) > HTML > markdown
+  // Prioridade: .docx (layout exato) → convertido p/ PDF via CloudConvert > HTML > markdown
   if (base64_docx) {
-    body.base64_docx = base64_docx;
+    console.log('[Zapsign] Convertendo .docx → PDF (CloudConvert)');
+    body.base64_pdf = await convertDocxToPdf(base64_docx);
   } else if (html_text) {
     body.html_text = html_text;
   } else if (markdown_text) {
@@ -180,53 +243,61 @@ async function createFromMarkdown(token: string, params: any) {
   return normalizeDoc(data);
 }
 
-// Envelope: múltiplos docs em um link (via extra-docs)
+// Envelope: múltiplos docs em UM único link de assinatura.
+// O 1º documento é o principal (POST /docs/). Os demais são anexados a ele
+// como documentos extras (POST /docs/{token}/upload-extra-doc/), que herdam
+// os signatários e ficam no mesmo link. A Zapsign aceita só PDF no extra-doc,
+// então convertemos cada .docx em PDF antes (CloudConvert).
 async function createEnvelope(token: string, params: any) {
   const { docs, signers, expires_in_days } = params;
-  // docs = [{ name, markdown_text | html_text }, ...]
+  // docs = [{ name, base64_docx | html_text | markdown_text }, ...]
   if (!docs?.length || !signers?.length) {
     throw new Error('docs e signers são obrigatórios');
   }
 
-  const results: any[] = [];
-
-  for (let i = 0; i < docs.length; i++) {
-    const { name, markdown_text, html_text, base64_docx } = docs[i];
-    const body: any = {
-      name,
-      signers: buildSigners(signers.map((s: any) => ({
-        ...s,
-        send_automatic_email: i === 0,
-      }))),
-      expires_in_days: expires_in_days || 7,
-    };
-
-    // Prioridade: .docx (layout exato) > HTML > markdown
-    if (base64_docx) {
-      body.base64_docx = base64_docx;
-    } else if (html_text) {
-      body.html_text = html_text;
-    } else if (markdown_text) {
-      body.markdown_text = markdown_text;
+  // Converte todos os .docx em PDF (base64) de uma vez
+  const pdfs: { name: string; base64_pdf?: string; html_text?: string; markdown_text?: string }[] = [];
+  for (const d of docs) {
+    if (d.base64_docx) {
+      console.log(`[Zapsign] Envelope: convertendo "${d.name}" .docx → PDF`);
+      pdfs.push({ name: d.name, base64_pdf: await convertDocxToPdf(d.base64_docx) });
+    } else {
+      pdfs.push({ name: d.name, html_text: d.html_text, markdown_text: d.markdown_text });
     }
+  }
 
-    const data = await zapsignFetch(token, '/docs/', 'POST', body);
-    results.push(normalizeDoc(data));
+  // 1) Documento principal
+  const mainBody: any = {
+    name: pdfs[0].name,
+    signers: buildSigners(signers),
+    expires_in_days: expires_in_days || 7,
+  };
+  if (pdfs[0].base64_pdf) mainBody.base64_pdf = pdfs[0].base64_pdf;
+  else if (pdfs[0].html_text) mainBody.html_text = pdfs[0].html_text;
+  else if (pdfs[0].markdown_text) mainBody.markdown_text = pdfs[0].markdown_text;
 
-    if (i > 0 && results[0]?.id) {
-      try {
-        await zapsignFetch(token, `/docs/${results[0].id}/extra-docs/`, 'POST', {
-          name,
-          doc_token: results[i].id,
-        });
-      } catch (e) {
-        console.warn(`[Zapsign] Falha ao anexar extra-doc: ${e}`);
-      }
+  const mainDoc = normalizeDoc(await zapsignFetch(token, '/docs/', 'POST', mainBody));
+  const results: any[] = [mainDoc];
+
+  // 2) Documentos extras anexados ao principal (mesmo link)
+  for (let i = 1; i < pdfs.length; i++) {
+    if (!pdfs[i].base64_pdf) {
+      console.warn(`[Zapsign] Extra "${pdfs[i].name}" ignorado: upload-extra-doc só aceita PDF`);
+      continue;
+    }
+    try {
+      const extra = await zapsignFetch(token, `/docs/${mainDoc.id}/upload-extra-doc/`, 'POST', {
+        name: pdfs[i].name,
+        base64_pdf: pdfs[i].base64_pdf,
+      });
+      results.push(normalizeDoc(extra));
+    } catch (e) {
+      console.warn(`[Zapsign] Falha ao anexar extra-doc "${pdfs[i].name}": ${e}`);
     }
   }
 
   return {
-    ...results[0],
+    ...mainDoc,
     envelope_docs: results,
     total_docs: results.length,
   };

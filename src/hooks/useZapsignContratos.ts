@@ -115,7 +115,7 @@ export async function fetchZapsignContratosData(): Promise<ContratoZapsignComSta
   );
 
   // 6. Mapear contratos com origem identificada
-  return documents.map(doc => {
+  const mapped = documents.map(doc => {
     const local = recordsByDocId.get(doc.id);
     const leadId = local?.lead_id;
 
@@ -156,6 +156,13 @@ export async function fetchZapsignContratosData(): Promise<ContratoZapsignComSta
       tipoOrigem,
       statusLocal: mapZapsignStatus(doc.status, doc.signers),
     };
+  });
+
+  // Ordena por data de criação decrescente (contratos novos primeiro)
+  return mapped.sort((a, b) => {
+    const ta = new Date(a.created_at || 0).getTime();
+    const tb = new Date(b.created_at || 0).getTime();
+    return tb - ta;
   });
 }
 
