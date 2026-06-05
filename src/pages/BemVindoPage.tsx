@@ -8,7 +8,8 @@ import {
   GraduationCap, Search, Users, Scale, CheckSquare, CalendarDays,
   DollarSign, FileText, FileSignature, FileEdit, Bot, MessageSquare,
   LayoutDashboard, Zap, Play, ChevronRight, BookOpen, ClipboardList, ArrowLeft,
-  Copy, Check, AlertCircle, CheckCircle2, XCircle, Download, ExternalLink
+  Copy, Check, AlertCircle, CheckCircle2, XCircle, Download, ExternalLink,
+  TrendingUp, Maximize2, X, Target, PhoneCall, Filter, Repeat, Clock
 } from 'lucide-react';
 
 interface Tutorial {
@@ -206,6 +207,16 @@ const tutorials: Tutorial[] = [
     icon: ClipboardList,
     category: 'Gestão',
     color: 'text-cyan-600 bg-cyan-50 dark:bg-cyan-950/30',
+    steps: [],
+    hasDetailedView: true,
+  },
+  {
+    id: 'auditoria-comercial',
+    title: 'Auditoria Comercial — Atendimento & Vendas',
+    description: 'Método de atendimento em 4 etapas, números críticos (70% / 22% / 10%), perfis de leads, funil de vendas, follow-up e pós-venda. Scripts e exemplos de mensagens reais.',
+    icon: TrendingUp,
+    category: 'Gestão',
+    color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30',
     steps: [],
     hasDetailedView: true,
   },
@@ -707,11 +718,332 @@ function GuiaVendaCasadaView({ onBack }: { onBack: () => void }) {
   );
 }
 
+const AUDITORIA_SLIDES: { n: number; legenda: string }[] = [
+  { n: 1, legenda: 'Capa — Auditoria de Experiência do Cliente' },
+  { n: 2, legenda: 'Objetivo — Atendimento Humano, Fluxo de IA e Follow-up' },
+  { n: 3, legenda: 'Problema: abordagem massiva de texto (evidências + correção)' },
+  { n: 4, legenda: 'Problema: no-show em agendamentos' },
+  { n: 5, legenda: 'Problema: abordagem massiva de texto (reforço)' },
+  { n: 6, legenda: 'Método de atendimento em 4 etapas' },
+  { n: 7, legenda: 'Números importantes do atendimento (70% / 22% / 10%)' },
+  { n: 8, legenda: 'Tipos de cliente que não respondem (3 perfis)' },
+  { n: 9, legenda: 'O que fazer com cada perfil' },
+  { n: 10, legenda: 'Exemplo de abordagem por telefone' },
+  { n: 11, legenda: 'Em que etapa do funil o cliente está' },
+  { n: 12, legenda: 'Erros e acertos no pós-venda' },
+  { n: 13, legenda: 'O que precisa focar: Tempo, Prioridade e Burocracia' },
+  { n: 14, legenda: 'Conclusão — Boas vendas!' },
+];
+
+function AuditoriaComercialView({ onBack }: { onBack: () => void }) {
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<number | null>(null);
+
+  const copyToClipboard = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      console.error('Erro ao copiar:', err);
+    }
+  };
+
+  const slidePath = (n: number) => `/tutoriais/auditoria-comercial/slide-${String(n).padStart(2, '0')}.png`;
+
+  return (
+    <div className="space-y-8 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4 sticky top-16 z-30 bg-gradient-to-r from-card/95 via-card/90 to-card/95 backdrop-blur-xl -mx-4 px-4 py-4 md:-mx-6 md:px-6 border-b border-border/50 shadow-sm">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-all duration-200"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span className="hidden sm:inline">Voltar</span>
+        </button>
+        <div className="text-center min-w-0 flex-1">
+          <h1 className="text-lg md:text-xl font-bold bg-gradient-to-r from-amber-600 to-yellow-500 dark:from-amber-400 dark:to-yellow-300 bg-clip-text text-transparent truncate">
+            Auditoria Comercial — Atendimento &amp; Vendas
+          </h1>
+          <p className="text-xs text-muted-foreground mt-1">Método de atendimento, métricas e follow-up · BackOffice Consultoria</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="default" className="text-xs rounded-md bg-amber-600 hover:bg-amber-700">Comercial</Badge>
+          <Badge variant="secondary" className="text-xs rounded-md hidden sm:inline-flex">Vendas</Badge>
+        </div>
+      </div>
+
+      {/* Frase-âncora / objetivo */}
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-to-r from-amber-600/10 via-yellow-500/5 to-transparent rounded-2xl blur-2xl" />
+        <Card className="relative border-amber-300/50 dark:border-amber-700/50 bg-gradient-to-br from-amber-50/80 via-white dark:from-amber-950/30 dark:via-card to-white dark:to-card shadow-lg">
+          <CardContent className="p-6 md:p-8">
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-xl bg-amber-100 dark:bg-amber-900/40">
+                <Target className="h-6 w-6 text-amber-700 dark:text-amber-300" />
+              </div>
+              <div className="space-y-3">
+                <p className="font-bold text-sm uppercase tracking-wider text-amber-900 dark:text-amber-200">⚡ O foco da auditoria</p>
+                <p className="text-base leading-relaxed font-semibold text-foreground">
+                  Melhorar a experiência do cliente em três frentes: <strong>Atendimento Humano</strong> (empatia + resolução técnica),
+                  <strong> Fluxo de IA</strong> (triagem e transbordo para o especialista) e <strong>Follow-up</strong> (prazos claros e registro no CRM).
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Diagnóstico — problemas */}
+      <section className="space-y-4 pt-2">
+        <div className="border-t border-border/30" />
+        <h2 className="text-xl font-bold">Diagnóstico — o que precisa mudar</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            { icon: MessageSquare, titulo: 'Abordagem só por texto', desc: 'Variar entre texto, áudio, imagem e vídeo. Abrir com rapport, não com pergunta direta de serviço.' },
+            { icon: CalendarDays, titulo: 'No-show em agendamentos', desc: 'Gerar compromisso emocional: "já ajustei a agenda para te dar mais tempo".' },
+            { icon: Repeat, titulo: 'Reforçar o CTA', desc: 'Pós-contato: enviar material em vídeo para reforçar a lembrança e a ação esperada.' },
+          ].map((p) => (
+            <Card key={p.titulo} className="border-border/60">
+              <CardContent className="p-5 space-y-2">
+                <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 w-fit">
+                  <p.icon className="h-5 w-5 text-amber-600" />
+                </div>
+                <h3 className="font-semibold text-sm text-foreground">{p.titulo}</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">{p.desc}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* Método 4 etapas */}
+      <section className="space-y-4">
+        <div className="border-t border-border/30" />
+        <h2 className="text-xl font-bold">Método de atendimento em 4 etapas</h2>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          {[
+            { n: 1, t: 'Abordagem', d: 'Trazer o lead para a conversa com rapport, espelhamento e confiança.' },
+            { n: 2, t: 'Sondagem', d: 'Entender o cenário completo. Só analise outros casos após fechar o primeiro. Mensagens com números funcionam melhor.' },
+            { n: 3, t: 'Apresentação', d: 'Alinhar tudo que o cliente precisa saber para não esquecer nem se desconectar do profissional.' },
+            { n: 4, t: 'Fechamento', d: 'Etapa crítica: contrato assinado. Criar senso de urgência após confirmar o cabimento da ação.' },
+          ].map((e) => (
+            <Card key={e.n} className="border-border/60 relative overflow-hidden">
+              <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-amber-500 to-yellow-400" />
+              <CardContent className="p-5 space-y-2">
+                <span className="flex items-center justify-center h-7 w-7 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-sm font-bold">{e.n}</span>
+                <h3 className="font-semibold text-sm text-foreground">{e.t}</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">{e.d}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* Números críticos */}
+      <section className="space-y-4">
+        <div className="border-t border-border/30" />
+        <h2 className="text-xl font-bold">Números críticos do atendimento</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            { num: '70%', label: 'abandonam na entrega de documentos', acao: 'Faça o lead assumir compromisso. Seja você a dar o prazo de retorno — nunca "fico no aguardo".' },
+            { num: '22%', label: 'conversão mínima em captação', acao: 'Forneça ferramentas visuais para o cliente produzir as provas com facilidade.' },
+            { num: '10%', label: 'resgate mínimo de leads frios', acao: 'Identifique o canal preferido e faça resgates semanais/mensais.' },
+          ].map((m) => (
+            <Card key={m.num} className="border-amber-200/60 dark:border-amber-800/40 bg-gradient-to-br from-amber-50/60 to-transparent dark:from-amber-950/20">
+              <CardContent className="p-5 space-y-2">
+                <p className="text-3xl font-extrabold text-amber-600 dark:text-amber-400">{m.num}</p>
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wide">{m.label}</p>
+                <p className="text-xs text-muted-foreground leading-relaxed pt-1 border-t border-border/40">{m.acao}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* Perfis de leads */}
+      <section className="space-y-4">
+        <div className="border-t border-border/30" />
+        <h2 className="text-xl font-bold">Leads que não respondem — 3 perfis</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            { p: '1º', t: 'Lead curioso', sub: 'Manda mensagem e some', acao: 'Reenviar o mesmo material do anúncio para gerar interesse novo.' },
+            { p: '2º', t: 'Some depois', sub: 'Responde de primeira, sem prioridade', acao: 'Falar o que ele perde ou deixa de ganhar por não assinar o contrato.' },
+            { p: '3º', t: 'Está comparando', sub: 'Já deve ter outro advogado/processo', acao: 'Prospectar outras ações ou sugerir indicações.' },
+          ].map((p) => (
+            <Card key={p.p} className="border-border/60">
+              <CardContent className="p-5 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-amber-600">{p.p} PERFIL</span>
+                </div>
+                <h3 className="font-semibold text-sm text-foreground">{p.t}</h3>
+                <p className="text-xs italic text-muted-foreground">"{p.sub}"</p>
+                <p className="text-xs text-foreground leading-relaxed pt-1 border-t border-border/40"><span className="font-semibold text-amber-700 dark:text-amber-300">Ação: </span>{p.acao}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* Funil */}
+      <section className="space-y-4">
+        <div className="border-t border-border/30" />
+        <h2 className="text-xl font-bold">Em que etapa do funil o cliente está</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            { icon: Users, t: 'Topo de funil', d: 'Nunca tinham feito contato. Foco: ganhar confiança.' },
+            { icon: Zap, t: 'Meio de funil', d: 'Já conhecem o escritório. Foco: gerar urgência.' },
+            { icon: CheckCircle2, t: 'Fundo de funil', d: 'Clientes recorrentes. Foco: manter o relacionamento ativo.' },
+          ].map((f) => (
+            <Card key={f.t} className="border-border/60">
+              <CardContent className="p-5 space-y-2">
+                <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 w-fit"><f.icon className="h-5 w-5 text-amber-600" /></div>
+                <h3 className="font-semibold text-sm text-foreground">{f.t}</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">{f.d}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* Pilares de foco */}
+      <section className="space-y-4">
+        <div className="border-t border-border/30" />
+        <h2 className="text-xl font-bold">Pilares de foco</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            { icon: Clock, t: 'Tempo', d: 'Vá direto ao ponto, mas amarre o cliente a um prazo. Ex: "Preciso deste documento até 12h00, ok?"' },
+            { icon: Target, t: 'Prioridade', d: 'O cliente só envia documentos se reconhecer a importância. Reforce as perdas.' },
+            { icon: Filter, t: 'Burocracia', d: 'Evite listas enormes. Estabeleça uma sequência lógica do que pedir e em que prazo.' },
+          ].map((p) => (
+            <Card key={p.t} className="border-border/60">
+              <CardContent className="p-5 space-y-2">
+                <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 w-fit"><p.icon className="h-5 w-5 text-amber-600" /></div>
+                <h3 className="font-semibold text-sm text-foreground">{p.t}</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">{p.d}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* Script de abordagem por telefone */}
+      <section className="space-y-4">
+        <div className="border-t border-border/30" />
+        <h2 className="text-xl font-bold">Script — abordagem por telefone</h2>
+        <div className="space-y-2">
+          {[
+            { id: 'tel-1', fase: 'Abertura', txt: 'Bom dia {NOME}, tá tudo certo aí? Recebi seu pedido de informações e já ajudamos vários casos parecidos com o seu.' },
+            { id: 'tel-2', fase: 'Condução', txt: 'Eu só preciso entender dois pontos e aí você me fala se podemos prosseguir. Combinado?' },
+            { id: 'tel-3', fase: 'Fechamento', txt: 'Sem dúvidas então? Agora, em quantos minutos você envia os documentos? Vou aproveitar e já encaminhar o documento que você precisa assinar.' },
+          ].map((s) => (
+            <Card key={s.id} className="border-border/60">
+              <CardContent className="p-4 flex items-start gap-3">
+                <PhoneCall className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-amber-600 mb-1">{s.fase}</p>
+                  <p className="text-sm text-foreground leading-relaxed">{s.txt}</p>
+                </div>
+                <button
+                  onClick={() => copyToClipboard(s.txt, s.id)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-muted-foreground hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:text-amber-700 transition-all shrink-0"
+                >
+                  {copiedId === s.id ? <><Check className="h-3 w-3" /> Copiado</> : <><Copy className="h-3 w-3" /> Copiar</>}
+                </button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* Galeria dos slides */}
+      <section className="space-y-4">
+        <div className="border-t border-border/30" />
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <h2 className="text-xl font-bold">Apresentação completa ({AUDITORIA_SLIDES.length} slides)</h2>
+          <a
+            href="/tutoriais/auditoria-comercial.pdf"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-amber-600 hover:bg-amber-700 text-white transition-all"
+          >
+            <Download className="h-4 w-4" /> Baixar PDF
+          </a>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {AUDITORIA_SLIDES.map((s) => (
+            <button
+              key={s.n}
+              onClick={() => setLightbox(s.n)}
+              className="group text-left rounded-xl overflow-hidden border border-border/60 hover:border-amber-300 hover:shadow-md transition-all"
+            >
+              <div className="relative aspect-video bg-muted overflow-hidden">
+                <img
+                  src={slidePath(s.n)}
+                  alt={s.legenda}
+                  loading="lazy"
+                  className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                  <Maximize2 className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+                <span className="absolute top-2 left-2 text-[10px] font-bold bg-black/60 text-white px-1.5 py-0.5 rounded">{s.n}/{AUDITORIA_SLIDES.length}</span>
+              </div>
+              <p className="text-xs text-muted-foreground p-2.5 leading-snug">{s.legenda}</p>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* Lightbox */}
+      {lightbox !== null && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            onClick={() => setLightbox(null)}
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          {lightbox > 1 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setLightbox(lightbox - 1); }}
+              className="absolute left-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors rotate-180"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </button>
+          )}
+          {lightbox < AUDITORIA_SLIDES.length && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setLightbox(lightbox + 1); }}
+              className="absolute right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </button>
+          )}
+          <img
+            src={slidePath(lightbox)}
+            alt={`Slide ${lightbox}`}
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-[85vh] rounded-lg shadow-2xl"
+          />
+          <span className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-white/80 bg-black/50 px-3 py-1 rounded-full">
+            {lightbox} / {AUDITORIA_SLIDES.length}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function BemVindoPage() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [expandedTutorial, setExpandedTutorial] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'list' | 'guia-venda-casada'>('list');
+  const [currentView, setCurrentView] = useState<'list' | 'guia-venda-casada' | 'auditoria-comercial'>('list');
 
   const filtered = tutorials.filter((t) => {
     const matchSearch = !search || t.title.toLowerCase().includes(search.toLowerCase()) || t.description.toLowerCase().includes(search.toLowerCase());
@@ -724,6 +1056,16 @@ export default function BemVindoPage() {
       <AppLayout>
         <div className="flex-1 p-4 md:p-6">
           <GuiaVendaCasadaView onBack={() => setCurrentView('list')} />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (currentView === 'auditoria-comercial') {
+    return (
+      <AppLayout>
+        <div className="flex-1 p-4 md:p-6">
+          <AuditoriaComercialView onBack={() => setCurrentView('list')} />
         </div>
       </AppLayout>
     );
@@ -803,7 +1145,11 @@ export default function BemVindoPage() {
                 }`}
                 onClick={() => {
                   if (tutorial.hasDetailedView) {
-                    setCurrentView('guia-venda-casada');
+                    if (tutorial.id === 'auditoria-comercial') {
+                      setCurrentView('auditoria-comercial');
+                    } else {
+                      setCurrentView('guia-venda-casada');
+                    }
                   } else {
                     setExpandedTutorial(isExpanded ? null : tutorial.id);
                   }
