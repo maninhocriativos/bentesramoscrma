@@ -3,6 +3,7 @@ import DOMPurify from 'dompurify';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Download, Printer, Loader2, FileText } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface DocxPreviewModalProps {
   open: boolean;
@@ -13,17 +14,40 @@ interface DocxPreviewModalProps {
 
 const MIN_PREVIEW_TEXT_LENGTH = 80;
 
+// ArrayBuffer → base64 sem estourar a pilha
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function base64ToBlob(base64: string, type: string): Blob {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type });
+}
+
 export default function DocxPreviewModal({ open, onOpenChange, docxBuffer, title }: DocxPreviewModalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
-  const [previewMode, setPreviewMode] = useState<'docx' | 'html'>('docx');
+  const [previewMode, setPreviewMode] = useState<'pdf' | 'docx' | 'html'>('pdf');
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
+  // Converte o .docx em PDF fiel (CloudConvert) e exibe; em caso de falha,
+  // cai no preview aproximado (docx-preview / mammoth).
   useEffect(() => {
-    if (!open || !docxBuffer || !containerRef.current) return;
+    if (!open || !docxBuffer) return;
 
     let cancelled = false;
+    let createdUrl: string | null = null;
     setLoading(true);
-    setPreviewMode('docx');
+    setPdfUrl(null);
+    setPreviewMode('pdf');
 
     const getArrayBuffer = async () => {
       if (docxBuffer instanceof Blob) return await docxBuffer.arrayBuffer();
@@ -69,9 +93,8 @@ export default function DocxPreviewModal({ open, onOpenChange, docxBuffer, title
       setPreviewMode('html');
     };
 
-    (async () => {
-      const arrayBuffer = await getArrayBuffer();
-
+    const renderApproxPreview = async (arrayBuffer: ArrayBuffer) => {
+      // Preview aproximado local (sem conversão): docx-preview + fallback HTML
       try {
         const { renderAsync } = await import('docx-preview');
         if (cancelled || !containerRef.current) return;
@@ -95,6 +118,7 @@ export default function DocxPreviewModal({ open, onOpenChange, docxBuffer, title
         });
 
         if (cancelled || !containerRef.current) return;
+        setPreviewMode('docx');
 
         if (!hasVisibleContent(containerRef.current)) {
           await renderHtmlFallback(arrayBuffer);
@@ -109,6 +133,31 @@ export default function DocxPreviewModal({ open, onOpenChange, docxBuffer, title
             containerRef.current.innerHTML = '<p class="p-8 text-center text-sm text-muted-foreground">Erro ao renderizar o documento. Tente baixar o .docx.</p>';
           }
         }
+      }
+    };
+
+    (async () => {
+      const arrayBuffer = await getArrayBuffer();
+
+      // 1) Tenta conversão fiel para PDF (CloudConvert via Edge Function)
+      try {
+        const base64Docx = arrayBufferToBase64(arrayBuffer);
+        const { data, error } = await supabase.functions.invoke('docx-to-pdf', {
+          body: { base64_docx: base64Docx },
+        });
+        if (error) throw new Error(error.message || 'Falha na conversão');
+        if (data?.error) throw new Error(data.error.message || 'Falha na conversão');
+        if (!data?.base64_pdf) throw new Error('PDF não retornado');
+
+        if (cancelled) return;
+        const pdfBlob = base64ToBlob(data.base64_pdf, 'application/pdf');
+        createdUrl = URL.createObjectURL(pdfBlob);
+        setPdfUrl(createdUrl);
+        setPreviewMode('pdf');
+      } catch (err) {
+        // 2) Fallback: preview aproximado local (ex.: limite diário atingido)
+        console.warn('Conversão fiel para PDF falhou, usando preview aproximado:', err);
+        if (!cancelled) await renderApproxPreview(arrayBuffer);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -116,10 +165,11 @@ export default function DocxPreviewModal({ open, onOpenChange, docxBuffer, title
 
     return () => {
       cancelled = true;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
     };
   }, [open, docxBuffer]);
 
-  const handleDownload = () => {
+  const handleDownloadDocx = () => {
     if (!docxBuffer) return;
     const blob = docxBuffer instanceof Blob
       ? docxBuffer
@@ -132,7 +182,20 @@ export default function DocxPreviewModal({ open, onOpenChange, docxBuffer, title
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadPdf = () => {
+    if (!pdfUrl) return;
+    const a = document.createElement('a');
+    a.href = pdfUrl;
+    a.download = `${title || 'peticao'}.pdf`;
+    a.click();
+  };
+
   const handlePrint = () => {
+    // PDF fiel: abre em nova aba (visualizador nativo permite imprimir/salvar)
+    if (previewMode === 'pdf' && pdfUrl) {
+      window.open(pdfUrl, '_blank');
+      return;
+    }
     if (!containerRef.current) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -185,9 +248,15 @@ export default function DocxPreviewModal({ open, onOpenChange, docxBuffer, title
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={handlePrint}>
                 <Printer className="mr-1.5 h-3.5 w-3.5" />
-                Imprimir / PDF
+                Imprimir
               </Button>
-              <Button size="sm" onClick={handleDownload}>
+              {previewMode === 'pdf' && pdfUrl && (
+                <Button size="sm" onClick={handleDownloadPdf}>
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  Baixar PDF
+                </Button>
+              )}
+              <Button variant={previewMode === 'pdf' && pdfUrl ? 'outline' : 'default'} size="sm" onClick={handleDownloadDocx}>
                 <Download className="mr-1.5 h-3.5 w-3.5" />
                 Baixar .docx
               </Button>
@@ -195,17 +264,28 @@ export default function DocxPreviewModal({ open, onOpenChange, docxBuffer, title
           </div>
         </DialogHeader>
 
-        <div className="relative flex-1 overflow-auto bg-muted/30">
+        <div className="relative flex-1 overflow-hidden bg-muted/30">
           {loading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
               <div className="flex flex-col items-center gap-3">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Renderizando documento...</p>
+                <p className="text-sm text-muted-foreground">Gerando pré-visualização fiel...</p>
               </div>
             </div>
           )}
 
-          <div className="min-h-full px-4 py-5 sm:px-6">
+          {/* PDF fiel (CloudConvert) */}
+          {previewMode === 'pdf' && pdfUrl && (
+            <iframe
+              src={pdfUrl}
+              title={title || 'Petição'}
+              className="w-full h-full border-0"
+            />
+          )}
+
+          {/* Fallback: preview aproximado (docx-preview / HTML). Mantido sempre
+              montado para que o ref exista quando a conversão falhar. */}
+          <div className={(previewMode === 'pdf' && pdfUrl) ? 'hidden' : 'h-full overflow-auto px-4 py-5 sm:px-6'}>
             <div
               ref={containerRef}
               className={previewMode === 'html'
