@@ -2214,6 +2214,11 @@ const ManyChatInboxContent = () => {
                       </Avatar>
                       {subscriber.atendimento_humano && <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-amber-500 flex items-center justify-center text-[9px]">🙋</span>}
                       {online && <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-[#111B21] animate-pulse-subtle" />}
+                      {(subscriber.canal === "instagram" || subscriber.canal === "facebook") && (
+                        <span className="absolute -bottom-1 -right-1 ring-2 ring-[#111B21] rounded">
+                          <ChannelIcon canal={subscriber.canal} size="sm" />
+                        </span>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 pr-1">
                       <div className="min-w-0">
