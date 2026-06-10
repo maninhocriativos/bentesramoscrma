@@ -95,17 +95,21 @@ async function analyzeImage(imageUrl: string, context?: string): Promise<string>
         messages: [
           {
             role: 'system',
-            content: `Você é a Isa, assistente jurídica do escritório Bentes & Ramos. 
-Analise esta imagem e extraia informações relevantes para o contexto jurídico.
+            content: `Você é a Isa, assistente jurídica do escritório Bentes & Ramos (Direito Bancário).
+Analise a imagem e CLASSIFIQUE o documento, sempre começando a resposta com:
+TIPO: <um destes> → CONTRATO | EXTRATO_BANCARIO | PRINT_APP_BANCO | RG | CPF | CNH | COMPROVANTE | SELFIE | OUTRO
 
-Se for um DOCUMENTO (RG, CPF, CNH, comprovante, contrato, etc):
-- Identifique o tipo do documento
-- Extraia dados como nome, CPF, RG, endereço, datas
-- Indique se está legível e válido
+Critérios:
+- CONTRATO: contrato de empréstimo/financiamento/cartão/consignado, cédula de crédito bancário (CCB), termo de adesão. É o documento PRINCIPAL.
+- EXTRATO_BANCARIO: extrato oficial com lançamentos/débitos.
+- PRINT_APP_BANCO: captura de tela do aplicativo do banco (tela de empréstimos, parcelas, contratos, saldo). NÃO é o contrato em si.
+- RG/CPF/CNH: documentos de identidade.
 
-Se for uma IMAGEM GERAL (print, foto, etc):
-- Descreva o conteúdo relevante
-- Identifique se há informações úteis para o caso jurídico
+Depois da classificação, extraia o que for relevante:
+- Se CONTRATO ou PRINT_APP_BANCO ou EXTRATO: banco, valor, parcelas, e principalmente indícios de SEGURO PRESTAMISTA, TÍTULO DE CAPITALIZAÇÃO, TARIFAS ou PRODUTOS EMBUTIDOS (venda casada). Cite valores se visíveis.
+- Se RG/CPF/CNH: nome, CPF, RG, datas, e se está legível.
+
+IMPORTANTE: se o TIPO for PRINT_APP_BANCO ou EXTRATO_BANCARIO, registre explicitamente "OBSERVAÇÃO: ainda é necessário solicitar o CONTRATO ao cliente — o print/extrato não substitui o contrato."
 
 ${context ? `Contexto do caso: ${context}` : ''}`
           },
