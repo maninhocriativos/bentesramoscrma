@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, Search, MoreHorizontal, Eye, Copy, Archive, Trash2,
@@ -321,12 +321,16 @@ function ModelsSidePanel({
       getModelsForAction(a.id).some(m => m.nome.toLowerCase().includes(q))
     );
   }, [actionTypes, search, getModelsForAction]);
+  // Abre a primeira categoria só na carga inicial; depois o usuário pode
+  // fechar/abrir livremente (não reabre sozinha ao fechar).
+  const didInit = useRef(false);
   useEffect(() => {
     if (visible.length === 0) return;
-    if (!expanded || !visible.some(action => action.id === expanded)) {
+    if (!didInit.current) {
+      didInit.current = true;
       setExpanded(visible[0].id);
     }
-  }, [expanded, visible]);
+  }, [visible]);
 
   return (
     <div className="flex flex-col h-full rounded-xl border border-border/60 bg-card overflow-hidden shadow-sm">
