@@ -688,6 +688,40 @@ const ManyChatInboxContent = () => {
             subscriber = subscribers.find(s => s.subscriber_id === zapiId || s.subscriber_id.includes(phoneSuffix));
           }
         }
+
+        // Não achou na memória (lista só tem as 300 conversas mais recentes).
+        // Busca no BANCO antes de criar — a conversa existente pode ser antiga.
+        if (!subscriber) {
+          // 1) por lead_id já vinculado
+          const { data: byLead } = await supabase
+            .from("manychat_subscribers").select("*")
+            .eq("lead_id", pendingLeadId)
+            .order("ultima_interacao", { ascending: false }).limit(1);
+          let dbSub: any = byLead?.[0];
+
+          // 2) por telefone / subscriber_id (sufixo de 8-9 dígitos)
+          if (!dbSub && phoneSuffix.length >= 8) {
+            const suf8 = phoneClean.slice(-8);
+            const { data: byPhone } = await supabase
+              .from("manychat_subscribers").select("*")
+              .or(`telefone_normalizado.ilike.%${suf8}%,subscriber_id.ilike.%${suf8}%,telefone.ilike.%${suf8}%`)
+              .order("ultima_interacao", { ascending: false }).limit(1);
+            dbSub = byPhone?.[0];
+          }
+
+          if (dbSub) {
+            const sub: Subscriber = {
+              id: dbSub.id, subscriber_id: dbSub.subscriber_id, nome: dbSub.nome || lead.nome || "Contato",
+              telefone: dbSub.telefone, email: dbSub.email, foto: dbSub.foto, canal: dbSub.canal || "whatsapp",
+              lead_id: dbSub.lead_id || pendingLeadId, ultima_interacao: dbSub.ultima_interacao,
+              instance_name: dbSub.instance_name, atendimento_humano: dbSub.atendimento_humano,
+            } as Subscriber;
+            // adiciona à lista em memória se ainda não estiver
+            setSubscribers(prev => prev.some(s => s.subscriber_id === sub.subscriber_id) ? prev : [sub, ...prev]);
+            subscriber = sub;
+          }
+        }
+
         if (subscriber) {
           const invalidNames = ["Desconhecido", "Sem nome", "desconhecido", "null", "", "{{wa_id}}"];
           const subHasInvalidName = !subscriber.nome || invalidNames.includes(subscriber.nome) || subscriber.nome.startsWith("{{") || subscriber.nome.startsWith("[");
