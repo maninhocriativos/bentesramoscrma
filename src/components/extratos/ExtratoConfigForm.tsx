@@ -21,28 +21,64 @@ const BANCOS = [
 
 const CATEGORIAS: Record<string, string[]> = {
   'Seguros': [
-    'Seguro Prestamista', 'Seguro Proteção Financeira', 'Seguro de Vida',
-    'Seguro Residencial', 'Seguro Auto', 'Seguro Cartão',
+    'SEGURO PRESTAMISTA', 'SEGURO PROTEÇÃO FINANCEIRA', 'SEGURO MAIS PROTECAO',
+    'SEGURO AP- BRADESCO', 'SEGURO CART DEB BRADESCO', 'SEGURO UNIMED- BRADESCO',
+    'SEG PROTECAO CHEQUE ESP', 'SEGURADORA SECON', 'SERVICO CARTAO PROTEGIDO',
+    'BRADESCO AUTO-RE', 'BRADESCO SEG-RESID/OUTROS', 'BRADESCO VIDA E PREVIDENCIA',
+    'BRADESCO VIDA PREV-SEG. VIDA', 'BRADESCO VIDA PREV-SEG.VIDA',
+    'SABEMI SEGURADO', 'LIBERTY SEGUROS', 'ASPECIR', 'ASPECIR - UNIAO SEGURADORA',
+    'PREVISUL', 'VIZA PREV SEGUROS', 'VIDA E PREVIDENCIA', 'MORA VIDA E PREVIDENCIA',
+    'AQUISICAO/DEVOLUCAO-SEG',
+    // termos genéricos (matching amplo)
+    'Seguro de Vida', 'Seguro Residencial', 'Seguro Auto', 'Seguro Cartão',
     'Seguro Desemprego', 'Seguro Acidentes Pessoais',
   ],
-  'Tarifas Bancárias': [
-    'Tarifa de Manutenção de Conta', 'Tarifa de Emissão de Extrato',
-    'Tarifa de Segunda Via Cartão', 'Tarifa DOC/TED', 'Tarifa de Transferência',
-    'Tarifa de Saque', 'Tarifa de Pacote de Serviços',
-    'TAC (Tarifa de Abertura de Crédito)', 'TEC (Taxa de Emissão de Carnê)',
+  'Tarifas e Extratos': [
+    'TARIFA BANCARIA', 'TARIFA BANCARIA (saquepessoal)', 'TARIFA EMISSAO EXTRATO',
+    'TAR 2 VIA CARTAO DEBITO', 'TAR ADIANT.DEPOSITANTE', 'TAR DEMONSTR CONSOLIDADO',
+    '2VIA DE EXTRATO', 'SEGUNDA VIA', 'EMISSÃO EXTRATO', 'EMISSÃO EXTRATOS UNIFICADO',
+    'EXTRATO MÊS', 'EXTRATOmes(E)', 'EXTRATOmovimento(E)',
+    'ANUIDADE DE CARTÃO DE CRÉDITO', 'CARTAO CREDITO ANUIDADE', 'DOC/TED INTERNET',
+    'SAQUE correspondente', 'SAQUEpessoal', 'SAQUEterminal', 'ADIANT.DEPOSITANTE',
   ],
-  'Serviços Não Solicitados': [
-    'Clube de Benefícios', 'Título de Capitalização', 'Previdência Privada',
-    'Consórcio', 'Assistência Odontológica', 'Assistência Residencial',
-    'Serviços de Assinatura',
+  'Cestas e Pacotes de Serviços': [
+    'CESTA', 'CESTA B. EXPRESSO', 'CESTA B.EXPRESSO', 'CESTA BENEFICIARIO 1',
+    'CESTA BRADESCO EXPRE', 'CESTA CELULAR', 'CESTA CLASSIC', 'CESTA CLASSIC MAIS',
+    'CESTA DE SERVIÇOS', 'CESTA ESTUDANTIL', 'Cesta Exclus Mais', 'CESTA EXCLUS. MAX',
+    'CESTA EXCLUSIVE', 'CESTA EXCLUSIVE 1', 'CESTA EXPRESSO 4 - R', 'CESTA FACIL ECONOMICA',
+    'Cesta Facil MAIS', 'CESTA FACIL MASTER', 'CESTA POUPANCA 1', 'CESTA PRIME CLASSICA',
+    'CESTA UNIVERSITARIA', 'VR.PARCIAL CESTA B.EXPRESSO1', 'VR.PARCIAL CESTA B.EXPRESSO4',
+    'VR.PARCIAL CESTA FACIL ECONO', 'PACOTE DE SERVIÇOS', 'BX', 'Bx.ant.fin/emp',
   ],
-  'Encargos': [
-    'Encargos Descoberto', 'Encargos Limite de Crédito',
-    'Mora e Juros', 'Multa Contratual',
+  'Capitalização, Clubes e Assistências': [
+    'TITULO DE CAPITALIZACAO', 'SOROCRED', 'SUDAMERICA CLUBE DE SERVICOS',
+    'SEBRASEG CLUBE DE BENEFICIOS', 'BINCLUB SERVICOS DE ADMINISTRACA',
+    'ODONTOPREV S/A', 'CREFISA SA CREDITO FINANCIAMENTO', 'JBCRED SOCIEDADE',
+    'PSERV', 'EAGLE', 'PADRONIZADO PRIORITARIOS I',
   ],
-  'Outros': [
-    'Débitos Não Identificados', 'Cobranças Duplicadas',
-    'Valores Divergentes do Contrato',
+  'Pagamentos Eletrônicos e Cobranças': [
+    'PAGTO ELETRON COBRANCA', 'PAGTO ELETRON COBRANCA (ACE SEGURADORA S/A)',
+    'PAGTO ELETRON COBRANCA (BRADES RESI)', 'PAGTO ELETRON COBRANCA (centro de assistencia)',
+    'PAGTO ELETRON COBRANCA (DENTAL SAUDE)', 'PAGTO ELETRON COBRANCA (EAGLE)',
+    'PAGTO ELETRON COBRANCA (PSERV)', 'PAGTO ELETRON COBRANCA (VIDA PRE)',
+    'PAGTO ELETRON COBRANCA CENASP', 'RECEBIMENTO FORNECEDOR',
+  ],
+  'Encargos e Mora': [
+    'ENCARGOS', 'ENCARGO SALDO VINCULADO', 'ENCARGOS SALDO VINCULADO',
+    'ENCARGOS DESCOBERTO CC', 'ENCARGOS EXCESSO LIMITE', 'ENCARGOS LIMITE DE CRED',
+    'ENCARGOS LIMITE DE CREDITO', 'MORA CARTAO', 'MORA CARTAO DE CREDITO',
+    'MORA CONTA DE TELEFONE', 'MORA CRED PESS', 'MORA CREDITO PESSOAL', 'Mora Cta Telef',
+    'MORA DE OPERACAO', 'MORA ENC DESCOBERTO C.C', 'MORA ENCARGOS', 'MORA OPERAÇÃO DE CRÉDITO',
+    'OPERACOES VENCIDAS', 'GASTOS CARTAO DE CREDITO', 'Gasto c Credito',
+    'PROVISAO GASTO CART CRED', 'LANCAMENTO A DEBITO',
+  ],
+  'Crédito e Operações': [
+    'PARC CRED PESS', 'PARCELA CREDITO PESSOAL', 'PARCELA OPER DE CREDITO',
+  ],
+  'Outros Lançamentos': [
+    'APLIC.INVEST FACIL', 'APLICAÇÃO AUTOMÁTICA', 'APLICACAO CDB',
+    'REGULARIZACAO LANCAMENTO', 'REGULARIZAÇÃO MANUAL', 'REORGANIZACAO FINANCEIRA', 'MSG',
+    'Débitos Não Identificados', 'Cobranças Duplicadas', 'Valores Divergentes do Contrato',
   ],
 };
 
