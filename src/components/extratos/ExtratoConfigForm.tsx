@@ -30,7 +30,8 @@ const CATEGORIAS: Record<string, string[]> = {
     'PREVISUL', 'VIZA PREV SEGUROS', 'VIDA E PREVIDENCIA', 'MORA VIDA E PREVIDENCIA',
     'AQUISICAO/DEVOLUCAO-SEG',
     // termos genéricos (matching amplo)
-    'Seguro de Vida', 'Seguro Residencial', 'Seguro Auto', 'Seguro Cartão',
+    'Seguro Prestamista', 'Seguro Proteção Financeira', 'Seguro de Vida',
+    'Seguro Residencial', 'Seguro Auto', 'Seguro Cartão',
     'Seguro Desemprego', 'Seguro Acidentes Pessoais',
   ],
   'Tarifas e Extratos': [
@@ -40,6 +41,11 @@ const CATEGORIAS: Record<string, string[]> = {
     'EXTRATO MÊS', 'EXTRATOmes(E)', 'EXTRATOmovimento(E)',
     'ANUIDADE DE CARTÃO DE CRÉDITO', 'CARTAO CREDITO ANUIDADE', 'DOC/TED INTERNET',
     'SAQUE correspondente', 'SAQUEpessoal', 'SAQUEterminal', 'ADIANT.DEPOSITANTE',
+    // termos genéricos (matching amplo)
+    'Tarifa de Manutenção de Conta', 'Tarifa de Emissão de Extrato',
+    'Tarifa de Segunda Via Cartão', 'Tarifa DOC/TED', 'Tarifa de Transferência',
+    'Tarifa de Saque', 'Tarifa de Pacote de Serviços',
+    'TAC (Tarifa de Abertura de Crédito)', 'TEC (Taxa de Emissão de Carnê)',
   ],
   'Cestas e Pacotes de Serviços': [
     'CESTA', 'CESTA B. EXPRESSO', 'CESTA B.EXPRESSO', 'CESTA BENEFICIARIO 1',
@@ -55,6 +61,10 @@ const CATEGORIAS: Record<string, string[]> = {
     'SEBRASEG CLUBE DE BENEFICIOS', 'BINCLUB SERVICOS DE ADMINISTRACA',
     'ODONTOPREV S/A', 'CREFISA SA CREDITO FINANCIAMENTO', 'JBCRED SOCIEDADE',
     'PSERV', 'EAGLE', 'PADRONIZADO PRIORITARIOS I',
+    // termos genéricos (matching amplo)
+    'Clube de Benefícios', 'Título de Capitalização', 'Previdência Privada',
+    'Consórcio', 'Assistência Odontológica', 'Assistência Residencial',
+    'Serviços de Assinatura',
   ],
   'Pagamentos Eletrônicos e Cobranças': [
     'PAGTO ELETRON COBRANCA', 'PAGTO ELETRON COBRANCA (ACE SEGURADORA S/A)',
@@ -71,6 +81,8 @@ const CATEGORIAS: Record<string, string[]> = {
     'MORA DE OPERACAO', 'MORA ENC DESCOBERTO C.C', 'MORA ENCARGOS', 'MORA OPERAÇÃO DE CRÉDITO',
     'OPERACOES VENCIDAS', 'GASTOS CARTAO DE CREDITO', 'Gasto c Credito',
     'PROVISAO GASTO CART CRED', 'LANCAMENTO A DEBITO',
+    // termos genéricos (matching amplo)
+    'Encargos Descoberto', 'Encargos Limite de Crédito', 'Mora e Juros', 'Multa Contratual',
   ],
   'Crédito e Operações': [
     'PARC CRED PESS', 'PARCELA CREDITO PESSOAL', 'PARCELA OPER DE CREDITO',
