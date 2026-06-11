@@ -64,11 +64,49 @@ const formatCurrency = (value: number | null): string => {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 };
 
+// Próxima ação sugerida com base no status do lead
+function proximaAcao(lead: Lead, diasParado: number): { texto: string; cor: string } {
+  const s = lead.status || '';
+  if (s === 'Perdido') return { texto: 'Lead perdido — reative com uma nova abordagem ou prova social.', cor: 'rose' };
+  if (s === 'Ganho' || s === 'Contrato Assinado') return { texto: 'Cliente fechado — acompanhe o processo e peça indicações.', cor: 'emerald' };
+  if (s === 'Aguardando Contrato') return { texto: 'Cobre a assinatura do contrato (dê um prazo claro).', cor: 'amber' };
+  if (s === 'Em Negociação') return { texto: 'Avance para o fechamento — crie senso de urgência.', cor: 'violet' };
+  if (s === 'Em Atendimento') return { texto: 'Peça os documentos (contrato é a prioridade).', cor: 'blue' };
+  if (s === 'Lead Frio') return { texto: 'Faça o primeiro contato e gere rapport.', cor: 'slate' };
+  if (diasParado >= 3) return { texto: `Parado há ${diasParado} dias — faça um follow-up.`, cor: 'amber' };
+  return { texto: 'Dê o próximo passo do atendimento.', cor: 'slate' };
+}
+
 // ============== RESUMO TAB ==============
 function ResumoTab({ lead }: { lead: Lead }) {
   const { data: contractReminders } = useLeadContracts(lead.id);
   const { data: processosData } = useLeadProcessos(lead.id);
   const navigate = useNavigate();
+
+  // Inteligência do lead: engajamento + duplicatas (tempo real)
+  const [msgStats, setMsgStats] = useState<{ total: number; ultima?: string } | null>(null);
+  const [duplicados, setDuplicados] = useState<{ id: string; nome: string; status: string }[]>([]);
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      // Engajamento: nº de mensagens e data da última
+      const { data: msgs } = await supabase
+        .from('manychat_mensagens').select('created_at')
+        .eq('lead_id', lead.id).order('created_at', { ascending: false }).limit(1000);
+      if (!cancel) setMsgStats({ total: msgs?.length || 0, ultima: msgs?.[0]?.created_at });
+
+      // Duplicatas: outros leads com o mesmo telefone (sufixo de 8 dígitos)
+      const suf = (lead.telefone || '').replace(/\D/g, '').slice(-8);
+      if (suf.length >= 8) {
+        const { data: dups } = await supabase
+          .from('leads_juridicos').select('id, nome, status, telefone')
+          .ilike('telefone', `%${suf}%`).neq('id', lead.id).limit(5);
+        if (!cancel) setDuplicados((dups || []).map((d: any) => ({ id: d.id, nome: d.nome || 'Sem nome', status: d.status || '' })));
+      }
+    })();
+    return () => { cancel = true; };
+  }, [lead.id, lead.telefone]);
 
   const config = STATUS_CONFIG[lead.status || 'Lead Frio'] || STATUS_CONFIG['Lead Frio'];
   const processoCount = processosData?.processos.length || 0;
@@ -77,6 +115,10 @@ function ResumoTab({ lead }: { lead: Lead }) {
   const hasContract = lead.contract_signed_at || lead.status === 'Contrato Assinado' || lead.status === 'Ganho' || signedCount > 0;
 
   const whatsappLink = lead.telefone ? `https://wa.me/${lead.telefone.replace(/\D/g, '')}` : null;
+
+  const refDate = msgStats?.ultima || lead.updated_at || lead.created_at;
+  const diasParado = refDate ? Math.floor((Date.now() - new Date(refDate).getTime()) / 86400000) : 0;
+  const acao = proximaAcao(lead, diasParado);
 
   return (
     <ScrollArea className="h-[62vh]">
@@ -103,6 +145,60 @@ function ResumoTab({ lead }: { lead: Lead }) {
           <Button variant="outline" size="sm" className="gap-1.5 text-xs rounded-lg ml-auto" onClick={() => navigate(`/chat?lead_id=${lead.id}`)}>
             <MessageSquare className="h-3.5 w-3.5" /> Chat
           </Button>
+        </div>
+
+        {/* ⚠️ Alerta de duplicata */}
+        {duplicados.length > 0 && (
+          <div className="rounded-xl border border-amber-300/60 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-2">
+            <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+              <Copy className="h-4 w-4" />
+              <span className="text-xs font-semibold">
+                {duplicados.length === 1 ? 'Possível duplicata' : `${duplicados.length} possíveis duplicatas`} — mesmo telefone
+              </span>
+            </div>
+            <div className="space-y-1">
+              {duplicados.map(d => (
+                <button key={d.id} onClick={() => navigate(`/leads/${d.id}`)}
+                  className="flex items-center justify-between w-full text-left text-xs px-2 py-1.5 rounded-lg bg-card hover:bg-muted/50 transition-colors">
+                  <span className="truncate">{d.nome}</span>
+                  <span className="flex items-center gap-1 text-muted-foreground shrink-0">{d.status} <ArrowRight className="h-3 w-3" /></span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 🧠 Inteligência do lead */}
+        <div className="rounded-xl border border-border/50 bg-gradient-to-br from-primary/5 to-transparent p-4 space-y-3">
+          <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+            <Sparkles className="w-3 h-3" /> Inteligência do lead
+          </h4>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/40"><MessageCircle className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" /></div>
+              <div>
+                <p className="text-sm font-bold leading-none">{msgStats?.total ?? '—'}</p>
+                <p className="text-[9px] text-muted-foreground mt-0.5">mensagens trocadas</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className={cn("p-1.5 rounded-lg", diasParado >= 3 ? "bg-amber-100 dark:bg-amber-950/40" : "bg-emerald-100 dark:bg-emerald-950/40")}><Clock className={cn("h-3.5 w-3.5", diasParado >= 3 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400")} /></div>
+              <div>
+                <p className="text-sm font-bold leading-none">{diasParado === 0 ? 'Hoje' : `${diasParado}d`}</p>
+                <p className="text-[9px] text-muted-foreground mt-0.5">desde o último contato</p>
+              </div>
+            </div>
+          </div>
+          <div className={cn("flex items-start gap-2 text-xs p-2.5 rounded-lg",
+            acao.cor === 'rose' ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400' :
+            acao.cor === 'amber' ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400' :
+            acao.cor === 'emerald' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400' :
+            acao.cor === 'violet' ? 'bg-violet-50 text-violet-700 dark:bg-violet-950/20 dark:text-violet-400' :
+            acao.cor === 'blue' ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400' :
+            'bg-muted/50 text-muted-foreground')}>
+            <Zap className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            <span><strong>Próxima ação:</strong> {acao.texto}</span>
+          </div>
         </div>
 
         {/* Status + Stage Card */}

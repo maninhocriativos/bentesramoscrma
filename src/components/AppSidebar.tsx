@@ -43,7 +43,7 @@ const menuSections: MenuSection[] = [
     items: [
       { title: 'Bem-Vindo', url: '/bem-vindo', icon: GraduationCap, visibility: 'all' },
       { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, visibility: 'dashboard-only' },
-      { title: 'CRM de Leads', url: '/leads', icon: Users, visibility: 'leads-only' },
+      { title: 'Leads', url: '/leads', icon: Users, visibility: 'leads-only' },
       { title: 'Leads API (Meta)', url: '/meta-leads', icon: FormInput, visibility: 'leads-only' },
       { title: 'Processos', url: '/processos', icon: Scale, visibility: 'processos-only' },
       { title: 'Intimações', url: '/intimacoes', icon: Gavel, visibility: 'processos-only' },
