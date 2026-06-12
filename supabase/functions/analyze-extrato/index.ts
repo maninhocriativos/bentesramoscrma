@@ -32,8 +32,7 @@ function instrucoesCopista(tipos?: string[]): string {
 - Tarifas e cestas: TARIFA, TAXA, CESTA, PACOTE, MANUTENÇÃO, MENSALIDADE, ANUIDADE, ADM CARTÃO, 2ª VIA, EMISSÃO EXTRATO
 - Seguros: SEGURO, SEG., PRESTAMISTA, VIDA, PREV, PROTEÇÃO, PREVIDÊNCIA, AP, RESIDENCIAL, AUTO
 - Capitalização e clubes: CAPITALIZ, TÍTULO CAP, CLUBE, BENEFÍCIO, ASSISTÊNCIA, ASSINATURA, CONSÓRCIO, ODONTO
-- Encargos e mora: ENCARGOS, MORA, JUROS, MULTA, OPERAÇÕES VENCIDAS
-- Pagamentos de cobrança: PAGTO ELETRON COBRANCA, RECEBIMENTO FORNECEDOR
+- Cobranças de seguradora/serviço: PAGTO ELETRON COBRANCA (de seguradora/clube/assistência), nomes como SABEMI, LIBERTY, SOROCRED, SUDAMERICA, ASPECIR
 - Vedadas: TAC, TEC, ABERTURA CRÉDITO, EMISSÃO CARNÊ`;
 
   if (tipos && tipos.length > 0) {
@@ -42,10 +41,10 @@ function instrucoesCopista(tipos?: string[]): string {
 
 ${lista}
 
-Além desses, capture também qualquer SEGURO, TARIFA, CESTA, CAPITALIZAÇÃO, CLUBE, ASSISTÊNCIA, ANUIDADE, ENCARGO ou MORA que apareça no extrato, mesmo que não esteja exatamente na lista acima.`;
+Além desses, capture também qualquer SEGURO, TARIFA, CESTA, CAPITALIZAÇÃO, CLUBE, ASSISTÊNCIA ou ANUIDADE que apareça no extrato, mesmo que não esteja exatamente na lista acima.`;
   }
 
-  return `Você é um AUDITOR especialista em detectar cobranças indevidas (venda casada) em extratos bancários. Leia TODO o conteúdo e copie CADA lançamento que se enquadre, UM POR LINHA — sem omitir nenhum.
+  return `Você é um AUDITOR especialista em detectar cobranças indevidas de TARIFAS, SEGUROS e SERVIÇOS (venda casada) em extratos bancários. Leia TODO o conteúdo e copie CADA lançamento que se enquadre, UM POR LINHA — sem omitir nenhum.
 
 ${alvo}
 
@@ -57,8 +56,12 @@ REGRAS:
 - VALOR = valor EXATO daquela linha individual. NUNCA some, agrupe ou multiplique.
 - Use ponto decimal (ex.: 32.00). Não use separador de milhar.
 - Preserve a descrição original do extrato (não traduza nem padronize).
-- NÃO inclua: IOF, saques, depósitos, transferências, compras no débito/crédito comuns, salário, pagamento de contas de consumo (luz/água/telefone do cliente), rendimentos.
-- Na dúvida entre incluir ou não um seguro/tarifa/serviço, INCLUA (o advogado filtra depois).`;
+- NUNCA inclua (NÃO são tarifa/seguro indevido — são dinheiro do próprio cliente ou a dívida em si):
+  • Pagamento, parcela, mora ou amortização de EMPRÉSTIMO / CRÉDITO PESSOAL / CONSIGNADO / OPERAÇÃO DE CRÉDITO (ex.: "MORA CREDITO PESSOAL", "PARCELA CREDITO PESSOAL" — é a quitação da dívida, não uma taxa)
+  • Gastos, compras ou fatura de CARTÃO DE CRÉDITO (ex.: "GASTOS CARTAO DE CREDITO" — é o gasto do próprio cliente)
+  • PIX, TED, DOC, transferências, estornos, depósitos, saques, aplicações, resgates, poupança
+  • IOF, salário, benefício, rendimento, pagamento de contas de consumo (luz/água/telefone)
+- Na dúvida entre incluir ou não um SEGURO/TARIFA/SERVIÇO de venda casada, INCLUA (o advogado filtra depois).`;
 }
 
 async function analisarTextoPuro(texto: string, apiKey: string, tipos?: string[]): Promise<string> {
@@ -157,15 +160,15 @@ function parsearLinhas(texto: string): Lancamento[] {
 
     const d = descricao.toUpperCase();
 
-    // Exclui categorias não indevidas
+    // Exclui categorias não indevidas (movimentações comuns)
     if (
       d.includes("IOF") ||
-      (d.includes("ENCARGO") && d.includes("LIMITE")) ||
       d.includes("SAQUE") ||
       d.includes("DEPOSITO") ||
       d.includes("DEPÓSITO") ||
       d.includes("TRANSFERENCIA") ||
       d.includes("TRANSFERÊNCIA") ||
+      d.includes("TRANSF") ||
       d.includes("COMPRA") ||
       d.includes("SALARIO") ||
       d.includes("SALÁRIO") ||
@@ -173,6 +176,27 @@ function parsearLinhas(texto: string): Lancamento[] {
       d.includes("CONTA DE AGUA") ||
       d.includes("CONTA DE TELEFONE") ||
       d.includes("RENDIMENTO")
+    ) continue;
+
+    // Exclui o PRÓPRIO empréstimo/cartão do cliente — NÃO é tarifa/seguro indevido.
+    // "MORA CREDITO PESSOAL", "PARCELA CREDITO PESSOAL" = quitação da dívida (principal);
+    // "GASTOS CARTAO DE CREDITO" = gasto do próprio cliente. Contar isso inflaria o laudo
+    // com o valor da dívida/gasto, não com a cobrança casada.
+    if (
+      d.includes("CREDITO PESSOAL") || d.includes("CRÉDITO PESSOAL") ||
+      d.includes("CRED PESS") ||
+      d.includes("PARCELA") || d.includes("PARC CRED") ||
+      d.includes("OPER DE CREDITO") || d.includes("OPERACAO DE CREDITO") ||
+      d.includes("OPERAÇÃO DE CRÉDITO") || d.includes("OPERACOES VENCIDAS") ||
+      d.includes("OPERAÇÕES VENCIDAS") ||
+      d.includes("GASTOS CARTAO") || d.includes("GASTOS CARTÃO") ||
+      d.includes("GASTO C CRED") || d.includes("PROVISAO GASTO") ||
+      d.includes("FATURA") ||
+      d.includes("PIX") || d.includes("DOC CRED") || d.includes("DOC AUTOM") ||
+      d.includes("ESTORNO") || d.includes("POUP") ||
+      d.includes("APLIC") || d.includes("RESGATE") ||
+      d.includes("BX.ANT") || d.includes("BX ANT") ||
+      d.includes("AMORTIZ")
     ) continue;
 
     // Exclui anuidades de conselhos profissionais
@@ -202,13 +226,11 @@ function parsearLinhas(texto: string): Lancamento[] {
       "TAC — Vedada": 5000,
       "TEC — Vedada": 1500,
       "Serviços Não Solicitados": 600,
-      "Encargos e Mora": 1500,
-      "Outras Cobranças": 1500,
       "Cobranças Indevidas": 600,
     };
 
-    if (valor > (limites[categoria] ?? 1500)) {
-      console.warn(`Rejeitado (valor alto, possível soma): ${data} | ${descricao} | ${valor} > limite ${limites[categoria] ?? 1500}`);
+    if (valor > (limites[categoria] ?? 600)) {
+      console.warn(`Rejeitado (valor alto, possível soma): ${data} | ${descricao} | ${valor} > limite ${limites[categoria] ?? 600}`);
       continue;
     }
 
@@ -356,27 +378,15 @@ function classificar(descricao: string): Classificacao {
     };
   }
 
-  if (
-    d.includes("ENCARGO") || d.includes("MORA") || d.includes("JUROS") ||
-    d.includes("MULTA") || d.includes("OPERACOES VENCIDAS") || d.includes("OPERAÇÕES VENCIDAS") ||
-    d.includes("PROVISAO GASTO") || d.includes("GASTO C CREDITO") || d.includes("GASTOS CARTAO")
-  ) {
-    return {
-      categoria: "Encargos e Mora",
-      baseLegal: "CDC Art. 51, IV — cláusulas e encargos abusivos; revisão de juros",
-      justificativa: "Encargos/mora cobrados — sujeitos a revisão judicial quanto à abusividade.",
-      indevido: true,
-    };
-  }
-
-  // Fallback: a IA já filtrou para cobranças relevantes (seguros/tarifas/serviços)
-  // e os itens claramente legítimos (saque, depósito, etc.) já foram excluídos antes.
-  // Então o que chega aqui é tratado como cobrança a conferir.
+  // Fallback: lançamento que não casa com nenhum padrão de venda casada conhecido.
+  // NÃO marca como indevido — evita falsos positivos (mora/parcela de empréstimo,
+  // gastos do cliente, etc., que não foram excluídos antes). Foco em precisão:
+  // só entra no laudo o que é claramente tarifa/seguro/serviço casado.
   return {
-    categoria: "Outras Cobranças",
+    categoria: "Cobranças Indevidas",
     baseLegal: "CDC Art. 39 — práticas abusivas proibidas",
-    justificativa: "Cobrança sem evidência de contratação expressa — conferir documentação.",
-    indevido: true,
+    justificativa: "Cobrança sem evidência de contratação expressa.",
+    indevido: false,
   };
 }
 
