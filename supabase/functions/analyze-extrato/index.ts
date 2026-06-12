@@ -25,7 +25,43 @@ interface Classificacao {
   indevido: boolean;
 }
 
-async function analisarTextoPuro(texto: string, apiKey: string): Promise<string> {
+// Gera as instruções do copista, incorporando a lista de tipos selecionados
+// pelo usuário (detecção precisa) + orientação inteligente para variações.
+function instrucoesCopista(tipos?: string[]): string {
+  let alvo = `CATEGORIAS A CAPTURAR (e QUALQUER variação de escrita, abreviação, acento ou nome de seguradora/serviço):
+- Tarifas e cestas: TARIFA, TAXA, CESTA, PACOTE, MANUTENÇÃO, MENSALIDADE, ANUIDADE, ADM CARTÃO, 2ª VIA, EMISSÃO EXTRATO
+- Seguros: SEGURO, SEG., PRESTAMISTA, VIDA, PREV, PROTEÇÃO, PREVIDÊNCIA, AP, RESIDENCIAL, AUTO
+- Capitalização e clubes: CAPITALIZ, TÍTULO CAP, CLUBE, BENEFÍCIO, ASSISTÊNCIA, ASSINATURA, CONSÓRCIO, ODONTO
+- Encargos e mora: ENCARGOS, MORA, JUROS, MULTA, OPERAÇÕES VENCIDAS
+- Pagamentos de cobrança: PAGTO ELETRON COBRANCA, RECEBIMENTO FORNECEDOR
+- Vedadas: TAC, TEC, ABERTURA CRÉDITO, EMISSÃO CARNÊ`;
+
+  if (tipos && tipos.length > 0) {
+    const lista = tipos.slice(0, 200).map((t) => `• ${t}`).join("\n");
+    alvo = `O usuário marcou ESTES tipos de cobrança para procurar. Capture TODAS as ocorrências que correspondam a qualquer um deles — reconhecendo variações de escrita, abreviações, maiúsculas/minúsculas, acentos e nomes de seguradora/serviço (ex.: "SEG PREST" = "SEGURO PRESTAMISTA"):
+
+${lista}
+
+Além desses, capture também qualquer SEGURO, TARIFA, CESTA, CAPITALIZAÇÃO, CLUBE, ASSISTÊNCIA, ANUIDADE, ENCARGO ou MORA que apareça no extrato, mesmo que não esteja exatamente na lista acima.`;
+  }
+
+  return `Você é um AUDITOR especialista em detectar cobranças indevidas (venda casada) em extratos bancários. Leia TODO o conteúdo e copie CADA lançamento que se enquadre, UM POR LINHA — sem omitir nenhum.
+
+${alvo}
+
+FORMATO — uma linha por lançamento:
+DD/MM/AAAA | DESCRIÇÃO (exatamente como no extrato) | VALOR
+
+REGRAS:
+- Capture TODAS as ocorrências: a mesma cobrança repetida em vários meses gera VÁRIAS linhas (uma por mês).
+- VALOR = valor EXATO daquela linha individual. NUNCA some, agrupe ou multiplique.
+- Use ponto decimal (ex.: 32.00). Não use separador de milhar.
+- Preserve a descrição original do extrato (não traduza nem padronize).
+- NÃO inclua: IOF, saques, depósitos, transferências, compras no débito/crédito comuns, salário, pagamento de contas de consumo (luz/água/telefone do cliente), rendimentos.
+- Na dúvida entre incluir ou não um seguro/tarifa/serviço, INCLUA (o advogado filtra depois).`;
+}
+
+async function analisarTextoPuro(texto: string, apiKey: string, tipos?: string[]): Promise<string> {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -39,27 +75,9 @@ async function analisarTextoPuro(texto: string, apiKey: string): Promise<string>
       messages: [
         {
           role: "user",
-          content: `Você é um copista de dados bancários. Analise o texto abaixo e copie CADA lançamento das categorias indicadas, UM POR LINHA.
+          content: `${instrucoesCopista(tipos)}
 
-CATEGORIAS:
-- Tarifas: TARIFA, TAXA, CESTA, PACOTE, MANUTENÇÃO, MENSALIDADE CONTA
-- Seguros: SEGURO, SEG., PRESTAMISTA, VIDA, PREV, PROTEÇÃO, PREVIDENCIA
-- Capitalização: CAPITALIZ, TITULO CAP, CAP MENSAL
-- Anuidades: ANUIDADE, ADM CARTÃO, ADMINISTRAÇÃO CARTÃO
-- Vedadas: TAC, TEC, ABERTURA CRÉDITO, EMISSÃO CARNÊ
-- Serviços: CLUBE, BENEFICIO, ASSISTÊNCIA, ASSINATURA, CONSÓRCIO
-
-FORMATO — uma linha por lançamento:
-DD/MM/AAAA | DESCRIÇÃO | VALOR
-
-REGRAS:
-- VALOR = valor EXATO daquela linha individual
-- NUNCA some ou multiplique valores
-- Mesma cobrança em vários meses = várias linhas separadas
-- Use ponto decimal: 32.00
-- NÃO inclua: IOF, saques, depósitos, transferências, compras, salário
-
-TEXTO:
+TEXTO DO EXTRATO:
 ${texto.substring(0, 50000)}
 
 Responda APENAS as linhas DATA | DESCRIÇÃO | VALOR:`,
@@ -77,7 +95,7 @@ Responda APENAS as linhas DATA | DESCRIÇÃO | VALOR:`,
   return result.content?.[0]?.text || "";
 }
 
-async function extrairDoPdf(base64: string, apiKey: string): Promise<string> {
+async function extrairDoPdf(base64: string, apiKey: string, tipos?: string[]): Promise<string> {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -98,24 +116,9 @@ async function extrairDoPdf(base64: string, apiKey: string): Promise<string> {
             },
             {
               type: "text",
-              text: `Você é um copista de dados bancários. Leia TODAS as páginas deste extrato e copie CADA lançamento das categorias abaixo, UM POR LINHA.
+              text: `Leia TODAS as páginas deste extrato (use o valor da coluna de DÉBITO de cada linha).
 
-CATEGORIAS:
-- Tarifas: TARIFA, TAXA, CESTA, PACOTE, MANUTENÇÃO
-- Seguros: SEGURO, SEG., PRESTAMISTA, VIDA, PREV, PROTEÇÃO
-- Capitalização: CAPITALIZ, TITULO CAP
-- Anuidades: ANUIDADE, ADM CARTÃO
-- Vedadas: TAC, TEC, ABERTURA CRÉDITO
-- Serviços: CLUBE, BENEFICIO, ASSISTÊNCIA, ASSINATURA
-
-FORMATO — uma linha por lançamento:
-DD/MM/AAAA | DESCRIÇÃO EXATA | VALOR
-
-REGRAS ABSOLUTAS:
-- VALOR = valor EXATO da coluna débito daquela linha individual
-- NUNCA some, NUNCA multiplique
-- Mesma cobrança em 12 meses = 12 linhas separadas
-- NÃO inclua: IOF, saques, depósitos, transferências, compras, salário
+${instrucoesCopista(tipos)}
 
 Responda APENAS as linhas DATA | DESCRIÇÃO | VALOR:`,
             },
@@ -188,21 +191,24 @@ function parsearLinhas(texto: string): Lancamento[] {
     const { indevido, categoria } = classificar(descricao);
     if (!indevido) continue;
 
-    // Limites por categoria — rejeita valores somados
+    // Tetos por categoria — apenas sanity check para evitar capturar o valor de
+    // um empréstimo/financiamento inteiro somado. Generosos para não descartar
+    // descontos legítimos de valor mais alto.
     const limites: Record<string, number> = {
-      "Tarifas Bancárias": 55,
-      "Seguros": 50,
-      "Capitalização": 300,
-      "Anuidade Cartão": 100,
-      "TAC — Vedada": 2000,
-      "TEC — Vedada": 500,
-      "Serviços Não Solicitados": 300,
-      "Cobranças Indevidas": 55,
+      "Tarifas Bancárias": 250,
+      "Seguros": 400,
+      "Capitalização": 600,
+      "Anuidade Cartão": 400,
+      "TAC — Vedada": 5000,
+      "TEC — Vedada": 1500,
+      "Serviços Não Solicitados": 600,
+      "Encargos e Mora": 1500,
+      "Outras Cobranças": 1500,
+      "Cobranças Indevidas": 600,
     };
 
-    // CORREÇÃO: fallback 55 em vez de 500
-    if (valor > (limites[categoria] ?? 55)) {
-      console.warn(`Rejeitado (soma): ${data} | ${descricao} | ${valor} > limite ${limites[categoria] ?? 55}`);
+    if (valor > (limites[categoria] ?? 1500)) {
+      console.warn(`Rejeitado (valor alto, possível soma): ${data} | ${descricao} | ${valor} > limite ${limites[categoria] ?? 1500}`);
       continue;
     }
 
@@ -332,22 +338,45 @@ function classificar(descricao: string): Classificacao {
     d.includes("ASSINATURA") ||
     d.includes("CONSORCIO") ||
     d.includes("CONSÓRCIO") ||
-    d.includes("ODONTOL") ||
-    d.includes("PREVIDENCIA PRIV")
+    d.includes("ODONTO") ||
+    d.includes("PREVIDENCIA PRIV") ||
+    // clubes/serviços/seguradoras que aparecem no extrato como débito embutido
+    d.includes("SOROCRED") || d.includes("SUDAMERICA") || d.includes("SEBRASEG") ||
+    d.includes("BINCLUB") || d.includes("ASPECIR") || d.includes("SABEMI") ||
+    d.includes("LIBERTY") || d.includes("PREVISUL") || d.includes("JBCRED") ||
+    d.includes("CREFISA") || d.includes("PSERV") || d.includes("EAGLE") ||
+    d.includes("PAGTO ELETRON COBRANCA") || d.includes("PADRONIZADO PRIORITARIOS") ||
+    d.includes("VIZA PREV") || d.includes("SECON")
   ) {
     return {
       categoria: "Serviços Não Solicitados",
       baseLegal: "CDC Art. 39, III — serviço sem solicitação é prática abusiva",
-      justificativa: "Serviço cobrado sem autorização expressa do cliente.",
+      justificativa: "Serviço/produto cobrado sem autorização expressa do cliente.",
       indevido: true,
     };
   }
 
+  if (
+    d.includes("ENCARGO") || d.includes("MORA") || d.includes("JUROS") ||
+    d.includes("MULTA") || d.includes("OPERACOES VENCIDAS") || d.includes("OPERAÇÕES VENCIDAS") ||
+    d.includes("PROVISAO GASTO") || d.includes("GASTO C CREDITO") || d.includes("GASTOS CARTAO")
+  ) {
+    return {
+      categoria: "Encargos e Mora",
+      baseLegal: "CDC Art. 51, IV — cláusulas e encargos abusivos; revisão de juros",
+      justificativa: "Encargos/mora cobrados — sujeitos a revisão judicial quanto à abusividade.",
+      indevido: true,
+    };
+  }
+
+  // Fallback: a IA já filtrou para cobranças relevantes (seguros/tarifas/serviços)
+  // e os itens claramente legítimos (saque, depósito, etc.) já foram excluídos antes.
+  // Então o que chega aqui é tratado como cobrança a conferir.
   return {
-    categoria: "Cobranças Indevidas",
+    categoria: "Outras Cobranças",
     baseLegal: "CDC Art. 39 — práticas abusivas proibidas",
-    justificativa: "Cobrança sem evidência de contratação expressa.",
-    indevido: false,
+    justificativa: "Cobrança sem evidência de contratação expressa — conferir documentação.",
+    indevido: true,
   };
 }
 
@@ -402,8 +431,10 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const {
       banco, dataInicial, dataFinal, nomeCliente, cpf, numeroContrato,
-      textoExtraido, imagensBase64, arquivosBase64,
+      textoExtraido, imagensBase64, arquivosBase64, tiposCobranças,
     } = body;
+    const tipos: string[] = Array.isArray(tiposCobranças) ? tiposCobranças : [];
+    console.log("Tipos de cobrança selecionados:", tipos.length);
 
     console.log("=== NOVA ANÁLISE ===");
     console.log("Banco:", banco, "| Período:", dataInicial, "a", dataFinal);
@@ -426,7 +457,7 @@ Deno.serve(async (req) => {
     // CAMINHO 1: Texto extraído pelo pdf.js
     if (textoExtraido?.trim()) {
       console.log("CAMINHO 1: texto do pdf.js...");
-      linhasAnalisadas = await analisarTextoPuro(textoExtraido, ANTHROPIC_API_KEY);
+      linhasAnalisadas = await analisarTextoPuro(textoExtraido, ANTHROPIC_API_KEY, tipos);
       console.log("Linhas via texto:", linhasAnalisadas.split("\n").filter((l) => l.includes("|")).length);
     }
 
@@ -438,7 +469,7 @@ Deno.serve(async (req) => {
       if (todosPdfs.length > 0) {
         console.log(`CAMINHO 2: ${todosPdfs.length} PDF(s) via base64...`);
         for (const file of todosPdfs) {
-          const resultado = await extrairDoPdf(file.base64, ANTHROPIC_API_KEY);
+          const resultado = await extrairDoPdf(file.base64, ANTHROPIC_API_KEY, tipos);
           linhasAnalisadas += resultado + "\n";
           console.log("Linhas do PDF:", resultado.split("\n").filter((l) => l.includes("|")).length);
         }
@@ -467,7 +498,7 @@ Deno.serve(async (req) => {
                 role: "user",
                 content: [
                   { type: "image", source: { type: "base64", media_type: img.mimeType, data: img.base64 } },
-                  { type: "text", text: "Copie cada cobrança (TARIFA, SEGURO, CESTA) no formato: DATA | DESCRIÇÃO | VALOR. Uma linha por lançamento, valor individual." },
+                  { type: "text", text: `${instrucoesCopista(tipos)}\n\nResponda APENAS as linhas DATA | DESCRIÇÃO | VALOR:` },
                 ],
               }],
             }),
