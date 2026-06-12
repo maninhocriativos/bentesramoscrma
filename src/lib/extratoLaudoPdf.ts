@@ -25,6 +25,29 @@ export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig
   const now = new Date();
   const laudoNum = `LAU-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
 
+  // Período: usa o informado; senão deriva das datas das cobranças (MM/AAAA a MM/AAAA).
+  const mesAnoKey = (data: string): string => {
+    const s = (data || "").trim();
+    const br = s.match(/(\d{2})\/(\d{2})\/(\d{2,4})/);
+    if (br) return `${br[3].length === 2 ? "20" + br[3] : br[3]}-${br[2]}`;
+    const iso = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+    return iso ? `${iso[1]}-${iso[2]}` : "";
+  };
+  const mesAnoLabel = (k: string) => { const [y, m] = k.split("-"); return y && m ? `${m}/${y}` : k; };
+  const periodoInformado = (resumo.periodo_analisado || "").trim();
+  let periodoTexto = periodoInformado && !/não informado/i.test(periodoInformado) ? periodoInformado : "";
+  if (!periodoTexto) {
+    const keys = (cobrancas_indevidas || []).map((c) => mesAnoKey(c.data || "")).filter(Boolean).sort();
+    if (keys.length) {
+      const ini = mesAnoLabel(keys[0]); const fim = mesAnoLabel(keys[keys.length - 1]);
+      periodoTexto = ini === fim ? ini : `${ini} a ${fim}`;
+    } else if (config.dataInicial && config.dataFinal) {
+      periodoTexto = `${config.dataInicial} a ${config.dataFinal}`;
+    } else {
+      periodoTexto = "Não informado";
+    }
+  }
+
   const PW = 210;
   const ML = 15;
   const MR = 15;
@@ -411,7 +434,7 @@ export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig
   doc.text("Período analisado:", ML + 6, y + 7);
   fn(8);
   st(COR.cinzaEscuro);
-  doc.text(resumo.periodo_analisado || `${config.dataInicial} a ${config.dataFinal}`, ML + 50, y + 7);
+  doc.text(periodoTexto, ML + 50, y + 7);
   y += 17;
 
   // por categoria

@@ -34,6 +34,45 @@ function brl(v: number) {
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Converte uma data "DD/MM/AAAA" (ou ISO "AAAA-MM-DD") numa chave ordenável "AAAA-MM".
+function mesAnoKey(data: string): string {
+  const s = (data || '').trim();
+  const br = s.match(/(\d{2})\/(\d{2})\/(\d{2,4})/);   // DD/MM/AAAA
+  if (br) {
+    const yyyy = br[3].length === 2 ? `20${br[3]}` : br[3];
+    return `${yyyy}-${br[2]}`;
+  }
+  const iso = s.match(/(\d{4})-(\d{2})-(\d{2})/);       // AAAA-MM-DD
+  if (iso) return `${iso[1]}-${iso[2]}`;
+  return '';
+}
+
+// "AAAA-MM" → "MM/AAAA" para exibição.
+function mesAnoLabel(key: string): string {
+  const [y, m] = key.split('-');
+  return y && m ? `${m}/${y}` : key;
+}
+
+// Deriva o período (ex.: "05/2022 a 09/2025") a partir das próprias cobranças,
+// usado quando o usuário não informou o período no formulário.
+function periodoDasCobrancas(resultado: AnaliseResultado): string {
+  const keys = (resultado.cobrancas_indevidas || [])
+    .map((c) => mesAnoKey(c.data || ''))
+    .filter(Boolean)
+    .sort();
+  if (!keys.length) return '';
+  const ini = mesAnoLabel(keys[0]);
+  const fim = mesAnoLabel(keys[keys.length - 1]);
+  return ini === fim ? ini : `${ini} a ${fim}`;
+}
+
+// Período "humano": usa o informado; senão deriva das cobranças.
+function periodoExibicao(resultado: AnaliseResultado): string {
+  const p = (resultado.resumo.periodo_analisado || '').trim();
+  if (p && !/não informado/i.test(p)) return p;
+  return periodoDasCobrancas(resultado) || 'Não informado';
+}
+
 // ─── Helpers de célula ────────────────────────────────────────────────────────
 function headerFill(ws: ExcelJS.Worksheet, row: number, from: number, to: number, text: string, size = 13) {
   const cell = ws.getRow(row).getCell(from);
@@ -133,13 +172,17 @@ function buildResumoSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado, con
   ws.columns = [
     { width: 32 }, { width: 38 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 },
   ];
+  ws.views = [{ showGridLines: false }];
+
+  const periodo   = periodoExibicao(resultado);
+  const emissao   = new Date().toLocaleDateString('pt-BR');
 
   // Título principal
   headerFill(ws, 1, 1, 6, 'CONFERÊNCIA DE EXTRATOS — BENTES RAMOS ADVOCACIA', 14);
   ws.getRow(1).height = 36;
 
   subHeader(ws, 2, 1, 6,
-    `Banco: ${resultado.resumo.banco}   |   Cliente: ${config.nomeCliente || 'N/D'}   |   Período: ${resultado.resumo.periodo_analisado}`);
+    `Banco: ${resultado.resumo.banco}   |   Cliente: ${config.nomeCliente || 'N/D'}   |   Período: ${periodo}   |   Emitido em: ${emissao}`);
   ws.getRow(2).height = 22;
 
   ws.getRow(3).height = 8;
@@ -152,7 +195,7 @@ function buildResumoSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado, con
     ['Lançamentos Analisados',      resultado.resumo.total_lancamentos,           false],
     ['Irregularidades Encontradas',  resultado.resumo.irregularidades_encontradas, false],
     ['Valor Total Indevido',         resultado.resumo.valor_total_indevido,        true ],
-    ['Período Analisado',            resultado.resumo.periodo_analisado,           false],
+    ['Período Analisado',            periodo,                                       false],
     ['Banco',                        resultado.resumo.banco,                       false],
     ['Nome do Cliente',              config.nomeCliente   || 'Não informado',      false],
     ['CPF / CNPJ',                   config.cpf           || 'Não informado',      false],
@@ -219,8 +262,8 @@ function buildCobrancasSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado) 
   const hdrs = ['Data', 'Descrição', 'Valor Unitário (R$)', 'Ocorrências', 'Total (R$)', 'Categoria', 'Status', 'Base Legal', 'Justificativa'];
   hdrs.forEach((h, i) => colHeader(ws.getRow(2).getCell(i + 1), h));
 
-  // Congelar cabeçalho
-  ws.views = [{ state: 'frozen', ySplit: 2 }];
+  // Congelar cabeçalho + layout limpo
+  ws.views = [{ state: 'frozen', ySplit: 2, showGridLines: false }];
 
   const cobrancas = resultado.cobrancas_indevidas || [];
   cobrancas.forEach((c, idx) => {
@@ -255,6 +298,7 @@ function buildCobrancasSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado) 
 function buildCategoriaSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado) {
   const ws = wb.addWorksheet('Por Categoria', { properties: { tabColor: { argb: `FF${C.ouro}` } } });
   ws.columns = [{ width: 34 }, { width: 20 }, { width: 16 }, { width: 14 }];
+  ws.views = [{ showGridLines: false }];
 
   headerFill(ws, 1, 1, 4, 'RESUMO POR CATEGORIA', 13);
   ws.getRow(1).height = 30;
@@ -290,7 +334,8 @@ function buildCategoriaSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado) 
 // ─── Aba 4: Linha do Tempo ────────────────────────────────────────────────────
 function buildTimelineSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado) {
   const ws = wb.addWorksheet('Linha do Tempo', { properties: { tabColor: { argb: `FF${C.marromMed}` } } });
-  ws.columns = [{ width: 16 }, { width: 22 }, { width: 18 }];
+  ws.columns = [{ width: 18 }, { width: 24 }, { width: 20 }];
+  ws.views = [{ state: 'frozen', ySplit: 2, showGridLines: false }];
 
   headerFill(ws, 1, 1, 3, 'LINHA DO TEMPO DE COBRANÇAS', 13);
   ws.getRow(1).height = 30;
@@ -299,23 +344,24 @@ function buildTimelineSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado) {
   ['Mês/Ano', 'Total Cobrado (R$)', 'Qtd. Ocorrências'].forEach((h, i) =>
     colHeader(ws.getRow(2).getCell(i + 1), h));
 
+  // Agrupa por AAAA-MM (chave ordenável); exibe como MM/AAAA.
   const map = new Map<string, { total: number; count: number }>();
   (resultado.cobrancas_indevidas || []).forEach((c) => {
-    const m = (c.data || '').substring(0, 7);
-    if (!m) return;
-    const ex = map.get(m) || { total: 0, count: 0 };
-    map.set(m, { total: ex.total + (c.valor_total || 0), count: ex.count + (c.quantidade_ocorrencias || 1) });
+    const k = mesAnoKey(c.data || '');
+    if (!k) return;
+    const ex = map.get(k) || { total: 0, count: 0 };
+    map.set(k, { total: ex.total + (c.valor_total || 0), count: ex.count + (c.quantidade_ocorrencias || 1) });
   });
 
-  const entries = Array.from(map.entries()).sort();
-  entries.forEach(([mes, d], idx) => {
+  const entries = Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  entries.forEach(([key, d], idx) => {
     const r   = idx + 3;
     const alt = idx % 2 !== 0;
     const row = ws.getRow(r);
     row.height = 22;
-    dataRow(row.getCell(1), mes,     alt, { center: true });
-    dataRow(row.getCell(2), d.total, alt, { currency: true, red: true, bold: true });
-    dataRow(row.getCell(3), d.count, alt, { center: true });
+    dataRow(row.getCell(1), mesAnoLabel(key), alt, { center: true });
+    dataRow(row.getCell(2), d.total,          alt, { currency: true, red: true, bold: true });
+    dataRow(row.getCell(3), d.count,          alt, { center: true });
   });
 
   const tr   = entries.length + 3;
