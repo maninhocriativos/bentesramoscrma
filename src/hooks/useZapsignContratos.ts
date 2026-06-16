@@ -26,6 +26,14 @@ function normalizeName(s: string): string {
     .toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+// Chave tolerante: primeiro + último nome (ignora nomes do meio).
+// Ex.: "Benedito Isaney Nascimento da Silva" → "benedito silva".
+function nameKey(s: string): string {
+  const parts = normalizeName(s).split(' ').filter(Boolean);
+  if (parts.length < 2) return '';
+  return `${parts[0]} ${parts[parts.length - 1]}`;
+}
+
 function classifyOrigem(lead: any): TipoOrigemZapsign {
   if (!lead) return 'indefinido';
   if (
@@ -96,9 +104,10 @@ export async function fetchZapsignContratosData(): Promise<ContratoZapsignComSta
     .from('leads_juridicos')
     .select('id, nome, email, telefone, tipo_origem, origem, linha_whatsapp, empresa_tag');
 
-  const leadByPhone = new Map<string, any>();
-  const leadByEmail = new Map<string, any>();
-  const leadByName  = new Map<string, any>();
+  const leadByPhone   = new Map<string, any>();
+  const leadByEmail   = new Map<string, any>();
+  const leadByName    = new Map<string, any>();
+  const leadByNameKey = new Map<string, any>();
 
   for (const l of allLeads || []) {
     leadById.set(l.id, l); // garante que todos estejam disponíveis por id
@@ -113,6 +122,8 @@ export async function fetchZapsignContratosData(): Promise<ContratoZapsignComSta
     if (l.nome) {
       const nm = normalizeName(l.nome);
       if (nm && !leadByName.has(nm)) leadByName.set(nm, l);
+      const nk = nameKey(l.nome);
+      if (nk && !leadByNameKey.has(nk)) leadByNameKey.set(nk, l);
     }
   }
 
@@ -136,9 +147,15 @@ export async function fetchZapsignContratosData(): Promise<ContratoZapsignComSta
       if (email && leadByEmail.has(email)) resolvedLead = leadByEmail.get(email);
     }
     // 4) NOME do signatário (cobre contratos criados direto no painel ZapSign)
+    const signerNm = local?.signer_name || doc.signers?.[0]?.name || '';
     if (!resolvedLead) {
-      const nm = normalizeName(local?.signer_name || doc.signers?.[0]?.name || '');
+      const nm = normalizeName(signerNm);
       if (nm && leadByName.has(nm)) resolvedLead = leadByName.get(nm);
+    }
+    // 5) NOME tolerante: primeiro + último nome (variações de nome do meio)
+    if (!resolvedLead) {
+      const nk = nameKey(signerNm);
+      if (nk && leadByNameKey.has(nk)) resolvedLead = leadByNameKey.get(nk);
     }
 
     return {
