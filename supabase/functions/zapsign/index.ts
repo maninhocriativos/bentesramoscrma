@@ -200,16 +200,33 @@ async function listDocuments(token: string, params: any) {
   const offset = (page - 1) * per_page;
   const data = await zapsignFetch(token, `/docs/?limit=${per_page}&offset=${offset}`);
   const docs = data.results || data.documents || (Array.isArray(data) ? data : []);
-  // Diagnóstico: mostra como o ZapSign devolve o status na listagem.
-  if (docs[0]) {
-    const d = docs[0];
-    console.log('[Zapsign] amostra listagem →', JSON.stringify({
-      status: d.status, signed: d.signed, deleted: d.deleted,
-      signers: (d.signers || []).map((s: any) => ({ signed_at: s.signed_at, status: s.status })),
-    }).slice(0, 400));
+
+  // IMPORTANTE: a LISTAGEM do ZapSign NÃO traz os signatários (signers: []) e
+  // não marca "signed" — só "pending"/"cancelled". Para saber o status REAL
+  // (assinado), buscamos o DETALHE de cada documento (que traz signed_at de
+  // cada signatário). Feito em lotes para não estourar o rate limit da API.
+  const BATCH = 8;
+  const enriched: any[] = [];
+  for (let i = 0; i < docs.length; i += BATCH) {
+    const slice = docs.slice(i, i + BATCH);
+    const results = await Promise.all(
+      slice.map(async (d: any) => {
+        const tk = d.token || d.id;
+        if (!tk) return normalizeDoc(d);
+        try {
+          const full = await zapsignFetch(token, `/docs/${tk}/`);
+          return normalizeDoc(full);
+        } catch (e) {
+          console.warn(`[Zapsign] detalhe falhou p/ ${tk}: ${e}`);
+          return normalizeDoc(d); // fallback para o resumo
+        }
+      }),
+    );
+    enriched.push(...results);
   }
+
   return {
-    documents: docs.map(normalizeDoc),
+    documents: enriched,
     total: data.count || docs.length,
     page,
     per_page,
