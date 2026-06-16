@@ -91,7 +91,15 @@ export default function ContratosPage() {
   const [criarZapsignOpen, setCriarZapsignOpen] = useState(false);
 
   // Hook para Zapsign
-  const { contratos: contratosZapsign, isLoading: loadingZapsign, refetch: refetchZapsign } = useZapsignContratos();
+  const { contratos: contratosZapsign, isLoading: loadingZapsign, isFetching: fetchingZapsign, refetch: refetchZapsign } = useZapsignContratos();
+
+  const handleRefreshZapsign = useCallback(async () => {
+    const res = await refetchZapsign();
+    toast({
+      title: 'Contratos atualizados',
+      description: `${res.data?.length ?? 0} contratos sincronizados com o ZapSign`,
+    });
+  }, [refetchZapsign, toast]);
 
   const fetchContractsFromClicksign = useCallback(async (showLoading = true, showToast = false) => {
     if (showLoading) setLoading(true);
@@ -351,11 +359,12 @@ export default function ContratosPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => refetchZapsign()}
+                    onClick={handleRefreshZapsign}
+                    disabled={fetchingZapsign}
                     className="text-muted-foreground gap-2"
                   >
-                    <RefreshCw className="h-4 w-4" />
-                    Atualizar
+                    <RefreshCw className={cn('h-4 w-4', fetchingZapsign && 'animate-spin')} />
+                    {fetchingZapsign ? 'Atualizando...' : 'Atualizar'}
                   </Button>
                 </div>
 

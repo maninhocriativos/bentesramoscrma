@@ -180,7 +180,7 @@ export async function fetchZapsignContratosData(): Promise<ContratoZapsignComSta
 export function useZapsignContratos(options: { refreshInterval?: number } = {}) {
   const { refreshInterval = 5 * 60 * 1000 } = options;
 
-  const { data: contratos = [], isLoading, error, refetch } = useQuery({
+  const { data: contratos = [], isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ['zapsign-contratos'],
     queryFn: fetchZapsignContratosData,
     refetchInterval: refreshInterval,
@@ -196,7 +196,7 @@ export function useZapsignContratos(options: { refreshInterval?: number } = {}) 
     return () => { supabase.removeChannel(channel); };
   }, [refetch]);
 
-  return { contratos, isLoading, error, refetch };
+  return { contratos, isLoading, isFetching, error, refetch };
 }
 
 export function mapZapsignStatusExport(status: string, signers: any[]): string {
