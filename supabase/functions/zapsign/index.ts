@@ -161,14 +161,19 @@ function buildSigners(signers: any[]) {
 }
 
 function normalizeDoc(doc: any) {
-  const signers = (doc.signers || []).map((s: any) => ({
-    id:        s.token || s.id,
-    name:      s.name,
-    email:     s.email,
-    status:    s.signed_at ? 'signed' : 'pending',
-    signed_at: s.signed_at || null,
-    sign_url:  s.sign_url || null,
-  }));
+  const signers = (doc.signers || []).map((s: any) => {
+    const phone = [s.phone_country, s.phone_number].filter(Boolean).join('') ||
+      s.phone || s.phone_number || '';
+    return {
+      id:        s.token || s.id,
+      name:      s.name,
+      email:     s.email,
+      phone,
+      status:    s.signed_at ? 'signed' : 'pending',
+      signed_at: s.signed_at || null,
+      sign_url:  s.sign_url || null,
+    };
+  });
   // O ZapSign indica o status de formas diferentes conforme o endpoint:
   //  • string `status` ("signed" / "pending" / "refused") — vem na listagem
   //  • booleano `signed` — vem em alguns detalhes

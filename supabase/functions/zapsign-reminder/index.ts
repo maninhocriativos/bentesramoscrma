@@ -50,6 +50,10 @@ serve(async (req) => {
       signUrl,
       leadId,
       hoursLeft,
+      // Dados do signatário vindos da tela (cobrem contratos criados direto no
+      // painel do ZapSign, que NÃO têm registro local).
+      signerPhone,
+      signerName,
     } = await req.json();
 
     if (!documentId) {
@@ -61,22 +65,15 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 1. Buscar contrato local
+    // 1. Buscar contrato local (pode não existir se foi criado direto no ZapSign)
     const { data: contract } = await supabase
       .from("contract_reminders_zapsign")
       .select("*")
       .eq("document_id", documentId)
       .maybeSingle();
 
-    if (!contract) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Contrato não encontrado no banco" }),
-        { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
-    }
-
     // 2. Buscar lead pelo lead_id do contrato ou pelo leadId informado
-    const targetLeadId = leadId || contract.lead_id;
+    const targetLeadId = leadId || contract?.lead_id;
     let lead: any = null;
 
     if (targetLeadId) {
@@ -88,9 +85,10 @@ serve(async (req) => {
       lead = data;
     }
 
-    // Fallback: buscar pelo telefone do signatário
-    if (!lead && contract.signer_phone) {
-      const normalized = normalizePhone(contract.signer_phone);
+    // Fallback: buscar pelo telefone do signatário (local ou da tela)
+    const phoneParaBusca = contract?.signer_phone || signerPhone;
+    if (!lead && phoneParaBusca) {
+      const normalized = normalizePhone(phoneParaBusca);
       if (normalized.length >= 10) {
         const { data } = await supabase
           .from("leads_juridicos")
@@ -102,21 +100,21 @@ serve(async (req) => {
       }
     }
 
-    // Determinar telefone de destino: do lead ou do signatário
-    const telefoneDestino = lead?.telefone || contract.signer_phone;
+    // Determinar telefone de destino: do lead, do registro local ou da tela
+    const telefoneDestino = lead?.telefone || contract?.signer_phone || signerPhone;
 
     if (!telefoneDestino) {
       return new Response(
-        JSON.stringify({ success: false, error: "Nenhum telefone encontrado para envio" }),
+        JSON.stringify({ success: false, error: "Nenhum telefone encontrado para envio. Verifique se o cliente tem telefone cadastrado." }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
     // 3. Resolver URL de assinatura
-    const resolvedSignUrl = signUrl || contract.contract_link || "https://zapsign.com.br";
+    const resolvedSignUrl = signUrl || contract?.contract_link || "https://zapsign.com.br";
 
     // 4. Montar mensagem
-    const clientName = (lead?.nome || contract.signer_name || "Cliente").split(" ")[0];
+    const clientName = (lead?.nome || contract?.signer_name || signerName || "Cliente").split(" ")[0];
     let message: string;
 
     if (reminderType === "urgent") {
@@ -147,7 +145,7 @@ serve(async (req) => {
 
     // 6. Registrar histórico
     const cleanPhone = normalizePhone(telefoneDestino);
-    const effectiveLeadId = lead?.id || contract.lead_id;
+    const effectiveLeadId = lead?.id || contract?.lead_id;
 
     await Promise.all([
       // Mensagem no histórico do chat

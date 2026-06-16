@@ -112,6 +112,9 @@ export function ZapsignContratosTable({ contratos, isLoading, activeTab }: Zapsi
           reminderType: type,
           signUrl,
           leadId: contrato.leadId,
+          // Dados do signatário p/ contratos sem registro local (criados direto no ZapSign)
+          signerPhone: contrato.leadPhone || contrato.signers?.[0]?.phone,
+          signerName: contrato.leadNome || contrato.signers?.[0]?.name,
         },
       });
       if (error) throw error;
