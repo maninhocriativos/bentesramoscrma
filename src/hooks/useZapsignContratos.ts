@@ -19,20 +19,31 @@ function normalizePhone(p: string): string {
   return (p || '').replace(/\D/g, '').slice(-11);
 }
 
+// Normaliza nome para matching: sem acentos, minúsculas, espaços colapsados.
+function normalizeName(s: string): string {
+  return (s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
 function classifyOrigem(lead: any): TipoOrigemZapsign {
   if (!lead) return 'indefinido';
   if (
     lead.tipo_origem === 'trafego' ||
     lead.linha_whatsapp === 'trafego_isa' ||
     (lead.origem || '').toLowerCase().includes('tráfego') ||
-    (lead.origem || '').toLowerCase().includes('trafego')
+    (lead.origem || '').toLowerCase().includes('trafego') ||
+    (lead.origem || '').toLowerCase().includes('meta') ||
+    (lead.origem || '').toLowerCase().includes('facebook') ||
+    (lead.origem || '').toLowerCase().includes('instagram') ||
+    (lead.origem || '').toLowerCase().includes('anúncio') ||
+    (lead.origem || '').toLowerCase().includes('anuncio') ||
+    (lead.origem || '').toLowerCase().includes('ads')
   ) return 'trafego';
-  if (
-    lead.linha_whatsapp === 'bentes_ramos_antigo' ||
-    lead.empresa_tag === 'BENTES_RAMOS' ||
-    lead.tipo_origem === 'whatsapp_direto'
-  ) return 'escritorio';
-  return 'indefinido';
+  // Qualquer lead vinculado que NÃO é de tráfego é cliente do escritório
+  // (direto/orgânico). Antes exigia campos específicos e quase tudo virava
+  // "indefinido" — agora todo contrato ligado a um lead recebe origem.
+  return 'escritorio';
 }
 
 function mapZapsignStatus(status: string, signers: any[] = []): string {
@@ -77,83 +88,66 @@ export async function fetchZapsignContratosData(): Promise<ContratoZapsignComSta
     for (const l of leadsData || []) leadById.set(l.id, l);
   }
 
-  // 4. Buscar TODOS os leads de tráfego para matching por telefone
-  const { data: trafegoLeads } = await supabase
+  // 4. Buscar TODOS os leads para matching amplo (telefone, email e NOME do
+  //    signatário), cobrindo tráfego E escritório. Antes só buscava leads de
+  //    tráfego e só casava por telefone/email → contratos criados direto no
+  //    ZapSign (sem lead_id) ficavam todos "indefinido".
+  const { data: allLeads } = await supabase
     .from('leads_juridicos')
-    .select('id, nome, email, telefone, tipo_origem, origem, linha_whatsapp, empresa_tag')
-    .or('tipo_origem.eq.trafego,linha_whatsapp.eq.trafego_isa,origem.ilike.*ráfego*');
+    .select('id, nome, email, telefone, tipo_origem, origem, linha_whatsapp, empresa_tag');
 
-  const trafegoPhoneSet = new Set<string>();
-  const trafegoEmailSet = new Set<string>();
-  const trafegoLeadByPhone = new Map<string, any>();
-  const trafegoLeadByEmail = new Map<string, any>();
+  const leadByPhone = new Map<string, any>();
+  const leadByEmail = new Map<string, any>();
+  const leadByName  = new Map<string, any>();
 
-  for (const l of trafegoLeads || []) {
+  for (const l of allLeads || []) {
+    leadById.set(l.id, l); // garante que todos estejam disponíveis por id
     if (l.telefone) {
       const n = normalizePhone(l.telefone);
-      if (n.length >= 10) {
-        trafegoPhoneSet.add(n);
-        trafegoLeadByPhone.set(n, l);
-      }
+      if (n.length >= 10 && !leadByPhone.has(n)) leadByPhone.set(n, l);
     }
     if (l.email) {
-      trafegoEmailSet.add(l.email.toLowerCase().trim());
-      trafegoLeadByEmail.set(l.email.toLowerCase().trim(), l);
+      const e = l.email.toLowerCase().trim();
+      if (e && !leadByEmail.has(e)) leadByEmail.set(e, l);
+    }
+    if (l.nome) {
+      const nm = normalizeName(l.nome);
+      if (nm && !leadByName.has(nm)) leadByName.set(nm, l);
     }
   }
 
-  // 5. Buscar instâncias ZAPI para saber qual é tráfego vs escritório
-  const { data: zapiInstances } = await supabase
-    .from('zapi_instances')
-    .select('instance_id, name, is_default');
-
-  // A instância de tráfego normalmente tem "isa" ou "trafego" no nome
-  const trafegoInstanceIds = new Set<string>(
-    (zapiInstances || [])
-      .filter(i => /isa|trafego|tráfego/i.test(i.name || ''))
-      .map(i => i.instance_id)
-  );
-
-  // 6. Mapear contratos com origem identificada
+  // 5. Mapear contratos resolvendo o lead por lead_id → telefone → email → nome
   const mapped = documents.map(doc => {
     const local = recordsByDocId.get(doc.id);
-    const leadId = local?.lead_id;
-
-    // Tenta identificar pelo lead_id primeiro
-    let tipoOrigem: TipoOrigemZapsign = 'indefinido';
     let resolvedLead: any = null;
 
-    if (leadId && leadById.has(leadId)) {
-      resolvedLead = leadById.get(leadId);
-      tipoOrigem = classifyOrigem(resolvedLead);
+    // 1) lead_id explícito (contratos criados pelo CRM)
+    if (local?.lead_id && leadById.has(local.lead_id)) {
+      resolvedLead = leadById.get(local.lead_id);
     }
-
-    // Fallback: matching por telefone do signatário
-    if (tipoOrigem === 'indefinido') {
-      const signerPhone = local?.signer_phone || doc.signers?.[0]?.phone || '';
-      const normalizedPhone = normalizePhone(signerPhone);
-      if (normalizedPhone.length >= 10 && trafegoPhoneSet.has(normalizedPhone)) {
-        resolvedLead = trafegoLeadByPhone.get(normalizedPhone);
-        tipoOrigem = 'trafego';
-      }
+    // 2) telefone do signatário
+    if (!resolvedLead) {
+      const phone = normalizePhone(local?.signer_phone || doc.signers?.[0]?.phone || '');
+      if (phone.length >= 10 && leadByPhone.has(phone)) resolvedLead = leadByPhone.get(phone);
     }
-
-    // Fallback: matching por email do signatário
-    if (tipoOrigem === 'indefinido') {
-      const signerEmail = (local?.signer_email || doc.signers?.[0]?.email || '').toLowerCase().trim();
-      if (signerEmail && trafegoEmailSet.has(signerEmail)) {
-        resolvedLead = trafegoLeadByEmail.get(signerEmail);
-        tipoOrigem = 'trafego';
-      }
+    // 3) email do signatário
+    if (!resolvedLead) {
+      const email = (local?.signer_email || doc.signers?.[0]?.email || '').toLowerCase().trim();
+      if (email && leadByEmail.has(email)) resolvedLead = leadByEmail.get(email);
+    }
+    // 4) NOME do signatário (cobre contratos criados direto no painel ZapSign)
+    if (!resolvedLead) {
+      const nm = normalizeName(local?.signer_name || doc.signers?.[0]?.name || '');
+      if (nm && leadByName.has(nm)) resolvedLead = leadByName.get(nm);
     }
 
     return {
       ...doc,
-      leadId: leadId || resolvedLead?.id,
+      leadId: local?.lead_id || resolvedLead?.id,
       leadNome: local?.signer_name || resolvedLead?.nome || doc.signers?.[0]?.name,
       leadEmail: local?.signer_email || resolvedLead?.email || doc.signers?.[0]?.email,
       leadPhone: local?.signer_phone || resolvedLead?.telefone || doc.signers?.[0]?.phone,
-      tipoOrigem,
+      tipoOrigem: classifyOrigem(resolvedLead),
       statusLocal: mapZapsignStatus(doc.status, doc.signers),
     };
   });
