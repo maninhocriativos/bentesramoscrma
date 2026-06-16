@@ -155,3 +155,11 @@ verify_jwt = false
 
 [functions.instagram-send]
 verify_jwt = false
+
+# zapsign expõe um /webhook que o ZapSign chama SEM JWT do Supabase.
+# Sem isto, o webhook leva 401 e os contratos assinados nunca são atualizados.
+[functions.zapsign]
+verify_jwt = false
+
+[functions.zapsign-reminder]
+verify_jwt = false

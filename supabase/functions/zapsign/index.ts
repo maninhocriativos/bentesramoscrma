@@ -326,13 +326,23 @@ async function handleWebhook(payload: any) {
   if (!supabaseUrl || !supabaseKey) return;
 
   const supabase = createClient(supabaseUrl, supabaseKey);
-  const docToken = payload.token || payload.document_id;
-  const event    = payload.event_action || payload.event || '';
-  if (!docToken) return;
+  // ZapSign envia o token do documento no topo do payload; o evento vem em
+  // event_type (ex.: "doc_signed"), com fallback para outros formatos.
+  const docToken = payload.token || payload.document_id || payload.doc_token || payload.doc?.token;
+  const event    = String(payload.event_type || payload.event_action || payload.event || '').toLowerCase();
+  const status   = String(payload.status || payload.doc?.status || '').toLowerCase();
+  if (!docToken) {
+    console.warn('[Zapsign Webhook] payload sem token de documento', JSON.stringify(payload).slice(0, 300));
+    return;
+  }
 
-  console.log(`[Zapsign Webhook] event=${event} doc=${docToken}`);
+  console.log(`[Zapsign Webhook] event=${event} status=${status} doc=${docToken}`);
 
-  if (event.includes('signed') || payload.signed) {
+  const isSigned    = event.includes('signed') || payload.signed === true || status === 'signed';
+  const isCancelled = event.includes('deleted') || event.includes('cancel') || status === 'cancelled';
+  const isExpired   = event.includes('expired') || status === 'expired';
+
+  if (isSigned) {
     await supabase.from('contract_reminders_zapsign')
       .update({ status: 'signed', signed_at: new Date().toISOString() })
       .eq('document_id', docToken);
@@ -343,10 +353,10 @@ async function handleWebhook(payload: any) {
       await supabase.from('leads_juridicos')
         .update({ status: 'Contrato Assinado' }).eq('id', contract.lead_id);
     }
-  } else if (event.includes('deleted') || event.includes('cancelled')) {
+  } else if (isCancelled) {
     await supabase.from('contract_reminders_zapsign')
       .update({ status: 'cancelled' }).eq('document_id', docToken);
-  } else if (event.includes('expired')) {
+  } else if (isExpired) {
     await supabase.from('contract_reminders_zapsign')
       .update({ status: 'expired' }).eq('document_id', docToken);
   }
