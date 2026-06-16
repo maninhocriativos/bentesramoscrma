@@ -169,10 +169,23 @@ function normalizeDoc(doc: any) {
     signed_at: s.signed_at || null,
     sign_url:  s.sign_url || null,
   }));
+  // O ZapSign indica o status de formas diferentes conforme o endpoint:
+  //  • string `status` ("signed" / "pending" / "refused") — vem na listagem
+  //  • booleano `signed` — vem em alguns detalhes
+  //  • `signed_at` em cada signatário — sinal mais confiável
+  // Antes só líamos o booleano `doc.signed`, que NÃO vem na listagem → tudo
+  // aparecia como "pending" (0 assinados). Agora cobrimos as 3 formas.
+  const rawStatus = String(doc.status ?? '').toLowerCase();
+  const allSignersSigned = signers.length > 0 && signers.every((s) => s.status === 'signed');
+  const isCancelled = doc.deleted === true ||
+    ['refused', 'cancelled', 'canceled', 'rejected'].includes(rawStatus);
+  const isSigned = !isCancelled &&
+    (doc.signed === true || rawStatus === 'signed' || allSignersSigned);
+
   return {
     id:         doc.token || doc.id,
     name:       doc.name,
-    status:     doc.deleted ? 'cancelled' : doc.signed ? 'signed' : 'pending',
+    status:     isCancelled ? 'cancelled' : isSigned ? 'signed' : 'pending',
     created_at: doc.created_at,
     updated_at: doc.last_update_date || doc.updated_at || doc.created_at,
     expires_at: doc.expiration_date || null,
@@ -187,6 +200,14 @@ async function listDocuments(token: string, params: any) {
   const offset = (page - 1) * per_page;
   const data = await zapsignFetch(token, `/docs/?limit=${per_page}&offset=${offset}`);
   const docs = data.results || data.documents || (Array.isArray(data) ? data : []);
+  // Diagnóstico: mostra como o ZapSign devolve o status na listagem.
+  if (docs[0]) {
+    const d = docs[0];
+    console.log('[Zapsign] amostra listagem →', JSON.stringify({
+      status: d.status, signed: d.signed, deleted: d.deleted,
+      signers: (d.signers || []).map((s: any) => ({ signed_at: s.signed_at, status: s.status })),
+    }).slice(0, 400));
+  }
   return {
     documents: docs.map(normalizeDoc),
     total: data.count || docs.length,
