@@ -195,20 +195,31 @@ function normalizeDoc(doc: any) {
 
 // ── Ações ─────────────────────────────────────────────────────────────────────
 
-async function listDocuments(token: string, params: any) {
-  const { page = 1, per_page = 20 } = params;
-  const offset = (page - 1) * per_page;
-  const data = await zapsignFetch(token, `/docs/?limit=${per_page}&offset=${offset}`);
-  const docs = data.results || data.documents || (Array.isArray(data) ? data : []);
+async function listDocuments(token: string, _params: any) {
+  // ATENÇÃO: o ZapSign pagina com ?page=N (estilo DRF, ~25 por página) e IGNORA
+  // limit/offset. Antes líamos só a 1ª página → documentos assinados em páginas
+  // seguintes NUNCA apareciam. Agora percorremos TODAS as páginas.
+  const raw: any[] = [];
+  let page = 1;
+  let count = Infinity;
+  const MAX_PAGES = 60; // trava de segurança
+  while (raw.length < count && page <= MAX_PAGES) {
+    const data = await zapsignFetch(token, `/docs/?page=${page}`);
+    const docs = data.results || data.documents || (Array.isArray(data) ? data : []);
+    if (typeof data.count === 'number') count = data.count;
+    if (!docs.length) break;
+    raw.push(...docs);
+    if (!data.next) break;
+    page++;
+  }
 
-  // IMPORTANTE: a LISTAGEM do ZapSign NÃO traz os signatários (signers: []) e
-  // não marca "signed" — só "pending"/"cancelled". Para saber o status REAL
-  // (assinado), buscamos o DETALHE de cada documento (que traz signed_at de
-  // cada signatário). Feito em lotes para não estourar o rate limit da API.
+  // A listagem NÃO traz os signatários (signers: []). Para saber o status REAL
+  // (assinado), buscamos o DETALHE de cada documento (que traz signed_at de cada
+  // signatário). Feito em lotes para não estourar o rate limit da API.
   const BATCH = 8;
   const enriched: any[] = [];
-  for (let i = 0; i < docs.length; i += BATCH) {
-    const slice = docs.slice(i, i + BATCH);
+  for (let i = 0; i < raw.length; i += BATCH) {
+    const slice = raw.slice(i, i + BATCH);
     const results = await Promise.all(
       slice.map(async (d: any) => {
         const tk = d.token || d.id;
@@ -227,9 +238,9 @@ async function listDocuments(token: string, params: any) {
 
   return {
     documents: enriched,
-    total: data.count || docs.length,
-    page,
-    per_page,
+    total: count === Infinity ? raw.length : count,
+    page: 1,
+    per_page: enriched.length,
   };
 }
 
