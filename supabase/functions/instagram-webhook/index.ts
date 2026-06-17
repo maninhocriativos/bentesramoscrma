@@ -33,8 +33,8 @@ async function getIgProfile(igsid: string): Promise<{ name?: string; username?: 
   }
 }
 
-function descreverMensagem(message: any): { texto: string; tipo: string } {
-  if (message?.text) return { texto: message.text, tipo: "text" };
+function descreverMensagem(message: any): { texto: string; tipo: string; mediaUrl: string } {
+  if (message?.text) return { texto: message.text, tipo: "text", mediaUrl: "" };
   const att = message?.attachments?.[0];
   if (att) {
     const t = att.type || "anexo";
@@ -43,10 +43,46 @@ function descreverMensagem(message: any): { texto: string; tipo: string } {
       image: "📷 Imagem", video: "🎥 Vídeo", audio: "🎵 Áudio",
       file: "📎 Arquivo", share: "🔗 Compartilhamento", story_mention: "📲 Menção em Story",
     };
-    return { texto: url ? `${rotulo[t] || "📎 Anexo"}: ${url}` : (rotulo[t] || "📎 Anexo"), tipo: t };
+    return { texto: rotulo[t] || "📎 Anexo", tipo: t, mediaUrl: url };
   }
-  if (message?.is_deleted) return { texto: "🚫 Mensagem apagada", tipo: "text" };
-  return { texto: "[mensagem não suportada]", tipo: "text" };
+  if (message?.is_deleted) return { texto: "🚫 Mensagem apagada", tipo: "text", mediaUrl: "" };
+  return { texto: "[mensagem não suportada]", tipo: "text", mediaUrl: "" };
+}
+
+// Baixa a mídia do Instagram (URL temporária) e guarda no Storage público,
+// devolvendo a URL permanente. As URLs de mídia do IG expiram, então persistimos
+// na hora que o webhook chega (URL ainda válida). Em caso de falha, devolve a
+// própria URL do IG (melhor que nada).
+async function persistirMidia(rawUrl: string, tipo: string, mid: string): Promise<string> {
+  try {
+    const resp = await fetch(rawUrl, { signal: AbortSignal.timeout(20000) });
+    if (!resp.ok) return rawUrl;
+    const ct = (resp.headers.get("content-type") || "").toLowerCase();
+    const buf = new Uint8Array(await resp.arrayBuffer());
+    let ext = ({ image: "jpg", video: "mp4", audio: "mp3", file: "bin" } as Record<string, string>)[tipo] || "bin";
+    if (ct.includes("png")) ext = "png";
+    else if (ct.includes("jpeg") || ct.includes("jpg")) ext = "jpg";
+    else if (ct.includes("webp")) ext = "webp";
+    else if (ct.includes("gif")) ext = "gif";
+    else if (ct.includes("mp4")) ext = "mp4";
+    else if (ct.includes("ogg") || ct.includes("opus")) ext = "ogg";
+    else if (ct.includes("mpeg") || ct.includes("mp3")) ext = "mp3";
+    const safe = (mid || crypto.randomUUID()).replace(/[^a-zA-Z0-9_-]/g, "_");
+    const path = `instagram-media/${safe}.${ext}`;
+    const { error } = await supabase.storage.from("documentos").upload(path, buf, {
+      contentType: ct || "application/octet-stream",
+      upsert: true,
+    });
+    if (error) {
+      console.error("[IG Webhook] upload de mídia falhou:", error.message);
+      return rawUrl;
+    }
+    const { data } = supabase.storage.from("documentos").getPublicUrl(path);
+    return data?.publicUrl || rawUrl;
+  } catch (e) {
+    console.error("[IG Webhook] persistirMidia erro:", e);
+    return rawUrl;
+  }
 }
 
 Deno.serve(async (req) => {
@@ -120,7 +156,21 @@ Deno.serve(async (req) => {
             : profile?.name || "Instagram User";
 
           recebidas++;
-          const { texto, tipo } = descreverMensagem(message);
+          const { texto, tipo, mediaUrl } = descreverMensagem(message);
+
+          // Mídia (foto/vídeo/áudio/arquivo): baixa do IG e guarda no Storage,
+          // gravando a URL permanente em metadata.media_url (que o chat usa para
+          // renderizar). Links (share/story) ficam no próprio texto.
+          const ehMidia = ["image", "video", "audio", "file"].includes(tipo);
+          let mediaPublica = "";
+          let conteudoFinal = texto;
+          if (mediaUrl) {
+            if (ehMidia) {
+              mediaPublica = await persistirMidia(mediaUrl, tipo, mid);
+            } else {
+              conteudoFinal = `${texto}: ${mediaUrl}`;
+            }
+          }
 
           // Upsert do contato
           const { error: subErr } = await supabase.from("manychat_subscribers").upsert(
@@ -133,7 +183,7 @@ Deno.serve(async (req) => {
           const { error: msgErr } = await supabase.from("manychat_mensagens").insert({
             subscriber_id: subscriberId,
             subscriber_nome: isEcho ? "Atendente" : nome,
-            conteudo: texto,
+            conteudo: conteudoFinal,
             canal: "instagram",
             tipo,
             direcao: isEcho ? "saida" : "entrada",
@@ -144,6 +194,7 @@ Deno.serve(async (req) => {
               sender_id: senderId,
               source: "instagram_webhook",
               is_echo: isEcho,
+              ...(mediaPublica ? { media_url: mediaPublica } : {}),
             },
           });
 
