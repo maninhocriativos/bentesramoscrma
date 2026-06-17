@@ -133,31 +133,45 @@ export default function ContratosPage() {
         }
       }
 
+      // Detecção AMPLA de tráfego (igual à tela do ZapSign): cobre tipo_origem,
+      // linha do WhatsApp e origem com meta/facebook/instagram/ads/anúncio.
+      const TRAFEGO_RE = /tráfego|trafego|meta|facebook|instagram|anúncio|anuncio|\bads\b/i;
+      const isTrafego = (l: any) =>
+        l?.tipo_origem === 'trafego' || l?.linha_whatsapp === 'trafego_isa' || TRAFEGO_RE.test(l?.origem || '');
+      const normName = (s: string) =>
+        (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+      const nameKeyOf = (s: string) => {
+        const p = normName(s).split(' ').filter(Boolean);
+        return p.length < 2 ? '' : `${p[0]} ${p[p.length - 1]}`;
+      };
+
       const leadIds = [...new Set(leadIdByDocKey.values())].filter(Boolean);
       const tipoOrigemByLeadId = new Map<string, string>();
       if (leadIds.length > 0) {
         const { data: leadsData } = await supabase
           .from('leads_juridicos')
-          .select('id, tipo_origem, origem')
+          .select('id, tipo_origem, origem, linha_whatsapp')
           .in('id', leadIds);
         for (const l of leadsData || []) {
-          const isTraffic = l.tipo_origem === 'trafego' || (l.origem || '').includes('Tráfego');
-          if (isTraffic) tipoOrigemByLeadId.set(l.id, 'trafego');
+          if (isTrafego(l)) tipoOrigemByLeadId.set(l.id, 'trafego');
           else if (l.tipo_origem) tipoOrigemByLeadId.set(l.id, l.tipo_origem);
         }
       }
 
-      // Busca todos os leads de tráfego para matching por telefone, email e nome
-      const { data: trafegoLeadsData } = await supabase
+      // Busca TODOS os leads e monta os conjuntos de tráfego (email, telefone,
+      // nome exato e nome tolerante = primeiro+último). Antes só buscava leads de
+      // tráfego literal e casava nome exato → muitos não pegavam a tag.
+      const { data: allLeadsData } = await supabase
         .from('leads_juridicos')
-        .select('nome, email, telefone')
-        .or('tipo_origem.eq.trafego,origem.ilike.*Tráfego*');
-      const trafegoEmailSet = new Set<string>();
-      const trafegoNomeSet  = new Set<string>();
-      const trafegoPhoneSet = new Set<string>();
-      for (const l of (trafegoLeadsData || []) as any[]) {
+        .select('nome, email, telefone, tipo_origem, origem, linha_whatsapp');
+      const trafegoEmailSet   = new Set<string>();
+      const trafegoNomeSet    = new Set<string>();
+      const trafegoNomeKeySet = new Set<string>();
+      const trafegoPhoneSet   = new Set<string>();
+      for (const l of (allLeadsData || []) as any[]) {
+        if (!isTrafego(l)) continue;
         if (l.email)    trafegoEmailSet.add(l.email.toLowerCase().trim());
-        if (l.nome)     trafegoNomeSet.add(l.nome.toLowerCase().trim());
+        if (l.nome)     { trafegoNomeSet.add(normName(l.nome)); const k = nameKeyOf(l.nome); if (k) trafegoNomeKeySet.add(k); }
         if (l.telefone) { const n = normalizePhone(l.telefone); if (n.length >= 10) trafegoPhoneSet.add(n); }
       }
 
@@ -185,8 +199,10 @@ export default function ContratosPage() {
             if (np.length >= 10 && trafegoPhoneSet.has(np)) return 'trafego';
           }
           const nomeFull = (doc.filename?.replace(/\.[^/.]+$/, '') || '');
-          const nomeCliente = nomeFull.replace(/^Kit\s*[-–—]\s*/i, '').trim().toLowerCase();
+          const nomeCliente = normName(nomeFull.replace(/^Kit\s*[-–—]\s*/i, ''));
           if (nomeCliente.length > 3 && trafegoNomeSet.has(nomeCliente)) return 'trafego';
+          const nk = nameKeyOf(nomeCliente);
+          if (nk && trafegoNomeKeySet.has(nk)) return 'trafego';
           return null;
         })();
         return {
