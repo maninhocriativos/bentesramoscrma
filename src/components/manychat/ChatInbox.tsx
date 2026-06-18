@@ -1546,8 +1546,9 @@ const ManyChatInboxContent = () => {
         }
       });
     } catch (error: any) {
+      console.error("[Envio mídia] falhou:", error);
       setMessages(prev => { const updated = prev.map(m => m.id === tempId ? { ...m, conteudo: `❌ Erro no envio de ${originalFileName}`, metadata: { send_error: true } } : m); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
-      toast({ title: "Erro", description: "Falha no upload", variant: "destructive" });
+      toast({ title: "Erro ao enviar", description: error?.message || error?.error_description || "Falha no upload", variant: "destructive" });
     }
   };
 
@@ -1629,8 +1630,9 @@ const ManyChatInboxContent = () => {
         }
       });
     } catch (error: any) {
+      console.error("[Envio áudio] falhou:", error);
       setMessages(prev => { const updated = prev.map(m => m.id === tempId ? { ...m, conteudo: "❌ Erro no envio do áudio", metadata: { send_error: true } } : m); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
-      toast({ title: "Erro", description: "Falha ao enviar áudio", variant: "destructive" });
+      toast({ title: "Erro ao enviar áudio", description: error?.message || error?.error_description || "Falha no envio", variant: "destructive" });
     }
   };
 
