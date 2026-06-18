@@ -198,11 +198,24 @@ export default function ContratosPage() {
             const np = normalizePhone(rawPhone);
             if (np.length >= 10 && trafegoPhoneSet.has(np)) return 'trafego';
           }
-          const nomeFull = (doc.filename?.replace(/\.[^/.]+$/, '') || '');
-          const nomeCliente = normName(nomeFull.replace(/^Kit\s*[-–—]\s*/i, ''));
-          if (nomeCliente.length > 3 && trafegoNomeSet.has(nomeCliente)) return 'trafego';
-          const nk = nameKeyOf(nomeCliente);
-          if (nk && trafegoNomeKeySet.has(nk)) return 'trafego';
+          // Match por nome: testa o nome do arquivo E o do signatário, limpando
+          // sufixos como "- contrato 2" / "- 2" que sujavam o nome e quebravam
+          // o reconhecimento (ex.: "Kit - Mateus ... - contrato 2").
+          const limpaNome = (raw: string) => normName(
+            (raw || '')
+              .replace(/\.[^/.]+$/, '')                   // extensão
+              .replace(/^Kit\s*[-–—]\s*/i, '')            // prefixo "Kit -"
+              .replace(/\s*[-–—]\s*contrato.*$/i, '')     // "- contrato 2"
+              .replace(/\s*[-–—]\s*\d+\s*$/, ''),         // "- 2"
+          );
+          const candidatos = [doc.filename, dbSignerName, signatarioNome]
+            .map(limpaNome)
+            .filter((n) => n.length > 3);
+          for (const nomeCliente of candidatos) {
+            if (trafegoNomeSet.has(nomeCliente)) return 'trafego';
+            const k = nameKeyOf(nomeCliente);
+            if (k && trafegoNomeKeySet.has(k)) return 'trafego';
+          }
           return null;
         })();
         return {
