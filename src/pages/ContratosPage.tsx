@@ -116,25 +116,8 @@ export default function ContratosPage() {
       const signerByDocKey = new Map<string, string>();
       const leadIdByDocKey = new Map<string, string>();
 
-      if (docKeys.length > 0) {
-        const { data: reminders } = await supabase
-          .from('contract_reminders')
-          .select('document_key, contract_link, signer_name, document_name, lead_id')
-          .in('document_key', docKeys);
-        for (const r of reminders || []) {
-          if (r?.document_key) {
-            if (r.contract_link && !linksByDocKey.has(r.document_key))
-              linksByDocKey.set(r.document_key, r.contract_link);
-            if (r.signer_name && !signerByDocKey.has(r.document_key))
-              signerByDocKey.set(r.document_key, r.signer_name);
-            if (r.lead_id && !leadIdByDocKey.has(r.document_key))
-              leadIdByDocKey.set(r.document_key, r.lead_id);
-          }
-        }
-      }
-
-      // Detecção AMPLA de tráfego (igual à tela do ZapSign): cobre tipo_origem,
-      // linha do WhatsApp e origem com meta/facebook/instagram/ads/anúncio.
+      // Detecção AMPLA de tráfego + normalização de nome (definidos antes pois
+      // já são usados no casamento dos lembretes).
       const TRAFEGO_RE = /tráfego|trafego|meta|facebook|instagram|anúncio|anuncio|\bads\b/i;
       const isTrafego = (l: any) =>
         l?.tipo_origem === 'trafego' || l?.linha_whatsapp === 'trafego_isa' || TRAFEGO_RE.test(l?.origem || '');
@@ -145,7 +128,40 @@ export default function ContratosPage() {
         return p.length < 2 ? '' : `${p[0]} ${p[p.length - 1]}`;
       };
 
-      const leadIds = [...new Set(leadIdByDocKey.values())].filter(Boolean);
+      // VÍNCULO EXATO por lead_id. O Kit é criado pela API v3 (grava lead_id no
+      // contract_reminders sob o id v3 do documento), mas a listagem usa a API v1
+      // com 'key' diferente → casar por document_key falha (e a coluna Signatário
+      // fica vazia). Então buscamos TODOS os lembretes com lead_id e casamos pelo
+      // NOME do signatário, que carrega o lead_id exato gravado na criação.
+      const leadIdBySignerName = new Map<string, string>();   // normName/nameKey → lead_id
+      const linkBySignerName   = new Map<string, string>();
+      const signerByNameKey    = new Map<string, string>();
+      const allReminderLeadIds = new Set<string>();
+      {
+        const { data: reminders } = await supabase
+          .from('contract_reminders')
+          .select('document_key, contract_link, signer_name, document_name, lead_id')
+          .order('created_at', { ascending: false })
+          .limit(3000);
+        for (const r of reminders || []) {
+          // por document_key (caso bata) — mantém comportamento antigo
+          if (r?.document_key) {
+            if (r.contract_link && !linksByDocKey.has(r.document_key)) linksByDocKey.set(r.document_key, r.contract_link);
+            if (r.signer_name && !signerByDocKey.has(r.document_key)) signerByDocKey.set(r.document_key, r.signer_name);
+            if (r.lead_id && !leadIdByDocKey.has(r.document_key)) leadIdByDocKey.set(r.document_key, r.lead_id);
+          }
+          // por NOME do signatário → lead_id (contorna o mismatch v1/v3)
+          if (r?.lead_id && r?.signer_name) {
+            allReminderLeadIds.add(r.lead_id);
+            const nn = normName(r.signer_name);
+            const k = nameKeyOf(r.signer_name);
+            if (nn.length > 3 && !leadIdBySignerName.has(nn)) { leadIdBySignerName.set(nn, r.lead_id); signerByNameKey.set(nn, r.signer_name); if (r.contract_link) linkBySignerName.set(nn, r.contract_link); }
+            if (k && !leadIdBySignerName.has(k)) { leadIdBySignerName.set(k, r.lead_id); signerByNameKey.set(k, r.signer_name); if (r.contract_link) linkBySignerName.set(k, r.contract_link); }
+          }
+        }
+      }
+
+      const leadIds = [...new Set([...leadIdByDocKey.values(), ...allReminderLeadIds])].filter(Boolean);
       const tipoOrigemByLeadId = new Map<string, string>();
       if (leadIds.length > 0) {
         const { data: leadsData } = await supabase
@@ -180,16 +196,41 @@ export default function ContratosPage() {
         const linkContrato =
           (key && linksByDocKey.get(key)) ||
           (key ? `https://app.clicksign.com/sign/${key}` : 'https://app.clicksign.com');
-        const dbSignerName = key ? signerByDocKey.get(key) : null;
         const apiSigners = doc.signers || [];
         const apiSignerNames = apiSigners.map((s: any) => s.name).filter(Boolean);
-        const signatarioNome = dbSignerName || (apiSignerNames.length > 0 ? apiSignerNames.join(', ') : null);
         const pathParts = (doc.path || '').split('/').filter(Boolean);
         const categoria = pathParts.length > 1 ? pathParts[0] : null;
         const leadEmail = doc.signers?.[0]?.email || null;
-        const leadId = key ? leadIdByDocKey.get(key) : undefined;
 
-        // Determina origem: lead_id → email → telefone → nome
+        // Nomes candidatos limpos (arquivo + signatário), sem sufixo "- contrato N".
+        const limpaNome = (raw: string) => normName(
+          (raw || '')
+            .replace(/\.[^/.]+$/, '')
+            .replace(/^Kit\s*[-–—]\s*/i, '')
+            .replace(/\s*[-–—]\s*contrato.*$/i, '')
+            .replace(/\s*[-–—]\s*\d+\s*$/, ''),
+        );
+        const candidatos = Array.from(new Set(
+          [doc.filename, key ? signerByDocKey.get(key) : null, ...apiSignerNames]
+            .map(limpaNome)
+            .filter((n) => n.length > 3),
+        ));
+
+        // lead_id EXATO: por document_key (se bater) ou pelo NOME do signatário
+        // (contorna o mismatch v1/v3). Recupera também o nome do signatário.
+        let leadId = key ? leadIdByDocKey.get(key) : undefined;
+        let signerFromRemind: string | undefined;
+        if (!leadId) {
+          for (const nc of candidatos) {
+            const lid = leadIdBySignerName.get(nc) || leadIdBySignerName.get(nameKeyOf(nc));
+            if (lid) { leadId = lid; signerFromRemind = signerByNameKey.get(nc) || signerByNameKey.get(nameKeyOf(nc)); break; }
+          }
+        }
+
+        const dbSignerName = (key ? signerByDocKey.get(key) : null) || signerFromRemind || null;
+        const signatarioNome = dbSignerName || (apiSignerNames.length > 0 ? apiSignerNames.join(', ') : null);
+
+        // Determina origem: lead_id exato → email → telefone → nome
         const tipoOrigem = (() => {
           if (leadId && tipoOrigemByLeadId.has(leadId)) return tipoOrigemByLeadId.get(leadId)!;
           if (leadEmail && trafegoEmailSet.has(leadEmail.toLowerCase().trim())) return 'trafego';
@@ -198,19 +239,6 @@ export default function ContratosPage() {
             const np = normalizePhone(rawPhone);
             if (np.length >= 10 && trafegoPhoneSet.has(np)) return 'trafego';
           }
-          // Match por nome: testa o nome do arquivo E o do signatário, limpando
-          // sufixos como "- contrato 2" / "- 2" que sujavam o nome e quebravam
-          // o reconhecimento (ex.: "Kit - Mateus ... - contrato 2").
-          const limpaNome = (raw: string) => normName(
-            (raw || '')
-              .replace(/\.[^/.]+$/, '')                   // extensão
-              .replace(/^Kit\s*[-–—]\s*/i, '')            // prefixo "Kit -"
-              .replace(/\s*[-–—]\s*contrato.*$/i, '')     // "- contrato 2"
-              .replace(/\s*[-–—]\s*\d+\s*$/, ''),         // "- 2"
-          );
-          const candidatos = [doc.filename, dbSignerName, signatarioNome]
-            .map(limpaNome)
-            .filter((n) => n.length > 3);
           for (const nomeCliente of candidatos) {
             if (trafegoNomeSet.has(nomeCliente)) return 'trafego';
             const k = nameKeyOf(nomeCliente);
