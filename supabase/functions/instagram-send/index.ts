@@ -24,13 +24,22 @@ Deno.serve(async (req) => {
   try {
     if (!IG_TOKEN) throw new Error("INSTAGRAM_ACCESS_TOKEN não configurado");
 
-    const { subscriber_id, text } = await req.json();
-    if (!subscriber_id || !text) {
-      throw new Error("subscriber_id e text são obrigatórios");
+    // Aceita texto OU mídia (imagem/vídeo/áudio) via media_url.
+    const { subscriber_id, text, type, media_url } = await req.json();
+    const ehMidia = ["image", "video", "audio"].includes(type) && !!media_url;
+    if (!subscriber_id || (!text && !ehMidia)) {
+      throw new Error("subscriber_id e (text ou media_url) são obrigatórios");
     }
 
     // subscriber_id no formato "ig_<igsid>"
     const igsid = String(subscriber_id).replace(/^ig_/, "");
+
+    // Monta a mensagem: anexo (mídia) ou texto. A Graph API do Instagram busca
+    // a URL da mídia no servidor, então precisa ser uma URL acessível (a URL
+    // assinada do Storage funciona).
+    const messagePayload = ehMidia
+      ? { attachment: { type, payload: { url: media_url } } }
+      : { text };
 
     // Envia via Graph API do Instagram
     const resp = await fetch(
@@ -40,9 +49,9 @@ Deno.serve(async (req) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           recipient: { id: igsid },
-          message: { text },
+          message: messagePayload,
         }),
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(20000),
       },
     );
 
@@ -57,15 +66,16 @@ Deno.serve(async (req) => {
     await supabase.from("manychat_mensagens").insert({
       subscriber_id,
       subscriber_nome: "Atendente",
-      conteudo: text,
+      conteudo: ehMidia ? (media_url as string) : (text as string),
       canal: "instagram",
-      tipo: "text",
+      tipo: ehMidia ? type : "text",
       direcao: "saida",
       metadata: {
         mid: data?.message_id || null,
         igsid,
         source: "instagram_send",
         sent_via: "crm",
+        ...(ehMidia ? { media_url } : {}),
       },
     });
 

@@ -1532,6 +1532,20 @@ const ManyChatInboxContent = () => {
       if (uploadErr) throw uploadErr;
       const { data: signed, error: signError } = await supabase.storage.from("documentos").createSignedUrl(filePath, 60 * 60 * 24 * 30);
       if (signError || !signed?.signedUrl) throw signError;
+      // Instagram: envia via Graph API (instagram-send registra no banco; o
+      // realtime substitui a mensagem otimista). Imagem/vídeo viram anexo;
+      // documento vai como link (a API do IG não aceita arquivo genérico).
+      if ((subscriberSnapshot as any).canal === "instagram") {
+        const igBody = (mediaType === "image" || mediaType === "video")
+          ? { subscriber_id: subscriberSnapshot.subscriber_id, type: mediaType, media_url: signed.signedUrl }
+          : { subscriber_id: subscriberSnapshot.subscriber_id, text: signed.signedUrl };
+        const { data: igResult, error: igError } = await supabase.functions.invoke("instagram-send", { body: igBody });
+        if (igError) throw new Error(igError.message || "Erro ao enviar no Instagram");
+        if (!igResult?.success) throw new Error(igResult?.error || "Instagram: envio não confirmado");
+        setMessages(prev => { const updated = prev.filter(m => m.id !== tempId); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+        return;
+      }
+
       const outboundInstanceId = resolveInstanceId(subscriberSnapshot);
       const { data: zapiResult, error: zapiError } = await invokeZapiSend({ to_phone: subscriberSnapshot.telefone, message: signed.signedUrl, type: mediaType, lead_id: subscriberSnapshot.lead_id, file_name: originalFileName, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
       if (zapiError) throw new Error(zapiError.message);
@@ -1613,6 +1627,17 @@ const ManyChatInboxContent = () => {
       const signResult = await supabase.storage.from("documentos").createSignedUrl(filePath, 60 * 60 * 24 * 30);
       if (signResult.error || !signResult.data?.signedUrl) throw signResult.error;
       const signedUrl = signResult.data.signedUrl;
+
+      // Instagram: envia o áudio como anexo via Graph API (instagram-send)
+      if ((subscriberSnapshot as any).canal === "instagram") {
+        const { data: igResult, error: igError } = await supabase.functions.invoke("instagram-send", {
+          body: { subscriber_id: subscriberSnapshot.subscriber_id, type: "audio", media_url: signedUrl },
+        });
+        if (igError) throw new Error(igError.message || "Erro ao enviar no Instagram");
+        if (!igResult?.success) throw new Error(igResult?.error || "Instagram: envio não confirmado");
+        setMessages(prev => { const updated = prev.filter(m => m.id !== tempId); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+        return;
+      }
 
       // Envia base64 para Z-API (não a URL assinada — evita problemas de acesso)
       const { data: zapiResult, error: zapiError } = await invokeZapiSend({ to_phone: subscriberSnapshot.telefone, message: audioBase64, type: "audio", lead_id: subscriberSnapshot.lead_id, file_name: audioFile.name, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
