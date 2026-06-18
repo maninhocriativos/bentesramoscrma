@@ -33,20 +33,26 @@ async function getIgProfile(igsid: string): Promise<{ name?: string; username?: 
   }
 }
 
-function descreverMensagem(message: any): { texto: string; tipo: string; mediaUrl: string } {
-  if (message?.text) return { texto: message.text, tipo: "text", mediaUrl: "" };
-  const att = message?.attachments?.[0];
-  if (att) {
-    const t = att.type || "anexo";
-    const url = att.payload?.url || "";
-    const rotulo: Record<string, string> = {
-      image: "📷 Imagem", video: "🎥 Vídeo", audio: "🎵 Áudio",
-      file: "📎 Arquivo", share: "🔗 Compartilhamento", story_mention: "📲 Menção em Story",
-    };
-    return { texto: rotulo[t] || "📎 Anexo", tipo: t, mediaUrl: url };
+type Parte = { texto: string; tipo: string; mediaUrl: string };
+
+// Extrai TODAS as partes de uma mensagem do Instagram: o texto e/ou CADA anexo.
+// Antes só pegava o 1º anexo — então quando o cliente manda várias fotos numa
+// mensagem só (ex.: o contrato em várias páginas), só vinha uma.
+function extrairPartes(message: any): Parte[] {
+  const rotulo: Record<string, string> = {
+    image: "📷 Imagem", video: "🎥 Vídeo", audio: "🎵 Áudio",
+    file: "📎 Arquivo", share: "🔗 Compartilhamento", story_mention: "📲 Menção em Story",
+  };
+  const atts: any[] = message?.attachments || [];
+  if (atts.length > 0) {
+    return atts.map((att) => {
+      const t = att?.type || "anexo";
+      return { texto: rotulo[t] || "📎 Anexo", tipo: t, mediaUrl: att?.payload?.url || "" };
+    });
   }
-  if (message?.is_deleted) return { texto: "🚫 Mensagem apagada", tipo: "text", mediaUrl: "" };
-  return { texto: "[mensagem não suportada]", tipo: "text", mediaUrl: "" };
+  if (message?.text) return [{ texto: message.text, tipo: "text", mediaUrl: "" }];
+  if (message?.is_deleted) return [{ texto: "🚫 Mensagem apagada", tipo: "text", mediaUrl: "" }];
+  return [{ texto: "[mensagem não suportada]", tipo: "text", mediaUrl: "" }];
 }
 
 // Baixa a mídia do Instagram (URL temporária) e guarda no Storage público,
@@ -77,8 +83,12 @@ async function persistirMidia(rawUrl: string, tipo: string, mid: string): Promis
       console.error("[IG Webhook] upload de mídia falhou:", error.message);
       return rawUrl;
     }
-    const { data } = supabase.storage.from("documentos").getPublicUrl(path);
-    return data?.publicUrl || rawUrl;
+    // URL ASSINADA de longa duração (10 anos): o bucket 'documentos' é privado,
+    // então a URL pública dá HTTP 400 e a imagem não carrega no chat. A assinada
+    // funciona direto no <img>.
+    const { data: signed } = await supabase.storage.from("documentos")
+      .createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+    return signed?.signedUrl || rawUrl;
   } catch (e) {
     console.error("[IG Webhook] persistirMidia erro:", e);
     return rawUrl;
@@ -156,54 +166,55 @@ Deno.serve(async (req) => {
             : profile?.name || "Instagram User";
 
           recebidas++;
-          const { texto, tipo, mediaUrl } = descreverMensagem(message);
+          const partes = extrairPartes(message);
 
-          // Mídia (foto/vídeo/áudio/arquivo): baixa do IG e guarda no Storage,
-          // gravando a URL permanente em metadata.media_url (que o chat usa para
-          // renderizar). Links (share/story) ficam no próprio texto.
-          const ehMidia = ["image", "video", "audio", "file"].includes(tipo);
-          let mediaPublica = "";
-          let conteudoFinal = texto;
-          if (mediaUrl) {
-            if (ehMidia) {
-              mediaPublica = await persistirMidia(mediaUrl, tipo, mid);
-            } else {
-              conteudoFinal = `${texto}: ${mediaUrl}`;
-            }
-          }
-
-          // Upsert do contato
+          // Upsert do contato (uma vez por evento)
           const { error: subErr } = await supabase.from("manychat_subscribers").upsert(
             { subscriber_id: subscriberId, nome, canal: "instagram", ultima_interacao: new Date().toISOString() },
             { onConflict: "subscriber_id", ignoreDuplicates: false },
           );
           if (subErr) erros.push(`subscriber: ${subErr.message}`);
 
-          // Insere a mensagem
-          const { error: msgErr } = await supabase.from("manychat_mensagens").insert({
-            subscriber_id: subscriberId,
-            subscriber_nome: isEcho ? "Atendente" : nome,
-            conteudo: conteudoFinal,
-            canal: "instagram",
-            tipo,
-            direcao: isEcho ? "saida" : "entrada",
-            metadata: {
-              mid,
-              igsid: contatoIgsid,
-              recipient_id: recipientId,
-              sender_id: senderId,
-              source: "instagram_webhook",
-              is_echo: isEcho,
-              ...(mediaPublica ? { media_url: mediaPublica } : {}),
-            },
-          });
+          // Uma mensagem por parte: o texto e/ou CADA anexo (cobre várias fotos).
+          for (let pi = 0; pi < partes.length; pi++) {
+            const { texto, tipo, mediaUrl } = partes[pi];
+            const ehMidia = ["image", "video", "audio", "file"].includes(tipo);
+            let mediaPublica = "";
+            let conteudoFinal = texto;
+            if (mediaUrl) {
+              if (ehMidia) {
+                mediaPublica = await persistirMidia(mediaUrl, tipo, `${mid || crypto.randomUUID()}_${pi}`);
+              } else {
+                conteudoFinal = `${texto}: ${mediaUrl}`;
+              }
+            }
 
-          if (msgErr) {
-            erros.push(`mensagem: ${msgErr.message}`);
-            console.error("[IG Webhook] Erro ao salvar mensagem:", msgErr);
-          } else {
-            salvas++;
-            console.log(`[IG Webhook] ✅ ${isEcho ? "saída" : "entrada"} salva de ${nome}: ${texto.slice(0, 60)}`);
+            const { error: msgErr } = await supabase.from("manychat_mensagens").insert({
+              subscriber_id: subscriberId,
+              subscriber_nome: isEcho ? "Atendente" : nome,
+              conteudo: conteudoFinal,
+              canal: "instagram",
+              tipo,
+              direcao: isEcho ? "saida" : "entrada",
+              metadata: {
+                mid,
+                igsid: contatoIgsid,
+                recipient_id: recipientId,
+                sender_id: senderId,
+                source: "instagram_webhook",
+                is_echo: isEcho,
+                ...(partes.length > 1 ? { attachment_index: pi } : {}),
+                ...(mediaPublica ? { media_url: mediaPublica } : {}),
+              },
+            });
+
+            if (msgErr) {
+              erros.push(`mensagem: ${msgErr.message}`);
+              console.error("[IG Webhook] Erro ao salvar mensagem:", msgErr);
+            } else {
+              salvas++;
+              console.log(`[IG Webhook] ✅ ${isEcho ? "saída" : "entrada"} salva de ${nome}: ${conteudoFinal.slice(0, 60)}`);
+            }
           }
         }
       }
