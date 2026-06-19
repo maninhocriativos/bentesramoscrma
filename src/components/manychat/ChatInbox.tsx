@@ -1875,6 +1875,32 @@ const ManyChatInboxContent = () => {
 
   const hasUnreadForSubscriber = (sub: Subscriber) => getUnreadCountForSubscriber(sub) > 0 || hasUnreadHintForSubscriber(sub);
 
+  // ─── Busca no BANCO ──────────────────────────────────────────────────────────
+  // A lista carrega só as 300 conversas mais recentes em memória. Ao pesquisar,
+  // consultamos o banco e mesclamos os resultados — assim qualquer conversa é
+  // encontrada (mesmo fora das 300), independente de quem a abriu por último.
+  useEffect(() => {
+    const term = searchTerm.trim();
+    if (term.length < 2) return;
+    const handle = setTimeout(async () => {
+      try {
+        const digits = term.replace(/\D/g, "");
+        let query = supabase.from("manychat_subscribers" as any).select("*");
+        query = digits.length >= 4
+          ? query.or(`nome.ilike.%${term}%,telefone.ilike.%${digits}%,subscriber_id.ilike.%${digits}%`)
+          : query.ilike("nome", `%${term}%`);
+        const { data } = await query.order("ultima_interacao", { ascending: false, nullsFirst: false }).limit(30);
+        if (!data?.length) return;
+        setSubscribers(prev => {
+          const existentes = new Set(prev.map(s => s.subscriber_id));
+          const novos = (data as Subscriber[]).filter(d => !existentes.has(d.subscriber_id));
+          return novos.length ? [...prev, ...novos] : prev;
+        });
+      } catch { /* ignora erro de busca */ }
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [searchTerm]);
+
   // ─── Filtered subscribers ───────────────────────────────────────────────────
 
   const filteredSubscribers = subscribers
