@@ -10,6 +10,56 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+// Converte o áudio gravado no navegador (webm/mp4) para OGG/Opus — formato que o
+// WhatsApp toca como mensagem de voz. Sem isso o áudio chega "zerado" (0:00).
+// Usa CloudConvert (já usado no sistema). Em caso de falha, devolve o original.
+async function converterAudioParaOgg(dataUrlOrUrl: string): Promise<string> {
+  try {
+    const cc = Deno.env.get('CLOUDCONVERT_API_KEY');
+    if (!cc) return dataUrlOrUrl;
+    // Só converte base64 (data URL). Detecta o formato de entrada.
+    const m = /^data:audio\/([a-z0-9.+-]+)[;,]/i.exec(dataUrlOrUrl);
+    if (!m) return dataUrlOrUrl;                 // não é data URL de áudio
+    const inFmt = m[1].toLowerCase().includes('mp4') ? 'm4a'
+      : m[1].toLowerCase().includes('ogg') ? 'ogg' : 'webm';
+    if (inFmt === 'ogg') return dataUrlOrUrl;    // já é ogg
+    const rawB64 = dataUrlOrUrl.split(',')[1] || '';
+    if (!rawB64) return dataUrlOrUrl;
+
+    const headers = { 'Authorization': `Bearer ${cc}`, 'Content-Type': 'application/json' };
+    const jobResp = await fetch('https://api.cloudconvert.com/v2/jobs', {
+      method: 'POST', headers,
+      body: JSON.stringify({
+        tasks: {
+          'imp': { operation: 'import/base64', file: rawB64, filename: `audio.${inFmt}` },
+          'conv': { operation: 'convert', input: 'imp', output_format: 'ogg', engine: 'ffmpeg', audio_codec: 'libopus' },
+          'exp': { operation: 'export/url', input: 'conv' },
+        },
+      }),
+    });
+    const jobData = await jobResp.json();
+    const jobId = jobData?.data?.id;
+    if (!jobResp.ok || !jobId) return dataUrlOrUrl;
+
+    const waitResp = await fetch(`https://api.cloudconvert.com/v2/jobs/${jobId}/wait`, {
+      headers, signal: AbortSignal.timeout(45000),
+    });
+    const waitData = await waitResp.json();
+    const exp = (waitData?.data?.tasks || []).find((t: any) => t.operation === 'export/url' && t.status === 'finished');
+    const url = exp?.result?.files?.[0]?.url;
+    if (!url) return dataUrlOrUrl;
+
+    const oggResp = await fetch(url, { signal: AbortSignal.timeout(30000) });
+    const buf = new Uint8Array(await oggResp.arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    return `data:audio/ogg;base64,${btoa(bin)}`;
+  } catch (e) {
+    console.error('[zapi-send] conversão de áudio falhou, enviando original:', e);
+    return dataUrlOrUrl;
+  }
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -214,13 +264,17 @@ async function sendViaZapi(
         };
         break;
 
-      case 'audio':
+      case 'audio': {
         endpoint = `${baseUrl}/send-audio`;
+        // Converte para OGG/Opus (WhatsApp só toca voz nesse formato; webm chega
+        // "zerado"). Defensivo: se a conversão falhar, envia o original.
+        const audioOgg = await converterAudioParaOgg(message);
         body = {
           phone: cleanPhone,
-          audio: message, // URL do áudio
+          audio: audioOgg,
         };
         break;
+      }
 
       case 'video':
         endpoint = `${baseUrl}/send-video`;
