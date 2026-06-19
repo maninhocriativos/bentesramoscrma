@@ -11,7 +11,7 @@ import { ZapsignContratosTable } from '@/components/contratos/ZapsignContratosTa
 import { CriarContratoZapsignModal } from '@/components/contratos/CriarContratoZapsignModal';
 import { useZapsignContratos, type ContratoZapsignComStatus, type TipoOrigemZapsign } from '@/hooks/useZapsignContratos';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, FileText, FolderOpen, Clock, CheckCircle2, XCircle, Zap, Plus, RefreshCw } from 'lucide-react';
+import { Loader2, FileText, FolderOpen, Clock, CheckCircle2, XCircle, Zap, Plus, RefreshCw, Building2, HelpCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -86,6 +86,7 @@ export default function ContratosPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('todos');
+  const [origemFilterCs, setOrigemFilterCs] = useState<'todas' | 'trafego' | 'escritorio' | 'indefinido'>('todas');
   const [enviarModalOpen, setEnviarModalOpen] = useState(false);
   const [provider, setProvider] = useState<'clicksign' | 'zapsign'>('clicksign');
   const [criarZapsignOpen, setCriarZapsignOpen] = useState(false);
@@ -304,14 +305,24 @@ export default function ContratosPage() {
 
   const handleRefresh = () => fetchContractsFromClicksign(false, true);
 
-  const filteredContratos = contratos.filter(c => {
+  const matchTabStatus = (c: ContratoComStatus) => {
     switch (activeTab) {
       case 'em-processo': return ['Aguardando Assinatura', 'Assinatura Parcial', 'Documento Enviado'].includes(c.status);
       case 'finalizados':  return ['Assinado', 'Finalizado'].includes(c.status);
       case 'cancelados':   return ['Cancelado', 'Recusado', 'Prazo Expirado'].includes(c.status);
       default: return true;
     }
-  });
+  };
+  // Lista após o filtro de status (aba), antes do filtro de origem — usada p/ contagem dos chips.
+  const contratosPorAba = contratos.filter(matchTabStatus);
+  const origemCount = {
+    todas:      contratosPorAba.length,
+    trafego:    contratosPorAba.filter(c => c.tipoOrigem === 'trafego').length,
+    escritorio: contratosPorAba.filter(c => c.tipoOrigem === 'escritorio').length,
+    indefinido: contratosPorAba.filter(c => !c.tipoOrigem || c.tipoOrigem === 'indefinido').length,
+  };
+  const filteredContratos = contratosPorAba.filter(c =>
+    origemFilterCs === 'todas' || (c.tipoOrigem || 'indefinido') === origemFilterCs);
 
   const trafegoTotal = contratos.filter(c => c.tipoOrigem === 'trafego').length;
 
@@ -531,6 +542,38 @@ export default function ContratosPage() {
                     );
                   })}
                 </div>
+
+                {/* Filtros de origem (Clicksign) */}
+                {activeTab !== 'modelos' && (
+                  <div className="flex flex-wrap gap-2">
+                    {([
+                      { id: 'todas',      label: 'Todos',      count: origemCount.todas,      Icon: FileText },
+                      { id: 'trafego',    label: 'Tráfego',    count: origemCount.trafego,    Icon: Zap },
+                      { id: 'escritorio', label: 'Escritório', count: origemCount.escritorio, Icon: Building2 },
+                      { id: 'indefinido', label: 'Indefinido', count: origemCount.indefinido, Icon: HelpCircle },
+                    ] as const).map(f => {
+                      const isActive = origemFilterCs === f.id;
+                      return (
+                        <button
+                          key={f.id}
+                          onClick={() => setOrigemFilterCs(f.id)}
+                          className={cn(
+                            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all',
+                            isActive
+                              ? 'bg-[#3d2b1f] text-[#c9a96e] border-[#3d2b1f]'
+                              : 'bg-background text-muted-foreground border-border hover:bg-muted'
+                          )}
+                        >
+                          <f.Icon className="h-3.5 w-3.5" />
+                          {f.label}
+                          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-semibold min-w-[20px] text-center">
+                            {f.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Conteúdo Clicksign */}
                 {renderClicksignContent()}
