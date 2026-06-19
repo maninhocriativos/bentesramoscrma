@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import {
   FileSignature, Clock, CheckCircle2, XCircle, AlertCircle,
   ExternalLink, FileText, MessageSquare, Loader2, AlertTriangle,
-  Search, Megaphone,
+  Search, Megaphone, Building2,
 } from 'lucide-react';
 import { ContratoComStatus } from '@/pages/ContratosPage';
 import { cn } from '@/lib/utils';
@@ -243,6 +243,12 @@ export function ContratosTable({ contratos, onRefresh }: ContratosTableProps) {
                               Tráfego
                             </span>
                           )}
+                          {contrato.tipoOrigem === 'escritorio' && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 shrink-0">
+                              <Building2 className="h-2.5 w-2.5" />
+                              Escritório
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -342,6 +348,11 @@ export function ContratosTable({ contratos, onRefresh }: ContratosTableProps) {
                       {contrato.tipoOrigem === 'trafego' && (
                         <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-semibold bg-blue-100 text-blue-700">
                           <Megaphone className="h-2 w-2" />Tráfego
+                        </span>
+                      )}
+                      {contrato.tipoOrigem === 'escritorio' && (
+                        <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-semibold bg-purple-100 text-purple-700">
+                          <Building2 className="h-2 w-2" />Escritório
                         </span>
                       )}
                     </div>

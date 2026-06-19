@@ -161,35 +161,27 @@ export default function ContratosPage() {
         }
       }
 
-      const leadIds = [...new Set([...leadIdByDocKey.values(), ...allReminderLeadIds])].filter(Boolean);
-      const tipoOrigemByLeadId = new Map<string, string>();
-      if (leadIds.length > 0) {
-        const { data: leadsData } = await supabase
-          .from('leads_juridicos')
-          .select('id, tipo_origem, origem, linha_whatsapp')
-          .in('id', leadIds);
-        for (const l of leadsData || []) {
-          if (isTrafego(l)) tipoOrigemByLeadId.set(l.id, 'trafego');
-          else if (l.tipo_origem) tipoOrigemByLeadId.set(l.id, l.tipo_origem);
-        }
-      }
-
       // Busca TODOS os leads e monta os conjuntos de tráfego (email, telefone,
       // nome exato e nome tolerante = primeiro+último). Antes só buscava leads de
       // tráfego literal e casava nome exato → muitos não pegavam a tag.
       const { data: allLeadsData } = await supabase
         .from('leads_juridicos')
-        .select('nome, email, telefone, tipo_origem, origem, linha_whatsapp');
-      const trafegoEmailSet   = new Set<string>();
-      const trafegoNomeSet    = new Set<string>();
-      const trafegoNomeKeySet = new Set<string>();
-      const trafegoPhoneSet   = new Set<string>();
+        .select('id, nome, email, telefone, tipo_origem, origem, linha_whatsapp');
+      const leadById      = new Map<string, any>();
+      const leadByEmail   = new Map<string, any>();
+      const leadByPhone   = new Map<string, any>();
+      const leadByName    = new Map<string, any>();
+      const leadByNameKey = new Map<string, any>();
       for (const l of (allLeadsData || []) as any[]) {
-        if (!isTrafego(l)) continue;
-        if (l.email)    trafegoEmailSet.add(l.email.toLowerCase().trim());
-        if (l.nome)     { trafegoNomeSet.add(normName(l.nome)); const k = nameKeyOf(l.nome); if (k) trafegoNomeKeySet.add(k); }
-        if (l.telefone) { const n = normalizePhone(l.telefone); if (n.length >= 10) trafegoPhoneSet.add(n); }
+        if (l.id) leadById.set(l.id, l);
+        if (l.email) { const e = l.email.toLowerCase().trim(); if (e && !leadByEmail.has(e)) leadByEmail.set(e, l); }
+        if (l.telefone) { const n = normalizePhone(l.telefone); if (n.length >= 10 && !leadByPhone.has(n)) leadByPhone.set(n, l); }
+        if (l.nome) { const nn = normName(l.nome); if (nn && !leadByName.has(nn)) leadByName.set(nn, l); const k = nameKeyOf(l.nome); if (k && !leadByNameKey.has(k)) leadByNameKey.set(k, l); }
       }
+      // Mesma regra do ZapSign: lead vinculado de tráfego → 'trafego'; qualquer
+      // outro lead vinculado → 'escritorio'; sem lead → 'indefinido'.
+      const classifyOrigem = (lead: any): 'trafego' | 'escritorio' | 'indefinido' =>
+        !lead ? 'indefinido' : (isTrafego(lead) ? 'trafego' : 'escritorio');
 
       const mappedContracts: ContratoComStatus[] = documents.map((doc: any) => {
         const key: string | undefined = doc?.key;
@@ -230,22 +222,22 @@ export default function ContratosPage() {
         const dbSignerName = (key ? signerByDocKey.get(key) : null) || signerFromRemind || null;
         const signatarioNome = dbSignerName || (apiSignerNames.length > 0 ? apiSignerNames.join(', ') : null);
 
-        // Determina origem: lead_id exato → email → telefone → nome
-        const tipoOrigem = (() => {
-          if (leadId && tipoOrigemByLeadId.has(leadId)) return tipoOrigemByLeadId.get(leadId)!;
-          if (leadEmail && trafegoEmailSet.has(leadEmail.toLowerCase().trim())) return 'trafego';
-          const rawPhone: string = doc.signers?.[0]?.phone_number || '';
-          if (rawPhone) {
-            const np = normalizePhone(rawPhone);
-            if (np.length >= 10 && trafegoPhoneSet.has(np)) return 'trafego';
+        // Resolve o LEAD (objeto): por lead_id (exato) → email → telefone → nome
+        // do signatário/arquivo. Depois classifica igual ao ZapSign.
+        let resolvedLead: any = (leadId && leadById.get(leadId)) || null;
+        if (!resolvedLead && leadEmail) resolvedLead = leadByEmail.get(leadEmail.toLowerCase().trim()) || null;
+        if (!resolvedLead) {
+          const np = normalizePhone(doc.signers?.[0]?.phone_number || '');
+          if (np.length >= 10) resolvedLead = leadByPhone.get(np) || null;
+        }
+        if (!resolvedLead) {
+          for (const nc of candidatos) {
+            resolvedLead = leadByName.get(nc) || leadByNameKey.get(nameKeyOf(nc)) || null;
+            if (resolvedLead) break;
           }
-          for (const nomeCliente of candidatos) {
-            if (trafegoNomeSet.has(nomeCliente)) return 'trafego';
-            const k = nameKeyOf(nomeCliente);
-            if (k && trafegoNomeKeySet.has(k)) return 'trafego';
-          }
-          return null;
-        })();
+        }
+        if (!leadId && resolvedLead?.id) leadId = resolvedLead.id;
+        const tipoOrigem = classifyOrigem(resolvedLead);
         return {
           id: key,
           key,
