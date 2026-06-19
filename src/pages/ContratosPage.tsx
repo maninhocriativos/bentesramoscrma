@@ -246,7 +246,6 @@ export default function ContratosPage() {
         }
 
         const dbSignerName = (key ? signerByDocKey.get(key) : null) || signerFromRemind || null;
-        const signatarioNome = dbSignerName || (apiSignerNames.length > 0 ? apiSignerNames.join(', ') : null);
 
         // Resolve o LEAD (objeto): por lead_id (exato) → email → telefone → nome
         // do signatário/arquivo. Depois classifica igual ao ZapSign.
@@ -264,6 +263,13 @@ export default function ContratosPage() {
         }
         if (!leadId && resolvedLead?.id) leadId = resolvedLead.id;
         const tipoOrigem = classifyOrigem(resolvedLead);
+
+        // Nome do signatário: registro local → API → lead vinculado → email.
+        const signatarioNome = dbSignerName
+          || (apiSignerNames.length > 0 ? apiSignerNames.join(', ') : null)
+          || resolvedLead?.nome
+          || doc.signers?.[0]?.email
+          || null;
         return {
           id: key,
           key,

@@ -197,6 +197,43 @@ serve(async (req: Request): Promise<Response> => {
           return doc;
         });
 
+        // 5. ENRIQUECER com os signatários de cada documento (igual ao ZapSign).
+        // A listagem v1 não traz signatário → buscamos o detalhe de cada doc, que
+        // traz signers (email/nome/CPF) e o status de assinatura. Em lotes, com
+        // fallback seguro (se falhar, mantém o doc como está — sem regressão).
+        const ENRICH_BATCH = 8;
+        for (let i = 0; i < documentsWithLinks.length; i += ENRICH_BATCH) {
+          const batch = documentsWithLinks.slice(i, i + ENRICH_BATCH);
+          await Promise.all(batch.map(async (doc: any) => {
+            if (!doc.key) return;
+            try {
+              const detRes = await fetchWithRetry(
+                `${CLICKSIGN_BASE_URL}/documents/${doc.key}?access_token=${CLICKSIGN_API_KEY}`,
+                { method: "GET" },
+              );
+              if (!detRes.ok) return;
+              const detData = await detRes.json();
+              const det = detData.document || detData;
+              const rawSigners = det.signers || det.list?.signers || [];
+              if (Array.isArray(rawSigners) && rawSigners.length) {
+                doc.signers = rawSigners.map((s: any) => {
+                  const sg = s.signer || s;
+                  return {
+                    name: sg.name || s.name || "",
+                    email: sg.email || s.email || "",
+                    phone_number: sg.phone_number || sg.phone || s.phone_number || "",
+                    documentation: sg.documentation || s.documentation || "",
+                    signed_at: s.signed_at || s.signature?.signed_at || s.signed || sg.signed_at || null,
+                  };
+                });
+              }
+              if (det.status && !doc.status) doc.status = det.status;
+            } catch {
+              // mantém o doc sem signatário (sem regressão)
+            }
+          }));
+        }
+
         console.log(`Total documents: ${documentsWithLinks.length}, com link: ${linksByKey.size}`);
         result = { documents: documentsWithLinks };
         break;
