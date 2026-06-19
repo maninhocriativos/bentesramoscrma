@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { ContratosKPIs } from '@/components/contratos/ContratosKPIs';
@@ -9,7 +9,7 @@ import { EnviarKitModal } from '@/components/contratos/EnviarKitModal';
 import { ZapsignContratosKPIs } from '@/components/contratos/ZapsignContratosKPIs';
 import { ZapsignContratosTable } from '@/components/contratos/ZapsignContratosTable';
 import { CriarContratoZapsignModal } from '@/components/contratos/CriarContratoZapsignModal';
-import { useZapsignContratos } from '@/hooks/useZapsignContratos';
+import { useZapsignContratos, type ContratoZapsignComStatus, type TipoOrigemZapsign } from '@/hooks/useZapsignContratos';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, FileText, FolderOpen, Clock, CheckCircle2, XCircle, Zap, Plus, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -89,6 +89,31 @@ export default function ContratosPage() {
   const [enviarModalOpen, setEnviarModalOpen] = useState(false);
   const [provider, setProvider] = useState<'clicksign' | 'zapsign'>('clicksign');
   const [criarZapsignOpen, setCriarZapsignOpen] = useState(false);
+
+  // Adapta os contratos do ClickSign para o MESMO painel de KPIs do ZapSign
+  // (apenas reuso visual; os dados continuam 100% independentes do ZapSign).
+  const contratosClicksignKpi = useMemo<ContratoZapsignComStatus[]>(() => {
+    const toZapStatus = (label: string): ContratoZapsignComStatus['status'] => {
+      if (label === 'Finalizado' || label === 'Assinado') return 'signed';
+      if (label === 'Cancelado') return 'cancelled';
+      if (label === 'Rejeitado') return 'rejected';
+      if (label === 'Expirado') return 'expired';
+      return 'pending';
+    };
+    return contratos.map((c) => ({
+      id: c.key || c.id || '',
+      name: c.leadNome || 'Documento',
+      status: toZapStatus(c.status || ''),
+      created_at: c.lastUpdate || new Date().toISOString(),
+      signers: [],
+      leadId: c.leadId,
+      leadNome: c.signatarioNome || c.leadNome,
+      leadEmail: c.leadEmail || undefined,
+      leadPhone: undefined,
+      tipoOrigem: (c.tipoOrigem as TipoOrigemZapsign) || 'indefinido',
+      statusLocal: c.status === 'Finalizado' ? 'Assinado' : (c.status || 'Aguardando Assinatura'),
+    })) as ContratoZapsignComStatus[];
+  }, [contratos]);
 
   // Hook para Zapsign
   const { contratos: contratosZapsign, isLoading: loadingZapsign, isFetching: fetchingZapsign, refetch: refetchZapsign } = useZapsignContratos();
@@ -445,15 +470,33 @@ export default function ContratosPage() {
               </>
             ) : (
               <>
-                {/* Clicksign Analytics e KPIs */}
-                <ContratosAnalytics contratos={contratos} />
-
-                <ContratosKPIs
-                  data={kpiData}
-                  onRefresh={handleRefresh}
-                  onSendContract={() => setEnviarModalOpen(true)}
-                  refreshing={refreshing}
+                {/* KPIs no MESMO layout do ZapSign (dados do ClickSign) */}
+                <ZapsignContratosKPIs
+                  contratos={contratosClicksignKpi}
+                  isLoading={loading}
                 />
+
+                {/* Ações ClickSign */}
+                <div className="flex items-center justify-between">
+                  <Button
+                    onClick={() => setEnviarModalOpen(true)}
+                    size="sm"
+                    className="bg-[#c9a96e] hover:bg-[#b8975c] text-white gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Enviar Kit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleRefresh()}
+                    disabled={refreshing}
+                    className="text-muted-foreground gap-2"
+                  >
+                    <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
+                    {refreshing ? 'Atualizando...' : 'Atualizar'}
+                  </Button>
+                </div>
 
                 {/* Tabs Clicksign */}
                 <div className="flex gap-1 overflow-x-auto pb-0.5">
