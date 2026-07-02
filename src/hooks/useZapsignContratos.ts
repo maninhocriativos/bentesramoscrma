@@ -34,19 +34,39 @@ function nameKey(s: string): string {
   return `${parts[0]} ${parts[parts.length - 1]}`;
 }
 
+function documentNameCandidates(s: string): string[] {
+  const base = (s || '')
+    .replace(/\.[^/.]+$/, '')
+    .replace(/^Kit\s*[-–—]\s*/i, '')
+    .replace(/\s*[-–—]\s*contrato.*$/i, '')
+    .replace(/\s*[-–—]\s*\d+\s*$/, '')
+    .replace(/\s+\d+\s*docx.*$/i, '')
+    .replace(/\d+\s*$/g, '');
+
+  return Array.from(new Set([s, base].map(normalizeName).filter((n) => n.length > 3)));
+}
+
 function classifyOrigem(lead: any): TipoOrigemZapsign {
   if (!lead) return 'indefinido';
+  const origemText = normalizeName([
+    lead.origem,
+    lead.fonte_trafego,
+    lead.canal_origem,
+    lead.empresa_tag,
+  ].filter(Boolean).join(' '));
+
   if (
     lead.tipo_origem === 'trafego' ||
     lead.linha_whatsapp === 'trafego_isa' ||
-    (lead.origem || '').toLowerCase().includes('tráfego') ||
-    (lead.origem || '').toLowerCase().includes('trafego') ||
-    (lead.origem || '').toLowerCase().includes('meta') ||
-    (lead.origem || '').toLowerCase().includes('facebook') ||
-    (lead.origem || '').toLowerCase().includes('instagram') ||
-    (lead.origem || '').toLowerCase().includes('anúncio') ||
-    (lead.origem || '').toLowerCase().includes('anuncio') ||
-    (lead.origem || '').toLowerCase().includes('ads')
+    Boolean(lead.fonte_trafego) ||
+    Boolean(lead.facebook_lead_id) ||
+    origemText.includes('trafego') ||
+    origemText.includes('meta') ||
+    origemText.includes('facebook') ||
+    origemText.includes('instagram') ||
+    origemText.includes('google') ||
+    origemText.includes('anuncio') ||
+    origemText.includes('ads')
   ) return 'trafego';
   // Qualquer lead vinculado que NÃO é de tráfego é cliente do escritório
   // (direto/orgânico). Antes exigia campos específicos e quase tudo virava
@@ -70,6 +90,8 @@ function mapZapsignStatus(status: string, signers: any[] = []): string {
 }
 
 export async function fetchZapsignContratosData(): Promise<ContratoZapsignComStatus[]> {
+  const leadsSelect = 'id, nome, email, telefone, tipo_origem, origem, linha_whatsapp, empresa_tag, fonte_trafego, canal_origem, facebook_lead_id';
+
   // 1. Buscar documentos da Zapsign
   const zapsignDocs = await zapsignClient.listDocuments(1, 100);
   const documents: ZapsignDocument[] = zapsignDocs.documents || [];
@@ -91,7 +113,7 @@ export async function fetchZapsignContratosData(): Promise<ContratoZapsignComSta
   if (leadIds.length > 0) {
     const { data: leadsData } = await supabase
       .from('leads_juridicos')
-      .select('id, nome, email, telefone, tipo_origem, origem, linha_whatsapp, empresa_tag')
+      .select(leadsSelect)
       .in('id', leadIds);
     for (const l of leadsData || []) leadById.set(l.id, l);
   }
@@ -102,7 +124,7 @@ export async function fetchZapsignContratosData(): Promise<ContratoZapsignComSta
   //    ZapSign (sem lead_id) ficavam todos "indefinido".
   const { data: allLeads } = await supabase
     .from('leads_juridicos')
-    .select('id, nome, email, telefone, tipo_origem, origem, linha_whatsapp, empresa_tag');
+    .select(leadsSelect);
 
   const leadByPhone   = new Map<string, any>();
   const leadByEmail   = new Map<string, any>();
@@ -148,14 +170,31 @@ export async function fetchZapsignContratosData(): Promise<ContratoZapsignComSta
     }
     // 4) NOME do signatário (cobre contratos criados direto no painel ZapSign)
     const signerNm = local?.signer_name || doc.signers?.[0]?.name || '';
+    const nameCandidates = Array.from(new Set([
+      normalizeName(signerNm),
+      nameKey(signerNm),
+      ...documentNameCandidates(doc.name || ''),
+      ...documentNameCandidates((doc.metadata as any)?.name || ''),
+    ].filter(Boolean)));
+
     if (!resolvedLead) {
-      const nm = normalizeName(signerNm);
-      if (nm && leadByName.has(nm)) resolvedLead = leadByName.get(nm);
+      for (const candidate of nameCandidates) {
+        if (leadByName.has(candidate)) {
+          resolvedLead = leadByName.get(candidate);
+          break;
+        }
+      }
     }
     // 5) NOME tolerante: primeiro + último nome (variações de nome do meio)
     if (!resolvedLead) {
-      const nk = nameKey(signerNm);
-      if (nk && leadByNameKey.has(nk)) resolvedLead = leadByNameKey.get(nk);
+      for (const candidate of nameCandidates) {
+        const key = nameKey(candidate);
+        const matchedKey = leadByNameKey.has(candidate) ? candidate : key;
+        if (matchedKey && leadByNameKey.has(matchedKey)) {
+          resolvedLead = leadByNameKey.get(matchedKey);
+          break;
+        }
+      }
     }
 
     return {
