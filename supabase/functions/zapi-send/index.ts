@@ -20,8 +20,13 @@ async function converterAudioParaOgg(dataUrlOrUrl: string): Promise<string> {
     // Só converte base64 (data URL). Detecta o formato de entrada.
     const m = /^data:audio\/([a-z0-9.+-]+)[;,]/i.exec(dataUrlOrUrl);
     if (!m) return dataUrlOrUrl;                 // não é data URL de áudio
-    const inFmt = m[1].toLowerCase().includes('mp4') ? 'm4a'
-      : m[1].toLowerCase().includes('ogg') ? 'ogg' : 'webm';
+    const audioSubtype = m[1].toLowerCase();
+    const inFmt = audioSubtype.includes('mp4') || audioSubtype.includes('m4a') ? 'm4a'
+      : audioSubtype.includes('ogg') ? 'ogg'
+      : audioSubtype.includes('wav') ? 'wav'
+      : audioSubtype.includes('mpeg') || audioSubtype.includes('mp3') ? 'mp3'
+      : audioSubtype.includes('aac') ? 'aac'
+      : 'webm';
     if (inFmt === 'ogg') return dataUrlOrUrl;    // já é ogg
     const rawB64 = dataUrlOrUrl.split(',')[1] || '';
     if (!rawB64) return dataUrlOrUrl;

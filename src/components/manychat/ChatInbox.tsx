@@ -68,6 +68,68 @@ function resolveInstanceId(subscriber: { instance_name?: string | null }): strin
   return undefined;
 }
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("Falha ao ler arquivo de audio"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function encodeWav(samples: Float32Array, sampleRate: number): Blob {
+  const bytesPerSample = 2;
+  const blockAlign = bytesPerSample;
+  const buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
+  const view = new DataView(buffer);
+
+  const writeString = (offset: number, value: string) => {
+    for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i));
+  };
+
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * bytesPerSample, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true);
+  writeString(36, "data");
+  view.setUint32(40, samples.length * bytesPerSample, true);
+
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++, offset += 2) {
+    const sample = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+  }
+
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+async function audioFileToSendDataUrl(file: File): Promise<string> {
+  if (file.type.includes("ogg")) return blobToDataUrl(file);
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return blobToDataUrl(file);
+
+    const audioContext = new AudioContextClass();
+    const decoded = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+    const channelData = decoded.getChannelData(0);
+    const wavBlob = encodeWav(channelData, decoded.sampleRate);
+    await audioContext.close?.();
+    return blobToDataUrl(wavBlob);
+  } catch (error) {
+    console.warn("[Audio] Conversao local para WAV falhou, enviando original:", error);
+    return blobToDataUrl(file);
+  }
+}
+
 function getInstanceInfoFromConnectedPhone(connectedPhone?: string): InstanceInfo | null {
   if (!connectedPhone) return null;
   const phone = connectedPhone.replace(/\D/g, "");
@@ -1611,14 +1673,7 @@ const ManyChatInboxContent = () => {
     try {
       const ext = audioFile.name.split('.').pop() || 'ogg';
       const filePath = `manychat/${subscriberSnapshot.subscriber_id}/audio_${Date.now()}.${ext}`;
-
-      // Converter para base64 — Z-API recebe direto sem depender de URL assinada
-      const audioBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error('Falha ao ler áudio'));
-        reader.readAsDataURL(audioFile);
-      });
+      const audioBase64 = await audioFileToSendDataUrl(audioFile);
 
       // Upload para o storage (apenas para exibir no CRM)
       const { error: uploadError } = await supabase.storage.from("documentos").upload(filePath, audioFile);
