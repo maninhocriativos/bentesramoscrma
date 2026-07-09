@@ -35,10 +35,17 @@ async function fetchWithRetry(
   throw lastError;
 }
 
+// Um link só é ACEITÁVEL para enviar ao cliente se for de assinatura de verdade:
+//  - ClickSign: https://app.clicksign.com/sign/<request_signature_key>
+//  - ZapSign:   https://app.zapsign.com.br/verificar/<token>
+// Rejeita /document/<key>, a homepage e o /sign/<documentKey> (key do documento
+// no lugar do request_signature_key) — todos levam a erro para o cliente.
 function isBadClicksignLink(link: string | null | undefined, documentKey?: string | null) {
   if (!link) return true;
-  if (!documentKey) return false;
-  return link.includes(`/sign/${documentKey}`);
+  if (link.includes('/verificar/')) return false;                     // ZapSign válido
+  if (!link.includes('/sign/')) return true;                          // /document/<key>, homepage, key cru
+  if (documentKey && link.includes(`/sign/${documentKey}`)) return true; // key do doc no lugar do request key
+  return false;
 }
 
 async function resolveClicksignSignerLink(documentKey: string): Promise<string | null> {
@@ -166,13 +173,24 @@ serve(async (req: Request): Promise<Response> => {
         await supabase.from('contract_reminders').update({ contract_link: link, updated_at: new Date().toISOString() }).eq('document_key', documentKey);
       }
     }
-    if (!link && documentKey) link = `https://app.clicksign.com/document/${documentKey}`;
-    if (!link) link = 'https://app.clicksign.com';
+    // Sem link de assinatura VÁLIDO não enviamos nada: mandar /document/<key> ou a
+    // homepage gera erro para o cliente. Melhor abortar e avisar o operador.
+    if (isBadClicksignLink(link, documentKey)) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Não foi possível obter o link de assinatura do ClickSign. A cobrança não foi enviada para evitar mandar um link quebrado ao cliente.',
+          lead: { id: lead.id, nome: lead.nome },
+        }),
+        { status: 422, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
 
+    const signLink: string = link!; // garantido não-nulo pelo guard isBadClicksignLink acima
     const clientName = lead.nome?.split(' ')[0] || 'Cliente';
     const message = reminderType === 'urgent'
-      ? CONTRACT_MESSAGES.urgent(clientName, link)
-      : CONTRACT_MESSAGES.soft(clientName, link);
+      ? CONTRACT_MESSAGES.urgent(clientName, signLink)
+      : CONTRACT_MESSAGES.soft(clientName, signLink);
 
     // Send via Z-API
     const zapiConfig = await getZapiConfig(supabase);
