@@ -131,9 +131,11 @@ serve(async (req: Request): Promise<Response> => {
 
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const { documentKey, documentName, contractLink, reminderType = 'soft' } = await req.json();
+    // leadId / signerPhone / signerName cobrem contratos pegos direto da API do
+    // ClickSign (sem registro local nem lead vinculado) — enviados pelo chat.
+    const { documentKey, documentName, contractLink, reminderType = 'soft', leadId, signerPhone, signerName } = await req.json();
 
-    console.log('[Contract Reminder] Request:', { documentKey, documentName, reminderType });
+    console.log('[Contract Reminder] Request:', { documentKey, documentName, reminderType, leadId, hasPhone: !!signerPhone });
 
     if (!documentName && !documentKey) {
       return new Response(
@@ -142,14 +144,32 @@ serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    // Find lead
-    let lead = null;
-    if (documentKey) lead = await findLeadByDocumentKey(supabase, documentKey);
+    // Find lead: leadId explícito (chat) → document_key → nome → telefone do signatário.
+    let lead: any = null;
+    if (leadId) {
+      const { data } = await supabase.from('leads_juridicos')
+        .select('id, nome, telefone, email, link_contrato, status, contract_key').eq('id', leadId).maybeSingle();
+      lead = data || null;
+    }
+    if (!lead && documentKey) lead = await findLeadByDocumentKey(supabase, documentKey);
     if (!lead && documentName) lead = await findLeadByDocumentName(supabase, documentName);
+    if (!lead && signerPhone) {
+      const digits = String(signerPhone).replace(/\D/g, '');
+      if (digits.length >= 8) {
+        const { data } = await supabase.from('leads_juridicos')
+          .select('id, nome, telefone, email, link_contrato, status, contract_key')
+          .ilike('telefone', `%${digits.slice(-8)}%`).limit(1).maybeSingle();
+        lead = data || null;
+      }
+    }
+    // Sem lead no CRM, mas com telefone da tela → envia mesmo assim (lead "virtual").
+    if (!lead && signerPhone) {
+      lead = { id: null, nome: signerName || 'Cliente', telefone: signerPhone };
+    }
 
     if (!lead) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Lead não encontrado no CRM', details: 'Verifique se o cliente está cadastrado e vinculado ao contrato' }),
+        JSON.stringify({ success: false, error: 'Cliente não encontrado', details: 'Nenhum lead vinculado e sem telefone do signatário para envio.' }),
         { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
@@ -210,34 +230,42 @@ serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    // Save message, interaction, and event
-    const cleanPhone = normalizePhone(lead.telefone);
-    await Promise.all([
-      supabase.from('manychat_mensagens').insert({
-        subscriber_id: `zapi_${cleanPhone}`,
-        lead_id: lead.id,
-        conteudo: message,
-        direcao: 'saida',
-        tipo: 'text',
-        subscriber_nome: 'Sistema',
-        canal: 'whatsapp',
-        metadata: { source: 'zapi', context: 'contract_reminder', message_id: sendResult.messageId }
-      }),
-      supabase.from('interacoes').insert({
-        cliente_id: lead.id,
-        tipo: 'WhatsApp',
-        resumo: `Cobrança de assinatura enviada (${reminderType})`,
-        detalhes: `Mensagem enviada via Z-API. Link: ${link}`,
-        direcao: 'Saída',
-      }),
-      supabase.from('system_events').insert({
-        tipo: 'contrato',
-        acao: `reminder_${reminderType}_sent`,
-        fonte: 'contract-reminder',
-        lead_id: lead.id,
-        dados: { document_key: documentKey, sent_via: 'zapi' }
-      }),
-    ]);
+    // Save message, interaction, and event — só quando há lead real no CRM
+    // (lead "virtual" por telefone não tem id p/ os vínculos). A mensagem já foi
+    // enviada; não deixamos uma falha de log virar erro para o operador.
+    if (lead.id) {
+      const cleanPhone = normalizePhone(lead.telefone);
+      try {
+        await Promise.all([
+          supabase.from('manychat_mensagens').insert({
+            subscriber_id: `zapi_${cleanPhone}`,
+            lead_id: lead.id,
+            conteudo: message,
+            direcao: 'saida',
+            tipo: 'text',
+            subscriber_nome: 'Sistema',
+            canal: 'whatsapp',
+            metadata: { source: 'zapi', context: 'contract_reminder', message_id: sendResult.messageId }
+          }),
+          supabase.from('interacoes').insert({
+            cliente_id: lead.id,
+            tipo: 'WhatsApp',
+            resumo: `Cobrança de assinatura enviada (${reminderType})`,
+            detalhes: `Mensagem enviada via Z-API. Link: ${link}`,
+            direcao: 'Saída',
+          }),
+          supabase.from('system_events').insert({
+            tipo: 'contrato',
+            acao: `reminder_${reminderType}_sent`,
+            fonte: 'contract-reminder',
+            lead_id: lead.id,
+            dados: { document_key: documentKey, sent_via: 'zapi' }
+          }),
+        ]);
+      } catch (logErr: any) {
+        console.error('[Contract Reminder] Falha ao registrar log (mensagem já enviada):', logErr?.message);
+      }
+    }
 
     return new Response(
       JSON.stringify({ success: true, message: 'Cobrança enviada com sucesso via WhatsApp', lead: { id: lead.id, nome: lead.nome } }),

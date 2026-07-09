@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizePhone } from "@/lib/chatUtils";
+import { fetchZapsignContratosData } from "@/hooks/useZapsignContratos";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +10,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  PenLine, Loader2, FileText, Zap, CheckCircle2, Clock,
+  FileSignature, Loader2, FileText, Zap, CheckCircle2, Clock,
   XCircle, AlertTriangle, MessageCircle, Search, ExternalLink,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -22,11 +23,13 @@ interface ProviderContract {
   id: string;
   docId: string;              // document_key (ClickSign) | document_id (ZapSign)
   name: string;
-  status: string;
+  status: string;             // normalizado: pending | signed | cancelled | rejected | expired
   signerName?: string | null;
-  link?: string | null;       // contract_link (ClickSign)
-  leadId?: string | null;     // lead_id gravado no contrato
-  phoneCore?: string;         // últimos dígitos do telefone do signatário (p/ casar)
+  signerPhone?: string | null;
+  link?: string | null;       // sign_url do provedor
+  leadId?: string | null;
+  phoneCore: string;          // últimos 8 dígitos do telefone (p/ casar)
+  nameHay: string;            // nome do doc + signatário, normalizado (p/ casar/buscar)
 }
 
 interface ChatContractReminderProps {
@@ -36,79 +39,88 @@ interface ChatContractReminderProps {
   triggerClassName?: string;
 }
 
-// Núcleo do telefone: últimos 8 dígitos (número local), tolerante a formatação
-// e a códigos de país/DDD diferentes entre o cadastro e o contrato.
+const STATUS_META: Record<string, { label: string; cls: string; Icon: typeof Clock }> = {
+  pending:   { label: "Aguardando", cls: "text-amber-500",   Icon: Clock },
+  signed:    { label: "Assinado",   cls: "text-emerald-500", Icon: CheckCircle2 },
+  cancelled: { label: "Cancelado",  cls: "text-zinc-400",    Icon: XCircle },
+  rejected:  { label: "Rejeitado",  cls: "text-red-500",     Icon: XCircle },
+  expired:   { label: "Expirado",   cls: "text-orange-500",  Icon: XCircle },
+};
+const statusMeta = (s: string) => STATUS_META[s] || { label: "Aguardando", cls: "text-amber-500", Icon: Clock };
+
+const sanitize = (t: string) => t.replace(/[,()%*]/g, " ").replace(/\s+/g, " ").trim();
+const normName = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+const stripPrefix = (s: string) => (s || "").replace(/^\s*cliente\s*[-–—:]\s*/i, "").trim();
+const nameKey = (s: string) => {
+  const p = normName(s).split(" ").filter(Boolean);
+  return p.length < 2 ? "" : `${p[0]} ${p[p.length - 1]}`;
+};
 const phoneCore = (p?: string | null) => {
   const d = normalizePhone(p || "");
   return d.length >= 8 ? d.slice(-8) : "";
 };
 
-const STATUS_META: Record<string, { label: string; cls: string; Icon: typeof Clock }> = {
-  pending:   { label: "Aguardando", cls: "text-amber-500",   Icon: Clock },
-  signed:    { label: "Assinado",   cls: "text-emerald-500", Icon: CheckCircle2 },
-  cancelled: { label: "Cancelado",  cls: "text-zinc-400",    Icon: XCircle },
-  canceled:  { label: "Cancelado",  cls: "text-zinc-400",    Icon: XCircle },
-  rejected:  { label: "Rejeitado",  cls: "text-red-500",     Icon: XCircle },
-  expired:   { label: "Expirado",   cls: "text-orange-500",  Icon: XCircle },
-};
-const statusMeta = (s: string) => STATUS_META[s] || { label: s || "—", cls: "text-muted-foreground", Icon: Clock };
-
-const sanitize = (t: string) => t.replace(/[,()%*]/g, " ").replace(/\s+/g, " ").trim();
-
-function normalize(provider: Provider, r: any): ProviderContract | null {
-  const docId = provider === "clicksign" ? r.document_key : r.document_id;
-  if (!docId) return null;
-  return {
-    provider, id: `${provider}-${r.id}`, docId,
-    name: r.document_name || "Contrato", status: r.status || "pending",
-    signerName: r.signer_name, link: provider === "clicksign" ? r.contract_link : null,
-    leadId: r.lead_id ?? null, phoneCore: phoneCore(r.signer_phone),
-  };
-}
-
-// Carrega os contratos recentes de um provedor (as tabelas são pequenas). O
-// casamento com o lead — por lead_id, TELEFONE ou nome — é feito no cliente,
-// porque muitos contratos não têm lead_id e o nome do lead no chat pode diferir
-// do signatário. O telefone é o elo mais confiável com a conversa.
-function useProviderContracts(provider: Provider, enabled: boolean) {
+// ClickSign: contratos vêm da API (função list_documents), como na página de
+// Contratos — não da tabela local. Assim o modal enxerga TODOS os contratos.
+function useClickSignContracts(enabled: boolean) {
   return useQuery({
-    queryKey: ["chat-provider-contracts", provider],
+    queryKey: ["chat-cs-contracts"],
     enabled,
-    staleTime: 60_000,
+    staleTime: 3 * 60_000,
     queryFn: async (): Promise<ProviderContract[]> => {
-      const table = provider === "clicksign" ? "contract_reminders" : "contract_reminders_zapsign";
-      const { data } = await supabase.from(table as any)
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(1000);
-      return ((data as any[]) || []).map((r) => normalize(provider, r)).filter(Boolean) as ProviderContract[];
+      const { data, error } = await supabase.functions.invoke("clicksign", { body: { action: "list_documents", page: 1 } });
+      if (error) throw error;
+      const docs = (data?.documents || []) as any[];
+      return docs
+        .filter((d) => d?.key)
+        .map((d) => {
+          const s = d.signers?.[0] || {};
+          const name = (d.filename || "").replace(/\.[^/.]+$/, "") || "Contrato";
+          const status = d.status === "closed" ? "signed" : d.status === "canceled" ? "cancelled" : "pending";
+          return {
+            provider: "clicksign" as const,
+            id: `cs-${d.key}`, docId: d.key, name, status,
+            signerName: s.name || null,
+            signerPhone: s.phone_number || s.phone || null,
+            link: d.sign_url || null,
+            leadId: null,
+            phoneCore: phoneCore(s.phone_number || s.phone),
+            nameHay: normName(`${d.filename || ""} ${s.name || ""}`),
+          };
+        });
     },
   });
 }
 
-// Contador barato p/ o badge (dot) do botão — só por lead_id. É apenas um
-// indicador; a listagem do modal faz o casamento completo (id/telefone/nome).
-function usePendingBadge(leadId?: string | null) {
+// ZapSign: reusa fetchZapsignContratosData (já casa lead por id/telefone/email/
+// nome). Compartilha o cache da página de Contratos (mesma queryKey).
+function useZapSignContracts(enabled: boolean) {
   return useQuery({
-    queryKey: ["chat-pending-badge", leadId],
-    enabled: !!leadId,
-    staleTime: 60_000,
-    queryFn: async (): Promise<number> => {
-      if (!leadId) return 0;
-      const [cs, zs] = await Promise.all([
-        supabase.from("contract_reminders").select("id").eq("lead_id", leadId).eq("status", "pending"),
-        supabase.from("contract_reminders_zapsign").select("id").eq("lead_id", leadId).eq("status", "pending"),
-      ]);
-      return ((cs.data as any[])?.length || 0) + ((zs.data as any[])?.length || 0);
-    },
+    queryKey: ["zapsign-contratos"],
+    enabled,
+    staleTime: 30_000,
+    queryFn: fetchZapsignContratosData,
+    select: (list: any[]): ProviderContract[] =>
+      (list || []).filter((c) => c?.id).map((c) => ({
+        provider: "zapsign" as const,
+        id: `zs-${c.id}`, docId: c.id,
+        name: c.name || "Contrato",
+        status: c.status || "pending",
+        signerName: c.leadNome || c.signers?.[0]?.name || null,
+        signerPhone: c.leadPhone || c.signers?.[0]?.phone || null,
+        link: c.signers?.[0]?.sign_url || null,
+        leadId: c.leadId || null,
+        phoneCore: phoneCore(c.leadPhone || c.signers?.[0]?.phone),
+        nameHay: normName(`${c.name || ""} ${c.leadNome || c.signers?.[0]?.name || ""}`),
+      })),
   });
 }
 
 /**
  * Botão do header do chat que abre um modal para enviar o lembrete de assinatura
  * com o LINK REAL do contrato do lead — ClickSign (/sign/) ou ZapSign (/verificar/).
- * O lembrete é enviado no próprio chat (WhatsApp via Z-API) pelas edge functions
- * contract-reminder / zapsign-reminder, que resolvem o link correto no servidor.
+ * Os contratos vêm da API do provedor (todos, como na página de Contratos) e são
+ * casados com o lead por lead_id, TELEFONE ou nome. O envio vai no próprio chat.
  */
 export function ChatContractReminder({ leadId, leadNome, leadPhone, triggerClassName }: ChatContractReminderProps) {
   const { toast } = useToast();
@@ -119,25 +131,32 @@ export function ChatContractReminder({ leadId, leadNome, leadPhone, triggerClass
   const [selected, setSelected] = useState<ProviderContract | null>(null);
   const [sending, setSending] = useState<"soft" | "urgent" | null>(null);
 
-  const { data: pendingCount = 0 } = usePendingBadge(leadId);
-  const { data: allContracts = [], isLoading } = useProviderContracts(provider, open);
+  const csQ = useClickSignContracts(open && provider === "clicksign");
+  const zsQ = useZapSignContracts(open && provider === "zapsign");
+  const activeQ = provider === "clicksign" ? csQ : zsQ;
+  const allContracts = (activeQ.data as ProviderContract[]) || [];
+  const isLoading = activeQ.isLoading || activeQ.isFetching;
 
   const leadCore = phoneCore(leadPhone);
-  const term = sanitize(search).toLowerCase();
+  const leadNameNorm = normName(stripPrefix(leadNome || ""));
+  const leadNameK = nameKey(stripPrefix(leadNome || ""));
+  const term = sanitize(search);
 
-  // Sem busca: contratos DESTE lead — casa por lead_id OU telefone (elo confiável).
-  // Com busca: procura por nome/documento em todos os contratos do provedor.
+  // Sem busca: contratos DESTE lead (lead_id OU telefone OU nome). Com busca:
+  // procura por nome em todos os contratos do provedor.
   const contracts = useMemo(() => {
     if (term.length >= 2) {
-      return allContracts.filter((c) =>
-        c.name?.toLowerCase().includes(term) || (c.signerName || "").toLowerCase().includes(term));
+      const t = normName(term);
+      return allContracts.filter((c) => c.nameHay.includes(t));
     }
     return allContracts.filter((c) => {
-      const byId = !!leadId && c.leadId === leadId;
-      const byPhone = !!leadCore && c.phoneCore === leadCore;
-      return byId || byPhone;
+      if (leadId && c.leadId === leadId) return true;
+      if (leadCore && c.phoneCore === leadCore) return true;
+      if (leadNameNorm && leadNameNorm.length >= 5 && c.nameHay.includes(leadNameNorm)) return true;
+      if (leadNameK && leadNameK.length >= 7 && c.nameHay.includes(leadNameK)) return true;
+      return false;
     });
-  }, [allContracts, term, leadId, leadCore]);
+  }, [allContracts, term, leadId, leadCore, leadNameNorm, leadNameK]);
 
   if (!leadId && !leadPhone) return null;
 
@@ -148,9 +167,15 @@ export function ChatContractReminder({ leadId, leadNome, leadPhone, triggerClass
     setSending(type);
     try {
       const fn = selected.provider === "clicksign" ? "contract-reminder" : "zapsign-reminder";
+      const common = {
+        reminderType: type,
+        leadId: leadId || undefined,
+        signerPhone: selected.signerPhone || leadPhone || undefined,
+        signerName: selected.signerName || leadNome || undefined,
+      };
       const body = selected.provider === "clicksign"
-        ? { documentKey: selected.docId, documentName: selected.name, contractLink: selected.link, reminderType: type }
-        : { documentId: selected.docId, documentName: selected.name, reminderType: type, leadId };
+        ? { documentKey: selected.docId, documentName: selected.name, contractLink: selected.link, ...common }
+        : { documentId: selected.docId, documentName: selected.name, signUrl: selected.link, ...common };
       const { data, error } = await supabase.functions.invoke(fn, { body });
       if (error) {
         let msg = error.message || "Falha ao enviar";
@@ -162,9 +187,7 @@ export function ChatContractReminder({ leadId, leadNome, leadPhone, triggerClass
         title: type === "urgent" ? "⚠️ Cobrança urgente enviada" : "✅ Lembrete enviado no chat",
         description: `Link de assinatura enviado no WhatsApp de ${selected.signerName || leadNome || "cliente"}.`,
       });
-      setOpen(false);
-      setSelected(null);
-      setSearch("");
+      setOpen(false); setSelected(null); setSearch("");
     } catch (e: any) {
       toast({ title: "Não foi possível enviar", description: e?.message || "Tente novamente.", variant: "destructive" });
     } finally {
@@ -193,14 +216,11 @@ export function ChatContractReminder({ leadId, leadNome, leadPhone, triggerClass
         title="Enviar lembrete de assinatura"
         onClick={() => setOpen(true)}
         className={cn(
-          "relative h-8 w-8 md:h-10 md:w-10 rounded-full transition-colors",
-          pendingCount > 0 ? "text-amber-500 bg-amber-500/10 hover:bg-amber-500/20" : triggerClassName,
+          "h-8 w-8 md:h-9 md:w-9 rounded-full text-violet-500 bg-violet-500/10 hover:bg-violet-500/20 hover:text-violet-500 transition-colors",
+          triggerClassName,
         )}
       >
-        <PenLine className="h-4 w-4 md:h-[18px] md:w-[18px]" />
-        {pendingCount > 0 && (
-          <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-background animate-pulse" />
-        )}
+        <FileSignature className="h-4 w-4 md:h-[18px] md:w-[18px]" />
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -208,8 +228,8 @@ export function ChatContractReminder({ leadId, leadNome, leadPhone, triggerClass
           {/* Header */}
           <DialogHeader className="px-5 pt-5 pb-4 space-y-0 text-left">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#00A884]/10 text-[#00A884] shrink-0">
-                <PenLine className="h-[18px] w-[18px]" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-500/12 text-violet-500 shrink-0">
+                <FileSignature className="h-[18px] w-[18px]" />
               </div>
               <div className="min-w-0">
                 <DialogTitle className="text-[15px] font-semibold leading-tight">Lembrete de assinatura</DialogTitle>
