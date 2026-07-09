@@ -2597,6 +2597,7 @@ const ManyChatInboxContent = () => {
                 <ChatContractReminder
                   leadId={selectedSubscriber.lead_id}
                   leadNome={getDisplayName(selectedSubscriber)}
+                  leadPhone={selectedSubscriber.telefone}
                   triggerClassName={`${themeClasses.iconColor} ${themeClasses.hoverBtn}`}
                 />
 

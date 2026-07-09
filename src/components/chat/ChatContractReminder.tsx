@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizePhone } from "@/lib/chatUtils";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   PenLine, Loader2, FileText, Zap, CheckCircle2, Clock,
-  XCircle, AlertTriangle, MessageCircle, Search, Send, ExternalLink,
+  XCircle, AlertTriangle, MessageCircle, Search, ExternalLink,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -24,13 +25,23 @@ interface ProviderContract {
   status: string;
   signerName?: string | null;
   link?: string | null;       // contract_link (ClickSign)
+  leadId?: string | null;     // lead_id gravado no contrato
+  phoneCore?: string;         // últimos dígitos do telefone do signatário (p/ casar)
 }
 
 interface ChatContractReminderProps {
   leadId?: string | null;
   leadNome?: string;
+  leadPhone?: string | null;
   triggerClassName?: string;
 }
+
+// Núcleo do telefone: últimos 8 dígitos (número local), tolerante a formatação
+// e a códigos de país/DDD diferentes entre o cadastro e o contrato.
+const phoneCore = (p?: string | null) => {
+  const d = normalizePhone(p || "");
+  return d.length >= 8 ? d.slice(-8) : "";
+};
 
 const STATUS_META: Record<string, { label: string; cls: string; Icon: typeof Clock }> = {
   pending:   { label: "Aguardando", cls: "text-amber-500",   Icon: Clock },
@@ -51,55 +62,44 @@ function normalize(provider: Provider, r: any): ProviderContract | null {
     provider, id: `${provider}-${r.id}`, docId,
     name: r.document_name || "Contrato", status: r.status || "pending",
     signerName: r.signer_name, link: provider === "clicksign" ? r.contract_link : null,
+    leadId: r.lead_id ?? null, phoneCore: phoneCore(r.signer_phone),
   };
 }
 
-// Contratos do lead (os dois provedores) — usado para o badge de pendência.
-function useLeadContractsBadge(leadId?: string | null) {
+// Carrega os contratos recentes de um provedor (as tabelas são pequenas). O
+// casamento com o lead — por lead_id, TELEFONE ou nome — é feito no cliente,
+// porque muitos contratos não têm lead_id e o nome do lead no chat pode diferir
+// do signatário. O telefone é o elo mais confiável com a conversa.
+function useProviderContracts(provider: Provider, enabled: boolean) {
   return useQuery({
-    queryKey: ["chat-lead-contracts-badge", leadId],
-    enabled: !!leadId,
-    staleTime: 30_000,
-    queryFn: async (): Promise<number> => {
-      if (!leadId) return 0;
-      const [cs, zs] = await Promise.all([
-        supabase.from("contract_reminders").select("status").eq("lead_id", leadId).eq("status", "pending"),
-        supabase.from("contract_reminders_zapsign").select("status").eq("lead_id", leadId).eq("status", "pending"),
-      ]);
-      return ((cs.data as any[])?.length || 0) + ((zs.data as any[])?.length || 0);
+    queryKey: ["chat-provider-contracts", provider],
+    enabled,
+    staleTime: 60_000,
+    queryFn: async (): Promise<ProviderContract[]> => {
+      const table = provider === "clicksign" ? "contract_reminders" : "contract_reminders_zapsign";
+      const { data } = await supabase.from(table as any)
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(1000);
+      return ((data as any[]) || []).map((r) => normalize(provider, r)).filter(Boolean) as ProviderContract[];
     },
   });
 }
 
-// Contratos por provedor: casa pelo lead_id e, se necessário, por nome (busca),
-// para achar o contrato mesmo quando não está vinculado por lead_id.
-function useProviderContracts(provider: Provider, leadId: string | null | undefined, leadNome: string | undefined, search: string, enabled: boolean) {
-  const term = sanitize(search) || "";
+// Contador barato p/ o badge (dot) do botão — só por lead_id. É apenas um
+// indicador; a listagem do modal faz o casamento completo (id/telefone/nome).
+function usePendingBadge(leadId?: string | null) {
   return useQuery({
-    queryKey: ["chat-provider-contracts", provider, leadId, term],
-    enabled,
-    staleTime: 15_000,
-    queryFn: async (): Promise<ProviderContract[]> => {
-      const table = provider === "clicksign" ? "contract_reminders" : "contract_reminders_zapsign";
-      const rows: any[] = [];
-      const seen = new Set<string>();
-      const push = (arr: any[] | null) => {
-        for (const r of arr || []) { if (r?.id && !seen.has(r.id)) { seen.add(r.id); rows.push(r); } }
-      };
-
-      if (leadId) {
-        const { data } = await supabase.from(table as any).select("*").eq("lead_id", leadId).order("created_at", { ascending: false });
-        push(data as any[]);
-      }
-      // Busca por nome: o que o operador digitou, ou o nome do lead se nada casou por id.
-      const q = term || (rows.length === 0 ? sanitize(leadNome || "") : "");
-      if (q && q.length >= 3) {
-        const { data } = await supabase.from(table as any).select("*")
-          .or(`signer_name.ilike.%${q}%,document_name.ilike.%${q}%`)
-          .order("created_at", { ascending: false }).limit(25);
-        push(data as any[]);
-      }
-      return rows.map((r) => normalize(provider, r)).filter(Boolean) as ProviderContract[];
+    queryKey: ["chat-pending-badge", leadId],
+    enabled: !!leadId,
+    staleTime: 60_000,
+    queryFn: async (): Promise<number> => {
+      if (!leadId) return 0;
+      const [cs, zs] = await Promise.all([
+        supabase.from("contract_reminders").select("id").eq("lead_id", leadId).eq("status", "pending"),
+        supabase.from("contract_reminders_zapsign").select("id").eq("lead_id", leadId).eq("status", "pending"),
+      ]);
+      return ((cs.data as any[])?.length || 0) + ((zs.data as any[])?.length || 0);
     },
   });
 }
@@ -110,7 +110,7 @@ function useProviderContracts(provider: Provider, leadId: string | null | undefi
  * O lembrete é enviado no próprio chat (WhatsApp via Z-API) pelas edge functions
  * contract-reminder / zapsign-reminder, que resolvem o link correto no servidor.
  */
-export function ChatContractReminder({ leadId, leadNome, triggerClassName }: ChatContractReminderProps) {
+export function ChatContractReminder({ leadId, leadNome, leadPhone, triggerClassName }: ChatContractReminderProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -119,10 +119,27 @@ export function ChatContractReminder({ leadId, leadNome, triggerClassName }: Cha
   const [selected, setSelected] = useState<ProviderContract | null>(null);
   const [sending, setSending] = useState<"soft" | "urgent" | null>(null);
 
-  const { data: pendingCount = 0 } = useLeadContractsBadge(leadId);
-  const { data: contracts = [], isLoading } = useProviderContracts(provider, leadId, leadNome, search, open);
+  const { data: pendingCount = 0 } = usePendingBadge(leadId);
+  const { data: allContracts = [], isLoading } = useProviderContracts(provider, open);
 
-  if (!leadId) return null;
+  const leadCore = phoneCore(leadPhone);
+  const term = sanitize(search).toLowerCase();
+
+  // Sem busca: contratos DESTE lead — casa por lead_id OU telefone (elo confiável).
+  // Com busca: procura por nome/documento em todos os contratos do provedor.
+  const contracts = useMemo(() => {
+    if (term.length >= 2) {
+      return allContracts.filter((c) =>
+        c.name?.toLowerCase().includes(term) || (c.signerName || "").toLowerCase().includes(term));
+    }
+    return allContracts.filter((c) => {
+      const byId = !!leadId && c.leadId === leadId;
+      const byPhone = !!leadCore && c.phoneCore === leadCore;
+      return byId || byPhone;
+    });
+  }, [allContracts, term, leadId, leadCore]);
+
+  if (!leadId && !leadPhone) return null;
 
   const switchProvider = (p: Provider) => { setProvider(p); setSelected(null); };
 
