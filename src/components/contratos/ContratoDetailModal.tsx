@@ -174,7 +174,10 @@ export function ContratoDetailModal({ contrato, isOpen, onClose, onRefresh }: Co
   const signerName  = contrato.signatarioNome || reminder?.signer_name  || lead?.nome  || csFirst?.name;
   const signerEmail = contrato.leadEmail       || reminder?.signer_email || lead?.email || csFirst?.email;
   const signerPhone = reminder?.signer_phone   || lead?.telefone         || csFirst?.phone_number;
-  const signLink    = reminder?.contract_link  || contrato.linkContrato;
+  // Só aceita link de assinatura VÁLIDO do ClickSign (/sign/<request_signature_key>).
+  // Evita cair num link de documento quebrado que leva à página de erro.
+  const signLink    = [reminder?.contract_link, contrato.linkContrato]
+    .find((l) => l && l.includes('/sign/')) || '';
 
   // ── buscarLeads ───────────────────────────────────────────────────────────
   const buscarLeads = async (texto?: string) => {
@@ -747,28 +750,31 @@ export function ContratoDetailModal({ contrato, isOpen, onClose, onRefresh }: Co
                 </Button>
               )}
 
-              {/* Copiar link */}
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 text-xs border-[#c9a96e]/30 text-[#3d2b1f] hover:bg-[#c9a96e]/10"
-                onClick={handleCopyLink}
-              >
-                <Copy className="h-3.5 w-3.5" />
-                Copiar link
-              </Button>
+              {/* Copiar link + Abrir no Clicksign — só com link de assinatura válido */}
+              {signLink && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs border-[#c9a96e]/30 text-[#3d2b1f] hover:bg-[#c9a96e]/10"
+                    onClick={handleCopyLink}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    Copiar link
+                  </Button>
 
-              {/* Abrir no Clicksign */}
-              <Button
-                asChild
-                size="sm"
-                className="h-8 gap-1.5 text-xs ml-auto bg-[#3d2b1f] text-[#c9a96e] border border-[#c9a96e]/30 hover:bg-[#5c3d2e]"
-              >
-                <a href={signLink} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Abrir no Clicksign
-                </a>
-              </Button>
+                  <Button
+                    asChild
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs ml-auto bg-[#3d2b1f] text-[#c9a96e] border border-[#c9a96e]/30 hover:bg-[#5c3d2e]"
+                  >
+                    <a href={signLink} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Abrir no Clicksign
+                    </a>
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </DialogContent>

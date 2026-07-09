@@ -211,9 +211,14 @@ export default function ContratosPage() {
 
       const mappedContracts: ContratoComStatus[] = documents.map((doc: any) => {
         const key: string | undefined = doc?.key;
-        const linkContrato =
+        // O link de assinatura do ClickSign é POR SIGNATÁRIO (request_signature_key),
+        // não o key do documento. A edge function já resolve o link correto e o
+        // injeta como doc.sign_url — então usamos ele primeiro (igual ao ZapSign).
+        // NUNCA montar `/sign/${key}` com o key do documento: gera página de erro.
+        const linkContrato: string =
+          doc.sign_url ||
           (key && linksByDocKey.get(key)) ||
-          (key ? `https://app.clicksign.com/sign/${key}` : 'https://app.clicksign.com');
+          '';
         const apiSigners = doc.signers || [];
         const apiSignerNames = apiSigners.map((s: any) => s.name).filter(Boolean);
         const pathParts = (doc.path || '').split('/').filter(Boolean);

@@ -315,16 +315,18 @@ export function ContratosTable({ contratos, onRefresh }: ContratosTableProps) {
                               </DropdownMenuContent>
                             </DropdownMenu>
                           )}
-                          <Button
-                            asChild
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 text-[#c9a96e]/60 hover:text-[#c9a96e] hover:bg-[#c9a96e]/10"
-                          >
-                            <a href={contrato.linkContrato} target="_blank" rel="noopener noreferrer">
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </a>
-                          </Button>
+                          {contrato.linkContrato?.includes('/sign/') && (
+                            <Button
+                              asChild
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-[#c9a96e]/60 hover:text-[#c9a96e] hover:bg-[#c9a96e]/10"
+                            >
+                              <a href={contrato.linkContrato} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -383,11 +385,13 @@ export function ContratosTable({ contratos, onRefresh }: ContratosTableProps) {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}
-                    <Button asChild variant="ghost" size="sm" className="h-7 w-7 p-0 text-[#c9a96e]/60">
-                      <a href={contrato.linkContrato} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    </Button>
+                    {contrato.linkContrato?.includes('/sign/') && (
+                      <Button asChild variant="ghost" size="sm" className="h-7 w-7 p-0 text-[#c9a96e]/60">
+                        <a href={contrato.linkContrato} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
