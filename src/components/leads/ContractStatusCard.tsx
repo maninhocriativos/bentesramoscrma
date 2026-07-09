@@ -215,7 +215,7 @@ export function ContractStatusCard({ leadId, linkContrato }: ContractStatusCardP
           </p>
         )}
 
-        {linkContrato?.startsWith('http') && (
+        {linkContrato?.includes('/sign/') && (
           <a
             href={linkContrato}
             target="_blank"
