@@ -58,7 +58,7 @@ export function TagBadge({ tag, reason, size = 'sm', showRemove, onRemove }: Tag
         <button
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
           className="ml-0.5 rounded-full p-0.5 leading-none opacity-0 -mr-1 w-0 overflow-hidden
-            group-hover/tag:opacity-100 group-hover/tag:w-auto group-hover/tag:mr-0 hover:bg-black/15 transition-all duration-150"
+            group-hover/tag:opacity-100 group-hover/tag:w-auto group-hover/tag:mr-0 hover:bg-foreground/10 transition-all duration-150"
           aria-label={`Remover tag ${tag.name}`}
         >
           <X className="h-2.5 w-2.5" />

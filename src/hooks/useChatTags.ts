@@ -243,17 +243,19 @@ export function useChatTags() {
 }
 
 // Color mapping for tailwind classes
-export const TAG_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  orange:  { bg: 'bg-orange-100',  text: 'text-orange-700',  border: 'border-orange-300' },
-  green:   { bg: 'bg-green-100',   text: 'text-green-700',   border: 'border-green-300' },
-  blue:    { bg: 'bg-blue-100',    text: 'text-blue-700',    border: 'border-blue-300' },
-  red:     { bg: 'bg-red-100',     text: 'text-red-700',     border: 'border-red-300' },
-  yellow:  { bg: 'bg-yellow-100',  text: 'text-yellow-700',  border: 'border-yellow-300' },
-  purple:  { bg: 'bg-purple-100',  text: 'text-purple-700',  border: 'border-purple-300' },
-  cyan:    { bg: 'bg-cyan-100',    text: 'text-cyan-700',    border: 'border-cyan-300' },
-  indigo:  { bg: 'bg-indigo-100',  text: 'text-indigo-700',  border: 'border-indigo-300' },
-  emerald: { bg: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-300' },
-  amber:   { bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-300' },
-  pink:    { bg: 'bg-pink-100',    text: 'text-pink-700',    border: 'border-pink-300' },
-  gray:    { bg: 'bg-gray-100',    text: 'text-gray-600',    border: 'border-gray-300' },
+// Estilo translúcido: elegante e legível em tema claro e escuro (o chat é escuro).
+// `dot` é a cor sólida do pontinho de identidade da tag.
+export const TAG_COLORS: Record<string, { bg: string; text: string; border: string; dot: string }> = {
+  orange:  { bg: 'bg-orange-500/12',  text: 'text-orange-700 dark:text-orange-300',   border: 'border-orange-500/25',  dot: 'bg-orange-500' },
+  green:   { bg: 'bg-green-500/12',   text: 'text-green-700 dark:text-green-300',     border: 'border-green-500/25',   dot: 'bg-green-500' },
+  blue:    { bg: 'bg-blue-500/12',    text: 'text-blue-700 dark:text-blue-300',       border: 'border-blue-500/25',    dot: 'bg-blue-500' },
+  red:     { bg: 'bg-red-500/12',     text: 'text-red-700 dark:text-red-300',         border: 'border-red-500/25',     dot: 'bg-red-500' },
+  yellow:  { bg: 'bg-yellow-500/12',  text: 'text-yellow-700 dark:text-yellow-300',   border: 'border-yellow-500/25',  dot: 'bg-yellow-500' },
+  purple:  { bg: 'bg-purple-500/12',  text: 'text-purple-700 dark:text-purple-300',   border: 'border-purple-500/25',  dot: 'bg-purple-500' },
+  cyan:    { bg: 'bg-cyan-500/12',    text: 'text-cyan-700 dark:text-cyan-300',       border: 'border-cyan-500/25',    dot: 'bg-cyan-500' },
+  indigo:  { bg: 'bg-indigo-500/12',  text: 'text-indigo-700 dark:text-indigo-300',   border: 'border-indigo-500/25',  dot: 'bg-indigo-500' },
+  emerald: { bg: 'bg-emerald-500/12', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-500/25', dot: 'bg-emerald-500' },
+  amber:   { bg: 'bg-amber-500/12',   text: 'text-amber-700 dark:text-amber-300',     border: 'border-amber-500/25',   dot: 'bg-amber-500' },
+  pink:    { bg: 'bg-pink-500/12',    text: 'text-pink-700 dark:text-pink-300',       border: 'border-pink-500/25',    dot: 'bg-pink-500' },
+  gray:    { bg: 'bg-gray-500/12',    text: 'text-gray-700 dark:text-gray-300',       border: 'border-gray-500/25',    dot: 'bg-gray-400' },
 };

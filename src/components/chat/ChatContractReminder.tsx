@@ -175,58 +175,68 @@ export function ChatContractReminder({ leadId, leadNome, triggerClassName }: Cha
         size="icon"
         title="Enviar lembrete de assinatura"
         onClick={() => setOpen(true)}
-        className={cn("relative h-8 w-8 md:h-10 md:w-10 rounded-full", triggerClassName)}
+        className={cn(
+          "relative h-8 w-8 md:h-10 md:w-10 rounded-full transition-colors",
+          pendingCount > 0 ? "text-amber-500 bg-amber-500/10 hover:bg-amber-500/20" : triggerClassName,
+        )}
       >
         <PenLine className="h-4 w-4 md:h-[18px] md:w-[18px]" />
         {pendingCount > 0 && (
-          <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-background" />
+          <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-background animate-pulse" />
         )}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
-          <DialogHeader className="px-4 py-3 border-b border-border/60">
-            <DialogTitle className="flex items-center gap-2 text-[15px]">
-              <PenLine className="h-4 w-4 text-[#00A884]" />
-              Enviar lembrete de assinatura
-            </DialogTitle>
-            {leadNome && <p className="text-xs text-muted-foreground mt-0.5">Para {leadNome} — enviado no chat</p>}
+        <DialogContent className="max-w-md p-0 gap-0 overflow-hidden rounded-2xl">
+          {/* Header */}
+          <DialogHeader className="px-5 pt-5 pb-4 space-y-0 text-left">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#00A884]/10 text-[#00A884] shrink-0">
+                <PenLine className="h-[18px] w-[18px]" />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle className="text-[15px] font-semibold leading-tight">Lembrete de assinatura</DialogTitle>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                  {leadNome ? <>Para <span className="font-medium text-foreground/80">{leadNome}</span> · enviado no chat</> : "Enviado no chat"}
+                </p>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="p-4 space-y-3">
+          <div className="px-5 pb-1 space-y-3">
             {/* Provedor */}
-            <div className="flex gap-1 p-1 rounded-xl bg-muted/50">
-              {providerBtn("clicksign", "ClickSign", FileText, "bg-white dark:bg-zinc-800 text-[#c9a96e] shadow-sm")}
-              {providerBtn("zapsign", "ZapSign", Zap, "bg-white dark:bg-zinc-800 text-cyan-600 shadow-sm")}
+            <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-muted/60">
+              {providerBtn("clicksign", "ClickSign", FileText, "bg-background text-[#c9a96e] shadow-sm ring-1 ring-black/5")}
+              {providerBtn("zapsign", "ZapSign", Zap, "bg-background text-cyan-600 shadow-sm ring-1 ring-black/5")}
             </div>
 
             {/* Busca */}
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar contrato por nome…"
-                className="h-9 pl-8 text-[13px]"
+                className="h-10 pl-9 text-[13px] rounded-xl bg-muted/40 border-transparent focus-visible:bg-background"
               />
             </div>
 
             {/* Lista */}
-            <div className="max-h-[240px] overflow-y-auto -mx-1 px-1 space-y-1">
+            <div className="max-h-[248px] overflow-y-auto -mx-1 px-1 space-y-1.5">
               {isLoading ? (
-                <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Buscando contratos…
+                <div className="flex flex-col items-center justify-center gap-2 py-10 text-xs text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin opacity-70" /> Buscando contratos…
                 </div>
               ) : contracts.length === 0 ? (
-                <div className="py-8 text-center">
-                  <FileText className="h-7 w-7 mx-auto mb-2 opacity-30" />
-                  <p className="text-xs text-muted-foreground">
-                    Nenhum contrato {provider === "clicksign" ? "ClickSign" : "ZapSign"} encontrado.
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-1">Tente buscar pelo nome ou troque de provedor.</p>
+                <div className="py-10 text-center">
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                    <FileText className="h-6 w-6 text-muted-foreground/60" />
+                  </div>
+                  <p className="text-[13px] font-medium">Nenhum contrato {provider === "clicksign" ? "ClickSign" : "ZapSign"}</p>
+                  <p className="text-[11.5px] text-muted-foreground mt-0.5">Busque pelo nome ou troque de provedor acima.</p>
                   <button
                     onClick={() => { setOpen(false); navigate("/contratos"); }}
-                    className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-[#00A884] hover:underline"
+                    className="mt-3 inline-flex items-center gap-1 text-[11.5px] font-medium text-[#00A884] hover:underline"
                   >
                     Ir para Contratos <ExternalLink className="h-3 w-3" />
                   </button>
@@ -235,29 +245,35 @@ export function ChatContractReminder({ leadId, leadNome, triggerClassName }: Cha
                 contracts.map((c) => {
                   const meta = statusMeta(c.status);
                   const isSel = selected?.id === c.id;
+                  const accent = c.provider === "clicksign" ? "text-[#c9a96e]" : "text-cyan-500";
                   return (
                     <button
                       key={c.id}
                       type="button"
                       onClick={() => setSelected(c)}
                       className={cn(
-                        "w-full text-left px-3 py-2 rounded-lg border transition-all",
+                        "group/row relative w-full text-left pl-3.5 pr-3 py-2.5 rounded-xl border transition-all overflow-hidden",
                         isSel
-                          ? "border-[#00A884] bg-[#00A884]/5 ring-1 ring-[#00A884]/30"
-                          : "border-border/60 hover:bg-muted/50",
+                          ? "border-[#00A884]/50 bg-[#00A884]/[0.07] ring-1 ring-[#00A884]/25"
+                          : "border-border/50 hover:border-border hover:bg-muted/40",
                       )}
                     >
-                      <div className="flex items-center gap-1.5 min-w-0">
+                      <span className={cn(
+                        "absolute left-0 top-0 h-full w-[3px] rounded-r transition-opacity",
+                        c.provider === "clicksign" ? "bg-[#c9a96e]" : "bg-cyan-500",
+                        isSel ? "opacity-100" : "opacity-0 group-hover/row:opacity-40",
+                      )} />
+                      <div className="flex items-center gap-2 min-w-0">
                         {c.provider === "clicksign"
-                          ? <FileText className="h-3.5 w-3.5 shrink-0 text-[#c9a96e]" />
-                          : <Zap className="h-3.5 w-3.5 shrink-0 text-cyan-500" />}
-                        <span className="text-[12.5px] font-medium truncate flex-1" title={c.name}>{c.name}</span>
-                        <span className={cn("inline-flex items-center gap-0.5 text-[10px] font-semibold shrink-0", meta.cls)}>
-                          <meta.Icon className="h-3 w-3" />{meta.label}
+                          ? <FileText className={cn("h-4 w-4 shrink-0", accent)} />
+                          : <Zap className={cn("h-4 w-4 shrink-0", accent)} />}
+                        <span className="text-[13px] font-medium truncate flex-1" title={c.name}>{c.name}</span>
+                        <span className={cn("inline-flex items-center gap-1 text-[10px] font-semibold shrink-0", meta.cls)}>
+                          <meta.Icon className="h-2.5 w-2.5" />{meta.label}
                         </span>
                       </div>
                       {c.signerName && (
-                        <p className="text-[11px] text-muted-foreground truncate mt-0.5 pl-5">👤 {c.signerName}</p>
+                        <p className="text-[11px] text-muted-foreground truncate mt-1 pl-6">👤 {c.signerName}</p>
                       )}
                     </button>
                   );
@@ -266,18 +282,18 @@ export function ChatContractReminder({ leadId, leadNome, triggerClassName }: Cha
             </div>
           </div>
 
-          <DialogFooter className="px-4 py-3 border-t border-border/60 gap-2 sm:gap-2">
+          <DialogFooter className="px-5 py-4 gap-2 sm:gap-2">
             <Button
               variant="outline"
-              className="flex-1 h-9 gap-1.5 text-[13px]"
+              className="flex-1 h-10 gap-1.5 text-[13px] rounded-xl border-emerald-500/30 text-emerald-600 dark:text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-600 disabled:opacity-40"
               disabled={!selected || sending !== null}
               onClick={() => send("soft")}
             >
-              {sending === "soft" ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4 text-emerald-600" />}
+              {sending === "soft" ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
               Lembrete
             </Button>
             <Button
-              className="flex-1 h-9 gap-1.5 text-[13px] bg-amber-500 hover:bg-amber-600 text-white"
+              className="flex-1 h-10 gap-1.5 text-[13px] rounded-xl bg-amber-500 hover:bg-amber-600 text-white shadow-sm shadow-amber-500/25 disabled:opacity-40 disabled:shadow-none"
               disabled={!selected || sending !== null}
               onClick={() => send("urgent")}
             >
