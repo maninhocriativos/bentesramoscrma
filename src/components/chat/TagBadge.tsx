@@ -27,10 +27,13 @@ interface TagBadgeProps {
   size?: 'sm' | 'md';
   showRemove?: boolean;
   onRemove?: () => void;
+  /** Tema do chat (independente do app). true = fundo escuro → usa texto claro. */
+  dark?: boolean;
 }
 
-export function TagBadge({ tag, reason, size = 'sm', showRemove, onRemove }: TagBadgeProps) {
+export function TagBadge({ tag, reason, size = 'sm', showRemove, onRemove, dark }: TagBadgeProps) {
   const colors = TAG_COLORS[tag.color] || TAG_COLORS.gray;
+  const textCls = dark ? colors.textDark : colors.text;
   const Icon = getTagIcon(tag);
 
   const containerCls = size === 'sm'
@@ -45,7 +48,7 @@ export function TagBadge({ tag, reason, size = 'sm', showRemove, onRemove }: Tag
         'group/tag inline-flex items-center rounded-full border font-medium whitespace-nowrap select-none',
         'shadow-sm transition-all duration-150 hover:shadow',
         colors.bg,
-        colors.text,
+        textCls,
         colors.border,
         containerCls,
         showRemove && 'pr-0.5',

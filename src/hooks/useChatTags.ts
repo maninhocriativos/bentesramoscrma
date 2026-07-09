@@ -243,19 +243,20 @@ export function useChatTags() {
 }
 
 // Color mapping for tailwind classes
-// Estilo translúcido: elegante e legível em tema claro e escuro (o chat é escuro).
-// `dot` é a cor sólida do pontinho de identidade da tag.
-export const TAG_COLORS: Record<string, { bg: string; text: string; border: string; dot: string }> = {
-  orange:  { bg: 'bg-orange-500/12',  text: 'text-orange-700 dark:text-orange-300',   border: 'border-orange-500/25',  dot: 'bg-orange-500' },
-  green:   { bg: 'bg-green-500/12',   text: 'text-green-700 dark:text-green-300',     border: 'border-green-500/25',   dot: 'bg-green-500' },
-  blue:    { bg: 'bg-blue-500/12',    text: 'text-blue-700 dark:text-blue-300',       border: 'border-blue-500/25',    dot: 'bg-blue-500' },
-  red:     { bg: 'bg-red-500/12',     text: 'text-red-700 dark:text-red-300',         border: 'border-red-500/25',     dot: 'bg-red-500' },
-  yellow:  { bg: 'bg-yellow-500/12',  text: 'text-yellow-700 dark:text-yellow-300',   border: 'border-yellow-500/25',  dot: 'bg-yellow-500' },
-  purple:  { bg: 'bg-purple-500/12',  text: 'text-purple-700 dark:text-purple-300',   border: 'border-purple-500/25',  dot: 'bg-purple-500' },
-  cyan:    { bg: 'bg-cyan-500/12',    text: 'text-cyan-700 dark:text-cyan-300',       border: 'border-cyan-500/25',    dot: 'bg-cyan-500' },
-  indigo:  { bg: 'bg-indigo-500/12',  text: 'text-indigo-700 dark:text-indigo-300',   border: 'border-indigo-500/25',  dot: 'bg-indigo-500' },
-  emerald: { bg: 'bg-emerald-500/12', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-500/25', dot: 'bg-emerald-500' },
-  amber:   { bg: 'bg-amber-500/12',   text: 'text-amber-700 dark:text-amber-300',     border: 'border-amber-500/25',   dot: 'bg-amber-500' },
-  pink:    { bg: 'bg-pink-500/12',    text: 'text-pink-700 dark:text-pink-300',       border: 'border-pink-500/25',    dot: 'bg-pink-500' },
-  gray:    { bg: 'bg-gray-500/12',    text: 'text-gray-700 dark:text-gray-300',       border: 'border-gray-500/25',    dot: 'bg-gray-400' },
+// Estilo translúcido. O chat tem tema próprio (useChatTheme), independente do
+// `dark` class do app — por isso NÃO dá para usar `dark:` aqui. Guardamos o tom
+// claro (`text`) e o escuro (`textDark`) e o componente escolhe conforme o tema.
+export const TAG_COLORS: Record<string, { bg: string; text: string; textDark: string; border: string; dot: string }> = {
+  orange:  { bg: 'bg-orange-500/15',  text: 'text-orange-700',  textDark: 'text-orange-300',  border: 'border-orange-500/30',  dot: 'bg-orange-500' },
+  green:   { bg: 'bg-green-500/15',   text: 'text-green-700',   textDark: 'text-green-300',   border: 'border-green-500/30',   dot: 'bg-green-500' },
+  blue:    { bg: 'bg-blue-500/15',    text: 'text-blue-700',    textDark: 'text-blue-300',    border: 'border-blue-500/30',    dot: 'bg-blue-500' },
+  red:     { bg: 'bg-red-500/15',     text: 'text-red-700',     textDark: 'text-red-300',     border: 'border-red-500/30',     dot: 'bg-red-500' },
+  yellow:  { bg: 'bg-yellow-500/15',  text: 'text-yellow-700',  textDark: 'text-yellow-300',  border: 'border-yellow-500/30',  dot: 'bg-yellow-500' },
+  purple:  { bg: 'bg-purple-500/15',  text: 'text-purple-700',  textDark: 'text-purple-300',  border: 'border-purple-500/30',  dot: 'bg-purple-500' },
+  cyan:    { bg: 'bg-cyan-500/15',    text: 'text-cyan-700',    textDark: 'text-cyan-300',    border: 'border-cyan-500/30',    dot: 'bg-cyan-500' },
+  indigo:  { bg: 'bg-indigo-500/15',  text: 'text-indigo-700',  textDark: 'text-indigo-300',  border: 'border-indigo-500/30',  dot: 'bg-indigo-500' },
+  emerald: { bg: 'bg-emerald-500/15', text: 'text-emerald-700', textDark: 'text-emerald-300', border: 'border-emerald-500/30', dot: 'bg-emerald-500' },
+  amber:   { bg: 'bg-amber-500/15',   text: 'text-amber-700',   textDark: 'text-amber-300',   border: 'border-amber-500/30',   dot: 'bg-amber-500' },
+  pink:    { bg: 'bg-pink-500/15',    text: 'text-pink-700',    textDark: 'text-pink-300',    border: 'border-pink-500/30',    dot: 'bg-pink-500' },
+  gray:    { bg: 'bg-gray-500/15',    text: 'text-gray-700',    textDark: 'text-gray-300',    border: 'border-gray-500/30',    dot: 'bg-gray-400' },
 };

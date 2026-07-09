@@ -2548,7 +2548,7 @@ const ManyChatInboxContent = () => {
                 </div>
                 <div className="flex items-center gap-1 mt-[2px] min-w-0 flex-wrap">
                   {getSubscriberTags(selectedSubscriber.subscriber_id).map(st => st.tag && (
-                    <TagBadge key={st.id} tag={st.tag} reason={st.reason} size="sm" showRemove
+                    <TagBadge key={st.id} tag={st.tag} reason={st.reason} size="sm" showRemove dark={isDark}
                       onRemove={() => removeTagFromSubscriber(selectedSubscriber.subscriber_id, st.tag_id)} />
                   ))}
                   <TagSelector
