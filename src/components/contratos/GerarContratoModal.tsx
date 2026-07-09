@@ -411,10 +411,13 @@ export function GerarContratoModal({
       }
 
       // 3. Update lead with contract link if using lead data
-      const clicksignDocumentUrl = `https://app.clicksign.com/document/${documentKey}`;
+      // Só persiste link de assinatura VÁLIDO (/sign/<request_signature_key>).
+      // O antigo fallback /document/<key> é página interna (exige login) e gera
+      // erro para o cliente — nesses casos guardamos null e a listagem resolve o
+      // sign_url correto depois (via edge function).
       const clicksignSignUrl = primaryRequestSignatureKey
         ? `https://app.clicksign.com/sign/${primaryRequestSignatureKey}`
-        : clicksignDocumentUrl;
+        : null;
       
       if (dataSource === 'lead' && selectedLeadId) {
         await supabase

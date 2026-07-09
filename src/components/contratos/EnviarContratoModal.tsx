@@ -151,10 +151,13 @@ export function EnviarContratoModal({ isOpen, onClose, onSuccess, preSelectedLea
       // Update lead with contract link if a lead was selected
       if (selectedLeadId && documentKey) {
         const requestKey: string | undefined = listData?.list?.request_signature_key;
-        const clicksignDocumentUrl = `https://app.clicksign.com/document/${documentKey}`;
+        // Só persiste link de assinatura VÁLIDO (/sign/<request_signature_key>).
+        // O antigo fallback /document/<key> é uma página interna que exige login e
+        // leva a erro para o cliente — nesses casos guardamos null e a listagem
+        // resolve o sign_url correto depois (via edge function).
         const clicksignSignUrl = requestKey
           ? `https://app.clicksign.com/sign/${requestKey}`
-          : clicksignDocumentUrl;
+          : null;
 
         await supabase
           .from('leads_juridicos')

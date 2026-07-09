@@ -215,9 +215,9 @@ export function ContractStatusCard({ leadId, linkContrato }: ContractStatusCardP
           </p>
         )}
 
-        {linkContrato && (
+        {linkContrato?.startsWith('http') && (
           <a
-            href={linkContrato.startsWith('http') ? linkContrato : `https://app.clicksign.com/documents/${linkContrato}`}
+            href={linkContrato}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-sm text-purple-600 hover:text-purple-700 hover:underline"

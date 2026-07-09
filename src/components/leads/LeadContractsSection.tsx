@@ -241,7 +241,7 @@ export function LeadContractsSection({ leadId, leadNome, leadEmail, leadPhone }:
                           </Button>
                         </>
                       )}
-                      {contract.contract_link && (
+                      {contract.contract_link?.startsWith('http') && (
                         <a href={contract.contract_link} target="_blank" rel="noopener noreferrer" className="ml-auto">
                           <Button variant="ghost" size="sm" className="text-xs h-7 gap-1">
                             <ExternalLink className="h-3 w-3" />Abrir
