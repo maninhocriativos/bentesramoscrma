@@ -27,6 +27,7 @@ import { ForwardMessageModal } from "@/components/chat/ForwardMessageModal";
 import { ConversationSearch } from "@/components/chat/ConversationSearch";
 import { SendContactModal } from "@/components/chat/SendContactModal";
 import { ContratoFechadoModal } from "@/components/chat/ContratoFechadoModal";
+import { ChatContractReminder } from "@/components/chat/ChatContractReminder";
 import { useMetaCapi } from "@/hooks/useMetaCapi";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ChatFiltersBar, type ConversationFilter, type OrigemFilter } from "@/components/chat/ChatFiltersBar";
@@ -2521,9 +2522,26 @@ const ManyChatInboxContent = () => {
                     );
                   })()}
                 </div>
-                {/* Linha 2: status + tags — separados para não comprimir */}
+                {/* Linha 2: status + telefone + tags — separados para não comprimir */}
                 <div className="flex items-center gap-1.5 mt-[3px] min-w-0 overflow-hidden flex-wrap">
                   <ActivityIndicator subscriber={selectedSubscriber} showText />
+                  {formatPhone(selectedSubscriber.telefone) && (
+                    <>
+                      <span className={`text-[11px] ${themeClasses.secondaryText} opacity-40 shrink-0`}>•</span>
+                      <button
+                        type="button"
+                        title="Copiar número"
+                        onClick={() => {
+                          navigator.clipboard.writeText(formatPhone(selectedSubscriber.telefone) || selectedSubscriber.telefone || "");
+                          toast({ title: "Número copiado" });
+                        }}
+                        className={`group inline-flex items-center gap-1 text-[11px] font-medium tabular-nums ${themeClasses.secondaryText} hover:text-[#00A884] transition-colors shrink-0`}
+                      >
+                        <Phone className="h-3 w-3 opacity-60 group-hover:opacity-100" />
+                        {formatPhone(selectedSubscriber.telefone)}
+                      </button>
+                    </>
+                  )}
                   {isTyping(selectedSubscriber.subscriber_id) && (
                     <span className="text-[11px] text-[#00A884] font-medium animate-pulse shrink-0">digitando...</span>
                   )}
@@ -2567,13 +2585,20 @@ const ManyChatInboxContent = () => {
                   onClick={() => setContratoModalOpen(true)}
                   title="Registrar contrato fechado"
                   className="h-7 md:h-8 px-2.5 md:px-3.5 rounded-full gap-1.5 text-[11px] md:text-xs font-semibold
-                    bg-emerald-500 text-white border border-emerald-500
-                    hover:bg-emerald-600 hover:border-emerald-600 hover:shadow-md hover:shadow-emerald-500/30
+                    border border-emerald-400/60 bg-emerald-500/10 text-emerald-600 dark:text-emerald-500
+                    hover:bg-emerald-500 hover:text-white hover:border-emerald-500 hover:shadow-md hover:shadow-emerald-500/25
                     active:scale-95 transition-all duration-150"
                 >
                   <BadgeCheck className="h-3.5 w-3.5 shrink-0" />
                   <span className="hidden lg:inline">Contrato Fechado</span>
                 </Button>
+
+                {/* ✍️ LEMBRETE DE ASSINATURA (link real ClickSign/ZapSign do contrato do lead) */}
+                <ChatContractReminder
+                  leadId={selectedSubscriber.lead_id}
+                  leadNome={getDisplayName(selectedSubscriber)}
+                  triggerClassName={`${themeClasses.iconColor} ${themeClasses.hoverBtn}`}
+                />
 
                 {selectedSubscriber.telefone && (
                   <>

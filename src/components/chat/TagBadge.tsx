@@ -42,7 +42,8 @@ export function TagBadge({ tag, reason, size = 'sm', showRemove, onRemove }: Tag
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-full border font-semibold whitespace-nowrap select-none',
+        'group/tag inline-flex items-center rounded-full border font-medium whitespace-nowrap select-none',
+        'shadow-sm transition-all duration-150 hover:shadow',
         colors.bg,
         colors.text,
         colors.border,
@@ -56,7 +57,9 @@ export function TagBadge({ tag, reason, size = 'sm', showRemove, onRemove }: Tag
       {showRemove && onRemove && (
         <button
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
-          className="ml-0.5 rounded-full hover:bg-black/10 p-0.5 leading-none"
+          className="ml-0.5 rounded-full p-0.5 leading-none opacity-0 -mr-1 w-0 overflow-hidden
+            group-hover/tag:opacity-100 group-hover/tag:w-auto group-hover/tag:mr-0 hover:bg-black/15 transition-all duration-150"
+          aria-label={`Remover tag ${tag.name}`}
         >
           <X className="h-2.5 w-2.5" />
         </button>
