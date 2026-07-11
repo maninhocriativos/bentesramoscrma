@@ -10,6 +10,7 @@ import {
   getProximaSegundaUtc,
   validarAgendamento
 } from '../_shared/timezone-helpers.ts';
+import { siteUrl } from '../_shared/site.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -599,7 +600,7 @@ async function enviarNotificacaoEquipe(
           <p><strong>Urgência:</strong> <span style="background:${urgenciaCor};color:white;padding:2px 8px;border-radius:12px;">${analise.urgencia}</span></p>
           ${acoesHtml}
           <div style="text-align:center;margin-top:24px;">
-            <a href="https://lovable.dev/projects/qgenaltkjtlvwfgykpxq" style="background:#3b82f6;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;">Revisar no Sistema</a>
+            <a href="${siteUrl('isa-autonoma')}" style="background:#3b82f6;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;">Revisar no Sistema</a>
           </div>
         </div>
       </div>
@@ -1971,7 +1972,7 @@ serve(async (req: Request) => {
       const newAgent = transferredToAgent;
 
       // Prova social: imagem Bradesco + texto de casos de sucesso antes da transferência
-      const PROVA_SOCIAL_IMG = 'https://bentesramoscrma.lovable.app/images/prova-social-bradesco.jpg';
+      const PROVA_SOCIAL_IMG = siteUrl('images/prova-social-bradesco.jpg');
       const provaSocialTexto = 'Enquanto direciono seu atendimento, compartilho um exemplo de caso bancario ja analisado pelo escritorio. Seguimos com criterio, documentacao adequada e proximos passos objetivos.';
       const imgSend = await enviarImagemZapi(supabase, subscriber_id, PROVA_SOCIAL_IMG, provaSocialTexto);
       if (imgSend.success) {

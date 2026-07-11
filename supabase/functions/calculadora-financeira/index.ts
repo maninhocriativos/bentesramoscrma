@@ -1,4 +1,6 @@
 // xhr polyfill removed — using native fetch
+import { chatCompletion, AIError } from "../_shared/ai-helper.ts";
+
 const serve = Deno.serve;
 
 const corsHeaders = {
@@ -69,11 +71,6 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY não configurada');
-    }
-
     const { message, conversationHistory = [] } = await req.json();
 
     if (!message) {
@@ -87,43 +84,28 @@ serve(async (req) => {
       { role: 'user', content: message }
     ];
 
-    console.log('Sending request to AI gateway...');
+    console.log('Sending request to AI (OpenAI → Claude fallback)...');
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages,
-        stream: false,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI gateway error:', response.status, errorText);
-      
-      if (response.status === 429) {
+    let assistantResponse = '';
+    try {
+      assistantResponse = await chatCompletion({ messages, maxTokens: 4000 });
+    } catch (aiErr) {
+      const status = aiErr instanceof AIError ? aiErr.status : 500;
+      console.error('Erro IA calculadora:', status, (aiErr as Error).message);
+      if (status === 429) {
         return new Response(JSON.stringify({ error: 'Limite de requisições excedido. Tente novamente em alguns instantes.' }), {
           status: 429,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      if (response.status === 402) {
+      if (status === 402) {
         return new Response(JSON.stringify({ error: 'Créditos insuficientes. Entre em contato com o administrador.' }), {
           status: 402,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      
-      throw new Error(`Erro no gateway de IA: ${response.status}`);
+      throw new Error(`Erro no serviço de IA: ${status}`);
     }
-
-    const data = await response.json();
-    const assistantResponse = data.choices?.[0]?.message?.content;
 
     if (!assistantResponse) {
       throw new Error('Resposta vazia da IA');

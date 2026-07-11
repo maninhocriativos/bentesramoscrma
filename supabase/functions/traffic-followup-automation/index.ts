@@ -4,6 +4,7 @@ import {
   sendText, sendImage, sendDocument, sendAudio, sendVideo,
   sendButtonList, normalizePhone,
 } from '../_shared/zapi-helper.ts';
+import { siteUrl } from '../_shared/site.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -41,8 +42,8 @@ const TEXTO_FOLLOWUP_1 = `Entendo que analisar questões jurídicas exija cautel
 
 Enquanto o seu documento não entra na nossa fila de análise, o tempo corre a favor do banco. Basta encaminhar o PDF ou uma foto nítida aqui mesmo para darmos andamento.`;
 
-// Prova social (2º follow-up) — imagem no servidor Lovable (confirmado 200 OK)
-const PROVA_SOCIAL_IMAGE_URL = 'https://bentesramoscrma.lovable.app/images/prova-social-bradesco.jpg';
+// Prova social (2º follow-up) — imagem servida pelo domínio de produção (Netlify)
+const PROVA_SOCIAL_IMAGE_URL = siteUrl('images/prova-social-bradesco.jpg');
 const PROVA_SOCIAL_TEXTO = (nome: string) => {
   const n = (nome || 'Cliente').split(' ')[0];
   return `${n}, olha essa decisão que acabamos de ganhar! 🎉\n\nUm banco foi *condenado a pagar R$ 8.000,00* por cobrança indevida em contrato de financiamento.\n\nSe você também passa por algo parecido, seus direitos podem estar sendo violados. 💬 Me conta sua situação!`;

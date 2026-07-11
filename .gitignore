@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Secrets (nunca commitar — arquivo local com credenciais reais)
+docs/SECRETS.local.md
+*.secrets.md
+.env.local
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

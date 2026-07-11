@@ -12,8 +12,9 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { assetUrl } from '@/lib/siteConfig';
 
-const DEFAULT_IMAGE_URL = 'https://bentesramoscrma.lovable.app/images/prova-social-bradesco.jpg';
+const DEFAULT_IMAGE_URL = assetUrl('images/prova-social-bradesco.jpg');
 
 const DEFAULT_MESSAGE = `Olá {nome}! Aqui é a *Isa do Bentes & Ramos* 🏛️
 

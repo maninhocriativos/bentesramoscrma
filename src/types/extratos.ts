@@ -17,22 +17,21 @@ export interface AnaliseResultado {
     periodo_analisado: string;
     banco: string;
   };
+  // Cada item é um lançamento individual do extrato (análise item a item, sem agrupamento).
   cobrancas_indevidas: Array<{
     data: string;
     descricao: string;
     valor_unitario: number;
+    /** Sempre 1 no modelo individual — mantido por compatibilidade. */
     quantidade_ocorrencias: number;
     valor_total: number;
     categoria: string;
     status: string;
     base_legal: string;
+    /** Justificativa jurídica individual do lançamento (gerada pela IA). */
     justificativa: string;
+    /** Sempre false no modelo individual — mantido por compatibilidade. */
     recorrente: boolean;
-  }>;
-  por_categoria: Array<{
-    categoria: string;
-    total: number;
-    ocorrencias: number;
   }>;
   recomendacao: {
     tipo_acao: string;

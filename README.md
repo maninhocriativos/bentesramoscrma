@@ -1,73 +1,134 @@
-# Welcome to your Lovable project
+# CRM Bentes Ramos
 
-## Project info
+CRM jurídico do escritório **Bentes Ramos**. Gestão de leads, processos, petições,
+contratos, financeiro, agenda e atendimento omnichannel (WhatsApp, Instagram, Meta Leads),
+com uma assistente de IA ("Isa") para automações.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+> ⚠️ **Este projeto NÃO usa Lovable.** O fluxo de trabalho é **git + Supabase + Netlify**.
+> Ainda existem resquícios do Lovable no código (dependência, URLs de assets e um gateway de IA) —
+> veja [Dívidas técnicas do Lovable](#dívidas-técnicas-do-lovable).
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+## Stack
 
-**Use Lovable**
+| Camada | Tecnologia |
+|---|---|
+| Frontend | Vite + React 18 + TypeScript + shadcn/ui + Tailwind CSS |
+| Estado/dados | TanStack React Query, React Router v6 |
+| Backend | Supabase — Postgres + Auth + Storage + Realtime |
+| Funções serverless | 71 Supabase Edge Functions (Deno) em `supabase/functions/` |
+| Hospedagem (frontend) | **Netlify** |
+| CI/CD | GitHub Actions (deploy de functions e migrations no push para `main`) |
+| PWA | `vite-plugin-pwa` (service worker versionado por build) |
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+Supabase project ref: `qgenaltkjtlvwfgykpxq`
 
-Changes made via Lovable will be committed automatically to this repo.
+---
 
-**Use your preferred IDE**
+## Rodando localmente
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+Pré-requisitos: **Node.js 18+** (o repo usa `bun.lock`, mas `npm` funciona).
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# 1. Instalar dependências
+npm install        # ou: bun install
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# 2. Configurar variáveis de ambiente (ver seção abaixo)
+#    Copie o modelo e preencha:
+cp .env.example .env   # se existir; senão veja "Variáveis de ambiente"
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# 3. Subir o dev server (porta 8080)
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Scripts disponíveis:
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+| Comando | O que faz |
+|---|---|
+| `npm run dev` | Dev server em `http://localhost:8080` |
+| `npm run build` | Build de produção |
+| `npm run build:dev` | Build em modo development |
+| `npm run lint` | ESLint |
+| `npm run preview` | Preview do build |
 
-**Use GitHub Codespaces**
+---
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Variáveis de ambiente
 
-## What technologies are used for this project?
+**Frontend** (`.env`, prefixo `VITE_`, embarcadas no bundle — não são segredo):
 
-This project is built with:
+```
+VITE_SUPABASE_URL=https://qgenaltkjtlvwfgykpxq.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=<anon key>
+VITE_SUPABASE_PROJECT_ID=qgenaltkjtlvwfgykpxq
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+**Backend** (secrets das Edge Functions) ficam no painel do Supabase
+(`Project Settings → Edge Functions → Secrets`), **não** no `.env`.
+A lista completa e onde obter cada um está documentada em `docs/SECRETS.local.md`
+(arquivo local, fora do git).
 
-## How can I deploy this project?
+---
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+## Estrutura
 
-## Can I connect a custom domain to my Lovable project?
+```
+bentesramoscrma/
+├── src/
+│   ├── pages/          # 37 rotas (Dashboard, Leads, Processos, Petições, ...)
+│   ├── components/     # UI por domínio (crm, processos, contratos, chat, ...)
+│   ├── contexts/       # PerfilContext (usuário/permissões)
+│   ├── hooks/          # hooks reutilizáveis
+│   ├── integrations/   # supabase (client + types) e zapsign
+│   └── lib/            # utilitários (PDF, laudos, etc.)
+├── supabase/
+│   ├── functions/      # 71 Edge Functions (Deno)
+│   ├── migrations/     # 214 migrations SQL
+│   └── config.toml     # config de deploy das functions (verify_jwt por função)
+├── public/
+│   ├── _redirects      # rewrite SPA para Netlify
+│   ├── images/         # assets (logos, prova social)
+│   └── templates-zapsign/  # PDFs de contratos
+└── .github/workflows/  # deploy de functions, migrations e automações agendadas
+```
 
-Yes, you can!
+---
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## Deploy
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+O deploy é **automático via GitHub Actions** ao dar push na branch `main`:
+
+- **Frontend** → Netlify (build automático a cada push).
+- **Edge Functions** → `.github/workflows/deploy.yml` faz deploy de todas as
+  funções em `supabase/functions/*` (exceto `_shared`).
+- **Migrations** → `.github/workflows/deploy-migrations.yml` aplica os `.sql`
+  novos via API do Supabase. **Só processa migrations com prefixo de data ≥ `20260523`**
+  (as anteriores já estavam no banco quando o workflow foi adotado).
+- **Automações agendadas** → `intimacoes-auto-sync.yml`, `processo-auto-sync.yml`,
+  `traffic-followup-automation.yml` (cron).
+
+Secrets do CI (no GitHub): `SUPABASE_ACCESS_TOKEN`.
+
+---
+
+## Remoção do Lovable — concluída ✅
+
+O projeto nasceu no Lovable e foi totalmente desacoplado dele:
+
+| Item | Status |
+|---|---|
+| `README.md` boilerplate | ✅ Reescrito (este arquivo) |
+| Dep `lovable-tagger` | ✅ Removida do package.json (regenerar lockfile no próximo install) |
+| `playwright.config.ts` / `playwright-fixture.ts` | ✅ Reescritos com Playwright padrão (`@playwright/test`) |
+| Gateway de IA (`LOVABLE_API_KEY` + `ai.gateway.lovable.dev`) | ✅ Migrado para **OpenAI (primário) + Claude (fallback)** via `supabase/functions/_shared/ai-helper.ts` |
+| URLs `bentesramoscrma.lovable.app` (assets) | ✅ Centralizadas em `siteConfig.ts` (frontend) e `_shared/site.ts` (functions), resolvidas por `SITE_URL`/origem real |
+| Pasta `.lovable/` | ✅ Removida |
+
+**Config de IA:** modelos ajustáveis por env `OPENAI_MODEL` (default `gpt-4o`) e
+`ANTHROPIC_MODEL` (default `claude-sonnet-4-20250514`). Funções migradas:
+`petition-rewrite`, `calculadora-financeira`, `petition-generate-v3`,
+`isa-multimodal` (só OpenAI — visão/áudio), `isa-reply-manychat` (limpeza de var morta).
+
+**Pendência única:** rodar `bun install` (ou `npm install`) para regenerar os
+lockfiles sem `lovable-tagger`.

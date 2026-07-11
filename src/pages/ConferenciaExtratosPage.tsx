@@ -44,17 +44,27 @@ export default function ConferenciaExtratosPage() {
         );
 
         if (file.type === 'application/pdf') {
-          // Tenta extrair texto com pdf.js
+          // 1) PDF digital → extrai texto com pdf.js (o backend lê SEM IA).
+          // 2) PDF escaneado (pouco texto) → renderiza páginas como imagem, para a
+          //    IA de visão (OpenAI) ler. Evita depender do PDF nativo do Claude.
           try {
             console.log('Tentando pdf.js:', file.name);
-            const { extrairTextoPdf } = await import('@/lib/pdfExtractor');
+            const { extrairTextoPdf, renderizarPdfComoImagens } = await import('@/lib/pdfExtractor');
             const texto = await extrairTextoPdf(file);
             if (texto && texto.length > 100) {
               console.log('pdf.js OK:', texto.length, 'chars');
               textoExtraido += `\n\n=== ARQUIVO: ${file.name} ===\n${texto}`;
             } else {
-              console.log('pdf.js retornou pouco texto, usando base64');
-              arquivosBase64.push({ base64, mimeType: file.type, name: file.name });
+              console.log('PDF escaneado, renderizando como imagem(ns)...');
+              try {
+                const paginas = await renderizarPdfComoImagens(file);
+                paginas.forEach((b64, idx) =>
+                  imagensBase64.push({ base64: b64, mimeType: 'image/png', name: `${file.name}-p${idx + 1}.png` })
+                );
+              } catch (renderErr) {
+                console.error('Falha ao renderizar PDF, usando PDF cru:', renderErr);
+                arquivosBase64.push({ base64, mimeType: file.type, name: file.name });
+              }
             }
           } catch (err) {
             console.error('pdf.js falhou, usando base64:', err);

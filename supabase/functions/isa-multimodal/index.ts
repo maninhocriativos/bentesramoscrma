@@ -10,7 +10,8 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')!;
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+// Modelo de visão configurável (default gpt-4o, que suporta imagem).
+const OPENAI_VISION_MODEL = Deno.env.get('OPENAI_MODEL') || 'gpt-4o';
 
 
 interface MediaMessage {
@@ -78,11 +79,9 @@ async function analyzeImage(imageUrl: string, context?: string): Promise<string>
   console.log('[ISA-MULTIMODAL] 🖼️ Analisando imagem:', imageUrl);
   
   try {
-    const apiUrl = LOVABLE_API_KEY 
-      ? 'https://ai.gateway.lovable.dev/v1/chat/completions'
-      : 'https://api.openai.com/v1/chat/completions';
+    const apiUrl = 'https://api.openai.com/v1/chat/completions';
     
-    const apiKey = LOVABLE_API_KEY || OPENAI_API_KEY;
+    const apiKey = OPENAI_API_KEY;
     
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -91,7 +90,7 @@ async function analyzeImage(imageUrl: string, context?: string): Promise<string>
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: LOVABLE_API_KEY ? 'google/gemini-2.5-flash' : 'gpt-4o',
+        model: OPENAI_VISION_MODEL,
         messages: [
           {
             role: 'system',
@@ -193,11 +192,9 @@ async function extractAndAnalyzePDF(pdfUrl: string, context?: string): Promise<s
       
       // Para PDFs escaneados, enviar a URL diretamente para o modelo de visão
       // Alguns modelos conseguem ler PDFs diretamente
-      const apiUrl = LOVABLE_API_KEY 
-        ? 'https://ai.gateway.lovable.dev/v1/chat/completions'
-        : 'https://api.openai.com/v1/chat/completions';
+      const apiUrl = 'https://api.openai.com/v1/chat/completions';
       
-      const apiKey = LOVABLE_API_KEY || OPENAI_API_KEY;
+      const apiKey = OPENAI_API_KEY;
       
       const ocrResponse = await fetch(apiUrl, {
         method: 'POST',
@@ -206,7 +203,7 @@ async function extractAndAnalyzePDF(pdfUrl: string, context?: string): Promise<s
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: LOVABLE_API_KEY ? 'google/gemini-2.5-flash' : 'gpt-4o',
+          model: OPENAI_VISION_MODEL,
           messages: [
             {
               role: 'system',
@@ -257,11 +254,9 @@ ${context ? `Contexto: ${context}` : ''}`
     }
     
     // Analisar o texto extraído com GPT
-    const apiUrl = LOVABLE_API_KEY 
-      ? 'https://ai.gateway.lovable.dev/v1/chat/completions'
-      : 'https://api.openai.com/v1/chat/completions';
+    const apiUrl = 'https://api.openai.com/v1/chat/completions';
     
-    const apiKey = LOVABLE_API_KEY || OPENAI_API_KEY;
+    const apiKey = OPENAI_API_KEY;
     
     const analysisResponse = await fetch(apiUrl, {
       method: 'POST',
@@ -270,7 +265,7 @@ ${context ? `Contexto: ${context}` : ''}`
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: LOVABLE_API_KEY ? 'google/gemini-2.5-flash' : 'gpt-4o',
+        model: OPENAI_VISION_MODEL,
         messages: [
           {
             role: 'system',
@@ -325,11 +320,9 @@ async function classifyAndExtractDocument(
   console.log('[ISA-MULTIMODAL] 📄 Classificando documento para lead:', leadId);
   
   try {
-    const apiUrl = LOVABLE_API_KEY 
-      ? 'https://ai.gateway.lovable.dev/v1/chat/completions'
-      : 'https://api.openai.com/v1/chat/completions';
+    const apiUrl = 'https://api.openai.com/v1/chat/completions';
     
-    const apiKey = LOVABLE_API_KEY || OPENAI_API_KEY;
+    const apiKey = OPENAI_API_KEY;
     
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -338,7 +331,7 @@ async function classifyAndExtractDocument(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: LOVABLE_API_KEY ? 'google/gemini-2.5-flash' : 'gpt-4o',
+        model: OPENAI_VISION_MODEL,
         messages: [
           {
             role: 'system',

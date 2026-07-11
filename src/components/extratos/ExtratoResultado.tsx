@@ -29,7 +29,7 @@ const statusBadge = (status: string) => {
 const fmt = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
 
 export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
-  const { resumo, cobrancas_indevidas, por_categoria, recomendacao } = resultado;
+  const { resumo, cobrancas_indevidas, recomendacao } = resultado;
 
   const handleEnviarCRM = async () => {
     try {
@@ -122,68 +122,48 @@ export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
         ))}
       </div>
 
-      {/* Tabela detalhada */}
+      {/* Tabela detalhada — análise individual item a item */}
       {cobrancas_indevidas?.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Detalhamento das Cobranças Indevidas</CardTitle>
+            <CardTitle>Detalhamento Individual das Cobranças Indevidas</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>#</TableHead>
                   <TableHead>Data</TableHead>
                   <TableHead>Descrição</TableHead>
-                  <TableHead className="text-right">Valor Unit.</TableHead>
-                  <TableHead className="text-center">Ocorr.</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Valor</TableHead>
                   <TableHead>Categoria</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Base Legal</TableHead>
+                  <TableHead className="min-w-[280px]">Análise Individual</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {cobrancas_indevidas.map((c, i) => (
                   <TableRow key={i}>
+                    <TableCell className="text-muted-foreground text-xs">{i + 1}</TableCell>
                     <TableCell className="whitespace-nowrap">{c.data}</TableCell>
                     <TableCell className="max-w-[200px] truncate">{c.descricao}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap text-muted-foreground">
-                      R$ {fmt(c.valor_unitario || 0)}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="outline" className="text-xs">
-                        {c.quantidade_ocorrencias}×
-                      </Badge>
-                    </TableCell>
                     <TableCell className="text-right whitespace-nowrap text-destructive font-bold">
-                      R$ {fmt(c.valor_total || 0)}
+                      R$ {fmt(c.valor_total || c.valor_unitario || 0)}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">{c.categoria}</Badge>
                     </TableCell>
                     <TableCell>{statusBadge(c.status)}</TableCell>
-                    <TableCell className="max-w-[150px] truncate text-xs">{c.base_legal}</TableCell>
+                    <TableCell className="text-xs align-top">
+                      <p>{c.justificativa}</p>
+                      <p className="text-muted-foreground mt-1 italic">{c.base_legal}</p>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
-      )}
-
-      {/* Por Categoria */}
-      {por_categoria?.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {por_categoria.map((cat, i) => (
-            <Card key={i}>
-              <CardContent className="pt-4 pb-4">
-                <p className="text-xs text-muted-foreground font-medium">{cat.categoria}</p>
-                <p className="text-lg font-bold text-destructive">R$ {fmt(cat.total || 0)}</p>
-                <p className="text-xs text-muted-foreground">{cat.ocorrencias} ocorrência(s)</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
       )}
 
       {/* Gráfico */}

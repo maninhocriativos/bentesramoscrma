@@ -1,3 +1,32 @@
+// Renderiza cada página de um PDF (tipicamente escaneado, sem texto) como imagem
+// PNG em base64 — para que a IA de visão (OpenAI) consiga ler. Retorna o base64
+// PURO (sem o prefixo "data:image/png;base64,").
+export async function renderizarPdfComoImagens(file: File, escala = 2): Promise<string[]> {
+  const arrayBuffer = await file.arrayBuffer();
+  const typedArray = new Uint8Array(arrayBuffer);
+
+  const pdfjsLib: any = await import('pdfjs-dist');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+
+  const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
+  const imagens: string[] = [];
+
+  for (let n = 1; n <= pdf.numPages; n++) {
+    const page = await pdf.getPage(n);
+    const viewport = page.getViewport({ scale: escala });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) continue;
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    imagens.push(canvas.toDataURL('image/png').split(',')[1]);
+  }
+
+  console.log(`PDF renderizado como ${imagens.length} imagem(ns)`);
+  return imagens;
+}
+
 export async function extrairTextoPdf(file: File): Promise<string> {
   try {
     const arrayBuffer = await file.arrayBuffer();

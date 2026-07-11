@@ -21,7 +21,7 @@ const COR = {
 
 export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  const { resumo, cobrancas_indevidas, por_categoria, recomendacao } = resultado;
+  const { resumo, cobrancas_indevidas, recomendacao } = resultado;
   const now = new Date();
   const laudoNum = `LAU-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
 
@@ -437,50 +437,15 @@ export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig
   doc.text(periodoTexto, ML + 50, y + 7);
   y += 17;
 
-  // por categoria
-  if (por_categoria?.length) {
-    sectionTitle("Cobranças por Categoria", "2.1");
-    const wCat = [98, 30, 52];
-    tableRow(["Categoria", "Ocorrências", "Total Cobrado"], wCat, y, COR.marromEscuro, COR.bege, true);
-    y += 7.5;
-    por_categoria.forEach((cat, i) => {
-      chk(8);
-      tableRow(
-        [cat.categoria || "N/D", String(cat.ocorrencias || 0), fmt(cat.total)],
-        wCat,
-        y,
-        i % 2 === 0 ? COR.bege : COR.branco,
-        COR.cinzaEscuro,
-      );
-      y += 7.5;
-    });
-    chk(8);
-    sf(COR.marrom);
-    doc.rect(ML, y, CW, 8, "F");
-    fn(8, "bold");
-    st(COR.bege);
-    const totOc = por_categoria.reduce((s, c) => s + (c.ocorrencias || 0), 0);
-    let xTot = ML + 2;
-    [
-      ["TOTAL GERAL", 98],
-      [String(totOc), 30],
-      [fmt(resumo.valor_total_indevido), 52],
-    ].forEach(([txt, w]) => {
-      doc.text(String(txt), xTot, y + 5.5);
-      xTot += Number(w);
-    });
-    y += 13;
-  }
-
   // ════════════════════════════════════════════════════════════
-  // PÁG(S) — DETALHAMENTO
+  // PÁG(S) — DETALHAMENTO INDIVIDUAL (item a item, sem agrupamento)
   // ════════════════════════════════════════════════════════════
   addPage();
-  sectionTitle("Detalhamento das Cobranças Indevidas", "3.");
+  sectionTitle("Detalhamento Individual das Cobranças Indevidas", "3.");
 
   if (cobrancas_indevidas?.length) {
-    const wDet = [10, 22, 64, 14, 28, 32];
-    tableRow(["#", "Data", "Descrição", "Qtd", "Unit.", "Total"], wDet, y, COR.marromEscuro, COR.bege, true);
+    const wDet = [12, 30, 96, 32];
+    tableRow(["#", "Data", "Descrição", "Valor"], wDet, y, COR.marromEscuro, COR.bege, true);
     y += 7.5;
 
     cobrancas_indevidas.forEach((c, i) => {
@@ -491,8 +456,6 @@ export function gerarLaudoPdf(resultado: AnaliseResultado, config: AnaliseConfig
           String(i + 1),
           c.data || "N/D",
           c.descricao || "N/D",
-          String(c.quantidade_ocorrencias || 1),
-          fmt(c.valor_unitario || 0),
           fmt(c.valor_total || c.valor_unitario || 0),
         ],
         wDet,

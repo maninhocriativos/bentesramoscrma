@@ -1,5 +1,6 @@
 const serve = Deno.serve;
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { chatCompletion } from "../_shared/ai-helper.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,9 +16,6 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-    const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
 
     const supabase = createClient(supabaseUrl, serviceKey);
 
@@ -42,92 +40,15 @@ serve(async (req) => {
     const systemPrompt = buildSystemPrompt(petType, category, office, caseData);
     const userPrompt = buildUserPrompt(caseData, petType);
 
-    let responseContent = "";
-
-    // Priority: 1) Anthropic Claude  2) Lovable AI Gateway  3) OpenAI
-    if (anthropicKey) {
-      // Only use agent_model if it's a valid Claude model, otherwise use default
-      const rawModel = petType?.agent_model || "";
-      const claudeModel = rawModel.startsWith("claude") ? rawModel : "claude-sonnet-4-20250514";
-      console.log("Using Anthropic Claude:", claudeModel);
-
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": anthropicKey,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: claudeModel,
-          max_tokens: 16000,
-          temperature: 0.15,
-          system: systemPrompt,
-          messages: [
-            { role: "user", content: userPrompt },
-          ],
-        }),
-      });
-
-      if (!resp.ok) {
-        const errText = await resp.text();
-        console.error("Anthropic error:", resp.status, errText);
-        throw new Error(`Anthropic API error: ${resp.status} - ${errText}`);
-      }
-
-      const data = await resp.json();
-      responseContent = data.content?.[0]?.text || "";
-    } else if (lovableKey) {
-      const model = "google/gemini-2.5-flash";
-      const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${lovableKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          temperature: 0.15,
-          max_tokens: 16000,
-        }),
-      });
-
-      if (!resp.ok) {
-        const errText = await resp.text();
-        console.error("Lovable AI error:", resp.status, errText);
-        throw new Error(`AI Gateway error: ${resp.status}`);
-      }
-
-      const data = await resp.json();
-      responseContent = data.choices?.[0]?.message?.content || "";
-    } else if (openaiKey) {
-      const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${openaiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-4o",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          temperature: 0.15,
-          max_tokens: 16000,
-        }),
-      });
-
-      if (!resp.ok) throw new Error("OpenAI error: " + resp.status);
-      const data = await resp.json();
-      responseContent = data.choices?.[0]?.message?.content || "";
-    } else {
-      throw new Error("Nenhuma chave de API configurada (ANTHROPIC_API_KEY, LOVABLE_API_KEY ou OPENAI_API_KEY)");
-    }
+    // Geração via OpenAI (primário) com fallback automático para Claude.
+    const responseContent = await chatCompletion({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.15,
+      maxTokens: 16000,
+    });
 
     // Parse structured response
     let contentJson: Record<string, unknown> = {};

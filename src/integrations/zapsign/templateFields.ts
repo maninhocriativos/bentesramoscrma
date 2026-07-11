@@ -2,6 +2,7 @@
 // Apenas renderiza campos para seleção e preenchimento
 
 import { HTML_TEMPLATES } from './html-templates';
+import { assetUrl } from '@/lib/siteConfig';
 
 export interface CampoTemplate {
   id: string;
@@ -35,7 +36,7 @@ const CAMPOS_PESSOAIS: CampoTemplate[] = [
   { id: 'cep',                label: 'CEP',                 obrigatorio: true,  tipo: 'texto',    origem: 'lead' },
 ];
 
-const BASE_URL = 'https://bentesramoscrma.lovable.app/templates-zapsign';
+const BASE_URL = assetUrl('templates-zapsign');
 
 export const TEMPLATES_DISPONIVEIS: TemplateInfo[] = [
   {

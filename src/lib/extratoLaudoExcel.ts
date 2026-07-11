@@ -247,19 +247,19 @@ function buildResumoSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado, con
   }
 }
 
-// ─── Aba 2: Cobranças Indevidas ───────────────────────────────────────────────
+// ─── Aba 2: Cobranças Indevidas (detalhamento INDIVIDUAL, item a item) ─────────
 function buildCobrancasSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado) {
   const ws = wb.addWorksheet('Cobranças Indevidas', { properties: { tabColor: { argb: `FF${C.vermelho}` } } });
   ws.columns = [
-    { width: 13 }, { width: 38 }, { width: 18 }, { width: 12 }, { width: 18 },
-    { width: 22 }, { width: 14 }, { width: 32 }, { width: 55 },
+    { width: 6 }, { width: 13 }, { width: 40 }, { width: 16 },
+    { width: 22 }, { width: 14 }, { width: 30 }, { width: 60 },
   ];
 
-  headerFill(ws, 1, 1, 9, 'COBRANÇAS INDEVIDAS — DETALHAMENTO COMPLETO', 13);
+  headerFill(ws, 1, 1, 8, 'COBRANÇAS INDEVIDAS — ANÁLISE INDIVIDUAL ITEM A ITEM', 13);
   ws.getRow(1).height = 32;
   ws.getRow(2).height = 36;
 
-  const hdrs = ['Data', 'Descrição', 'Valor Unitário (R$)', 'Ocorrências', 'Total (R$)', 'Categoria', 'Status', 'Base Legal', 'Justificativa'];
+  const hdrs = ['#', 'Data', 'Descrição', 'Valor (R$)', 'Categoria', 'Status', 'Base Legal', 'Análise Individual'];
   hdrs.forEach((h, i) => colHeader(ws.getRow(2).getCell(i + 1), h));
 
   // Congelar cabeçalho + layout limpo
@@ -270,104 +270,26 @@ function buildCobrancasSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado) 
     const r    = idx + 3;
     const alt  = idx % 2 !== 0;
     const row  = ws.getRow(r);
-    row.height = 20;
+    row.height = 42;
 
-    dataRow(row.getCell(1), c.data,                                 alt);
-    dataRow(row.getCell(2), c.descricao,                            alt, { wrap: false });
-    dataRow(row.getCell(3), c.valor_unitario  || 0,                 alt, { currency: true });
-    dataRow(row.getCell(4), c.quantidade_ocorrencias || 1,          alt, { center: true });
-    dataRow(row.getCell(5), c.valor_total     || 0,                 alt, { currency: true, red: true, bold: true });
-    dataRow(row.getCell(6), c.categoria,                            alt);
-    const statusCell = row.getCell(7);
-    dataRow(statusCell, c.status,                                   alt, { bold: true, color: corStatus(c.status) });
-    dataRow(row.getCell(8), c.base_legal,                           alt, { wrap: true });
-    dataRow(row.getCell(9), c.justificativa,                        alt, { wrap: true });
+    dataRow(row.getCell(1), idx + 1,                                alt, { center: true });
+    dataRow(row.getCell(2), c.data,                                 alt);
+    dataRow(row.getCell(3), c.descricao,                            alt, { wrap: true });
+    dataRow(row.getCell(4), c.valor_total || c.valor_unitario || 0, alt, { currency: true, red: true, bold: true });
+    dataRow(row.getCell(5), c.categoria,                            alt);
+    dataRow(row.getCell(6), c.status,                               alt, { bold: true, color: corStatus(c.status) });
+    dataRow(row.getCell(7), c.base_legal,                           alt, { wrap: true });
+    dataRow(row.getCell(8), c.justificativa,                        alt, { wrap: true });
   });
 
-  // Linha de total
+  // Linha de total (soma simples de todos os itens — não é agrupamento por categoria)
   const totalRow_ = cobrancas.length + 3;
-  const total = cobrancas.reduce((s, c) => s + (c.valor_total || 0), 0);
-  totalRow(ws, totalRow_, 1, 5, 'TOTAL GERAL', total);
+  const total = cobrancas.reduce((s, c) => s + (c.valor_total || c.valor_unitario || 0), 0);
+  totalRow(ws, totalRow_, 1, 4, 'TOTAL GERAL', total);
   ws.getRow(totalRow_).height = 24;
 
   // Auto filtro nas colunas
-  ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 9 } };
-}
-
-// ─── Aba 3: Por Categoria ─────────────────────────────────────────────────────
-function buildCategoriaSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado) {
-  const ws = wb.addWorksheet('Por Categoria', { properties: { tabColor: { argb: `FF${C.ouro}` } } });
-  ws.columns = [{ width: 34 }, { width: 20 }, { width: 16 }, { width: 14 }];
-  ws.views = [{ showGridLines: false }];
-
-  headerFill(ws, 1, 1, 4, 'RESUMO POR CATEGORIA', 13);
-  ws.getRow(1).height = 30;
-  ws.getRow(2).height = 28;
-
-  ['Categoria', 'Total (R$)', 'Ocorrências', '% do Total'].forEach((h, i) =>
-    colHeader(ws.getRow(2).getCell(i + 1), h));
-
-  const cats       = resultado.por_categoria || [];
-  const grandTotal = cats.reduce((s, c) => s + (c.total || 0), 0);
-
-  cats.forEach((cat, idx) => {
-    const r   = idx + 3;
-    const alt = idx % 2 !== 0;
-    const pct = grandTotal > 0 ? `${((cat.total / grandTotal) * 100).toFixed(1)}%` : '0%';
-    const row = ws.getRow(r);
-    row.height = 22;
-    dataRow(row.getCell(1), cat.categoria,     alt);
-    dataRow(row.getCell(2), cat.total || 0,    alt, { currency: true, red: true, bold: true });
-    dataRow(row.getCell(3), cat.ocorrencias,   alt, { center: true });
-    dataRow(row.getCell(4), pct,               alt, { center: true });
-  });
-
-  const tr = cats.length + 3;
-  totalRow(ws, tr, 1, 2, 'TOTAL GERAL', grandTotal);
-  ws.getRow(tr).getCell(4).value = '100%';
-  ws.getRow(tr).getCell(4).font  = { name: FONT_BASE, bold: true, color: { argb: `FF${C.branco}` } };
-  ws.getRow(tr).getCell(4).fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.marrom}` } };
-  ws.getRow(tr).getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
-  ws.getRow(tr).height = 24;
-}
-
-// ─── Aba 4: Linha do Tempo ────────────────────────────────────────────────────
-function buildTimelineSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado) {
-  const ws = wb.addWorksheet('Linha do Tempo', { properties: { tabColor: { argb: `FF${C.marromMed}` } } });
-  ws.columns = [{ width: 18 }, { width: 24 }, { width: 20 }];
-  ws.views = [{ state: 'frozen', ySplit: 2, showGridLines: false }];
-
-  headerFill(ws, 1, 1, 3, 'LINHA DO TEMPO DE COBRANÇAS', 13);
-  ws.getRow(1).height = 30;
-  ws.getRow(2).height = 28;
-
-  ['Mês/Ano', 'Total Cobrado (R$)', 'Qtd. Ocorrências'].forEach((h, i) =>
-    colHeader(ws.getRow(2).getCell(i + 1), h));
-
-  // Agrupa por AAAA-MM (chave ordenável); exibe como MM/AAAA.
-  const map = new Map<string, { total: number; count: number }>();
-  (resultado.cobrancas_indevidas || []).forEach((c) => {
-    const k = mesAnoKey(c.data || '');
-    if (!k) return;
-    const ex = map.get(k) || { total: 0, count: 0 };
-    map.set(k, { total: ex.total + (c.valor_total || 0), count: ex.count + (c.quantidade_ocorrencias || 1) });
-  });
-
-  const entries = Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-  entries.forEach(([key, d], idx) => {
-    const r   = idx + 3;
-    const alt = idx % 2 !== 0;
-    const row = ws.getRow(r);
-    row.height = 22;
-    dataRow(row.getCell(1), mesAnoLabel(key), alt, { center: true });
-    dataRow(row.getCell(2), d.total,          alt, { currency: true, red: true, bold: true });
-    dataRow(row.getCell(3), d.count,          alt, { center: true });
-  });
-
-  const tr   = entries.length + 3;
-  const soma = entries.reduce((s, [, d]) => s + d.total, 0);
-  totalRow(ws, tr, 1, 2, 'TOTAL', soma);
-  ws.getRow(tr).height = 24;
+  ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 8 } };
 }
 
 // ─── Exportar ─────────────────────────────────────────────────────────────────
@@ -379,8 +301,6 @@ export async function gerarLaudoExcel(resultado: AnaliseResultado, config: Anali
 
   buildResumoSheet(wb, resultado, config);
   buildCobrancasSheet(wb, resultado);
-  buildCategoriaSheet(wb, resultado);
-  buildTimelineSheet(wb, resultado);
 
   const buffer = await wb.xlsx.writeBuffer();
   const blob   = new Blob([buffer], {

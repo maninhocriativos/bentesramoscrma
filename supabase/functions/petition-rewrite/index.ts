@@ -1,3 +1,5 @@
+import { chatCompletion, AIError } from "../_shared/ai-helper.ts";
+
 const serve = Deno.serve;
 
 const corsHeaders = {
@@ -18,9 +20,6 @@ serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
-
     const systemPrompt = `Você é um advogado brasileiro altamente qualificado, especialista em redação de petições iniciais cíveis e consumeristas. Sua tarefa é transformar um resumo informal dos fatos em texto jurídico formal.
 
 INSTRUÇÕES:
@@ -36,43 +35,33 @@ ${tipo_acao ? `9. O tipo de ação é: ${tipo_acao}. Considere isso no enquadram
 
 Retorne APENAS o texto dos fatos, sem títulos ou cabeçalhos.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+    let content = "";
+    try {
+      content = await chatCompletion({
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Resumo do caso:\n\n${resumo}` },
         ],
         temperature: 0.7,
-        max_tokens: 2000,
-      }),
-    });
-
-    if (!response.ok) {
-      if (response.status === 429) {
+        maxTokens: 2000,
+      });
+    } catch (aiErr) {
+      const status = aiErr instanceof AIError ? aiErr.status : 500;
+      console.error("Erro IA petition-rewrite:", status, (aiErr as Error).message);
+      if (status === 429) {
         return new Response(JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns segundos." }), {
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
+      if (status === 402) {
         return new Response(JSON.stringify({ error: "Créditos de IA insuficientes." }), {
           status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
       return new Response(JSON.stringify({ error: "Erro ao processar com IA" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
 
     return new Response(JSON.stringify({ fatos_juridicos: content }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

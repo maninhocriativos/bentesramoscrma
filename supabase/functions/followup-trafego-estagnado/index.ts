@@ -1,6 +1,7 @@
 const serve = Deno.serve;
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getZapiConfig, sendImage, sendText, normalizePhone } from '../_shared/zapi-helper.ts';
+import { siteUrl } from '../_shared/site.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,7 +11,7 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const DEFAULT_IMAGE_URL = 'https://bentesramoscrma.lovable.app/images/prova-social-bradesco.jpg';
+const DEFAULT_IMAGE_URL = siteUrl('images/prova-social-bradesco.jpg');
 
 const DEFAULT_MENSAGEM = `Olá{nome_prefix}! Aqui é a *Isa do Bentes & Ramos* 🏛️
 

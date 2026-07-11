@@ -10,9 +10,13 @@ Coloque os 5 PDFs dos templates aqui:
 
 ## URLs dos templates
 
-Os PDFs serão acessados via:
-- https://bentesramoscrma.lovable.app/templates-zapsign/declaracao-nao-contratacao.pdf
-- https://bentesramoscrma.lovable.app/templates-zapsign/declaracao-falso-advogado.pdf
-- https://bentesramoscrma.lovable.app/templates-zapsign/declaracao-hipossuficiencia.pdf
-- https://bentesramoscrma.lovable.app/templates-zapsign/contrato-honorarios.pdf
-- https://bentesramoscrma.lovable.app/templates-zapsign/procuracao.pdf
+Os PDFs são servidos pelo domínio de produção (Netlify), no caminho
+`/templates-zapsign/<arquivo>.pdf`. A URL base é resolvida em código por
+`assetUrl()` (`src/lib/siteConfig.ts`) — não hardcode o domínio aqui.
+
+Exemplo (relativo à origem do app):
+- `/templates-zapsign/declaracao-nao-contratacao.pdf`
+- `/templates-zapsign/declaracao-falso-advogado.pdf`
+- `/templates-zapsign/declaracao-hipossuficiencia.pdf`
+- `/templates-zapsign/contrato-honorarios.pdf`
+- `/templates-zapsign/procuracao.pdf`
