@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { AutocompleteInput } from '@/components/ui/AutocompleteInput';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -293,18 +294,13 @@ function FieldInput({
           className={cn('rounded-xl mt-0 min-h-[80px]', isEmpty && 'border-destructive')}
         />
       ) : config.type === 'autocomplete' ? (
-        <>
-          <Input
-            list={`dl-${config.key}`}
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            placeholder={config.placeholder}
-            className={cn('rounded-xl mt-0', isEmpty && 'border-destructive')}
-          />
-          <datalist id={`dl-${config.key}`}>
-            {config.options?.map(opt => <option key={opt} value={opt} />)}
-          </datalist>
-        </>
+        <AutocompleteInput
+          value={value}
+          onChange={onChange}
+          options={config.options || []}
+          placeholder={config.placeholder}
+          invalid={isEmpty}
+        />
       ) : (
         <Input
           value={value}

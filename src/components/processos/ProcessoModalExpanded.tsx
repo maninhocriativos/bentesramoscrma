@@ -26,6 +26,7 @@ import { ProcessoNotificacoesTab } from './ProcessoNotificacoesTab';
 import { MovimentoDetailModal } from './MovimentoDetailModal';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { formatCpfCnpj, isCpfCnpjInvalidoCompleto } from '@/lib/documento';
 import { enrichMovements, MovimentoEnriquecido, getCategoriaColor } from '@/lib/cnjMovimentosMap';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -372,7 +373,7 @@ function ParteCard({ parte, index, onUpdate, onRemove }: {
                   <option value="Juiz">Juiz</option>
                 </select>
               </div>
-              <div><Label className="text-[10px] text-muted-foreground">CPF/CNPJ</Label><Input value={parte.documento || ''} onChange={e => onUpdate(index, 'documento', e.target.value)} className="h-7 text-xs rounded-lg mt-1" placeholder="Opcional" /></div>
+              <div><Label className="text-[10px] text-muted-foreground">CPF/CNPJ</Label><Input value={parte.documento || ''} onChange={e => onUpdate(index, 'documento', formatCpfCnpj(e.target.value))} inputMode="numeric" className={`h-7 text-xs rounded-lg mt-1 ${isCpfCnpjInvalidoCompleto(parte.documento || '') ? 'border-red-400 focus-visible:ring-red-400' : ''}`} placeholder="Opcional" /></div>
               <div><Label className="text-[10px] text-muted-foreground">Celular</Label><Input value={parte.celular || ''} onChange={e => onUpdate(index, 'celular', e.target.value)} className="h-7 text-xs rounded-lg mt-1" placeholder="(00) 00000-0000" /></div>
             </div>
           </div>
@@ -401,8 +402,10 @@ function ParteCard({ parte, index, onUpdate, onRemove }: {
 function AddParteForm({ onAdd }: { onAdd: (parte: ProcessoParte) => void }) {
   const [nome, setNome] = useState(''); const [tipo, setTipo] = useState('');
   const [doc, setDoc]   = useState(''); const [cel, setCel]   = useState('');
+  const docInvalido = isCpfCnpjInvalidoCompleto(doc);
   const handleAdd = () => {
     if (!nome.trim() || !tipo) { toast.error('Preencha nome e tipo'); return; }
+    if (docInvalido) { toast.error('CPF/CNPJ inválido'); return; }
     onAdd({ nome: nome.trim(), tipo, polo: tipo === 'Autor' || tipo === 'Requerente' || tipo === 'Exequente' ? 'AT' : tipo === 'Réu' || tipo === 'Requerido' || tipo === 'Executado' ? 'PA' : 'TC', tipoPessoa: 'FISICA', documento: doc || undefined, celular: cel || undefined });
     setNome(''); setTipo(''); setDoc(''); setCel('');
     toast.success(`"${nome.trim()}" adicionado`);
@@ -413,19 +416,22 @@ function AddParteForm({ onAdd }: { onAdd: (parte: ProcessoParte) => void }) {
       <div className="grid grid-cols-2 gap-2">
         <div><Label className="text-[10px] text-muted-foreground">Nome *</Label><Input value={nome} onChange={e => setNome(e.target.value)} className="h-7 text-xs rounded-lg mt-1 bg-card" placeholder="Nome" /></div>
         <div><Label className="text-[10px] text-muted-foreground">Tipo *</Label>
-          <select value={tipo} onChange={e => setTipo(e.target.value)} className="flex h-7 w-full rounded-lg border border-input bg-card px-2 text-xs mt-1">
-            <option value="">Selecione</option>
-            <option value="Autor">Autor</option>
-            <option value="Réu">Réu</option>
-            <option value="Requerente">Requerente</option>
-            <option value="Requerido">Requerido</option>
-            <option value="Exequente">Exequente</option>
-            <option value="Executado">Executado</option>
-            <option value="Terceiro Interessado">Terceiro</option>
-            <option value="Advogado">Advogado</option>
-          </select>
+          <Select value={tipo || '__none__'} onValueChange={v => setTipo(v === '__none__' ? '' : v)}>
+            <SelectTrigger className="h-7 text-xs rounded-lg mt-1 bg-card"><SelectValue placeholder="Selecione" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Selecione</SelectItem>
+              <SelectItem value="Autor">Autor</SelectItem>
+              <SelectItem value="Réu">Réu</SelectItem>
+              <SelectItem value="Requerente">Requerente</SelectItem>
+              <SelectItem value="Requerido">Requerido</SelectItem>
+              <SelectItem value="Exequente">Exequente</SelectItem>
+              <SelectItem value="Executado">Executado</SelectItem>
+              <SelectItem value="Terceiro Interessado">Terceiro</SelectItem>
+              <SelectItem value="Advogado">Advogado</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <div><Label className="text-[10px] text-muted-foreground">CPF/CNPJ</Label><Input value={doc} onChange={e => setDoc(e.target.value)} className="h-7 text-xs rounded-lg mt-1 bg-card" placeholder="Opcional" /></div>
+        <div><Label className="text-[10px] text-muted-foreground">CPF/CNPJ</Label><Input value={doc} onChange={e => setDoc(formatCpfCnpj(e.target.value))} inputMode="numeric" className={`h-7 text-xs rounded-lg mt-1 bg-card ${docInvalido ? 'border-red-400 focus-visible:ring-red-400' : ''}`} placeholder="Opcional" />{docInvalido && <p className="text-[9px] text-red-500 mt-0.5">CPF/CNPJ inválido</p>}</div>
         <div><Label className="text-[10px] text-muted-foreground">Celular</Label><Input value={cel} onChange={e => setCel(e.target.value)} className="h-7 text-xs rounded-lg mt-1 bg-card" placeholder="(00) 00000-0000" /></div>
       </div>
       <Button type="button" size="sm" className="w-full h-7 rounded-xl text-xs gap-1" onClick={handleAdd}><Plus className="h-3 w-3" /> Adicionar</Button>
