@@ -1,3 +1,8 @@
+// Worker do pdf.js EMPACOTADO pelo Vite — garante que a versão do worker é
+// idêntica à da lib instalada (evita "API version does not match Worker version")
+// e funciona offline, sem depender de CDN.
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
 // Renderiza cada página de um PDF (tipicamente escaneado, sem texto) como imagem
 // PNG em base64 — para que a IA de visão (OpenAI) consiga ler. Retorna o base64
 // PURO (sem o prefixo "data:image/png;base64,").
@@ -6,7 +11,7 @@ export async function renderizarPdfComoImagens(file: File, escala = 2): Promise<
   const typedArray = new Uint8Array(arrayBuffer);
 
   const pdfjsLib: any = await import('pdfjs-dist');
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
   const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
   const imagens: string[] = [];
@@ -36,7 +41,7 @@ export async function extrairTextoPdf(file: File): Promise<string> {
     let pdfjsLib: any;
     try {
       pdfjsLib = await import('pdfjs-dist');
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
     } catch (e) {
       console.error('pdfjs-dist não disponível:', e);
       return '';
