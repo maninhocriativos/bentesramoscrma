@@ -11,6 +11,8 @@ interface AutocompleteInputProps {
   className?: string;
   invalid?: boolean;
   maxItems?: number;
+  /** Exibe as iniciais em maiúscula (só visual — o valor gravado não muda). */
+  capitalize?: boolean;
 }
 
 /**
@@ -19,7 +21,7 @@ interface AutocompleteInputProps {
  * Aceita texto livre — as opções são só sugestões.
  */
 export function AutocompleteInput({
-  value, onChange, options, placeholder, className, invalid, maxItems = 8,
+  value, onChange, options, placeholder, className, invalid, maxItems = 8, capitalize,
 }: AutocompleteInputProps) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
@@ -58,7 +60,7 @@ export function AutocompleteInput({
         onKeyDown={onKeyDown}
         placeholder={placeholder}
         autoComplete="off"
-        className={cn('rounded-xl mt-0', invalid && 'border-destructive', className)}
+        className={cn('rounded-xl mt-0', invalid && 'border-destructive', capitalize && 'capitalize', className)}
       />
       {open && filtered.length > 0 && (
         <div className="absolute z-50 mt-1 w-full max-h-60 overflow-auto rounded-xl border border-border bg-popover p-1 shadow-lg animate-in fade-in-0 zoom-in-95">
@@ -73,6 +75,7 @@ export function AutocompleteInput({
                 className={cn(
                   'flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-sm text-left transition-colors',
                   'text-popover-foreground',
+                  capitalize && 'capitalize',
                   i === highlight ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/60',
                 )}
               >

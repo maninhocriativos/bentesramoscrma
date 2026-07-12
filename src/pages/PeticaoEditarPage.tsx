@@ -300,6 +300,7 @@ function FieldInput({
           options={config.options || []}
           placeholder={config.placeholder}
           invalid={isEmpty}
+          capitalize
         />
       ) : (
         <Input
@@ -338,6 +339,7 @@ export default function PeticaoEditarPage() {
   const [leadQuery,   setLeadQuery]   = useState('');
   const [leadResults, setLeadResults] = useState<Array<Record<string, string>>>([]);
   const [leadOpen,    setLeadOpen]    = useState(false);
+  const leadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autosaveTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Campos gerados dinamicamente a partir dos {{marcadores}} do template do modelo.
@@ -488,16 +490,19 @@ export default function PeticaoEditarPage() {
 
   // ── Busca de lead do CRM ────────────────────────────────────────────────────────
 
-  const buscarLeads = async (q: string) => {
+  // Busca precisa por nome, telefone OU CPF (RPC compara só os dígitos de tel/cpf,
+  // então casa mesmo com valores formatados no banco). Debounce de 250ms.
+  const buscarLeads = (q: string) => {
     setLeadQuery(q);
-    if (q.trim().length < 2) { setLeadResults([]); setLeadOpen(false); return; }
-    const { data } = await supabase
-      .from('leads_juridicos')
-      .select('id,nome,cpf,rg,estado_civil,nacionalidade,profissao,endereco,numero,bairro,cidade,uf,cep,telefone')
-      .or(`nome.ilike.%${q}%,cpf.ilike.%${q}%`)
-      .limit(8);
-    setLeadResults((data as Array<Record<string, string>>) || []);
-    setLeadOpen(true);
+    if (leadTimer.current) clearTimeout(leadTimer.current);
+    const termo = q.trim();
+    if (termo.length < 2) { setLeadResults([]); setLeadOpen(false); return; }
+    leadTimer.current = setTimeout(async () => {
+      const { data, error } = await (supabase.rpc as any)('buscar_leads_peticao', { termo });
+      if (error) { console.warn('[busca lead]', error.message); return; }
+      setLeadResults((data as Array<Record<string, string>>) || []);
+      setLeadOpen(true);
+    }, 250);
   };
 
   const aplicarLead = (l: Record<string, string>) => {
@@ -738,7 +743,7 @@ export default function PeticaoEditarPage() {
                           value={leadQuery}
                           onChange={e => buscarLeads(e.target.value)}
                           onFocus={() => leadResults.length && setLeadOpen(true)}
-                          placeholder="Buscar lead por nome ou CPF..."
+                          placeholder="Buscar por nome, telefone ou CPF..."
                           className="pl-10 rounded-lg bg-background"
                         />
                       </div>
