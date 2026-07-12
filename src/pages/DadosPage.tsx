@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import {
   Users, Trophy, XCircle, Target, PieChart as PieIcon, MapPin,
-  Scale, Briefcase, Loader2,
+  Scale, Briefcase, Loader2, CalendarDays,
 } from 'lucide-react';
 import { startOfMonth, startOfQuarter, startOfYear, isAfter } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -42,19 +42,13 @@ const SHADOW = '0 1px 4px rgba(0,0,0,0.04)';
 const num = (v: number) => new Intl.NumberFormat('pt-BR').format(v);
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 
+// Chave normalizada p/ agrupar variações de texto (acento/caixa/espaços): "Bancário" == "bancario".
+const normKey = (s: string) =>
+  s.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/\s+/g, ' ');
+const titleCase = (s: string) =>
+  s.trim().replace(/\s+/g, ' ').replace(/\b[\p{L}]/gu, (c) => c.toUpperCase());
+
 // ─── Classificações derivadas ──────────────────────────────────────────────────
-// Categoria do beneficiário: não há campo estruturado — derivada da profissão (texto livre).
-function categoriaBeneficiario(profissao: string | null): string {
-  const p = (profissao || '').toLowerCase();
-  if (!p.trim()) return 'Não informado';
-  if (/pension/.test(p)) return 'Pensionista';
-  if (/aposentad/.test(p)) return 'Aposentado';
-  if (/servidor|servidora|p[uú]blic|func.*p[uú]bl/.test(p)) return 'Servidor Público';
-  return 'Outro';
-}
-
-const CATEGORIA_ORDER = ['Servidor Público', 'Aposentado', 'Pensionista', 'Outro', 'Não informado'];
-
 function isGanho(l: LeadAnalytics) {
   return l.status === 'Ganho' || l.status === 'Contrato Assinado';
 }
@@ -112,6 +106,24 @@ function EmptyState({ label = 'Nenhum dado no período' }: { label?: string }) {
   return <div className="h-48 flex items-center justify-center text-center" style={{ color: NEUTRAL, fontSize: 13 }}>{label}</div>;
 }
 
+const AMBER = '#b45309';
+// Aviso de qualidade: alerta quando o dado está majoritariamente vazio ou todo igual.
+function QualidadeNote({ data, total, campo }: { data: { name: string; value: number }[]; total: number; campo: string }) {
+  if (total === 0) return null;
+  const semInfo = data.find(d => d.name === 'Não informado');
+  const semInfoPct = semInfo ? pct(semInfo.value, total) : 0;
+  let msg = '';
+  if (semInfoPct >= 40) msg = `${semInfoPct}% dos leads estão sem ${campo}. Preencha no cadastro para deixar este gráfico preciso.`;
+  else if (data.length === 1 && total >= 20) msg = `Todos os leads estão com o mesmo valor — verifique se o campo "${campo}" está sendo preenchido de verdade.`;
+  if (!msg) return null;
+  return (
+    <div className="flex items-start gap-2 mt-3 pt-3 px-0" style={{ borderTop: '0.5px solid rgba(201,169,110,0.12)' }}>
+      <span style={{ color: AMBER, fontSize: 13, lineHeight: '16px' }}>⚠</span>
+      <p className="text-[11px] leading-[15px]" style={{ color: AMBER }}>{msg}</p>
+    </div>
+  );
+}
+
 // Bar-list: ranking de categorias com rótulo direto (identidade pelo eixo, cor única).
 function BarList({ data, total, color = GOLD, max }: {
   data: { name: string; value: number }[];
@@ -123,21 +135,28 @@ function BarList({ data, total, color = GOLD, max }: {
   const peak = Math.max(...rows.map(r => r.value), 1);
   if (rows.length === 0) return <EmptyState />;
   return (
-    <div className="space-y-2.5">
-      {rows.map(r => (
-        <div key={r.name} className="group">
-          <div className="flex items-center justify-between mb-1 gap-2">
-            <span className="text-[12.5px] font-medium text-foreground truncate" title={r.name}>{r.name}</span>
-            <span className="text-[12px] shrink-0 tabular-nums" style={{ color: NEUTRAL }}>
-              <span className="font-semibold text-foreground">{num(r.value)}</span> · {pct(r.value, total)}%
-            </span>
+    <div className="space-y-3">
+      {rows.map((r, i) => {
+        const isEmpty = r.name === 'Não informado';
+        const barColor = isEmpty ? '#cbb48f' : color;
+        return (
+          <div key={r.name}>
+            <div className="flex items-center justify-between mb-1 gap-2">
+              <span className={cn('text-[12.5px] truncate', isEmpty ? 'italic' : 'font-medium text-foreground')}
+                style={isEmpty ? { color: NEUTRAL } : undefined} title={r.name}>
+                {r.name}
+              </span>
+              <span className="text-[12px] shrink-0 tabular-nums" style={{ color: NEUTRAL }}>
+                <span className="font-semibold text-foreground">{num(r.value)}</span> · {pct(r.value, total)}%
+              </span>
+            </div>
+            <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(201,169,110,0.1)' }}>
+              <div className="h-full rounded-full transition-all duration-700"
+                style={{ width: `${Math.max((r.value / peak) * 100, 2)}%`, background: barColor, animationDelay: `${i * 40}ms` }} />
+            </div>
           </div>
-          <div className="h-2.5 rounded-full overflow-hidden" style={{ background: 'rgba(201,169,110,0.12)' }}>
-            <div className="h-full rounded-full transition-all duration-500"
-              style={{ width: `${Math.max((r.value / peak) * 100, 3)}%`, background: color }} />
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -147,22 +166,25 @@ function Kpi({ label, value, sub, icon: Icon, color, bg }: {
   label: string; value: string; sub?: string; icon: React.ElementType; color: string; bg: string;
 }) {
   return (
-    <div className="rounded-2xl bg-card p-4 lg:p-5" style={{ border: BORDER, boxShadow: SHADOW }}>
+    <div className="rounded-2xl overflow-hidden bg-card transition-shadow hover:shadow-md" style={{ border: BORDER, boxShadow: SHADOW }}>
+      <div style={{ height: 3, background: color }} />
+      <div className="p-4 lg:p-5">
       <div className="flex items-start justify-between mb-2">
         <p className="text-[10.5px] font-semibold uppercase tracking-wider leading-tight" style={{ color: NEUTRAL }}>{label}</p>
         <div className="h-8 w-8 shrink-0 rounded-xl flex items-center justify-center" style={{ background: bg }}>
           <Icon style={{ width: 16, height: 16, color }} />
         </div>
       </div>
-      <p className="text-2xl font-extrabold text-foreground tabular-nums">{value}</p>
-      {sub && <p className="text-[11.5px] mt-0.5" style={{ color: NEUTRAL }}>{sub}</p>}
+      <p className="text-[26px] leading-none font-extrabold text-foreground tabular-nums">{value}</p>
+      {sub && <p className="text-[11.5px] mt-1.5" style={{ color: NEUTRAL }}>{sub}</p>}
+      </div>
     </div>
   );
 }
 
 // ─── Página ─────────────────────────────────────────────────────────────────────
 export default function DadosPage() {
-  const { leads, loading } = useLeadsAnalytics();
+  const { leads, loading, categoriaProcessos, totalProcessos } = useLeadsAnalytics();
   const [periodo, setPeriodo] = useState<Periodo>('tudo');
 
   const d = useMemo(() => {
@@ -176,20 +198,31 @@ export default function DadosPage() {
       return { map, arr: Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value) };
     };
 
+    // Agrupa juntando variações de texto (acento/caixa/espaço); rótulo = variação mais comum, em Title Case.
+    const groupNorm = (getRaw: (l: LeadAnalytics) => string | null | undefined, emptyLabel: string) => {
+      const buckets: Record<string, { total: number; labels: Record<string, number> }> = {};
+      base.forEach(l => {
+        const raw = (getRaw(l) || '').trim();
+        const key = raw ? normKey(raw) : '__empty__';
+        const b = (buckets[key] ||= { total: 0, labels: {} });
+        b.total += 1;
+        if (raw) b.labels[raw] = (b.labels[raw] || 0) + 1;
+      });
+      return Object.entries(buckets).map(([key, b]) => ({
+        name: key === '__empty__' ? emptyLabel : titleCase(Object.entries(b.labels).sort((a, c) => c[1] - a[1])[0][0]),
+        value: b.total,
+      })).sort((a, b) => b.value - a.value);
+    };
+
     // Origem
     const origem = rank(l => (l.origem && l.origem.trim()) || 'Não informado', 'Não informado');
     const origemData = origem.arr.map(e => ({ ...e, color: corOrigem(e.name) }));
 
-    // Categoria beneficiário (ordem fixa)
-    const catMap: Record<string, number> = {};
-    base.forEach(l => { const k = categoriaBeneficiario(l.profissao); catMap[k] = (catMap[k] || 0) + 1; });
-    const categoriaData = CATEGORIA_ORDER.filter(k => catMap[k]).map(name => ({ name, value: catMap[name] }));
-
     // Estado (UF)
     const estado = rank(l => { const uf = (l.uf || '').trim().toUpperCase(); return uf ? (UF_LABEL[uf] || uf) : 'Não informado'; }, 'Não informado');
 
-    // Tipo de ação
-    const acao = rank(l => (l.tipo_acao && l.tipo_acao.trim()) || 'Não informado', 'Não informado');
+    // Tipo de ação (normalizado — junta "Consumidor"/"CONSUMIDOR", "bancario"/"Bancário", etc.)
+    const acao = groupNorm(l => l.tipo_acao, 'Não informado');
 
     // Ganhos / Perdidos
     const ganhos = base.filter(isGanho).length;
@@ -197,7 +230,7 @@ export default function DadosPage() {
     const decididos = ganhos + perdidos;
     const winRate = pct(ganhos, decididos);
 
-    return { total, origemData, categoriaData, estado: estado.arr, acao: acao.arr, ganhos, perdidos, decididos, winRate };
+    return { total, origemData, estado: estado.arr, acao, ganhos, perdidos, decididos, winRate };
   }, [leads, periodo]);
 
   const winDonut = [
@@ -218,19 +251,22 @@ export default function DadosPage() {
               Origem, perfil, localização e desfecho dos leads {loading ? '' : `· ${num(d.total)} leads`}
             </p>
           </div>
-          <div className="flex rounded-lg overflow-hidden" style={{ border: BORDER }}>
-            {PERIODOS.map((p, i) => (
-              <button key={p.key} onClick={() => setPeriodo(p.key)}
-                className="transition-all"
-                style={{
-                  padding: '6px 14px', fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                  background: periodo === p.key ? BROWN : 'transparent',
-                  color: periodo === p.key ? GOLD : NEUTRAL,
-                  borderRight: i < PERIODOS.length - 1 ? '0.5px solid rgba(201,169,110,0.2)' : 'none',
-                }}>
-                {p.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <CalendarDays style={{ width: 15, height: 15, color: NEUTRAL }} className="hidden sm:block" />
+            <div className="flex rounded-xl overflow-hidden bg-card" style={{ border: BORDER, boxShadow: SHADOW }}>
+              {PERIODOS.map((p, i) => (
+                <button key={p.key} onClick={() => setPeriodo(p.key)}
+                  className="transition-all"
+                  style={{
+                    padding: '8px 16px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                    background: periodo === p.key ? BROWN : 'transparent',
+                    color: periodo === p.key ? GOLD : NEUTRAL,
+                    borderRight: i < PERIODOS.length - 1 ? '0.5px solid rgba(201,169,110,0.2)' : 'none',
+                  }}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -321,20 +357,23 @@ export default function DadosPage() {
             {/* Categoria + Estado */}
             <div className="grid gap-5 grid-cols-1 lg:grid-cols-2">
               <Card accent="#2563eb" icon={Briefcase} title="Perfil do Beneficiário" iconBg="rgba(37,99,235,0.09)" iconColor="#2563eb">
-                <BarList data={d.categoriaData} total={d.total} color="#2563eb" />
+                <BarList data={categoriaProcessos} total={totalProcessos} color="#2563eb" />
+                <QualidadeNote data={categoriaProcessos} total={totalProcessos} campo="categoria" />
                 <p className="text-[11px] mt-3 pt-3" style={{ color: NEUTRAL, borderTop: '0.5px solid rgba(201,169,110,0.12)' }}>
-                  Derivado da profissão informada no lead. "Não informado" = sem profissão registrada.
+                  Campo "Perfil do Beneficiário" preenchido no cadastro do processo · base de {num(totalProcessos)} processos.
                 </p>
               </Card>
 
               <Card accent={GOLD} icon={MapPin} title="Estado do Lead" iconBg="rgba(201,169,110,0.12)" iconColor="#a97e3f">
                 <BarList data={d.estado} total={d.total} color={GOLD} max={10} />
+                <QualidadeNote data={d.estado} total={d.total} campo="estado (UF)" />
               </Card>
             </div>
 
             {/* Tipo de ação */}
             <Card accent="#7c3aed" icon={Scale} title="Tipo de Ação" iconBg="rgba(124,58,237,0.09)" iconColor="#7c3aed">
               <BarList data={d.acao} total={d.total} color="#7c3aed" max={12} />
+              <QualidadeNote data={d.acao} total={d.total} campo="tipo de ação" />
             </Card>
           </>
         )}

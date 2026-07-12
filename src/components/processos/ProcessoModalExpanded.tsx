@@ -53,8 +53,11 @@ type ProcessoFormData = {
   data_arquivamento: string; data_encerramento: string; valor_provisionado: string;
   probabilidade: string; monitorar_push: boolean; tipo_orgao_julgador: string;
   sistema_judicial: string; complemento_enderecamento: string;
-  co_responsavel_id: string;
+  co_responsavel_id: string; categoria_beneficiario: string;
 };
+
+// Perfil do beneficiário — usado no cadastro do processo e no gráfico da página Dados.
+const CATEGORIAS_BENEFICIARIO = ['Servidor Público', 'Aposentado', 'Pensionista', 'Outro'] as const;
 
 interface ProcessoModalDraft {
   formData: ProcessoFormData;
@@ -80,7 +83,7 @@ const createEmptyForm = (): ProcessoFormData => ({
   data_citacao: '', data_recebimento: '', data_arquivamento: '',
   data_encerramento: '', valor_provisionado: '', probabilidade: '',
   monitorar_push: true, tipo_orgao_julgador: '', sistema_judicial: '',
-  complemento_enderecamento: '', co_responsavel_id: '',
+  complemento_enderecamento: '', co_responsavel_id: '', categoria_beneficiario: '',
 });
 
 const STATUS_CONFIG: Record<string, { cls: string; dot: string; barColor: string; icon: React.ElementType }> = {
@@ -642,6 +645,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
         tipo_orgao_julgador: p.tipo_orgao_julgador || '', sistema_judicial: p.sistema_judicial || '',
         complemento_enderecamento: p.complemento_enderecamento || '',
         co_responsavel_id: p.co_responsavel_id || '',
+        categoria_beneficiario: (p as any).categoria_beneficiario || '',
       });
       setPartes(processo.partes_json || []);
       setMovimentos(processo.movimentos_json || []);
@@ -860,6 +864,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
         valor_causa:               parseMoney(formData.valor_causa),
         valor_provisionado:        parseMoney(formData.valor_provisionado),
         probabilidade:             formData.probabilidade          || null,
+        categoria_beneficiario:    formData.categoria_beneficiario || null,
         data_ajuizamento:          parseDate(formData.data_distribuicao),
         data_distribuicao:         parseDate(formData.data_distribuicao),
         data_citacao:              parseDate(formData.data_citacao),
@@ -1580,6 +1585,12 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                             <Select value={formData.probabilidade || '__none__'} onValueChange={v => update('probabilidade', v === '__none__' ? '' : v)}>
                               <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
                               <SelectContent><SelectItem value="__none__">Selecione</SelectItem><SelectItem value="Provável">Provável</SelectItem><SelectItem value="Possível">Possível</SelectItem><SelectItem value="Remota">Remota</SelectItem></SelectContent>
+                            </Select>
+                          </Field>
+                          <Field label="Perfil do Beneficiário">
+                            <Select value={formData.categoria_beneficiario || '__none__'} onValueChange={v => update('categoria_beneficiario', v === '__none__' ? '' : v)}>
+                              <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                              <SelectContent><SelectItem value="__none__">Selecione</SelectItem>{CATEGORIAS_BENEFICIARIO.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                             </Select>
                           </Field>
                         </Row3>
