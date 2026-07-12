@@ -161,8 +161,10 @@ function buildTemplateData(formData: FormData, actionName: string): Record<strin
 
 // ─── Inserção do print do contrato no .docx ─────────────────────────────────────
 
-// Converte o arquivo enviado (JPG/PNG) em bytes PNG (padroniza o formato).
-async function fileToPngBytes(file: File): Promise<Uint8Array> {
+interface PrintImagem { bytes: Uint8Array; width: number; height: number }
+
+// Converte o arquivo enviado (JPG/PNG) em PNG e devolve também as dimensões.
+async function fileToPng(file: File): Promise<PrintImagem> {
   const dataUrl = await new Promise<string>((res, rej) => {
     const r = new FileReader();
     r.onload = () => res(r.result as string);
@@ -180,13 +182,52 @@ async function fileToPngBytes(file: File): Promise<Uint8Array> {
   canvas.height = img.naturalHeight;
   canvas.getContext('2d')!.drawImage(img, 0, 0);
   const blob = await new Promise<Blob>((res) => canvas.toBlob(b => res(b!), 'image/png'));
-  return new Uint8Array(await blob.arrayBuffer());
+  return { bytes: new Uint8Array(await blob.arrayBuffer()), width: img.naturalWidth, height: img.naturalHeight };
 }
 
-// Substitui a imagem do CORPO do documento (o print do contrato) pelos bytes
-// enviados. A logo do timbre fica no cabeçalho (header rels), então não é tocada.
-// Quando há mais de uma imagem no corpo, troca a maior (o print costuma ser a maior).
-function substituirPrintNoDocx(zip: PizZip, pngBytes: Uint8Array): boolean {
+// Ajusta a caixa de exibição (extent) do print no document.xml: preserva a LARGURA
+// definida no template e recalcula a ALTURA pela proporção da nova imagem — evita
+// que o print fique esticado/achatado ao herdar a caixa da imagem antiga.
+function ajustarExtent(zip: PizZip, targetMedia: string, imgW: number, imgH: number) {
+  if (!imgW || !imgH) return;
+  const relsTxt = zip.file('word/_rels/document.xml.rels')?.asText() || '';
+  const esc = targetMedia.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const relEl = relsTxt.match(new RegExp('<Relationship\\b[^>]*Target="' + esc + '"[^>]*>'));
+  const rId = relEl?.[0].match(/Id="(rId\d+)"/)?.[1];
+  if (!rId) return;
+
+  let doc = zip.file('word/document.xml')?.asText() || '';
+  let blipIdx = doc.indexOf(`r:embed="${rId}"`);
+  if (blipIdx < 0) return;
+
+  // wp:extent (nível do desenho) — o mais próximo ANTES do blip
+  const wpRe = /<wp:extent\b[^>]*\bcx="(\d+)"[^>]*\bcy="\d+"[^>]*\/>/g;
+  let wp: RegExpExecArray | null = null, m: RegExpExecArray | null;
+  while ((m = wpRe.exec(doc)) && m.index < blipIdx) wp = m;
+  if (wp) {
+    const cx = parseInt(wp[1], 10);
+    const cy = Math.round((cx * imgH) / imgW);
+    doc = doc.slice(0, wp.index) + `<wp:extent cx="${cx}" cy="${cy}"/>` + doc.slice(wp.index + wp[0].length);
+  }
+
+  // a:ext (nível da figura) — o primeiro DEPOIS do blip
+  blipIdx = doc.indexOf(`r:embed="${rId}"`);
+  const aRe = /<a:ext\b[^>]*\bcx="(\d+)"[^>]*\bcy="\d+"[^>]*\/>/g;
+  aRe.lastIndex = blipIdx;
+  const a = aRe.exec(doc);
+  if (a) {
+    const cx = parseInt(a[1], 10);
+    const cy = Math.round((cx * imgH) / imgW);
+    doc = doc.slice(0, a.index) + `<a:ext cx="${cx}" cy="${cy}"/>` + doc.slice(a.index + a[0].length);
+  }
+
+  zip.file('word/document.xml', doc);
+}
+
+// Substitui a imagem do CORPO do documento (o print do contrato) pela enviada e
+// ajusta a caixa de exibição. A logo do timbre fica no cabeçalho (header rels),
+// então não é tocada. Havendo várias imagens no corpo, troca a maior.
+function substituirPrintNoDocx(zip: PizZip, png: PrintImagem): boolean {
   const relsFile = zip.file('word/_rels/document.xml.rels');
   if (!relsFile) return false;
 
@@ -202,7 +243,8 @@ function substituirPrintNoDocx(zip: PizZip, pngBytes: Uint8Array): boolean {
     if (sz > maior) { maior = sz; alvo = t; }
   }
 
-  zip.file(`word/${alvo}`, pngBytes);
+  zip.file(`word/${alvo}`, png.bytes);
+  ajustarExtent(zip, alvo, png.width, png.height);
   return true;
 }
 
@@ -522,7 +564,7 @@ export default function PeticaoEditarPage() {
       const outZip = doc.getZip();
       if (printFile) {
         try {
-          const png = await fileToPngBytes(printFile);
+          const png = await fileToPng(printFile);
           const ok = substituirPrintNoDocx(outZip, png);
           if (!ok) console.warn('Nenhuma imagem de corpo encontrada no modelo para inserir o print.');
         } catch (imgErr) {
