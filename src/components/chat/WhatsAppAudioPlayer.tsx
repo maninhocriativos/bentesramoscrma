@@ -60,7 +60,9 @@ export function WhatsAppAudioPlayer({ message, isSent }: WhatsAppAudioPlayerProp
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  // Começa false: com preload="none" o áudio só é baixado ao clicar em play,
+  // então o balão aparece na hora (sem requisição de rede ao renderizar).
+  const [isLoading, setIsLoading] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   
   const audioUrl = extractAudioUrl(message);
@@ -114,11 +116,15 @@ export function WhatsAppAudioPlayer({ message, isSent }: WhatsAppAudioPlayerProp
         audio.pause();
         setIsPlaying(false);
       } else {
+        // 1ª reprodução: o áudio ainda não foi baixado (preload="none").
+        if (audio.readyState < 2) setIsLoading(true);
         await audio.play();
         setIsPlaying(true);
+        setIsLoading(false);
       }
     } catch (err) {
       setError(true);
+      setIsLoading(false);
     }
   };
   
@@ -184,7 +190,7 @@ export function WhatsAppAudioPlayer({ message, isSent }: WhatsAppAudioPlayerProp
   
   return (
     <div className="flex items-center gap-2 min-w-[220px] max-w-[280px]">
-      <audio ref={audioRef} preload="metadata">
+      <audio ref={audioRef} preload="none">
         <source src={audioUrl} type="audio/ogg; codecs=opus" />
         <source src={audioUrl} type="audio/ogg" />
         <source src={audioUrl} type="audio/mpeg" />

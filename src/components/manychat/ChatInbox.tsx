@@ -1674,20 +1674,18 @@ const ManyChatInboxContent = () => {
     try {
       const ext = audioFile.name.split('.').pop() || 'ogg';
       const filePath = `manychat/${subscriberSnapshot.subscriber_id}/audio_${Date.now()}.${ext}`;
-      const audioBase64 = await audioFileToSendDataUrl(audioFile);
-
-      // Upload para o storage (apenas para exibir no CRM)
-      const { error: uploadError } = await supabase.storage.from("documentos").upload(filePath, audioFile);
-      if (uploadError) throw uploadError;
+      // Envia o áudio ORIGINAL (ogg/opus vai direto ao WhatsApp, sem conversão).
+      const audioBase64 = await blobToDataUrl(audioFile);
       const outboundInstanceId = resolveInstanceId(subscriberSnapshot);
-      const signResult = await supabase.storage.from("documentos").createSignedUrl(filePath, 60 * 60 * 24 * 30);
-      if (signResult.error || !signResult.data?.signedUrl) throw signResult.error;
-      const signedUrl = signResult.data.signedUrl;
 
-      // Instagram: envia o áudio como anexo via Graph API (instagram-send)
+      // Instagram exige URL pública → sobe ao storage antes de enviar.
       if ((subscriberSnapshot as any).canal === "instagram") {
+        const { error: uploadError } = await supabase.storage.from("documentos").upload(filePath, audioFile);
+        if (uploadError) throw uploadError;
+        const signResult = await supabase.storage.from("documentos").createSignedUrl(filePath, 60 * 60 * 24 * 30);
+        if (signResult.error || !signResult.data?.signedUrl) throw signResult.error;
         const { data: igResult, error: igError } = await supabase.functions.invoke("instagram-send", {
-          body: { subscriber_id: subscriberSnapshot.subscriber_id, type: "audio", media_url: signedUrl },
+          body: { subscriber_id: subscriberSnapshot.subscriber_id, type: "audio", media_url: signResult.data.signedUrl },
         });
         if (igError) throw new Error(igError.message || "Erro ao enviar no Instagram");
         if (!igResult?.success) throw new Error(igResult?.error || "Instagram: envio não confirmado");
@@ -1695,21 +1693,34 @@ const ManyChatInboxContent = () => {
         return;
       }
 
-      // Envia base64 para Z-API (não a URL assinada — evita problemas de acesso)
+      // WhatsApp: ENVIA AO CLIENTE PRIMEIRO (imediato) com o base64 do áudio.
       const { data: zapiResult, error: zapiError } = await invokeZapiSend({ to_phone: subscriberSnapshot.telefone, message: audioBase64, type: "audio", lead_id: subscriberSnapshot.lead_id, file_name: audioFile.name, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
       if (zapiError) throw new Error(zapiError.message);
       if (!zapiResult?.success) throw new Error(zapiResult?.error || "Z-API: envio não confirmado pela instância");
       const msgId = zapiResult?.messageId;
-      supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: signedUrl, tipo: "audio", direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", message_id: msgId, file_name: audioFile.name } } as any).select().single().then(({ data: savedMsg }) => {
-        if (savedMsg) {
-          const savedAsMessage = savedMsg as Message;
-          dedupKeysRef.current.add(getMessageDedupeKey(savedAsMessage));
-          dedupKeysRef.current.add(`db_${savedAsMessage.id}`);
-          setMessages(prev => { const withoutTemp = prev.filter(m => m.id !== tempId); const updated = mergeMessageDedup(withoutTemp, savedAsMessage); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
-        } else {
-          setMessages(prev => { const updated = prev.filter(m => m.id !== tempId); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+
+      // EM SEGUNDO PLANO: sobe pro storage e salva a mensagem (só p/ exibir no CRM).
+      // Não bloqueia a entrega ao cliente, que já foi feita acima.
+      (async () => {
+        try {
+          const { error: uploadError } = await supabase.storage.from("documentos").upload(filePath, audioFile);
+          const signResult = uploadError ? null : await supabase.storage.from("documentos").createSignedUrl(filePath, 60 * 60 * 24 * 30);
+          const signedUrl = signResult?.data?.signedUrl || "";
+          const { data: savedMsg } = await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: signedUrl, tipo: "audio", direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", message_id: msgId, file_name: audioFile.name } } as any).select().single();
+          if (savedMsg && signedUrl) {
+            const savedAsMessage = savedMsg as Message;
+            dedupKeysRef.current.add(getMessageDedupeKey(savedAsMessage));
+            dedupKeysRef.current.add(`db_${savedAsMessage.id}`);
+            setMessages(prev => { const withoutTemp = prev.filter(m => m.id !== tempId); const updated = mergeMessageDedup(withoutTemp, savedAsMessage); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+          } else {
+            // Áudio já foi entregue ao cliente; só marca o otimista como enviado.
+            setMessages(prev => { const updated = prev.map(m => m.id === tempId ? { ...m, conteudo: "🎤 Áudio" } : m); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+          }
+        } catch (bgErr) {
+          console.error("[audio] upload/salvar em segundo plano falhou:", bgErr);
+          setMessages(prev => { const updated = prev.map(m => m.id === tempId ? { ...m, conteudo: "🎤 Áudio" } : m); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
         }
-      });
+      })();
     } catch (error: any) {
       console.error("[Envio áudio] falhou:", error);
       setMessages(prev => { const updated = prev.map(m => m.id === tempId ? { ...m, conteudo: "❌ Erro no envio do áudio", metadata: { send_error: true } } : m); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });

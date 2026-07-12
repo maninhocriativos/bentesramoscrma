@@ -66,7 +66,7 @@ export function AudioPlayer({ message, isSent }: AudioPlayerProps) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   
   const audioUrl = extractAudioUrl(message);
   const supportsOgg = canPlayOgg();
@@ -124,12 +124,15 @@ export function AudioPlayer({ message, isSent }: AudioPlayerProps) {
         audio.pause();
         setIsPlaying(false);
       } else {
+        if (audio.readyState < 2) setIsLoading(true); // baixa só ao tocar (preload="none")
         await audio.play();
         setIsPlaying(true);
+        setIsLoading(false);
       }
     } catch (err) {
       console.error('Play error:', err);
       setError(true);
+      setIsLoading(false);
     }
   };
   
@@ -243,7 +246,7 @@ export function AudioPlayer({ message, isSent }: AudioPlayerProps) {
       {/* Hidden audio element */}
       <audio
         ref={audioRef}
-        preload="metadata"
+        preload="none"
         crossOrigin="anonymous"
       >
         {/* Tentar múltiplos formatos para compatibilidade */}
