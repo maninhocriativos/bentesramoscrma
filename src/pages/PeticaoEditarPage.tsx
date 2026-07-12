@@ -28,7 +28,7 @@ import Docxtemplater from 'docxtemplater';
 import { saveAs } from 'file-saver';
 import type { PetitionModelV2 } from '@/hooks/usePeticoesV2';
 import { reaisPorExtenso, inteiroPorExtenso } from '@/lib/extenso';
-import { buildDynamicSteps, type FieldConfig, type StepConfig } from '@/lib/petitionFields';
+import { buildDynamicSteps, BANCO_CNPJ, type FieldConfig, type StepConfig } from '@/lib/petitionFields';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -291,6 +291,19 @@ function FieldInput({
           placeholder={config.placeholder}
           className={cn('rounded-xl mt-0 min-h-[80px]', isEmpty && 'border-destructive')}
         />
+      ) : config.type === 'autocomplete' ? (
+        <>
+          <Input
+            list={`dl-${config.key}`}
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            placeholder={config.placeholder}
+            className={cn('rounded-xl mt-0', isEmpty && 'border-destructive')}
+          />
+          <datalist id={`dl-${config.key}`}>
+            {config.options?.map(opt => <option key={opt} value={opt} />)}
+          </datalist>
+        </>
       ) : (
         <Input
           value={value}
@@ -464,7 +477,15 @@ export default function PeticaoEditarPage() {
   };
 
   const updateField = (key: string, value: string) => {
-    setFormData(prev => ({ ...prev, [key]: value }));
+    setFormData(prev => {
+      const next = { ...prev, [key]: value };
+      // Ao selecionar o banco, puxa o CNPJ automaticamente (se conhecido).
+      // Banco não mapeado → mantém o CNPJ para preenchimento manual.
+      if (key === 'banco_nome' && BANCO_CNPJ[value]) {
+        next.banco_cnpj = BANCO_CNPJ[value];
+      }
+      return next;
+    });
     if (key === 'endereco_cep') handleCepLookup(value);
   };
 

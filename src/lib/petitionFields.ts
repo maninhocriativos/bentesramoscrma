@@ -18,11 +18,57 @@ export const BANCOS = [
   'Banco Daycoval','Banco Mercantil','Outro',
 ];
 
+// CNPJ dos bancos réus mais comuns (dado público). Preenche automaticamente ao
+// selecionar o banco. ⚠️ Conferir sempre — o advogado revisa antes de protocolar.
+// Bancos sem entrada aqui ficam em preenchimento manual.
+export const BANCO_CNPJ: Record<string, string> = {
+  'Banco do Brasil':          '00.000.000/0001-91',
+  'Caixa Econômica Federal':  '00.360.305/0001-04',
+  'Bradesco':                 '60.746.948/0001-12',
+  'Itaú Unibanco':            '60.701.190/0001-04',
+  'Santander':                '90.400.888/0001-42',
+  'Banco Safra':              '58.160.789/0001-28',
+  'Banco BMG':                '61.186.680/0001-74',
+  'Banco PAN':                '59.285.411/0001-13',
+  'Banco Inter':              '00.416.968/0001-01',
+  'Nubank':                   '18.236.120/0001-58',
+  'Banrisul':                 '92.702.067/0001-96',
+  'Banco do Nordeste':        '07.237.373/0001-20',
+  'Banco da Amazônia':        '04.902.979/0001-44',
+  'Banco Mercantil':          '17.184.037/0001-10',
+  'Banco Daycoval':           '62.232.889/0001-82',
+  'C6 Bank':                  '31.872.495/0001-72',
+  'Facta Financeira':         '15.581.638/0001-30',
+};
+
+// Nacionalidades (com opção de digitar outra).
+export const NACIONALIDADES = ['brasileiro(a)', 'brasileiro', 'brasileira', 'naturalizado(a) brasileiro(a)', 'estrangeiro(a)'];
+
+// Gentílicos por estado (naturalidade) — o usuário pode digitar cidade/adjetivo próprio.
+export const NATURALIDADES = [
+  'acriano(a)', 'alagoano(a)', 'amapaense', 'amazonense', 'baiano(a)', 'cearense', 'brasiliense',
+  'capixaba', 'goiano(a)', 'maranhense', 'mato-grossense', 'sul-mato-grossense', 'mineiro(a)',
+  'paraense', 'paraibano(a)', 'paranaense', 'pernambucano(a)', 'piauiense', 'fluminense', 'carioca',
+  'potiguar', 'gaúcho(a)', 'rondoniense', 'roraimense', 'catarinense', 'paulista', 'paulistano(a)',
+  'sergipano(a)', 'tocantinense',
+];
+
+// Profissões mais frequentes no público do escritório (lista sugerida, editável).
+export const PROFISSOES = [
+  'aposentado(a)', 'pensionista', 'aposentado(a) por invalidez', 'servidor(a) público(a)',
+  'funcionário(a) público(a)', 'autônomo(a)', 'do lar', 'agricultor(a)', 'lavrador(a)',
+  'comerciante', 'microempreendedor(a) individual', 'empresário(a)', 'professor(a)', 'motorista',
+  'pedreiro(a)', 'doméstica', 'diarista', 'vendedor(a)', 'costureira', 'cozinheiro(a)',
+  'mecânico(a)', 'eletricista', 'pintor(a)', 'porteiro(a)', 'vigilante', 'militar',
+  'enfermeiro(a)', 'técnico(a) de enfermagem', 'auxiliar administrativo(a)', 'balconista',
+];
+
 export interface FieldConfig {
   key: string;
   label: string;
   placeholder?: string;
-  type?: 'text' | 'select' | 'textarea' | 'date';
+  // 'autocomplete' = input com sugestões (datalist) que permite digitar valor livre.
+  type?: 'text' | 'select' | 'textarea' | 'date' | 'autocomplete';
   options?: string[];
   span?: 'full' | 'half';
   hint?: string;
@@ -45,9 +91,9 @@ const FIELD_DICT: Record<string, DictEntry> = {
   cpf:             { label: 'CPF', placeholder: '000.000.000-00', group: 'Cliente' },
   rg:              { label: 'RG', placeholder: '0000000-0 SSP/AM', group: 'Cliente' },
   estado_civil:    { label: 'Estado Civil', type: 'select', options: ESTADOS_CIVIS, group: 'Cliente' },
-  profissao:       { label: 'Profissão', placeholder: 'Ex: aposentado(a)', group: 'Cliente' },
-  nacionalidade:   { label: 'Nacionalidade', placeholder: 'brasileiro(a)', group: 'Cliente' },
-  naturalidade:    { label: 'Naturalidade', placeholder: 'amazonense', group: 'Cliente' },
+  profissao:       { label: 'Profissão', type: 'autocomplete', options: PROFISSOES, placeholder: 'Ex: aposentado(a)', group: 'Cliente' },
+  nacionalidade:   { label: 'Nacionalidade', type: 'autocomplete', options: NACIONALIDADES, placeholder: 'brasileiro(a)', group: 'Cliente' },
+  naturalidade:    { label: 'Naturalidade', type: 'autocomplete', options: NATURALIDADES, placeholder: 'amazonense', group: 'Cliente' },
   idade_numerica:  { label: 'Idade (número)', placeholder: '68', group: 'Cliente' },
 
   // ── Endereço ──
