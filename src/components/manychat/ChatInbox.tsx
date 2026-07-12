@@ -1668,7 +1668,9 @@ const ManyChatInboxContent = () => {
     setSelectedFile(null);
     setPreviewUrl(null);
     const tempId = `temp_${Date.now()}`;
-    const optimisticMessage: Message = { id: tempId, conteudo: "🎤 Enviando áudio...", created_at: new Date().toISOString(), direcao: "saida", tipo: "audio", subscriber_id: subscriberSnapshot.subscriber_id };
+    // URL local do áudio recém-gravado: toca na hora (igual WhatsApp), sem esperar o upload.
+    const localAudioUrl = URL.createObjectURL(audioFile);
+    const optimisticMessage: Message = { id: tempId, conteudo: localAudioUrl, created_at: new Date().toISOString(), direcao: "saida", tipo: "audio", subscriber_id: subscriberSnapshot.subscriber_id, metadata: { sent_via: "chat_interface", file_name: audioFile.name } } as any;
     setMessages(prev => { const updated = [...prev, optimisticMessage]; messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
     scrollToBottom();
     try {
@@ -1689,6 +1691,7 @@ const ManyChatInboxContent = () => {
         });
         if (igError) throw new Error(igError.message || "Erro ao enviar no Instagram");
         if (!igResult?.success) throw new Error(igResult?.error || "Instagram: envio não confirmado");
+        URL.revokeObjectURL(localAudioUrl);
         setMessages(prev => { const updated = prev.filter(m => m.id !== tempId); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
         return;
       }
@@ -1712,17 +1715,18 @@ const ManyChatInboxContent = () => {
             dedupKeysRef.current.add(getMessageDedupeKey(savedAsMessage));
             dedupKeysRef.current.add(`db_${savedAsMessage.id}`);
             setMessages(prev => { const withoutTemp = prev.filter(m => m.id !== tempId); const updated = mergeMessageDedup(withoutTemp, savedAsMessage); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
-          } else {
-            // Áudio já foi entregue ao cliente; só marca o otimista como enviado.
-            setMessages(prev => { const updated = prev.map(m => m.id === tempId ? { ...m, conteudo: "🎤 Áudio" } : m); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+            // Já trocou pela URL do servidor; libera o blob local (com folga p/ não cortar reprodução em curso).
+            setTimeout(() => URL.revokeObjectURL(localAudioUrl), 15000);
           }
+          // Sem signedUrl: mantém a mensagem otimista tocando pelo blob local (não sobrescreve o conteúdo).
         } catch (bgErr) {
+          // Áudio já foi entregue ao cliente; mantém tocável pelo blob local.
           console.error("[audio] upload/salvar em segundo plano falhou:", bgErr);
-          setMessages(prev => { const updated = prev.map(m => m.id === tempId ? { ...m, conteudo: "🎤 Áudio" } : m); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
         }
       })();
     } catch (error: any) {
       console.error("[Envio áudio] falhou:", error);
+      URL.revokeObjectURL(localAudioUrl);
       setMessages(prev => { const updated = prev.map(m => m.id === tempId ? { ...m, conteudo: "❌ Erro no envio do áudio", metadata: { send_error: true } } : m); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
       toast({ title: "Erro ao enviar áudio", description: error?.message || error?.error_description || "Falha no envio", variant: "destructive" });
     }
@@ -2164,7 +2168,21 @@ const ManyChatInboxContent = () => {
     const isImage = type === "image" || urlCandidate.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i);
     const isVideo = type === "video" || urlCandidate.match(/\.(mp4|webm|mov)(\?|$)/i);
     const isDocument = type === "document" || urlCandidate.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt)(\?|$)/i);
-    if (isAudio) return <WhatsAppAudioPlayer message={{ ...message, conteudo: urlCandidate, metadata } as any} isSent={message.direcao === "saida"} />;
+    if (isAudio) {
+      const hasAudioUrl = /^(https?:|blob:)/i.test(urlCandidate);
+      if (hasAudioUrl) return <WhatsAppAudioPlayer message={{ ...message, conteudo: urlCandidate, metadata } as any} isSent={message.direcao === "saida"} />;
+      // Áudio sem URL tocável ainda: mensagem otimista em envio, erro, ou entregue sem arquivo no CRM.
+      const isSendError = metadata?.send_error || content.includes("❌");
+      const isSending = /enviando/i.test(content);
+      if (isSendError) {
+        return <div className="flex items-center gap-2 min-w-[160px] text-[13px] opacity-90"><Mic className="h-4 w-4 shrink-0" /><span>Erro no envio do áudio</span></div>;
+      }
+      if (isSending) {
+        return <div className="flex items-center gap-2 min-w-[160px] text-[13px] opacity-90"><span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" /><span>Enviando áudio…</span></div>;
+      }
+      // Entregue ao cliente, mas sem URL armazenada (ou áudio recebido indisponível).
+      return <div className="flex items-center gap-2 min-w-[160px] text-[13px] opacity-80"><Mic className="h-4 w-4 shrink-0" /><span>{message.direcao === "saida" ? "Áudio enviado" : "Áudio não disponível"}</span></div>;
+    }
     if (isImage) return <div className="space-y-1"><img src={urlCandidate} alt="" className="max-w-[280px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity" onClick={() => window.open(urlCandidate, "_blank")} />{caption && <p className="whitespace-pre-wrap break-words text-[13px] leading-[18px] opacity-90">{formatWhatsAppTextHelper(caption)}</p>}</div>;
     if (isVideo) return <video controls className="max-w-[280px] rounded-lg" preload="metadata"><source src={urlCandidate} /></video>;
     if (isDocument) {

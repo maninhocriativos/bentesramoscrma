@@ -229,7 +229,7 @@ export function useZapsignContratos(options: { refreshInterval?: number } = {}) 
   // Realtime: re-fetch quando banco local mudar
   useEffect(() => {
     const channel = supabase
-      .channel('zapsign-contracts-changes')
+      .channel(`zapsign-contracts-changes-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'contract_reminders_zapsign' }, () => refetch())
       .subscribe();
     return () => { supabase.removeChannel(channel); };

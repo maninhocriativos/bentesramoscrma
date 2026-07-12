@@ -79,7 +79,7 @@ export function useProcessos({ withRealtime = true }: { withRealtime?: boolean }
   useEffect(() => {
     if (!withRealtime) return;
     const channel = supabase
-      .channel('processos-realtime')
+      .channel(`processos-realtime-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'processos' }, (payload) => {
         const next = payload.new as Processo;
         if (!isVisible(next)) return;

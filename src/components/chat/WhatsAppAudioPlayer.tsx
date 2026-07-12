@@ -18,6 +18,8 @@ function extractAudioUrl(message: ChatMessage): string | null {
   
   const content = message.conteudo || '';
   const cleanUrl = content.replace(/^\[|\]$/g, '').trim();
+  // URL local (blob:) do áudio recém-gravado — permite tocar na hora, antes do upload.
+  if (cleanUrl.startsWith('blob:')) return cleanUrl;
   if (cleanUrl.match(/^https?:\/\/.+\.(ogg|mp3|wav|m4a|opus|aac|webm)/i) ||
       cleanUrl.includes('whatsapp') || 
       cleanUrl.includes('z-api') ||
@@ -193,6 +195,8 @@ export function WhatsAppAudioPlayer({ message, isSent }: WhatsAppAudioPlayerProp
       <audio ref={audioRef} preload="none">
         <source src={audioUrl} type="audio/ogg; codecs=opus" />
         <source src={audioUrl} type="audio/ogg" />
+        <source src={audioUrl} type="audio/webm; codecs=opus" />
+        <source src={audioUrl} type="audio/webm" />
         <source src={audioUrl} type="audio/mpeg" />
         <source src={audioUrl} type="audio/mp4" />
       </audio>

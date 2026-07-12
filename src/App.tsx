@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,44 +6,47 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { PerfilProvider } from "@/contexts/PerfilContext";
 import { useServiceWorkerUpdate } from "@/hooks/useServiceWorkerUpdate";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { lazyWithRetry } from "@/lib/lazyWithRetry";
 
 import RequireAuth from "@/components/auth/RequireAuth";
 
 // Lazy-loaded pages
-const DashboardPage            = lazy(() => import("./pages/DashboardPage"));
-const LeadsPage                = lazy(() => import("./pages/LeadsPage"));
-const ProcessosPage            = lazy(() => import("./pages/ProcessosPage"));
-const ConfiguracoesPage        = lazy(() => import("./pages/ConfiguracoesPage"));
-const AgendaPage               = lazy(() => import("./pages/AgendaPage"));
-const FinanceiroPage           = lazy(() => import("./pages/FinanceiroPage"));
-const DocumentosPage           = lazy(() => import("./pages/DocumentosPage"));
-const TarefasPage              = lazy(() => import("./pages/TarefasPage"));
-const ContratosPage            = lazy(() => import("./pages/ContratosPage"));
-const LeadDetailPage           = lazy(() => import("./pages/LeadDetailPage"));
-const AssistentePage           = lazy(() => import("./pages/AssistentePage"));
-const IsaAutonomaPage          = lazy(() => import("./pages/IsaAutonomaPage"));
-const ChatPage                 = lazy(() => import("./pages/ChatPage"));
-const ApiHubPage               = lazy(() => import("./pages/ApiHubPage"));
-const ApiDocsPage              = lazy(() => import("./pages/ApiDocsPage"));
-const MetaLeadsPage            = lazy(() => import("./pages/MetaLeadsPage"));
-const Auth                     = lazy(() => import("./pages/Auth"));
-const NotFound                 = lazy(() => import("./pages/NotFound"));
-const PoliticaPrivacidadePage  = lazy(() => import("./pages/PoliticaPrivacidadePage"));
-const TermosServicoPage        = lazy(() => import("./pages/TermosServicoPage"));
-const ExclusaoDadosPage        = lazy(() => import("./pages/ExclusaoDadosPage"));
-const InstallPage              = lazy(() => import("./pages/InstallPage"));
-const PeticoesPage             = lazy(() => import("./pages/PeticoesPage"));
-const PeticaoEditarPage        = lazy(() => import("./pages/PeticaoEditarPage"));
-const PeticaoRevisaoPage       = lazy(() => import("./pages/PeticaoRevisaoPage"));
-const PeticaoSaidaPage         = lazy(() => import("./pages/PeticaoSaidaPage"));
-const ModelosPage              = lazy(() => import("./pages/ModelosPage"));
-const PeticaoModeloEditorPage  = lazy(() => import("./pages/PeticaoModeloEditorPage"));
-const HistoricoAcessosPage     = lazy(() => import("./pages/HistoricoAcessosPage"));
-const IntimacoesPage           = lazy(() => import("./pages/IntimacoesPage"));
-const BemVindoPage             = lazy(() => import("./pages/BemVindoPage"));
-const ConferenciaExtratosPage  = lazy(() => import("./pages/ConferenciaExtratosPage"));
-const GoogleAuthCallback       = lazy(() => import("./pages/GoogleAuthCallback"));
-const FollowupPage             = lazy(() => import("./pages/FollowupPage"));
+const DashboardPage            = lazyWithRetry(() => import("./pages/DashboardPage"));
+const LeadsPage                = lazyWithRetry(() => import("./pages/LeadsPage"));
+const ProcessosPage            = lazyWithRetry(() => import("./pages/ProcessosPage"));
+const ConfiguracoesPage        = lazyWithRetry(() => import("./pages/ConfiguracoesPage"));
+const AgendaPage               = lazyWithRetry(() => import("./pages/AgendaPage"));
+const FinanceiroPage           = lazyWithRetry(() => import("./pages/FinanceiroPage"));
+const DocumentosPage           = lazyWithRetry(() => import("./pages/DocumentosPage"));
+const TarefasPage              = lazyWithRetry(() => import("./pages/TarefasPage"));
+const ContratosPage            = lazyWithRetry(() => import("./pages/ContratosPage"));
+const LeadDetailPage           = lazyWithRetry(() => import("./pages/LeadDetailPage"));
+const AssistentePage           = lazyWithRetry(() => import("./pages/AssistentePage"));
+const IsaAutonomaPage          = lazyWithRetry(() => import("./pages/IsaAutonomaPage"));
+const ChatPage                 = lazyWithRetry(() => import("./pages/ChatPage"));
+const ApiHubPage               = lazyWithRetry(() => import("./pages/ApiHubPage"));
+const ApiDocsPage              = lazyWithRetry(() => import("./pages/ApiDocsPage"));
+const MetaLeadsPage            = lazyWithRetry(() => import("./pages/MetaLeadsPage"));
+const Auth                     = lazyWithRetry(() => import("./pages/Auth"));
+const NotFound                 = lazyWithRetry(() => import("./pages/NotFound"));
+const PoliticaPrivacidadePage  = lazyWithRetry(() => import("./pages/PoliticaPrivacidadePage"));
+const TermosServicoPage        = lazyWithRetry(() => import("./pages/TermosServicoPage"));
+const ExclusaoDadosPage        = lazyWithRetry(() => import("./pages/ExclusaoDadosPage"));
+const InstallPage              = lazyWithRetry(() => import("./pages/InstallPage"));
+const PeticoesPage             = lazyWithRetry(() => import("./pages/PeticoesPage"));
+const PeticaoEditarPage        = lazyWithRetry(() => import("./pages/PeticaoEditarPage"));
+const PeticaoRevisaoPage       = lazyWithRetry(() => import("./pages/PeticaoRevisaoPage"));
+const PeticaoSaidaPage         = lazyWithRetry(() => import("./pages/PeticaoSaidaPage"));
+const ModelosPage              = lazyWithRetry(() => import("./pages/ModelosPage"));
+const PeticaoModeloEditorPage  = lazyWithRetry(() => import("./pages/PeticaoModeloEditorPage"));
+const HistoricoAcessosPage     = lazyWithRetry(() => import("./pages/HistoricoAcessosPage"));
+const IntimacoesPage           = lazyWithRetry(() => import("./pages/IntimacoesPage"));
+const BemVindoPage             = lazyWithRetry(() => import("./pages/BemVindoPage"));
+const ConferenciaExtratosPage  = lazyWithRetry(() => import("./pages/ConferenciaExtratosPage"));
+const GoogleAuthCallback       = lazyWithRetry(() => import("./pages/GoogleAuthCallback"));
+const FollowupPage             = lazyWithRetry(() => import("./pages/FollowupPage"));
+const DadosPage                = lazyWithRetry(() => import("./pages/DadosPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,6 +71,7 @@ function AppRoutes() {
 
   return (
     <PerfilProvider>
+      <ErrorBoundary>
       <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -110,11 +114,13 @@ function AppRoutes() {
             <Route path="/bem-vindo"             element={<BemVindoPage />} />
             <Route path="/conferencia-extratos"  element={<ConferenciaExtratosPage />} />
             <Route path="/followup"              element={<FollowupPage />} />
+            <Route path="/dados"                 element={<DadosPage />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
+      </ErrorBoundary>
     </PerfilProvider>
   );
 }

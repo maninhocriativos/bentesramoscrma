@@ -51,7 +51,7 @@ export function useLeads() {
   // Canal criado uma vez com [] — nunca recriado ao trocar de aba
   useEffect(() => {
     const channel = supabase
-      .channel('leads-realtime')
+      .channel(`leads-realtime-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'leads_juridicos' },

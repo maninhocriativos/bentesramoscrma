@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft,
   DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare,
-  Sparkles, Webhook, Zap, BookOpen, FormInput, History, FileEdit, Gavel, GraduationCap, Calculator, TrendingUp, LogOut
+  Sparkles, Webhook, Zap, BookOpen, FormInput, History, FileEdit, Gavel, GraduationCap, Calculator, TrendingUp, BarChart3, LogOut
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -43,6 +43,7 @@ const menuSections: MenuSection[] = [
     items: [
       { title: 'Bem-Vindo', url: '/bem-vindo', icon: GraduationCap, visibility: 'all' },
       { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, visibility: 'dashboard-only' },
+      { title: 'Dados', url: '/dados', icon: BarChart3, visibility: 'dashboard-only' },
       { title: 'Leads', url: '/leads', icon: Users, visibility: 'leads-only' },
       { title: 'Leads API (Meta)', url: '/meta-leads', icon: FormInput, visibility: 'leads-only' },
       { title: 'Processos', url: '/processos', icon: Scale, visibility: 'processos-only' },
