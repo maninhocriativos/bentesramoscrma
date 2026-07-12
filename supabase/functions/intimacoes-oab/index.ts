@@ -448,6 +448,49 @@ serve(async (req) => {
       console.log(`📋 [V1] ${v1Count} publicações no Diário Oficial`);
     }
 
+    // ── Estratégia DJEN: Comunica PJe / Diário de Justiça Eletrônico Nacional ──
+    // API pública do CNJ, gratuita, sem chave — unifica publicações de TODOS
+    // os tribunais do país (diferente do DataJud, que é por tribunal isolado e
+    // não expõe partes/advogados) e busca diretamente por número de OAB.
+    // https://comunicaapi.pje.jus.br
+    try {
+      let djenCount = 0;
+      const ITENS_POR_PAGINA = 100;
+      for (let pagina = 1; pagina <= 10; pagina++) {
+        const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroOab=${oab_numero}&ufOab=${oab_uf}&dataDisponibilizacaoInicio=${CUTOFF}&dataDisponibilizacaoFim=${new Date().toISOString().slice(0, 10)}&itensPorPagina=${ITENS_POR_PAGINA}&pagina=${pagina}`;
+        const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
+        if (!resp.ok) {
+          console.warn(`⚠️ [DJEN] p${pagina} → HTTP ${resp.status}`);
+          break;
+        }
+        const data = await resp.json();
+        const items: any[] = Array.isArray(data?.items) ? data.items : [];
+        if (pagina === 1) console.log(`🔎 [DJEN] total=${data?.count ?? "?"}`);
+        if (items.length === 0) break;
+
+        for (const item of items) {
+          const conteudo = item.texto || "";
+          const tipoRaw = classifyMovimento(conteudo, item.tipoComunicacao || "");
+          const tipo = TIPOS_INTIMACAO.has(tipoRaw) ? tipoRaw : "Publicação";
+          intimacoes.push(makeItem({
+            cnj: item.numeroprocessocommascara || item.numero_processo || "",
+            titulo: item.nomeClasse || "Processo",
+            tribunal: item.siglaTribunal || "",
+            tipo, conteudo,
+            dataDisp: item.data_disponibilizacao || null,
+            oab_numero, oab_uf, advogado_id,
+            fonte: "djen",
+            raw: item,
+          }));
+          djenCount++;
+        }
+        if (items.length < ITENS_POR_PAGINA) break;
+      }
+      console.log(`📋 [DJEN] ${djenCount} publicações via Comunica PJe Nacional`);
+    } catch (e) {
+      console.warn("⚠️ [DJEN] Erro geral:", e);
+    }
+
     // ── Estratégia 5: DataJud CNJ — publicações e intimações do DJe ────────────
     // DataJud é a base oficial do CNJ alimentada pelo próprio tribunal.
     // Query simplificada: busca processos com o advogado (OAB) atualizados nos
@@ -466,35 +509,24 @@ serve(async (req) => {
       // Log para diagnóstico: mostra se a env var está definida
       console.log(`🔑 [DataJud] chave: ${datajudKeyEnv ? "DATAJUD_API_KEY definida (" + datajudKey.slice(0, 8) + "...)" : "usando fallback hardcoded (vai falhar 401)"}`);
 
-      const tjIndex = `api-publica-tj${oab_uf.toLowerCase()}`;
+      // Nome real do índice usa underscore (api_publica_tjXX), não hífen —
+      // com hífen a API key é rejeitada com 403 security_exception.
+      const tjIndex = `api_publica_tj${oab_uf.toLowerCase()}`;
 
       // Codigos CNJ de publicação no DJe / intimação / citação / notificação
       const CODIGOS_DJE = new Set([11009, 11010, 11011, 11012, 60, 106, 108, 230]);
 
       // Query simplificada: apenas por OAB + janela de 90 dias
       // O filtro de movimentos é feito client-side para não depender dos códigos do TJAM
+      // Sem "nested": o mapeamento do índice do TJAM não declara "partes" como
+      // nested object (cada tribunal tem seu próprio mapeamento no DataJud),
+      // então o ES trata os campos com dot-notation direta.
       const djBody = {
         query: {
           bool: {
             must: [
-              {
-                nested: {
-                  path: "partes",
-                  query: {
-                    nested: {
-                      path: "partes.advogados",
-                      query: {
-                        bool: {
-                          must: [
-                            { term: { "partes.advogados.OABNumero": oab_numero } },
-                            { term: { "partes.advogados.OABEstado": oab_uf } },
-                          ],
-                        },
-                      },
-                    },
-                  },
-                },
-              },
+              { term: { "partes.advogados.OABNumero": oab_numero } },
+              { term: { "partes.advogados.OABEstado": oab_uf } },
               { range: { dataHoraUltimaAtualizacao: { gte: "now-90d" } } },
             ],
           },
