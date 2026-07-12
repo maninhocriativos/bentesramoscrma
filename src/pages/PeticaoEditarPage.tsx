@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { DetailSkeleton } from '@/components/ui/PageSkeleton';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRight, Save, Sparkles, Loader2,
   User, MapPin, Building2, DollarSign, CheckCircle2,
-  FileText, Scale, AlertCircle,
+  FileText, Scale, AlertCircle, Image as ImageIcon, Upload, X, Search, UserCheck,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
@@ -27,21 +27,8 @@ import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { saveAs } from 'file-saver';
 import type { PetitionModelV2 } from '@/hooks/usePeticoesV2';
-
-// ─── Constantes ────────────────────────────────────────────────────────────────
-
-const ESTADOS_CIVIS = ['Solteiro(a)', 'Casado(a)', 'Divorciado(a)', 'Viúvo(a)', 'União Estável'];
-const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
-const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
-const ANOS = Array.from({ length: 10 }, (_, i) => String(new Date().getFullYear() - i));
-
-const BANCOS = [
-  'Banco do Brasil','Bradesco','Itaú Unibanco','Caixa Econômica Federal','Santander',
-  'Banco Safra','Banco Inter','Nubank','C6 Bank','Banco PAN','Banco BMG','Banrisul',
-  'Banco do Nordeste','Banco da Amazônia','Sicoob','Sicredi','Agibank','Banco Cetelem',
-  'Banco Crefisa','PicPay','Will Bank','Facta Financeira','Banco Itaú Consignado',
-  'Banco Daycoval','Banco Bmg','Banco Mercantil','Outro',
-];
+import { reaisPorExtenso, inteiroPorExtenso } from '@/lib/extenso';
+import { buildDynamicSteps, type FieldConfig, type StepConfig } from '@/lib/petitionFields';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -49,48 +36,56 @@ type FormData = Record<string, string>;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-function numberToWords(value: string): string {
-  // Simple helper - advogado preenche por extenso manualmente
-  return value;
-}
+// Gera automaticamente os campos "por extenso" a partir dos valores numéricos,
+// preenchendo apenas os que o advogado deixou em branco (não sobrescreve manual).
+function autoExtenso(formData: FormData): Record<string, string> {
+  const extras: Record<string, string> = {};
+  const vazio = (k: string) => !(formData[k] && formData[k].trim());
 
-function normalizeText(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-}
+  for (const [key, raw] of Object.entries(formData)) {
+    const val = String(raw ?? '').trim();
+    if (!val || key.endsWith('_extenso')) continue;
 
-function detectActionSlug(actionName: string): string {
-  const name = normalizeText(actionName);
-  if (name.includes('venda casada') || name.includes('vendas casadas')) return 'venda-casada';
-  if (name.includes('tarifa bancaria')) return 'tarifa-bancaria';
-  if (name.includes('desconto indevido') || name.includes('descontos indevidos')) return 'descontos-indevidos';
-  if (name.includes('rmc') || name.includes('rcc') || name.includes('cartao consignado')) return 'rmc-rcc';
-  if (name.includes('cancelamento') && name.includes('voo')) return 'cancelamento-voo';
-  if (name.includes('emprestimo fraudulento')) return 'emprestimo-fraudulento';
-  if (name.includes('diferenca salarial')) return 'diferenca-salarial';
-  if (name.includes('negativacao')) return 'negativacao-indevida';
-  return 'generico';
-}
+    // Valores monetários (valor_*) → reais por extenso
+    if (/^valor_/.test(key)) {
+      const extKey = `${key}_extenso`;
+      if (vazio(extKey)) {
+        const txt = reaisPorExtenso(val);
+        if (txt) extras[extKey] = txt;
+      }
+    }
 
-function normalizeActionSlug(slug: string | null | undefined, actionName: string): string {
-  const normalized = (slug || '').replace(/_/g, '-');
-  if (normalized === 'vendas-casadas') return 'venda-casada';
-  if ([
-    'venda-casada',
-    'tarifa-bancaria',
-    'descontos-indevidos',
-    'rmc-rcc',
-    'cancelamento-voo',
-    'emprestimo-fraudulento',
-    'diferenca-salarial',
-    'negativacao-indevida',
-  ].includes(normalized)) {
-    return normalized;
+    // Quantidades de parcelas → inteiro por extenso
+    if (/^num_parcelas/.test(key)) {
+      const extKey = `${key}_extenso`;
+      const n = parseInt(val.replace(/\D/g, ''), 10);
+      if (vazio(extKey) && !isNaN(n)) extras[extKey] = inteiroPorExtenso(n);
+    }
   }
 
-  return detectActionSlug(actionName);
+  // Idade por extenso (mantém MAIÚSCULAS conforme padrão dos modelos)
+  if (formData.idade_numerica?.trim() && vazio('idade_extenso')) {
+    const n = parseInt(formData.idade_numerica.replace(/\D/g, ''), 10);
+    if (!isNaN(n)) extras.idade_extenso = inteiroPorExtenso(n).toUpperCase();
+  }
+
+  return extras;
+}
+
+// Extrai os marcadores {{...}} de um template .docx (via URL p\u00fablica).
+// Remove as tags XML antes de casar, para juntar marcadores quebrados em runs.
+async function extrairPlaceholders(url: string): Promise<string[]> {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error('Falha ao baixar o modelo');
+  const buf = await resp.arrayBuffer();
+  const zip = new PizZip(buf);
+  const xml = zip.file('word/document.xml')?.asText() || '';
+  const texto = xml.replace(/<[^>]+>/g, '');
+  const set = new Set<string>();
+  for (const m of texto.matchAll(/\{\{\s*([^}]+?)\s*\}\}/g)) {
+    set.add(m[1].trim());
+  }
+  return [...set];
 }
 
 function buildEnderecoCliente(formData: FormData): string {
@@ -129,6 +124,9 @@ function buildTemplateData(formData: FormData, actionName: string): Record<strin
 
   const data: Record<string, string> = {
     ...formData,
+    ...autoExtenso(formData),
+    // Alias: alguns modelos usam {{data_petição}} (com cedilha) e o form salva data_peticao.
+    'data_petição': formData.data_petição || formData.data_peticao || '',
     nome_completo: nomeCompleto,
     nome_maiusculo: nomeMaiusculo,
     qualificacao,
@@ -161,215 +159,51 @@ function buildTemplateData(formData: FormData, actionName: string): Record<strin
   );
 }
 
-// ─── Configuração de campos por tipo de ação ───────────────────────────────────
+// ─── Inserção do print do contrato no .docx ─────────────────────────────────────
 
-interface FieldConfig {
-  key: string;
-  label: string;
-  placeholder?: string;
-  type?: 'text' | 'select' | 'textarea' | 'date';
-  options?: string[];
-  span?: 'full' | 'half';
-  hint?: string;
+// Converte o arquivo enviado (JPG/PNG) em bytes PNG (padroniza o formato).
+async function fileToPngBytes(file: File): Promise<Uint8Array> {
+  const dataUrl = await new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result as string);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = rej;
+    i.src = dataUrl;
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  canvas.getContext('2d')!.drawImage(img, 0, 0);
+  const blob = await new Promise<Blob>((res) => canvas.toBlob(b => res(b!), 'image/png'));
+  return new Uint8Array(await blob.arrayBuffer());
 }
 
-interface StepConfig {
-  id: number;
-  title: string;
-  icon: React.ElementType;
-  fields: FieldConfig[];
-}
+// Substitui a imagem do CORPO do documento (o print do contrato) pelos bytes
+// enviados. A logo do timbre fica no cabeçalho (header rels), então não é tocada.
+// Quando há mais de uma imagem no corpo, troca a maior (o print costuma ser a maior).
+function substituirPrintNoDocx(zip: PizZip, pngBytes: Uint8Array): boolean {
+  const relsFile = zip.file('word/_rels/document.xml.rels');
+  if (!relsFile) return false;
 
-function getStepsConfig(actionSlug: string): StepConfig[] {
+  const rels = relsFile.asText();
+  const alvos = [...rels.matchAll(/Target="(media\/image[^"]+\.(?:png|jpe?g|gif))"/gi)].map(m => m[1]);
+  if (alvos.length === 0) return false;
 
-  const clienteBase: FieldConfig[] = [
-    { key: 'nome_maiusculo',    label: 'Nome Completo (MAIÚSCULAS)',  placeholder: 'NOME CONFORME DOCUMENTOS',  span: 'full' },
-    { key: 'nome_completo',     label: 'Nome Completo (normal)',      placeholder: 'Nome conforme documentos',  span: 'full' },
-    { key: 'cpf',               label: 'CPF',                         placeholder: '000.000.000-00' },
-    { key: 'rg',                label: 'RG',                          placeholder: '0000000-0 SSP/AM' },
-    { key: 'estado_civil',      label: 'Estado Civil',                type: 'select', options: ESTADOS_CIVIS },
-    { key: 'profissao',         label: 'Profissão',                   placeholder: 'Ex: aposentado(a), servidor(a) público(a)' },
-    { key: 'nacionalidade',     label: 'Nacionalidade',               placeholder: 'brasileiro(a)' },
-    { key: 'naturalidade',      label: 'Naturalidade',                placeholder: 'amazonense' },
-  ];
-
-  const clienteIdoso: FieldConfig[] = [
-    ...clienteBase,
-    { key: 'idade_numerica', label: 'Idade (número)', placeholder: '68' },
-    { key: 'idade_extenso',  label: 'Idade (por extenso)', placeholder: 'SESSENTA E OITO' },
-  ];
-
-  const enderecoFields: FieldConfig[] = [
-    { key: 'endereco_rua',        label: 'Rua',        placeholder: 'Rua das Flores', span: 'full' },
-    { key: 'endereco_numero',     label: 'Número',     placeholder: '123' },
-    { key: 'endereco_complemento',label: 'Complemento',placeholder: 'Apto 10' },
-    { key: 'endereco_bairro',     label: 'Bairro',     placeholder: 'Centro' },
-    { key: 'endereco_cidade',     label: 'Cidade',     placeholder: 'Manaus' },
-    { key: 'endereco_uf',         label: 'UF', type: 'select', options: UFS },
-    { key: 'endereco_cep',        label: 'CEP',        placeholder: '69.000-000' },
-  ];
-
-  const bancoBase: FieldConfig[] = [
-    { key: 'banco_nome',     label: 'Banco Réu',  type: 'select', options: BANCOS, span: 'full' },
-    { key: 'banco_cnpj',     label: 'CNPJ do Banco', placeholder: '00.000.000/0001-00' },
-    { key: 'banco_endereco', label: 'Endereço do Banco', placeholder: 'Av. Paulista, nº 100, Centro, São Paulo/SP', span: 'full' },
-  ];
-
-  const dataFields: FieldConfig[] = [
-    { key: 'data_peticao', label: 'Data da Petição', placeholder: '06 de março de 2026', span: 'full',
-      hint: 'Ex: 06 de março de 2026' },
-  ];
-
-  // ── VENDA CASADA ─────────────────────────────────────────────────────────────
-  if (actionSlug === 'venda-casada') {
-    return [
-      {
-        id: 1, title: 'Cliente', icon: User,
-        fields: clienteIdoso,
-      },
-      {
-        id: 2, title: 'Endereço', icon: MapPin,
-        fields: enderecoFields,
-      },
-      {
-        id: 3, title: 'Banco', icon: Building2,
-        fields: bancoBase,
-      },
-      {
-        id: 4, title: 'Contrato', icon: FileText,
-        fields: [
-          { key: 'numero_contrato',              label: 'Número do Contrato',             placeholder: '6182708' },
-          { key: 'valor_emprestimo',             label: 'Valor do Empréstimo (R$)',        placeholder: '2.000,05' },
-          { key: 'valor_emprestimo_extenso',     label: 'Valor do Empréstimo (extenso)',   placeholder: 'dois mil reais e cinco centavos', span: 'full' },
-          { key: 'valor_seguro',                 label: 'Valor do Seguro Prestamista (R$)',placeholder: '122,27' },
-          { key: 'valor_seguro_extenso',         label: 'Valor do Seguro (extenso)',       placeholder: 'cento e vinte e dois reais e vinte e sete centavos', span: 'full' },
-          { key: 'valor_encargos',               label: 'Valor dos Encargos (R$)',         placeholder: '97,63' },
-          { key: 'valor_encargos_extenso',       label: 'Valor dos Encargos (extenso)',    placeholder: 'noventa e sete reais e sessenta e três centavos', span: 'full' },
-          { key: 'valor_total_contrato',         label: 'Valor Total do Contrato (R$)',    placeholder: '2.219,65' },
-          { key: 'valor_total_contrato_extenso', label: 'Valor Total (extenso)',           placeholder: 'dois mil, duzentos e dezenove reais e sessenta e cinco centavos', span: 'full' },
-        ],
-      },
-      {
-        id: 5, title: 'Pedidos', icon: DollarSign,
-        fields: [
-          { key: 'valor_seguro_dobro',          label: 'Valor do Seguro em Dobro (R$)',    placeholder: '244,54' },
-          { key: 'valor_seguro_dobro_extenso',  label: 'Valor em Dobro (extenso)',         placeholder: 'duzentos e quarenta e quatro reais e cinquenta e quatro centavos', span: 'full' },
-          { key: 'valor_danos_morais',          label: 'Valor Danos Morais (R$)',          placeholder: '10.000,00' },
-          { key: 'valor_danos_morais_extenso',  label: 'Danos Morais (extenso)',           placeholder: 'dez mil reais', span: 'full' },
-          { key: 'valor_causa',                 label: 'Valor da Causa (R$)',              placeholder: '10.244,54' },
-          { key: 'valor_causa_extenso',         label: 'Valor da Causa (extenso)',         placeholder: 'dez mil, duzentos e quarenta e quatro reais e cinquenta e quatro centavos', span: 'full' },
-          ...dataFields,
-        ],
-      },
-      {
-        id: 6, title: 'Revisão', icon: CheckCircle2,
-        fields: [],
-      },
-    ];
+  let alvo = alvos[0];
+  let maior = -1;
+  for (const t of alvos) {
+    const f = zip.file(`word/${t}`);
+    const sz = f ? f.asUint8Array().length : 0;
+    if (sz > maior) { maior = sz; alvo = t; }
   }
 
-  // ── RMC / RCC ────────────────────────────────────────────────────────────────
-  if (actionSlug === 'rmc-rcc') {
-    return [
-      {
-        id: 1, title: 'Cliente', icon: User,
-        fields: clienteIdoso,
-      },
-      {
-        id: 2, title: 'Endereço', icon: MapPin,
-        fields: enderecoFields,
-      },
-      {
-        id: 3, title: 'Banco', icon: Building2,
-        fields: bancoBase,
-      },
-      {
-        id: 4, title: 'Contrato', icon: FileText,
-        fields: [
-          { key: 'mes_contratacao',          label: 'Mês da Contratação',    type: 'select', options: MESES },
-          { key: 'ano_contratacao',          label: 'Ano da Contratação',    type: 'select', options: ANOS },
-          { key: 'num_parcelas',             label: 'Nº de Parcelas',        placeholder: '24' },
-          { key: 'num_parcelas_extenso',     label: 'Nº de Parcelas (extenso)', placeholder: 'vinte e quatro' },
-          { key: 'valor_emprestimo',         label: 'Valor do Empréstimo (R$)', placeholder: '1.515,00' },
-          { key: 'valor_emprestimo_extenso', label: 'Valor do Empréstimo (extenso)', placeholder: 'um mil, quinhentos e quinze reais', span: 'full' },
-          { key: 'valor_parcela',            label: 'Valor da Parcela (R$)', placeholder: '88,29' },
-          { key: 'valor_parcela_extenso',    label: 'Valor da Parcela (extenso)', placeholder: 'oitenta e oito reais e vinte e nove centavos', span: 'full' },
-          { key: 'valor_total_contrato',     label: 'Valor Total do Contrato (R$)', placeholder: '2.118,96' },
-          { key: 'valor_total_contrato_extenso', label: 'Valor Total (extenso)', placeholder: 'dois mil, cento e dezoito reais e noventa e seis centavos', span: 'full' },
-        ],
-      },
-      {
-        id: 5, title: 'Descontos', icon: Scale,
-        fields: [
-          { key: 'mes_inicio_desconto',      label: 'Mês Início Desconto',   type: 'select', options: MESES },
-          { key: 'ano_inicio_desconto',      label: 'Ano Início Desconto',   type: 'select', options: ANOS },
-          { key: 'mes_quitacao',             label: 'Mês Quitação',          type: 'select', options: MESES },
-          { key: 'ano_quitacao',             label: 'Ano Quitação',          type: 'select', options: ANOS },
-          { key: 'mes_ultimo_desconto',      label: 'Mês Último Desconto',   type: 'select', options: MESES },
-          { key: 'ano_ultimo_desconto',      label: 'Ano Último Desconto',   type: 'select', options: ANOS },
-          { key: 'periodo_descontos_indevidos', label: 'Período Descontos Indevidos', placeholder: 'dezembro de 2024 a fevereiro de 2026', span: 'full' },
-          { key: 'num_parcelas_descontadas', label: 'Nº Parcelas Descontadas', placeholder: '39' },
-          { key: 'num_parcelas_descontadas_extenso', label: 'Parcelas Descontadas (extenso)', placeholder: 'trinta e nove' },
-          { key: 'valor_total_descontado',   label: 'Total Descontado (R$)', placeholder: '3.436,86' },
-          { key: 'valor_total_descontado_extenso', label: 'Total Descontado (extenso)', placeholder: 'três mil, quatrocentos e trinta e seis reais e oitenta e seis centavos', span: 'full' },
-          { key: 'valor_descontos_indevidos', label: 'Descontos Indevidos (R$)', placeholder: '1.317,90' },
-          { key: 'valor_descontos_indevidos_extenso', label: 'Descontos Indevidos (extenso)', placeholder: 'um mil, trezentos e dezessete reais e noventa centavos', span: 'full' },
-        ],
-      },
-      {
-        id: 6, title: 'Pedidos', icon: DollarSign,
-        fields: [
-          { key: 'valor_devolucao',          label: 'Valor Devolução (R$)',   placeholder: '2.635,80' },
-          { key: 'valor_devolucao_extenso',  label: 'Devolução (extenso)',    placeholder: 'dois mil, seiscentos e trinta e cinco reais e oitenta centavos', span: 'full' },
-          { key: 'valor_danos_morais',       label: 'Danos Morais (R$)',      placeholder: '20.000,00' },
-          { key: 'valor_danos_morais_extenso', label: 'Danos Morais (extenso)', placeholder: 'vinte mil reais', span: 'full' },
-          { key: 'valor_causa',              label: 'Valor da Causa (R$)',    placeholder: '22.635,80' },
-          { key: 'valor_causa_extenso',      label: 'Valor da Causa (extenso)', placeholder: 'vinte e dois mil, seiscentos e trinta e cinco reais e oitenta centavos', span: 'full' },
-          ...dataFields,
-        ],
-      },
-      {
-        id: 7, title: 'Revisão', icon: CheckCircle2,
-        fields: [],
-      },
-    ];
-  }
-
-  // ── GENÉRICO (fallback para outros tipos) ─────────────────────────────────────
-  return [
-    {
-      id: 1, title: 'Cliente', icon: User,
-      fields: [
-        ...clienteBase,
-        { key: 'idade_numerica', label: 'Idade (número)', placeholder: '65' },
-        { key: 'idade_extenso',  label: 'Idade (extenso)', placeholder: 'SESSENTA E CINCO' },
-      ],
-    },
-    {
-      id: 2, title: 'Endereço', icon: MapPin,
-      fields: enderecoFields,
-    },
-    {
-      id: 3, title: 'Banco / Réu', icon: Building2,
-      fields: bancoBase,
-    },
-    {
-      id: 4, title: 'Valores', icon: DollarSign,
-      fields: [
-        { key: 'valor_emprestimo',         label: 'Valor Principal (R$)',    placeholder: '0,00' },
-        { key: 'valor_emprestimo_extenso', label: 'Valor Principal (extenso)', placeholder: 'zero reais', span: 'full' },
-        { key: 'valor_danos_morais',       label: 'Danos Morais (R$)',       placeholder: '10.000,00' },
-        { key: 'valor_danos_morais_extenso', label: 'Danos Morais (extenso)', placeholder: 'dez mil reais', span: 'full' },
-        { key: 'valor_causa',              label: 'Valor da Causa (R$)',     placeholder: '10.000,00' },
-        { key: 'valor_causa_extenso',      label: 'Valor da Causa (extenso)', placeholder: 'dez mil reais', span: 'full' },
-        ...dataFields,
-      ],
-    },
-    {
-      id: 5, title: 'Revisão', icon: CheckCircle2,
-      fields: [],
-    },
-  ];
+  zip.file(`word/${alvo}`, pngBytes);
+  return true;
 }
 
 // ─── Componente de Campo ────────────────────────────────────────────────────────
@@ -438,15 +272,20 @@ export default function PeticaoEditarPage() {
   const [petitionId,     setPetitionId]     = useState(id || '');
   const [model,          setModel]          = useState<PetitionModelV2 | null>(null);
   const [actionName,     setActionName]     = useState('');
-  const [actionSlug,     setActionSlug]     = useState('generico');
+  const [placeholders,   setPlaceholders]   = useState<string[]>([]);
   const [saving,         setSaving]         = useState(false);
   const [generating,     setGenerating]     = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [submitted,      setSubmitted]      = useState(false);
+  const [printFile,      setPrintFile]      = useState<File | null>(null);
+  // Busca de lead do CRM para autopreencher os dados do cliente
+  const [leadQuery,   setLeadQuery]   = useState('');
+  const [leadResults, setLeadResults] = useState<Array<Record<string, string>>>([]);
+  const [leadOpen,    setLeadOpen]    = useState(false);
   const autosaveTimer = useRef<NodeJS.Timeout | null>(null);
 
-  const steps = getStepsConfig(actionSlug);
-  const reviewStep = steps[steps.length - 1];
+  // Campos gerados dinamicamente a partir dos {{marcadores}} do template do modelo.
+  const steps = useMemo(() => buildDynamicSteps(placeholders), [placeholders]);
   const activeSteps = steps;
 
   // ── Init ──────────────────────────────────────────────────────────────────────
@@ -469,9 +308,14 @@ export default function PeticaoEditarPage() {
           setFormData(d.form_data_json || {});
           setCurrentStep(d.current_step || 1);
           setActionName(d.action_types?.nome || '');
-          setActionSlug(normalizeActionSlug(d.action_types?.slug, d.action_types?.nome || ''));
           setModel(d.petition_models_v2 || null);
           setPetitionId(id);
+          // Carrega os campos do formulário a partir dos marcadores do template.
+          const tplUrl = d.petition_models_v2?.template_file_url;
+          if (tplUrl) {
+            try { setPlaceholders(await extrairPlaceholders(tplUrl)); }
+            catch (e) { console.error('Falha ao ler campos do modelo:', e); }
+          }
         }
         setLoadingInitial(false);
         return;
@@ -484,9 +328,7 @@ export default function PeticaoEditarPage() {
         ]);
 
         const aName = (actionData as any)?.nome || '';
-        const aSlug = normalizeActionSlug((actionData as any)?.slug, aName);
         setActionName(aName);
-        setActionSlug(aSlug);
         setModel((modelData as any) || null);
 
         try {
@@ -577,6 +419,42 @@ export default function PeticaoEditarPage() {
     if (key === 'endereco_cep') handleCepLookup(value);
   };
 
+  // ── Busca de lead do CRM ────────────────────────────────────────────────────────
+
+  const buscarLeads = async (q: string) => {
+    setLeadQuery(q);
+    if (q.trim().length < 2) { setLeadResults([]); setLeadOpen(false); return; }
+    const { data } = await supabase
+      .from('leads_juridicos')
+      .select('id,nome,cpf,rg,estado_civil,nacionalidade,profissao,endereco,numero,bairro,cidade,uf,cep,telefone')
+      .or(`nome.ilike.%${q}%,cpf.ilike.%${q}%`)
+      .limit(8);
+    setLeadResults((data as Array<Record<string, string>>) || []);
+    setLeadOpen(true);
+  };
+
+  const aplicarLead = (l: Record<string, string>) => {
+    setFormData(prev => ({
+      ...prev,
+      nome_maiusculo:  (l.nome || '').toUpperCase(),
+      nome_completo:   l.nome || prev.nome_completo || '',
+      cpf:             l.cpf || prev.cpf || '',
+      rg:              l.rg || prev.rg || '',
+      estado_civil:    l.estado_civil || prev.estado_civil || '',
+      nacionalidade:   l.nacionalidade || prev.nacionalidade || '',
+      profissao:       l.profissao || prev.profissao || '',
+      endereco_rua:    l.endereco || prev.endereco_rua || '',
+      endereco_numero: l.numero || prev.endereco_numero || '',
+      endereco_bairro: l.bairro || prev.endereco_bairro || '',
+      endereco_cidade: l.cidade || prev.endereco_cidade || '',
+      endereco_uf:     l.uf || prev.endereco_uf || '',
+      endereco_cep:    l.cep || prev.endereco_cep || '',
+    }));
+    setLeadOpen(false);
+    setLeadQuery(l.nome || '');
+    toast({ title: 'Cliente carregado', description: `Dados de ${l.nome} preenchidos automaticamente.` });
+  };
+
   // ── Navegação ──────────────────────────────────────────────────────────────────
 
   const currentStepConfig = activeSteps.find(s => s.id === currentStep) || activeSteps[0];
@@ -639,7 +517,21 @@ export default function PeticaoEditarPage() {
       const templateData = buildTemplateData(formData, actionName);
       doc.render(templateData);
 
-      const blob = doc.getZip().generate({
+      // Insere o print do contrato enviado no lugar da imagem do corpo do modelo
+      // (substitui o print antigo que vinha chumbado no template).
+      const outZip = doc.getZip();
+      if (printFile) {
+        try {
+          const png = await fileToPngBytes(printFile);
+          const ok = substituirPrintNoDocx(outZip, png);
+          if (!ok) console.warn('Nenhuma imagem de corpo encontrada no modelo para inserir o print.');
+        } catch (imgErr) {
+          console.error('Falha ao inserir o print no documento:', imgErr);
+          toast({ title: 'Aviso', description: 'Não foi possível inserir o print; o documento será gerado sem ele.', variant: 'destructive' });
+        }
+      }
+
+      const blob = outZip.generate({
         type:     'blob',
         mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       });
@@ -759,6 +651,44 @@ export default function PeticaoEditarPage() {
                     <currentStepConfig.icon className="h-5 w-5 text-primary" />
                     <h3 className="font-bold text-foreground">{currentStepConfig.title}</h3>
                   </div>
+
+                  {/* Autopreenchimento a partir de um lead do CRM (só na etapa Cliente) */}
+                  {currentStepConfig.title === 'Cliente' && (
+                    <div className="relative rounded-xl border border-primary/20 bg-primary/5 p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <UserCheck className="h-4 w-4 text-primary" />
+                        <span className="text-xs font-semibold text-foreground">Cliente já está no sistema?</span>
+                      </div>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          value={leadQuery}
+                          onChange={e => buscarLeads(e.target.value)}
+                          onFocus={() => leadResults.length && setLeadOpen(true)}
+                          placeholder="Buscar lead por nome ou CPF..."
+                          className="pl-10 rounded-lg bg-background"
+                        />
+                      </div>
+                      {leadOpen && leadResults.length > 0 && (
+                        <div className="absolute z-20 left-3 right-3 mt-1 rounded-lg border border-border/60 bg-popover shadow-xl max-h-64 overflow-y-auto">
+                          {leadResults.map(l => (
+                            <button
+                              key={l.id}
+                              type="button"
+                              onClick={() => aplicarLead(l)}
+                              className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors border-b border-border/30 last:border-0"
+                            >
+                              <p className="text-sm font-medium text-foreground">{l.nome || 'Sem nome'}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {[l.cpf && `CPF ${l.cpf}`, l.cidade, l.telefone].filter(Boolean).join(' · ') || '—'}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-4">
                     {currentStepConfig.fields.map(field => (
                       <FieldInput
@@ -858,6 +788,47 @@ export default function PeticaoEditarPage() {
                       <Badge className="ml-auto bg-red-100 text-red-700 border-red-200 text-xs">
                         ✗ Sem template
                       </Badge>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  {/* Upload do print do contrato (substitui a imagem do modelo) */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <ImageIcon className="h-4 w-4 text-primary" />
+                      <p className="text-sm font-semibold text-foreground">Print do contrato (CET / proposta)</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Anexe o print do contrato do cliente. Ele será inserido no lugar da imagem de exemplo do modelo (seção DOS FATOS).
+                    </p>
+                    {printFile ? (
+                      <div className="flex items-center gap-3 p-3 rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30">
+                        <img
+                          src={URL.createObjectURL(printFile)}
+                          alt="Prévia do print"
+                          className="h-16 w-16 object-cover rounded-lg border border-border/50"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{printFile.name}</p>
+                          <p className="text-xs text-muted-foreground">{(printFile.size / 1024).toFixed(0)} KB</p>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setPrintFile(null)}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center gap-2 p-6 rounded-xl border-2 border-dashed border-border/60 hover:border-primary/40 hover:bg-muted/30 transition-colors cursor-pointer">
+                        <Upload className="h-6 w-6 text-muted-foreground" />
+                        <span className="text-sm font-medium text-foreground">Clique para anexar o print</span>
+                        <span className="text-xs text-muted-foreground">PNG ou JPG</span>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg"
+                          className="hidden"
+                          onChange={e => setPrintFile(e.target.files?.[0] ?? null)}
+                        />
+                      </label>
                     )}
                   </div>
 
