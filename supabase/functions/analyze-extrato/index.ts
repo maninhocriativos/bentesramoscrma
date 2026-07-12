@@ -53,6 +53,7 @@ REGRAS:
 - VALOR = valor EXATO daquela linha individual. NUNCA some, agrupe ou multiplique.
 - Use ponto decimal (ex.: 32.00). Não use separador de milhar.
 - Preserve a descrição original do extrato (não traduza nem padronize).
+- DESCRIÇÃO COMPLETA: se a descrição vier quebrada em duas linhas (ex.: "TARIFA BANCARIA" numa linha e "CESTA FACIL ECONOMICA" ou "VR.PARCIAL CESTA FACIL ECONO" na outra), JUNTE as duas numa só descrição (ex.: "TARIFA BANCARIA CESTA FACIL ECONOMICA"). NUNCA devolva só o cabeçalho genérico "TARIFA BANCARIA" — inclua sempre o tipo específico da tarifa.
 - NUNCA inclua (NÃO são tarifa/seguro indevido — são dinheiro do próprio cliente ou a dívida em si):
   • Pagamento, parcela, mora ou amortização de EMPRÉSTIMO / CRÉDITO PESSOAL / CONSIGNADO / OPERAÇÃO DE CRÉDITO (ex.: "MORA CREDITO PESSOAL", "PARCELA CREDITO PESSOAL" — é a quitação da dívida, não uma taxa)
   • Gastos, compras ou fatura de CARTÃO DE CRÉDITO (ex.: "GASTOS CARTAO DE CREDITO" — é o gasto do próprio cliente)
@@ -253,38 +254,44 @@ function parsearPipe(texto: string): Lancamento[] {
 // Y, então cada transação fica numa linha). Para cada linha com DATA + VALOR(es),
 // extrai o lançamento. Quando há vários valores na linha (ex.: valor + saldo),
 // desambigua usando o teto da categoria da descrição.
+const reValorGlobal = /\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}/g;
+const reDataInicio = /^\s*(\d{2})[\/.\-](\d{2})[\/.\-](\d{2,4})\b/;
+
+// Um cabeçalho GENÉRICO (ex.: só "TARIFA BANCARIA") precisa do especificador da
+// linha vizinha (ex.: "CESTA FACIL ECONOMICA") para identificar o tipo da tarifa.
+function ehCabecalhoGenerico(d: string): boolean {
+  return /^(TARIFAS?( BANCARIA)?|SEGURO|SEG\.?|TAXA|CESTA|PACOTE)$/.test(d.toUpperCase().trim());
+}
+
+// Quebra uma linha em { data, valores, desc }.
+function analisarLinha(l: string): { data: string; valores: number[]; desc: string } {
+  const dm = l.match(reDataInicio);
+  let corpo = l;
+  let data = "";
+  if (dm) { data = `${dm[1]}/${dm[2]}/${dm[3]}`; corpo = l.slice(dm[0].length); }
+  const valores = [...corpo.matchAll(reValorGlobal)]
+    .map((m) => parseFloat(m[0].replace(/\./g, "").replace(",", ".")))
+    .filter((v) => v > 0);
+  const desc = corpo.replace(reValorGlobal, " ").replace(/\b\d{5,}\b/g, " ").replace(/\s+/g, " ").trim();
+  return { data, valores, desc };
+}
+
 function extrairDeterministico(texto: string): Lancamento[] {
   const brutos: Lancamento[] = [];
-  const reValor = /\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}/g;
-  // Data só no INÍCIO da linha e COMPLETA (dd/mm/aaaa) — evita casar docto/nº do meio.
-  const reData = /^\s*(\d{2})[\/.\-](\d{2})[\/.\-](\d{2,4})\b/;
+  const linhas = texto.split("\n");
 
   // Muitos bancos (ex.: Bradesco) repetem a data só no 1º lançamento do dia e
-  // quebram a descrição em 2 linhas ("TARIFA BANCARIA" + "CESTA FACIL... 63,60").
+  // quebram a descrição em 2 linhas ("TARIFA BANCARIA" + "CESTA FACIL ECONOMICA").
+  // O valor pode cair na linha do rótulo OU na do especificador — tratamos ambos.
   let dataAtual = "";
   let prefixo = "";
 
-  for (const linha of texto.split("\n")) {
-    const l = linha.trim();
+  for (let i = 0; i < linhas.length; i++) {
+    const l = linhas[i].trim();
     if (!l || l.startsWith("---")) continue;
 
-    const dm = l.match(reData);
-    let corpo = l;
-    if (dm) {
-      dataAtual = `${dm[1]}/${dm[2]}/${dm[3]}`;
-      corpo = l.slice(dm[0].length);
-    }
-
-    const valores = [...corpo.matchAll(reValor)]
-      .map((m) => parseFloat(m[0].replace(/\./g, "").replace(",", ".")))
-      .filter((v) => v > 0);
-
-    // Descrição: remove valores e códigos de documento (5+ dígitos seguidos).
-    const desc = corpo
-      .replace(reValor, " ")
-      .replace(/\b\d{5,}\b/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    const { data, valores, desc } = analisarLinha(l);
+    if (data) dataAtual = data;
 
     if (valores.length === 0) {
       // Linha "rótulo" (sem valor). Se for de categoria indevida, vira o prefixo
@@ -295,8 +302,20 @@ function extrairDeterministico(texto: string): Lancamento[] {
 
     if (!dataAtual) continue; // ainda sem contexto de data
 
-    const descFinal = (prefixo ? `${prefixo} ` : "") + desc;
+    let descFinal = (prefixo ? `${prefixo} ` : "") + desc;
     prefixo = "";
+
+    // Look-ahead: se a descrição ficou genérica ("TARIFA BANCARIA"), anexa o
+    // especificador da PRÓXIMA linha de texto puro (sem data e sem valor).
+    if (ehCabecalhoGenerico(descFinal)) {
+      const bruta = (linhas[i + 1] || "").trim();
+      const prox = analisarLinha(bruta);
+      if (bruta && !prox.data && prox.valores.length === 0 && prox.desc.length >= 3) {
+        descFinal += ` ${prox.desc}`;
+        i++; // consome a linha do especificador
+      }
+    }
+
     if (!descFinal || descFinal.length < 3) continue;
 
     // Desambigua valor vs. saldo: prefere o 1º valor dentro do teto da categoria.

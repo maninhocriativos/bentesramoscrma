@@ -80,15 +80,28 @@ export function ExtratoResultado({ resultado, config, onNovaAnalise }: Props) {
     }
   };
 
+  // Agrupa por mês/ano. As datas vêm como "DD/MM/AAAA" (ou ISO "AAAA-MM-DD").
+  // Chave ordenável "AAAA-MM"; rótulo exibido "MM/AAAA".
+  const mesAnoKey = (data: string): string => {
+    const s = (data || "").trim();
+    const br = s.match(/(\d{2})\/(\d{2})\/(\d{2,4})/); // DD/MM/AAAA
+    if (br) return `${br[3].length === 2 ? "20" + br[3] : br[3]}-${br[2]}`;
+    const iso = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+    return iso ? `${iso[1]}-${iso[2]}` : "";
+  };
   const chartData = (() => {
     const map = new Map<string, number>();
     (cobrancas_indevidas || []).forEach((c) => {
-      const month = c.data?.substring(0, 7) || "N/D";
-      map.set(month, (map.get(month) || 0) + (c.valor_total || c.valor_unitario || 0));
+      const k = mesAnoKey(c.data);
+      if (!k) return;
+      map.set(k, (map.get(k) || 0) + (c.valor_total || c.valor_unitario || 0));
     });
     return Array.from(map.entries())
-      .sort()
-      .map(([mes, valor]) => ({ mes, valor }));
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, valor]) => {
+        const [y, m] = k.split("-");
+        return { mes: `${m}/${y}`, valor };
+      });
   })();
 
   return (
