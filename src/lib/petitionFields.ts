@@ -3,7 +3,7 @@
 // sem configuração manual por tipo de ação.
 
 import {
-  User, MapPin, Building2, FileText, Scale, DollarSign, CheckCircle2, List,
+  User, MapPin, Building2, FileText, Scale, DollarSign, CheckCircle2, List, Image as ImageIcon,
 } from 'lucide-react';
 
 export const ESTADOS_CIVIS = ['Solteiro(a)', 'Casado(a)', 'Divorciado(a)', 'Viúvo(a)', 'União Estável'];
@@ -119,7 +119,7 @@ function normalizeKey(key: string): string {
  * Ignora os campos "por extenso" (gerados automaticamente). Sempre acrescenta
  * a etapa final de "Revisão".
  */
-export function buildDynamicSteps(placeholders: string[]): StepConfig[] {
+export function buildDynamicSteps(placeholders: string[], temPrint = false): StepConfig[] {
   const seen = new Set<string>();
   const porGrupo: Record<string, FieldConfig[]> = {};
 
@@ -147,7 +147,12 @@ export function buildDynamicSteps(placeholders: string[]): StepConfig[] {
     }
   }
 
-  // Etapa final de revisão (o print e o resumo são renderizados na página).
+  // Etapa dedicada para anexar o print do contrato (só quando o modelo tem imagem no corpo).
+  if (temPrint) {
+    steps.push({ id: id++, title: 'Print', icon: ImageIcon, fields: [] });
+  }
+
+  // Etapa final de revisão (o resumo e o botão de gerar são renderizados na página).
   steps.push({ id: id++, title: 'Revisão', icon: CheckCircle2, fields: [] });
   return steps;
 }

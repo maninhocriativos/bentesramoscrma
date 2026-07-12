@@ -72,9 +72,10 @@ function autoExtenso(formData: FormData): Record<string, string> {
   return extras;
 }
 
-// Extrai os marcadores {{...}} de um template .docx (via URL p\u00fablica).
-// Remove as tags XML antes de casar, para juntar marcadores quebrados em runs.
-async function extrairPlaceholders(url: string): Promise<string[]> {
+// L\u00ea o template .docx (via URL p\u00fablica) e devolve os marcadores {{...}} e se h\u00e1
+// imagem no corpo (espa\u00e7o para o print). Remove as tags XML antes de casar, para
+// juntar marcadores quebrados em runs.
+async function extrairModeloInfo(url: string): Promise<{ placeholders: string[]; temImagem: boolean }> {
   const resp = await fetch(url);
   if (!resp.ok) throw new Error('Falha ao baixar o modelo');
   const buf = await resp.arrayBuffer();
@@ -85,7 +86,9 @@ async function extrairPlaceholders(url: string): Promise<string[]> {
   for (const m of texto.matchAll(/\{\{\s*([^}]+?)\s*\}\}/g)) {
     set.add(m[1].trim());
   }
-  return [...set];
+  const rels = zip.file('word/_rels/document.xml.rels')?.asText() || '';
+  const temImagem = /Target="media\/image[^"]+\.(?:png|jpe?g|gif)"/i.test(rels);
+  return { placeholders: [...set], temImagem };
 }
 
 function buildEnderecoCliente(formData: FormData): string {
@@ -315,6 +318,7 @@ export default function PeticaoEditarPage() {
   const [model,          setModel]          = useState<PetitionModelV2 | null>(null);
   const [actionName,     setActionName]     = useState('');
   const [placeholders,   setPlaceholders]   = useState<string[]>([]);
+  const [temPrint,       setTemPrint]       = useState(false);
   const [saving,         setSaving]         = useState(false);
   const [generating,     setGenerating]     = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
@@ -327,7 +331,7 @@ export default function PeticaoEditarPage() {
   const autosaveTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Campos gerados dinamicamente a partir dos {{marcadores}} do template do modelo.
-  const steps = useMemo(() => buildDynamicSteps(placeholders), [placeholders]);
+  const steps = useMemo(() => buildDynamicSteps(placeholders, temPrint), [placeholders, temPrint]);
   const activeSteps = steps;
 
   // ── Init ──────────────────────────────────────────────────────────────────────
@@ -355,8 +359,11 @@ export default function PeticaoEditarPage() {
           // Carrega os campos do formulário a partir dos marcadores do template.
           const tplUrl = d.petition_models_v2?.template_file_url;
           if (tplUrl) {
-            try { setPlaceholders(await extrairPlaceholders(tplUrl)); }
-            catch (e) { console.error('Falha ao ler campos do modelo:', e); }
+            try {
+              const info = await extrairModeloInfo(tplUrl);
+              setPlaceholders(info.placeholders);
+              setTemPrint(info.temImagem);
+            } catch (e) { console.error('Falha ao ler campos do modelo:', e); }
           }
         }
         setLoadingInitial(false);
@@ -503,6 +510,7 @@ export default function PeticaoEditarPage() {
   const currentIdx        = activeSteps.findIndex(s => s.id === currentStep);
   const isLastStep        = currentIdx === activeSteps.length - 1;
   const isReviewStep      = currentStepConfig.title === 'Revisão';
+  const isPrintStep       = currentStepConfig.title === 'Print';
   const progress          = ((currentIdx + 1) / activeSteps.length) * 100;
 
   const goNext = () => {
@@ -566,7 +574,9 @@ export default function PeticaoEditarPage() {
         try {
           const png = await fileToPng(printFile);
           const ok = substituirPrintNoDocx(outZip, png);
-          if (!ok) console.warn('Nenhuma imagem de corpo encontrada no modelo para inserir o print.');
+          if (!ok) {
+            toast({ title: 'Aviso', description: 'Este modelo não tem espaço para print — o documento será gerado sem a imagem.', variant: 'destructive' });
+          }
         } catch (imgErr) {
           console.error('Falha ao inserir o print no documento:', imgErr);
           toast({ title: 'Aviso', description: 'Não foi possível inserir o print; o documento será gerado sem ele.', variant: 'destructive' });
@@ -745,6 +755,49 @@ export default function PeticaoEditarPage() {
                 </div>
               )}
 
+              {/* Print step — anexar o print do contrato */}
+              {isPrintStep && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <ImageIcon className="h-5 w-5 text-primary" />
+                    <h3 className="font-bold text-foreground">Print do contrato</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Anexe o print do contrato do cliente (CET / proposta). Ele entra no lugar da
+                    imagem de exemplo do modelo, na seção <b>DOS FATOS</b>. Opcional — pode gerar sem.
+                  </p>
+                  {printFile ? (
+                    <div className="flex items-center gap-4 p-4 rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30">
+                      <img
+                        src={URL.createObjectURL(printFile)}
+                        alt="Prévia do print"
+                        className="h-28 w-28 object-contain rounded-lg border border-border/50 bg-background"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">{printFile.name}</p>
+                        <p className="text-xs text-muted-foreground">{(printFile.size / 1024).toFixed(0)} KB · pronto para inserir</p>
+                        <label className="inline-flex items-center gap-1.5 mt-2 text-xs font-semibold text-primary cursor-pointer hover:underline">
+                          <Upload className="h-3.5 w-3.5" /> Trocar imagem
+                          <input type="file" accept="image/png,image/jpeg" className="hidden"
+                            onChange={e => setPrintFile(e.target.files?.[0] ?? null)} />
+                        </label>
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg" onClick={() => setPrintFile(null)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center gap-2 p-10 rounded-2xl border-2 border-dashed border-border/60 hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer">
+                      <Upload className="h-8 w-8 text-muted-foreground" />
+                      <span className="text-sm font-semibold text-foreground">Clique para anexar o print</span>
+                      <span className="text-xs text-muted-foreground">PNG ou JPG</span>
+                      <input type="file" accept="image/png,image/jpeg" className="hidden"
+                        onChange={e => setPrintFile(e.target.files?.[0] ?? null)} />
+                    </label>
+                  )}
+                </div>
+              )}
+
               {/* Review step */}
               {isReviewStep && (
                 <div className="space-y-5">
@@ -833,46 +886,20 @@ export default function PeticaoEditarPage() {
                     )}
                   </div>
 
-                  <Separator />
-
-                  {/* Upload do print do contrato (substitui a imagem do modelo) */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <ImageIcon className="h-4 w-4 text-primary" />
-                      <p className="text-sm font-semibold text-foreground">Print do contrato (CET / proposta)</p>
+                  {/* Lembrete do print anexado (o upload fica no passo "Print") */}
+                  {temPrint && (
+                    <div className={cn(
+                      'flex items-center gap-2 p-3 rounded-xl border text-sm',
+                      printFile
+                        ? 'border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400'
+                        : 'border-amber-200 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400'
+                    )}>
+                      <ImageIcon className="h-4 w-4 shrink-0" />
+                      {printFile
+                        ? <span>Print anexado: <b>{printFile.name}</b></span>
+                        : <span>Nenhum print anexado — volte ao passo <b>Print</b> se quiser inserir o contrato.</span>}
                     </div>
-                    <p className="text-xs text-muted-foreground mb-3">
-                      Anexe o print do contrato do cliente. Ele será inserido no lugar da imagem de exemplo do modelo (seção DOS FATOS).
-                    </p>
-                    {printFile ? (
-                      <div className="flex items-center gap-3 p-3 rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30">
-                        <img
-                          src={URL.createObjectURL(printFile)}
-                          alt="Prévia do print"
-                          className="h-16 w-16 object-cover rounded-lg border border-border/50"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{printFile.name}</p>
-                          <p className="text-xs text-muted-foreground">{(printFile.size / 1024).toFixed(0)} KB</p>
-                        </div>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setPrintFile(null)}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <label className="flex flex-col items-center justify-center gap-2 p-6 rounded-xl border-2 border-dashed border-border/60 hover:border-primary/40 hover:bg-muted/30 transition-colors cursor-pointer">
-                        <Upload className="h-6 w-6 text-muted-foreground" />
-                        <span className="text-sm font-medium text-foreground">Clique para anexar o print</span>
-                        <span className="text-xs text-muted-foreground">PNG ou JPG</span>
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg"
-                          className="hidden"
-                          onChange={e => setPrintFile(e.target.files?.[0] ?? null)}
-                        />
-                      </label>
-                    )}
-                  </div>
+                  )}
 
                   <Separator />
 
