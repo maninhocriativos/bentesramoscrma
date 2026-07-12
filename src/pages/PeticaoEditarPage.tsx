@@ -29,6 +29,7 @@ import { saveAs } from 'file-saver';
 import type { PetitionModelV2 } from '@/hooks/usePeticoesV2';
 import { reaisPorExtenso, inteiroPorExtenso } from '@/lib/extenso';
 import { buildDynamicSteps, BANCO_CNPJ, type FieldConfig, type StepConfig } from '@/lib/petitionFields';
+import { padronizarRodape } from '@/lib/petitionFooter';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -603,6 +604,9 @@ export default function PeticaoEditarPage() {
           toast({ title: 'Aviso', description: 'Não foi possível inserir o print; o documento será gerado sem ele.', variant: 'destructive' });
         }
       }
+
+      // Padroniza o rodapé do timbre (emojis + site) em qualquer modelo.
+      try { padronizarRodape(outZip); } catch (e) { console.error('Falha ao padronizar rodapé:', e); }
 
       const blob = outZip.generate({
         type:     'blob',
