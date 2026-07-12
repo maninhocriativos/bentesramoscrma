@@ -21,8 +21,8 @@ export interface LeadAnalytics {
 
 export interface CategoriaCount { name: string; value: number }
 
-const CATEGORIA_ORDER = ['Servidor Público', 'Aposentado', 'Pensionista', 'Outro', 'Não informado'];
-const CATEGORIA_CONHECIDAS = new Set(['Servidor Público', 'Aposentado', 'Pensionista']);
+const CATEGORIA_ORDER = ['Servidor Público', 'Aposentado', 'Pensionista', 'Carteira Assinada', 'Aéreo', 'Outro', 'Não informado'];
+const CATEGORIA_CONHECIDAS = new Set(['Servidor Público', 'Aposentado', 'Pensionista', 'Carteira Assinada', 'Aéreo']);
 
 // Busca TODAS as linhas de uma tabela (o PostgREST corta em ~1000 por requisição).
 async function fetchAll<T>(table: string, select: string): Promise<{ rows: T[]; error: string | null }> {

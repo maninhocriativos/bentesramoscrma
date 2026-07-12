@@ -58,7 +58,7 @@ type ProcessoFormData = {
 };
 
 // Perfil do beneficiário — usado no cadastro do processo e no gráfico da página Dados.
-const CATEGORIAS_BENEFICIARIO = ['Servidor Público', 'Aposentado', 'Pensionista', 'Outro'] as const;
+const CATEGORIAS_BENEFICIARIO = ['Servidor Público', 'Aposentado', 'Pensionista', 'Carteira Assinada', 'Aéreo', 'Outro'] as const;
 
 interface ProcessoModalDraft {
   formData: ProcessoFormData;
