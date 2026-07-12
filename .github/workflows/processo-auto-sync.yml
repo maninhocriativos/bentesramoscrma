@@ -8,9 +8,11 @@ on:
   workflow_dispatch:
     inputs:
       max:
+        # 15 estourava o idle timeout (150s) da edge function na maioria das
+        # execuções (~70% de falha) — 6 fica com folga confortável.
         description: 'Máximo de processos por execução'
         required: false
-        default: '15'
+        default: '6'
       force_all:
         description: 'Forçar atualização de todos (true/false)'
         required: false
@@ -25,7 +27,7 @@ jobs:
     steps:
       - name: Disparar processo-auto-sync
         run: |
-          MAX="${{ github.event.inputs.max || '15' }}"
+          MAX="${{ github.event.inputs.max || '6' }}"
           FORCE="${{ github.event.inputs.force_all || 'false' }}"
 
           echo "Disparando sync: max=$MAX, force_all=$FORCE"

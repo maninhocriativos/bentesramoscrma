@@ -102,9 +102,9 @@ O deploy é **automático via GitHub Actions** ao dar push na branch `main`:
 - **Frontend** → Netlify (build automático a cada push).
 - **Edge Functions** → `.github/workflows/deploy.yml` faz deploy de todas as
   funções em `supabase/functions/*` (exceto `_shared`).
-- **Migrations** → `.github/workflows/deploy-migrations.yml` aplica os `.sql`
-  novos via API do Supabase. **Só processa migrations com prefixo de data ≥ `20260523`**
-  (as anteriores já estavam no banco quando o workflow foi adotado).
+- **Migrations** → `.github/workflows/deploy-migrations.yml` roda `supabase db push`
+  (CLI oficial), que aplica só as migrations realmente novas com base no histórico
+  de migrations do próprio Supabase — sem cutoff de data.
 - **Automações agendadas** → `intimacoes-auto-sync.yml`, `processo-auto-sync.yml`,
   `traffic-followup-automation.yml` (cron).
 
