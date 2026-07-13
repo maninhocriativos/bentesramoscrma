@@ -2,20 +2,21 @@ name: Sync Automático de Processos
 
 on:
   schedule:
-    # A cada 15 min, o dia todo. Antes rodava 1x/dia com MAX=6 — a 864
-    # processos "Em Andamento" com refresh devido a cada 72h, isso nunca dava
-    # conta (821 de 864 ficaram atrasados). Com MAX=6 a cada 15min = ate 576/dia,
-    # cobre o backlog em ~1-2 dias e depois sustenta o ciclo de 72h tranquilo.
+    # A cada 15 min, o dia todo. A edge function agora se auto-limita por
+    # tempo (para com seguranca antes dos 150s de idle timeout, nao por
+    # contagem fixa), entao cada run aproveita o maximo do budget de tempo
+    # sem estourar — max alto so define o teto de segurança.
     - cron: '*/15 * * * *'
   # Permite acionar manualmente pelo GitHub Actions UI
   workflow_dispatch:
     inputs:
       max:
-        # 15 estourava o idle timeout (150s) da edge function na maioria das
-        # execuções (~70% de falha) — 6 fica com folga confortável.
+        # A função agora se auto-limita por tempo (para com segurança perto dos
+        # 150s de idle timeout da edge function, não por contagem) — max é só um
+        # teto de segurança, pode ficar alto.
         description: 'Máximo de processos por execução'
         required: false
-        default: '6'
+        default: '60'
       force_all:
         description: 'Forçar atualização de todos (true/false)'
         required: false
@@ -30,7 +31,7 @@ jobs:
     steps:
       - name: Disparar processo-auto-sync
         run: |
-          MAX="${{ github.event.inputs.max || '6' }}"
+          MAX="${{ github.event.inputs.max || '60' }}"
           FORCE="${{ github.event.inputs.force_all || 'false' }}"
 
           echo "Disparando sync: max=$MAX, force_all=$FORCE"

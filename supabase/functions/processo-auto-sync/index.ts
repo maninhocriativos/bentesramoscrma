@@ -68,7 +68,7 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const forceAll    = body.force_all || false;
     const processoId  = body.processo_id;
-    const maxProcessos = body.max || 20;
+    const maxProcessos = body.max || 60;
 
     console.log(`🔄 [Auto-Sync] Iniciando... force_all=${forceAll}, max=${maxProcessos}`);
 
@@ -116,7 +116,21 @@ serve(async (req) => {
     const results: SyncResult[] = [];
     let creditosEsgotados = false;
 
+    // A latência do DataJud varia muito (3s a 30s+ por processo). Em vez de um
+    // MAX fixo (que ou desperdiça o budget de 150s da edge function, ou estoura
+    // e perde o run inteiro num 504), paramos com segurança perto do limite —
+    // o que já foi processado fica salvo, e o resto pega o próximo ciclo do cron.
+    const startTime = Date.now();
+    const TIME_BUDGET_MS = 100_000;
+    let tempoEsgotado = false;
+
     for (const processo of processos) {
+      if (Date.now() - startTime > TIME_BUDGET_MS) {
+        console.log(`⏱️ Limite de tempo do lote atingido (${processos.indexOf(processo)}/${processos.length} processados) — parando com segurança`);
+        tempoEsgotado = true;
+        break;
+      }
+
       // ✅ FIX 4 — registra processos restantes como skipped_credits quando créditos acabam
       if (creditosEsgotados) {
         results.push({ processoId: processo.id, cnj: processo.numero_processo, success: false, movimentacoesNovas: 0, skipped_credits: true, error: "Créditos insuficientes — não processado" });
@@ -132,7 +146,7 @@ serve(async (req) => {
           try {
             const statusResp = await fetch(
               `https://api.escavador.com/api/v2/processos/numero_cnj/${encodeURIComponent(processo.numero_processo)}/status-atualizacao`,
-              { headers: { Authorization: `Bearer ${ESCAVADOR_API_KEY}`, "X-Requested-With": "XMLHttpRequest" } }
+              { headers: { Authorization: `Bearer ${ESCAVADOR_API_KEY}`, "X-Requested-With": "XMLHttpRequest" }, signal: AbortSignal.timeout(8_000) }
             );
 
             if (statusResp.ok) {
@@ -171,6 +185,12 @@ serve(async (req) => {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
           body: JSON.stringify({ numeroProcesso: processo.numero_processo, force_refresh: true, persistir: true }),
+          // consulta-processos tenta Escavador e depois DataJud, cada um com seus
+          // próprios retries internos — sem teto aqui, um processo lento sozinho
+          // podia consumir o budget inteiro do lote. DataJud sozinho já variou de
+          // 3s a 30s+ nos testes; 35s dá folga sem deixar 1 processo travar os
+          // outros do lote.
+          signal: AbortSignal.timeout(35_000),
         });
 
         if (consultaResponse.status === 402) {
@@ -290,10 +310,10 @@ serve(async (req) => {
     const failed           = results.filter((r) => !r.success && !r.skipped_credits).length;
     const totalMovimentacoes = results.reduce((sum, r) => sum + r.movimentacoesNovas, 0);
 
-    console.log(`📊 Sync completo: ${successful} atualizados, ${skipped} sem mudança, ${skipped_credits} sem crédito, ${failed} falhas, ${totalMovimentacoes} novas movs`);
+    console.log(`📊 Sync completo: ${successful} atualizados, ${skipped} sem mudança, ${skipped_credits} sem crédito, ${failed} falhas, ${totalMovimentacoes} novas movs${tempoEsgotado ? " (parou por tempo, resto no próximo ciclo)" : ""}`);
 
     return new Response(
-      JSON.stringify({ success: true, synced: successful, skipped, skipped_credits, failed, totalMovimentacoes, creditosEsgotados, results }),
+      JSON.stringify({ success: true, synced: successful, skipped, skipped_credits, failed, totalMovimentacoes, creditosEsgotados, tempoEsgotado, results }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
