@@ -473,7 +473,7 @@ export default function IntimacoesPage() {
 
         {/* Meta */}
         <div className="flex items-center justify-between text-[11px] text-muted-foreground px-0.5 flex-wrap gap-1">
-          <span className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> Sincronização automática: 08h e 14h · Escavador / Diários Oficiais</span>
+          <span className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> Sincronização automática: 07h, 13h e 19h (Brasília) · DJEN / Escavador / DataJud</span>
           <div className="flex items-center gap-3">
             {selectedIds.size > 0 && (
               <span className="font-semibold text-primary">{selectedIds.size} selecionada(s)</span>
@@ -846,9 +846,11 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
 
   const fonteDisplay = (() => {
     const f = intimacao.fonte || '';
-    if (f === 'datajud') return 'DataJud (Tribunal)';
-    if (f === 'escavador_v2') return 'Escavador';
-    if (f === 'escavador_v1') return intimacao.processo_titulo || 'Diário Oficial';
+    if (f === 'djen') return 'DJEN (Diário Nacional)';
+    if (f === 'datajud' || f === 'datajud_cnj') return 'DataJud (Tribunal)';
+    if (f === 'escavador_v2' || f === 'escavador_v2_pub') return 'Escavador';
+    if (f === 'escavador_v1' || f === 'escavador_v1_id') return intimacao.processo_titulo || 'Diário Oficial';
+    if (f === 'dje_tjam') return 'DJe TJAM';
     return f || 'Sistema';
   })();
 
