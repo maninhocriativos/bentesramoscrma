@@ -1670,6 +1670,8 @@ export type Database = {
       intimacoes: {
         Row: {
           advogado_id: string | null
+          analisado_em: string | null
+          analise_ia: Json | null
           conteudo: string | null
           created_at: string | null
           data_disponibilizacao: string | null
@@ -1682,6 +1684,7 @@ export type Database = {
           oab_numero: string
           oab_uf: string
           processo_cnj: string | null
+          processo_id: string | null
           processo_titulo: string | null
           raw_json: Json | null
           tipo_intimacao: string | null
@@ -1690,6 +1693,8 @@ export type Database = {
         }
         Insert: {
           advogado_id?: string | null
+          analisado_em?: string | null
+          analise_ia?: Json | null
           conteudo?: string | null
           created_at?: string | null
           data_disponibilizacao?: string | null
@@ -1702,6 +1707,7 @@ export type Database = {
           oab_numero: string
           oab_uf?: string
           processo_cnj?: string | null
+          processo_id?: string | null
           processo_titulo?: string | null
           raw_json?: Json | null
           tipo_intimacao?: string | null
@@ -1710,6 +1716,8 @@ export type Database = {
         }
         Update: {
           advogado_id?: string | null
+          analisado_em?: string | null
+          analise_ia?: Json | null
           conteudo?: string | null
           created_at?: string | null
           data_disponibilizacao?: string | null
@@ -1722,13 +1730,22 @@ export type Database = {
           oab_numero?: string
           oab_uf?: string
           processo_cnj?: string | null
+          processo_id?: string | null
           processo_titulo?: string | null
           raw_json?: Json | null
           tipo_intimacao?: string | null
           tribunal?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "intimacoes_processo_id_fkey"
+            columns: ["processo_id"]
+            isOneToOne: false
+            referencedRelation: "processos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       intimacoes_sync_jobs: {
         Row: {

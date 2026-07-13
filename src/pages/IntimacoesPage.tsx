@@ -28,6 +28,9 @@ import { ptBR } from 'date-fns/locale';
 import { generateIntimacaoReport, generateBatchIntimacaoReport } from '@/lib/intimacaoReportGenerator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DocumentoUploadModal } from '@/components/documentos/DocumentoUploadModal';
+import { ProcessoModalExpanded } from '@/components/processos/ProcessoModalExpanded';
+import { useLeadNames } from '@/hooks/useLeadNames';
+import type { Processo } from '@/types/processos';
 
 interface TeamMember {
   id: string;
@@ -37,6 +40,9 @@ interface TeamMember {
   oab_numero?: string | null;
   oab_uf?: string | null;
 }
+
+interface AcaoSugerida { titulo: string; descricao: string; prazo_dias: number | null; prioridade: string; }
+interface AnaliseIA { resumo: string; recomendacao: string; acoes: AcaoSugerida[]; }
 
 interface Intimacao {
   id: string;
@@ -56,6 +62,9 @@ interface Intimacao {
   fonte?: string;
   raw_json?: Record<string, unknown>;
   advogado_id?: string | null;
+  processo_id?: string | null;
+  analise_ia?: AnaliseIA | null;
+  analisado_em?: string | null;
 }
 
 async function copyTextToClipboard(text: string, label = 'Número do processo') {
@@ -797,6 +806,9 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const [processoSearch, setProcessoSearch] = useState('');
   const [processoResults, setProcessoResults] = useState<any[]>([]);
   const [linkedProcesso, setLinkedProcesso] = useState<{ id: string | null; numero: string; titulo: string } | null>(null);
+  const [linkedClienteId, setLinkedClienteId] = useState<string | null>(null);
+  const [cadastrarProcessoOpen, setCadastrarProcessoOpen] = useState(false);
+  const { leads: leadNames } = useLeadNames();
   const [showDropdown, setShowDropdown] = useState(false);
   const [tarefasAdicionadas, setTarefasAdicionadas] = useState<string[]>([]);
   const [tarefasCustom, setTarefasCustom] = useState<string[]>([]);
@@ -810,11 +822,10 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const [responsavelId, setResponsavelId] = useState('');
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [savingTarefa, setSavingTarefa] = useState(false);
-  const [analise, setAnalise] = useState<{
-    resumo: string; recomendacao: string;
-    acoes: { titulo: string; descricao: string; prazo_dias: number | null; prioridade: string }[];
-  } | null>(null);
+  const [analise, setAnalise] = useState<AnaliseIA | null>(intimacao.analise_ia || null);
   const [analisando, setAnalisando] = useState(false);
+  const [aprovandoTudo, setAprovandoTudo] = useState(false);
+  const { user: currentUser } = useAuth();
 
   const TAREFAS = ['Manifestação','Recurso de Apelação','Recurso Especial','Recurso Extraordinário','Recurso Ordinário','Recurso Inominado','Embargos de Declaração','Contrarrazões','Alegações Finais','Memoriais','Agravo de Instrumento','Agravo Interno','Sentença','Acórdão','Sessão de Julgamento','Réplica','Perícia'];
   const allTarefas = [...TAREFAS, ...tarefasCustom];
@@ -866,11 +877,33 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     setShowDropdown(true);
   };
 
-  const linkManualProcesso = (numero: string) => {
-    if (!numero.trim()) return;
-    setLinkedProcesso({ id: null, numero: numero.trim(), titulo: '' });
+  const selecionarProcesso = async (p: { id: string; numero_processo: string; titulo_acao?: string; nome_cliente?: string; cliente_id?: string | null }) => {
+    setLinkedProcesso({ id: p.id, numero: p.numero_processo || '', titulo: p.titulo_acao || p.nome_cliente || '' });
+    setLinkedClienteId(p.cliente_id || null);
     setProcessoSearch('');
     setShowDropdown(false);
+    await persistProcessoLink(p.id);
+  };
+
+  const desvincularProcesso = async () => {
+    setLinkedProcesso(null);
+    setLinkedClienteId(null);
+    await persistProcessoLink(null);
+  };
+
+  // Ao salvar um processo novo cadastrado a partir da intimação, busca o
+  // registro recém-criado por CNJ e persiste o vínculo (evita mexer na
+  // interface do ProcessoModalExpanded, que não expõe callback de "salvou").
+  const handleProcessoCadastrado = async () => {
+    setCadastrarProcessoOpen(false);
+    if (!intimacao.processo_cnj) return;
+    const cnjNorm = intimacao.processo_cnj.replace(/\D/g, '');
+    const { data } = await supabase
+      .from('processos')
+      .select('id, numero_processo, titulo_acao, nome_cliente, cliente_id')
+      .eq('cnj_normalizado', cnjNorm)
+      .maybeSingle();
+    if (data) await selecionarProcesso(data as any);
   };
 
   useEffect(() => {
@@ -896,6 +929,28 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     void fetchMembers();
   }, []);
 
+  // Carrega o processo já vinculado (persistido em intimacoes.processo_id)
+  useEffect(() => {
+    if (!intimacao.processo_id) return;
+    (async () => {
+      const { data } = await supabase
+        .from('processos')
+        .select('id, numero_processo, titulo_acao, nome_cliente, cliente_id')
+        .eq('id', intimacao.processo_id)
+        .maybeSingle();
+      if (data) {
+        setLinkedProcesso({ id: data.id, numero: data.numero_processo || '', titulo: data.titulo_acao || data.nome_cliente || '' });
+        setLinkedClienteId(data.cliente_id || null);
+      }
+    })();
+  }, [intimacao.processo_id]);
+
+  // Persiste o vínculo (ou remoção) na tabela — antes só vivia no estado local do modal
+  const persistProcessoLink = async (processoId: string | null) => {
+    const { error } = await supabase.from('intimacoes').update({ processo_id: processoId }).eq('id', intimacao.id);
+    if (error) toast.error('Erro ao salvar vínculo do processo', { description: error.message });
+  };
+
   useEffect(() => {
     if (!prazoSeguranca && prazos.dataConclusao) setPrazoSeguranca(format(prazos.dataConclusao, 'yyyy-MM-dd'));
     if (!prazoFatal && prazos.dataFatal) setPrazoFatal(format(prazos.dataFatal, 'yyyy-MM-dd'));
@@ -906,6 +961,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     try {
       const { data, error } = await supabase.functions.invoke('intimacoes-analise', {
         body: {
+          intimacao_id: intimacao.id,
           conteudo,
           tipo_intimacao: intimacao.tipo_intimacao,
           tribunal: intimacao.tribunal,
@@ -952,7 +1008,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
       ].filter(Boolean);
       const { data, error } = await supabase.from('tarefas').insert({
         titulo: selectedTarefaTipo, descricao: descriptionParts.join('\n\n'),
-        responsavel_id: responsavelId, processo_id: linkedProcesso?.id || null, cliente_id: null,
+        responsavel_id: responsavelId, processo_id: linkedProcesso?.id || null, cliente_id: linkedClienteId,
         prioridade, status: 'Pendente', data_limite: prazoFatal, prazo_seguranca: prazoSeguranca,
         prazo_fatal: prazoFatal, horario: horarioTarefa || null, data_conclusao: null,
         entrega_texto: null, entrega_anexo_url: null, entregue_em: null, aprovacao_status: null,
@@ -971,6 +1027,51 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     } catch (err: any) {
       toast.error('Erro ao criar tarefa', { description: err.message });
     } finally { setSavingTarefa(false); }
+  };
+
+  const handleAprovarTudo = async () => {
+    if (!analise) return;
+    const responsavel = responsavelId || currentUser?.id;
+    if (!responsavel) { toast.error('Selecione um responsável em "Criar tarefa" primeiro'); return; }
+    setAprovandoTudo(true);
+    try {
+      let criadas = 0;
+      for (const acao of analise.acoes) {
+        if (tarefasAdicionadas.includes(acao.titulo)) continue;
+        const fatal = acao.prazo_dias != null ? addBusinessDays(new Date(), acao.prazo_dias) : (prazos.dataFatal || addBusinessDays(new Date(), 15));
+        const fatalStr = format(fatal, 'yyyy-MM-dd');
+        const prioridade = acao.prioridade === 'Urgente' ? 'Urgente' : acao.prioridade === 'Alta' ? 'Alta' : 'Media';
+        const descriptionParts = [
+          `Ação sugerida pela análise ISA: ${acao.titulo}`,
+          acao.descricao,
+          `Processo: ${linkedProcesso?.numero || intimacao.processo_cnj || 'sem número'}`,
+          intimacao.tribunal ? `Tribunal: ${intimacao.tribunal}` : '',
+        ].filter(Boolean);
+        const { data, error } = await supabase.from('tarefas').insert({
+          titulo: acao.titulo, descricao: descriptionParts.join('\n\n'),
+          responsavel_id: responsavel, processo_id: linkedProcesso?.id || null, cliente_id: linkedClienteId,
+          prioridade, status: 'Pendente', data_limite: fatalStr, prazo_seguranca: fatalStr, prazo_fatal: fatalStr,
+          horario: null, data_conclusao: null, entrega_texto: null, entrega_anexo_url: null, entregue_em: null,
+          aprovacao_status: null, aprovacao_nota: null, aprovacao_feedback: null, aprovado_por: null, aprovado_em: null,
+        }).select('id').single();
+        if (!error) {
+          criadas++;
+          setTarefasAdicionadas(prev => [...prev, acao.titulo]);
+          await supabase.from('notificacoes_internas' as any).insert({
+            user_id: responsavel, titulo: 'Nova tarefa atribuída',
+            mensagem: `${acao.titulo} - prazo fatal ${format(fatal, 'dd/MM/yyyy')}`,
+            tipo: prioridade === 'Urgente' ? 'alerta' : 'info', lida: false, link: '/tarefas',
+            dados: { source: 'intimacoes', intimacao_id: intimacao.id, tarefa_id: data?.id },
+          } as any);
+        }
+      }
+      if (criadas > 0) toast.success(`${criadas} tarefa(s) criada(s)`);
+      else toast.info('Todas as ações já tinham tarefa criada');
+    } catch (err: any) {
+      toast.error('Erro ao aprovar ações', { description: err.message });
+    } finally {
+      setAprovandoTudo(false);
+    }
   };
 
   return (
@@ -1047,7 +1148,10 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                 </Button>
               )}
               {analise && (
-                <button className="text-xs text-muted-foreground hover:text-foreground" onClick={() => { setAnalise(null); }}>Refazer análise</button>
+                <Button size="sm" variant="outline" className="h-7 text-xs rounded-lg gap-1.5" onClick={handleAnalisar} disabled={analisando}>
+                  {analisando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  {analisando ? 'Refinando...' : 'Refinar análise'}
+                </Button>
               )}
             </div>
 
@@ -1081,7 +1185,15 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
 
                 {analise.acoes.length > 0 && (
                   <div>
-                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-2">Ações sugeridas</p>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Ações sugeridas</p>
+                      <Button size="sm" variant="outline" className="h-6 text-[10px] rounded-lg px-2 gap-1" disabled={aprovandoTudo || !responsavelId}
+                        title={!responsavelId ? 'Selecione um responsável em "Criar tarefa" primeiro' : undefined}
+                        onClick={handleAprovarTudo}>
+                        {aprovandoTudo ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                        Aprovar tudo
+                      </Button>
+                    </div>
                     <div className="space-y-2">
                       {analise.acoes.map((acao: { titulo: string; descricao: string; prazo_dias: number | null; prioridade: string }, i: number) => {
                         const prioColor =
@@ -1186,7 +1298,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                 <div className="space-y-1">
                   <p className="text-sm font-mono font-bold text-primary">{linkedProcesso.numero}</p>
                   {linkedProcesso.titulo && <p className="text-xs text-muted-foreground line-clamp-2">{linkedProcesso.titulo}</p>}
-                  <button className="text-xs text-primary hover:underline" onClick={() => setLinkedProcesso(null)}>Remover vínculo</button>
+                  <button className="text-xs text-primary hover:underline" onClick={desvincularProcesso}>Remover vínculo</button>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1198,27 +1310,24 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                       placeholder="Buscar por cliente, nº ou CNJ..."
                       value={processoSearch}
                       onChange={e => searchProcessos((e.target as HTMLInputElement).value)}
-                      onKeyDown={e => { if ((e as KeyboardEvent).key === 'Enter') linkManualProcesso(processoSearch); }}
                       className="h-8 text-xs rounded-lg"
                     />
-                    {showDropdown && (
+                    {showDropdown && processoResults.length > 0 && (
                       <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-xl max-h-48 overflow-y-auto">
                         {processoResults.map(p => (
                           <button key={p.id} className="w-full text-left px-3 py-2 hover:bg-muted/60 transition-colors border-b border-border/30 last:border-0"
-                            onClick={() => { setLinkedProcesso({ id: p.id, numero: p.numero_processo || '', titulo: p.titulo_acao || p.nome_cliente || '' }); setProcessoSearch(''); setShowDropdown(false); }}>
+                            onClick={() => selecionarProcesso(p)}>
                             <p className="text-xs font-mono font-bold text-primary">{p.numero_processo || 'Sem número'}</p>
                             {(p.titulo_acao || p.nome_cliente) && <p className="text-[10px] text-muted-foreground line-clamp-1">{p.nome_cliente || p.titulo_acao}</p>}
                           </button>
                         ))}
-                        {processoSearch.length >= 2 && (
-                          <button className="w-full text-left px-3 py-2 hover:bg-primary/10 transition-colors text-xs text-primary font-medium flex items-center gap-1.5 border-t border-border/30"
-                            onClick={() => linkManualProcesso(processoSearch)}>
-                            <span className="text-base leading-none">+</span> Usar "<span className="font-mono">{processoSearch}</span>" como número
-                          </button>
-                        )}
                       </div>
                     )}
                   </div>
+                  <p className="text-xs text-muted-foreground">Processo não cadastrado ainda?</p>
+                  <Button size="sm" variant="outline" className="h-7 text-xs rounded-lg w-full" onClick={() => setCadastrarProcessoOpen(true)}>
+                    + Cadastrar processo
+                  </Button>
                 </div>
               )}
             </SidebarField>
@@ -1291,6 +1400,21 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
       </div>
 
       <DocumentoUploadModal open={documentoModalOpen} onOpenChange={setDocumentoModalOpen} processoId={linkedProcesso?.id} />
+
+      {cadastrarProcessoOpen && (
+        <ProcessoModalExpanded
+          isOpen={cadastrarProcessoOpen}
+          isNew
+          canDelete={false}
+          leads={leadNames}
+          processo={{
+            numero_processo: intimacao.processo_cnj || '',
+            titulo_acao: intimacao.processo_titulo || '',
+            tribunal: intimacao.tribunal || '',
+          } as unknown as Processo}
+          onClose={handleProcessoCadastrado}
+        />
+      )}
 
       <Dialog open={tarefaModalOpen} onOpenChange={setTarefaModalOpen}>
         <DialogContent className="sm:max-w-xl p-0 rounded-2xl overflow-hidden">

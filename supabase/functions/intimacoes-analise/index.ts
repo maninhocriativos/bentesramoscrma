@@ -1,12 +1,15 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import { chatCompletion } from "../_shared/ai-helper.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!;
-const MODEL = "claude-sonnet-4-6";
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 interface AcaoSugerida {
   titulo: string;
@@ -33,6 +36,7 @@ serve(async (req) => {
       processo_titulo,
       data_publicacao,
       data_intimacao,
+      intimacao_id,
     } = await req.json();
 
     if (!conteudo) {
@@ -82,28 +86,10 @@ REGRAS:
 - Responda sempre em português brasileiro
 - Não invente informações — baseie-se apenas no conteúdo fornecido`;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 1500,
-        messages: [{ role: "user", content: prompt }],
-      }),
-      signal: AbortSignal.timeout(30000),
+    const rawText = await chatCompletion({
+      messages: [{ role: "user", content: prompt }],
+      maxTokens: 1500,
     });
-
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Anthropic API error ${response.status}: ${err}`);
-    }
-
-    const anthropicData = await response.json();
-    const rawText = anthropicData.content?.[0]?.text || "";
 
     // Extrai JSON da resposta (remove possível markdown)
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
@@ -114,6 +100,16 @@ REGRAS:
     // Valida estrutura mínima
     if (!analise.resumo || !analise.recomendacao || !Array.isArray(analise.acoes)) {
       throw new Error("Estrutura do JSON retornado é inválida");
+    }
+
+    // Persiste o cache da análise quando chamada para uma intimação específica
+    // (sync automático ao chegar, ou "Refinar análise" manual no modal).
+    if (intimacao_id) {
+      const { error: updateError } = await supabase
+        .from("intimacoes")
+        .update({ analise_ia: analise, analisado_em: new Date().toISOString() })
+        .eq("id", intimacao_id);
+      if (updateError) console.error("⚠️ [intimacoes-analise] Falha ao persistir:", updateError.message);
     }
 
     return new Response(

@@ -51,6 +51,37 @@ async function criarProcessosFaltantes(cnjs: string[]) {
   }
 }
 
+// Dispara a analise de IA (Isa) para intimacoes recem-criadas, em background,
+// e ja persiste o resultado (intimacoes-analise grava sozinha quando recebe
+// intimacao_id). Nao bloqueia a resposta do sync nem falha o job se a IA falhar.
+async function analisarNovasIntimacoes(rows: Array<Record<string, any>>) {
+  const BATCH = 3;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const lote = rows.slice(i, i + BATCH);
+    await Promise.allSettled(lote.map(async (row) => {
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/intimacoes-analise`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+          body: JSON.stringify({
+            intimacao_id: row.id,
+            conteudo: row.conteudo,
+            tipo_intimacao: row.tipo_intimacao,
+            tribunal: row.tribunal,
+            processo_cnj: row.processo_cnj,
+            processo_titulo: row.processo_titulo,
+            data_publicacao: row.data_publicacao,
+            data_intimacao: row.data_intimacao,
+          }),
+          signal: AbortSignal.timeout(30000),
+        });
+      } catch (e) {
+        console.warn(`⚠️ [Auto-análise] ${row.id} falhou:`, e);
+      }
+    }));
+  }
+}
+
 const TIPOS_INTIMACAO = new Set(["Intimação", "Citação", "Notificação", "Publicação"]);
 
 function cutoffDate(): string {
@@ -969,20 +1000,43 @@ serve(async (req) => {
       }
     }
 
+    // ── Vincula processo_id (quando o processo ja existe) antes de inserir ─────
+    const cnjsToInsert = [...new Set(
+      toInsert.filter((i) => i.processo_cnj).map((i) => i.processo_cnj.replace(/\D/g, ""))
+    )];
+    if (cnjsToInsert.length > 0) {
+      const { data: matched } = await supabase
+        .from("processos").select("id, cnj_normalizado").in("cnj_normalizado", cnjsToInsert);
+      const cnjToProcessoId = new Map((matched || []).map((p: any) => [p.cnj_normalizado, p.id]));
+      for (const item of toInsert) {
+        if (item.processo_cnj) {
+          item.processo_id = cnjToProcessoId.get(item.processo_cnj.replace(/\D/g, "")) || null;
+        }
+      }
+    }
+
     // ── Insert em lote ────────────────────────────────────────────────────────
+    const SELECT_NOVA = "id, conteudo, tipo_intimacao, tribunal, processo_cnj, processo_titulo, data_publicacao, data_intimacao";
     let savedCount = 0;
+    const novasInseridas: any[] = [];
     const CHUNK = 50;
     for (let i = 0; i < toInsert.length; i += CHUNK) {
       const chunk = toInsert.slice(i, i + CHUNK);
-      const { error } = await supabase.from("intimacoes").insert(chunk);
+      const { data, error } = await supabase.from("intimacoes").insert(chunk).select(SELECT_NOVA);
       if (error) {
         for (const item of chunk) {
-          const { error: e2 } = await supabase.from("intimacoes").insert(item);
-          if (!e2) savedCount++;
+          const { data: single, error: e2 } = await supabase.from("intimacoes").insert(item).select(SELECT_NOVA).single();
+          if (!e2) { savedCount++; if (single) novasInseridas.push(single); }
         }
       } else {
         savedCount += chunk.length;
+        if (data) novasInseridas.push(...data);
       }
+    }
+
+    // ── Análise automática de IA (Isa) para as intimações novas ────────────────
+    if (novasInseridas.length > 0) {
+      runInBackground(analisarNovasIntimacoes(novasInseridas));
     }
 
     // ── Auto-cadastro de processos novos encontrados via DJEN ──────────────────
