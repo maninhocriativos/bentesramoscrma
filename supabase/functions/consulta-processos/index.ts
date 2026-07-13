@@ -282,6 +282,37 @@ function mapearCacheParaFrontend(cachedProcesso: any): any {
 // PERSISTÊNCIA
 // =====================================================
 
+// Resolve cliente_id pelo nome do cliente do processo -- mesma regra usada no
+// backfill de 2026-07-13 (que levou a vinculacao de 31% pra 99% dos processos
+// existentes): nome bate com EXATAMENTE UM lead -> vincula; nao bate com
+// nenhum -> cria um lead novo a partir do proprio processo; bate com mais de
+// um -> nao arrisca, deixa null pra revisao manual. Sem isso, todo processo
+// novo criado automaticamente (ex: DJEN achando um CNJ ainda nao cadastrado)
+// nasceria sem cliente_id de novo, reabrindo o mesmo buraco aos poucos.
+async function resolverClienteId(nomeCliente: string): Promise<string | null> {
+  const nomeNorm = nomeCliente.trim().replace(/\s+/g, ' ');
+  if (!nomeNorm) return null;
+
+  const { data: matches } = await supabase.from('leads_juridicos').select('id').ilike('nome', nomeNorm);
+  if (matches && matches.length === 1) return matches[0].id;
+  if (matches && matches.length > 1) return null;
+
+  const { data: novoLead, error } = await supabase
+    .from('leads_juridicos')
+    .insert({
+      nome: nomeNorm,
+      status: 'Contrato Assinado',
+      origem: 'Processo Existente',
+      canal_origem: 'auto_processo',
+      tipo_origem: 'escritorio',
+    })
+    .select('id')
+    .single();
+
+  if (error) { console.error('❌ Erro ao criar lead automático:', error); return null; }
+  return novoLead?.id ?? null;
+}
+
 async function persistirProcesso(processo: any, processoIdExistente?: string | null, advogadoResponsavel?: string): Promise<{ id: string; movimentacoesNovas: number }> {
   const cnjNorm = normalizarCNJ(processo.cnj);
   const cacheValidUntil = new Date(Date.now() + 30 * 60 * 1000).toISOString();
@@ -327,21 +358,36 @@ async function persistirProcesso(processo: any, processoIdExistente?: string | n
   let processoId: string;
 
   if (processoIdExistente) {
-    const { data: existing } = await supabase.from('processos').select('nome_cliente, cpf_cliente').eq('id', processoIdExistente).single();
+    const { data: existing } = await supabase.from('processos').select('nome_cliente, cpf_cliente, cliente_id').eq('id', processoIdExistente).single();
     if (existing?.nome_cliente) { delete dadosProcesso.nome_cliente; delete dadosProcesso.cpf_cliente; }
+    if (!existing?.cliente_id) {
+      const nomeParaVincular = dadosProcesso.nome_cliente || existing?.nome_cliente;
+      if (nomeParaVincular) {
+        const clienteId = await resolverClienteId(nomeParaVincular);
+        if (clienteId) dadosProcesso.cliente_id = clienteId;
+      }
+    }
     const { error } = await supabase.from('processos').update(dadosProcesso).eq('id', processoIdExistente);
     if (error) { console.error('❌ Erro ao atualizar processo:', error); throw error; }
     processoId = processoIdExistente;
     console.log(`✅ Processo atualizado: ${processoId}`);
   } else {
     // ✅ FIX 2 — fallback por numero_processo quando cnj_normalizado não existe
-    const { data: existingByCnj } = await supabase.from('processos').select('id, nome_cliente, cpf_cliente').eq('cnj_normalizado', cnjNorm).maybeSingle();
+    const { data: existingByCnj } = await supabase.from('processos').select('id, nome_cliente, cpf_cliente, cliente_id').eq('cnj_normalizado', cnjNorm).maybeSingle();
     const { data: existingByNumero } = !existingByCnj
-      ? await supabase.from('processos').select('id, nome_cliente, cpf_cliente').eq('numero_processo', processo.cnjFormatado).maybeSingle()
+      ? await supabase.from('processos').select('id, nome_cliente, cpf_cliente, cliente_id').eq('numero_processo', processo.cnjFormatado).maybeSingle()
       : { data: null };
     const existing = existingByCnj || existingByNumero;
 
     if (existing?.nome_cliente) { delete dadosProcesso.nome_cliente; delete dadosProcesso.cpf_cliente; }
+
+    if (!existing?.cliente_id) {
+      const nomeParaVincular = dadosProcesso.nome_cliente || existing?.nome_cliente;
+      if (nomeParaVincular) {
+        const clienteId = await resolverClienteId(nomeParaVincular);
+        if (clienteId) dadosProcesso.cliente_id = clienteId;
+      }
+    }
 
     // Encontrou por numero_processo mas sem cnj_normalizado — atualiza em vez de upsert
     if (existing?.id && !existingByCnj) {
