@@ -111,6 +111,9 @@ verify_jwt = false
 [functions.processo-auto-sync]
 verify_jwt = false
 
+[functions.processo-djen-sync]
+verify_jwt = false
+
 [functions.processo-status-notify]
 verify_jwt = false
 

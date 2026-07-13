@@ -1,0 +1,46 @@
+name: Sync de Intimações DJEN por Processo
+
+on:
+  schedule:
+    # A cada 20 min. A função se auto-limita por tempo (~100s, mesmo padrão do
+    # processo-auto-sync) e por circuit-breaker se o DJEN bloquear o IP — max
+    # alto só define o teto de segurança por execução.
+    - cron: '*/20 * * * *'
+  workflow_dispatch:
+    inputs:
+      max:
+        description: 'Máximo de processos por execução'
+        required: false
+        default: '80'
+
+jobs:
+  sync:
+    name: Sincronizar Intimações DJEN por CNJ
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Disparar processo-djen-sync
+        run: |
+          MAX="${{ github.event.inputs.max || '80' }}"
+
+          echo "Disparando sync: max=$MAX"
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            --max-time 150 \
+            -X POST \
+            "https://qgenaltkjtlvwfgykpxq.supabase.co/functions/v1/processo-djen-sync" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFnZW5hbHRranRsdndmZ3lrcHhxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ5NjYxOTMsImV4cCI6MjA4MDU0MjE5M30.ewhDXc8qxAXdAevO-LMU_HOzu7oGUbj-p6Tj39hyUgg" \
+            -d "{\"max\": $MAX}")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+
+          echo "HTTP $HTTP_CODE"
+          echo "$BODY" | python3 -m json.tool 2>/dev/null || echo "$BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "ERRO: resposta HTTP $HTTP_CODE"
+            exit 1
+          fi
