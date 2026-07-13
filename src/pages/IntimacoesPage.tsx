@@ -28,9 +28,7 @@ import { ptBR } from 'date-fns/locale';
 import { generateIntimacaoReport, generateBatchIntimacaoReport } from '@/lib/intimacaoReportGenerator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DocumentoUploadModal } from '@/components/documentos/DocumentoUploadModal';
-import { ProcessoModalExpanded } from '@/components/processos/ProcessoModalExpanded';
-import { useLeadNames } from '@/hooks/useLeadNames';
-import type { Processo } from '@/types/processos';
+import { useNavigate } from 'react-router-dom';
 
 interface TeamMember {
   id: string;
@@ -807,8 +805,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const [processoResults, setProcessoResults] = useState<any[]>([]);
   const [linkedProcesso, setLinkedProcesso] = useState<{ id: string | null; numero: string; titulo: string } | null>(null);
   const [linkedClienteId, setLinkedClienteId] = useState<string | null>(null);
-  const [cadastrarProcessoOpen, setCadastrarProcessoOpen] = useState(false);
-  const { leadNames } = useLeadNames();
+  const navigate = useNavigate();
   const [showDropdown, setShowDropdown] = useState(false);
   const [tarefasAdicionadas, setTarefasAdicionadas] = useState<string[]>([]);
   const [tarefasCustom, setTarefasCustom] = useState<string[]>([]);
@@ -891,19 +888,23 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     await persistProcessoLink(null);
   };
 
-  // Ao salvar um processo novo cadastrado a partir da intimação, busca o
-  // registro recém-criado por CNJ e persiste o vínculo (evita mexer na
-  // interface do ProcessoModalExpanded, que não expõe callback de "salvou").
-  const handleProcessoCadastrado = async () => {
-    setCadastrarProcessoOpen(false);
-    if (!intimacao.processo_cnj) return;
-    const cnjNorm = intimacao.processo_cnj.replace(/\D/g, '');
-    const { data } = await supabase
-      .from('processos')
-      .select('id, numero_processo, titulo_acao, nome_cliente, cliente_id')
-      .eq('cnj_normalizado', cnjNorm)
-      .maybeSingle();
-    if (data) await selecionarProcesso(data as any);
+  // Vai para a página de Processos com o modal de cadastro já aberto e
+  // preenchido com os dados do DJEN (CNJ/tribunal/título) — evita embutir o
+  // ProcessoModalExpanded (componente grande, com premissas próprias de
+  // contexto) dentro da página de Intimações. A página de Processos persiste
+  // o vínculo de volta em intimacoes.processo_id após salvar (via
+  // linkIntimacaoId no state da navegação).
+  const handleCadastrarProcesso = () => {
+    navigate('/processos', {
+      state: {
+        novoProcesso: {
+          numero_processo: intimacao.processo_cnj || '',
+          titulo_acao: intimacao.processo_titulo || '',
+          tribunal: intimacao.tribunal || '',
+        },
+        linkIntimacaoId: intimacao.id,
+      },
+    });
   };
 
   useEffect(() => {
@@ -1328,7 +1329,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground">Processo não cadastrado ainda?</p>
-                  <Button size="sm" variant="outline" className="h-7 text-xs rounded-lg w-full" onClick={() => setCadastrarProcessoOpen(true)}>
+                  <Button size="sm" variant="outline" className="h-7 text-xs rounded-lg w-full" onClick={handleCadastrarProcesso}>
                     + Cadastrar processo
                   </Button>
                 </div>
@@ -1403,21 +1404,6 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
       </div>
 
       <DocumentoUploadModal open={documentoModalOpen} onOpenChange={setDocumentoModalOpen} processoId={linkedProcesso?.id} />
-
-      {cadastrarProcessoOpen && (
-        <ProcessoModalExpanded
-          isOpen={cadastrarProcessoOpen}
-          isNew
-          canDelete={false}
-          leads={leadNames}
-          processo={{
-            numero_processo: intimacao.processo_cnj || '',
-            titulo_acao: intimacao.processo_titulo || '',
-            tribunal: intimacao.tribunal || '',
-          } as unknown as Processo}
-          onClose={handleProcessoCadastrado}
-        />
-      )}
 
       <Dialog open={tarefaModalOpen} onOpenChange={setTarefaModalOpen}>
         <DialogContent className="sm:max-w-xl p-0 rounded-2xl overflow-hidden">

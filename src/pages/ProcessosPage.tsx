@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useCallback, lazy, Suspense, memo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense, memo } from 'react';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { ProcessosTable } from '@/components/processos/ProcessosTable';
@@ -177,6 +177,7 @@ type ViewTab = 'internos' | 'consulta';
 
 function ProcessosPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { processos, loading, assignCoResponsavel } = useProcessos();
   const { leadNames } = useLeadNames();
   const { canDelete, canAccessProcessos, loading: perfilLoading, isAdmin, isGerente } = usePerfil();
@@ -225,9 +226,41 @@ function ProcessosPage() {
   const handleNewProcesso = useCallback(() => {
     setSelectedProcesso(null); setIsNew(true); setIsModalOpen(true);
   }, []);
-  const handleCloseModal = useCallback(() => {
-    setIsModalOpen(false); setSelectedProcesso(null); setIsNew(false);
+
+  // Vínculo pendente: intimação de origem quando o cadastro veio da página de
+  // Intimações ("+ Cadastrar processo"), pra persistir intimacoes.processo_id
+  // depois que o processo for salvo.
+  const linkIntimacaoIdRef = useRef<string | null>(null);
+
+  // Abre o modal já preenchido quando chega navegando da página de Intimações
+  // (state.novoProcesso) — o próprio ProcessoModalExpanded busca o resto via
+  // consulta-processos (mesmo autofetch que já existe pra CNJ digitado à mão).
+  useEffect(() => {
+    const state = location.state as { novoProcesso?: Partial<Processo>; linkIntimacaoId?: string } | null;
+    if (state?.novoProcesso) {
+      linkIntimacaoIdRef.current = state.linkIntimacaoId || null;
+      setSelectedProcesso(state.novoProcesso as Processo);
+      setIsNew(true);
+      setIsModalOpen(true);
+      // Limpa o state da navegação pra não reabrir num refresh/voltar.
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleCloseModal = useCallback(() => {
+    const intimacaoId = linkIntimacaoIdRef.current;
+    const cnj = selectedProcesso?.numero_processo;
+    if (intimacaoId && cnj) {
+      const cnjNorm = cnj.replace(/\D/g, '');
+      supabase.from('processos').select('id').eq('cnj_normalizado', cnjNorm).maybeSingle()
+        .then(({ data }) => {
+          if (data?.id) supabase.from('intimacoes').update({ processo_id: data.id }).eq('id', intimacaoId).then();
+        });
+    }
+    linkIntimacaoIdRef.current = null;
+    setIsModalOpen(false); setSelectedProcesso(null); setIsNew(false);
+  }, [selectedProcesso]);
 
   const handleMovimentoProcessoSelect = useCallback((processoId: string) => {
     const p = processos.find(x => x.id === processoId);
