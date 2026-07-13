@@ -492,11 +492,34 @@ serve(async (req) => {
     try {
       let djenCount = 0;
       const ITENS_POR_PAGINA = 100;
+      // A API é pública mas parece aplicar algum bloqueio anti-bot intermitente
+      // em requests sem User-Agent de navegador — confirmado em produção (403
+      // esporádico, mesma query que funciona minutos depois). Header + retry
+      // curto reduzem o impacto disso.
+      const DJEN_HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+      };
+      async function fetchDjen(url: string): Promise<Response | null> {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const resp = await fetch(url, { headers: DJEN_HEADERS, signal: AbortSignal.timeout(15000) });
+            if (resp.ok) return resp;
+            console.warn(`⚠️ [DJEN] tentativa ${attempt + 1} → HTTP ${resp.status}`);
+            if (resp.status !== 403 && resp.status !== 429) return resp;
+          } catch (e) {
+            console.warn(`⚠️ [DJEN] tentativa ${attempt + 1} falhou:`, e);
+          }
+          await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+        }
+        return null;
+      }
+
       for (let pagina = 1; pagina <= 10; pagina++) {
         const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroOab=${oab_numero}&ufOab=${oab_uf}&dataDisponibilizacaoInicio=${CUTOFF}&dataDisponibilizacaoFim=${new Date().toISOString().slice(0, 10)}&itensPorPagina=${ITENS_POR_PAGINA}&pagina=${pagina}`;
-        const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
-        if (!resp.ok) {
-          console.warn(`⚠️ [DJEN] p${pagina} → HTTP ${resp.status}`);
+        const resp = await fetchDjen(url);
+        if (!resp || !resp.ok) {
+          console.warn(`⚠️ [DJEN] p${pagina} → falhou após retries (HTTP ${resp?.status ?? "sem resposta"})`);
           break;
         }
         const data = await resp.json();
