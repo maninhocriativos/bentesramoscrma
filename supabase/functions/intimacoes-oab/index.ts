@@ -15,6 +15,42 @@ const ESCAVADOR_API_KEY = Deno.env.get("ESCAVADOR_API_KEY");
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+const edgeRuntime = globalThis as typeof globalThis & {
+  EdgeRuntime?: { waitUntil: (promise: Promise<unknown>) => void };
+};
+
+function runInBackground(promise: Promise<unknown>) {
+  if (edgeRuntime.EdgeRuntime?.waitUntil) {
+    edgeRuntime.EdgeRuntime.waitUntil(promise);
+    return;
+  }
+  void promise;
+}
+
+// Cria processos que o DJEN encontrou mas ainda não existem em "processos".
+// Roda em background (não bloqueia a resposta) e em lotes pequenos para não
+// sobrecarregar o consulta-processos (que já tem seu próprio fallback Escavador/DataJud).
+async function criarProcessosFaltantes(cnjs: string[]) {
+  const BATCH = 3;
+  for (let i = 0; i < cnjs.length; i += BATCH) {
+    const lote = cnjs.slice(i, i + BATCH);
+    await Promise.allSettled(lote.map(async (cnj) => {
+      try {
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/consulta-processos`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+          body: JSON.stringify({ numero_processo: cnj, persistir: true }),
+          signal: AbortSignal.timeout(20000),
+        });
+        const data = await resp.json().catch(() => ({}));
+        console.log(`📌 [DJEN→Processo] ${cnj}: ${data?.encontrado ? "criado/atualizado" : "não encontrado"} (fonte=${data?.fonte || "?"})`);
+      } catch (e) {
+        console.warn(`⚠️ [DJEN→Processo] ${cnj} falhou:`, e);
+      }
+    }));
+  }
+}
+
 const TIPOS_INTIMACAO = new Set(["Intimação", "Citação", "Notificação", "Publicação"]);
 
 function cutoffDate(): string {
@@ -916,6 +952,27 @@ serve(async (req) => {
         }
       } else {
         savedCount += chunk.length;
+      }
+    }
+
+    // ── Auto-cadastro de processos novos encontrados via DJEN ──────────────────
+    // O DJEN cobre tribunais além do escritório costumar acompanhar; quando acha
+    // um CNJ que ainda não está em "processos", dispara o consulta-processos
+    // (mesmo fluxo de sync manual) em background para criar o registro completo.
+    const cnjsDjen = [...new Set(
+      toInsert.filter((i) => i.fonte === "djen" && i.processo_cnj).map((i) => i.processo_cnj.replace(/\D/g, ""))
+    )].filter((c) => c.length === 20);
+
+    if (cnjsDjen.length > 0) {
+      const { data: jaExistem } = await supabase
+        .from("processos")
+        .select("cnj_normalizado")
+        .in("cnj_normalizado", cnjsDjen);
+      const existentesSet = new Set((jaExistem || []).map((p: any) => p.cnj_normalizado));
+      const cnjsNovos = cnjsDjen.filter((c) => !existentesSet.has(c));
+      if (cnjsNovos.length > 0) {
+        console.log(`📌 [DJEN→Processo] ${cnjsNovos.length} processo(s) novo(s) para criar`);
+        runInBackground(criarProcessosFaltantes(cnjsNovos));
       }
     }
 

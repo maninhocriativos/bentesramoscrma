@@ -2,16 +2,12 @@ name: Sync Automático de Intimações
 
 on:
   schedule:
-    # Todos os dias (seg-dom), 5x por dia em horário de Manaus (UTC-4)
-    # 06:00 Manaus = 10:00 UTC
+    # Todos os dias (seg-dom), 3x por dia em horário de Brasília (UTC-3)
+    # 07:00 Brasília = 10:00 UTC
     - cron: '0 10 * * *'
-    # 09:00 Manaus = 13:00 UTC
-    - cron: '0 13 * * *'
-    # 12:00 Manaus = 16:00 UTC
+    # 13:00 Brasília = 16:00 UTC
     - cron: '0 16 * * *'
-    # 15:00 Manaus = 19:00 UTC
-    - cron: '0 19 * * *'
-    # 18:00 Manaus = 22:00 UTC
+    # 19:00 Brasília = 22:00 UTC
     - cron: '0 22 * * *'
   workflow_dispatch:
 
