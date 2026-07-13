@@ -20,10 +20,27 @@ const ROLE_DEFAULTS: Record<string, (p: ReturnType<typeof usePerfil>) => boolean
   'meta-leads':          p => p.canAccessLeads,
 };
 
+// Única fonte de verdade para "esse usuário pode acessar essa página": permissão
+// explícita (tabela user_page_permissions) tem prioridade; sem ela, cai na regra
+// padrão por cargo. Usada tanto para checar a página atual quanto para escolher
+// um destino de redirect que não vá bloquear de novo (era o bug: 'dashboard'
+// bloqueado sempre mandava pro chat, e outras páginas bloqueadas mandavam pro
+// dashboard mesmo quando o dashboard TAMBÉM estava bloqueado — cascata que
+// sempre terminava em /chat, dando a impressão de que toda navegação ia pro chat).
+function isPageAllowed(perfil: ReturnType<typeof usePerfil>, pageId: string): boolean {
+  const explicit = perfil.pagePermissions[pageId];
+  if (explicit === true)  return true;
+  if (explicit === false) return false;
+  const roleDefault = ROLE_DEFAULTS[pageId];
+  return roleDefault ? roleDefault(perfil) : true;
+}
+
 function defaultRedirect(perfil: ReturnType<typeof usePerfil>, blockedPage: string): string {
-  if (blockedPage === 'dashboard') return '/chat';
-  if (blockedPage === 'chat')      return '/bem-vindo';
-  return perfil.canAccessDashboard ? '/dashboard' : '/chat';
+  const candidatos = ['dashboard', 'processos', 'leads', 'tarefas'];
+  for (const pagina of candidatos) {
+    if (pagina !== blockedPage && isPageAllowed(perfil, pagina)) return `/${pagina}`;
+  }
+  return '/bem-vindo';
 }
 
 export default function RequireAuth() {
@@ -41,21 +58,7 @@ export default function RequireAuth() {
 
   const pageId = location.pathname.replace(/^\//, '').split('/')[0];
 
-  // Se o admin definiu explicitamente esta página como true para este usuário,
-  // ignora as regras de cargo e permite o acesso.
-  const explicitPermission = perfil.pagePermissions[pageId];
-  if (explicitPermission === true) {
-    return <Outlet />;
-  }
-
-  // Se o admin bloqueou explicitamente → bloqueia
-  if (explicitPermission === false) {
-    return <Navigate to={defaultRedirect(perfil, pageId)} replace />;
-  }
-
-  // Sem permissão explícita: aplica regra padrão por cargo
-  const roleDefault = ROLE_DEFAULTS[pageId];
-  if (roleDefault && !roleDefault(perfil)) {
+  if (!isPageAllowed(perfil, pageId)) {
     return <Navigate to={defaultRedirect(perfil, pageId)} replace />;
   }
 
