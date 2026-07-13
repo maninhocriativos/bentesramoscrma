@@ -378,7 +378,7 @@ function ParteCard({ parte, index, onUpdate, onRemove }: {
           {/* Documento e celular — sem corte */}
           {(parte.documento || parte.celular) && (
             <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
-              {parte.documento && <span className="text-[11px] text-muted-foreground break-all">Doc: {parte.documento}</span>}
+              {parte.documento && <span className="text-[11px] text-muted-foreground break-all">Doc: {formatCpfCnpj(parte.documento)}</span>}
               {parte.celular   && <span className="text-[11px] text-muted-foreground">📱 {parte.celular}</span>}
             </div>
           )}
@@ -400,7 +400,7 @@ function ParteCard({ parte, index, onUpdate, onRemove }: {
                   <option value="Juiz">Juiz</option>
                 </select>
               </div>
-              <div><Label className="text-[10px] text-muted-foreground">CPF/CNPJ</Label><Input value={parte.documento || ''} onChange={e => onUpdate(index, 'documento', formatCpfCnpj(e.target.value))} inputMode="numeric" className={`h-7 text-xs rounded-lg mt-1 ${isCpfCnpjInvalidoCompleto(parte.documento || '') ? 'border-red-400 focus-visible:ring-red-400' : ''}`} placeholder="Opcional" /></div>
+              <div><Label className="text-[10px] text-muted-foreground">CPF/CNPJ</Label><Input value={formatCpfCnpj(parte.documento || '')} onChange={e => onUpdate(index, 'documento', formatCpfCnpj(e.target.value))} inputMode="numeric" className={`h-7 text-xs rounded-lg mt-1 ${isCpfCnpjInvalidoCompleto(parte.documento || '') ? 'border-red-400 focus-visible:ring-red-400' : ''}`} placeholder="Opcional" /></div>
               <div><Label className="text-[10px] text-muted-foreground">Celular</Label><Input value={parte.celular || ''} onChange={e => onUpdate(index, 'celular', e.target.value)} className="h-7 text-xs rounded-lg mt-1" placeholder="(00) 00000-0000" /></div>
             </div>
           </div>
@@ -1509,7 +1509,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                         </Row2>
                         <Row2>
                           <Field label="CPF do Cliente" hint={isCpfInvalidoCompleto(formData.cpf_cliente) ? 'CPF inválido' : 'Usado pela Isa para localizar processos'}>
-                            <Input value={formData.cpf_cliente} onChange={e => update('cpf_cliente', formatCpf(e.target.value))}
+                            <Input value={formatCpf(formData.cpf_cliente || '')} onChange={e => update('cpf_cliente', formatCpf(e.target.value))}
                               className={`rounded-xl bg-card h-10 ${isCpfInvalidoCompleto(formData.cpf_cliente) ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                               placeholder="000.000.000-00" maxLength={14} />
                           </Field>

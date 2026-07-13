@@ -2,8 +2,11 @@ name: Sync Automático de Processos
 
 on:
   schedule:
-    # 07:00 UTC = 03:00 Manaus (UTC-4), todo dia
-    - cron: '0 7 * * *'
+    # A cada 15 min, o dia todo. Antes rodava 1x/dia com MAX=6 — a 864
+    # processos "Em Andamento" com refresh devido a cada 72h, isso nunca dava
+    # conta (821 de 864 ficaram atrasados). Com MAX=6 a cada 15min = ate 576/dia,
+    # cobre o backlog em ~1-2 dias e depois sustenta o ciclo de 72h tranquilo.
+    - cron: '*/15 * * * *'
   # Permite acionar manualmente pelo GitHub Actions UI
   workflow_dispatch:
     inputs:
