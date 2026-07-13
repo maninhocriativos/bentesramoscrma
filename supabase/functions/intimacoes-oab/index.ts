@@ -101,18 +101,66 @@ function nextBusinessDay(dateStr: string): string {
 
 // Remove scripts/estilos/tags + decodifica entidades — usado em conteúdo que
 // vem como HTML bruto (documento inteiro com DOCTYPE/head/style) em vez de texto.
+// Entidades HTML nomeadas mais comuns em conteúdo de tribunais em pt-BR —
+// stripHtml só cobria nbsp/amp/lt/gt, deixando "&aacute;" etc. literal no texto.
+const HTML_NAMED_ENTITIES: Record<string, string> = {
+  aacute: "á", Aacute: "Á", agrave: "à", Agrave: "À", acirc: "â", Acirc: "Â", atilde: "ã", Atilde: "Ã",
+  eacute: "é", Eacute: "É", egrave: "è", Egrave: "È", ecirc: "ê", Ecirc: "Ê",
+  iacute: "í", Iacute: "Í", icirc: "î", Icirc: "Î",
+  oacute: "ó", Oacute: "Ó", ograve: "ò", Ograve: "Ò", ocirc: "ô", Ocirc: "Ô", otilde: "õ", Otilde: "Õ",
+  uacute: "ú", Uacute: "Ú", ucirc: "û", Ucirc: "Û", uuml: "ü", Uuml: "Ü",
+  ccedil: "ç", Ccedil: "Ç", ntilde: "ñ", Ntilde: "Ñ",
+  ordm: "º", ordf: "ª", deg: "°",
+  quot: '"', apos: "'", lsquo: "'", rsquo: "'", ldquo: '"', rdquo: '"',
+  ndash: "–", mdash: "—", hellip: "…",
+  nbsp: " ", amp: "&", lt: "<", gt: ">",
+  sect: "§", para: "¶", raquo: "»", laquo: "«", middot: "·", copy: "©", reg: "®", trade: "™",
+};
+
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&([a-zA-Z]+);/g, (m, name) => HTML_NAMED_ENTITIES[name] ?? m);
+}
+
 function stripHtml(html: string): string {
-  if (!/<[a-z][\s\S]*>/i.test(html)) return html; // já é texto puro, não mexe
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/\s+/g, " ")
-    .trim();
+  const hasTags = /<[a-z][\s\S]*>/i.test(html);
+  let out = html;
+  if (hasTags) {
+    out = out
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ");
+  }
+  return decodeHtmlEntities(out).replace(/\s+/g, " ").trim();
+}
+
+// O DJe-TJAM devolve a página inteira de resultados (nav/paginação/rodapé
+// junto com as publicações) — a janela de caracteres ao redor do CNJ pega
+// esse lixo. Corta até o início real ("Processo n.º ...") e antes do rodapé
+// fixo do portal e-SAJ (aviso de plug-in Web Signer).
+const DJE_TJAM_BOILERPLATE_MARKERS = [
+  /Desenvolvido pela Softplan/i,
+  /instala[çc][ãa]o do plug-?in Web Signer/i,
+  /Instalar\s+Cancelar\s+Ajuda/i,
+  /navegador utilizado n[ãa]o [ée] compat[íi]vel/i,
+  /efetue a valida[çc][ãa]o de requisitos/i,
+];
+
+function limparSnippetDjeTjam(snippet: string): string {
+  let out = snippet;
+  let cutAt = -1;
+  for (const marker of DJE_TJAM_BOILERPLATE_MARKERS) {
+    const m = out.match(marker);
+    if (m && m.index !== undefined && (cutAt === -1 || m.index < cutAt)) cutAt = m.index;
+  }
+  if (cutAt > 0) out = out.slice(0, cutAt).trim();
+  const inicioMatch = out.match(/Processo\s*n[ºo.]{0,3}\s*\d/i);
+  if (inicioMatch && inicioMatch.index !== undefined && inicioMatch.index > 0 && inicioMatch.index < 400) {
+    out = out.slice(inicioMatch.index).trim();
+  }
+  return out;
 }
 
 function classifyMovimento(conteudo: string, tipo: string): string {
@@ -888,7 +936,8 @@ serve(async (req) => {
               for (const cnj of allCnjs) {
                 // Extrai até 2000 chars em torno do CNJ como trecho da publicação
                 const idx = text.indexOf(cnj);
-                const snippet = text.slice(Math.max(0, idx - 300), idx + 2000).trim();
+                const snippetBruto = text.slice(Math.max(0, idx - 300), idx + 2000).trim();
+                const snippet = limparSnippetDjeTjam(snippetBruto);
                 const tipo = classifyMovimento(snippet, "Publicação");
 
                 intimacoes.push(makeItem({

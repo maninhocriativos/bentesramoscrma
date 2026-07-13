@@ -134,7 +134,12 @@ export default function IntimacoesPage() {
     if (!oabNumero) { toast.error('Configure seu número da OAB no perfil'); return; }
     setSyncing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('intimacoes-oab', { body: { oab_numero: oabNumero, oab_uf: oabUf, advogado_id: user?.id } });
+      // Só atribui advogado_id quando a busca roda de fato sob a OAB pessoal de
+      // quem clicou — senão (fallback para a OAB genérica do escritório) fica
+      // null, como nos jobs do cron. Evita marcar quem clicou (ex: estagiário,
+      // secretaria) como "dono" de uma intimação buscada pela OAB de outra pessoa.
+      const usandoOabPropria = !!(perfil as any)?.oab_numero && (perfil as any).oab_numero === oabNumero;
+      const { data, error } = await supabase.functions.invoke('intimacoes-oab', { body: { oab_numero: oabNumero, oab_uf: oabUf, advogado_id: usandoOabPropria ? user?.id : null } });
       if (error) throw error;
       const syncedAt = new Date();
       setLastSyncAt(syncedAt);
