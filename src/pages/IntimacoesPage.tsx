@@ -808,7 +808,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const [linkedProcesso, setLinkedProcesso] = useState<{ id: string | null; numero: string; titulo: string } | null>(null);
   const [linkedClienteId, setLinkedClienteId] = useState<string | null>(null);
   const [cadastrarProcessoOpen, setCadastrarProcessoOpen] = useState(false);
-  const { leads: leadNames } = useLeadNames();
+  const { leadNames } = useLeadNames();
   const [showDropdown, setShowDropdown] = useState(false);
   const [tarefasAdicionadas, setTarefasAdicionadas] = useState<string[]>([]);
   const [tarefasCustom, setTarefasCustom] = useState<string[]>([]);
