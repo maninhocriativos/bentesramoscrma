@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
-import { useLeadsAnalytics, LeadAnalytics } from '@/hooks/useLeadsAnalytics';
+import { useLeadsAnalytics, LeadAnalytics, ExitoEstado } from '@/hooks/useLeadsAnalytics';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import {
   Users, Trophy, XCircle, Target, PieChart as PieIcon, MapPin,
-  Scale, Briefcase, Loader2, CalendarDays,
+  Scale, Briefcase, Loader2, CalendarDays, Landmark, TrendingUp, Cake,
 } from 'lucide-react';
 import { startOfMonth, startOfQuarter, startOfYear, isAfter } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -161,6 +161,37 @@ function BarList({ data, total, color = GOLD, max }: {
   );
 }
 
+// Ranking de estado com barra dupla ganhos (verde) × perdidos (vermelho).
+function ExitoBarList({ data, max }: { data: ExitoEstado[]; max?: number }) {
+  const rows = typeof max === 'number' ? data.slice(0, max) : data;
+  if (rows.length === 0) return <EmptyState label="Sem casos decididos vinculados a processo ainda" />;
+  const peak = Math.max(...rows.map(r => r.ganhos + r.perdidos), 1);
+  return (
+    <div className="space-y-3">
+      {rows.map((r, i) => {
+        const total = r.ganhos + r.perdidos;
+        return (
+          <div key={r.name}>
+            <div className="flex items-center justify-between mb-1 gap-2">
+              <span className="text-[12.5px] font-medium text-foreground truncate" title={r.name}>{r.name}</span>
+              <span className="text-[12px] shrink-0 tabular-nums" style={{ color: NEUTRAL }}>
+                <span className="font-semibold" style={{ color: GREEN }}>{num(r.ganhos)}</span>
+                {' / '}
+                <span className="font-semibold" style={{ color: RED }}>{num(r.perdidos)}</span>
+                {' · '}{pct(r.ganhos, total)}% êxito
+              </span>
+            </div>
+            <div className="h-2 rounded-full overflow-hidden flex" style={{ background: 'rgba(201,169,110,0.1)', width: `${Math.max((total / peak) * 100, 4)}%` }}>
+              <div className="h-full transition-all duration-700" style={{ width: `${pct(r.ganhos, total)}%`, background: GREEN, animationDelay: `${i * 40}ms` }} />
+              <div className="h-full transition-all duration-700" style={{ width: `${pct(r.perdidos, total)}%`, background: RED, animationDelay: `${i * 40}ms` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // KPI tile
 function Kpi({ label, value, sub, icon: Icon, color, bg }: {
   label: string; value: string; sub?: string; icon: React.ElementType; color: string; bg: string;
@@ -184,7 +215,10 @@ function Kpi({ label, value, sub, icon: Icon, color, bg }: {
 
 // ─── Página ─────────────────────────────────────────────────────────────────────
 export default function DadosPage() {
-  const { leads, loading, categoriaProcessos, totalProcessos } = useLeadsAnalytics();
+  const {
+    leads, loading, categoriaProcessos, totalProcessos,
+    estadoProcessos, exitoPorEstado, exitoCobertura, idadeClientes,
+  } = useLeadsAnalytics();
   const [periodo, setPeriodo] = useState<Periodo>('tudo');
 
   const d = useMemo(() => {
@@ -370,11 +404,40 @@ export default function DadosPage() {
               </Card>
             </div>
 
-            {/* Tipo de ação */}
-            <Card accent="#7c3aed" icon={Scale} title="Tipo de Ação" iconBg="rgba(124,58,237,0.09)" iconColor="#7c3aed">
-              <BarList data={d.acao} total={d.total} color="#7c3aed" max={12} />
-              <QualidadeNote data={d.acao} total={d.total} campo="tipo de ação" />
-            </Card>
+            {/* Processos por Estado + Êxito por Estado (via DJEN/DataJud) */}
+            <div className="grid gap-5 grid-cols-1 lg:grid-cols-2">
+              <Card accent="#0d9488" icon={Landmark} title="Processos por Estado" iconBg="rgba(13,148,136,0.1)" iconColor="#0d9488">
+                <BarList data={estadoProcessos} total={totalProcessos} color="#0d9488" max={10} />
+                <p className="text-[11px] mt-3 pt-3" style={{ color: NEUTRAL, borderTop: '0.5px solid rgba(201,169,110,0.12)' }}>
+                  Estado/tribunal de tramitação (via DJEN/DataJud) · base de {num(totalProcessos)} processos.
+                </p>
+              </Card>
+
+              <Card accent={GREEN} icon={TrendingUp} title="Êxito por Estado" iconBg="rgba(22,163,74,0.09)" iconColor={GREEN}>
+                <ExitoBarList data={exitoPorEstado} max={10} />
+                <p className="text-[11px] mt-3 pt-3" style={{ color: AMBER, borderTop: '0.5px solid rgba(201,169,110,0.12)' }}>
+                  ⚠ Baseado em {num(exitoCobertura.comCliente)} de {num(exitoCobertura.total)} processos
+                  ({pct(exitoCobertura.comCliente, exitoCobertura.total)}%) com cliente vinculado — os demais ainda
+                  não têm essa ligação no cadastro.
+                </p>
+              </Card>
+            </div>
+
+            {/* Tipo de ação + Idade dos Clientes */}
+            <div className="grid gap-5 grid-cols-1 lg:grid-cols-2">
+              <Card accent="#7c3aed" icon={Scale} title="Tipo de Ação" iconBg="rgba(124,58,237,0.09)" iconColor="#7c3aed">
+                <BarList data={d.acao} total={d.total} color="#7c3aed" max={12} />
+                <QualidadeNote data={d.acao} total={d.total} campo="tipo de ação" />
+              </Card>
+
+              <Card accent="#db2777" icon={Cake} title="Idade dos Clientes" iconBg="rgba(219,39,119,0.09)" iconColor="#db2777">
+                <BarList data={idadeClientes} total={totalProcessos} color="#db2777" />
+                <QualidadeNote data={idadeClientes} total={totalProcessos} campo="data de nascimento" />
+                <p className="text-[11px] mt-3 pt-3" style={{ color: NEUTRAL, borderTop: '0.5px solid rgba(201,169,110,0.12)' }}>
+                  Campo preenchido no cadastro do processo · base de {num(totalProcessos)} processos.
+                </p>
+              </Card>
+            </div>
           </>
         )}
       </div>

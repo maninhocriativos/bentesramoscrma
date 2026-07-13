@@ -12,8 +12,48 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "13.0.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
+      _migration_history: {
+        Row: {
+          applied_at: string | null
+          filename: string
+        }
+        Insert: {
+          applied_at?: string | null
+          filename: string
+        }
+        Update: {
+          applied_at?: string | null
+          filename?: string
+        }
+        Relationships: []
+      }
       access_logs: {
         Row: {
           accessed_at: string
@@ -79,6 +119,41 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      ai_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          lead_id: string | null
+          role: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          lead_id?: string | null
+          role: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          lead_id?: string | null
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_messages_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ai_prompts: {
         Row: {
@@ -200,6 +275,174 @@ export type Database = {
         }
         Relationships: []
       }
+      backup_chunk_progress: {
+        Row: {
+          completed: boolean | null
+          current_chunk: number | null
+          id: number
+        }
+        Insert: {
+          completed?: boolean | null
+          current_chunk?: number | null
+          id?: number
+        }
+        Update: {
+          completed?: boolean | null
+          current_chunk?: number | null
+          id?: number
+        }
+        Relationships: []
+      }
+      backup_leads_pre_merge_20260610: {
+        Row: {
+          bairro: string | null
+          canal_origem: string | null
+          cep: string | null
+          cidade: string | null
+          contract_key: string | null
+          contract_sent_at: string | null
+          contract_signed_at: string | null
+          contratos_adicionais: number | null
+          cpf: string | null
+          created_at: string | null
+          data_conversao: string | null
+          email: string | null
+          empresa_tag: string | null
+          endereco: string | null
+          estado_civil: string | null
+          facebook_lead_id: string | null
+          fonte_trafego: string | null
+          id: string | null
+          is_lost: boolean | null
+          isa_agent: string | null
+          isa_ativa: boolean | null
+          last_contact_at: string | null
+          lead_state: string | null
+          linha_whatsapp: string | null
+          link_contrato: string | null
+          lost_at: string | null
+          lost_reason: string | null
+          nacionalidade: string | null
+          nome: string | null
+          numero: string | null
+          openai_thread_id: string | null
+          origem: string | null
+          owner_tipo: string | null
+          profissao: string | null
+          resumo_ia: string | null
+          rg: string | null
+          state_updated_at: string | null
+          status: string | null
+          telefone: string | null
+          tipo_acao: string | null
+          tipo_conversao: string | null
+          tipo_origem: string | null
+          triage_started_at: string | null
+          uf: string | null
+          updated_at: string | null
+          valor_causa: number | null
+          whatsapp_numero_destino: string | null
+        }
+        Insert: {
+          bairro?: string | null
+          canal_origem?: string | null
+          cep?: string | null
+          cidade?: string | null
+          contract_key?: string | null
+          contract_sent_at?: string | null
+          contract_signed_at?: string | null
+          contratos_adicionais?: number | null
+          cpf?: string | null
+          created_at?: string | null
+          data_conversao?: string | null
+          email?: string | null
+          empresa_tag?: string | null
+          endereco?: string | null
+          estado_civil?: string | null
+          facebook_lead_id?: string | null
+          fonte_trafego?: string | null
+          id?: string | null
+          is_lost?: boolean | null
+          isa_agent?: string | null
+          isa_ativa?: boolean | null
+          last_contact_at?: string | null
+          lead_state?: string | null
+          linha_whatsapp?: string | null
+          link_contrato?: string | null
+          lost_at?: string | null
+          lost_reason?: string | null
+          nacionalidade?: string | null
+          nome?: string | null
+          numero?: string | null
+          openai_thread_id?: string | null
+          origem?: string | null
+          owner_tipo?: string | null
+          profissao?: string | null
+          resumo_ia?: string | null
+          rg?: string | null
+          state_updated_at?: string | null
+          status?: string | null
+          telefone?: string | null
+          tipo_acao?: string | null
+          tipo_conversao?: string | null
+          tipo_origem?: string | null
+          triage_started_at?: string | null
+          uf?: string | null
+          updated_at?: string | null
+          valor_causa?: number | null
+          whatsapp_numero_destino?: string | null
+        }
+        Update: {
+          bairro?: string | null
+          canal_origem?: string | null
+          cep?: string | null
+          cidade?: string | null
+          contract_key?: string | null
+          contract_sent_at?: string | null
+          contract_signed_at?: string | null
+          contratos_adicionais?: number | null
+          cpf?: string | null
+          created_at?: string | null
+          data_conversao?: string | null
+          email?: string | null
+          empresa_tag?: string | null
+          endereco?: string | null
+          estado_civil?: string | null
+          facebook_lead_id?: string | null
+          fonte_trafego?: string | null
+          id?: string | null
+          is_lost?: boolean | null
+          isa_agent?: string | null
+          isa_ativa?: boolean | null
+          last_contact_at?: string | null
+          lead_state?: string | null
+          linha_whatsapp?: string | null
+          link_contrato?: string | null
+          lost_at?: string | null
+          lost_reason?: string | null
+          nacionalidade?: string | null
+          nome?: string | null
+          numero?: string | null
+          openai_thread_id?: string | null
+          origem?: string | null
+          owner_tipo?: string | null
+          profissao?: string | null
+          resumo_ia?: string | null
+          rg?: string | null
+          state_updated_at?: string | null
+          status?: string | null
+          telefone?: string | null
+          tipo_acao?: string | null
+          tipo_conversao?: string | null
+          tipo_origem?: string | null
+          triage_started_at?: string | null
+          uf?: string | null
+          updated_at?: string | null
+          valor_causa?: number | null
+          whatsapp_numero_destino?: string | null
+        }
+        Relationships: []
+      }
       campaign_recipients: {
         Row: {
           accepted_at: string | null
@@ -258,6 +501,68 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_atendimento_log: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          previous_user_id: string | null
+          previous_user_nome: string | null
+          subscriber_id: string
+          user_id: string
+          user_nome: string
+        }
+        Insert: {
+          action?: string
+          created_at?: string
+          id?: string
+          previous_user_id?: string | null
+          previous_user_nome?: string | null
+          subscriber_id: string
+          user_id: string
+          user_nome: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          previous_user_id?: string | null
+          previous_user_nome?: string | null
+          subscriber_id?: string
+          user_id?: string
+          user_nome?: string
+        }
+        Relationships: []
+      }
+      chat_mensagens: {
+        Row: {
+          conteudo: string
+          created_at: string
+          id: string
+          sender_id: string
+        }
+        Insert: {
+          conteudo: string
+          created_at?: string
+          id?: string
+          sender_id: string
+        }
+        Update: {
+          conteudo?: string
+          created_at?: string
+          id?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_mensagens_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
             referencedColumns: ["id"]
           },
         ]
@@ -491,6 +796,143 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "contract_reminders_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contract_reminders_zapsign: {
+        Row: {
+          background_check_at: string | null
+          background_check_status: string | null
+          contract_link: string | null
+          created_at: string | null
+          document_id: string
+          document_name: string
+          envelope_id: string | null
+          expires_at: string | null
+          id: string
+          is_main_doc: boolean | null
+          lead_id: string | null
+          metadata: Json | null
+          modelo_contrato_id: string | null
+          sent_at: string | null
+          signed_at: string | null
+          signer_cpf: string | null
+          signer_email: string | null
+          signer_name: string | null
+          signer_phone: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          background_check_at?: string | null
+          background_check_status?: string | null
+          contract_link?: string | null
+          created_at?: string | null
+          document_id: string
+          document_name: string
+          envelope_id?: string | null
+          expires_at?: string | null
+          id?: string
+          is_main_doc?: boolean | null
+          lead_id?: string | null
+          metadata?: Json | null
+          modelo_contrato_id?: string | null
+          sent_at?: string | null
+          signed_at?: string | null
+          signer_cpf?: string | null
+          signer_email?: string | null
+          signer_name?: string | null
+          signer_phone?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          background_check_at?: string | null
+          background_check_status?: string | null
+          contract_link?: string | null
+          created_at?: string | null
+          document_id?: string
+          document_name?: string
+          envelope_id?: string | null
+          expires_at?: string | null
+          id?: string
+          is_main_doc?: boolean | null
+          lead_id?: string | null
+          metadata?: Json | null
+          modelo_contrato_id?: string | null
+          sent_at?: string | null
+          signed_at?: string | null
+          signer_cpf?: string | null
+          signer_email?: string | null
+          signer_name?: string | null
+          signer_phone?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_reminders_zapsign_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_reminders_zapsign_modelo_contrato_id_fkey"
+            columns: ["modelo_contrato_id"]
+            isOneToOne: false
+            referencedRelation: "modelos_contratos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contratos_fechados: {
+        Row: {
+          created_at: string | null
+          fonte: string | null
+          id: string
+          lead_id: string | null
+          meta_conversion_data: Json | null
+          meta_conversion_sent: boolean | null
+          modalidade_assinatura: string
+          observacoes: string | null
+          quantidade_contratos: number
+          tipo_contrato: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          fonte?: string | null
+          id?: string
+          lead_id?: string | null
+          meta_conversion_data?: Json | null
+          meta_conversion_sent?: boolean | null
+          modalidade_assinatura: string
+          observacoes?: string | null
+          quantidade_contratos?: number
+          tipo_contrato: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          fonte?: string | null
+          id?: string
+          lead_id?: string | null
+          meta_conversion_data?: Json | null
+          meta_conversion_sent?: boolean | null
+          modalidade_assinatura?: string
+          observacoes?: string | null
+          quantidade_contratos?: number
+          tipo_contrato?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contratos_fechados_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads_juridicos"
@@ -821,6 +1263,104 @@ export type Database = {
             columns: ["document_id"]
             isOneToOne: false
             referencedRelation: "documentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      followup_campanhas: {
+        Row: {
+          ativo: boolean
+          created_at: string | null
+          id: string
+          intervalo_dias: number
+          legenda: string | null
+          media_nome: string | null
+          media_url: string | null
+          mensagem: string | null
+          ordem: number
+          tipo_midia: string
+          titulo: string
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string | null
+          id?: string
+          intervalo_dias?: number
+          legenda?: string | null
+          media_nome?: string | null
+          media_url?: string | null
+          mensagem?: string | null
+          ordem?: number
+          tipo_midia?: string
+          titulo: string
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string | null
+          id?: string
+          intervalo_dias?: number
+          legenda?: string | null
+          media_nome?: string | null
+          media_url?: string | null
+          mensagem?: string | null
+          ordem?: number
+          tipo_midia?: string
+          titulo?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      followup_nutricao: {
+        Row: {
+          created_at: string | null
+          id: string
+          lead_id: string | null
+          optin_enviado_em: string | null
+          proxima_campanha_em: string | null
+          resposta_em: string | null
+          status: string
+          subscriber_id: string
+          telefone: string
+          ultima_campanha_em: string | null
+          ultima_campanha_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          lead_id?: string | null
+          optin_enviado_em?: string | null
+          proxima_campanha_em?: string | null
+          resposta_em?: string | null
+          status?: string
+          subscriber_id: string
+          telefone: string
+          ultima_campanha_em?: string | null
+          ultima_campanha_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          lead_id?: string | null
+          optin_enviado_em?: string | null
+          proxima_campanha_em?: string | null
+          resposta_em?: string | null
+          status?: string
+          subscriber_id?: string
+          telefone?: string
+          ultima_campanha_em?: string | null
+          ultima_campanha_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "followup_nutricao_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_juridicos"
             referencedColumns: ["id"]
           },
         ]
@@ -1579,6 +2119,7 @@ export type Database = {
           contratos_adicionais: number | null
           cpf: string | null
           created_at: string
+          data_conversao: string | null
           email: string | null
           empresa_tag: string | null
           endereco: string | null
@@ -1608,6 +2149,7 @@ export type Database = {
           status: string | null
           telefone: string | null
           tipo_acao: string | null
+          tipo_conversao: string | null
           tipo_origem: string | null
           triage_started_at: string | null
           uf: string | null
@@ -1626,6 +2168,7 @@ export type Database = {
           contratos_adicionais?: number | null
           cpf?: string | null
           created_at?: string
+          data_conversao?: string | null
           email?: string | null
           empresa_tag?: string | null
           endereco?: string | null
@@ -1655,6 +2198,7 @@ export type Database = {
           status?: string | null
           telefone?: string | null
           tipo_acao?: string | null
+          tipo_conversao?: string | null
           tipo_origem?: string | null
           triage_started_at?: string | null
           uf?: string | null
@@ -1673,6 +2217,7 @@ export type Database = {
           contratos_adicionais?: number | null
           cpf?: string | null
           created_at?: string
+          data_conversao?: string | null
           email?: string | null
           empresa_tag?: string | null
           endereco?: string | null
@@ -1702,6 +2247,7 @@ export type Database = {
           status?: string | null
           telefone?: string | null
           tipo_acao?: string | null
+          tipo_conversao?: string | null
           tipo_origem?: string | null
           triage_started_at?: string | null
           uf?: string | null
@@ -1768,6 +2314,9 @@ export type Database = {
         Row: {
           atendimento_humano: boolean | null
           atendimento_humano_desde: string | null
+          attending_by: string | null
+          attending_nome: string | null
+          attending_since: string | null
           canal: string | null
           created_at: string
           email: string | null
@@ -1775,6 +2324,9 @@ export type Database = {
           foto: string | null
           id: string
           instance_name: string | null
+          last_attended_at: string | null
+          last_attended_by: string | null
+          last_attended_nome: string | null
           lead_id: string | null
           linha_whatsapp: string | null
           nome: string | null
@@ -1787,6 +2339,9 @@ export type Database = {
         Insert: {
           atendimento_humano?: boolean | null
           atendimento_humano_desde?: string | null
+          attending_by?: string | null
+          attending_nome?: string | null
+          attending_since?: string | null
           canal?: string | null
           created_at?: string
           email?: string | null
@@ -1794,6 +2349,9 @@ export type Database = {
           foto?: string | null
           id?: string
           instance_name?: string | null
+          last_attended_at?: string | null
+          last_attended_by?: string | null
+          last_attended_nome?: string | null
           lead_id?: string | null
           linha_whatsapp?: string | null
           nome?: string | null
@@ -1806,6 +2364,9 @@ export type Database = {
         Update: {
           atendimento_humano?: boolean | null
           atendimento_humano_desde?: string | null
+          attending_by?: string | null
+          attending_nome?: string | null
+          attending_since?: string | null
           canal?: string | null
           created_at?: string
           email?: string | null
@@ -1813,6 +2374,9 @@ export type Database = {
           foto?: string | null
           id?: string
           instance_name?: string | null
+          last_attended_at?: string | null
+          last_attended_by?: string | null
+          last_attended_nome?: string | null
           lead_id?: string | null
           linha_whatsapp?: string | null
           nome?: string | null
@@ -1915,6 +2479,87 @@ export type Database = {
           },
         ]
       }
+      meta_leads_aereo: {
+        Row: {
+          ad_id: string | null
+          ad_name: string | null
+          adset_id: string | null
+          adset_name: string | null
+          campaign_id: string | null
+          campaign_name: string | null
+          classificacao: string | null
+          comprovantes: string | null
+          created_at: string | null
+          email: string | null
+          form_id: string | null
+          id: string
+          lead_id_meta: string | null
+          nome: string | null
+          observacoes: string | null
+          origem: string | null
+          problema_voo: string | null
+          raw_payload: Json | null
+          status: string | null
+          telefone: string | null
+          tempo_prejudicado: string | null
+          teve_prejuizo: string | null
+          updated_at: string | null
+          zapi_status: string | null
+        }
+        Insert: {
+          ad_id?: string | null
+          ad_name?: string | null
+          adset_id?: string | null
+          adset_name?: string | null
+          campaign_id?: string | null
+          campaign_name?: string | null
+          classificacao?: string | null
+          comprovantes?: string | null
+          created_at?: string | null
+          email?: string | null
+          form_id?: string | null
+          id?: string
+          lead_id_meta?: string | null
+          nome?: string | null
+          observacoes?: string | null
+          origem?: string | null
+          problema_voo?: string | null
+          raw_payload?: Json | null
+          status?: string | null
+          telefone?: string | null
+          tempo_prejudicado?: string | null
+          teve_prejuizo?: string | null
+          updated_at?: string | null
+          zapi_status?: string | null
+        }
+        Update: {
+          ad_id?: string | null
+          ad_name?: string | null
+          adset_id?: string | null
+          adset_name?: string | null
+          campaign_id?: string | null
+          campaign_name?: string | null
+          classificacao?: string | null
+          comprovantes?: string | null
+          created_at?: string | null
+          email?: string | null
+          form_id?: string | null
+          id?: string
+          lead_id_meta?: string | null
+          nome?: string | null
+          observacoes?: string | null
+          origem?: string | null
+          problema_voo?: string | null
+          raw_payload?: Json | null
+          status?: string | null
+          telefone?: string | null
+          tempo_prejudicado?: string | null
+          teve_prejuizo?: string | null
+          updated_at?: string | null
+          zapi_status?: string | null
+        }
+        Relationships: []
+      }
       model_chunks: {
         Row: {
           chunk_type: string | null
@@ -1949,35 +2594,47 @@ export type Database = {
         Row: {
           arquivo_nome: string
           arquivo_url: string
+          campos_variaveis: Json | null
           categoria: string
           created_at: string
           created_by: string | null
           descricao: string | null
           id: string
           nome: string
+          template_key: string | null
+          tipo: string
           updated_at: string
+          zapsign_template_id: string | null
         }
         Insert: {
           arquivo_nome: string
           arquivo_url: string
+          campos_variaveis?: Json | null
           categoria: string
           created_at?: string
           created_by?: string | null
           descricao?: string | null
           id?: string
           nome: string
+          template_key?: string | null
+          tipo?: string
           updated_at?: string
+          zapsign_template_id?: string | null
         }
         Update: {
           arquivo_nome?: string
           arquivo_url?: string
+          campos_variaveis?: Json | null
           categoria?: string
           created_at?: string
           created_by?: string | null
           descricao?: string | null
           id?: string
           nome?: string
+          template_key?: string | null
+          tipo?: string
           updated_at?: string
+          zapsign_template_id?: string | null
         }
         Relationships: []
       }
@@ -2280,6 +2937,7 @@ export type Database = {
           cargo: string | null
           email: string | null
           id: string
+          last_seen_at: string | null
           nome: string | null
           oab_numero: string | null
           oab_uf: string | null
@@ -2291,6 +2949,7 @@ export type Database = {
           cargo?: string | null
           email?: string | null
           id: string
+          last_seen_at?: string | null
           nome?: string | null
           oab_numero?: string | null
           oab_uf?: string | null
@@ -2302,6 +2961,7 @@ export type Database = {
           cargo?: string | null
           email?: string | null
           id?: string
+          last_seen_at?: string | null
           nome?: string | null
           oab_numero?: string | null
           oab_uf?: string | null
@@ -3152,11 +3812,13 @@ export type Database = {
           assunto: string | null
           assunto_cnj: string | null
           cache_valid_until: string | null
+          categoria_beneficiario: string | null
           classe_cnj: string | null
           classe_cnj_codigo: string | null
           classe_cnj_nome: string | null
           cliente_id: string | null
           cnj_normalizado: string | null
+          co_responsavel_id: string | null
           complemento_enderecamento: string | null
           cpf_cliente: string | null
           created_at: string | null
@@ -3166,6 +3828,7 @@ export type Database = {
           data_citacao: string | null
           data_distribuicao: string | null
           data_encerramento: string | null
+          data_nascimento_cliente: string | null
           data_recebimento: string | null
           data_ultima_atualizacao: string | null
           descricao: string | null
@@ -3181,6 +3844,7 @@ export type Database = {
           monitorar_push: boolean | null
           movimentos_json: Json | null
           nome_cliente: string | null
+          nosso_processo: boolean
           notificacao_ativa: boolean | null
           numero_complementar: string | null
           numero_processo: string | null
@@ -3188,6 +3852,7 @@ export type Database = {
           origem_cliente: string | null
           partes_json: Json | null
           probabilidade: string | null
+          processo_pai_id: string | null
           segredo_justica: boolean | null
           sigilo: string | null
           sistema: string | null
@@ -3214,11 +3879,13 @@ export type Database = {
           assunto?: string | null
           assunto_cnj?: string | null
           cache_valid_until?: string | null
+          categoria_beneficiario?: string | null
           classe_cnj?: string | null
           classe_cnj_codigo?: string | null
           classe_cnj_nome?: string | null
           cliente_id?: string | null
           cnj_normalizado?: string | null
+          co_responsavel_id?: string | null
           complemento_enderecamento?: string | null
           cpf_cliente?: string | null
           created_at?: string | null
@@ -3228,6 +3895,7 @@ export type Database = {
           data_citacao?: string | null
           data_distribuicao?: string | null
           data_encerramento?: string | null
+          data_nascimento_cliente?: string | null
           data_recebimento?: string | null
           data_ultima_atualizacao?: string | null
           descricao?: string | null
@@ -3243,6 +3911,7 @@ export type Database = {
           monitorar_push?: boolean | null
           movimentos_json?: Json | null
           nome_cliente?: string | null
+          nosso_processo?: boolean
           notificacao_ativa?: boolean | null
           numero_complementar?: string | null
           numero_processo?: string | null
@@ -3250,6 +3919,7 @@ export type Database = {
           origem_cliente?: string | null
           partes_json?: Json | null
           probabilidade?: string | null
+          processo_pai_id?: string | null
           segredo_justica?: boolean | null
           sigilo?: string | null
           sistema?: string | null
@@ -3276,11 +3946,13 @@ export type Database = {
           assunto?: string | null
           assunto_cnj?: string | null
           cache_valid_until?: string | null
+          categoria_beneficiario?: string | null
           classe_cnj?: string | null
           classe_cnj_codigo?: string | null
           classe_cnj_nome?: string | null
           cliente_id?: string | null
           cnj_normalizado?: string | null
+          co_responsavel_id?: string | null
           complemento_enderecamento?: string | null
           cpf_cliente?: string | null
           created_at?: string | null
@@ -3290,6 +3962,7 @@ export type Database = {
           data_citacao?: string | null
           data_distribuicao?: string | null
           data_encerramento?: string | null
+          data_nascimento_cliente?: string | null
           data_recebimento?: string | null
           data_ultima_atualizacao?: string | null
           descricao?: string | null
@@ -3305,6 +3978,7 @@ export type Database = {
           monitorar_push?: boolean | null
           movimentos_json?: Json | null
           nome_cliente?: string | null
+          nosso_processo?: boolean
           notificacao_ativa?: boolean | null
           numero_complementar?: string | null
           numero_processo?: string | null
@@ -3312,6 +3986,7 @@ export type Database = {
           origem_cliente?: string | null
           partes_json?: Json | null
           probabilidade?: string | null
+          processo_pai_id?: string | null
           segredo_justica?: boolean | null
           sigilo?: string | null
           sistema?: string | null
@@ -3337,6 +4012,20 @@ export type Database = {
             columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "processos_co_responsavel_id_fkey"
+            columns: ["co_responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "processos_processo_pai_id_fkey"
+            columns: ["processo_pai_id"]
+            isOneToOne: false
+            referencedRelation: "processos"
             referencedColumns: ["id"]
           },
         ]
@@ -3519,11 +4208,12 @@ export type Database = {
           entregue_em: string | null
           horario: string | null
           id: string
-          prioridade: string | null
-          processo_id: string | null
           prazo_fatal: string | null
           prazo_seguranca: string | null
+          prioridade: string | null
+          processo_id: string | null
           responsavel_id: string | null
+          started_at: string | null
           status: string | null
           titulo: string
           updated_at: string
@@ -3544,11 +4234,12 @@ export type Database = {
           entregue_em?: string | null
           horario?: string | null
           id?: string
-          prioridade?: string | null
-          processo_id?: string | null
           prazo_fatal?: string | null
           prazo_seguranca?: string | null
+          prioridade?: string | null
+          processo_id?: string | null
           responsavel_id?: string | null
+          started_at?: string | null
           status?: string | null
           titulo: string
           updated_at?: string
@@ -3569,11 +4260,12 @@ export type Database = {
           entregue_em?: string | null
           horario?: string | null
           id?: string
-          prioridade?: string | null
-          processo_id?: string | null
           prazo_fatal?: string | null
           prazo_seguranca?: string | null
+          prioridade?: string | null
+          processo_id?: string | null
           responsavel_id?: string | null
+          started_at?: string | null
           status?: string | null
           titulo?: string
           updated_at?: string
@@ -3730,6 +4422,41 @@ export type Database = {
           },
         ]
       }
+      user_page_permissions: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          id: string
+          page_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          page_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          page_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_page_permissions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -3875,6 +4602,64 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      buscar_leads_peticao: {
+        Args: { termo: string }
+        Returns: {
+          bairro: string | null
+          canal_origem: string | null
+          cep: string | null
+          cidade: string | null
+          contract_key: string | null
+          contract_sent_at: string | null
+          contract_signed_at: string | null
+          contratos_adicionais: number | null
+          cpf: string | null
+          created_at: string
+          data_conversao: string | null
+          email: string | null
+          empresa_tag: string | null
+          endereco: string | null
+          estado_civil: string | null
+          facebook_lead_id: string | null
+          fonte_trafego: string | null
+          id: string
+          is_lost: boolean | null
+          isa_agent: string | null
+          isa_ativa: boolean | null
+          last_contact_at: string | null
+          lead_state: string | null
+          linha_whatsapp: string | null
+          link_contrato: string | null
+          lost_at: string | null
+          lost_reason: string | null
+          nacionalidade: string | null
+          nome: string | null
+          numero: string | null
+          openai_thread_id: string | null
+          origem: string | null
+          owner_tipo: string | null
+          profissao: string | null
+          resumo_ia: string | null
+          rg: string | null
+          state_updated_at: string | null
+          status: string | null
+          telefone: string | null
+          tipo_acao: string | null
+          tipo_conversao: string | null
+          tipo_origem: string | null
+          triage_started_at: string | null
+          uf: string | null
+          updated_at: string | null
+          valor_causa: number | null
+          whatsapp_numero_destino: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "leads_juridicos"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       checar_cargo_usuario: { Args: never; Returns: string }
       claim_next_intimacoes_sync_job: {
         Args: never
@@ -3904,6 +4689,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      dispatch_next_backup_chunk: { Args: never; Returns: undefined }
       gerar_hash_movimentacao: {
         Args: {
           p_cnj: string
@@ -3959,7 +4745,12 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "Administrador" | "Advogado" | "Secretaria" | "Gerente" | "Estagiário"
+      app_role:
+        | "Administrador"
+        | "Advogado"
+        | "Secretaria"
+        | "Gerente"
+        | "Estagiário"
       petition_status_v3:
         | "rascunho"
         | "gerando"
@@ -4093,9 +4884,18 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
-      app_role: ["Administrador", "Advogado", "Secretaria", "Gerente", "Estagiário"],
+      app_role: [
+        "Administrador",
+        "Advogado",
+        "Secretaria",
+        "Gerente",
+        "Estagiário",
+      ],
       petition_status_v3: [
         "rascunho",
         "gerando",

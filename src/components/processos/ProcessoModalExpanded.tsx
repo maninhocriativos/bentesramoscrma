@@ -46,7 +46,7 @@ interface ProcessoModalExpandedProps {
 type ProcessoFormData = {
   numero_processo: string; numero_complementar: string; titulo_acao: string;
   status: ProcessoStatus; advogado_responsavel: string; cliente_id: string;
-  nome_cliente: string; cpf_cliente: string; tribunal: string; vara_comarca: string;
+  nome_cliente: string; cpf_cliente: string; data_nascimento_cliente: string; tribunal: string; vara_comarca: string;
   assunto: string; valor_causa: string; orgao_julgador: string; grau: string;
   origem_cliente: string; descricao: string; marcadores: string; area: string;
   fase: string; classe_cnj: string; assunto_cnj: string; segredo_justica: boolean;
@@ -77,7 +77,7 @@ const DRAFT_MAX_AGE = 1000 * 60 * 60 * 24;
 const createEmptyForm = (): ProcessoFormData => ({
   numero_processo: '', numero_complementar: '', titulo_acao: '',
   status: 'Em Andamento', advogado_responsavel: '', cliente_id: '',
-  nome_cliente: '', cpf_cliente: '', tribunal: '', vara_comarca: '',
+  nome_cliente: '', cpf_cliente: '', data_nascimento_cliente: '', tribunal: '', vara_comarca: '',
   assunto: '', valor_causa: '', orgao_julgador: '', grau: '', origem_cliente: '',
   descricao: '', marcadores: '', area: '', fase: '', classe_cnj: '',
   assunto_cnj: '', segredo_justica: false, data_distribuicao: '',
@@ -633,7 +633,8 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
         titulo_acao: processo.titulo_acao || '', status: (processo.status as ProcessoStatus) || 'Em Andamento',
         advogado_responsavel: processo.advogado_responsavel || '', cliente_id: processo.cliente_id || '',
         nome_cliente: p.nome_cliente || '',
-        cpf_cliente: processo.cpf_cliente || '', tribunal: processo.tribunal || '',
+        cpf_cliente: processo.cpf_cliente || '', data_nascimento_cliente: p.data_nascimento_cliente || '',
+        tribunal: processo.tribunal || '',
         vara_comarca: processo.vara_comarca || '',
         assunto: processo.assunto || '',
         valor_causa: fmtMoney(processo.valor_causa),
@@ -856,6 +857,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
         cliente_id:                resolvedClienteId,
         nome_cliente:              nomeCliente,
         cpf_cliente:               formData.cpf_cliente ? formData.cpf_cliente.replace(/\D/g, '') : null,
+        data_nascimento_cliente:   formData.data_nascimento_cliente || null,
         origem_cliente:            formData.origem_cliente         || null,
         tribunal:                  formData.tribunal               || null,
         vara_comarca:              formData.vara_comarca           || null,
@@ -1461,9 +1463,14 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                             </Select>
                           </Field>
                         </Row2>
-                        <Field label="CPF do Cliente" hint="Usado pela Isa para localizar processos">
-                          <Input value={formData.cpf_cliente} onChange={e => { let v = e.target.value.replace(/\D/g, '').slice(0, 11); if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4'); else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3'); else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2'); update('cpf_cliente', v); }} className="rounded-xl bg-card h-10" placeholder="000.000.000-00" maxLength={14} />
-                        </Field>
+                        <Row2>
+                          <Field label="CPF do Cliente" hint="Usado pela Isa para localizar processos">
+                            <Input value={formData.cpf_cliente} onChange={e => { let v = e.target.value.replace(/\D/g, '').slice(0, 11); if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4'); else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3'); else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2'); update('cpf_cliente', v); }} className="rounded-xl bg-card h-10" placeholder="000.000.000-00" maxLength={14} />
+                          </Field>
+                          <Field label="Data de Nascimento do Cliente" hint="Alimenta o gráfico de idade em Dados">
+                            <Input type="date" value={formData.data_nascimento_cliente} onChange={e => update('data_nascimento_cliente', e.target.value)} className="rounded-xl bg-card h-10" />
+                          </Field>
+                        </Row2>
                         <Field label="Co-responsável" hint="Estagiário ou colaborador que acompanha este processo">
                           <Select value={formData.co_responsavel_id || '__none__'} onValueChange={v => update('co_responsavel_id', v === '__none__' ? '' : v)}>
                             <SelectTrigger className="rounded-xl bg-card h-10"><SelectValue placeholder="Nenhum" /></SelectTrigger>
