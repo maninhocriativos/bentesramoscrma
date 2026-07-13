@@ -41,7 +41,43 @@ async function resolveAllOabs(): Promise<OabCredential[]> {
   const credentials: OabCredential[] = [];
   const seen = new Set<string>();
 
-  // 1. Office-level OAB
+  // 1. Advogados com OAB configurado, primeiro (prioridade sobre a OAB genérica
+  // do escritório abaixo, quando é a mesma). "cargo" em perfis é um papel único
+  // (Administrador/Secretaria/Estagiário) e não cobre quem acumula função de
+  // advogado — por isso usamos user_roles, que permite múltiplos papéis por
+  // pessoa (ex: Administrador + Advogado).
+  const { data: advogadoRoles } = await supabase
+    .from("user_roles")
+    .select("user_id")
+    .eq("role", "Advogado");
+  const advogadoIds = [...new Set((advogadoRoles || []).map((r: { user_id: string }) => r.user_id))];
+
+  const { data: advogados } = advogadoIds.length > 0
+    ? await supabase
+        .from("perfis")
+        .select("id, oab_numero, oab_uf")
+        .in("id", advogadoIds)
+        .not("oab_numero", "is", null)
+        .neq("oab_numero", "")
+    : { data: [] };
+
+  if (advogados) {
+    for (const adv of advogados) {
+      const uf = adv.oab_uf || "AM";
+      const key = `${adv.oab_numero}-${uf}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        credentials.push({
+          oabNumero: adv.oab_numero,
+          oabUf: uf,
+          advogadoId: adv.id,
+        });
+      }
+    }
+  }
+
+  // 2. OAB genérica do escritório — só entra se nenhum advogado específico
+  // já cobrir essa mesma OAB/UF (evita job duplicado sem advogado_id).
   const { data: office } = await supabase
     .from("office_settings")
     .select("oab_number, oab_state")
@@ -57,29 +93,6 @@ async function resolveAllOabs(): Promise<OabCredential[]> {
         oabUf: office.oab_state || "AM",
         advogadoId: null,
       });
-    }
-  }
-
-  // 2. Advogados (cargo = 'Advogado') com OAB configurado — exclui Secretaria/Administrador
-  const { data: advogados } = await supabase
-    .from("perfis")
-    .select("id, oab_numero, oab_uf")
-    .eq("cargo", "Advogado")
-    .not("oab_numero", "is", null)
-    .neq("oab_numero", "");
-
-  if (advogados) {
-    for (const adv of advogados) {
-      const uf = adv.oab_uf || "AM";
-      const key = `${adv.oab_numero}-${uf}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        credentials.push({
-          oabNumero: adv.oab_numero,
-          oabUf: uf,
-          advogadoId: adv.id,
-        });
-      }
     }
   }
 
