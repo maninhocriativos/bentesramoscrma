@@ -148,6 +148,10 @@ const DJE_TJAM_BOILERPLATE_MARKERS = [
   /efetue a valida[çc][ãa]o de requisitos/i,
 ];
 
+function normalizarBusca(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+}
+
 function limparSnippetDjeTjam(snippet: string): string {
   let out = snippet;
   let cutAt = -1;
@@ -933,9 +937,29 @@ serve(async (req) => {
               const allCnjs = [...new Set([...text.matchAll(cnjRe)].map(m => m[0]))];
               console.log(`📋 [DJe-TJAM] "${djeTerm}": ${allCnjs.length} CNJs em ${dtInicio}→${dtFim}`);
 
+              // A busca devolve a página inteira do caderno (várias publicações
+              // distintas, só uma delas de fato menciona o termo buscado) — sem
+              // isso, todo CNJ da página era atribuído ao advogado buscado, mesmo
+              // publicações de terceiros sem nenhuma relação com ele.
+              const termoNorm = normalizarBusca(djeTerm);
+              const textoNorm = normalizarBusca(text);
+              const termoPosicoes: number[] = [];
+              for (let from = 0, p = -1; (p = textoNorm.indexOf(termoNorm, from)) !== -1; from = p + 1) {
+                termoPosicoes.push(p);
+              }
+              const DISTANCIA_MAX = 2500;
+
               for (const cnj of allCnjs) {
                 // Extrai até 2000 chars em torno do CNJ como trecho da publicação
                 const idx = text.indexOf(cnj);
+                const distanciaMin = termoPosicoes.length
+                  ? Math.min(...termoPosicoes.map(p => Math.abs(p - idx)))
+                  : Infinity;
+                if (distanciaMin > DISTANCIA_MAX) {
+                  console.log(`⏭️ [DJe-TJAM] CNJ ${cnj} descartado — "${djeTerm}" não aparece perto (publicação de terceiro na mesma página)`);
+                  continue;
+                }
+
                 const snippetBruto = text.slice(Math.max(0, idx - 300), idx + 2000).trim();
                 const snippet = limparSnippetDjeTjam(snippetBruto);
                 const tipo = classifyMovimento(snippet, "Publicação");
