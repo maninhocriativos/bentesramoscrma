@@ -908,18 +908,21 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
 
   useEffect(() => {
     const fetchMembers = async () => {
+      // Não filtra por cargo='Advogado': "cargo" em perfis é um papel único
+      // (Administrador/Secretaria/Estagiário) e não cobre quem acumula função
+      // de advogado (ex: Andrey é Administrador + Advogado via user_roles) —
+      // filtrar por cargo deixava a lista sempre vazia. Mesmo padrão simples
+      // já usado em ProcessoModalExpanded para a lista de responsáveis.
       const { data } = await supabase
         .from('perfis')
         .select('id, nome, sobrenome, email, oab_numero, oab_uf')
         .eq('aprovado', true)
-        .eq('cargo', 'Advogado')
-        .not('oab_numero', 'is', null)
-        .neq('oab_numero', '')
         .order('nome', { ascending: true });
-      // Deduplica por oab_numero para eliminar perfis duplicados do mesmo advogado
+      // Deduplica por oab_numero (perfis duplicados do mesmo advogado); quem
+      // não tem OAB (equipe não-advogada) é deduplicado pelo próprio id.
       const seen = new Set<string>();
       const unique = ((data as TeamMember[]) || []).filter(m => {
-        const key = `${m.oab_numero}-${m.oab_uf || 'AM'}`;
+        const key = m.oab_numero ? `${m.oab_numero}-${m.oab_uf || 'AM'}` : `id-${m.id}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
