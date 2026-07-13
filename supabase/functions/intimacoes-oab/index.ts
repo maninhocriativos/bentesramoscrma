@@ -68,6 +68,22 @@ function nextBusinessDay(dateStr: string): string {
   return d.toISOString().split("T")[0];
 }
 
+// Remove scripts/estilos/tags + decodifica entidades — usado em conteúdo que
+// vem como HTML bruto (documento inteiro com DOCTYPE/head/style) em vez de texto.
+function stripHtml(html: string): string {
+  if (!/<[a-z][\s\S]*>/i.test(html)) return html; // já é texto puro, não mexe
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function classifyMovimento(conteudo: string, tipo: string): string {
   const c = (conteudo + " " + tipo).toLowerCase();
   if (c.includes("intimação") || c.includes("intimacao")) return "Intimação";
@@ -244,7 +260,7 @@ serve(async (req) => {
               if (items.length === 0) break;
 
               for (const item of items) {
-                const conteudo = item.texto || item.conteudo || item.content || "";
+                const conteudo = stripHtml(item.texto || item.conteudo || item.content || "");
                 const titulo = item.diario_nome || item.titulo || "Publicação em Diário Oficial";
                 const cnjMatch = conteudo.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
                 const dataDisp = item.data_disponibilizacao || item.diario_data || item.data_publicacao || item.data || "";
@@ -385,7 +401,7 @@ serve(async (req) => {
             if (items.length === 0) break;
 
             for (const item of items) {
-              const conteudo = item.texto || item.conteudo || item.content || "";
+              const conteudo = stripHtml(item.texto || item.conteudo || item.content || "");
               const titulo = item.diario_nome || item.titulo || item.fonte_nome || "Publicação em Diário Oficial";
               const cnjMatch = conteudo.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
               const dataDisp = item.data_disponibilizacao || item.diario_data || item.data_publicacao || item.data || "";
@@ -456,7 +472,7 @@ serve(async (req) => {
             if (items.length === 0) break;
 
             for (const item of items) {
-              const conteudo = item.texto || item.conteudo || item.content || "";
+              const conteudo = stripHtml(item.texto || item.conteudo || item.content || "");
               const titulo = item.diario_nome || item.titulo || "Publicação em Diário Oficial";
               const cnjMatch = conteudo.match(/(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/);
               const tipoRaw = classifyMovimento(conteudo, titulo);
@@ -528,7 +544,7 @@ serve(async (req) => {
         if (items.length === 0) break;
 
         for (const item of items) {
-          const conteudo = item.texto || "";
+          const conteudo = stripHtml(item.texto || "");
           const tipoRaw = classifyMovimento(conteudo, item.tipoComunicacao || "");
           const tipo = TIPOS_INTIMACAO.has(tipoRaw) ? tipoRaw : "Publicação";
           intimacoes.push(makeItem({
@@ -831,16 +847,7 @@ serve(async (req) => {
             if (semResultado) {
               console.log(`📋 [DJe-TJAM] "${djeTerm}" sem publicações em ${dtInicio}→${dtFim}`);
             } else {
-              // Texto puro: remove scripts/estilos/tags + decodifica entidades
-              const text = html
-                .replace(/<script[\s\S]*?<\/script>/gi, " ")
-                .replace(/<style[\s\S]*?<\/style>/gi, " ")
-                .replace(/<[^>]+>/g, " ")
-                .replace(/&nbsp;/g, " ")
-                .replace(/&amp;/g, "&")
-                .replace(/&lt;/g, "<")
-                .replace(/&gt;/g, ">")
-                .replace(/\s+/g, " ");
+              const text = stripHtml(html);
 
               // Extrai todos os CNJs únicos do texto
               const cnjRe = /\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/g;
