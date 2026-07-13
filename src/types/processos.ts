@@ -42,6 +42,8 @@ export interface Processo {
   cpf_cliente: string | null;
   nome_cliente: string | null;
   origem_cliente: string | null;
+  data_nascimento_cliente: string | null;
+  categoria_beneficiario: string | null;
 
   // Endereçamento judicial
   tribunal: string | null;

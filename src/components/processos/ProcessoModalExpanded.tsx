@@ -26,7 +26,7 @@ import { ProcessoNotificacoesTab } from './ProcessoNotificacoesTab';
 import { MovimentoDetailModal } from './MovimentoDetailModal';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { formatCpfCnpj, isCpfCnpjInvalidoCompleto } from '@/lib/documento';
+import { formatCpfCnpj, isCpfCnpjInvalidoCompleto, formatCpf, isCpfInvalidoCompleto } from '@/lib/documento';
 import { enrichMovements, MovimentoEnriquecido, getCategoriaColor } from '@/lib/cnjMovimentosMap';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -234,6 +234,27 @@ function AssuntoPickerModal({ isOpen, onClose, currentValue, onSelect }: {
   );
 }
 
+// Junta as partes vindas do DataJud com as que já estavam no processo, sem
+// perder edições manuais (celular/telefone adicional) quando o nome bate com
+// uma parte que a API também retornou — antes a parte da API substituía a
+// manual inteira, apagando esses campos a cada "Atualizar CNJ"/reabertura.
+function mergePartesPreservandoManual(apiPartes: ProcessoParte[], prevPartes: ProcessoParte[]): ProcessoParte[] {
+  const normalize = (s: string) => (s || '').toLowerCase().trim();
+  const prevByName = new Map(prevPartes.map(p => [normalize(p.nome), p]));
+  const apiNames = new Set(apiPartes.map(p => normalize(p.nome)));
+  const atualizadas = apiPartes.map(apiParte => {
+    const existente = prevByName.get(normalize(apiParte.nome));
+    if (!existente) return apiParte;
+    return {
+      ...apiParte,
+      celular: existente.celular || apiParte.celular,
+      telefone_adicional: existente.telefone_adicional || apiParte.telefone_adicional,
+    };
+  });
+  const manuaisSemMatch = prevPartes.filter(p => !apiNames.has(normalize(p.nome)));
+  return [...atualizadas, ...manuaisSemMatch];
+}
+
 // ─── NovoClienteModal ──────────────────────────────────────────────────────────
 
 function NovoClienteModal({ isOpen, onClose, onCreated }: { isOpen: boolean; onClose: () => void; onCreated: (lead: LeadName) => void; }) {
@@ -241,8 +262,11 @@ function NovoClienteModal({ isOpen, onClose, onCreated }: { isOpen: boolean; onC
   const [cpf, setCpf] = useState(''); const [email, setEmail] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const cpfInvalido = isCpfInvalidoCompleto(cpf);
+
   const handleSave = async () => {
     if (!nome.trim()) { toast.error('Informe o nome do cliente'); return; }
+    if (cpfInvalido) { toast.error('CPF inválido'); return; }
     setSaving(true);
     const { data, error } = await supabase.from('leads_juridicos')
       .insert({ nome: nome.trim(), telefone: telefone.trim() || null, cpf: cpf.replace(/\D/g, '') || null, email: email.trim() || null, origem: 'CRM' })
@@ -264,7 +288,10 @@ function NovoClienteModal({ isOpen, onClose, onCreated }: { isOpen: boolean; onC
           <div className="grid grid-cols-2 gap-3">
             <div><Label className="text-xs text-muted-foreground">Telefone / WhatsApp</Label><Input value={telefone} onChange={e => setTelefone(e.target.value)} className="h-9 rounded-xl mt-1" placeholder="(00) 00000-0000" /></div>
             <div><Label className="text-xs text-muted-foreground">CPF</Label>
-              <Input value={cpf} onChange={e => { let v = e.target.value.replace(/\D/g, '').slice(0, 11); if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4'); else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3'); else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2'); setCpf(v); }} className="h-9 rounded-xl mt-1" placeholder="000.000.000-00" maxLength={14} />
+              <Input value={cpf} onChange={e => setCpf(formatCpf(e.target.value))}
+                className={`h-9 rounded-xl mt-1 ${cpfInvalido ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                placeholder="000.000.000-00" maxLength={14} />
+              {cpfInvalido && <p className="text-[10px] text-destructive mt-1">CPF inválido</p>}
             </div>
           </div>
           <div><Label className="text-xs text-muted-foreground">E-mail</Label><Input value={email} onChange={e => setEmail(e.target.value)} className="h-9 rounded-xl mt-1" placeholder="email@exemplo.com" type="email" /></div>
@@ -326,33 +353,33 @@ function ParteCard({ parte, index, onUpdate, onRemove }: {
     <div>
       <div className="rounded-xl border border-border/40 bg-card" style={{ borderLeftWidth: 3, borderLeftColor: barColor }}>
         <div className="p-2.5 pl-3">
-          {/* Nome + ações na linha de cima */}
-          <div className="flex items-center justify-between gap-1 mb-1">
-            <p className="text-xs font-semibold truncate flex-1 min-w-0">{parte.nome}</p>
+          {/* Nome + ações na linha de cima — quebra linha em vez de cortar */}
+          <div className="flex items-start justify-between gap-1 mb-1.5">
+            <p className="text-[13px] font-semibold leading-snug flex-1 min-w-0 break-words">{parte.nome}</p>
             <div className="flex items-center gap-1 shrink-0 ml-1">
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className={`h-5 w-5 shrink-0 ${editing ? 'text-primary' : 'text-muted-foreground/50 hover:text-primary'}`}
+                className={`h-6 w-6 shrink-0 ${editing ? 'text-primary' : 'text-muted-foreground/50 hover:text-primary'}`}
                 onClick={() => setEditing(v => !v)}
               >
-                <Pencil className="h-2.5 w-2.5" />
+                <Pencil className="h-3 w-3" />
               </Button>
-              <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground/50 hover:text-destructive shrink-0" onClick={() => onRemove(index)}>
-                <X className="h-2.5 w-2.5" />
+              <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground/50 hover:text-destructive shrink-0" onClick={() => onRemove(index)}>
+                <X className="h-3 w-3" />
               </Button>
             </div>
           </div>
-          {/* Tipo truncado na linha de baixo — evita overflow */}
-          <span className={`inline-block max-w-full truncate text-[9px] font-semibold px-1.5 py-0.5 rounded-md border ${badgeCls}`}>
+          {/* Tipo — sem corte, quebra se precisar */}
+          <span className={`inline-block max-w-full text-[10px] font-semibold px-1.5 py-0.5 rounded-md border whitespace-normal break-words ${badgeCls}`}>
             {parte.tipo}
           </span>
-          {/* Documento e celular */}
+          {/* Documento e celular — sem corte */}
           {(parte.documento || parte.celular) && (
-            <div className="flex flex-wrap gap-x-2 mt-1">
-              {parte.documento && <span className="text-[10px] text-muted-foreground truncate">Doc: {parte.documento}</span>}
-              {parte.celular   && <span className="text-[10px] text-muted-foreground">📱 {parte.celular}</span>}
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
+              {parte.documento && <span className="text-[11px] text-muted-foreground break-all">Doc: {parte.documento}</span>}
+              {parte.celular   && <span className="text-[11px] text-muted-foreground">📱 {parte.celular}</span>}
             </div>
           )}
         </div>
@@ -383,12 +410,12 @@ function ParteCard({ parte, index, onUpdate, onRemove }: {
       {parte.advogados && parte.advogados.length > 0 && (
         <div className="ml-3 mt-0.5 mb-1 pl-2.5 border-l-2 border-border/30">
           {parte.advogados.map((adv: any, j: number) => (
-            <div key={j} className="flex items-center gap-2 py-0.5 min-w-0">
-              <p className="text-[10px] font-medium truncate flex-1 min-w-0">{adv.nome}</p>
+            <div key={j} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 py-0.5 min-w-0">
+              <p className="text-[11px] font-medium break-words flex-1 min-w-0">{adv.nome}</p>
               {adv.oab && (
-                <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 shrink-0">
+                <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 shrink-0">
                   <BadgeCheck className="h-2.5 w-2.5 text-primary" />
-                  <span className="truncate max-w-[80px]">{adv.oab}</span>
+                  <span className="break-words">{adv.oab}</span>
                 </span>
               )}
             </div>
@@ -593,6 +620,8 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   const [criandoTarefa,        setCriandoTarefa]        = useState(false);
   const [processoTarefas,      setProcessoTarefas]      = useState<Tarefa[]>([]);
   const [tarefasLoading,       setTarefasLoading]       = useState(false);
+  const [intimacoesVinculadas, setIntimacoesVinculadas] = useState<Array<{ id: string; tipo_intimacao: string | null; conteudo: string | null; data_disponibilizacao: string | null; fonte: string | null }>>([]);
+  const [intimacoesLoading,    setIntimacoesLoading]    = useState(false);
   const [membros,              setMembros]              = useState<{ id: string; nome: string | null; sobrenome: string | null; email: string | null }[]>([]);
 
   useEffect(() => { setLeads(leadsInit); }, [leadsInit]);
@@ -776,11 +805,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
           valor_causa:          fields.valorCausa != null ? fmtMoney(fields.valorCausa) : prev.valor_causa,
           data_distribuicao:    fields.dataDistrib ? fields.dataDistrib.slice(0, 10) : prev.data_distribuicao,
         }));
-        if (proc.partes?.length) setPartes(prev => {
-          const apiNames = new Set(proc.partes.map((p: any) => (p.nome || '').toLowerCase().trim()));
-          const manual = prev.filter(p => !apiNames.has((p.nome || '').toLowerCase().trim()));
-          return [...proc.partes, ...manual];
-        });
+        if (proc.partes?.length) setPartes(prev => mergePartesPreservandoManual(proc.partes, prev));
         if (proc.movimentos?.length) setMovimentos(proc.movimentos.slice(0, 100));
         toast.success('Dados carregados!', { description: fields.classe || proc.tribunal });
       } else { toast.error('Processo não encontrado', { description: data?.mensagem }); }
@@ -799,11 +824,11 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
         const proc = data.processo; const fields = extractFromProc(proc);
         const toDate = (v?: string | null): string => { if (!v) return ''; if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10); const pt = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if (pt) return `${pt[3]}-${pt[2]}-${pt[1]}`; try { const d = new Date(v); if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10); } catch { /**/ } return ''; };
         const newPartes = proc.partes || []; const newMovs = (proc.movimentos || []).slice(0, 100);
+        let partesFinais: ProcessoParte[] = [];
         setPartes((prev: ProcessoParte[]) => {
           if (!newPartes.length) return prev;
-          const apiNames = new Set(newPartes.map((p: any) => (p.nome || '').toLowerCase().trim()));
-          const manual = prev.filter((p: ProcessoParte) => !apiNames.has((p.nome || '').toLowerCase().trim()));
-          return [...newPartes, ...manual];
+          partesFinais = mergePartesPreservandoManual(newPartes, prev);
+          return partesFinais;
         });
         setMovimentos(newMovs);
         setFormData(prev => ({ ...prev,
@@ -826,7 +851,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
             vara_comarca: fields.varaComarca || null, assunto: fields.assunto || null,
             assunto_cnj: fields.assuntoCnj || null, classe_cnj: fields.classeCnj || null,
             valor_causa: fields.valorCausa || null,
-            partes_json: newPartes.length > 0 ? newPartes : null, movimentos_json: newMovs.length > 0 ? newMovs : null,
+            partes_json: partesFinais.length > 0 ? partesFinais : (newPartes.length > 0 ? newPartes : null), movimentos_json: newMovs.length > 0 ? newMovs : null,
             ultima_consulta_api_at: new Date().toISOString(), data_ultima_atualizacao: new Date().toISOString(),
           }).eq('id', processo.id);
           fetchProcessos();
@@ -1066,6 +1091,22 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
     setTarefasLoading(false);
   }, [processo?.id, isNew]);
 
+  // Intimações/publicações do DJEN já vinculadas a este processo (intimacoes.processo_id) —
+  // complementa o docket oficial do DataJud, sem substituí-lo (o DJEN é um feed de
+  // publicações, não o histórico completo de movimentações do processo).
+  const fetchIntimacoesVinculadas = useCallback(async () => {
+    if (!processo?.id || isNew) return;
+    setIntimacoesLoading(true);
+    const { data } = await supabase
+      .from('intimacoes')
+      .select('id, tipo_intimacao, conteudo, data_disponibilizacao, fonte')
+      .eq('processo_id', processo.id)
+      .order('data_disponibilizacao', { ascending: false, nullsFirst: false })
+      .limit(50);
+    setIntimacoesVinculadas((data as any[]) || []);
+    setIntimacoesLoading(false);
+  }, [processo?.id, isNew]);
+
   useEffect(() => {
     if (membros.length === 0) {
       supabase.from('perfis').select('id, nome, sobrenome, email').eq('aprovado', true)
@@ -1073,6 +1114,9 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
     }
     if (activeTab === 'tarefas') {
       fetchProcessoTarefas();
+    }
+    if (activeTab === 'movimentos') {
+      fetchIntimacoesVinculadas();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, processo?.id]);
@@ -1264,8 +1308,8 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
 
             {/* ── TAB PROCESSO ── */}
             <TabsContent value="processo" className="flex-1 min-h-0 mt-0 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col">
-              {/* Layout: form à esquerda | divider | partes à direita */}
-              <div className="flex flex-1 min-h-0 overflow-hidden">
+              {/* Layout: form em cima/esquerda | divider | partes embaixo/direita — empilha em telas menores que lg */}
+              <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
 
                 {/* Form — scroll interno */}
                 <ScrollArea className="flex-1 min-w-0 h-full">
@@ -1464,8 +1508,10 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                           </Field>
                         </Row2>
                         <Row2>
-                          <Field label="CPF do Cliente" hint="Usado pela Isa para localizar processos">
-                            <Input value={formData.cpf_cliente} onChange={e => { let v = e.target.value.replace(/\D/g, '').slice(0, 11); if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4'); else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3'); else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2'); update('cpf_cliente', v); }} className="rounded-xl bg-card h-10" placeholder="000.000.000-00" maxLength={14} />
+                          <Field label="CPF do Cliente" hint={isCpfInvalidoCompleto(formData.cpf_cliente) ? 'CPF inválido' : 'Usado pela Isa para localizar processos'}>
+                            <Input value={formData.cpf_cliente} onChange={e => update('cpf_cliente', formatCpf(e.target.value))}
+                              className={`rounded-xl bg-card h-10 ${isCpfInvalidoCompleto(formData.cpf_cliente) ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                              placeholder="000.000.000-00" maxLength={14} />
                           </Field>
                           <Field label="Data de Nascimento do Cliente" hint="Alimenta o gráfico de idade em Dados">
                             <Input type="date" value={formData.data_nascimento_cliente} onChange={e => update('data_nascimento_cliente', e.target.value)} className="rounded-xl bg-card h-10" />
@@ -1614,11 +1660,11 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                   </div>
                 </ScrollArea>
 
-                {/* Divider */}
-                <div className="hidden lg:block w-px bg-border/40 shrink-0" />
+                {/* Divider — horizontal quando empilhado, vertical em lg+ */}
+                <div className="h-px lg:h-auto lg:w-px bg-border/40 shrink-0" />
 
-                {/* Partes — largura responsiva, sem overflow */}
-                <div className="hidden lg:flex w-[300px] xl:w-[340px] shrink-0 flex-col overflow-hidden h-full bg-muted/5">
+                {/* Partes — largura total quando empilhado, coluna fixa em lg+ */}
+                <div className="flex w-full lg:w-[300px] xl:w-[340px] shrink-0 flex-col overflow-hidden max-h-[45vh] lg:max-h-none lg:h-full bg-muted/5">
                   <div className="px-4 pt-3.5 pb-3 border-b border-border/40 shrink-0 bg-card">
                     <div className="flex items-center gap-2">
                       <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -1671,6 +1717,34 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
             <TabsContent value="movimentos" className="flex-1 min-h-0 mt-0 overflow-hidden">
               <ScrollArea className="h-full">
                 <div className="px-6 py-5">
+                  {(intimacoesLoading || intimacoesVinculadas.length > 0) && (
+                    <div className="mb-5 pb-5 border-b border-border/30">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="h-7 w-7 rounded-lg bg-violet-100 dark:bg-violet-950/30 flex items-center justify-center">
+                          <Bell className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+                        </span>
+                        <div>
+                          <p className="text-xs font-bold text-foreground leading-none">Publicações / Intimações (DJEN)</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">complementa o docket oficial — fonte separada, não substitui as movimentações abaixo</p>
+                        </div>
+                      </div>
+                      {intimacoesLoading ? (
+                        <div className="flex items-center justify-center py-6"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {intimacoesVinculadas.map(int => (
+                            <div key={int.id} className="p-3 rounded-xl border border-border/30 bg-violet-50/40 dark:bg-violet-950/10">
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">{int.tipo_intimacao || 'Publicação'}</span>
+                                <span className="text-[10px] text-muted-foreground whitespace-nowrap">{int.data_disponibilizacao ? new Date(int.data_disponibilizacao).toLocaleDateString('pt-BR') : '—'}</span>
+                              </div>
+                              <p className="text-xs text-foreground leading-relaxed line-clamp-2">{int.conteudo}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {movimentosEnriquecidos.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-24 gap-3 border-2 border-dashed border-border/40 rounded-2xl">
                       <div className="h-14 w-14 rounded-2xl bg-muted/60 flex items-center justify-center"><Calendar className="h-7 w-7 text-muted-foreground/20" /></div>

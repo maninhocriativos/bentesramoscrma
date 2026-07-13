@@ -59,3 +59,9 @@ export function isCpfCnpjInvalidoCompleto(value: string): boolean {
   const d = (value || '').replace(/\D/g, '');
   return (d.length === 11 || d.length === 14) && !isValidCpfCnpj(value);
 }
+
+/** Igual a isCpfCnpjInvalidoCompleto, mas só para campos CPF-only (11 díg.). */
+export function isCpfInvalidoCompleto(value: string): boolean {
+  const d = (value || '').replace(/\D/g, '');
+  return d.length === 11 && !isValidCpf(value);
+}
