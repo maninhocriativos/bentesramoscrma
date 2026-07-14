@@ -1,10 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { usePerfil } from '@/hooks/usePerfil';
 import { useOfficeSettings } from '@/hooks/useOfficeSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import type { Processo } from '@/types/processos';
+
+const ProcessoSidePanel = lazy(() =>
+  import('@/components/processos/ProcessoSidePanel').then(m => ({ default: m.ProcessoSidePanel }))
+);
 import {
   Loader2, Gavel, Search, RefreshCw, CheckCircle2,
   Clock, AlertTriangle, Eye, FileText, CalendarDays,
@@ -110,6 +115,13 @@ export default function IntimacoesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [viewingProcesso, setViewingProcesso] = useState<Processo | null>(null);
+
+  const handleVisualizarProcesso = async (processoId: string) => {
+    const { data } = await supabase.from('processos').select('*').eq('id', processoId).maybeSingle();
+    if (data) setViewingProcesso(data as Processo);
+    else toast.error('Processo não encontrado');
+  };
 
   const oabNumero = officeSettings?.oab_number || (perfil as any)?.oab_numero || '';
   const oabUf = officeSettings?.oab_state || (perfil as any)?.oab_uf || 'AM';
@@ -715,18 +727,30 @@ export default function IntimacoesPage() {
               calcularPrazos={calcularPrazos}
               onMarkRead={() => { handleMarkRead(selectedIntimacao.id); setSelectedIntimacao({ ...selectedIntimacao, lida: true }); }}
               onGenerateReport={() => handleGenerateReport(selectedIntimacao)}
+              onVisualizarProcesso={handleVisualizarProcesso}
             />
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Painel lateral do processo — igual o Advbox, sem sair da tela */}
+      {viewingProcesso && (
+        <Suspense fallback={null}>
+          <ProcessoSidePanel
+            processo={viewingProcesso}
+            open={!!viewingProcesso}
+            onClose={() => setViewingProcesso(null)}
+          />
+        </Suspense>
+      )}
     </AppLayout>
   );
 }
 
-function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularPrazos, onMarkRead, onGenerateReport }: {
+function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularPrazos, onMarkRead, onGenerateReport, onVisualizarProcesso }: {
   intimacao: Intimacao; formatDate: (d: string | null) => string | null; formatDateLong: (d: string | null) => string;
   calcularPrazos: (i: Intimacao) => { dataBase: Date | null; dataConclusao: Date | null; dataFatal: Date | null };
-  onMarkRead: () => void; onGenerateReport: () => void;
+  onMarkRead: () => void; onGenerateReport: () => void; onVisualizarProcesso: (processoId: string) => void;
 }) {
   const [showFullContent, setShowFullContent] = useState(false);
   const [comentario, setComentario] = useState('');
@@ -1250,7 +1274,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                   </div>
                   <button
                     className="text-xs text-primary font-semibold hover:underline"
-                    onClick={() => navigate('/processos', { state: { abrirProcessoId: linkedProcesso.id } })}
+                    onClick={() => linkedProcesso.id && onVisualizarProcesso(linkedProcesso.id)}
                   >
                     Visualizar processo →
                   </button>
