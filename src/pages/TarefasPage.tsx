@@ -446,44 +446,44 @@ export default function TarefasPage() {
             <KpiCard label="Horas/Mês"   value={kpis.totalHoras.toFixed(1)} icon={Clock} accent={BROWN} bg={`${BROWN}08`} suffix="h" />
           </div>
 
-          {/* ── Layout principal ── */}
-          <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 items-start">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            {/* Tab header + filtro usuário */}
+            <div className="flex items-center gap-3 flex-wrap mb-4">
+              <TabsList className="h-9" style={{ background: `${GOLD}12`, border: `0.5px solid ${GOLD}30` }}>
+                <TabsTrigger value="kanban"    style={{ fontSize: 12, fontWeight: 600 }}>Quadro</TabsTrigger>
+                <TabsTrigger value="equipe"    style={{ fontSize: 12, fontWeight: 600 }}>Por Usuário</TabsTrigger>
+                <TabsTrigger value="timesheet" style={{ fontSize: 12, fontWeight: 600 }}>Timesheet</TabsTrigger>
+                {isAdmin && <TabsTrigger value="analytics" style={{ fontSize: 12, fontWeight: 600 }}>Analytics</TabsTrigger>}
+              </TabsList>
 
-            {/* Kanban + Tabs */}
-            <div className="space-y-4">
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                {/* Tab header + filtro usuário */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  <TabsList className="h-9" style={{ background: `${GOLD}12`, border: `0.5px solid ${GOLD}30` }}>
-                    <TabsTrigger value="kanban"    style={{ fontSize: 12, fontWeight: 600 }}>Quadro</TabsTrigger>
-                    <TabsTrigger value="equipe"    style={{ fontSize: 12, fontWeight: 600 }}>Por Usuário</TabsTrigger>
-                    <TabsTrigger value="timesheet" style={{ fontSize: 12, fontWeight: 600 }}>Timesheet</TabsTrigger>
-                    {isAdmin && <TabsTrigger value="analytics" style={{ fontSize: 12, fontWeight: 600 }}>Analytics</TabsTrigger>}
-                  </TabsList>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {[{ id: 'all', label: 'Todos', online: false },...team.map(m => ({ id: m.id, label: m.nome || m.fullName.split(' ')[0], online: m.online }))].map(u => {
+                  const count = u.id === 'all' ? 0 : (tarefasPorUsuario[u.id] || []).filter(t => t.status !== 'Concluída').length;
+                  const isActive = activeUser === u.id;
+                  return (
+                    <button key={u.id} onClick={() => setActiveUser(u.id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all text-xs font-semibold"
+                      style={{ background: isActive ? BROWN : `${BROWN}07`, color: isActive ? GOLD : '#9ca3af', border: `0.5px solid ${isActive ? BROWN : 'transparent'}` }}>
+                      {u.id !== 'all' && <Circle style={{ width: 6, height: 6, fill: u.online ? '#22c55e' : '#d1d5db', color: u.online ? '#22c55e' : '#d1d5db' }} />}
+                      {u.label}
+                      {count > 0 && (
+                        <span style={{ fontSize: 9, fontWeight: 800, background: '#dc2626', color: 'white', borderRadius: 5, padding: '0 4px', lineHeight: '14px' }}>
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {[{ id: 'all', label: 'Todos', online: false },...team.map(m => ({ id: m.id, label: m.nome || m.fullName.split(' ')[0], online: m.online }))].map(u => {
-                      const count = u.id === 'all' ? 0 : (tarefasPorUsuario[u.id] || []).filter(t => t.status !== 'Concluída').length;
-                      const isActive = activeUser === u.id;
-                      return (
-                        <button key={u.id} onClick={() => setActiveUser(u.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all text-xs font-semibold"
-                          style={{ background: isActive ? BROWN : `${BROWN}07`, color: isActive ? GOLD : '#9ca3af', border: `0.5px solid ${isActive ? BROWN : 'transparent'}` }}>
-                          {u.id !== 'all' && <Circle style={{ width: 6, height: 6, fill: u.online ? '#22c55e' : '#d1d5db', color: u.online ? '#22c55e' : '#d1d5db' }} />}
-                          {u.label}
-                          {count > 0 && (
-                            <span style={{ fontSize: 9, fontWeight: 800, background: '#dc2626', color: 'white', borderRadius: 5, padding: '0 4px', lineHeight: '14px' }}>
-                              {count}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+            {/* ── Layout principal ── */}
+            <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 items-start">
 
+              {/* Kanban + Tabs */}
+              <div className="space-y-4">
                 {/* Kanban */}
-                <TabsContent value="kanban" className="mt-4">
+                <TabsContent value="kanban" className="mt-0">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {columns.map(col => {
                       const cfg = STATUS_CFG[col];
@@ -624,11 +624,10 @@ export default function TarefasPage() {
                     <AnalyticsTab tarefas={tarefas} team={team} />
                   </TabsContent>
                 )}
-              </Tabs>
-            </div>
+              </div>
 
-            {/* ── Sidebar ── */}
-            <div className="space-y-4">
+              {/* ── Sidebar ── */}
+              <div className="space-y-4">
 
               {/* Alertas */}
               <div className="rounded-2xl overflow-hidden bg-white"
@@ -674,8 +673,9 @@ export default function TarefasPage() {
                 )}
               </div>
 
+              </div>
             </div>
-          </div>
+          </Tabs>
 
           {/* ── Carga por Usuário (largura total) ── */}
           <div className="rounded-2xl overflow-hidden bg-white"
