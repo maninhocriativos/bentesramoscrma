@@ -32,6 +32,7 @@ const PAGE_GROUPS = [
     pages: [
       { id: 'bem-vindo',   label: 'Bem-Vindo' },
       { id: 'dashboard',   label: 'Dashboard' },
+      { id: 'dados',       label: 'Dados' },
       { id: 'leads',       label: 'CRM de Leads' },
       { id: 'meta-leads',  label: 'Leads API (Meta)' },
       { id: 'processos',   label: 'Processos' },
@@ -103,7 +104,7 @@ export function EditUserModal({ user, open, onOpenChange, onSave }: EditUserModa
     if (isTargetAdmin) return true;
     const adminOnly = ['configuracoes', 'historico-acessos', 'api-hub', 'api-docs'];
     if (adminOnly.includes(pageId)) return false;
-    if (pageId === 'dashboard') return ['Gerente', 'Advogado'].includes(selectedRole);
+    if (pageId === 'dashboard' || pageId === 'dados') return ['Gerente', 'Advogado'].includes(selectedRole);
     if (pageId === 'financeiro' || pageId === 'conferencia-extratos') return selectedRole === 'Gerente';
     return true;
   };

@@ -78,9 +78,15 @@ export function useUsers() {
       toast({ title: 'Erro ao carregar convites', description: invitesError.message, variant: 'destructive' });
     }
 
-    // Merge profiles with roles and separate approved from pending
+    // Merge profiles with roles and separate approved from pending.
+    // Um usuário pode ter mais de uma linha em user_roles (ex: Administrador +
+    // Advogado, para aparecer nas buscas por OAB) — prioriza a role que bate
+    // com perfis.cargo (estável) em vez de pegar a primeira linha encontrada
+    // (find() sem order by é não-determinístico e fazia o cargo exibido mudar
+    // dependendo da ordem de retorno do banco).
     const allUsers: UserWithRole[] = (perfis || []).map(perfil => {
-      const userRole = roles?.find(r => r.user_id === perfil.id);
+      const userRoles = roles?.filter(r => r.user_id === perfil.id) || [];
+      const userRole = userRoles.find(r => r.role === perfil.cargo) || userRoles[0];
       return {
         id: perfil.id,
         email: perfil.email,
@@ -101,42 +107,61 @@ export function useUsers() {
   };
 
   const updateUserRole = async (userId: string, newRole: AppRole) => {
-    // Update the role in user_roles table
-    const { error: roleError } = await supabase
-      .from('user_roles')
-      .update({ role: newRole })
-      .eq('user_id', userId);
+    // ⚠️ .update().eq(...) SEM .select()/.single() não retorna erro quando zero
+    // linhas batem (comportamento do PostgREST) — o fallback de insert baseado em
+    // roleError.code === 'PGRST116' nunca disparava na prática para usuários sem
+    // linha prévia em user_roles: o toast dizia "sucesso" mas nada era salvo.
+    //
+    // Também: um usuário pode ter mais de uma linha em user_roles (ex: cargo
+    // Administrador + uma linha extra Advogado, usada pelas buscas por OAB) —
+    // um .update() cego sobrescreveria as duas pro mesmo valor, apagando o papel
+    // extra sem querer. Por isso: remove só a linha que corresponde ao cargo
+    // ANTERIOR (perfis.cargo, antes desta troca) e insere a nova, preservando
+    // qualquer outra role que a pessoa já tivesse.
+    const { data: perfilAtual } = await supabase
+      .from('perfis')
+      .select('cargo')
+      .eq('id', userId)
+      .maybeSingle();
+    const cargoAnterior = perfilAtual?.cargo;
 
-    if (roleError) {
-      // If no row exists, insert it
-      if (roleError.code === 'PGRST116') {
-        const { error: insertError } = await supabase
-          .from('user_roles')
-          .insert({ user_id: userId, role: newRole });
-        
-        if (insertError) {
-          toast({
-            title: 'Erro ao atualizar cargo',
-            description: insertError.message,
-            variant: 'destructive',
-          });
-          return false;
-        }
-      } else {
-        toast({
-          title: 'Erro ao atualizar cargo',
-          description: roleError.message,
-          variant: 'destructive',
-        });
+    const { data: rolesAtuais } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId);
+    const jaTemNovaRole = (rolesAtuais || []).some(r => r.role === newRole);
+
+    if (cargoAnterior && cargoAnterior !== newRole) {
+      const { error: deleteError } = await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', userId)
+        .eq('role', cargoAnterior as AppRole);
+      if (deleteError) {
+        toast({ title: 'Erro ao atualizar cargo', description: deleteError.message, variant: 'destructive' });
+        return false;
+      }
+    }
+
+    if (!jaTemNovaRole) {
+      const { error: insertError } = await supabase
+        .from('user_roles')
+        .insert({ user_id: userId, role: newRole });
+      if (insertError) {
+        toast({ title: 'Erro ao atualizar cargo', description: insertError.message, variant: 'destructive' });
         return false;
       }
     }
 
     // Also update the legacy cargo field in perfis for compatibility
-    await supabase
+    const { error: perfilError } = await supabase
       .from('perfis')
       .update({ cargo: newRole })
       .eq('id', userId);
+    if (perfilError) {
+      toast({ title: 'Erro ao atualizar cargo', description: perfilError.message, variant: 'destructive' });
+      return false;
+    }
 
     toast({
       title: 'Cargo atualizado',

@@ -8,6 +8,7 @@ import { AppLoadingScreen } from "@/components/ui/AppLoadingScreen";
 // Admin pode sobrescrever qualquer regra via Configurações → Usuários.
 const ROLE_DEFAULTS: Record<string, (p: ReturnType<typeof usePerfil>) => boolean> = {
   'dashboard':            p => p.canAccessDashboard,
+  'dados':                p => p.canAccessDashboard,
   'configuracoes':        p => p.canAccessSettings,
   'historico-acessos':   p => p.canAccessSettings,
   'api-hub':             p => p.canAccessSettings,
