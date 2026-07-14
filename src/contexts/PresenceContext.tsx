@@ -62,19 +62,29 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   userNameRef.current = fullName || user?.email?.split('@')[0] || 'Usuário';
 
   // Carrega membros da equipe (inclui last_seen_at para presença por heartbeat)
-  const fetchTeam = useCallback(() => {
-    supabase
+  const fetchTeam = useCallback(async () => {
+    const { data, error } = await supabase
       .from('perfis')
       .select('id, nome, sobrenome, cargo, email, last_seen_at')
-      .eq('aprovado', true)
-      .then(({ data }) => { if (data) setTeamMembers(data as TeamMember[]); });
+      .eq('aprovado', true);
+    if (error) {
+      console.error('[PresenceContext] Erro ao buscar equipe:', error);
+      return false;
+    }
+    setTeamMembers((data || []) as TeamMember[]);
+    return true;
   }, []);
 
   useEffect(() => {
-    fetchTeam();
+    let cancelled = false;
+    fetchTeam().then(ok => {
+      // Falha na primeira carga (sessão ainda propagando, hiccup de rede) —
+      // tenta de novo em 3s em vez de esperar o intervalo de 3 minutos.
+      if (!ok && !cancelled) setTimeout(() => { if (!cancelled) fetchTeam(); }, 3000);
+    });
     // Re-fetch da lista a cada 3 minutos para atualizar last_seen_at dos membros
     const interval = setInterval(fetchTeam, 3 * 60 * 1000);
-    return () => clearInterval(interval);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [fetchTeam]);
 
   // Heartbeat: atualiza last_seen_at no banco a cada 3 minutos + imediatamente ao logar
