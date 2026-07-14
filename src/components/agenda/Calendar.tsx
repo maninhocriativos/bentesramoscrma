@@ -79,6 +79,9 @@ const PALETTE = {
   outro:       { bar: '#64748b', bg: 'rgba(100,116,139,0.07)', text: '#334155' },
   intim:       { bar: '#7c3aed', bg: 'rgba(124,58,237,0.07)',  text: '#4c1d95' },
   intim_prazo: { bar: '#9333ea', bg: 'rgba(147,51,234,0.07)',  text: '#581c87' },
+  // Tarefa criada a partir de uma intimação (tarefas.intimacao_id) — tipo
+  // 'Intimação' em compromissos, vermelho pra chamar atenção na agenda.
+  tarefa_intimacao: { bar: '#dc2626', bg: 'rgba(220,38,38,0.07)', text: '#7f1d1d' },
   confirmado:  { bar: '#059669', bg: 'rgba(5,150,105,0.07)',   text: '#064e3b' },
   cancelado:   { bar: '#dc2626', bg: 'rgba(220,38,38,0.07)',   text: '#7f1d1d' },
   remarcado:   { bar: '#2563eb', bg: 'rgba(37,99,235,0.07)',   text: '#1e3a8a' },
@@ -93,6 +96,7 @@ const pkByTipo = (c: Compromisso): PaletteKey => {
     case 'Reunião':   return 'reuniao';
     case 'Prazo':     return 'prazo';
     case 'Tarefa':    return 'tarefa';
+    case 'Intimação': return 'tarefa_intimacao';
     default:          return 'outro';
   }
 };

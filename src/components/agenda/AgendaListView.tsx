@@ -10,7 +10,7 @@ const TIPO_DOT: Record<string, string> = {
   'Reunião':   '#d97706',
   'Prazo':     '#ca8a04',
   'Tarefa':    '#16a34a',
-  'Intimação': '#64748b',
+  'Intimação': '#dc2626',
   'Outro':     '#64748b',
 };
 
@@ -19,7 +19,7 @@ const TIPO_BADGE: Record<string, { bg: string; text: string; border: string }> =
   'Reunião':   { bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200' },
   'Prazo':     { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200' },
   'Tarefa':    { bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200' },
-  'Intimação': { bg: 'bg-slate-50',  text: 'text-slate-600',  border: 'border-slate-200' },
+  'Intimação': { bg: 'bg-red-50',    text: 'text-red-700',    border: 'border-red-200' },
   'Outro':     { bg: 'bg-slate-50',  text: 'text-slate-600',  border: 'border-slate-200' },
 };
 

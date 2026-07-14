@@ -71,6 +71,7 @@ const TIPO_COLORS: Record<string, { bg: string; text: string }> = {
   'Audiência': { bg: 'bg-red-500/10',     text: 'text-red-600 dark:text-red-400'      },
   'Prazo':     { bg: 'bg-amber-500/10',   text: 'text-amber-600 dark:text-amber-400'  },
   'Tarefa':    { bg: 'bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400' },
+  'Intimação': { bg: 'bg-red-500/10',     text: 'text-red-600 dark:text-red-400'      },
   'Outro':     { bg: 'bg-slate-500/10',   text: 'text-slate-600 dark:text-slate-400'  },
 };
 

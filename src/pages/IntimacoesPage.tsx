@@ -977,6 +977,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
       const { data, error } = await supabase.from('tarefas').insert({
         titulo: selectedTarefaTipo, descricao: descriptionParts.join('\n\n'),
         responsavel_id: responsavelId, processo_id: linkedProcesso?.id || null, cliente_id: linkedClienteId,
+        intimacao_id: intimacao.id,
         prioridade, status: 'Pendente', data_limite: prazoFatal, prazo_seguranca: prazoSeguranca,
         prazo_fatal: prazoFatal, horario: horarioTarefa || null, data_conclusao: null,
         entrega_texto: null, entrega_anexo_url: null, entregue_em: null, aprovacao_status: null,
@@ -1018,6 +1019,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
         const { data, error } = await supabase.from('tarefas').insert({
           titulo: acao.titulo, descricao: descriptionParts.join('\n\n'),
           responsavel_id: responsavel, processo_id: linkedProcesso?.id || null, cliente_id: linkedClienteId,
+          intimacao_id: intimacao.id,
           prioridade, status: 'Pendente', data_limite: fatalStr, prazo_seguranca: fatalStr, prazo_fatal: fatalStr,
           horario: null, data_conclusao: null, entrega_texto: null, entrega_anexo_url: null, entregue_em: null,
           aprovacao_status: null, aprovacao_nota: null, aprovacao_feedback: null, aprovado_por: null, aprovado_em: null,

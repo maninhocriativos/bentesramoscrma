@@ -35,7 +35,7 @@ const TIPO_OPTIONS = [
   { value: 'Prazo',     label: 'Prazos',      color: 'bg-yellow-500' },
   { value: 'Tarefa',    label: 'Tarefas',     color: 'bg-green-600' },
   { value: 'Outro',     label: 'Outros',      color: 'bg-slate-400' },
-  { value: 'Intimação', label: 'Intimações',  color: 'bg-slate-400' },
+  { value: 'Intimação', label: 'Intimações',  color: 'bg-red-600' },
 ];
 
 const SITUACAO_OPTIONS = [

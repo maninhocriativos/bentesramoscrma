@@ -16,7 +16,7 @@ const TIPO_COLOR: Record<string, { bg: string; text: string; dot: string }> = {
   'Reunião':   { bg: '#fef3c7', text: '#92400e', dot: '#d97706' },
   'Prazo':     { bg: '#fef9c3', text: '#713f12', dot: '#ca8a04' },
   'Tarefa':    { bg: '#dcfce7', text: '#14532d', dot: '#16a34a' },
-  'Intimação': { bg: '#f1f5f9', text: '#475569', dot: '#64748b' },
+  'Intimação': { bg: '#fee2e2', text: '#7f1d1d', dot: '#dc2626' },
   'Outro':     { bg: '#f1f5f9', text: '#475569', dot: '#64748b' },
 };
 
