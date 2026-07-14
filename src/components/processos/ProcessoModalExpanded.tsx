@@ -609,6 +609,26 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   const [verificacaoStatus, setVerificacaoStatus]  = useState<Record<string, 'ok' | 'erro'>>({});
   const autoSavePartesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Navegação rápida entre seções da aba "Processo" — 6 seções empilhadas num
+  // scroll só ficavam sem jeito de pular direto pra uma delas.
+  const secNumeracaoRef    = useRef<HTMLDivElement>(null);
+  const secDetalhesRef     = useRef<HTMLDivElement>(null);
+  const secResponsavelRef  = useRef<HTMLDivElement>(null);
+  const secEnderecoRef     = useRef<HTMLDivElement>(null);
+  const secAutosRef        = useRef<HTMLDivElement>(null);
+  const secPedidosRef      = useRef<HTMLDivElement>(null);
+  const SECOES_PROCESSO: Array<{ label: string; ref: React.RefObject<HTMLDivElement> }> = [
+    { label: 'Numeração',     ref: secNumeracaoRef },
+    { label: 'Detalhes',      ref: secDetalhesRef },
+    { label: 'Responsável',   ref: secResponsavelRef },
+    { label: 'Endereçamento', ref: secEnderecoRef },
+    { label: 'Autos',         ref: secAutosRef },
+    { label: 'Pedidos',       ref: secPedidosRef },
+  ];
+  const scrollToSecao = (ref: React.RefObject<HTMLDivElement>) => {
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   // ── Tarefas do processo ──────────────────────────────────────────────────────
   const [showNovaTarefaForm,   setShowNovaTarefaForm]   = useState(false);
   const [novaTarefaTitulo,     setNovaTarefaTitulo]     = useState('');
@@ -863,6 +883,13 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   };
 
   const handleSave = async () => {
+    // Sem nenhum identificador (nº CNJ nem título/classe), o registro fica
+    // impossível de achar depois — barra antes de criar em branco por engano.
+    if (!formData.numero_processo?.trim() && !formData.titulo_acao?.trim()) {
+      toast.error('Preencha o número CNJ ou o título/classe da ação', { description: 'Pelo menos um dos dois é necessário para identificar o processo.' });
+      setActiveTab('processo');
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     try {
@@ -1315,7 +1342,21 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                 <ScrollArea className="flex-1 min-w-0 h-full">
                   <div className="px-6 py-5 space-y-5">
 
-                    <div>
+                    {/* Navegação rápida entre seções */}
+                    <div className="sticky top-0 z-10 -mx-6 px-6 py-2 bg-card/95 backdrop-blur-sm border-b border-border/30 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                      {SECOES_PROCESSO.map(sec => (
+                        <button
+                          key={sec.label}
+                          type="button"
+                          onClick={() => scrollToSecao(sec.ref)}
+                          className="shrink-0 text-[10px] font-semibold px-2.5 py-1 rounded-full border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors whitespace-nowrap"
+                        >
+                          {sec.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div ref={secNumeracaoRef}>
                       <SectionTitle icon={Hash} label="Numeração" />
                       <FieldGroup>
                         <Row2>
@@ -1415,7 +1456,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                       </FieldGroup>
                     </div>
 
-                    <div>
+                    <div ref={secDetalhesRef}>
                       <SectionTitle icon={FileText} label="Detalhes" />
                       <FieldGroup>
                         <Row2>
@@ -1489,7 +1530,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                       </FieldGroup>
                     </div>
 
-                    <div>
+                    <div ref={secResponsavelRef}>
                       <SectionTitle icon={Users} label="Responsável" bg="bg-secondary/15" color="text-foreground" />
                       <FieldGroup>
                         <Row2>
@@ -1533,7 +1574,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                       </FieldGroup>
                     </div>
 
-                    <div>
+                    <div ref={secEnderecoRef}>
                       <SectionTitle icon={Building2} label="Endereçamento" bg="bg-blue-500/10" color="text-blue-600 dark:text-blue-400" />
                       <FieldGroup>
                         <Row2>
@@ -1584,7 +1625,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                       </FieldGroup>
                     </div>
 
-                    <div>
+                    <div ref={secAutosRef}>
                       <SectionTitle icon={FolderOpen} label="Autos" bg="bg-amber-500/10" color="text-amber-600 dark:text-amber-400" />
                       <FieldGroup>
                         <Row2>
@@ -1634,7 +1675,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                       </FieldGroup>
                     </div>
 
-                    <div>
+                    <div ref={secPedidosRef}>
                       <SectionTitle icon={DollarSign} label="Pedidos" bg="bg-emerald-500/10" color="text-emerald-600 dark:text-emerald-400" />
                       <FieldGroup>
                         <Row3>
