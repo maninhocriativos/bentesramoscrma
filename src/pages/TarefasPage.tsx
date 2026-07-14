@@ -15,10 +15,11 @@ import { TimesheetModal } from '@/components/tarefas/TimesheetModal';
 import { TimesheetTable } from '@/components/tarefas/TimesheetTable';
 import { AnalyticsTab } from '@/components/tarefas/AnalyticsTab';
 import { Tarefa } from '@/types/tarefas';
+import { generateTarefasReport } from '@/lib/tarefaReportGenerator';
 import {
   Plus, Clock, AlertTriangle, CheckCircle2, CheckSquare,
   TrendingUp, Users, Star, Bell, Flame, Calendar,
-  ChevronRight, Circle
+  ChevronRight, Circle, FileDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { differenceInCalendarDays, formatDistanceToNow, isPast, isToday, isTomorrow, format } from 'date-fns';
@@ -325,6 +326,34 @@ export default function TarefasPage() {
     [activeUser, tarefas, tarefasPorUsuario]
   );
 
+  const memberMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    team.forEach(t => { m[t.id] = t.nome || t.fullName; });
+    return m;
+  }, [team]);
+
+  const reportKpis = useMemo(() => {
+    const ativas = filteredTarefas.filter(t => t.status !== 'Concluída' && t.status !== 'Cancelada');
+    const atrasadas = ativas.filter(t => t.data_limite && isPast(new Date(t.data_limite)) && !isToday(new Date(t.data_limite)));
+    return {
+      pendentes:   filteredTarefas.filter(t => t.status === 'Pendente').length,
+      emAndamento: filteredTarefas.filter(t => t.status === 'Em Andamento').length,
+      concluidas:  filteredTarefas.filter(t => t.status === 'Concluída').length,
+      urgentes:    ativas.filter(t => t.prioridade === 'Urgente').length,
+      atrasadas:   atrasadas.length,
+      hojePrazo:   ativas.filter(t => t.data_limite && isToday(new Date(t.data_limite))).length,
+      aguardando:  filteredTarefas.filter(t => t.aprovacao_status === 'aguardando_aprovacao').length,
+      totalHoras:  kpis.totalHoras,
+    };
+  }, [filteredTarefas, kpis.totalHoras]);
+
+  const handleGenerateReport = () => {
+    const filtroLabel = activeUser === 'all'
+      ? 'Todos os usuários'
+      : (team.find(m => m.id === activeUser)?.nome || team.find(m => m.id === activeUser)?.fullName || 'Usuário');
+    generateTarefasReport(filteredTarefas, memberMap, reportKpis, filtroLabel);
+  };
+
   const columns = ['Pendente', 'Em Andamento', 'Concluída'] as const;
 
   return (
@@ -341,6 +370,10 @@ export default function TarefasPage() {
               <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>Controle de demandas, prazos e timesheet da equipe</p>
             </div>
             <div className="flex gap-2">
+              <Button onClick={handleGenerateReport} variant="outline" size="sm"
+                style={{ borderColor: `${GOLD}60`, color: BROWN, fontSize: 12, fontWeight: 600 }}>
+                <FileDown style={{ width: 14, height: 14, marginRight: 6 }} /> Gerar Relatório
+              </Button>
               <Button onClick={() => setTimesheetModal(true)} variant="outline" size="sm"
                 style={{ borderColor: `${GOLD}60`, color: BROWN, fontSize: 12, fontWeight: 600 }}>
                 <Clock style={{ width: 14, height: 14, marginRight: 6 }} /> Registrar Horas
