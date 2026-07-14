@@ -19,7 +19,7 @@ import { buildTarefasReport, tarefasReportFilename } from '@/lib/tarefaReportGen
 import {
   Plus, Clock, AlertTriangle, CheckCircle2, CheckSquare,
   TrendingUp, Users, Star, Bell, Flame, Calendar,
-  ChevronRight, Circle, FileDown, ChevronLeft, Download
+  ChevronRight, Circle, FileDown, ChevronLeft, Download, User
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { differenceInCalendarDays, formatDistanceToNow, isPast, isToday, isTomorrow, format } from 'date-fns';
@@ -174,38 +174,67 @@ function TarefaCard({ tarefa, onClick, draggable, isDragging, onDragStart, onDra
 }
 
 // ── AlertaItem ───────────────────────────────────────────────────────────────
-function AlertaItem({ tarefa, onClick }: { tarefa: Tarefa; onClick: () => void }) {
+function AlertaItem({ tarefa, onClick, memberMap }: { tarefa: Tarefa; onClick: () => void; memberMap: Record<string, string> }) {
   const prio = PRIO_CFG[tarefa.prioridade] || PRIO_CFG.Baixa;
   const dl   = tarefa.data_limite ? new Date(tarefa.data_limite) : null;
-  const atrasada = dl && isPast(dl) && !isToday(dl);
+  const atrasada  = !!(dl && isPast(dl) && !isToday(dl));
+  const venceHoje = !!(dl && isToday(dl));
+  const aguardando = tarefa.aprovacao_status === 'aguardando_aprovacao';
+  const responsavel = tarefa.responsavel_id ? (memberMap[tarefa.responsavel_id] || 'Usuário') : null;
+
+  const reason = atrasada
+    ? { label: `Atrasada ${formatDistanceToNow(dl!, { locale: ptBR, addSuffix: true })}`, color: '#dc2626', bg: '#fef2f2', border: 'rgba(220,38,38,0.25)' }
+    : venceHoje
+    ? { label: 'Vence hoje', color: '#ea580c', bg: '#fff7ed', border: 'rgba(234,88,12,0.25)' }
+    : aguardando
+    ? { label: 'Aguardando aprovação', color: GOLD_D, bg: `${GOLD}15`, border: `${GOLD}40` }
+    : { label: `${tarefa.prioridade} — sem prazo`, color: '#dc2626', bg: '#fef2f2', border: 'rgba(220,38,38,0.25)' };
+
+  const isCritical = atrasada || venceHoje;
 
   return (
     <div
       onClick={onClick}
-      className="flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5"
+      className="group p-3 rounded-xl cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5"
       style={{
-        border: `0.5px solid ${atrasada ? 'rgba(220,38,38,0.25)' : 'rgba(201,169,110,0.2)'}`,
-        background: atrasada ? 'rgba(220,38,38,0.03)' : 'white',
-        borderLeft: `3px solid ${atrasada ? '#dc2626' : prio.dot}`,
+        border: `0.5px solid ${isCritical ? 'rgba(220,38,38,0.25)' : 'rgba(201,169,110,0.2)'}`,
+        background: isCritical ? 'rgba(220,38,38,0.03)' : 'white',
+        borderLeft: `3px solid ${isCritical ? '#dc2626' : prio.dot}`,
       }}
     >
-      <div className="h-7 w-7 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-        style={{ background: atrasada ? 'rgba(220,38,38,0.1)' : prio.bg }}>
-        {atrasada
-          ? <AlertTriangle style={{ width: 13, height: 13, color: '#dc2626' }} className="animate-pulse" />
-          : <Flame style={{ width: 13, height: 13, color: prio.dot }} />
-        }
-      </div>
-      <div className="flex-1 min-w-0">
-        <p style={{ fontSize: 12, fontWeight: 700, color: '#1c1917', lineHeight: 1.35 }} className="line-clamp-2">{tarefa.titulo}</p>
-        <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>
+      <div className="flex items-start gap-2.5">
+        <div className="h-7 w-7 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+          style={{ background: isCritical ? 'rgba(220,38,38,0.1)' : prio.bg }}>
           {atrasada
-            ? `Atrasada ${formatDistanceToNow(dl!, { locale: ptBR, addSuffix: true })}`
-            : dl ? `Vence ${formatDistanceToNow(dl, { locale: ptBR, addSuffix: true })}` : 'Urgente — sem prazo'
+            ? <AlertTriangle style={{ width: 13, height: 13, color: '#dc2626' }} className="animate-pulse" />
+            : aguardando
+            ? <Bell style={{ width: 13, height: 13, color: GOLD_D }} />
+            : <Flame style={{ width: 13, height: 13, color: isCritical ? '#dc2626' : prio.dot }} />
           }
-        </p>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p style={{ fontSize: 12, fontWeight: 700, color: '#1c1917', lineHeight: 1.35 }} className="line-clamp-2">{tarefa.titulo}</p>
+        </div>
+        <ChevronRight style={{ width: 14, height: 14, color: '#d1d5db', flexShrink: 0, marginTop: 3 }} className="transition-transform group-hover:translate-x-0.5" />
       </div>
-      <ChevronRight style={{ width: 14, height: 14, color: '#d1d5db', flexShrink: 0, marginTop: 3 }} />
+
+      <div className="flex items-center gap-1.5 flex-wrap mt-2 pl-[38px]">
+        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 8, background: reason.bg, color: reason.color, border: `0.5px solid ${reason.border}` }}>
+          {reason.label}
+        </span>
+        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 8, background: prio.bg, color: prio.text, border: `0.5px solid ${prio.dot}30` }}>
+          {prio.label}
+        </span>
+      </div>
+
+      {responsavel && (
+        <div className="flex items-center gap-1.5 mt-2 pl-[38px]">
+          <div className="h-4 w-4 rounded-full flex items-center justify-center shrink-0" style={{ background: `${BROWN}12` }}>
+            <User style={{ width: 9, height: 9, color: BROWN }} />
+          </div>
+          <span style={{ fontSize: 10.5, color: '#9ca3af', fontWeight: 600 }} className="truncate">{responsavel}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -660,7 +689,7 @@ export default function TarefasPage() {
                     return (
                       <>
                         <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                          {paged.map(t => <AlertaItem key={t.id} tarefa={t} onClick={() => setDetailTarefa(t)} />)}
+                          {paged.map(t => <AlertaItem key={t.id} tarefa={t} onClick={() => setDetailTarefa(t)} memberMap={memberMap} />)}
                         </div>
                         <div className="px-3 shrink-0" style={{ height: 46 }}>
                           <Pager page={page} totalPages={totalPages} onChange={setAlertaPage} />
