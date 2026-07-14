@@ -15,11 +15,11 @@ import { TimesheetModal } from '@/components/tarefas/TimesheetModal';
 import { TimesheetTable } from '@/components/tarefas/TimesheetTable';
 import { AnalyticsTab } from '@/components/tarefas/AnalyticsTab';
 import { Tarefa } from '@/types/tarefas';
-import { generateTarefasReport } from '@/lib/tarefaReportGenerator';
+import { buildTarefasReport, tarefasReportFilename } from '@/lib/tarefaReportGenerator';
 import {
   Plus, Clock, AlertTriangle, CheckCircle2, CheckSquare,
   TrendingUp, Users, Star, Bell, Flame, Calendar,
-  ChevronRight, Circle, FileDown
+  ChevronRight, Circle, FileDown, ChevronLeft, Download
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { differenceInCalendarDays, formatDistanceToNow, isPast, isToday, isTomorrow, format } from 'date-fns';
@@ -210,6 +210,34 @@ function AlertaItem({ tarefa, onClick }: { tarefa: Tarefa; onClick: () => void }
   );
 }
 
+// ── Pager ────────────────────────────────────────────────────────────────────
+function Pager({ page, totalPages, onChange }: { page: number; totalPages: number; onChange: (p: number) => void }) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-center gap-2 pt-1">
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(0, page - 1))}
+        disabled={page === 0}
+        className="h-6 w-6 rounded-lg flex items-center justify-center transition-all disabled:opacity-30"
+        style={{ background: `${GOLD}12` }}>
+        <ChevronLeft style={{ width: 12, height: 12, color: BROWN }} />
+      </button>
+      <span style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af' }}>
+        Página {page + 1} de {totalPages}
+      </span>
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(totalPages - 1, page + 1))}
+        disabled={page >= totalPages - 1}
+        className="h-6 w-6 rounded-lg flex items-center justify-center transition-all disabled:opacity-30"
+        style={{ background: `${GOLD}12` }}>
+        <ChevronRight style={{ width: 12, height: 12, color: BROWN }} />
+      </button>
+    </div>
+  );
+}
+
 // ── KPI Card ─────────────────────────────────────────────────────────────────
 function KpiCard({ label, value, icon: Icon, accent, bg, suffix = '', highlight = false }: {
   label: string; value: number | string; icon: any; accent: string; bg: string; suffix?: string; highlight?: boolean;
@@ -251,6 +279,11 @@ export default function TarefasPage() {
   const [activeTab, setActiveTab] = useState('kanban');
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+  const [colPage, setColPage] = useState<Record<string, number>>({});
+  const [alertaPage, setAlertaPage] = useState(0);
+  const [reportPreview, setReportPreview] = useState<{ url: string; filename: string } | null>(null);
+  const KANBAN_PAGE_SIZE = 6;
+  const ALERTAS_PAGE_SIZE = 5;
 
   const handleNew = () => { setSelectedTarefa(null); setTarefaModalOpen(true); };
 
@@ -326,6 +359,12 @@ export default function TarefasPage() {
     [activeUser, tarefas, tarefasPorUsuario]
   );
 
+  useEffect(() => { setColPage({}); setAlertaPage(0); }, [activeUser]);
+
+  useEffect(() => {
+    return () => { if (reportPreview) URL.revokeObjectURL(reportPreview.url); };
+  }, [reportPreview]);
+
   const memberMap = useMemo(() => {
     const m: Record<string, string> = {};
     team.forEach(t => { m[t.id] = t.nome || t.fullName; });
@@ -351,7 +390,17 @@ export default function TarefasPage() {
     const filtroLabel = activeUser === 'all'
       ? 'Todos os usuários'
       : (team.find(m => m.id === activeUser)?.nome || team.find(m => m.id === activeUser)?.fullName || 'Usuário');
-    generateTarefasReport(filteredTarefas, memberMap, reportKpis, filtroLabel);
+    const doc = buildTarefasReport(filteredTarefas, memberMap, reportKpis, filtroLabel);
+    const url = URL.createObjectURL(doc.output('blob'));
+    setReportPreview({ url, filename: tarefasReportFilename() });
+  };
+
+  const handleDownloadReport = () => {
+    if (!reportPreview) return;
+    const a = document.createElement('a');
+    a.href = reportPreview.url;
+    a.download = reportPreview.filename;
+    a.click();
   };
 
   const columns = ['Pendente', 'Em Andamento', 'Concluída'] as const;
@@ -440,6 +489,9 @@ export default function TarefasPage() {
                       const cfg = STATUS_CFG[col];
                       const colTarefas = filteredTarefas.filter(t => t.status === col);
                       const isDragOver = dragOverCol === col;
+                      const totalPages = Math.max(1, Math.ceil(colTarefas.length / KANBAN_PAGE_SIZE));
+                      const page = Math.min(colPage[col] || 0, totalPages - 1);
+                      const pagedTarefas = colTarefas.slice(page * KANBAN_PAGE_SIZE, page * KANBAN_PAGE_SIZE + KANBAN_PAGE_SIZE);
                       return (
                         <div key={col} className="rounded-2xl overflow-hidden flex flex-col transition-colors"
                           onDragOver={(e) => { e.preventDefault(); if (dragOverCol !== col) setDragOverCol(col); }}
@@ -462,7 +514,7 @@ export default function TarefasPage() {
                           </div>
 
                           {/* Cards */}
-                          <div className="p-3 space-y-2.5 flex-1">
+                          <div className="p-3 space-y-2.5" style={{ minHeight: 360 }}>
                             {loading ? (
                               [1,2].map(i => <div key={i} className="h-24 rounded-2xl animate-pulse" style={{ background: 'rgba(201,169,110,0.08)' }} />)
                             ) : colTarefas.length === 0 ? (
@@ -471,7 +523,7 @@ export default function TarefasPage() {
                                 <p style={{ fontSize: 12, fontWeight: 500, color: '#d1d5db' }}>Sem tarefas aqui</p>
                               </div>
                             ) : (
-                              colTarefas.map(t => (
+                              pagedTarefas.map(t => (
                                 <TarefaCard
                                   key={t.id}
                                   tarefa={t}
@@ -485,8 +537,13 @@ export default function TarefasPage() {
                             )}
                           </div>
 
+                          {/* Paginação */}
+                          <div className="px-3">
+                            <Pager page={page} totalPages={totalPages} onChange={p => setColPage(prev => ({ ...prev, [col]: p }))} />
+                          </div>
+
                           {/* Add button */}
-                          <div className="p-3 pt-0">
+                          <div className="p-3 pt-2">
                             <button onClick={handleNew}
                               className="w-full py-2 rounded-xl text-xs font-semibold transition-all hover:opacity-80"
                               style={{ background: cfg.bg, color: cfg.color, border: `1px dashed ${cfg.color}40` }}>
@@ -597,9 +654,23 @@ export default function TarefasPage() {
                     <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 3 }}>Nenhuma tarefa urgente ou atrasada</p>
                   </div>
                 ) : (
-                  <div className="p-3 space-y-2 overflow-y-auto" style={{ maxHeight: 520 }}>
-                    {alertas.map(t => <AlertaItem key={t.id} tarefa={t} onClick={() => setDetailTarefa(t)} />)}
-                  </div>
+                  <>
+                    {(() => {
+                      const totalPages = Math.max(1, Math.ceil(alertas.length / ALERTAS_PAGE_SIZE));
+                      const page = Math.min(alertaPage, totalPages - 1);
+                      const paged = alertas.slice(page * ALERTAS_PAGE_SIZE, page * ALERTAS_PAGE_SIZE + ALERTAS_PAGE_SIZE);
+                      return (
+                        <>
+                          <div className="p-3 space-y-2">
+                            {paged.map(t => <AlertaItem key={t.id} tarefa={t} onClick={() => setDetailTarefa(t)} />)}
+                          </div>
+                          <div className="px-3 pb-3">
+                            <Pager page={page} totalPages={totalPages} onChange={setAlertaPage} />
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </>
                 )}
               </div>
 
@@ -797,6 +868,28 @@ export default function TarefasPage() {
         onSuccess={fetchTarefas} />
       <TarefaModal open={tarefaModalOpen} onOpenChange={setTarefaModalOpen} tarefa={selectedTarefa} onDelete={deleteTarefa} onSuccess={fetchTarefas} />
       <TimesheetModal open={timesheetModalOpen} onOpenChange={setTimesheetModal} />
+
+      {/* ── Preview do Relatório ── */}
+      <Dialog open={!!reportPreview} onOpenChange={o => !o && setReportPreview(null)}>
+        <DialogContent className="p-0 overflow-hidden" style={{ maxWidth: 900, width: 'calc(100vw - 32px)', height: '85vh' }}>
+          <DialogHeader className="px-5 pt-4 pb-3" style={{ borderBottom: `0.5px solid ${GOLD}20` }}>
+            <DialogTitle style={{ fontSize: 15, fontWeight: 800, color: BROWN }}>Prévia do Relatório</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 px-5" style={{ height: 'calc(85vh - 130px)' }}>
+            {reportPreview && (
+              <iframe src={reportPreview.url} title="Prévia do relatório" className="w-full h-full border-0 rounded-lg" style={{ border: `0.5px solid ${GOLD}30` }} />
+            )}
+          </div>
+          <div className="px-5 py-3 flex gap-2 justify-end" style={{ borderTop: `0.5px solid ${GOLD}20` }}>
+            <Button variant="outline" onClick={() => setReportPreview(null)} style={{ fontSize: 12, fontWeight: 600 }}>
+              Fechar
+            </Button>
+            <Button onClick={handleDownloadReport} style={{ background: BROWN, color: GOLD, fontSize: 12, fontWeight: 700 }}>
+              <Download style={{ width: 14, height: 14, marginRight: 6 }} /> Baixar PDF
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }

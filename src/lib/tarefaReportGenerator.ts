@@ -38,12 +38,16 @@ function truncate(doc: jsPDF, text: string, maxW: number): string {
   return lines[0].replace(/\s+\S*$/, '') + '…';
 }
 
-export function generateTarefasReport(
+export function tarefasReportFilename(): string {
+  return `Relatorio_Tarefas_${new Date().toISOString().split('T')[0]}.pdf`;
+}
+
+export function buildTarefasReport(
   tarefas: Tarefa[],
   memberMap: Record<string, string>,
   kpis: TarefasKpis,
   filtroLabel: string,
-): void {
+): jsPDF {
   const doc = new jsPDF({ orientation: 'landscape' });
   const pw = doc.internal.pageSize.getWidth();
   const ph = doc.internal.pageSize.getHeight();
@@ -162,5 +166,5 @@ export function generateTarefasReport(
     doc.text(`Página ${i} de ${pages} | Gerado em ${new Date().toLocaleString('pt-BR')}`, pw / 2, ph - 8, { align: 'center' });
   }
 
-  doc.save(`Relatorio_Tarefas_${new Date().toISOString().split('T')[0]}.pdf`);
+  return doc;
 }
