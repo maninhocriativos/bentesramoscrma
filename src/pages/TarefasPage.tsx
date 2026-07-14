@@ -1,9 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useTarefas, useTimesheet } from '@/hooks/useTarefas';
@@ -63,7 +62,10 @@ function getDeadlineInfo(dl: string | null) {
 }
 
 // ── TarefaCard premium ───────────────────────────────────────────────────────
-function TarefaCard({ tarefa, onClick }: { tarefa: Tarefa; onClick: () => void }) {
+function TarefaCard({ tarefa, onClick, draggable, isDragging, onDragStart, onDragEnd }: {
+  tarefa: Tarefa; onClick: () => void; draggable?: boolean; isDragging?: boolean;
+  onDragStart?: (e: React.DragEvent) => void; onDragEnd?: (e: React.DragEvent) => void;
+}) {
   const prio       = PRIO_CFG[tarefa.prioridade] || PRIO_CFG.Baixa;
   const dl         = getDeadlineInfo(tarefa.data_limite);
   const aprov      = tarefa.aprovacao_status ? APROV_CFG[tarefa.aprovacao_status] : null;
@@ -79,8 +81,15 @@ function TarefaCard({ tarefa, onClick }: { tarefa: Tarefa; onClick: () => void }
   return (
     <div
       onClick={onClick}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       className="group rounded-2xl cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
-      style={{ background: cardBg, border: cardBorder, boxShadow: '0 1px 4px rgba(0,0,0,0.04)', overflow: 'hidden' }}
+      style={{
+        background: cardBg, border: cardBorder, boxShadow: '0 1px 4px rgba(0,0,0,0.04)', overflow: 'hidden',
+        opacity: isDragging ? 0.4 : 1,
+        cursor: draggable ? 'grab' : 'pointer',
+      }}
     >
       {/* Barra de cor no topo */}
       <div style={{ height: 3, background: topBar }} />
@@ -239,8 +248,20 @@ export default function TarefasPage() {
   const [activeUser, setActiveUser] = useState<string>('all');
   const [criticalPopupOpen, setCriticalPopupOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('kanban');
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<string | null>(null);
 
   const handleNew = () => { setSelectedTarefa(null); setTarefaModalOpen(true); };
+
+  const handleDropOnColumn = async (col: string) => {
+    setDragOverCol(null);
+    const id = draggedId;
+    setDraggedId(null);
+    if (!id) return;
+    const tarefa = tarefas.find(t => t.id === id);
+    if (!tarefa || tarefa.status === col) return;
+    await updateTarefa(id, { status: col as Tarefa['status'] });
+  };
 
   const kpis = useMemo(() => {
     const ativas = tarefas.filter(t => t.status !== 'Concluída' && t.status !== 'Cancelada');
@@ -281,9 +302,14 @@ export default function TarefasPage() {
       .slice(0, 5);
   }, [tarefas, user]);
 
+  const shownCriticalIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (criticalTasks.length > 0) setCriticalPopupOpen(true);
-  }, [criticalTasks.length]);
+    const newOnes = criticalTasks.filter(t => !shownCriticalIdsRef.current.has(t.id));
+    if (newOnes.length > 0) {
+      newOnes.forEach(t => shownCriticalIdsRef.current.add(t.id));
+      setCriticalPopupOpen(true);
+    }
+  }, [criticalTasks]);
   const tarefasPorUsuario = useMemo(() => {
     const map: Record<string, Tarefa[]> = {};
     tarefas.forEach(t => {
@@ -380,9 +406,17 @@ export default function TarefasPage() {
                     {columns.map(col => {
                       const cfg = STATUS_CFG[col];
                       const colTarefas = filteredTarefas.filter(t => t.status === col);
+                      const isDragOver = dragOverCol === col;
                       return (
-                        <div key={col} className="rounded-2xl overflow-hidden flex flex-col"
-                          style={{ background: 'white', border: `0.5px solid rgba(201,169,110,0.18)`, minHeight: 480, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                        <div key={col} className="rounded-2xl overflow-hidden flex flex-col transition-colors"
+                          onDragOver={(e) => { e.preventDefault(); if (dragOverCol !== col) setDragOverCol(col); }}
+                          onDragLeave={() => setDragOverCol(prev => prev === col ? null : prev)}
+                          onDrop={(e) => { e.preventDefault(); handleDropOnColumn(col); }}
+                          style={{
+                            background: isDragOver ? `${cfg.color}0d` : 'white',
+                            border: `${isDragOver ? 2 : 0.5}px ${isDragOver ? 'dashed' : 'solid'} ${isDragOver ? cfg.color : 'rgba(201,169,110,0.18)'}`,
+                            minHeight: 480, boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                          }}>
 
                           {/* Col header */}
                           <div className="flex items-center gap-2.5 px-4 py-3.5"
@@ -404,7 +438,17 @@ export default function TarefasPage() {
                                 <p style={{ fontSize: 12, fontWeight: 500, color: '#d1d5db' }}>Sem tarefas aqui</p>
                               </div>
                             ) : (
-                              colTarefas.map(t => <TarefaCard key={t.id} tarefa={t} onClick={() => setDetailTarefa(t)} />)
+                              colTarefas.map(t => (
+                                <TarefaCard
+                                  key={t.id}
+                                  tarefa={t}
+                                  onClick={() => setDetailTarefa(t)}
+                                  draggable
+                                  isDragging={draggedId === t.id}
+                                  onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', t.id); setDraggedId(t.id); }}
+                                  onDragEnd={() => { setDraggedId(null); setDragOverCol(null); }}
+                                />
+                              ))
                             )}
                           </div>
 
@@ -520,11 +564,9 @@ export default function TarefasPage() {
                     <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 3 }}>Nenhuma tarefa urgente ou atrasada</p>
                   </div>
                 ) : (
-                  <ScrollArea style={{ maxHeight: 380 }}>
-                    <div className="p-3 space-y-2">
-                      {alertas.map(t => <AlertaItem key={t.id} tarefa={t} onClick={() => setDetailTarefa(t)} />)}
-                    </div>
-                  </ScrollArea>
+                  <div className="p-3 space-y-2 overflow-y-auto" style={{ maxHeight: 520 }}>
+                    {alertas.map(t => <AlertaItem key={t.id} tarefa={t} onClick={() => setDetailTarefa(t)} />)}
+                  </div>
                 )}
               </div>
 
