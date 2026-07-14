@@ -49,9 +49,19 @@ Deno.serve(async (req) => {
       .eq('id', userId);
 
     // Garantir que existe registro em user_roles
-    await supabaseAdmin
+    // ⚠️ a unique constraint real da tabela é (user_id, role), não user_id sozinho —
+    // onConflict:'user_id' não batia com nenhuma constraint, o Postgres rejeitava o
+    // upsert (42P10) e, como o erro não era checado, TODO usuário convidado ficava
+    // sem linha em user_roles silenciosamente (o sistema só "parecia" funcionar
+    // porque PerfilContext cai pro fallback perfis.cargo quando user_roles vem vazio
+    // — mas qualquer código que exige user_roles de verdade, como o roteamento de
+    // OAB do intimacoes-scheduler, nunca encontrava esses usuários).
+    const { error: roleUpsertError } = await supabaseAdmin
       .from('user_roles')
-      .upsert({ user_id: userId, role: invite.role }, { onConflict: 'user_id' });
+      .upsert({ user_id: userId, role: invite.role }, { onConflict: 'user_id,role' });
+    if (roleUpsertError) {
+      console.error('accept-invite: falha ao criar user_roles:', roleUpsertError.message);
+    }
 
     // Marcar convite como aceito
     await supabaseAdmin
