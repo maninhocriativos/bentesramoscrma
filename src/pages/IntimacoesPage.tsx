@@ -102,7 +102,6 @@ export default function IntimacoesPage() {
   const [filterLida, setFilterLida] = useState<'all' | 'unread' | 'read' | 'urgent' | 'today'>('all');
   const [selectedIntimacao, setSelectedIntimacao] = useState<Intimacao | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [lastSyncAt, setLastSyncAt] = useState<Date | null>(() => {
     const s = localStorage.getItem('intimacoes-last-sync');
     return s ? new Date(s) : null;
@@ -110,6 +109,7 @@ export default function IntimacoesPage() {
   const [tick, setTick] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [members, setMembers] = useState<TeamMember[]>([]);
 
   const oabNumero = officeSettings?.oab_number || (perfil as any)?.oab_numero || '';
   const oabUf = officeSettings?.oab_state || (perfil as any)?.oab_uf || 'AM';
@@ -117,6 +117,18 @@ export default function IntimacoesPage() {
   useEffect(() => { if (user) fetchIntimacoes(); }, [user]);
   useEffect(() => { const t = setInterval(() => setTick(n => n + 1), 60000); return () => clearInterval(t); }, []);
   useEffect(() => { setCurrentPage(1); }, [searchTerm, filterLida]);
+  useEffect(() => {
+    supabase.from('perfis').select('id, nome, sobrenome, email, oab_numero, oab_uf').eq('aprovado', true)
+      .then(({ data }) => { if (data) setMembers(data as TeamMember[]); });
+  }, []);
+
+  const getMemberName = (member: TeamMember) =>
+    [member.nome, member.sobrenome].filter(Boolean).join(' ') || member.email || 'Usuário';
+
+  const resolverResponsavel = (intimacao: Intimacao): TeamMember | null =>
+    members.find(m => intimacao.advogado_id && m.id === intimacao.advogado_id)
+    || members.find(m => m.oab_numero && m.oab_numero === intimacao.oab_numero && (m.oab_uf || 'AM') === intimacao.oab_uf)
+    || null;
 
   const fetchIntimacoes = async () => {
     setLoading(true);
@@ -531,183 +543,95 @@ export default function IntimacoesPage() {
               </div>
             </div>
 
-            {/* CARDS com agrupamento por mês de publicação */}
-            {(() => {
-              const currentMonthKey = format(new Date(), 'yyyy-MM');
-              const lastMonthKey = format(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1), 'yyyy-MM');
+            {/* TABELA — estilo Advbox: Processo | Publicação | Tribunal | Número do processo | Responsável | Situação */}
+            <div className="rounded-xl border border-border/50 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50 border-b border-border/50 text-[11px] uppercase tracking-wider text-muted-foreground">
+                    <th className="w-9 px-3 py-2.5"></th>
+                    <th className="text-left px-3 py-2.5 font-semibold">Processo</th>
+                    <th className="text-left px-3 py-2.5 font-semibold whitespace-nowrap">Publicação</th>
+                    <th className="text-left px-3 py-2.5 font-semibold">Tribunal</th>
+                    <th className="text-left px-3 py-2.5 font-semibold whitespace-nowrap">Número do processo</th>
+                    <th className="text-left px-3 py-2.5 font-semibold">Responsável</th>
+                    <th className="text-left px-3 py-2.5 font-semibold">Situação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginated.map(intimacao => {
+                    const tc = getTypeConfig(intimacao.tipo_intimacao);
+                    const isSelected = selectedIds.has(intimacao.id);
+                    const isUnread = !intimacao.lida;
+                    const temProcessoCadastrado = !!intimacao.processo_id;
+                    const responsavel = resolverResponsavel(intimacao);
+                    const publicacaoData = intimacao.data_publicacao || intimacao.data_disponibilizacao || intimacao.data_intimacao;
 
-              const getGroupKey = (i: Intimacao): string => {
-                const dateStr = i.data_publicacao || i.data_disponibilizacao || i.data_intimacao || i.created_at;
-                try { const d = parseISO(dateStr); if (isValid(d)) return format(d, 'yyyy-MM'); } catch { /* */ }
-                return '0000-00';
-              };
-              const getGroupLabel = (key: string): string => {
-                if (key === '0000-00') return 'Sem data';
-                try {
-                  const d = parseISO(`${key}-01`);
-                  const l = format(d, 'MMMM yyyy', { locale: ptBR });
-                  return l.charAt(0).toUpperCase() + l.slice(1);
-                } catch { return key; }
-              };
-
-              const groups: Record<string, Intimacao[]> = {};
-              for (const i of paginated) { const k = getGroupKey(i); (groups[k] = groups[k] || []).push(i); }
-              const sortedKeys = Object.keys(groups).sort().reverse();
-
-              return sortedKeys.map(key => {
-                const label = getGroupLabel(key);
-                const dotCls = key === currentMonthKey
-                  ? 'bg-violet-500 animate-pulse'
-                  : key === lastMonthKey ? 'bg-blue-400' : 'bg-muted-foreground/40';
-                const group = label;
-                return (
-                <div key={key}>
-                  <div className="flex items-center gap-2 mb-2 mt-4 first:mt-0">
-                    <div className={`h-2 w-2 rounded-full ${dotCls}`} />
-                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{group}</span>
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground">{groups[key].length}</span>
-                    <div className="flex-1 h-px bg-border/50" />
-                  </div>
-                  {groups[key].map(intimacao => {
-              const urgency = getUrgencyInfo(intimacao);
-              const tc = getTypeConfig(intimacao.tipo_intimacao);
-              const isExpanded = expandedCards.has(intimacao.id);
-              const contentText = intimacao.conteudo || 'Sem conteúdo detalhado';
-              const isLong = contentText.length > 160;
-              const isSelected = selectedIds.has(intimacao.id);
-              const isUnread = !intimacao.lida;
-
-              return (
-                <div
-                  key={intimacao.id}
-                  onClick={() => { setSelectedIntimacao(intimacao); if (isUnread) handleMarkRead(intimacao.id); }}
-                  className={`group relative flex rounded-2xl cursor-pointer overflow-hidden border transition-all duration-200 hover:-translate-y-[1px] hover:shadow-lg
-                    ${isSelected
-                      ? 'border-primary/40 bg-primary/[0.03] shadow-md shadow-primary/10'
-                      : isUnread
-                      ? 'border-border/60 hover:border-border hover:shadow-md'
-                      : 'border-border/40 bg-card hover:border-border/70'
-                    }`}
-                  style={isUnread ? { backgroundColor: tc.cardUnread } : undefined}
-                >
-                  {/* Left accent bar using inline style for reliable color */}
-                  <div
-                    className={`w-1.5 shrink-0 rounded-l-2xl transition-opacity duration-200 ${isUnread ? 'opacity-100' : 'opacity-20 group-hover:opacity-50'}`}
-                    style={{ background: `linear-gradient(to bottom, ${tc.avatarFrom}, ${tc.avatarTo})` }}
-                  />
-
-                  <div className="flex-1 px-4 py-4 min-w-0">
-                    <div className="flex items-start gap-3.5">
-                      {/* Checkbox */}
-                      <div className="pt-0.5 shrink-0" onClick={e => e.stopPropagation()}>
-                        <Checkbox checked={isSelected} onCheckedChange={() => toggleSelect(intimacao.id)} />
-                      </div>
-
-                      {/* Avatar */}
-                      <div
-                        className="shrink-0 h-11 w-11 rounded-xl flex items-center justify-center shadow-md text-white font-black text-lg leading-none"
-                        style={{ background: `linear-gradient(135deg, ${tc.avatarFrom}, ${tc.avatarTo})` }}
+                    return (
+                      <tr
+                        key={intimacao.id}
+                        onClick={() => { setSelectedIntimacao(intimacao); if (isUnread) handleMarkRead(intimacao.id); }}
+                        className={`cursor-pointer border-b border-border/30 last:border-0 transition-colors ${isSelected ? 'bg-primary/[0.04]' : isUnread ? 'hover:bg-muted/30' : 'hover:bg-muted/20 opacity-80'}`}
+                        style={isUnread ? { backgroundColor: tc.cardUnread } : undefined}
                       >
-                        {(intimacao.tipo_intimacao || 'P')[0].toUpperCase()}
-                      </div>
-
-                      {/* Content */}
-                      <div className="flex-1 min-w-0 space-y-1.5">
-                        {/* Badges */}
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {isUnread && <span className={`h-2 w-2 rounded-full ${tc.dot} animate-pulse shrink-0`} />}
-                          <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-lg ${tc.badge}`}>
-                            {intimacao.tipo_intimacao || 'Publicação'}
-                          </span>
-                          {intimacao.tribunal && (
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg border border-border/50 bg-muted/60 text-muted-foreground">
-                              {intimacao.tribunal}
+                        <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                          <Checkbox checked={isSelected} onCheckedChange={() => toggleSelect(intimacao.id)} />
+                        </td>
+                        <td className="px-3 py-3 max-w-[280px]">
+                          {temProcessoCadastrado ? (
+                            <>
+                              <p className={`font-semibold leading-snug truncate ${isUnread ? 'text-foreground' : 'text-foreground/80'}`}>
+                                {intimacao.processo_titulo || intimacao.tipo_intimacao || 'Publicação'}
+                              </p>
+                              {intimacao.conteudo && (
+                                <p className="text-xs text-muted-foreground truncate mt-0.5">{intimacao.conteudo}</p>
+                              )}
+                            </>
+                          ) : (
+                            <span className="font-semibold text-muted-foreground/70">N/A</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap text-muted-foreground">
+                          {formatDate(publicacaoData) || '—'}
+                        </td>
+                        <td className="px-3 py-3 text-muted-foreground">
+                          {intimacao.tribunal || '—'}
+                        </td>
+                        <td className="px-3 py-3 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                          {intimacao.processo_cnj || '—'}
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 text-white text-[11px] font-bold shadow-sm"
+                              style={{ background: `linear-gradient(135deg, ${tc.avatarFrom}, ${tc.avatarTo})` }}
+                              title={responsavel ? getMemberName(responsavel) : `OAB/${intimacao.oab_uf} ${intimacao.oab_numero}`}
+                            >
+                              {(responsavel ? getMemberName(responsavel) : intimacao.oab_numero || 'U')[0]?.toUpperCase()}
+                            </div>
+                            <span className="text-xs text-muted-foreground truncate max-w-[110px]">
+                              {responsavel ? getMemberName(responsavel) : `OAB/${intimacao.oab_uf} ${intimacao.oab_numero}`}
                             </span>
-                          )}
-                          {(urgency.level === 'urgent' || urgency.level === 'overdue') && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-lg bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40 animate-pulse">
-                              <AlertTriangle className="h-2.5 w-2.5" /> {urgency.label}
-                            </span>
-                          )}
-                          {urgency.level === 'warning' && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200/60">
-                              <Timer className="h-2.5 w-2.5" /> {urgency.label}
-                            </span>
-                          )}
-                          {urgency.level === 'safe' && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 border border-emerald-200/50">
-                              <Clock className="h-2.5 w-2.5" /> {urgency.label}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* CNJ + título */}
-                        <div>
-                          <p className={`text-sm font-bold font-mono leading-snug ${isUnread ? 'text-foreground' : 'text-foreground/80'}`}>
-                            {intimacao.processo_cnj || 'Sem CNJ'}
-                          </p>
-                          {intimacao.processo_titulo && (
-                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{intimacao.processo_titulo}</p>
-                          )}
-                        </div>
-
-                        {/* Conteúdo */}
-                        <p className={`text-xs leading-relaxed text-muted-foreground/80 ${isExpanded ? '' : 'line-clamp-2'}`}>
-                          {contentText}
-                        </p>
-                        {isLong && (
-                          <button onClick={e => { e.stopPropagation(); setExpandedCards(prev => { const n = new Set(prev); n.has(intimacao.id) ? n.delete(intimacao.id) : n.add(intimacao.id); return n; }); }} className="text-[11px] text-primary font-semibold hover:underline">
-                            {isExpanded ? '▲ Recolher' : '▼ Ver mais'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={e => handleToggleRead(intimacao.id, intimacao.lida, e)}
+                            className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border text-xs font-semibold transition-colors ${
+                              intimacao.lida
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800/40'
+                                : 'bg-card text-muted-foreground border-border/60 hover:bg-muted/50'
+                            }`}
+                          >
+                            {intimacao.lida ? <CheckCircle2 className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
+                            {intimacao.lida ? 'Concluído' : 'Pendente'}
                           </button>
-                        )}
-
-                        {/* Dates */}
-                        <div className="flex flex-wrap gap-1.5 pt-0.5">
-                          {intimacao.data_disponibilizacao && (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/60 px-2 py-1 rounded-lg border border-border/30">
-                              <CalendarDays className="h-2.5 w-2.5 shrink-0" style={{ color: tc.bar }} />
-                              Disponib.: <b className="text-foreground/80 ml-0.5">{formatDate(intimacao.data_disponibilizacao)}</b>
-                            </span>
-                          )}
-                          {intimacao.data_publicacao && (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/60 px-2 py-1 rounded-lg border border-border/30">
-                              <CalendarDays className="h-2.5 w-2.5 shrink-0" style={{ color: tc.bar }} />
-                              Publicação: <b className="text-foreground/80 ml-0.5">{formatDate(intimacao.data_publicacao)}</b>
-                            </span>
-                          )}
-                          {intimacao.data_intimacao && (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/60 px-2 py-1 rounded-lg border border-border/30">
-                              <CalendarDays className="h-2.5 w-2.5 shrink-0" style={{ color: tc.bar }} />
-                              Intimação: <b className="text-foreground/80 ml-0.5">{formatDate(intimacao.data_intimacao)}</b>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Quick actions */}
-                      <div className="flex flex-col items-center gap-1 shrink-0 self-start pt-0.5">
-                        <button className="h-8 w-8 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all" onClick={e => handleToggleRead(intimacao.id, intimacao.lida, e)} title={intimacao.lida ? 'Marcar como não lida' : 'Marcar como lida'}>
-                          {intimacao.lida ? <EyeOff className="h-3.5 w-3.5 text-muted-foreground" /> : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />}
-                        </button>
-                        {intimacao.processo_cnj && (
-                          <button className="h-8 w-8 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all" onClick={e => { e.stopPropagation(); void copyTextToClipboard(intimacao.processo_cnj); }} title="Copiar CNJ">
-                            <Copy className="h-3.5 w-3.5 text-blue-600" />
-                          </button>
-                        )}
-                        <button className="h-8 w-8 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" onClick={e => handleGenerateReport(intimacao, e)} title="Relatório">
-                          <FileText className="h-3.5 w-3.5 text-purple-600" />
-                        </button>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground/25 group-hover:text-primary group-hover:translate-x-0.5 transition-all duration-200 mt-1" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-                </div>
-              );
-              });
-            })()}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
             {/* PAGINAÇÃO */}
             {filtered.length > 0 && (
