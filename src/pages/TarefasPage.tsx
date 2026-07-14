@@ -504,8 +504,8 @@ export default function TarefasPage() {
                           }}>
 
                           {/* Col header */}
-                          <div className="flex items-center gap-2.5 px-4 py-3.5 shrink-0"
-                            style={{ borderBottom: `2px solid ${cfg.bg}`, background: cfg.bg }}>
+                          <div className="flex items-center gap-2.5 px-4 shrink-0"
+                            style={{ height: 52, borderBottom: `2px solid ${cfg.bg}`, background: cfg.bg }}>
                             <div className="w-3 h-3 rounded-full" style={{ background: cfg.color }} />
                             <span style={{ fontSize: 13, fontWeight: 800, color: '#1c1917', flex: 1 }}>{cfg.label}</span>
                             <span style={{ fontSize: 12, fontWeight: 800, padding: '2px 10px', borderRadius: 20, background: 'white', color: cfg.color, border: `1px solid ${cfg.color}30` }}>
@@ -543,7 +543,7 @@ export default function TarefasPage() {
                           </div>
 
                           {/* Add button */}
-                          <div className="p-3 pt-2 shrink-0">
+                          <div className="px-3 flex items-center shrink-0" style={{ height: 58 }}>
                             <button onClick={handleNew}
                               className="w-full py-2 rounded-xl text-xs font-semibold transition-all hover:opacity-80"
                               style={{ background: cfg.bg, color: cfg.color, border: `1px dashed ${cfg.color}40` }}>
@@ -686,8 +686,20 @@ export default function TarefasPage() {
               <div className="h-8 w-8 rounded-xl flex items-center justify-center" style={{ background: `${GOLD}12` }}>
                 <Users style={{ width: 15, height: 15, color: GOLD_D }} />
               </div>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#1c1917' }}>Carga por Usuário</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#1c1917', flex: 1 }}>Carga por Usuário</span>
+              {team.length > 0 && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>
+                  {team.length} membro{team.length !== 1 ? 's' : ''} · {team.filter(m => m.online).length} online
+                </span>
+              )}
             </div>
+            {team.length === 0 ? (
+              <div className="py-10 text-center px-4">
+                <Users style={{ width: 28, height: 28, color: '#d1d5db', margin: '0 auto 8px' }} />
+                <p style={{ fontSize: 13, fontWeight: 700, color: '#1c1917' }}>Nenhum membro encontrado</p>
+                <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 3 }}>A equipe aparecerá aqui assim que houver usuários aprovados</p>
+              </div>
+            ) : (
             <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {team.map(member => {
                 const mTarefas    = tarefasPorUsuario[member.id] || [];
@@ -768,6 +780,7 @@ export default function TarefasPage() {
                 );
               })}
             </div>
+            )}
           </div>
         </div>
       </div>
