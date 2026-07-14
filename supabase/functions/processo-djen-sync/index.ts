@@ -40,21 +40,22 @@ const DJEN_HEADERS = {
 type DjenResult = { blocked: boolean; items: any[] };
 
 async function fetchDjenPorProcesso(cnjNorm: string): Promise<DjenResult> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroProcesso=${cnjNorm}&itensPorPagina=50&pagina=1`;
-      const resp = await fetch(url, { headers: DJEN_HEADERS, signal: AbortSignal.timeout(15000) });
-      if (resp.ok) {
-        const data = await resp.json();
-        return { blocked: false, items: Array.isArray(data?.items) ? data.items : [] };
-      }
-      if (resp.status !== 403 && resp.status !== 429) return { blocked: false, items: [] };
-    } catch {
-      // tenta de novo
+  try {
+    const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroProcesso=${cnjNorm}&itensPorPagina=50&pagina=1`;
+    const resp = await fetch(url, { headers: DJEN_HEADERS, signal: AbortSignal.timeout(15000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      return { blocked: false, items: Array.isArray(data?.items) ? data.items : [] };
     }
-    await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+    // 403/429 já visto bloqueando o IP do Supabase mesmo na primeira tentativa
+    // (teste em produção: circuit breaker disparou com apenas 5 chamadas) —
+    // reter/retentar na hora só piora, melhor marcar bloqueado e deixar o
+    // próximo ciclo do cron (20 min depois) tentar de novo.
+    if (resp.status === 403 || resp.status === 429) return { blocked: true, items: [] };
+    return { blocked: false, items: [] };
+  } catch {
+    return { blocked: true, items: [] };
   }
-  return { blocked: true, items: [] };
 }
 
 async function analisarNovasIntimacoes(rows: Array<Record<string, any>>) {
@@ -124,7 +125,7 @@ serve(async (req) => {
     const TIME_BUDGET_MS = 100_000;
     let processados = 0, novas = 0, comErro = 0, tempoEsgotado = false, bloqueadoPeloDjen = false;
     let bloqueiosConsecutivos = 0;
-    const BLOQUEIOS_MAX = 5; // 5 processos seguidos bloqueados = provavelmente o IP tomou 403, não a falta de resultado
+    const BLOQUEIOS_MAX = 3; // teste em produção: DJEN já bloqueou com só 5 chamadas — para cedo, não desperdiça o resto do lote
     const novasInseridas: any[] = [];
 
     for (const processo of processos) {
@@ -190,7 +191,7 @@ serve(async (req) => {
         }
 
         await supabase.from("processos").update({ ultima_consulta_djen_at: new Date().toISOString() }).eq("id", processo.id);
-        await new Promise((r) => setTimeout(r, 900));
+        await new Promise((r) => setTimeout(r, 1500));
       } catch (err: unknown) {
         comErro++;
         const msg = err instanceof Error ? err.message : "Erro desconhecido";
