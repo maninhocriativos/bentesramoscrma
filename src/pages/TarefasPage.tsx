@@ -212,9 +212,9 @@ function AlertaItem({ tarefa, onClick }: { tarefa: Tarefa; onClick: () => void }
 
 // ── Pager ────────────────────────────────────────────────────────────────────
 function Pager({ page, totalPages, onChange }: { page: number; totalPages: number; onChange: (p: number) => void }) {
-  if (totalPages <= 1) return null;
+  const hidden = totalPages <= 1;
   return (
-    <div className="flex items-center justify-center gap-2 pt-1">
+    <div className="flex items-center justify-center gap-2 pt-1" style={{ visibility: hidden ? 'hidden' : 'visible', height: 30 }}>
       <button
         type="button"
         onClick={() => onChange(Math.max(0, page - 1))}
@@ -500,11 +500,11 @@ export default function TarefasPage() {
                           style={{
                             background: isDragOver ? `${cfg.color}0d` : 'white',
                             border: `${isDragOver ? 2 : 0.5}px ${isDragOver ? 'dashed' : 'solid'} ${isDragOver ? cfg.color : 'rgba(201,169,110,0.18)'}`,
-                            minHeight: 480, boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                            height: 560, boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
                           }}>
 
                           {/* Col header */}
-                          <div className="flex items-center gap-2.5 px-4 py-3.5"
+                          <div className="flex items-center gap-2.5 px-4 py-3.5 shrink-0"
                             style={{ borderBottom: `2px solid ${cfg.bg}`, background: cfg.bg }}>
                             <div className="w-3 h-3 rounded-full" style={{ background: cfg.color }} />
                             <span style={{ fontSize: 13, fontWeight: 800, color: '#1c1917', flex: 1 }}>{cfg.label}</span>
@@ -514,11 +514,11 @@ export default function TarefasPage() {
                           </div>
 
                           {/* Cards */}
-                          <div className="p-3 space-y-2.5" style={{ minHeight: 360 }}>
+                          <div className="p-3 space-y-2.5 overflow-y-auto" style={{ height: 396 }}>
                             {loading ? (
                               [1,2].map(i => <div key={i} className="h-24 rounded-2xl animate-pulse" style={{ background: 'rgba(201,169,110,0.08)' }} />)
                             ) : colTarefas.length === 0 ? (
-                              <div className="flex flex-col items-center justify-center h-full py-16" style={{ color: '#e5e7eb' }}>
+                              <div className="flex flex-col items-center justify-center h-full" style={{ color: '#e5e7eb' }}>
                                 <CheckCircle2 style={{ width: 32, height: 32, marginBottom: 8, color: '#e5e7eb' }} />
                                 <p style={{ fontSize: 12, fontWeight: 500, color: '#d1d5db' }}>Sem tarefas aqui</p>
                               </div>
@@ -538,12 +538,12 @@ export default function TarefasPage() {
                           </div>
 
                           {/* Paginação */}
-                          <div className="px-3">
+                          <div className="px-3 shrink-0">
                             <Pager page={page} totalPages={totalPages} onChange={p => setColPage(prev => ({ ...prev, [col]: p }))} />
                           </div>
 
                           {/* Add button */}
-                          <div className="p-3 pt-2">
+                          <div className="p-3 pt-2 shrink-0">
                             <button onClick={handleNew}
                               className="w-full py-2 rounded-xl text-xs font-semibold transition-all hover:opacity-80"
                               style={{ background: cfg.bg, color: cfg.color, border: `1px dashed ${cfg.color}40` }}>
@@ -674,51 +674,99 @@ export default function TarefasPage() {
                 )}
               </div>
 
-              {/* Carga por usuário */}
-              <div className="rounded-2xl overflow-hidden bg-white"
-                style={{ border: '0.5px solid rgba(201,169,110,0.2)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-                <div style={{ height: 3, background: GOLD }} />
-                <div className="flex items-center gap-2.5 px-4 py-3.5"
-                  style={{ borderBottom: '0.5px solid rgba(201,169,110,0.12)' }}>
-                  <div className="h-8 w-8 rounded-xl flex items-center justify-center" style={{ background: `${GOLD}12` }}>
-                    <Users style={{ width: 15, height: 15, color: GOLD_D }} />
-                  </div>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1c1917' }}>Carga por Usuário</span>
-                </div>
-                <div className="p-4 space-y-4">
-                  {team.map(member => {
-                    const mTarefas = tarefasPorUsuario[member.id] || [];
-                    const ativas   = mTarefas.filter(t => t.status !== 'Concluída').length;
-                    const urgentes = mTarefas.filter(t => t.prioridade === 'Urgente' && t.status !== 'Concluída').length;
-                    const maxCarga = Math.max(...team.map(m => (tarefasPorUsuario[m.id] || []).filter(t => t.status !== 'Concluída').length), 1);
-                    const pct = Math.round((ativas / maxCarga) * 100);
-                    const barColor = urgentes > 0 ? '#dc2626' : pct > 70 ? GOLD : BROWN;
+            </div>
+          </div>
 
-                    return (
-                      <div key={member.id}>
-                        <div className="flex items-center gap-2.5 mb-1.5">
-                          <div className="relative shrink-0">
-                            <div className="h-7 w-7 rounded-xl flex items-center justify-center text-[10px] font-black"
-                              style={{ background: `${BROWN}10`, color: BROWN }}>
-                              {getInitials(member.fullName)}
-                            </div>
-                            <div className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full"
-                              style={{ background: member.online ? '#22c55e' : '#d1d5db', border: '1.5px solid white' }} />
-                          </div>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: '#1c1917', flex: 1 }} className="truncate">
-                            {member.nome || member.fullName.split(' ')[0]}
-                          </span>
-                          <span style={{ fontSize: 12, fontWeight: 800, color: urgentes > 0 ? '#dc2626' : '#9ca3af' }}>{ativas}</span>
-                        </div>
-                        <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(201,169,110,0.12)' }}>
-                          <div className="h-full rounded-full transition-all duration-700"
-                            style={{ width: `${pct}%`, background: barColor }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+          {/* ── Carga por Usuário (largura total) ── */}
+          <div className="rounded-2xl overflow-hidden bg-white"
+            style={{ border: '0.5px solid rgba(201,169,110,0.2)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+            <div style={{ height: 3, background: GOLD }} />
+            <div className="flex items-center gap-2.5 px-4 py-3.5"
+              style={{ borderBottom: '0.5px solid rgba(201,169,110,0.12)' }}>
+              <div className="h-8 w-8 rounded-xl flex items-center justify-center" style={{ background: `${GOLD}12` }}>
+                <Users style={{ width: 15, height: 15, color: GOLD_D }} />
               </div>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#1c1917' }}>Carga por Usuário</span>
+            </div>
+            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {team.map(member => {
+                const mTarefas    = tarefasPorUsuario[member.id] || [];
+                const pendentes   = mTarefas.filter(t => t.status === 'Pendente').length;
+                const emAndamento = mTarefas.filter(t => t.status === 'Em Andamento').length;
+                const concluidas  = mTarefas.filter(t => t.status === 'Concluída').length;
+                const ativas      = pendentes + emAndamento;
+                const urgentes    = mTarefas.filter(t => t.prioridade === 'Urgente' && t.status !== 'Concluída' && t.status !== 'Cancelada').length;
+                const atrasadas   = mTarefas.filter(t => t.data_limite && isPast(new Date(t.data_limite)) && !isToday(new Date(t.data_limite)) && t.status !== 'Concluída' && t.status !== 'Cancelada').length;
+                const aguardando  = mTarefas.filter(t => t.aprovacao_status === 'aguardando_aprovacao').length;
+                const maxCarga    = Math.max(...team.map(m => (tarefasPorUsuario[m.id] || []).filter(t => t.status === 'Pendente' || t.status === 'Em Andamento').length), 1);
+                const pct         = Math.round((ativas / maxCarga) * 100);
+                const barColor    = urgentes > 0 ? '#dc2626' : atrasadas > 0 ? GOLD_D : BROWN;
+
+                return (
+                  <div key={member.id} className="rounded-xl p-3"
+                    style={{ border: `0.5px solid ${urgentes > 0 || atrasadas > 0 ? 'rgba(220,38,38,0.2)' : 'rgba(201,169,110,0.18)'}`, background: '#fefdfb' }}>
+                    <div className="flex items-center gap-2.5 mb-2.5">
+                      <div className="relative shrink-0">
+                        <div className="h-8 w-8 rounded-xl flex items-center justify-center text-[11px] font-black"
+                          style={{ background: `${BROWN}10`, color: BROWN }}>
+                          {getInitials(member.fullName)}
+                        </div>
+                        <div className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full"
+                          style={{ background: member.online ? '#22c55e' : '#d1d5db', border: '1.5px solid white' }} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p style={{ fontSize: 12, fontWeight: 700, color: '#1c1917' }} className="truncate">
+                          {member.nome || member.fullName.split(' ')[0]}
+                        </p>
+                        <p style={{ fontSize: 10, color: member.online ? '#16a34a' : '#9ca3af' }}>
+                          {member.online ? '● Online' : '○ Offline'}
+                        </p>
+                      </div>
+                      <span style={{ fontSize: 15, fontWeight: 900, color: urgentes > 0 ? '#dc2626' : BROWN }}>{ativas}</span>
+                    </div>
+
+                    <div className="h-1.5 rounded-full overflow-hidden mb-2.5" style={{ background: 'rgba(201,169,110,0.12)' }}>
+                      <div className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${pct}%`, background: barColor }} />
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1.5 mb-1.5">
+                      <div className="rounded-lg py-1.5 text-center" style={{ background: 'rgba(245,158,11,0.08)' }}>
+                        <p style={{ fontSize: 12, fontWeight: 800, color: '#d97706' }}>{pendentes}</p>
+                        <p style={{ fontSize: 8, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>Pend.</p>
+                      </div>
+                      <div className="rounded-lg py-1.5 text-center" style={{ background: 'rgba(59,130,246,0.08)' }}>
+                        <p style={{ fontSize: 12, fontWeight: 800, color: '#2563eb' }}>{emAndamento}</p>
+                        <p style={{ fontSize: 8, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>And.</p>
+                      </div>
+                      <div className="rounded-lg py-1.5 text-center" style={{ background: 'rgba(22,163,74,0.08)' }}>
+                        <p style={{ fontSize: 12, fontWeight: 800, color: '#16a34a' }}>{concluidas}</p>
+                        <p style={{ fontSize: 8, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>Concl.</p>
+                      </div>
+                    </div>
+
+                    {(urgentes > 0 || atrasadas > 0 || aguardando > 0) && (
+                      <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                        {urgentes > 0 && (
+                          <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 8, background: '#fef2f2', color: '#dc2626' }}>
+                            {urgentes} urgente{urgentes > 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {atrasadas > 0 && (
+                          <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 8, background: '#fffbeb', color: GOLD_D }}>
+                            {atrasadas} atrasada{atrasadas > 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {aguardando > 0 && (
+                          <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 8, background: `${GOLD}15`, color: GOLD_D }}>
+                            {aguardando} p/ aprovar
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
