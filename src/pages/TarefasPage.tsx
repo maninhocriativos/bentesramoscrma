@@ -630,11 +630,11 @@ export default function TarefasPage() {
               <div className="space-y-4">
 
               {/* Alertas */}
-              <div className="rounded-2xl overflow-hidden bg-white"
-                style={{ border: `0.5px solid ${alertas.length > 0 ? 'rgba(220,38,38,0.2)' : 'rgba(201,169,110,0.2)'}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-                <div style={{ height: 3, background: alertas.length > 0 ? '#dc2626' : '#16a34a' }} />
-                <div className="flex items-center gap-2.5 px-4 py-3.5"
-                  style={{ borderBottom: '0.5px solid rgba(201,169,110,0.12)' }}>
+              <div className="rounded-2xl overflow-hidden bg-white flex flex-col"
+                style={{ height: 560, border: `0.5px solid ${alertas.length > 0 ? 'rgba(220,38,38,0.2)' : 'rgba(201,169,110,0.2)'}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                <div style={{ height: 3, background: alertas.length > 0 ? '#dc2626' : '#16a34a' }} className="shrink-0" />
+                <div className="flex items-center gap-2.5 px-4 shrink-0"
+                  style={{ height: 52, borderBottom: '0.5px solid rgba(201,169,110,0.12)' }}>
                   <div className="h-8 w-8 rounded-xl flex items-center justify-center"
                     style={{ background: alertas.length > 0 ? 'rgba(220,38,38,0.08)' : 'rgba(22,163,74,0.08)' }}>
                     <AlertTriangle style={{ width: 15, height: 15, color: alertas.length > 0 ? '#dc2626' : '#16a34a' }} />
@@ -647,29 +647,27 @@ export default function TarefasPage() {
                   )}
                 </div>
                 {alertas.length === 0 ? (
-                  <div className="py-10 text-center px-4">
+                  <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
                     <CheckCircle2 style={{ width: 28, height: 28, color: '#16a34a', margin: '0 auto 8px' }} />
                     <p style={{ fontSize: 13, fontWeight: 700, color: '#1c1917' }}>Tudo em dia!</p>
                     <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 3 }}>Nenhuma tarefa urgente ou atrasada</p>
                   </div>
                 ) : (
-                  <>
-                    {(() => {
-                      const totalPages = Math.max(1, Math.ceil(alertas.length / ALERTAS_PAGE_SIZE));
-                      const page = Math.min(alertaPage, totalPages - 1);
-                      const paged = alertas.slice(page * ALERTAS_PAGE_SIZE, page * ALERTAS_PAGE_SIZE + ALERTAS_PAGE_SIZE);
-                      return (
-                        <>
-                          <div className="p-3 space-y-2">
-                            {paged.map(t => <AlertaItem key={t.id} tarefa={t} onClick={() => setDetailTarefa(t)} />)}
-                          </div>
-                          <div className="px-3 pb-3">
-                            <Pager page={page} totalPages={totalPages} onChange={setAlertaPage} />
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </>
+                  (() => {
+                    const totalPages = Math.max(1, Math.ceil(alertas.length / ALERTAS_PAGE_SIZE));
+                    const page = Math.min(alertaPage, totalPages - 1);
+                    const paged = alertas.slice(page * ALERTAS_PAGE_SIZE, page * ALERTAS_PAGE_SIZE + ALERTAS_PAGE_SIZE);
+                    return (
+                      <>
+                        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                          {paged.map(t => <AlertaItem key={t.id} tarefa={t} onClick={() => setDetailTarefa(t)} />)}
+                        </div>
+                        <div className="px-3 shrink-0" style={{ height: 46 }}>
+                          <Pager page={page} totalPages={totalPages} onChange={setAlertaPage} />
+                        </div>
+                      </>
+                    );
+                  })()
                 )}
               </div>
 
