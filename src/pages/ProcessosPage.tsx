@@ -236,13 +236,22 @@ function ProcessosPage() {
   // (state.novoProcesso) — o próprio ProcessoModalExpanded busca o resto via
   // consulta-processos (mesmo autofetch que já existe pra CNJ digitado à mão).
   useEffect(() => {
-    const state = location.state as { novoProcesso?: Partial<Processo>; linkIntimacaoId?: string } | null;
+    const state = location.state as { novoProcesso?: Partial<Processo>; linkIntimacaoId?: string; abrirProcessoId?: string } | null;
     if (state?.novoProcesso) {
       linkIntimacaoIdRef.current = state.linkIntimacaoId || null;
       setSelectedProcesso(state.novoProcesso as Processo);
       setIsNew(true);
       setIsModalOpen(true);
       // Limpa o state da navegação pra não reabrir num refresh/voltar.
+      navigate(location.pathname, { replace: true, state: null });
+    } else if (state?.abrirProcessoId) {
+      // Vem do modal de Intimações ("Visualizar processo") — busca direto no banco
+      // em vez de depender da lista `processos` já ter carregado (evita corrida
+      // entre este efeito e o fetch inicial da página).
+      const id = state.abrirProcessoId;
+      supabase.from('processos').select('*').eq('id', id).maybeSingle().then(({ data }) => {
+        if (data) { setSelectedProcesso(data as Processo); setIsNew(false); setIsModalOpen(true); }
+      });
       navigate(location.pathname, { replace: true, state: null });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

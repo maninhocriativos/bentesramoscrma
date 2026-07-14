@@ -643,6 +643,9 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   const [intimacoesVinculadas, setIntimacoesVinculadas] = useState<Array<{ id: string; tipo_intimacao: string | null; conteudo: string | null; data_disponibilizacao: string | null; fonte: string | null }>>([]);
   const [intimacoesLoading,    setIntimacoesLoading]    = useState(false);
   const [membros,              setMembros]              = useState<{ id: string; nome: string | null; sobrenome: string | null; email: string | null }[]>([]);
+  const [despesas,             setDespesas]             = useState<Array<{ id: string; tipo: string | null; descricao: string | null; valor: number | null; data_despesa: string | null; status: string | null }>>([]);
+  const [honorarios,           setHonorarios]           = useState<Array<{ id: string; tipo: string | null; valor_total: number | null; valor_entrada: number | null; forma_pagamento: string | null; status: string | null; data_contrato: string | null }>>([]);
+  const [financeiroLoading,    setFinanceiroLoading]    = useState(false);
 
   useEffect(() => { setLeads(leadsInit); }, [leadsInit]);
   const movimentosEnriquecidos = useMemo(() => enrichMovements(movimentos), [movimentos]);
@@ -1134,6 +1137,20 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
     setIntimacoesLoading(false);
   }, [processo?.id, isNew]);
 
+  // Financeiro do processo — dados reais de despesas e honorários (ambas com
+  // processo_id próprio), não inventados.
+  const fetchFinanceiro = useCallback(async () => {
+    if (!processo?.id || isNew) return;
+    setFinanceiroLoading(true);
+    const [despesasRes, honorariosRes] = await Promise.all([
+      supabase.from('despesas').select('id, tipo, descricao, valor, data_despesa, status').eq('processo_id', processo.id).order('data_despesa', { ascending: false }),
+      supabase.from('honorarios').select('id, tipo, valor_total, valor_entrada, forma_pagamento, status, data_contrato').eq('processo_id', processo.id).order('data_contrato', { ascending: false }),
+    ]);
+    setDespesas((despesasRes.data as any[]) || []);
+    setHonorarios((honorariosRes.data as any[]) || []);
+    setFinanceiroLoading(false);
+  }, [processo?.id, isNew]);
+
   useEffect(() => {
     if (membros.length === 0) {
       supabase.from('perfis').select('id, nome, sobrenome, email').eq('aprovado', true)
@@ -1144,6 +1161,9 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
     }
     if (activeTab === 'movimentos') {
       fetchIntimacoesVinculadas();
+    }
+    if (activeTab === 'financeiro') {
+      fetchFinanceiro();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, processo?.id]);
@@ -1328,6 +1348,11 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                         {processoTarefas.length}
                       </span>
                     )}
+                  </TabsTrigger>
+                )}
+                {!isNew && (
+                  <TabsTrigger value="financeiro" className="rounded-lg text-xs h-7 px-4 gap-1.5 data-[state=active]:shadow-sm data-[state=active]:bg-card font-semibold">
+                    <DollarSign className="h-3.5 w-3.5" /> Financeiro
                   </TabsTrigger>
                 )}
               </TabsList>
@@ -1989,6 +2014,82 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                         />
                       ))}
                     </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </TabsContent>
+
+            {/* ── TAB FINANCEIRO ── */}
+            <TabsContent value="financeiro" className="flex-1 min-h-0 mt-0 overflow-hidden">
+              <ScrollArea className="h-full">
+                <div className="px-6 py-5 pb-16 space-y-5">
+                  {financeiroLoading ? (
+                    <div className="flex items-center justify-center py-10 gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Carregando financeiro...</span>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Honorários */}
+                      <div>
+                        <SectionTitle icon={DollarSign} label="Honorários" bg="bg-emerald-500/10" color="text-emerald-600 dark:text-emerald-400" />
+                        {honorarios.length === 0 ? (
+                          <div className="rounded-2xl border-2 border-dashed border-border/40 py-8 text-center">
+                            <p className="text-sm text-muted-foreground">Nenhum honorário cadastrado para este processo.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {honorarios.map(h => (
+                              <div key={h.id} className="rounded-xl border border-border/40 bg-card p-3.5">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <p className="text-sm font-semibold text-foreground">{h.tipo || 'Honorário'}</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      {h.forma_pagamento || '—'}{h.data_contrato ? ` · Contrato: ${new Date(h.data_contrato + 'T12:00:00').toLocaleDateString('pt-BR')}` : ''}
+                                    </p>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{fmtMoney(h.valor_total) ? `R$ ${fmtMoney(h.valor_total)}` : '—'}</p>
+                                    {h.valor_entrada ? <p className="text-[10px] text-muted-foreground">Entrada: R$ {fmtMoney(h.valor_entrada)}</p> : null}
+                                  </div>
+                                </div>
+                                {h.status && (
+                                  <span className="inline-block mt-2 text-[10px] font-bold px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/50">{h.status}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Despesas */}
+                      <div>
+                        <SectionTitle icon={Hash} label="Despesas" bg="bg-amber-500/10" color="text-amber-600 dark:text-amber-400" />
+                        {despesas.length === 0 ? (
+                          <div className="rounded-2xl border-2 border-dashed border-border/40 py-8 text-center">
+                            <p className="text-sm text-muted-foreground">Nenhuma despesa cadastrada para este processo.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {despesas.map(d => (
+                              <div key={d.id} className="rounded-xl border border-border/40 bg-card p-3.5">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <p className="text-sm font-semibold text-foreground">{d.tipo || 'Despesa'}</p>
+                                    {d.descricao && <p className="text-xs text-muted-foreground mt-0.5">{d.descricao}</p>}
+                                    {d.data_despesa && <p className="text-[10px] text-muted-foreground/70 mt-0.5">{new Date(d.data_despesa + 'T12:00:00').toLocaleDateString('pt-BR')}</p>}
+                                  </div>
+                                  <p className="text-sm font-bold text-amber-600 dark:text-amber-400 shrink-0">{fmtMoney(d.valor) ? `R$ ${fmtMoney(d.valor)}` : '—'}</p>
+                                </div>
+                                {d.status && (
+                                  <span className="inline-block mt-2 text-[10px] font-bold px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/50">{d.status}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
               </ScrollArea>

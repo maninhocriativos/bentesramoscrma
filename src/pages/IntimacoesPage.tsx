@@ -732,7 +732,10 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const [comentario, setComentario] = useState('');
   const [processoSearch, setProcessoSearch] = useState('');
   const [processoResults, setProcessoResults] = useState<any[]>([]);
-  const [linkedProcesso, setLinkedProcesso] = useState<{ id: string | null; numero: string; titulo: string } | null>(null);
+  const [linkedProcesso, setLinkedProcesso] = useState<{
+    id: string | null; numero: string; titulo: string; area?: string | null; assunto?: string | null;
+    advogado_responsavel?: string | null; tribunal?: string | null; partes_json?: any[] | null;
+  } | null>(null);
   const [linkedClienteId, setLinkedClienteId] = useState<string | null>(null);
   const navigate = useNavigate();
   const [showDropdown, setShowDropdown] = useState(false);
@@ -796,15 +799,19 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     if (term.length < 2) { setProcessoResults([]); setShowDropdown(false); return; }
     const { data } = await supabase
       .from('processos')
-      .select('id, numero_processo, titulo_acao, nome_cliente')
+      .select('id, numero_processo, titulo_acao, nome_cliente, area, assunto, advogado_responsavel, tribunal, partes_json, cliente_id')
       .or(`numero_processo.ilike.%${term}%,titulo_acao.ilike.%${term}%,nome_cliente.ilike.%${term}%`)
       .limit(10);
     setProcessoResults((data as any[]) || []);
     setShowDropdown(true);
   };
 
-  const selecionarProcesso = async (p: { id: string; numero_processo: string; titulo_acao?: string; nome_cliente?: string; cliente_id?: string | null }) => {
-    setLinkedProcesso({ id: p.id, numero: p.numero_processo || '', titulo: p.titulo_acao || p.nome_cliente || '' });
+  const selecionarProcesso = async (p: { id: string; numero_processo: string; titulo_acao?: string; nome_cliente?: string; cliente_id?: string | null; area?: string | null; assunto?: string | null; advogado_responsavel?: string | null; tribunal?: string | null; partes_json?: any[] | null }) => {
+    setLinkedProcesso({
+      id: p.id, numero: p.numero_processo || '', titulo: p.titulo_acao || p.nome_cliente || '',
+      area: p.area, assunto: p.assunto, advogado_responsavel: p.advogado_responsavel,
+      tribunal: p.tribunal, partes_json: p.partes_json,
+    });
     setLinkedClienteId(p.cliente_id || null);
     setProcessoSearch('');
     setShowDropdown(false);
@@ -868,11 +875,15 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     (async () => {
       const { data } = await supabase
         .from('processos')
-        .select('id, numero_processo, titulo_acao, nome_cliente, cliente_id')
+        .select('id, numero_processo, titulo_acao, nome_cliente, cliente_id, area, assunto, advogado_responsavel, tribunal, partes_json')
         .eq('id', intimacao.processo_id)
         .maybeSingle();
       if (data) {
-        setLinkedProcesso({ id: data.id, numero: data.numero_processo || '', titulo: data.titulo_acao || data.nome_cliente || '' });
+        setLinkedProcesso({
+          id: data.id, numero: data.numero_processo || '', titulo: data.titulo_acao || data.nome_cliente || '',
+          area: data.area, assunto: (data as any).assunto, advogado_responsavel: data.advogado_responsavel,
+          tribunal: data.tribunal, partes_json: (data.partes_json as any[]) || [],
+        });
         setLinkedClienteId(data.cliente_id || null);
       }
     })();
@@ -1229,9 +1240,20 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
             <SidebarField label="Processo">
               {linkedProcesso ? (
                 <div className="space-y-1">
-                  <p className="text-sm font-mono font-bold text-primary">{linkedProcesso.numero}</p>
-                  {linkedProcesso.titulo && <p className="text-xs text-muted-foreground line-clamp-2">{linkedProcesso.titulo}</p>}
-                  <button className="text-xs text-primary hover:underline" onClick={desvincularProcesso}>Remover vínculo</button>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-mono font-bold text-primary">{linkedProcesso.numero}</p>
+                    {linkedProcesso.numero && (
+                      <button onClick={() => void copyTextToClipboard(linkedProcesso.numero)} className="text-muted-foreground/50 hover:text-foreground transition-colors">
+                        <Copy className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    className="text-xs text-primary font-semibold hover:underline"
+                    onClick={() => navigate('/processos', { state: { abrirProcessoId: linkedProcesso.id } })}
+                  >
+                    Visualizar processo →
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1265,8 +1287,56 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
               )}
             </SidebarField>
 
-            {/* Responsável */}
-            <SidebarField label="Responsável">
+            {/* Campos abaixo só existem quando há um processo vinculado — dados
+                reais puxados de processos.partes_json/area/assunto/advogado_responsavel,
+                nunca inventados. */}
+            {linkedProcesso && (
+              <>
+                <SidebarField label="Partes envolvidas">
+                  {linkedProcesso.partes_json && linkedProcesso.partes_json.length > 0 ? (
+                    <div className="space-y-2">
+                      {linkedProcesso.partes_json.slice(0, 4).map((parte: any, idx: number) => (
+                        <div key={idx}>
+                          <p className="text-sm font-medium text-foreground leading-snug">{parte.nome}</p>
+                          {parte.celular && (
+                            <a href={`https://wa.me/55${parte.celular.replace(/\D/g, '')}`} target="_blank" rel="noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 mt-0.5">
+                              📱 {parte.celular}
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">—</span>
+                  )}
+                </SidebarField>
+
+                <SidebarField label="Grupo de ação">
+                  <span className="text-sm text-foreground">{linkedProcesso.area || '—'}</span>
+                </SidebarField>
+
+                <SidebarField label="Tipo de ação">
+                  <span className="text-sm text-foreground">{linkedProcesso.assunto || '—'}</span>
+                </SidebarField>
+
+                <SidebarField label="Responsável pelo processo">
+                  <span className="text-sm text-foreground">
+                    {linkedProcesso.advogado_responsavel ? linkedProcesso.advogado_responsavel.replace(/\s*\(OAB.*\)/i, '') : '—'}
+                  </span>
+                </SidebarField>
+
+                <div className="py-3">
+                  <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg w-full gap-1.5 text-muted-foreground" onClick={desvincularProcesso}>
+                    <X className="h-3.5 w-3.5" /> Desvincular processo
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* Responsável (da intimação — quem na equipe está acompanhando esta publicação) */}
+            <SidebarField label="Responsável pela intimação">
               <div className="flex items-center gap-2">
                 <div className="h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
                   style={{ background: `linear-gradient(135deg, ${tc.avatarFrom}, ${tc.avatarTo})` }}>
