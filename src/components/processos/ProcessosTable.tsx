@@ -111,11 +111,18 @@ export function ProcessosTable({ processos, onProcessoClick, leads, selectionMod
       const lead = leads.find(l => l.id === processo.cliente_id);
       if (lead?.nome) return lead.nome;
     }
-    // 3. parte ativa/autor no partes_json
+    // 3. parte ativa/autor no partes_json — cobre a terminologia de cada tipo de
+    // ação (cível usa "autor", trabalhista usa "reclamante", execução usa
+    // "exequente", recursos usam "recorrente/apelante/agravante" etc.)
     const partes = processo.partes_json || [];
+    const TERMOS_POLO_ATIVO = [
+      'autor', 'requerente', 'reclamante', 'exequente', 'exeqüente',
+      'recorrente', 'apelante', 'agravante', 'impetrante', 'embargante',
+      'demandante', 'suscitante',
+    ];
     const ativo = partes.find(p =>
       p.polo?.toLowerCase() === 'ativo' || p.polo === 'AT' ||
-      p.tipo?.toLowerCase()?.includes('autor') || p.tipo?.toLowerCase()?.includes('requerente')
+      TERMOS_POLO_ATIVO.some(t => p.tipo?.toLowerCase()?.includes(t))
     );
     if (ativo?.nome) return ativo.nome;
     // 4. qualquer parte que nao seja advogado/juiz

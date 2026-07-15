@@ -348,9 +348,19 @@ async function persistirProcesso(processo: any, processoIdExistente?: string | n
 
   if (advogadoResponsavel) dadosProcesso.advogado_responsavel = advogadoResponsavel;
 
-  // Popula nome_cliente do polo AT (Autor) — nunca do Réu
+  // Popula nome_cliente do polo AT — nunca do Réu. `polo === 'AT'` é o sinal mais
+  // confiável (não depende de terminologia); o fallback por `tipo` cobre os casos em
+  // que só temos o rótulo cru da fonte (trabalhista usa "Reclamante", execução usa
+  // "Exequente", recursos usam "Recorrente/Apelante/Agravante" etc.).
   if (!dadosProcesso.nome_cliente && Array.isArray(processo.partes)) {
-    const autor = processo.partes.find((p: any) => p.polo === 'AT' || p.tipo === 'Autor' || p.tipo === 'Requerente');
+    const TERMOS_POLO_ATIVO = [
+      'autor', 'requerente', 'reclamante', 'exequente', 'exeqüente',
+      'recorrente', 'apelante', 'agravante', 'impetrante', 'embargante',
+      'demandante', 'suscitante',
+    ];
+    const autor = processo.partes.find((p: any) =>
+      p.polo === 'AT' || TERMOS_POLO_ATIVO.some(t => String(p.tipo || '').toLowerCase().includes(t))
+    );
     if (autor?.nome && autor.nome !== 'Desconhecido') dadosProcesso.nome_cliente = autor.nome.toUpperCase();
     if (autor?.documento) { const digits = String(autor.documento).replace(/\D/g, ''); if (digits.length >= 11) dadosProcesso.cpf_cliente = digits; }
   }

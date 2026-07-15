@@ -807,7 +807,15 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
       if (error) throw error;
       if (data?.encontrado && data?.processo) {
         const proc = data.processo; const fields = extractFromProc(proc);
-        const autor = proc.partes?.find((p: any) => p.tipo === 'Autor' || p.polo?.toUpperCase() === 'AT');
+        const TERMOS_POLO_ATIVO = [
+          'autor', 'requerente', 'reclamante', 'exequente', 'exeqüente',
+          'recorrente', 'apelante', 'agravante', 'impetrante', 'embargante',
+          'demandante', 'suscitante',
+        ];
+        const autor = proc.partes?.find((p: any) =>
+          p.polo?.toUpperCase() === 'AT' ||
+          TERMOS_POLO_ATIVO.some(t => (p.tipo || '').toLowerCase().includes(t))
+        );
         let clienteId = '';
         if (autor?.nome) { const norm = autor.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); const match = leads.find(l => { const ln = (l.nome || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); return ln.includes(norm) || norm.includes(ln); }); if (match) clienteId = match.id; }
         const adv = autor?.advogados?.[0];
