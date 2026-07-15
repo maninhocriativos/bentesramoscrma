@@ -253,6 +253,60 @@ function substituirPrintNoDocx(zip: PizZip, png: PrintImagem): boolean {
   return true;
 }
 
+// Anexa prints adicionais como novos parágrafos (um por página, centralizados) logo
+// antes do <w:sectPr> final do corpo — ou seja, ao final do documento. Usa DrawingML
+// moderno (independente do template usar VML ou DrawingML na imagem original) com os
+// namespaces a:/pic: declarados inline, já que nem todo modelo os declara na raiz.
+function adicionarPrintsExtras(zip: PizZip, images: PrintImagem[]): void {
+  if (images.length === 0) return;
+
+  const relsPath = 'word/_rels/document.xml.rels';
+  const relsFile = zip.file(relsPath);
+  if (!relsFile) return;
+  let relsXml = relsFile.asText();
+
+  const existingIds = [...relsXml.matchAll(/Id="rId(\d+)"/g)].map(m => parseInt(m[1], 10));
+  let nextId = (existingIds.length ? Math.max(...existingIds) : 0) + 1;
+
+  let doc = zip.file('word/document.xml')?.asText() || '';
+  const PAGE_WIDTH_EMU = 6120130; // largura útil aproximada de uma A4 com margens padrão
+
+  let newRelsEntries = '';
+  let newParagraphs = '';
+
+  images.forEach((img, idx) => {
+    const rId = `rId${nextId++}`;
+    const mediaName = `image_print_extra_${Date.now()}_${idx}.png`;
+    zip.file(`word/media/${mediaName}`, img.bytes);
+    newRelsEntries += `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${mediaName}"/>`;
+
+    const cx = PAGE_WIDTH_EMU;
+    const cy = img.width && img.height ? Math.round((cx * img.height) / img.width) : Math.round(cx * 0.75);
+    const drawingId = 900000 + idx;
+
+    newParagraphs += `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:noProof/></w:rPr><w:drawing>` +
+      `<wp:inline distT="0" distB="0" distL="0" distR="0">` +
+      `<wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>` +
+      `<wp:docPr id="${drawingId}" name="PrintExtra${idx}"/>` +
+      `<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>` +
+      `<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+      `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+      `<pic:nvPicPr><pic:cNvPr id="${drawingId}" name="PrintExtra${idx}"/><pic:cNvPicPr/></pic:nvPicPr>` +
+      `<pic:blipFill><a:blip r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+      `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
+      `</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
+  });
+
+  relsXml = relsXml.replace('</Relationships>', newRelsEntries + '</Relationships>');
+  zip.file(relsPath, relsXml);
+
+  const sectPrIdx = doc.lastIndexOf('<w:sectPr');
+  doc = sectPrIdx >= 0
+    ? doc.slice(0, sectPrIdx) + newParagraphs + doc.slice(sectPrIdx)
+    : doc.replace('</w:body>', newParagraphs + '</w:body>');
+  zip.file('word/document.xml', doc);
+}
+
 // ─── Componente de Campo ────────────────────────────────────────────────────────
 
 function FieldInput({
@@ -334,7 +388,7 @@ export default function PeticaoEditarPage() {
   const [generating,     setGenerating]     = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [submitted,      setSubmitted]      = useState(false);
-  const [printFile,      setPrintFile]      = useState<File | null>(null);
+  const [printFiles,     setPrintFiles]      = useState<File[]>([]);
   // Busca de lead do CRM para autopreencher os dados do cliente
   const [leadQuery,   setLeadQuery]   = useState('');
   const [leadResults, setLeadResults] = useState<Array<Record<string, string>>>([]);
@@ -619,19 +673,30 @@ export default function PeticaoEditarPage() {
       const templateData = buildTemplateData(formData, actionName);
       doc.render(templateData);
 
-      // Insere o print do contrato enviado no lugar da imagem do corpo do modelo
-      // (substitui o print antigo que vinha chumbado no template).
+      // Primeiro print: entra no lugar da imagem do corpo do modelo (substitui o
+      // print antigo que vinha chumbado no template). Demais prints (se houver):
+      // anexados como páginas extras no final do documento.
       const outZip = doc.getZip();
-      if (printFile) {
+      if (printFiles.length > 0) {
         try {
-          const png = await fileToPng(printFile);
-          const ok = substituirPrintNoDocx(outZip, png);
+          const primeiroPng = await fileToPng(printFiles[0]);
+          const ok = substituirPrintNoDocx(outZip, primeiroPng);
           if (!ok) {
             toast({ title: 'Aviso', description: 'Este modelo não tem espaço para print — o documento será gerado sem a imagem.', variant: 'destructive' });
           }
         } catch (imgErr) {
           console.error('Falha ao inserir o print no documento:', imgErr);
           toast({ title: 'Aviso', description: 'Não foi possível inserir o print; o documento será gerado sem ele.', variant: 'destructive' });
+        }
+
+        if (printFiles.length > 1) {
+          try {
+            const extrasPng = await Promise.all(printFiles.slice(1).map(fileToPng));
+            adicionarPrintsExtras(outZip, extrasPng);
+          } catch (imgErr) {
+            console.error('Falha ao anexar prints extras:', imgErr);
+            toast({ title: 'Aviso', description: 'Não foi possível anexar todos os prints extras.', variant: 'destructive' });
+          }
         }
       }
 
@@ -813,7 +878,7 @@ export default function PeticaoEditarPage() {
                 </div>
               )}
 
-              {/* Print step — anexar o print do contrato */}
+              {/* Print step — anexar o(s) print(s) do contrato */}
               {isPrintStep && (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 mb-1">
@@ -821,38 +886,52 @@ export default function PeticaoEditarPage() {
                     <h3 className="font-bold text-foreground">Print do contrato</h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Anexe o print do contrato do cliente (CET / proposta). Ele entra no lugar da
-                    imagem de exemplo do modelo, na seção <b>DOS FATOS</b>. Opcional — pode gerar sem.
+                    Anexe o(s) print(s) do contrato do cliente (CET / proposta). O primeiro entra no
+                    lugar da imagem de exemplo do modelo, na seção <b>DOS FATOS</b>; os demais são
+                    adicionados ao final do documento. Opcional — pode gerar sem.
                   </p>
-                  {printFile ? (
-                    <div className="flex items-center gap-4 p-4 rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30">
-                      <img
-                        src={URL.createObjectURL(printFile)}
-                        alt="Prévia do print"
-                        className="h-28 w-28 object-contain rounded-lg border border-border/50 bg-background"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-foreground truncate">{printFile.name}</p>
-                        <p className="text-xs text-muted-foreground">{(printFile.size / 1024).toFixed(0)} KB · pronto para inserir</p>
-                        <label className="inline-flex items-center gap-1.5 mt-2 text-xs font-semibold text-primary cursor-pointer hover:underline">
-                          <Upload className="h-3.5 w-3.5" /> Trocar imagem
-                          <input type="file" accept="image/png,image/jpeg" className="hidden"
-                            onChange={e => setPrintFile(e.target.files?.[0] ?? null)} />
-                        </label>
-                      </div>
-                      <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg" onClick={() => setPrintFile(null)}>
-                        <X className="h-4 w-4" />
-                      </Button>
+
+                  {printFiles.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {printFiles.map((f, i) => (
+                        <div key={i} className="relative p-3 rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30">
+                          <span className="absolute top-2 left-2 h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
+                            {i + 1}
+                          </span>
+                          <Button
+                            variant="ghost" size="icon"
+                            className="absolute top-1 right-1 h-6 w-6 rounded-lg"
+                            onClick={() => setPrintFiles(prev => prev.filter((_, idx) => idx !== i))}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                          <img
+                            src={URL.createObjectURL(f)}
+                            alt={`Print ${i + 1}`}
+                            className="h-28 w-full object-contain rounded-lg border border-border/50 bg-background mt-3"
+                          />
+                          <p className="text-xs font-medium text-foreground truncate mt-2">{f.name}</p>
+                          <p className="text-[11px] text-muted-foreground">{(f.size / 1024).toFixed(0)} KB</p>
+                        </div>
+                      ))}
                     </div>
-                  ) : (
-                    <label className="flex flex-col items-center justify-center gap-2 p-10 rounded-2xl border-2 border-dashed border-border/60 hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer">
-                      <Upload className="h-8 w-8 text-muted-foreground" />
-                      <span className="text-sm font-semibold text-foreground">Clique para anexar o print</span>
-                      <span className="text-xs text-muted-foreground">PNG ou JPG</span>
-                      <input type="file" accept="image/png,image/jpeg" className="hidden"
-                        onChange={e => setPrintFile(e.target.files?.[0] ?? null)} />
-                    </label>
                   )}
+
+                  <label className="flex flex-col items-center justify-center gap-2 p-8 rounded-2xl border-2 border-dashed border-border/60 hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer">
+                    <Upload className="h-7 w-7 text-muted-foreground" />
+                    <span className="text-sm font-semibold text-foreground">
+                      {printFiles.length > 0 ? 'Adicionar mais um print' : 'Clique para anexar o(s) print(s)'}
+                    </span>
+                    <span className="text-xs text-muted-foreground">PNG ou JPG — pode selecionar vários de uma vez</span>
+                    <input
+                      type="file" accept="image/png,image/jpeg" multiple className="hidden"
+                      onChange={e => {
+                        const novos = Array.from(e.target.files ?? []);
+                        if (novos.length) setPrintFiles(prev => [...prev, ...novos]);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
                 </div>
               )}
 
@@ -944,17 +1023,17 @@ export default function PeticaoEditarPage() {
                     )}
                   </div>
 
-                  {/* Lembrete do print anexado (o upload fica no passo "Print") */}
+                  {/* Lembrete do(s) print(s) anexado(s) (o upload fica no passo "Print") */}
                   {temPrint && (
                     <div className={cn(
                       'flex items-center gap-2 p-3 rounded-xl border text-sm',
-                      printFile
+                      printFiles.length > 0
                         ? 'border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400'
                         : 'border-amber-200 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400'
                     )}>
                       <ImageIcon className="h-4 w-4 shrink-0" />
-                      {printFile
-                        ? <span>Print anexado: <b>{printFile.name}</b></span>
+                      {printFiles.length > 0
+                        ? <span>{printFiles.length} print{printFiles.length > 1 ? 's' : ''} anexado{printFiles.length > 1 ? 's' : ''}</span>
                         : <span>Nenhum print anexado — volte ao passo <b>Print</b> se quiser inserir o contrato.</span>}
                     </div>
                   )}
