@@ -93,10 +93,10 @@ function FollowupStatsWidget() {
       const h48ago  = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
 
       const [
-        { count: pipeline_ativo },
-        { count: em_andamento },
-        { count: aguardando_optin },
-        { count: convertidos_automacao },
+        { count: pipeline_ativo, error: errPipeline },
+        { count: em_andamento, error: errAndamento },
+        { count: aguardando_optin, error: errOptin },
+        { count: convertidos_automacao, error: errConvertidos },
       ] = await Promise.all([
         supabase.from('traffic_followups').select('id', { count: 'exact', head: true }).eq('automation_active', true),
         supabase.from('traffic_followups').select('id', { count: 'exact', head: true }).eq('status', 'in_progress'),
@@ -104,21 +104,25 @@ function FollowupStatsWidget() {
         supabase.from('leads_juridicos').select('id', { count: 'exact', head: true })
           .eq('tipo_origem', 'trafego').in('status', ['Ganho', 'Contrato Assinado']),
       ]);
+      if (errPipeline || errAndamento || errOptin || errConvertidos) {
+        console.error('[FollowupStatsWidget] Erro ao buscar contadores:', errPipeline || errAndamento || errOptin || errConvertidos);
+      }
 
       // Reativações de hoje
-      const { data: reativacoesHoje } = await supabase
+      const { data: reativacoesHoje, error: errReativacoes } = await supabase
         .from('manychat_mensagens')
         .select('lead_id, created_at')
         .eq('direcao', 'saida')
         .filter('metadata->>source', 'eq', 'reativacao_antiga')
         .gte('created_at', hojeISO)
         .order('created_at', { ascending: false });
+      if (errReativacoes) console.error('[FollowupStatsWidget] Erro ao buscar reativações de hoje:', errReativacoes);
 
       const enviados_hoje = reativacoesHoje?.length ?? 0;
       const ultimo_envio  = reativacoesHoje?.[0]?.created_at ?? null;
 
       // Enviados recentes (últimas 48h, únicos por lead)
-      const { data: recentRaw } = await supabase
+      const { data: recentRaw, error: errRecent } = await supabase
         .from('manychat_mensagens')
         .select('lead_id, created_at')
         .eq('direcao', 'saida')
@@ -126,6 +130,7 @@ function FollowupStatsWidget() {
         .gte('created_at', h48ago)
         .order('created_at', { ascending: false })
         .limit(30);
+      if (errRecent) console.error('[FollowupStatsWidget] Erro ao buscar enviados recentes:', errRecent);
 
       // Deduplicar por lead (manter o mais recente)
       const uniqueSends = new Map<string, string>();
@@ -171,6 +176,8 @@ function FollowupStatsWidget() {
         ultimo_envio,
         enviados_recentes,
       });
+    } catch (err) {
+      console.error('[FollowupStatsWidget] Erro inesperado ao carregar estatísticas:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);

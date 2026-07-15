@@ -60,10 +60,11 @@ export function AgendaPrazosWidget() {
     tarefas
       .filter(t => t.prioridade === 'Urgente' && (t.status === 'Pendente' || t.status === 'Em Andamento'))
       .forEach(t => {
-        const d = t.data_limite ? new Date(t.data_limite) : new Date();
+        const prazo = t.prazo_fatal || t.data_limite;
+        if (!prazo) return; // sem prazo real — não inventa uma data
         result.push({
           id: t.id, type: 'tarefa',
-          title: t.titulo, date: d, icon: AlertTriangle,
+          title: t.titulo, date: new Date(prazo), icon: AlertTriangle,
           iconBg: 'rgba(201,169,110,0.1)', iconColor: '#b8922a',
           route: '/tarefas',
         });

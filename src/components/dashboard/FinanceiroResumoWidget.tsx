@@ -27,7 +27,7 @@ export function FinanceiroResumoWidget() {
       const mesFim = endOfMonth(now).toISOString();
       const hoje = now.toISOString().split('T')[0];
 
-      const [{ data: pagas }, { data: pendentes }, { data: atrasadas }] = await Promise.all([
+      const [{ data: pagas, error: e1 }, { data: pendentes, error: e2 }, { data: atrasadas, error: e3 }] = await Promise.all([
         supabase.from('parcelas').select('valor').eq('status', 'Pago')
           .gte('data_pagamento', mesInicio).lte('data_pagamento', mesFim),
         supabase.from('parcelas').select('valor').eq('status', 'Pendente').gte('data_vencimento', hoje),
@@ -35,6 +35,11 @@ export function FinanceiroResumoWidget() {
       ]);
 
       if (!active) return;
+      if (e1 || e2 || e3) {
+        console.error('[FinanceiroResumoWidget] Erro ao buscar parcelas:', e1 || e2 || e3);
+        setLoading(false);
+        return;
+      }
       setStats({
         recebidoMes:   (pagas     || []).reduce((s, p) => s + Number(p.valor), 0),
         aReceber:      (pendentes || []).reduce((s, p) => s + Number(p.valor), 0),

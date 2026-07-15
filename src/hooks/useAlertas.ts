@@ -17,6 +17,7 @@ export interface Alerta {
 export function useAlertas(leads: Lead[], processos: Processo[]) {
   const [alertasRetomada, setAlertasRetomada] = useState<Alerta[]>([]);
   const [alertasParcelas, setAlertasParcelas] = useState<Alerta[]>([]);
+  const [alertasPrazos, setAlertasPrazos] = useState<Alerta[]>([]);
 
   // Buscar alertas de leads frios que responderam
   useEffect(() => {
@@ -97,6 +98,43 @@ export function useAlertas(leads: Lead[], processos: Processo[]) {
     return () => clearInterval(interval);
   }, []);
 
+  // Prazos fatais de tarefas vinculadas a processos, vencendo nos próximos 3 dias
+  useEffect(() => {
+    const fetchPrazosProcessos = async () => {
+      const now = new Date();
+      const today = now.toISOString().slice(0, 10);
+      const limite = addDays(now, 3).toISOString().slice(0, 10);
+      const { data } = await supabase
+        .from('tarefas')
+        .select('id, titulo, prazo_fatal, processo_id')
+        .not('processo_id', 'is', null)
+        .not('prazo_fatal', 'is', null)
+        .gte('prazo_fatal', today)
+        .lte('prazo_fatal', limite)
+        .not('status', 'in', '("Concluída","Cancelada")')
+        .order('prazo_fatal', { ascending: true })
+        .limit(20);
+
+      if (data) {
+        const alertas: Alerta[] = data.map((t) => {
+          const diasRestantes = differenceInDays(new Date(t.prazo_fatal as string), now);
+          return {
+            id: `deadline-${t.id}`,
+            tipo: 'prazo' as const,
+            titulo: 'Prazo Próximo',
+            descricao: `${t.titulo} vence em ${diasRestantes} dia(s)`,
+            prioridade: diasRestantes <= 1 ? 'alta' as const : 'media' as const,
+            processoId: t.processo_id as string,
+          };
+        });
+        setAlertasPrazos(alertas);
+      }
+    };
+    fetchPrazosProcessos();
+    const interval = setInterval(fetchPrazosProcessos, 300_000);
+    return () => clearInterval(interval);
+  }, []);
+
   const alertas = useMemo(() => {
     const now = new Date();
     const result: Alerta[] = [];
@@ -154,33 +192,12 @@ export function useAlertas(leads: Lead[], processos: Processo[]) {
       });
     }
 
-    // 4. Prazos próximos (processos - usando created_at como referência por enquanto)
-    // Nota: Em um cenário real, você teria uma coluna de data_prazo
-    processos.forEach(processo => {
-      if (processo.status === 'Em Andamento' && processo.created_at) {
-        // Simulando prazo como 30 dias após criação
-        const prazoEstimado = addDays(new Date(processo.created_at), 30);
-        const diasRestantes = differenceInDays(prazoEstimado, now);
-        
-        if (diasRestantes <= 3 && diasRestantes >= 0) {
-          result.push({
-            id: `deadline-${processo.id}`,
-            tipo: 'prazo',
-            titulo: 'Prazo Próximo',
-            descricao: `${processo.titulo_acao || 'Processo'} vence em ${diasRestantes} dia(s)`,
-            prioridade: diasRestantes <= 1 ? 'alta' : 'media',
-            processoId: processo.id,
-          });
-        }
-      }
-    });
-
     // Ordenar por prioridade
-    return [...alertasRetomada, ...alertasParcelas, ...result].sort((a, b) => {
+    return [...alertasRetomada, ...alertasParcelas, ...alertasPrazos, ...result].sort((a, b) => {
       const prioridadeOrder = { alta: 0, media: 1, baixa: 2 };
       return prioridadeOrder[a.prioridade] - prioridadeOrder[b.prioridade];
     });
-  }, [leads, processos, alertasRetomada, alertasParcelas]);
+  }, [leads, alertasRetomada, alertasParcelas, alertasPrazos]);
 
   return { alertas };
 }

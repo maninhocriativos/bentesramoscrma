@@ -138,7 +138,7 @@ function DashboardPage() {
                 label="Total de Leads"
                 value={stats.total_leads.toLocaleString('pt-BR')}
                 sub={stats.total_leads > 0
-                  ? `${((stats.leads_trafego_convertidos / stats.total_leads) * 100).toFixed(1)}% taxa de conversão`
+                  ? `${((stats.leads_convertidos / stats.total_leads) * 100).toFixed(1)}% taxa de conversão`
                   : 'leads no CRM'}
                 icon={Users}
                 accent="bg-[#3d2b1f]"
