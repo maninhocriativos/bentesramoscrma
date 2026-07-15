@@ -3,7 +3,7 @@ import { DetailSkeleton } from '@/components/ui/PageSkeleton';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Download, FileText, Loader2, CheckCircle2, Edit3,
-  Sparkles, Clock, User, DollarSign, Copy, Archive
+  Sparkles, Clock, User, DollarSign, Copy, Archive, Eye
 } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
@@ -12,11 +12,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import mammoth from 'mammoth';
 
 interface PetitionData {
   id: string;
@@ -45,6 +47,9 @@ export default function PeticaoRevisaoPage() {
   const [petition, setPetition] = useState<PetitionData | null>(null);
   const [versions, setVersions] = useState<VersionData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -83,6 +88,25 @@ export default function PeticaoRevisaoPage() {
     navigate('/peticoes');
   };
 
+  const handlePreview = async (docxUrl: string) => {
+    setPreviewOpen(true);
+    setPreviewLoading(true);
+    setPreviewHtml(null);
+    try {
+      const resp = await fetch(docxUrl);
+      if (!resp.ok) throw new Error('Falha ao baixar o documento');
+      const arrayBuffer = await resp.arrayBuffer();
+      const result = await mammoth.convertToHtml({ arrayBuffer });
+      setPreviewHtml(result.value);
+    } catch (err) {
+      console.error('[PeticaoRevisaoPage] Erro ao gerar pré-visualização:', err);
+      toast({ title: 'Erro', description: 'Não foi possível gerar a pré-visualização', variant: 'destructive' });
+      setPreviewOpen(false);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <AppLayout><AppHeader title="Carregando..." />
@@ -102,12 +126,18 @@ export default function PeticaoRevisaoPage() {
     );
   }
 
-  const fd = petition.form_data_json;
-  const cliente = (fd?.cliente as Record<string, string>) || {};
-  const endereco = (fd?.endereco as Record<string, string>) || {};
-  const banco = (fd?.banco as Record<string, string>) || {};
-  const valores = (fd?.valores as Record<string, unknown>) || {};
-  const pedidos = (valores?.pedidos_selecionados as string[]) || [];
+  // form_data_json é um objeto "chato" (uma chave por campo, ex: nome_completo, cpf,
+  // valor_causa) — não aninhado em cliente/endereco/banco/valores como este card
+  // assumia antes. Também cobre a variante em MAIÚSCULAS que o docxtemplater usa
+  // como alias (NOME_COMPLETO, CPF...), presente em alguns registros mais antigos.
+  const fd = (petition.form_data_json || {}) as Record<string, unknown>;
+  const campo = (...chaves: string[]): string => {
+    for (const chave of chaves) {
+      const v = fd[chave] ?? fd[chave.toUpperCase()];
+      if (v !== undefined && v !== null && String(v).trim()) return String(v);
+    }
+    return '';
+  };
 
   const statusMap: Record<string, { label: string; color: string }> = {
     draft: { label: 'Rascunho', color: 'bg-amber-100 text-amber-700' },
@@ -162,35 +192,37 @@ export default function PeticaoRevisaoPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-4 pb-4 space-y-1 text-sm">
-                    <p><span className="text-muted-foreground">Nome:</span> {cliente.nome_completo || '—'}</p>
-                    <p><span className="text-muted-foreground">CPF:</span> {cliente.cpf || '—'}</p>
-                    <p><span className="text-muted-foreground">Estado Civil:</span> {cliente.estado_civil || '—'}</p>
-                    <p><span className="text-muted-foreground">Profissão:</span> {cliente.profissao || '—'}</p>
-                    <p><span className="text-muted-foreground">Telefone:</span> {cliente.telefone || '—'}</p>
+                    <p><span className="text-muted-foreground">Nome:</span> {campo('nome_completo', 'nome_maiusculo') || '—'}</p>
+                    <p><span className="text-muted-foreground">CPF:</span> {campo('cpf') || '—'}</p>
+                    <p><span className="text-muted-foreground">RG:</span> {campo('rg') || '—'}</p>
+                    <p><span className="text-muted-foreground">Estado Civil:</span> {campo('estado_civil') || '—'}</p>
+                    <p><span className="text-muted-foreground">Profissão:</span> {campo('profissao') || '—'}</p>
                   </CardContent>
                 </Card>
 
                 <Card className="rounded-xl border border-border/30">
                   <CardHeader className="pb-2 pt-4 px-4">
                     <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                      <DollarSign className="h-4 w-4 text-primary" /> Valores e Pedidos
+                      <DollarSign className="h-4 w-4 text-primary" /> Valores e Réu
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="px-4 pb-4 space-y-2 text-sm">
-                    <p><span className="text-muted-foreground">Valor cobrado:</span> {(valores.valor_cobrado as string) || '—'}</p>
-                    <p><span className="text-muted-foreground">Valor da causa:</span> {(valores.valor_total as string) || '—'}</p>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {pedidos.map(p => <Badge key={p} variant="outline" className="text-[10px]">{p}</Badge>)}
-                    </div>
+                  <CardContent className="px-4 pb-4 space-y-1 text-sm">
+                    <p><span className="text-muted-foreground">Banco/Réu:</span> {campo('reu_nome', 'banco_nome') || '—'}</p>
+                    <p><span className="text-muted-foreground">Nº do Contrato:</span> {campo('numero_contrato') || '—'}</p>
+                    <p><span className="text-muted-foreground">Valor do Empréstimo:</span> {campo('valor_emprestimo') ? `R$ ${campo('valor_emprestimo')}` : '—'}</p>
+                    <p><span className="text-muted-foreground">Valor da Causa:</span> {campo('valor_causa') ? `R$ ${campo('valor_causa')}` : '—'}</p>
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Download buttons */}
+              {/* Download / preview buttons */}
               {petition.generated_docx_url && (
                 <>
                   <Separator className="my-4" />
                   <div className="flex items-center gap-3">
+                    <Button variant="outline" className="gap-2 rounded-xl" onClick={() => handlePreview(petition.generated_docx_url!)}>
+                      <Eye className="h-4 w-4" /> Pré-visualizar
+                    </Button>
                     <Button asChild className="gap-2 rounded-xl">
                       <a href={petition.generated_docx_url} target="_blank" rel="noopener noreferrer">
                         <Download className="h-4 w-4" /> Baixar DOCX
@@ -221,11 +253,16 @@ export default function PeticaoRevisaoPage() {
                         </p>
                       </div>
                       {v.generated_docx_url && (
-                        <Button asChild variant="outline" size="sm" className="gap-2 rounded-lg">
-                          <a href={v.generated_docx_url} target="_blank" rel="noopener noreferrer">
-                            <Download className="h-3.5 w-3.5" /> DOCX
-                          </a>
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" size="sm" className="gap-2 rounded-lg" onClick={() => handlePreview(v.generated_docx_url!)}>
+                            <Eye className="h-3.5 w-3.5" /> Ver
+                          </Button>
+                          <Button asChild variant="outline" size="sm" className="gap-2 rounded-lg">
+                            <a href={v.generated_docx_url} target="_blank" rel="noopener noreferrer">
+                              <Download className="h-3.5 w-3.5" /> DOCX
+                            </a>
+                          </Button>
+                        </div>
                       )}
                     </div>
                   ))}
@@ -235,6 +272,30 @@ export default function PeticaoRevisaoPage() {
           )}
         </div>
       </ScrollArea>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-3xl h-[85vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-5 pt-4 pb-3 border-b border-border/50">
+            <DialogTitle className="text-base">Pré-visualização</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto px-8 py-6 bg-muted/20">
+            {previewLoading ? (
+              <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Gerando pré-visualização...
+              </div>
+            ) : previewHtml ? (
+              <div
+                className="docx-preview bg-white rounded-lg shadow-sm p-8 mx-auto max-w-[820px] prose prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: previewHtml }}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                Não foi possível carregar a pré-visualização.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
