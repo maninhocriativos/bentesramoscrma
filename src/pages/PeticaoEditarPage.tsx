@@ -536,7 +536,24 @@ export default function PeticaoEditarPage() {
   const isPrintStep       = currentStepConfig.title === 'Print';
   const progress          = ((currentIdx + 1) / activeSteps.length) * 100;
 
+  // Campos de um passo que ainda estão vazios — todo campo aqui veio de um
+  // {{marcador}} real do modelo .docx, então deixá-lo em branco vira um espaço
+  // vazio na petição final. Sem essa checagem dava pra clicar "Próximo" e depois
+  // "Gerar" com o formulário inteiro vazio, baixando o modelo sem nenhum dado
+  // preenchido (foi exatamente o que aconteceu no teste do Gabriel).
+  const stepMissingFields = (step: StepConfig) =>
+    step.fields.filter(f => !(formData[f.key] || '').trim());
+
+  const firstInvalidStepIdx = () =>
+    activeSteps.findIndex(s => s.title !== 'Revisão' && s.title !== 'Print' && stepMissingFields(s).length > 0);
+
   const goNext = () => {
+    if (!isReviewStep && !isPrintStep && stepMissingFields(currentStepConfig).length > 0) {
+      setSubmitted(true);
+      toast({ title: 'Campos obrigatórios', description: 'Preencha os campos destacados antes de continuar.', variant: 'destructive' });
+      return;
+    }
+    setSubmitted(false);
     if (currentIdx < activeSteps.length - 1) {
       setCurrentStep(activeSteps[currentIdx + 1].id);
     }
@@ -565,13 +582,25 @@ export default function PeticaoEditarPage() {
       return;
     }
 
+    const invalidIdx = firstInvalidStepIdx();
+    if (invalidIdx !== -1) {
+      setCurrentStep(activeSteps[invalidIdx].id);
+      toast({
+        title: 'Faltam campos obrigatórios',
+        description: `Preencha a etapa "${activeSteps[invalidIdx].title}" antes de gerar — senão a petição sai com espaços em branco.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setGenerating(true);
     try {
-      await supabase.from('petitions_v2').update({
+      const { error: saveError } = await supabase.from('petitions_v2').update({
         form_data_json: formData as any,
         status:         'review',
         updated_at:     new Date().toISOString(),
       }).eq('id', petitionId);
+      if (saveError) throw saveError;
 
       // Baixar template
       const response = await fetch(model.template_file_url);
@@ -618,26 +647,29 @@ export default function PeticaoEditarPage() {
       const fileName    = `peticao-${petitionId}-${Date.now()}.docx`;
       const storagePath = `peticoes/geradas/${fileName}`;
 
-      await supabase.storage.from('peticoes-modelos').upload(storagePath, blob, {
+      const { error: uploadError } = await supabase.storage.from('peticoes-modelos').upload(storagePath, blob, {
         cacheControl: '3600', upsert: true,
       });
+      if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage
         .from('peticoes-modelos')
         .getPublicUrl(storagePath);
 
-      await supabase.from('petitions_v2').update({
+      const { error: statusError } = await supabase.from('petitions_v2').update({
         status:             'generated',
         generated_docx_url: publicUrl,
         updated_at:         new Date().toISOString(),
       }).eq('id', petitionId);
+      if (statusError) throw statusError;
 
-      await supabase.from('petition_versions').insert({
+      const { error: versionError } = await supabase.from('petition_versions').insert({
         petition_id:        petitionId,
         version_number:     1,
         form_data_json:     formData as any,
         generated_docx_url: publicUrl,
       });
+      if (versionError) console.error('[PeticaoEditarPage] Falha ao salvar versão:', versionError);
 
       const clienteNome = formData.nome_completo || formData.nome_maiusculo || 'documento';
       saveAs(blob, `Peticao_${clienteNome.replace(/\s+/g, '_')}.docx`);
