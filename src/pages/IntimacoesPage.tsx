@@ -509,7 +509,7 @@ export default function IntimacoesPage() {
 
         {/* Meta */}
         <div className="flex items-center justify-between text-[11px] text-muted-foreground px-0.5 flex-wrap gap-1">
-          <span className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> Sincronização automática: 07h, 13h e 19h (Brasília) · DJEN / Escavador / DataJud</span>
+          <span className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> Sincronização automática: 06h, 12h e 17h (Manaus) · DJEN / Escavador / DataJud</span>
           <div className="flex items-center gap-3">
             {selectedIds.size > 0 && (
               <span className="font-semibold text-primary">{selectedIds.size} selecionada(s)</span>
