@@ -107,6 +107,21 @@ function DashboardPage() {
     });
   }, [leads, filters]);
 
+  const isFiltered = filters.period !== 'all' || filters.origem !== 'all' || filters.status !== 'all' || filters.search !== '';
+
+  // KPIs derivados de filteredLeads — quando um filtro está ativo, os cards de topo
+  // refletem o recorte filtrado em vez dos totais globais do RPC.
+  const heroMetrics = useMemo(() => {
+    const CONVERTIDO_STATES = ['CONTRACT_SIGNED', 'DOCS_PENDING', 'READY_FOR_LAWYER'];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const totalLeads = filteredLeads.length;
+    const convertidos = filteredLeads.filter(l => CONVERTIDO_STATES.includes(l.lead_state || '')).length;
+    const leadsHoje = filteredLeads.filter(l => new Date(l.created_at) >= today).length;
+    const leadsTrafego = filteredLeads.filter(l => l.tipo_origem === 'trafego' || l.origem === 'Tráfego Pago').length;
+    return { totalLeads, convertidos, leadsHoje, leadsTrafego };
+  }, [filteredLeads]);
+
   const handleAlertClick = (alerta: any) => {
     if (alerta.leadId) navigate('/leads');
     else if (alerta.processoId) navigate('/processos');
@@ -135,10 +150,10 @@ function DashboardPage() {
             {/* ── Hero KPIs ── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <HeroCard
-                label="Total de Leads"
-                value={stats.total_leads.toLocaleString('pt-BR')}
-                sub={stats.total_leads > 0
-                  ? `${((stats.leads_convertidos / stats.total_leads) * 100).toFixed(1)}% taxa de conversão`
+                label={isFiltered ? 'Total de Leads (filtrado)' : 'Total de Leads'}
+                value={heroMetrics.totalLeads.toLocaleString('pt-BR')}
+                sub={heroMetrics.totalLeads > 0
+                  ? `${((heroMetrics.convertidos / heroMetrics.totalLeads) * 100).toFixed(1)}% taxa de conversão`
                   : 'leads no CRM'}
                 icon={Users}
                 accent="bg-[#3d2b1f]"
@@ -164,9 +179,9 @@ function DashboardPage() {
                 iconColor="text-emerald-600"
               />
               <HeroCard
-                label="Tráfego Hoje"
-                value={stats.leads_hoje.toLocaleString('pt-BR')}
-                sub={`${stats.leads_trafego.toLocaleString('pt-BR')} total de tráfego`}
+                label={isFiltered ? 'Tráfego Hoje (filtrado)' : 'Tráfego Hoje'}
+                value={heroMetrics.leadsHoje.toLocaleString('pt-BR')}
+                sub={`${heroMetrics.leadsTrafego.toLocaleString('pt-BR')} total de tráfego`}
                 icon={Zap}
                 accent="bg-blue-500"
                 iconBg="bg-blue-50"
@@ -183,13 +198,19 @@ function DashboardPage() {
                 {/* Origem + Alertas */}
                 <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
                   <div className="space-y-6">
-                    <LeadOriginKPIs leads={leads} stats={stats} />
-                    <DashboardKPIs leads={leads} processos={processos} stats={stats} />
+                    <LeadOriginKPIs leads={filteredLeads} />
+                    <DashboardKPIs
+                      leads={filteredLeads}
+                      processos={processos}
+                      stats={{ ...stats, contratos_trafego_manual: isFiltered ? 0 : stats.contratos_trafego_manual }}
+                    />
                   </div>
                   <AlertasWidget alertas={alertas} onAlertClick={handleAlertClick} />
                 </div>
 
-                {/* Conversão */}
+                {/* Conversão — mantém a lista completa de leads: o widget tem sua
+                    própria janela semana/mês/trimestre, cruzar com o filtro de período
+                    do topo geraria recortes duplicados e confusos */}
                 <Suspense fallback={<ChartFallback />}>
                   <ConversionMetrics leads={leads} stats={stats} />
                 </Suspense>
@@ -209,7 +230,7 @@ function DashboardPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch">
                   <AgendaPrazosWidget />
                   <Suspense fallback={<ChartFallback />}>
-                    <RealtimeLeadsMonitor leads={leads} onRefresh={handleRefreshLeads} />
+                    <RealtimeLeadsMonitor leads={filteredLeads} onRefresh={handleRefreshLeads} />
                   </Suspense>
                   <Suspense fallback={<ChartFallback />}>
                     <TeamStatusWidget />

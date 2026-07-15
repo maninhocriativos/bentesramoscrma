@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Users, Scale, TrendingUp, Briefcase, ArrowUpRight, ArrowDownRight, Activity } from 'lucide-react';
 import { Lead } from '@/types/leads';
 import { Processo } from '@/types/processos';
@@ -12,64 +12,86 @@ interface DashboardKPIsProps {
   stats: DashboardStats;
 }
 
-export function DashboardKPIs({ stats }: DashboardKPIsProps) {
+const isTrafegoLead = (l: Lead) => l.tipo_origem === 'trafego' || l.origem === 'Tráfego Pago';
+const CONVERTIDO_STATES = ['CONTRACT_SIGNED', 'DOCS_PENDING', 'READY_FOR_LAWYER'];
+const EM_PROGRESSO_STATES = ['TRIAGE', 'CLASSIFIED', 'DATA_CAPTURE', 'CONTRACT_SENT'];
+
+// Recalcula os KPIs a partir da lista de leads recebida (já filtrada pela barra de
+// filtros do dashboard), em vez de sempre usar os totais globais do RPC — assim os
+// números aqui refletem o mesmo recorte que o resto da página.
+export function DashboardKPIs({ leads, stats }: DashboardKPIsProps) {
   const [recentChange, setRecentChange] = useState<string | null>(null);
   const [prevTotal, setPrevTotal] = useState(0);
 
+  const computed = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const totalLeads = leads.length;
+    const leadsHoje = leads.filter(l => new Date(l.created_at) >= today).length;
+    const leadsNovos = leads.filter(l => !l.lead_state || l.lead_state === 'NEW').length;
+    const leadsEmProgresso = leads.filter(l => EM_PROGRESSO_STATES.includes(l.lead_state || '')).length;
+    const leadsConvertidos = leads.filter(l => CONVERTIDO_STATES.includes(l.lead_state || '')).length;
+
+    const trafegoLeads = leads.filter(isTrafegoLead);
+    const leadsTrafego = trafegoLeads.length;
+    const contratosTrafegoTotal = trafegoLeads
+      .filter(l => l.lead_state === 'CONTRACT_SIGNED')
+      .reduce((s, l) => s + 1 + (l.contratos_adicionais || 0), 0);
+    const taxaConversao = leadsTrafego > 0 ? Math.round((contratosTrafegoTotal / leadsTrafego) * 100) : 0;
+
+    return { totalLeads, leadsHoje, leadsNovos, leadsEmProgresso, leadsConvertidos, leadsTrafego, contratosTrafegoTotal, taxaConversao };
+  }, [leads]);
+
   useEffect(() => {
-    if (prevTotal !== 0 && stats.total_leads !== prevTotal) {
+    if (prevTotal !== 0 && computed.totalLeads !== prevTotal) {
       setRecentChange('totalLeads');
       setTimeout(() => setRecentChange(null), 2000);
     }
-    setPrevTotal(stats.total_leads);
-  }, [stats.total_leads]);
-
-  const taxaConversao = stats.leads_trafego > 0
-    ? Math.round((stats.contratos_trafego_total / stats.leads_trafego) * 100)
-    : 0;
+    setPrevTotal(computed.totalLeads);
+  }, [computed.totalLeads]);
 
   const kpis = [
     {
       id: 'totalLeads',
       title: 'Total de Leads',
-      value: stats.total_leads,
+      value: computed.totalLeads,
       icon: Users,
-      trend: stats.leads_hoje > 0 ? `+${stats.leads_hoje} hoje` : '+0 hoje',
-      trendUp: stats.leads_hoje > 0,
-      description: `${stats.leads_novos} novos aguardando`,
+      trend: computed.leadsHoje > 0 ? `+${computed.leadsHoje} hoje` : '+0 hoje',
+      trendUp: computed.leadsHoje > 0,
+      description: `${computed.leadsNovos} novos aguardando`,
       accent: '#3d2b1f', accentLight: 'rgba(61,43,31,0.08)', accentBar: '#3d2b1f',
     },
     {
       id: 'emProgresso',
       title: 'Em Progresso',
-      value: stats.leads_em_progresso,
+      value: computed.leadsEmProgresso,
       icon: TrendingUp,
-      trend: stats.leads_em_progresso > 0 ? 'Ativos' : 'Nenhum',
-      trendUp: stats.leads_em_progresso > 0,
+      trend: computed.leadsEmProgresso > 0 ? 'Ativos' : 'Nenhum',
+      trendUp: computed.leadsEmProgresso > 0,
       description: 'Triagem a Contrato',
       accent: '#c9a96e', accentLight: 'rgba(201,169,110,0.1)', accentBar: '#c9a96e',
     },
     {
       id: 'taxaConversao',
       title: 'Taxa de Conversão',
-      value: taxaConversao,
+      value: computed.taxaConversao,
       isPercentage: true,
       icon: Scale,
-      trend: taxaConversao >= 50 ? 'Excelente' : taxaConversao >= 20 ? 'Bom' : 'Em progresso',
-      trendUp: taxaConversao >= 20,
+      trend: computed.taxaConversao >= 50 ? 'Excelente' : computed.taxaConversao >= 20 ? 'Bom' : 'Em progresso',
+      trendUp: computed.taxaConversao >= 20,
       description: 'Contratos vs Leads de Tráfego',
       accent: '#c9a96e', accentLight: 'rgba(201,169,110,0.1)', accentBar: '#c9a96e',
     },
     {
       id: 'contratosTrafego',
       title: 'Contratos (Tráfego)',
-      value: stats.contratos_trafego_total,
+      value: computed.contratosTrafegoTotal,
       icon: Briefcase,
-      trend: `de ${stats.leads_trafego} leads`,
-      trendUp: stats.contratos_trafego_total > 0,
+      trend: `de ${computed.leadsTrafego} leads`,
+      trendUp: computed.contratosTrafegoTotal > 0,
       description: stats.contratos_trafego_manual > 0
         ? `+${stats.contratos_trafego_manual} inseridos manualmente`
-        : `${stats.leads_convertidos} total geral`,
+        : `${computed.leadsConvertidos} total geral`,
       accent: '#16a34a', accentLight: 'rgba(22,163,74,0.08)', accentBar: '#16a34a',
       badge: stats.contratos_trafego_manual > 0
         ? { text: `+${stats.contratos_trafego_manual} manual`, color: '#c9a96e' }

@@ -6,18 +6,20 @@ import { cn } from '@/lib/utils';
 
 interface LeadOriginKPIsProps {
   leads: Lead[];
-  stats?: { total_leads?: number; leads_trafego?: number };
 }
 
-export function LeadOriginKPIs({ leads, stats }: LeadOriginKPIsProps) {
+// Deriva sempre da lista de leads recebida (já filtrada pela barra de filtros do
+// dashboard) em vez de usar os totais globais do RPC — mantém consistência com o
+// resto da página quando um filtro está ativo.
+export function LeadOriginKPIs({ leads }: LeadOriginKPIsProps) {
   const metrics = useMemo(() => {
-    const totalLeads       = stats?.total_leads ?? leads.length;
-    const leadsTrafego     = stats?.leads_trafego ?? leads.filter(l => l.tipo_origem === 'trafego').length;
+    const totalLeads       = leads.length;
+    const leadsTrafego     = leads.filter(l => l.tipo_origem === 'trafego' || l.origem === 'Tráfego Pago').length;
     const leadsBR          = totalLeads - leadsTrafego;
     const trafegoPercent   = totalLeads > 0 ? Math.round((leadsTrafego / totalLeads) * 100) : 0;
     const brPercent        = totalLeads > 0 ? Math.round((leadsBR / totalLeads) * 100) : 0;
     return { totalLeads, leadsTrafego, leadsBR, trafegoPercent, brPercent };
-  }, [leads, stats]);
+  }, [leads]);
 
   const kpis = [
     {
