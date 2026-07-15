@@ -64,13 +64,16 @@ function buildSegment(
   };
   const isConverted = (l: Lead) => contratosDoLead(l) > 0;
 
-  const getSignedDate = (l: Lead): Date => {
-    if (isConvertedByState(l)) {
-      const dateStr = (l as any).contract_signed_at || (l as any).state_updated_at || l.updated_at || l.created_at;
-      return new Date(dateStr);
-    }
+  // Só usa uma data de assinatura quando há um sinal real e específico de quando o
+  // contrato foi fechado — contract_signed_at (campo dedicado) ou a data do registro
+  // em contratos_fechados. NÃO adivinha via updated_at/state_updated_at: esses campos
+  // são tocados por qualquer edição do lead e já causaram leads antigos aparecendo
+  // como "convertidos essa semana" por coincidência de data de edição.
+  const getSignedDate = (l: Lead): Date | null => {
     const manual = contratosManuaisPorLead.get(l.id);
-    return new Date(manual?.primeiraData || l.created_at);
+    if ((l as any).contract_signed_at) return new Date((l as any).contract_signed_at);
+    if (manual?.primeiraData) return new Date(manual.primeiraData);
+    return null;
   };
 
   const getPeriod = (start: Date, end: Date): PeriodResult => {
@@ -83,6 +86,7 @@ function buildSegment(
     const signedInPeriod = segmentLeads.filter(l => {
       if (!isConverted(l)) return false;
       const d = getSignedDate(l);
+      if (!d) return false; // sem data de assinatura confiável — não entra em nenhum período
       return isAfter(d, start) && isBefore(d, end);
     });
     const converted = signedInPeriod.reduce((s, l) => s + contratosDoLead(l), 0);
