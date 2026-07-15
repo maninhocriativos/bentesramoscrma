@@ -63,14 +63,22 @@ export default function PeticaoRevisaoPage() {
 
   const handleMarkFiled = async () => {
     if (!id) return;
-    await supabase.from('petitions_v2').update({ status: 'filed', updated_at: new Date().toISOString() }).eq('id', id);
+    const { error } = await supabase.from('petitions_v2').update({ status: 'filed', updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) {
+      toast({ title: 'Erro', description: 'Não foi possível marcar como protocolada', variant: 'destructive' });
+      return;
+    }
     toast({ title: 'Protocolado', description: 'Petição marcada como protocolada' });
     setPetition(prev => prev ? { ...prev, status: 'filed' } : prev);
   };
 
   const handleArchive = async () => {
     if (!id) return;
-    await supabase.from('petitions_v2').update({ status: 'archived', updated_at: new Date().toISOString() }).eq('id', id);
+    const { error } = await supabase.from('petitions_v2').update({ status: 'archived', updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) {
+      toast({ title: 'Erro', description: 'Não foi possível arquivar a petição', variant: 'destructive' });
+      return;
+    }
     toast({ title: 'Arquivado', description: 'Petição arquivada' });
     navigate('/peticoes');
   };

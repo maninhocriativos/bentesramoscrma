@@ -184,17 +184,24 @@ export function usePeticoesV2() {
     if (success) {
       toast({ title: 'Arquivado', description: 'Petição arquivada com sucesso' });
       fetchPetitions();
+    } else {
+      toast({ title: 'Erro', description: 'Não foi possível arquivar a petição', variant: 'destructive' });
     }
     return success;
   }, [updatePetition, fetchPetitions, toast]);
 
   const deletePetition = useCallback(async (id: string): Promise<boolean> => {
-    // Delete versions first
-    await supabase.from('petition_versions').delete().eq('petition_id', id);
-    
-    const { error } = await supabase.from('petitions_v2').delete().eq('id', id);
+    // RLS restringe DELETE em petitions_v2 a Administrador — sem .select(), uma
+    // exclusão bloqueada pela política retorna error:null e 0 linhas afetadas
+    // (comportamento padrão do Postgres/PostgREST), o que mostrava "Excluído" com
+    // sucesso mesmo quando nada foi apagado de fato.
+    const { data, error } = await supabase.from('petitions_v2').delete().eq('id', id).select('id');
     if (error) {
       toast({ title: 'Erro', description: 'Não foi possível excluir', variant: 'destructive' });
+      return false;
+    }
+    if (!data || data.length === 0) {
+      toast({ title: 'Sem permissão', description: 'Apenas administradores podem excluir petições.', variant: 'destructive' });
       return false;
     }
     toast({ title: 'Excluído', description: 'Petição excluída' });

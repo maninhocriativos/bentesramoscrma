@@ -752,7 +752,12 @@ export default function PeticoesPage() {
                                   <DropdownMenuItem className="rounded-lg gap-2 font-medium" onClick={e => { e.stopPropagation(); archivePetition(p.id); }}>
                                     <Archive className="h-4 w-4" /> Arquivar
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem className="rounded-lg gap-2 font-medium text-destructive focus:text-destructive" onClick={e => { e.stopPropagation(); deletePetition(p.id); }}>
+                                  <DropdownMenuItem className="rounded-lg gap-2 font-medium text-destructive focus:text-destructive" onClick={e => {
+                                    e.stopPropagation();
+                                    if (window.confirm(`Excluir a petição "${p.action_types?.nome || 'sem título'}"? Essa ação não pode ser desfeita.`)) {
+                                      deletePetition(p.id);
+                                    }
+                                  }}>
                                     <Trash2 className="h-4 w-4" /> Excluir
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
