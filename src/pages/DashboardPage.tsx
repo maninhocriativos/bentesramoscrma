@@ -212,7 +212,7 @@ function DashboardPage() {
                     própria janela semana/mês/trimestre, cruzar com o filtro de período
                     do topo geraria recortes duplicados e confusos */}
                 <Suspense fallback={<ChartFallback />}>
-                  <ConversionMetrics leads={leads} stats={stats} />
+                  <ConversionMetrics leads={leads} processos={processos} />
                 </Suspense>
 
                 {/* Gráficos — largura total */}
