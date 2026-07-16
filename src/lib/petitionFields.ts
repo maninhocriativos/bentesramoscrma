@@ -61,6 +61,20 @@ export const PROFISSOES = [
   'pedreiro(a)', 'doméstica', 'diarista', 'vendedor(a)', 'costureira', 'cozinheiro(a)',
   'mecânico(a)', 'eletricista', 'pintor(a)', 'porteiro(a)', 'vigilante', 'militar',
   'enfermeiro(a)', 'técnico(a) de enfermagem', 'auxiliar administrativo(a)', 'balconista',
+  'policial militar', 'policial civil', 'bombeiro(a) militar', 'motorista de aplicativo',
+  'motorista de ônibus', 'motorista de caminhão', 'taxista', 'mototaxista', 'entregador(a)',
+  'pescador(a)', 'pecuarista', 'garimpeiro(a)', 'artesão(ã)', 'feirante', 'ambulante',
+  'zelador(a)', 'jardineiro(a)', 'faxineiro(a)', 'cuidador(a) de idosos', 'babá',
+  'cabeleireiro(a)', 'manicure', 'esteticista', 'barbeiro', 'padeiro(a)', 'açougueiro(a)',
+  'garçom/garçonete', 'auxiliar de cozinha', 'auxiliar de limpeza', 'operador(a) de caixa',
+  'estoquista', 'operador(a) de produção', 'auxiliar de produção', 'soldador(a)', 'marceneiro(a)',
+  'serralheiro(a)', 'encanador(a)', 'técnico(a) em refrigeração', 'técnico(a) em informática',
+  'auxiliar de escritório', 'recepcionista', 'secretário(a)', 'corretor(a) de imóveis',
+  'corretor(a) de seguros', 'contador(a)', 'advogado(a)', 'engenheiro(a)', 'arquiteto(a)',
+  'médico(a)', 'dentista', 'fisioterapeuta', 'psicólogo(a)', 'nutricionista', 'farmacêutico(a)',
+  'assistente social', 'bancário(a)', 'analista administrativo(a)', 'supervisor(a)',
+  'gerente', 'consultor(a)', 'programador(a)', 'designer', 'jornalista', 'estudante',
+  'desempregado(a)', 'trabalhador(a) rural', 'seringueiro(a)', 'ribeirinho(a)', 'indígena',
 ];
 
 export interface FieldConfig {
@@ -72,6 +86,9 @@ export interface FieldConfig {
   options?: string[];
   span?: 'full' | 'half';
   hint?: string;
+  // Campo que não bloqueia avançar/gerar mesmo vazio (ex: RG — muita gente só tem
+  // o CPF como documento hoje em dia).
+  optional?: boolean;
 }
 
 export interface StepConfig {
@@ -89,7 +106,7 @@ const FIELD_DICT: Record<string, DictEntry> = {
   nome_maiusculo:  { label: 'Nome Completo (MAIÚSCULAS)', placeholder: 'NOME CONFORME DOCUMENTOS', span: 'full', group: 'Cliente' },
   nome_completo:   { label: 'Nome Completo (normal)', placeholder: 'Nome conforme documentos', span: 'full', group: 'Cliente' },
   cpf:             { label: 'CPF', placeholder: '000.000.000-00', group: 'Cliente' },
-  rg:              { label: 'RG', placeholder: '0000000-0 SSP/AM', group: 'Cliente' },
+  rg:              { label: 'RG', placeholder: '0000000-0 SSP/AM', group: 'Cliente', optional: true, hint: 'Opcional — o CPF já vale como documento; preencha se o cliente tiver RG.' },
   estado_civil:    { label: 'Estado Civil', type: 'select', options: ESTADOS_CIVIS, group: 'Cliente' },
   profissao:       { label: 'Profissão', type: 'autocomplete', options: PROFISSOES, placeholder: 'Ex: aposentado(a)', group: 'Cliente' },
   nacionalidade:   { label: 'Nacionalidade', type: 'autocomplete', options: NACIONALIDADES, placeholder: 'brasileiro(a)', group: 'Cliente' },
@@ -183,7 +200,7 @@ export function buildDynamicSteps(placeholders: string[], temPrint = false): Ste
     const dict = FIELD_DICT[key];
     const group = dict?.group ?? 'Outros';
     const field: FieldConfig = dict
-      ? { key, label: dict.label, placeholder: dict.placeholder, type: dict.type, options: dict.options, span: dict.span, hint: dict.hint }
+      ? { key, label: dict.label, placeholder: dict.placeholder, type: dict.type, options: dict.options, span: dict.span, hint: dict.hint, optional: dict.optional }
       : { key, label: humanize(key) };
 
     (porGrupo[group] ??= []).push(field);

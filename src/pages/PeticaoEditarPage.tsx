@@ -367,12 +367,13 @@ function FieldInput({
   onChange: (v: string) => void;
   submitted: boolean;
 }) {
-  const isEmpty = submitted && !value?.trim();
+  const isEmpty = submitted && !config.optional && !value?.trim();
 
   return (
     <div className={config.span === 'full' ? 'col-span-2' : ''}>
       <Label className={cn('text-xs mb-1.5 flex items-center gap-1', isEmpty ? 'text-destructive' : 'text-muted-foreground')}>
         {config.label}
+        {config.optional && <span className="text-muted-foreground/60 font-normal">(opcional)</span>}
         {isEmpty && <AlertCircle className="h-3 w-3" />}
       </Label>
 
@@ -646,7 +647,7 @@ export default function PeticaoEditarPage() {
   // "Gerar" com o formulário inteiro vazio, baixando o modelo sem nenhum dado
   // preenchido (foi exatamente o que aconteceu no teste do Gabriel).
   const stepMissingFields = (step: StepConfig) =>
-    step.fields.filter(f => !(formData[f.key] || '').trim());
+    step.fields.filter(f => !f.optional && !(formData[f.key] || '').trim());
 
   const firstInvalidStepIdx = () =>
     activeSteps.findIndex(s => s.title !== 'Revisão' && s.title !== 'Print' && stepMissingFields(s).length > 0);

@@ -18,7 +18,23 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import mammoth from 'mammoth';
+
+function arrayBufferToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function base64ToBlobUrl(base64: string, mime: string): string {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return URL.createObjectURL(new Blob([bytes], { type: mime }));
+}
 
 interface PetitionData {
   id: string;
@@ -48,7 +64,7 @@ export default function PeticaoRevisaoPage() {
   const [versions, setVersions] = useState<VersionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
@@ -88,16 +104,25 @@ export default function PeticaoRevisaoPage() {
     navigate('/peticoes');
   };
 
+  // Converte via CloudConvert (docx-to-pdf) em vez de mammoth: mammoth ignora
+  // cabeçalho/rodapé, então a prévia saía sem o timbre do escritório. A conversão
+  // real preserva logo, cabeçalho e rodapé exatamente como o documento imprime.
   const handlePreview = async (docxUrl: string) => {
     setPreviewOpen(true);
     setPreviewLoading(true);
-    setPreviewHtml(null);
+    if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl);
+    setPreviewPdfUrl(null);
     try {
       const resp = await fetch(docxUrl);
       if (!resp.ok) throw new Error('Falha ao baixar o documento');
       const arrayBuffer = await resp.arrayBuffer();
-      const result = await mammoth.convertToHtml({ arrayBuffer });
-      setPreviewHtml(result.value);
+      const base64_docx = arrayBufferToBase64(arrayBuffer);
+
+      const { data, error } = await supabase.functions.invoke('docx-to-pdf', { body: { base64_docx } });
+      if (error) throw error;
+      if (!data?.base64_pdf) throw new Error(data?.error?.message || 'PDF não retornado');
+
+      setPreviewPdfUrl(base64ToBlobUrl(data.base64_pdf, 'application/pdf'));
     } catch (err) {
       console.error('[PeticaoRevisaoPage] Erro ao gerar pré-visualização:', err);
       toast({ title: 'Erro', description: 'Não foi possível gerar a pré-visualização', variant: 'destructive' });
@@ -273,21 +298,18 @@ export default function PeticaoRevisaoPage() {
         </div>
       </ScrollArea>
 
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-3xl h-[85vh] flex flex-col p-0 gap-0">
+      <Dialog open={previewOpen} onOpenChange={(o) => { setPreviewOpen(o); if (!o && previewPdfUrl) { URL.revokeObjectURL(previewPdfUrl); setPreviewPdfUrl(null); } }}>
+        <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 gap-0">
           <DialogHeader className="px-5 pt-4 pb-3 border-b border-border/50">
             <DialogTitle className="text-base">Pré-visualização</DialogTitle>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-8 py-6 bg-muted/20">
+          <div className="flex-1 bg-muted/20">
             {previewLoading ? (
               <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" /> Gerando pré-visualização...
               </div>
-            ) : previewHtml ? (
-              <div
-                className="docx-preview bg-white rounded-lg shadow-sm p-8 mx-auto max-w-[820px] prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: previewHtml }}
-              />
+            ) : previewPdfUrl ? (
+              <iframe src={previewPdfUrl} title="Pré-visualização da petição" className="w-full h-full border-0" />
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
                 Não foi possível carregar a pré-visualização.
