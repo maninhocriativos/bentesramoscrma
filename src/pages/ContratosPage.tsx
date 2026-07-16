@@ -144,9 +144,16 @@ export default function ContratosPage() {
 
       // Detecção AMPLA de tráfego + normalização de nome (definidos antes pois
       // já são usados no casamento dos lembretes).
+      // A instância de WhatsApp por onde o lead foi atendido é a fonte da
+      // verdade — linha de tráfego → tráfego, linha do escritório →
+      // escritório, mesmo que `origem` (texto livre) diga outra coisa.
+      // Só cai no fallback textual quando a instância não é conhecida.
       const TRAFEGO_RE = /tráfego|trafego|meta|facebook|instagram|anúncio|anuncio|\bads\b/i;
-      const isTrafego = (l: any) =>
-        l?.tipo_origem === 'trafego' || l?.linha_whatsapp === 'trafego_isa' || TRAFEGO_RE.test(l?.origem || '');
+      const isTrafego = (l: any) => {
+        if (l?.linha_whatsapp === 'trafego_isa') return true;
+        if (l?.linha_whatsapp === 'bentes_ramos_antigo') return false;
+        return l?.tipo_origem === 'trafego' || TRAFEGO_RE.test(l?.origem || '');
+      };
       const normName = (s: string) =>
         (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
       const nameKeyOf = (s: string) => {

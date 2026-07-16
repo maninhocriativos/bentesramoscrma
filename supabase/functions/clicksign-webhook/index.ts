@@ -48,6 +48,10 @@ async function fetchWithRetry(
 
 function isBadClicksignLink(link: string | null | undefined, documentKey?: string | null) {
   if (!link) return true;
+  // Qualquer link que não seja /sign/{request_signature_key} é ruim — inclui o
+  // fallback /document/{key} (exige login no ClickSign, quebra para o cliente)
+  // e não só o caso antigo de /sign/{documentKey} com a chave errada.
+  if (!link.includes('/sign/')) return true;
   if (!documentKey) return false;
   return link.includes(`/sign/${documentKey}`);
 }

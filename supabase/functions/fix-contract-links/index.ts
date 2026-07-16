@@ -17,16 +17,21 @@ serve(async (req: Request): Promise<Response> => {
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-    // 1. Buscar todos os contract_reminders com links errados (document_key == UUID no link)
+    // 1. Buscar todos os contract_reminders com links errados:
+    //    (a) /sign/{document_key} — usou a chave errada como signature key;
+    //    (b) qualquer link que não seja /sign/{request_signature_key}, ex.:
+    //        o fallback /document/{key}, que exige login no ClickSign e
+    //        quebra para o cliente.
     const { data: reminders, error } = await supabase
       .from("contract_reminders")
-      .select("id, document_key, contract_link")
-      .like("contract_link", "%/sign/%");
+      .select("id, document_key, contract_link");
 
     if (error) throw error;
 
     const toFix = (reminders || []).filter(r =>
-      r.contract_link === `https://app.clicksign.com/sign/${r.document_key}`
+      r.contract_link === `https://app.clicksign.com/sign/${r.document_key}` ||
+      !r.contract_link ||
+      !r.contract_link.includes('/sign/')
     );
 
     console.log(`Total para corrigir: ${toFix.length}`);
@@ -86,11 +91,12 @@ serve(async (req: Request): Promise<Response> => {
     const { data: leads } = await supabase
       .from("leads_juridicos")
       .select("id, link_contrato, contract_key")
-      .like("link_contrato", "%/sign/%")
       .not("contract_key", "is", null);
 
     const leadsToFix = (leads || []).filter(l =>
-      l.link_contrato === `https://app.clicksign.com/sign/${l.contract_key}`
+      l.link_contrato === `https://app.clicksign.com/sign/${l.contract_key}` ||
+      !l.link_contrato ||
+      !l.link_contrato.includes('/sign/')
     );
 
     console.log(`Leads para corrigir: ${leadsToFix.length}`);
@@ -102,6 +108,7 @@ serve(async (req: Request): Promise<Response> => {
           .from("contract_reminders")
           .select("contract_link")
           .eq("document_key", lead.contract_key)
+          .like("contract_link", "%/sign/%")
           .not("contract_link", "eq", `https://app.clicksign.com/sign/${lead.contract_key}`)
           .maybeSingle();
 
