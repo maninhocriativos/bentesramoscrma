@@ -67,7 +67,7 @@ export function inteiroPorExtenso(numero: number): string {
 }
 
 // Converte "2.000,05" | "2000.05" | "2000,05" | number → número.
-function parseValor(input: string | number): number {
+export function parseValor(input: string | number): number {
   if (typeof input === 'number') return input;
   const limpo = String(input).replace(/[^\d,.-]/g, '').trim();
   if (!limpo) return NaN;

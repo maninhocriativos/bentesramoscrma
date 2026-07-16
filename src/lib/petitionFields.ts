@@ -41,6 +41,24 @@ export const BANCO_CNPJ: Record<string, string> = {
   'Facta Financeira':         '15.581.638/0001-30',
 };
 
+// Endereço da sede dos bancos réus mais comuns (dado público, registrado no CNPJ).
+// Preenche automaticamente ao selecionar o banco. ⚠️ Conferir sempre — endereço de
+// sede é usado para citação, um dado desatualizado pode prejudicar o processo.
+// Lista deliberadamente parcial: só entram bancos com endereço de sede bem
+// conhecido/estável; os demais ficam em preenchimento manual em vez de arriscar
+// um endereço errado.
+export const BANCO_ENDERECO: Record<string, { endereco: string; cep: string }> = {
+  'Banco do Brasil':         { endereco: 'SAUN Quadra 5, Lote B, Torre I, Asa Norte, Brasília/DF', cep: '70040-912' },
+  'Caixa Econômica Federal': { endereco: 'SBS Quadra 4, Lotes 3/4, Asa Sul, Brasília/DF', cep: '70092-900' },
+  'Bradesco':                { endereco: 'Cidade de Deus, s/n, Vila Yara, Osasco/SP', cep: '06029-900' },
+  'Itaú Unibanco':           { endereco: 'Praça Alfredo Egydio de Souza Aranha, 100, Torre Itaúsa, Jabaquara, São Paulo/SP', cep: '04344-902' },
+  'Santander':               { endereco: 'Av. Presidente Juscelino Kubitschek, 2041/2235, Vila Olímpia, São Paulo/SP', cep: '04543-011' },
+  'Banrisul':                { endereco: 'Rua Capitão Montanha, 177, Centro Histórico, Porto Alegre/RS', cep: '90010-040' },
+  'Banco do Nordeste':       { endereco: 'Av. Dr. Silas Munguba, 5700, Passaré, Fortaleza/CE', cep: '60743-902' },
+  'Banco da Amazônia':       { endereco: 'Av. Presidente Vargas, 800, Campina, Belém/PA', cep: '66017-901' },
+  'C6 Bank':                 { endereco: 'Av. Nove de Julho, 3229, Jardim Paulista, São Paulo/SP', cep: '01407-000' },
+};
+
 // Nacionalidades (com opção de digitar outra).
 export const NACIONALIDADES = ['brasileiro(a)', 'brasileiro', 'brasileira', 'naturalizado(a) brasileiro(a)', 'estrangeiro(a)'];
 
@@ -126,6 +144,7 @@ const FIELD_DICT: Record<string, DictEntry> = {
   banco_nome:     { label: 'Banco Réu', type: 'select', options: BANCOS, span: 'full', group: 'Banco' },
   banco_cnpj:     { label: 'CNPJ do Banco', placeholder: '00.000.000/0001-00', group: 'Banco' },
   banco_endereco: { label: 'Endereço do Banco', placeholder: 'Av. Paulista, nº 100, São Paulo/SP', span: 'full', group: 'Banco' },
+  banco_cep:      { label: 'CEP do Banco', placeholder: '00.000-000', group: 'Banco' },
 
   // ── Contrato ──
   numero_contrato:   { label: 'Número do Contrato', placeholder: '91507432', group: 'Contrato' },

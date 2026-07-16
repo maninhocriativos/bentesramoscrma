@@ -29,8 +29,8 @@ import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { saveAs } from 'file-saver';
 import type { PetitionModelV2 } from '@/hooks/usePeticoesV2';
-import { reaisPorExtenso, inteiroPorExtenso } from '@/lib/extenso';
-import { buildDynamicSteps, normalizeKey, BANCO_CNPJ, type FieldConfig, type StepConfig } from '@/lib/petitionFields';
+import { reaisPorExtenso, inteiroPorExtenso, parseValor } from '@/lib/extenso';
+import { buildDynamicSteps, normalizeKey, BANCO_CNPJ, BANCO_ENDERECO, type FieldConfig, type StepConfig } from '@/lib/petitionFields';
 import { padronizarRodape } from '@/lib/petitionFooter';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────
@@ -164,6 +164,13 @@ function buildTemplateData(formData: FormData, actionName: string, placeholders:
   const rg = get(formData, 'rg', 'RG');
   const cpf = get(formData, 'cpf', 'CPF');
 
+  // Restituição em dobro do seguro (art. 42, parágrafo único, CDC) — o modelo
+  // de venda casada consignado pede o valor já dobrado, mas só o valor do
+  // seguro é digitado no formulário; calculamos o dobro aqui.
+  const valorSeguroNum = parseValor(get(formData, 'valor_seguro', 'VALOR_SEGURO'));
+  const valorSeguroDobro = isNaN(valorSeguroNum) ? '' : (valorSeguroNum * 2).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const valorSeguroDobroExtenso = isNaN(valorSeguroNum) ? '' : reaisPorExtenso(valorSeguroNum * 2);
+
   const data: Record<string, string> = {
     ...formData,
     ...autoExtenso(formData),
@@ -195,6 +202,8 @@ function buildTemplateData(formData: FormData, actionName: string, placeholders:
     BANCO_ENDERECO: get(formData, 'banco_endereco', 'BANCO_ENDERECO') || reuEndereco,
     DOC_ID: rg || cpf,
     VARA_JUIZO: varaJuizo,
+    valor_seguro_dobro: valorSeguroDobro,
+    valor_seguro_dobro_extenso: valorSeguroDobroExtenso,
   };
 
   // Cobertura genérica: qualquer marcador cru do template que não tenha alias
@@ -580,13 +589,28 @@ export default function PeticaoEditarPage() {
     } catch { /* ignore */ }
   };
 
+  // Campos que compõem o "Valor Total do Contrato" — recalculado sempre que
+  // qualquer um deles muda, em vez de exigir digitação manual da soma.
+  const VALOR_TOTAL_FONTES = ['valor_emprestimo', 'valor_seguro', 'valor_encargos'];
+
   const updateField = (key: string, value: string) => {
     setFormData(prev => {
       const next = { ...prev, [key]: value };
-      // Ao selecionar o banco, puxa o CNPJ automaticamente (se conhecido).
-      // Banco não mapeado → mantém o CNPJ para preenchimento manual.
-      if (key === 'banco_nome' && BANCO_CNPJ[value]) {
-        next.banco_cnpj = BANCO_CNPJ[value];
+      // Ao selecionar o banco, puxa CNPJ/endereço/CEP automaticamente (se conhecidos).
+      // Banco não mapeado → mantém os campos para preenchimento manual.
+      if (key === 'banco_nome') {
+        if (BANCO_CNPJ[value]) next.banco_cnpj = BANCO_CNPJ[value];
+        const end = BANCO_ENDERECO[value];
+        if (end) {
+          next.banco_endereco = end.endereco;
+          next.banco_cep = end.cep;
+        }
+      }
+      if (VALOR_TOTAL_FONTES.includes(key)) {
+        const soma = VALOR_TOTAL_FONTES.reduce((acc, k) => acc + (parseValor(next[k] || '') || 0), 0);
+        next.valor_total_contrato = soma > 0
+          ? soma.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          : '';
       }
       return next;
     });
