@@ -152,12 +152,17 @@ function humanize(key: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-// Normaliza a chave do marcador para a chave do formulário.
+// Normaliza a chave do marcador para a chave do formulário: sempre minúscula,
+// independente de como o autor do .docx escreveu o {{MARCADOR}}. Sem isso, um
+// template com {{NOME_COMPLETO}} (maiúsculo) não batia com o dicionário de campos
+// (que só tem "nome_completo") e virava um campo genérico sem label nem alias —
+// o valor digitado ficava "preso" na chave maiúscula e nunca chegava ao merge
+// final, que só lê a partir da chave minúscula (ver buildTemplateData).
 // Ex.: {{data_petição}} (com cedilha) e {{data_peticao}} são o mesmo campo.
-function normalizeKey(key: string): string {
-  const k = key.trim();
-  if (k === 'data_petição') return 'data_peticao';
-  return k;
+export function normalizeKey(key: string): string {
+  const lower = key.trim().toLowerCase();
+  if (lower === 'data_petição') return 'data_peticao';
+  return lower;
 }
 
 /**

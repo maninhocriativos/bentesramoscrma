@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRight, Save, Sparkles, Loader2,
   User, MapPin, Building2, DollarSign, CheckCircle2,
-  FileText, Scale, AlertCircle, Image as ImageIcon, Upload, X, Search, UserCheck,
+  FileText, Scale, AlertCircle, Image as ImageIcon, Upload, X, Search, UserCheck, Eye,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -29,7 +30,7 @@ import Docxtemplater from 'docxtemplater';
 import { saveAs } from 'file-saver';
 import type { PetitionModelV2 } from '@/hooks/usePeticoesV2';
 import { reaisPorExtenso, inteiroPorExtenso } from '@/lib/extenso';
-import { buildDynamicSteps, BANCO_CNPJ, type FieldConfig, type StepConfig } from '@/lib/petitionFields';
+import { buildDynamicSteps, normalizeKey, BANCO_CNPJ, type FieldConfig, type StepConfig } from '@/lib/petitionFields';
 import { padronizarRodape } from '@/lib/petitionFooter';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────
@@ -37,6 +38,22 @@ import { padronizarRodape } from '@/lib/petitionFooter';
 type FormData = Record<string, string>;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function base64ToBlobUrl(base64: string, mime = 'application/pdf'): string {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return URL.createObjectURL(new Blob([bytes], { type: mime }));
+}
 
 // Gera automaticamente os campos "por extenso" a partir dos valores numéricos,
 // preenchendo apenas os que o advogado deixou em branco (não sobrescreve manual).
@@ -116,22 +133,42 @@ function buildQualificacao(formData: FormData): string {
   ].filter(Boolean).join(', ');
 }
 
-function buildTemplateData(formData: FormData, actionName: string): Record<string, string> {
-  const enderecoCliente = formData.endereco_cliente || buildEnderecoCliente(formData);
-  const qualificacao = formData.qualificacao || buildQualificacao(formData);
-  const tipoAcao = formData.tipo_acao || actionName;
-  const reuNome = formData.reu_nome || formData.banco_nome || '';
-  const reuCnpj = formData.reu_cnpj || formData.banco_cnpj || '';
-  const reuEndereco = formData.reu_endereco || formData.banco_endereco || '';
-  const nomeCompleto = formData.nome_completo || formData.nome_maiusculo || '';
-  const nomeMaiusculo = formData.nome_maiusculo || nomeCompleto.toUpperCase();
-  const varaJuizo = formData.vara_juizo || '____ª VARA DO JUIZADO ESPECIAL CÍVEL DA COMARCA DE MANAUS/AM';
+// Lê o primeiro valor não-vazio dentre várias chaves possíveis — cobre tanto a
+// chave minúscula canônica quanto variantes em MAIÚSCULAS que podem ter ficado
+// gravadas em petições salvas antes da normalização de chaves (ver normalizeKey
+// em petitionFields.ts): um modelo cujo {{MARCADOR}} está em caixa alta gerava um
+// campo cuja key preservava essa caixa, e essa função não enxergava o valor.
+function get(formData: FormData, ...keys: string[]): string {
+  for (const k of keys) {
+    const v = formData[k];
+    if (v !== undefined && v !== null && String(v).trim()) return String(v);
+  }
+  return '';
+}
+
+// `placeholders` é a lista crua de {{marcadores}} extraída do .docx (na caixa
+// exata em que o autor do modelo escreveu). O docxtemplater substitui por
+// correspondência exata de texto, então precisamos garantir que TODO marcador
+// cru tenha uma entrada em `data` — mesmo os que não têm alias nomeado abaixo —
+// olhando o valor pela chave normalizada (minúscula) que o formulário usa.
+function buildTemplateData(formData: FormData, actionName: string, placeholders: string[] = []): Record<string, string> {
+  const enderecoCliente = get(formData, 'endereco_cliente', 'ENDERECO_CLIENTE') || buildEnderecoCliente(formData);
+  const qualificacao = get(formData, 'qualificacao', 'QUALIFICACAO') || buildQualificacao(formData);
+  const tipoAcao = get(formData, 'tipo_acao', 'TIPO_ACAO') || actionName;
+  const reuNome = get(formData, 'reu_nome', 'REU_NOME', 'banco_nome', 'BANCO_NOME');
+  const reuCnpj = get(formData, 'reu_cnpj', 'REU_CNPJ', 'banco_cnpj', 'BANCO_CNPJ');
+  const reuEndereco = get(formData, 'reu_endereco', 'REU_ENDERECO', 'banco_endereco', 'BANCO_ENDERECO');
+  const nomeCompleto = get(formData, 'nome_completo', 'NOME_COMPLETO_NORMAL', 'nome_maiusculo', 'NOME_COMPLETO');
+  const nomeMaiusculo = get(formData, 'nome_maiusculo', 'NOME_COMPLETO') || nomeCompleto.toUpperCase();
+  const varaJuizo = get(formData, 'vara_juizo', 'VARA_JUIZO') || '____ª VARA DO JUIZADO ESPECIAL CÍVEL DA COMARCA DE MANAUS/AM';
+  const rg = get(formData, 'rg', 'RG');
+  const cpf = get(formData, 'cpf', 'CPF');
 
   const data: Record<string, string> = {
     ...formData,
     ...autoExtenso(formData),
     // Alias: alguns modelos usam {{data_petição}} (com cedilha) e o form salva data_peticao.
-    'data_petição': formData.data_petição || formData.data_peticao || '',
+    'data_petição': get(formData, 'data_petição', 'data_peticao'),
     nome_completo: nomeCompleto,
     nome_maiusculo: nomeMaiusculo,
     qualificacao,
@@ -140,24 +177,34 @@ function buildTemplateData(formData: FormData, actionName: string): Record<strin
     reu_nome: reuNome,
     reu_cnpj: reuCnpj,
     reu_endereco: reuEndereco,
-    doc_id: formData.rg || formData.cpf || '',
+    doc_id: rg || cpf,
     vara_juizo: varaJuizo,
+    rg, cpf,
     NOME_COMPLETO: nomeMaiusculo,
     NOME_COMPLETO_NORMAL: nomeCompleto,
     QUALIFICACAO: qualificacao,
-    RG: formData.rg || '',
-    CPF: formData.cpf || '',
+    RG: rg,
+    CPF: cpf,
     ENDERECO_CLIENTE: enderecoCliente,
     TIPO_ACAO: tipoAcao,
     REU_NOME: reuNome,
     REU_CNPJ: reuCnpj,
     REU_ENDERECO: reuEndereco,
-    BANCO_NOME: formData.banco_nome || reuNome,
-    BANCO_CNPJ: formData.banco_cnpj || reuCnpj,
-    BANCO_ENDERECO: formData.banco_endereco || reuEndereco,
-    DOC_ID: formData.rg || formData.cpf || '',
+    BANCO_NOME: get(formData, 'banco_nome', 'BANCO_NOME') || reuNome,
+    BANCO_CNPJ: get(formData, 'banco_cnpj', 'BANCO_CNPJ') || reuCnpj,
+    BANCO_ENDERECO: get(formData, 'banco_endereco', 'BANCO_ENDERECO') || reuEndereco,
+    DOC_ID: rg || cpf,
     VARA_JUIZO: varaJuizo,
   };
+
+  // Cobertura genérica: qualquer marcador cru do template que não tenha alias
+  // explícito acima ainda recebe o valor certo, buscando pela chave normalizada.
+  for (const raw of placeholders) {
+    if (raw in data) continue;
+    const norm = normalizeKey(raw);
+    const v = get(formData, norm, raw);
+    if (v) data[raw] = v;
+  }
 
   return Object.fromEntries(
     Object.entries(data).map(([key, value]) => [key, String(value ?? '')]),
@@ -389,6 +436,9 @@ export default function PeticaoEditarPage() {
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [submitted,      setSubmitted]      = useState(false);
   const [printFiles,     setPrintFiles]      = useState<File[]>([]);
+  const [previewOpen,    setPreviewOpen]     = useState(false);
+  const [previewPdfUrl,  setPreviewPdfUrl]   = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading]  = useState(false);
   // Busca de lead do CRM para autopreencher os dados do cliente
   const [leadQuery,   setLeadQuery]   = useState('');
   const [leadResults, setLeadResults] = useState<Array<Record<string, string>>>([]);
@@ -629,6 +679,92 @@ export default function PeticaoEditarPage() {
 
   // ── Gerar petição ──────────────────────────────────────────────────────────────
 
+  // Monta o .docx final (template + dados + prints) a partir do estado atual do
+  // formulário, sem salvar nada — reaproveitado tanto pela geração real quanto
+  // pela pré-visualização.
+  const buildPeticaoDocxBlob = async (): Promise<Blob> => {
+    if (!model?.template_file_url) throw new Error('Modelo sem arquivo vinculado.');
+
+    const response = await fetch(model.template_file_url);
+    if (!response.ok) throw new Error('Erro ao baixar o modelo .docx');
+    const arrayBuffer = await response.arrayBuffer();
+
+    const zip = new PizZip(arrayBuffer);
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks:    true,
+      delimiters:    { start: '{{', end: '}}' },
+      nullGetter()  { return ''; },
+    });
+
+    const templateData = buildTemplateData(formData, actionName, placeholders);
+    doc.render(templateData);
+
+    const outZip = doc.getZip();
+    if (printFiles.length > 0) {
+      try {
+        const primeiroPng = await fileToPng(printFiles[0]);
+        const ok = substituirPrintNoDocx(outZip, primeiroPng);
+        if (!ok) {
+          toast({ title: 'Aviso', description: 'Este modelo não tem espaço para print — o documento será gerado sem a imagem.', variant: 'destructive' });
+        }
+      } catch (imgErr) {
+        console.error('Falha ao inserir o print no documento:', imgErr);
+        toast({ title: 'Aviso', description: 'Não foi possível inserir o print; o documento será gerado sem ele.', variant: 'destructive' });
+      }
+
+      if (printFiles.length > 1) {
+        try {
+          const extrasPng = await Promise.all(printFiles.slice(1).map(fileToPng));
+          adicionarPrintsExtras(outZip, extrasPng);
+        } catch (imgErr) {
+          console.error('Falha ao anexar prints extras:', imgErr);
+          toast({ title: 'Aviso', description: 'Não foi possível anexar todos os prints extras.', variant: 'destructive' });
+        }
+      }
+    }
+
+    try { padronizarRodape(outZip); } catch (e) { console.error('Falha ao padronizar rodapé:', e); }
+
+    return outZip.generate({
+      type:     'blob',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
+  };
+
+  const handlePreview = async () => {
+    const invalidIdx = firstInvalidStepIdx();
+    if (invalidIdx !== -1) {
+      setSubmitted(true);
+      setCurrentStep(activeSteps[invalidIdx].id);
+      toast({
+        title: 'Faltam campos obrigatórios',
+        description: `Preencha a etapa "${activeSteps[invalidIdx].title}" antes de pré-visualizar.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setPreviewLoading(true);
+    if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl);
+    setPreviewPdfUrl(null);
+    setPreviewOpen(true);
+    try {
+      const blob = await buildPeticaoDocxBlob();
+      const base64_docx = await blobToBase64(blob);
+      const { data, error } = await supabase.functions.invoke('docx-to-pdf', { body: { base64_docx } });
+      if (error) throw error;
+      if (!data?.base64_pdf) throw new Error(data?.error?.message || 'PDF não retornado');
+      setPreviewPdfUrl(base64ToBlobUrl(data.base64_pdf));
+    } catch (err: any) {
+      console.error('[PeticaoEditarPage] Erro ao pré-visualizar:', err);
+      toast({ title: 'Erro na pré-visualização', description: err.message || 'Erro desconhecido', variant: 'destructive' });
+      setPreviewOpen(false);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   const handleGenerate = async () => {
     setSubmitted(true);
     if (!petitionId || !model?.template_file_url) {
@@ -656,57 +792,7 @@ export default function PeticaoEditarPage() {
       }).eq('id', petitionId);
       if (saveError) throw saveError;
 
-      // Baixar template
-      const response = await fetch(model.template_file_url);
-      if (!response.ok) throw new Error('Erro ao baixar o modelo .docx');
-      const arrayBuffer = await response.arrayBuffer();
-
-      const zip = new PizZip(arrayBuffer);
-      const doc = new Docxtemplater(zip, {
-        paragraphLoop: true,
-        linebreaks:    true,
-        delimiters:    { start: '{{', end: '}}' },
-        nullGetter()  { return ''; },
-      });
-
-      // Renderizar com aliases compatíveis com os modelos .docx
-      const templateData = buildTemplateData(formData, actionName);
-      doc.render(templateData);
-
-      // Primeiro print: entra no lugar da imagem do corpo do modelo (substitui o
-      // print antigo que vinha chumbado no template). Demais prints (se houver):
-      // anexados como páginas extras no final do documento.
-      const outZip = doc.getZip();
-      if (printFiles.length > 0) {
-        try {
-          const primeiroPng = await fileToPng(printFiles[0]);
-          const ok = substituirPrintNoDocx(outZip, primeiroPng);
-          if (!ok) {
-            toast({ title: 'Aviso', description: 'Este modelo não tem espaço para print — o documento será gerado sem a imagem.', variant: 'destructive' });
-          }
-        } catch (imgErr) {
-          console.error('Falha ao inserir o print no documento:', imgErr);
-          toast({ title: 'Aviso', description: 'Não foi possível inserir o print; o documento será gerado sem ele.', variant: 'destructive' });
-        }
-
-        if (printFiles.length > 1) {
-          try {
-            const extrasPng = await Promise.all(printFiles.slice(1).map(fileToPng));
-            adicionarPrintsExtras(outZip, extrasPng);
-          } catch (imgErr) {
-            console.error('Falha ao anexar prints extras:', imgErr);
-            toast({ title: 'Aviso', description: 'Não foi possível anexar todos os prints extras.', variant: 'destructive' });
-          }
-        }
-      }
-
-      // Padroniza o rodapé do timbre (emojis + site) em qualquer modelo.
-      try { padronizarRodape(outZip); } catch (e) { console.error('Falha ao padronizar rodapé:', e); }
-
-      const blob = outZip.generate({
-        type:     'blob',
-        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      });
+      const blob = await buildPeticaoDocxBlob();
 
       // Salvar no Storage
       const fileName    = `peticao-${petitionId}-${Date.now()}.docx`;
@@ -1043,6 +1129,17 @@ export default function PeticaoEditarPage() {
                   {/* Botões */}
                   <div className="flex flex-col sm:flex-row items-center gap-3 justify-center pt-2">
                     <Button
+                      variant="outline"
+                      onClick={handlePreview}
+                      disabled={previewLoading || !model?.template_file_url}
+                      className="gap-2 rounded-xl h-12 px-8 text-base font-bold"
+                    >
+                      {previewLoading
+                        ? <><Loader2 className="h-5 w-5 animate-spin" /> Gerando prévia...</>
+                        : <><Eye className="h-5 w-5" /> Pré-visualizar</>
+                      }
+                    </Button>
+                    <Button
                       onClick={handleGenerate}
                       disabled={generating || !model?.template_file_url}
                       className="gap-2 rounded-xl h-12 px-8 shadow-md text-base font-bold"
@@ -1082,6 +1179,27 @@ export default function PeticaoEditarPage() {
 
         </div>
       </ScrollArea>
+
+      <Dialog open={previewOpen} onOpenChange={(o) => { setPreviewOpen(o); if (!o && previewPdfUrl) { URL.revokeObjectURL(previewPdfUrl); setPreviewPdfUrl(null); } }}>
+        <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-5 pt-4 pb-3 border-b border-border/50">
+            <DialogTitle className="text-base">Pré-visualização</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 bg-muted/20">
+            {previewLoading ? (
+              <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Gerando pré-visualização...
+              </div>
+            ) : previewPdfUrl ? (
+              <iframe src={previewPdfUrl} title="Pré-visualização da petição" className="w-full h-full border-0" />
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                Não foi possível carregar a pré-visualização.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
