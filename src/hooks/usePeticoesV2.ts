@@ -32,6 +32,13 @@ export interface PetitionModelV2 {
   field_schema_json: Record<string, unknown>;
   version: string;
   action_types?: ActionType;
+  // Slots de print nomeados (ex.: "Contrato nº 857098267") — cada um aponta
+  // pra uma imagem específica dentro do .docx (media_target) que deve ser
+  // substituída pelo print daquele slot, sem mexer nas demais imagens do
+  // documento (ex.: notícia institucional fixa sobre suspensão do banco).
+  // Nulo/vazio = modelo sem slots definidos, usa o comportamento genérico
+  // antigo (troca a maior imagem do corpo + anexa o resto no final).
+  print_slots_json?: Array<{ label: string; media_target: string }> | null;
 }
 
 export interface PetitionV2 {
