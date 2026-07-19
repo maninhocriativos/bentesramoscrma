@@ -162,7 +162,7 @@ const AgendarConsultaModal = ({
       </Button>
 
       <Dialog open={isOpen} onOpenChange={(v) => { if (!v) fecharModal(); }}>
-        <DialogContent className="max-w-lg p-0 overflow-hidden gap-0">
+        <DialogContent className="max-w-lg p-0 overflow-hidden gap-0" hideCloseButton>
           <DialogHeader className="px-6 py-4 border-b bg-[#00A884] text-white">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
