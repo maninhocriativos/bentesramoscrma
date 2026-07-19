@@ -41,7 +41,7 @@ import {
   FileText, Square, Star, Contact, XCircle, BadgeCheck,
   ExternalLink, Download, Ban, MailOpen, UserPlus2, Archive,
 } from "lucide-react";
-import CalWidget from "./CalWidget";
+import AgendarConsultaModal from "./AgendarConsultaModal";
 import { subDays } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import {
@@ -2655,7 +2655,7 @@ const ManyChatInboxContent = () => {
                 {/* Desktop only buttons */}
                 <div className="hidden md:flex items-center gap-1">
                   <ConversationAssignmentMenu teamMembers={getTeamWithStatus()} currentUserId={user?.id} currentAssignee={selectedSubscriber.assigned_to} onAssign={assignConversation} />
-                  <CalWidget subscriberId={selectedSubscriber.subscriber_id} subscriberName={getDisplayName(selectedSubscriber)} subscriberEmail={selectedSubscriber.email} subscriberPhone={selectedSubscriber.telefone} leadId={selectedSubscriber.lead_id} onScheduled={() => toast({ title: "📅 Agendado!" })} />
+                  <AgendarConsultaModal subscriberId={selectedSubscriber.subscriber_id} subscriberName={getDisplayName(selectedSubscriber)} subscriberEmail={selectedSubscriber.email} subscriberPhone={selectedSubscriber.telefone} leadId={selectedSubscriber.lead_id} onScheduled={() => toast({ title: "📅 Agendado!" })} />
                   {selectedSubscriber.lead_id && (
                     <Button variant="ghost" size="icon" onClick={() => setShowContextPanel(!showContextPanel)} className={`h-10 w-10 rounded-full transition-all ${showContextPanel ? "text-[#00A884] bg-[#00A884]/10 hover:bg-[#00A884]/20" : `${themeClasses.iconColor} ${themeClasses.hoverBtn}`}`}>
                       {showContextPanel ? <PanelRightClose className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}

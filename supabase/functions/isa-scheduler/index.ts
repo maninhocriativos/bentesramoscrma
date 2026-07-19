@@ -11,10 +11,12 @@ import {
   getInicioAmanhaUtc,
   MANAUS_TIMEZONE
 } from '../_shared/timezone-helpers.ts';
-import { 
-  getZapiConfig, 
+import {
+  getZapiConfig,
   sendText,
-  gerarSubscriberId 
+  gerarSubscriberId,
+  enviarParaLead,
+  enviarMensagemZapi,
 } from '../_shared/zapi-helper.ts';
 
 const corsHeaders = {
@@ -239,6 +241,173 @@ serve(async (req) => {
             metodo: resultado.metodo
           });
         }
+      }
+    }
+
+    // ==================== LEMBRETES DE CONSULTA (presencial/online) — 24h/5h/2h ====================
+    // Só compromissos criados pelo novo fluxo de agendamento (modalidade setada).
+    // Dedup pelas próprias colunas timestamp (mais barato que consultar
+    // system_events por linha a cada ciclo do cron), gravando também em
+    // system_events para manter o padrão de auditoria do resto do sistema.
+    if (task === 'lembretes_compromissos' || task === 'all') {
+      const agora = new Date();
+      const em26h = new Date(agora.getTime() + 26 * 60 * 60 * 1000);
+
+      const { data: consultas } = await supabase
+        .from('compromissos')
+        .select('*')
+        .not('modalidade', 'is', null)
+        .neq('confirmacao_status', 'cancelado')
+        .gte('data_inicio', agora.toISOString())
+        .lte('data_inicio', em26h.toISOString());
+
+      const JANELAS = [
+        { campo: 'lembrete_24h_enviado_em', min: 23 * 60, max: 25 * 60, label: '24h' },
+        { campo: 'lembrete_5h_enviado_em', min: 4.5 * 60, max: 5.5 * 60, label: '5h' },
+        { campo: 'lembrete_2h_enviado_em', min: 1.5 * 60, max: 2.5 * 60, label: '2h' },
+      ] as const;
+
+      for (const comp of consultas || []) {
+        const diffMin = (new Date(comp.data_inicio).getTime() - agora.getTime()) / 60000;
+        const janela = JANELAS.find(j => diffMin >= j.min && diffMin <= j.max && !comp[j.campo]);
+        if (!janela) continue;
+
+        const nome = comp.nome_contato || 'Cliente';
+        const telefone = comp.telefone_contato;
+        const dataFormatada = formatarDataHoraExtenso(new Date(comp.data_inicio));
+        const localTexto = comp.modalidade === 'presencial'
+          ? `📍 Presencial: ${comp.local_reuniao}`
+          : `📹 Online: ${comp.local_reuniao || 'o link será enviado em breve'}`;
+        const mensagem = `⏰ Olá ${nome}! Lembrando da sua consulta jurídica marcada para ${dataFormatada}.\n\n${localTexto}\n\nAté lá!`;
+
+        let enviado = false;
+        if (comp.lead_id) {
+          const r = await enviarParaLead(supabase, comp.lead_id, mensagem, `consulta_lembrete_${janela.label}`);
+          enviado = r.success;
+        } else if (telefone) {
+          const r = await enviarMensagemZapi(supabase, telefone, mensagem, {
+            context: `consulta_lembrete_${janela.label}`,
+            instanceId: comp.zapi_instance_id || undefined,
+          });
+          enviado = r.success;
+          // enviarMensagemZapi só grava manychat_mensagens quando há leadId nas
+          // options; sem lead vinculado, gravamos aqui pra aparecer no histórico.
+          if (enviado && comp.subscriber_id) {
+            await supabase.from('manychat_mensagens').insert({
+              subscriber_id: comp.subscriber_id,
+              subscriber_nome: nome,
+              conteudo: mensagem,
+              tipo: 'text',
+              direcao: 'saida',
+              lead_id: null,
+            });
+          }
+        }
+
+        await supabase.from('compromissos').update({ [janela.campo]: new Date().toISOString() }).eq('id', comp.id);
+        await supabase.from('system_events').insert({
+          tipo: 'notificacao',
+          fonte: 'isa_scheduler',
+          acao: `consulta_lembrete_${janela.label}`,
+          entidade_tipo: 'compromisso',
+          entidade_id: comp.id,
+          lead_id: comp.lead_id,
+          dados: { enviado, modalidade: comp.modalidade },
+        });
+
+        results.actions.push({
+          tipo: 'consulta_lembrete',
+          janela: janela.label,
+          compromisso: comp.titulo,
+          contato: nome,
+          enviado,
+        });
+      }
+    }
+
+    // ==================== VERIFICAÇÃO DE NÃO COMPARECIMENTO ====================
+    // Roda para compromissos de consulta (modalidade setada) cujo horário já
+    // passou; se o cliente não mandou nenhuma mensagem desde o início da
+    // consulta, dispara uma verificação. Marca sempre (respondeu ou não) para
+    // nunca reprocessar o mesmo compromisso.
+    if (task === 'verificacao_comparecimento' || task === 'all') {
+      const agora = new Date();
+      const janelaIni = new Date(agora.getTime() - 90 * 60 * 1000);
+      const janelaFim = new Date(agora.getTime() - 30 * 60 * 1000);
+
+      const { data: consultas } = await supabase
+        .from('compromissos')
+        .select('*')
+        .not('modalidade', 'is', null)
+        .neq('confirmacao_status', 'cancelado')
+        .is('verificacao_comparecimento_em', null)
+        .gte('data_inicio', janelaIni.toISOString())
+        .lte('data_inicio', janelaFim.toISOString());
+
+      for (const comp of consultas || []) {
+        let respondeu = false;
+
+        if (comp.lead_id) {
+          const { data } = await supabase
+            .from('manychat_mensagens')
+            .select('id')
+            .eq('lead_id', comp.lead_id)
+            .eq('direcao', 'entrada')
+            .gt('created_at', comp.data_inicio)
+            .limit(1);
+          respondeu = !!data?.length;
+        } else if (comp.subscriber_id) {
+          const { data } = await supabase
+            .from('manychat_mensagens')
+            .select('id')
+            .eq('subscriber_id', comp.subscriber_id)
+            .eq('direcao', 'entrada')
+            .gt('created_at', comp.data_inicio)
+            .limit(1);
+          respondeu = !!data?.length;
+        }
+
+        if (!respondeu) {
+          const nome = comp.nome_contato || '';
+          const mensagem = `Olá ${nome}! 👋\n\nNotamos que o horário da sua consulta (${formatarDataHoraExtenso(new Date(comp.data_inicio))}) já passou. Você conseguiu comparecer/participar? Se precisar remarcar, é só nos avisar. 📅`;
+
+          if (comp.lead_id) {
+            await enviarParaLead(supabase, comp.lead_id, mensagem, 'consulta_verificacao_comparecimento');
+          } else if (comp.telefone_contato) {
+            const r = await enviarMensagemZapi(supabase, comp.telefone_contato, mensagem, {
+              context: 'consulta_verificacao_comparecimento',
+              instanceId: comp.zapi_instance_id || undefined,
+            });
+            if (r.success && comp.subscriber_id) {
+              await supabase.from('manychat_mensagens').insert({
+                subscriber_id: comp.subscriber_id,
+                subscriber_nome: nome || 'Cliente',
+                conteudo: mensagem,
+                tipo: 'text',
+                direcao: 'saida',
+                lead_id: null,
+              });
+            }
+          }
+        }
+
+        // Marca sempre, respondeu ou não, para nunca reprocessar.
+        await supabase.from('compromissos').update({ verificacao_comparecimento_em: new Date().toISOString() }).eq('id', comp.id);
+        await supabase.from('system_events').insert({
+          tipo: 'notificacao',
+          fonte: 'isa_scheduler',
+          acao: 'consulta_verificacao_comparecimento',
+          entidade_tipo: 'compromisso',
+          entidade_id: comp.id,
+          lead_id: comp.lead_id,
+          dados: { respondeu, modalidade: comp.modalidade },
+        });
+
+        results.actions.push({
+          tipo: 'consulta_verificacao_comparecimento',
+          compromisso: comp.titulo,
+          respondeu,
+        });
       }
     }
 

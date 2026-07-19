@@ -1,8 +1,9 @@
 const serve = Deno.serve;
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { formatInTimeZone, toZonedTime } from "npm:date-fns-tz@3";
+import { formatInTimeZone, toZonedTime, fromZonedTime } from "npm:date-fns-tz@3";
 import { addDays, format, addWeeks, getDay } from "npm:date-fns@3";
 import { ptBR } from "npm:date-fns@3/locale";
+import { resolveInstanceForLead } from "../_shared/zapi-helper.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,6 +14,35 @@ const CALCOM_API_KEY = Deno.env.get('CALCOM_API_KEY');
 const CALCOM_API_V1 = 'https://api.cal.com/v1';
 const CALCOM_API_V2 = 'https://api.cal.com/v2';
 const TIMEZONE = 'America/Manaus';
+
+// Mesmo endereço usado no timbre das petições (src/lib/petitionFooter.ts).
+const ENDERECO_ESCRITORIO = 'Rua Salvador, 120, Sala 708 – Vieiralves Business Center – Adrianópolis, Manaus/AM – CEP 69057-040';
+
+// Resolve a instância Z-API correta (regra tráfego/escritório) a partir de um
+// leadId OU de um subscriberId do chat (quando ainda não há lead vinculado).
+async function resolverZapiInstanceId(
+  supabase: any,
+  leadId?: string | null,
+  subscriberId?: string | null,
+): Promise<string | undefined> {
+  if (leadId) {
+    const { data: lead } = await supabase
+      .from('leads_juridicos')
+      .select('linha_whatsapp, tipo_origem')
+      .eq('id', leadId)
+      .maybeSingle();
+    if (lead) return await resolveInstanceForLead(supabase, lead);
+  }
+  if (subscriberId) {
+    const { data: subscriber } = await supabase
+      .from('manychat_subscribers')
+      .select('linha_whatsapp')
+      .eq('subscriber_id', subscriberId)
+      .maybeSingle();
+    if (subscriber) return await resolveInstanceForLead(supabase, { linha_whatsapp: subscriber.linha_whatsapp });
+  }
+  return undefined;
+}
 
 // Configuração do evento - substitua pelo seu
 const CALCOM_USERNAME = 'bentes-ramos-advocacia-1ucmau';
@@ -300,6 +330,38 @@ function filtrarSlotsPermitidos(slots: Record<string, CalComSlot[]>): Array<{ la
   return resultado.slice(0, 6);
 }
 
+// Fallback quando a API do Cal.com está indisponível/mal configurada (ex.:
+// API Key expirada ou event type renomeado): gera slots só a partir da regra
+// de dias/horários fixos, sem depender do calendário do Cal.com. Usado
+// principalmente para não travar o agendamento PRESENCIAL, que não precisa do
+// Cal.com para nada além de ler a disponibilidade — mas serve de base também
+// para o online (a criação do booking em si ainda vai falhar sem a API).
+function gerarSlotsFallback(startTime: string, endTime: string): Array<{ label: string; short: string; datetime: string }> {
+  const resultado: Array<{ label: string; short: string; datetime: string }> = [];
+  const agora = new Date();
+  let cursor = toZonedTime(new Date(startTime), TIMEZONE);
+  const fim = new Date(endTime);
+
+  while (cursor <= fim && resultado.length < 30) {
+    const diaSemana = getDay(cursor);
+    if (DIAS_PERMITIDOS.includes(diaSemana)) {
+      const diaStr = format(cursor, 'yyyy-MM-dd');
+      for (const hora of HORARIOS_DISPONIVEIS) {
+        // Constrói o horário como hora LOCAL de Manaus (não do servidor) e
+        // converte pra UTC de verdade — evitar isso foi a causa do bug
+        // anterior (slots saindo 4h adiantados).
+        const slotUtc = fromZonedTime(`${diaStr}T${hora}:00`, TIMEZONE);
+        if (slotUtc > agora) {
+          resultado.push(formatarSlotParaExibicao(slotUtc.toISOString()));
+        }
+      }
+    }
+    cursor = addDays(cursor, 1);
+  }
+
+  return resultado.slice(0, 12);
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -325,21 +387,16 @@ serve(async (req) => {
       );
     }
 
-    // Buscar Event Type ID
+    // Buscar Event Type ID. Se falhar (API Key inválida/expirada, evento
+    // renomeado etc.), NÃO aborta aqui — cada action decide se consegue
+    // degradar (buscar_horarios cai no fallback local; agendar presencial não
+    // depende disso de jeito nenhum; só agendar online exige de verdade).
     const eventTypeId = await getEventTypeId();
     if (!eventTypeId) {
-      console.error('Event type não encontrado');
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Event type não encontrado no Cal.com. Verifique se a API Key tem permissão e se o evento existe.',
-          horarios: [] // Retornar array vazio para não quebrar o fluxo
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      console.error('Event type não encontrado no Cal.com — seguindo em modo degradado quando possível.');
+    } else {
+      console.log('Event Type ID:', eventTypeId);
     }
-
-    console.log('Event Type ID:', eventTypeId);
 
     // ========================================
     // ACTION: buscar_horarios
@@ -355,25 +412,32 @@ serve(async (req) => {
 
       console.log('Buscando horários de', startTime, 'até', endTime);
 
-      const slotsResponse = await getAvailableSlots(eventTypeId, startTime, endTime);
-      
-      if (!slotsResponse || !slotsResponse.slots) {
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            error: 'Não foi possível buscar horários disponíveis',
-            horarios: []
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+      const slotsResponse = eventTypeId ? await getAvailableSlots(eventTypeId, startTime, endTime) : null;
 
-      const horariosFormatados = filtrarSlotsPermitidos(slotsResponse.slots);
+      const horariosBrutos = slotsResponse?.slots
+        ? filtrarSlotsPermitidos(slotsResponse.slots)
+        : gerarSlotsFallback(startTime, endTime);
+
+      // Exclui horários já ocupados em `compromissos` (ex.: consultas presenciais,
+      // que não passam pelo calendário do Cal.com e por isso não apareceriam
+      // como indisponíveis na resposta da API acima). Usa `hoje` (não
+      // `startTime`, que já é "próxima segunda no mesmo horário do dia atual")
+      // como piso, pra não deixar escapar nada entre agora e o início do range.
+      const { data: ocupados } = await supabase
+        .from('compromissos')
+        .select('data_inicio')
+        .not('modalidade', 'is', null)
+        .neq('confirmacao_status', 'cancelado')
+        .gte('data_inicio', hoje.toISOString())
+        .lte('data_inicio', endTime);
+      const ocupadosSet = new Set((ocupados || []).map((o: any) => new Date(o.data_inicio).toISOString()));
+      const horariosFormatados = horariosBrutos.filter(h => !ocupadosSet.has(new Date(h.datetime).toISOString()));
+
       console.log('Horários formatados:', horariosFormatados.length);
 
       return new Response(
-        JSON.stringify({ 
-          success: true, 
+        JSON.stringify({
+          success: true,
           horarios: horariosFormatados,
           mensagem: horariosFormatados.length > 0 
             ? `Encontrei ${horariosFormatados.length} horários disponíveis para agendamento.`
@@ -387,46 +451,78 @@ serve(async (req) => {
     // ACTION: agendar
     // ========================================
     if (action === 'agendar') {
-      const { datetime, nome, email, telefone, leadId, subscriberId, notas } = params;
+      const { datetime, nome, email, telefone, leadId, subscriberId, notas, modalidade = 'online' } = params;
 
-      if (!datetime || !nome || !email) {
+      if (!datetime || !nome) {
         return new Response(
-          JSON.stringify({ success: false, error: 'Dados obrigatórios: datetime, nome, email' }),
+          JSON.stringify({ success: false, error: 'Dados obrigatórios: datetime, nome' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+      if (modalidade === 'online' && !email) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'E-mail obrigatório para consulta online' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
         );
       }
 
-      // Criar booking no Cal.com
-      const booking = await createBooking(
-        eventTypeId,
-        datetime,
-        nome,
-        email,
-        telefone,
-        notas
-      );
+      const zapiInstanceId = await resolverZapiInstanceId(supabase, leadId, subscriberId);
 
-      if (!booking || booking.status !== 'success') {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Não foi possível criar o agendamento no Cal.com' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-        );
+      let dataInicio: string;
+      let dataFim: string;
+      let localReuniao: string | null;
+      let bookingData: CalComBookingResponse['data'] | null = null;
+      let externalId: string | null = null;
+
+      if (modalidade === 'presencial') {
+        // Não reserva no Cal.com — evita que o Cal.com mande e-mail de
+        // confirmação mencionando Google Meet para quem vai presencialmente.
+        // O índice único uq_compromissos_slot_consulta garante atomicidade
+        // contra dois agendamentos (presencial ou online) no mesmo horário.
+        dataInicio = new Date(datetime).toISOString();
+        dataFim = new Date(new Date(datetime).getTime() + 60 * 60 * 1000).toISOString();
+        localReuniao = ENDERECO_ESCRITORIO;
+      } else {
+        if (!eventTypeId) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Agendamento online indisponível no momento (Cal.com não configurado). Tente presencial ou entre em contato com o escritório.' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 503 }
+          );
+        }
+        const booking = await createBooking(eventTypeId, datetime, nome, email, telefone, notas);
+        if (!booking || booking.status !== 'success') {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Não foi possível criar o agendamento no Cal.com' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+          );
+        }
+        bookingData = booking.data;
+        dataInicio = bookingData.start;
+        dataFim = bookingData.end;
+        localReuniao = bookingData.meetingUrl || null;
+        externalId = bookingData.uid;
       }
-
-      const bookingData = booking.data;
 
       // Criar compromisso no CRM
       const { data: compromisso, error: compromissoError } = await supabase
         .from('compromissos')
         .insert({
-          titulo: `Consulta Jurídica - ${nome}`,
+          titulo: `Consulta Jurídica (${modalidade === 'presencial' ? 'Presencial' : 'Online'}) - ${nome}`,
           tipo: 'Reunião',
-          data_inicio: bookingData.start,
-          data_fim: bookingData.end,
-          descricao: `Agendamento via Cal.com.\n\nUID: ${bookingData.uid}\nDuração: ${bookingData.duration} min\n${bookingData.meetingUrl ? `Link: ${bookingData.meetingUrl}` : ''}`,
+          modalidade,
+          local_reuniao: localReuniao,
+          data_inicio: dataInicio,
+          data_fim: dataFim,
+          descricao: modalidade === 'presencial'
+            ? `Agendamento presencial via chat/CRM.\n\nLocal: ${localReuniao}`
+            : `Agendamento via Cal.com.\n\nUID: ${bookingData?.uid}\nDuração: ${bookingData?.duration} min\n${localReuniao ? `Link: ${localReuniao}` : ''}`,
           lead_id: leadId || null,
+          nome_contato: nome,
+          telefone_contato: telefone || null,
+          subscriber_id: subscriberId || null,
+          zapi_instance_id: zapiInstanceId || null,
           origem: 'cal.com',
-          external_id: bookingData.uid,
+          external_id: externalId,
           confirmacao_status: 'confirmado',
           confirmado_em: new Date().toISOString(),
         })
@@ -435,6 +531,12 @@ serve(async (req) => {
 
       if (compromissoError) {
         console.error('Erro ao criar compromisso:', compromissoError);
+        if (compromissoError.code === '23505') {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Esse horário acabou de ser reservado. Por favor, escolha outro.' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 409 }
+          );
+        }
       }
 
       // Registrar interação
@@ -442,8 +544,8 @@ serve(async (req) => {
         await supabase.from('interacoes').insert({
           cliente_id: leadId,
           tipo: 'Agendamento',
-          resumo: `Consulta agendada via Cal.com para ${format(new Date(bookingData.start), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
-          detalhes: `Agendamento criado automaticamente via API do Cal.com.\nUID: ${bookingData.uid}`,
+          resumo: `Consulta ${modalidade === 'presencial' ? 'presencial' : 'online'} agendada para ${format(new Date(dataInicio), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
+          detalhes: bookingData ? `Agendamento criado automaticamente via API do Cal.com.\nUID: ${bookingData.uid}` : `Agendamento presencial criado diretamente no CRM.`,
           direcao: 'entrada',
           data_interacao: new Date().toISOString(),
         });
@@ -466,41 +568,48 @@ serve(async (req) => {
       // Criar evento de sistema
       await supabase.from('system_events').insert({
         tipo: 'agendamento',
-        acao: 'calcom_booking_created',
-        fonte: 'cal.com',
+        acao: modalidade === 'presencial' ? 'agendamento_presencial_criado' : 'calcom_booking_created',
+        fonte: modalidade === 'presencial' ? 'crm' : 'cal.com',
         lead_id: leadId || null,
         entidade_tipo: 'compromisso',
         entidade_id: compromisso?.id,
         dados: {
-          booking_id: bookingData.id,
-          booking_uid: bookingData.uid,
-          start: bookingData.start,
-          end: bookingData.end,
-          meeting_url: bookingData.meetingUrl,
+          booking_id: bookingData?.id,
+          booking_uid: bookingData?.uid,
+          start: dataInicio,
+          end: dataFim,
+          meeting_url: localReuniao,
+          modalidade,
           subscriber_id: subscriberId,
         },
       });
 
       // Formatar data para exibição
       const dataFormatada = format(
-        toZonedTime(new Date(bookingData.start), TIMEZONE),
+        toZonedTime(new Date(dataInicio), TIMEZONE),
         "EEEE, dd 'de' MMMM 'às' HH:mm",
         { locale: ptBR }
       );
 
+      const mensagem = modalidade === 'presencial'
+        ? `✅ Agendamento confirmado para ${dataFormatada}!\n\n📍 Local: ${localReuniao}`
+        : `✅ Agendamento confirmado para ${dataFormatada}!\n\nVocê receberá um e-mail de confirmação.${localReuniao ? `\n\n📹 Link da reunião: ${localReuniao}` : ''}`;
+
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          booking: {
+        JSON.stringify({
+          success: true,
+          booking: bookingData ? {
             id: bookingData.id,
             uid: bookingData.uid,
-            start: bookingData.start,
-            end: bookingData.end,
+            start: dataInicio,
+            end: dataFim,
             meetingUrl: bookingData.meetingUrl,
             dataFormatada,
-          },
+          } : { start: dataInicio, end: dataFim, dataFormatada },
+          modalidade,
+          localReuniao,
           compromisso_id: compromisso?.id,
-          mensagem: `✅ Agendamento confirmado para ${dataFormatada}!\n\nVocê receberá um e-mail de confirmação.${bookingData.meetingUrl ? `\n\n📹 Link da reunião: ${bookingData.meetingUrl}` : ''}`
+          mensagem,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -526,8 +635,8 @@ serve(async (req) => {
       const endOfDayDate = new Date(date);
       endOfDayDate.setHours(23, 59, 59, 999);
 
-      const slotsResponse = await getAvailableSlots(eventTypeId, startOfDayDate.toISOString(), endOfDayDate.toISOString());
-      
+      const slotsResponse = eventTypeId ? await getAvailableSlots(eventTypeId, startOfDayDate.toISOString(), endOfDayDate.toISOString()) : null;
+
       if (!slotsResponse || !slotsResponse.slots) {
         return new Response(
           JSON.stringify({ success: false, disponivel: false, error: 'Não foi possível verificar disponibilidade' }),

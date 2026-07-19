@@ -41,6 +41,12 @@ const eventTime = (isoStr: string): string => {
 };
 
 const getModalidadeIcon = (c: Compromisso) => {
+  // Prioriza a coluna estruturada (compromissos criados pelo agendamento
+  // presencial/online do chat); cai pro parsing de texto só como fallback
+  // para compromissos antigos, criados antes dessa coluna existir.
+  if (c.modalidade === 'online') return { icon: Video, color: 'text-blue-500', label: 'Online' };
+  if (c.modalidade === 'presencial') return { icon: Building2, color: 'text-amber-600', label: 'Presencial' };
+
   const t = (c.tipo || '').toLowerCase();
   const d = (c.descricao || '').toLowerCase();
   if (t.includes('online') || d.includes('online') || d.includes('virtual') || d.includes('remoto'))
