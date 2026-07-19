@@ -35,6 +35,14 @@ async function getIgProfile(igsid: string): Promise<{ name?: string; username?: 
 
 type Parte = { texto: string; tipo: string; mediaUrl: string };
 
+// Normaliza o tipo cru do attachment da Meta pro mesmo vocabulário usado pelo
+// WhatsApp (zapi-webhook): a Meta manda "file" pra documentos, mas o front
+// (ChatInbox.tsx) só reconhece "document" — sem isso, PDF/DOC/XLS do
+// Instagram caem sempre no texto genérico, sem preview/link nenhum.
+function normalizarTipo(t: string): string {
+  return t === "file" ? "document" : t;
+}
+
 // Extrai TODAS as partes de uma mensagem do Instagram: o texto e/ou CADA anexo.
 // Antes só pegava o 1º anexo — então quando o cliente manda várias fotos numa
 // mensagem só (ex.: o contrato em várias páginas), só vinha uma.
@@ -47,7 +55,7 @@ function extrairPartes(message: any): Parte[] {
   if (atts.length > 0) {
     return atts.map((att) => {
       const t = att?.type || "anexo";
-      return { texto: rotulo[t] || "📎 Anexo", tipo: t, mediaUrl: att?.payload?.url || "" };
+      return { texto: rotulo[t] || "📎 Anexo", tipo: normalizarTipo(t), mediaUrl: att?.payload?.url || "" };
     });
   }
   if (message?.text) return [{ texto: message.text, tipo: "text", mediaUrl: "" }];
@@ -65,7 +73,7 @@ async function persistirMidia(rawUrl: string, tipo: string, mid: string): Promis
     if (!resp.ok) return rawUrl;
     const ct = (resp.headers.get("content-type") || "").toLowerCase();
     const buf = new Uint8Array(await resp.arrayBuffer());
-    let ext = ({ image: "jpg", video: "mp4", audio: "mp3", file: "bin" } as Record<string, string>)[tipo] || "bin";
+    let ext = ({ image: "jpg", video: "mp4", audio: "mp3", document: "bin" } as Record<string, string>)[tipo] || "bin";
     if (ct.includes("png")) ext = "png";
     else if (ct.includes("jpeg") || ct.includes("jpg")) ext = "jpg";
     else if (ct.includes("webp")) ext = "webp";
@@ -73,6 +81,17 @@ async function persistirMidia(rawUrl: string, tipo: string, mid: string): Promis
     else if (ct.includes("mp4")) ext = "mp4";
     else if (ct.includes("ogg") || ct.includes("opus")) ext = "ogg";
     else if (ct.includes("mpeg") || ct.includes("mp3")) ext = "mp3";
+    // Documentos — a Meta manda o content-type real do arquivo (aplica-se
+    // também a áudios em formato .m4a/.aac que o IG às vezes usa).
+    else if (ct.includes("pdf")) ext = "pdf";
+    else if (ct.includes("wordprocessingml") || ct.includes("msword")) ext = "docx";
+    else if (ct.includes("spreadsheetml") || ct.includes("ms-excel")) ext = "xlsx";
+    else if (ct.includes("presentationml") || ct.includes("ms-powerpoint")) ext = "pptx";
+    else if (ct.includes("csv")) ext = "csv";
+    else if (ct.includes("plain")) ext = "txt";
+    else if (ct.includes("zip")) ext = "zip";
+    else if (ct.includes("aac")) ext = "aac";
+    else if (ct.includes("m4a") || ct.includes("x-m4a")) ext = "m4a";
     const safe = (mid || crypto.randomUUID()).replace(/[^a-zA-Z0-9_-]/g, "_");
     const path = `instagram-media/${safe}.${ext}`;
     const { error } = await supabase.storage.from("documentos").upload(path, buf, {
@@ -178,7 +197,7 @@ Deno.serve(async (req) => {
           // Uma mensagem por parte: o texto e/ou CADA anexo (cobre várias fotos).
           for (let pi = 0; pi < partes.length; pi++) {
             const { texto, tipo, mediaUrl } = partes[pi];
-            const ehMidia = ["image", "video", "audio", "file"].includes(tipo);
+            const ehMidia = ["image", "video", "audio", "document"].includes(tipo);
             let mediaPublica = "";
             let conteudoFinal = texto;
             if (mediaUrl) {

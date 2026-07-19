@@ -2167,7 +2167,7 @@ const ManyChatInboxContent = () => {
     const isAudio = type === "audio" || urlCandidate.match(/\.(ogg|mp3|wav|m4a|opus|aac|webm)(\?|$)/i);
     const isImage = type === "image" || urlCandidate.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i);
     const isVideo = type === "video" || urlCandidate.match(/\.(mp4|webm|mov)(\?|$)/i);
-    const isDocument = type === "document" || urlCandidate.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt)(\?|$)/i);
+    const isDocument = type === "document" || type === "file" || urlCandidate.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt)(\?|$)/i);
     if (isAudio) {
       const hasAudioUrl = /^(https?:|blob:)/i.test(urlCandidate);
       if (hasAudioUrl) return <WhatsAppAudioPlayer message={{ ...message, conteudo: urlCandidate, metadata } as any} isSent={message.direcao === "saida"} />;
