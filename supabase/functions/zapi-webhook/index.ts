@@ -674,7 +674,7 @@ serve(async (req: Request) => {
         const { data: existingOutbound } = await supabase
           .from('manychat_mensagens')
           .select('id')
-          .or(`metadata->>message_id.eq.${normalized.messageId},metadata->>zapi_message_id.eq.${normalized.messageId}`)
+          .eq('metadata->>message_id', normalized.messageId)
           .maybeSingle();
         
         if (existingOutbound) {
