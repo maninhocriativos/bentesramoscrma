@@ -55,6 +55,24 @@ function base64ToBlobUrl(base64: string, mime = 'application/pdf'): string {
   return URL.createObjectURL(new Blob([bytes], { type: mime }));
 }
 
+// Calcula automaticamente {{valor_X_dobro}} = 2× {{valor_X}} pra qualquer
+// campo valor_* que o modelo peça essa contrapartida (padrão de restituição em
+// dobro do art. 42, parágrafo único, CDC, usado em vários modelos de
+// consignado/venda casada) — sem precisar de código específico por modelo.
+// Só preenche se o advogado não tiver digitado o dobro manualmente.
+function autoDobro(formData: FormData): Record<string, string> {
+  const extras: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(formData)) {
+    if (!/^valor_/.test(key) || key.endsWith('_dobro') || key.endsWith('_extenso')) continue;
+    const dobroKey = `${key}_dobro`;
+    if (formData[dobroKey]?.trim()) continue; // já preenchido manualmente
+    const num = parseValor(raw || '');
+    if (isNaN(num)) continue;
+    extras[dobroKey] = (num * 2).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  return extras;
+}
+
 // Gera automaticamente os campos "por extenso" a partir dos valores numéricos,
 // preenchendo apenas os que o advogado deixou em branco (não sobrescreve manual).
 function autoExtenso(formData: FormData): Record<string, string> {
@@ -171,9 +189,11 @@ function buildTemplateData(formData: FormData, actionName: string, placeholders:
   const valorSeguroDobro = isNaN(valorSeguroNum) ? '' : (valorSeguroNum * 2).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const valorSeguroDobroExtenso = isNaN(valorSeguroNum) ? '' : reaisPorExtenso(valorSeguroNum * 2);
 
+  const formDataComDobro = { ...formData, ...autoDobro(formData) };
+
   const data: Record<string, string> = {
-    ...formData,
-    ...autoExtenso(formData),
+    ...formDataComDobro,
+    ...autoExtenso(formDataComDobro),
     // Alias: alguns modelos usam {{data_petição}} (com cedilha) e o form salva data_peticao.
     'data_petição': get(formData, 'data_petição', 'data_peticao'),
     nome_completo: nomeCompleto,
