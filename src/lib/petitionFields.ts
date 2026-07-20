@@ -120,6 +120,10 @@ type DictEntry = Omit<FieldConfig, 'key'> & { group: string };
 
 // Dicionário de campos conhecidos: rótulo, tipo e grupo (etapa) de cada marcador.
 const FIELD_DICT: Record<string, DictEntry> = {
+  // ── Processo ──
+  vara_juizo:      { label: 'Vara / Juízo', placeholder: '1ª Vara Cível e de Acidentes de Trabalho da Comarca de Manaus/AM', span: 'full', group: 'Processo' },
+  nome_estagiario: { label: 'Nome do Estagiário (assinatura)', placeholder: 'Nome conforme petição', group: 'Processo' },
+
   // ── Cliente ──
   nome_maiusculo:  { label: 'Nome Completo (MAIÚSCULAS)', placeholder: 'NOME CONFORME DOCUMENTOS', span: 'full', group: 'Cliente' },
   nome_completo:   { label: 'Nome Completo (normal)', placeholder: 'Nome conforme documentos', span: 'full', group: 'Cliente' },
@@ -130,6 +134,14 @@ const FIELD_DICT: Record<string, DictEntry> = {
   nacionalidade:   { label: 'Nacionalidade', type: 'autocomplete', options: NACIONALIDADES, placeholder: 'brasileiro(a)', group: 'Cliente' },
   naturalidade:    { label: 'Naturalidade', type: 'autocomplete', options: NATURALIDADES, placeholder: 'amazonense', group: 'Cliente' },
   idade_numerica:  { label: 'Idade (número)', placeholder: '68', group: 'Cliente' },
+  diagnostico_prioridade: { label: 'Diagnóstico (prioridade de tramitação)', placeholder: 'Ex: Transtorno do Espectro Autista — TEA', span: 'full', group: 'Cliente', optional: true, hint: 'Só preencha se o processo pedir prioridade por doença/deficiência.' },
+
+  // ── Representante legal (menor/incapaz) ──
+  representante_legal_qualificacao:  { label: 'Qualificação do Representante', placeholder: 'sua genitora', group: 'Cliente', optional: true, hint: 'Só se o autor for menor/incapaz representado por terceiro.' },
+  representante_legal_nome:          { label: 'Nome do Representante Legal', placeholder: 'Nome completo', span: 'full', group: 'Cliente', optional: true },
+  representante_legal_nacionalidade: { label: 'Nacionalidade do Representante', type: 'autocomplete', options: NACIONALIDADES, group: 'Cliente', optional: true },
+  representante_legal_naturalidade:  { label: 'Naturalidade do Representante', type: 'autocomplete', options: NATURALIDADES, group: 'Cliente', optional: true },
+  representante_legal_estado_civil:  { label: 'Estado Civil do Representante', type: 'select', options: ESTADOS_CIVIS, group: 'Cliente', optional: true },
 
   // ── Endereço ──
   endereco_rua:         { label: 'Rua', placeholder: 'Rua das Flores', span: 'full', group: 'Endereço' },
@@ -140,22 +152,34 @@ const FIELD_DICT: Record<string, DictEntry> = {
   endereco_uf:          { label: 'UF', type: 'select', options: UFS, group: 'Endereço' },
   endereco_cep:         { label: 'CEP', placeholder: '69.000-000', group: 'Endereço' },
 
-  // ── Banco / Réu ──
+  // ── Banco (convenção antiga, ainda usada por modelos legados) ──
   banco_nome:     { label: 'Banco Réu', type: 'select', options: BANCOS, span: 'full', group: 'Banco' },
   banco_cnpj:     { label: 'CNPJ do Banco', placeholder: '00.000.000/0001-00', group: 'Banco' },
   banco_endereco: { label: 'Endereço do Banco', placeholder: 'Av. Paulista, nº 100, São Paulo/SP', span: 'full', group: 'Banco' },
   banco_cep:      { label: 'CEP do Banco', placeholder: '00.000-000', group: 'Banco' },
 
+  // ── Réu (convenção nova, genérica p/ banco OU seguradora — CNPJ/endereço
+  // preenchidos manualmente, sem autofill, conforme decisão do usuário) ──
+  reu_nome:     { label: 'Nome do Réu', placeholder: 'Banco/Seguradora S/A', span: 'full', group: 'Réu' },
+  reu_cnpj:     { label: 'CNPJ do Réu', placeholder: '00.000.000/0001-00', group: 'Réu' },
+  reu_endereco: { label: 'Endereço do Réu', placeholder: 'Av. Paulista, nº 100, São Paulo/SP', span: 'full', group: 'Réu' },
+
   // ── Contrato ──
   numero_contrato:   { label: 'Número do Contrato', placeholder: '91507432', group: 'Contrato' },
   mes_contratacao:   { label: 'Mês da Contratação', type: 'select', options: MESES, group: 'Contrato' },
   ano_contratacao:   { label: 'Ano da Contratação', type: 'select', options: ANOS, group: 'Contrato' },
+  data_contratacao:  { label: 'Data da Contratação', placeholder: 'janeiro de 2024', group: 'Contrato' },
   num_parcelas:      { label: 'Nº de Parcelas', placeholder: '84', group: 'Contrato' },
   valor_emprestimo:  { label: 'Valor do Empréstimo (R$)', placeholder: '1.286,33', group: 'Contrato' },
   valor_parcela:     { label: 'Valor da Parcela (R$)', placeholder: '29,10', group: 'Contrato' },
   valor_total_contrato: { label: 'Valor Total do Contrato (R$)', placeholder: '2.444,40', group: 'Contrato' },
   valor_seguro:      { label: 'Valor do Seguro/Prestamista (R$)', placeholder: '207,79', group: 'Contrato' },
   valor_encargos:    { label: 'Valor dos Encargos (R$)', placeholder: '97,63', group: 'Contrato' },
+  numero_beneficio_inss:       { label: 'Nº Benefício INSS', placeholder: '999.999.999-9', group: 'Contrato' },
+  codigo_contrato_rcc:         { label: 'Código do Contrato (RCC)', placeholder: 'EMPRÉSTIMO SOBRE A RCC – CÓDIGO 000', span: 'full', group: 'Contrato' },
+  codigo_contrato_rmc:         { label: 'Código do Contrato (RMC)', placeholder: 'EMPRÉSTIMO SOBRE A RMC – CÓDIGO 000', span: 'full', group: 'Contrato' },
+  codigo_rubrica_consignacao:  { label: 'Código da Rubrica de Consignação', placeholder: 'CONSIGNAÇÃO – CARTÃO', span: 'full', group: 'Contrato' },
+  numero_apolice:              { label: 'Número da Apólice', placeholder: '868678307230000900330006', span: 'full', group: 'Contrato' },
 
   // ── Descontos (RMC/RCC) ──
   mes_inicio_desconto:  { label: 'Mês Início Desconto', type: 'select', options: MESES, group: 'Descontos' },
@@ -168,18 +192,28 @@ const FIELD_DICT: Record<string, DictEntry> = {
   num_parcelas_descontadas:    { label: 'Nº Parcelas Descontadas', placeholder: '39', group: 'Descontos' },
   valor_total_descontado:      { label: 'Total Descontado (R$)', placeholder: '3.436,86', group: 'Descontos' },
   valor_descontos_indevidos:   { label: 'Descontos Indevidos (R$)', placeholder: '1.317,90', group: 'Descontos' },
+  data_inicio_descontos:            { label: 'Início dos Descontos', placeholder: 'fevereiro de 2024', group: 'Descontos' },
+  data_termino_previsto:            { label: 'Término Previsto do Contrato', placeholder: 'fevereiro de 2025', group: 'Descontos' },
+  data_fim_apuracao:                { label: 'Fim do Período de Apuração', placeholder: 'julho de 2026', group: 'Descontos' },
+  num_parcelas_pagas_total:         { label: 'Nº Parcelas Pagas (total)', placeholder: '20', group: 'Descontos' },
+  valor_total_pago_ate_ajuizamento: { label: 'Total Pago até o Ajuizamento (R$)', placeholder: '2.000,00', group: 'Descontos' },
+  periodo_indevido_inicio:          { label: 'Início do Período Indevido', placeholder: 'março de 2025', group: 'Descontos' },
+  periodo_indevido_fim:             { label: 'Fim do Período Indevido', placeholder: 'julho de 2026', group: 'Descontos' },
 
   // ── Pedidos / Valores ──
   valor_seguro_dobro:  { label: 'Seguro em Dobro (R$)', placeholder: '415,58', group: 'Valores' },
   valor_devolucao:     { label: 'Valor Devolução (R$)', placeholder: '2.635,80', group: 'Valores' },
   valor_danos_morais:  { label: 'Danos Morais (R$)', placeholder: '10.000,00', group: 'Valores' },
   valor_causa:         { label: 'Valor da Causa (R$)', placeholder: '10.415,58', group: 'Valores' },
+  valor_renda_familiar: { label: 'Renda Familiar (R$)', placeholder: '2.000,00', group: 'Valores' },
+  multa_diaria_cancelamento_apolice: { label: 'Multa Diária — Cancelamento de Apólice (R$)', placeholder: '500,00', group: 'Valores' },
+  multa_diaria_exibicao_documentos:  { label: 'Multa Diária — Exibição de Documentos (R$)', placeholder: '300,00', group: 'Valores' },
   data_peticao:        { label: 'Data da Petição', placeholder: '03 de junho de 2026', span: 'full', hint: 'Ex: 03 de junho de 2026', group: 'Valores' },
 };
 
-const GROUP_ORDER = ['Cliente', 'Endereço', 'Banco', 'Contrato', 'Descontos', 'Valores', 'Outros'];
+const GROUP_ORDER = ['Processo', 'Cliente', 'Endereço', 'Réu', 'Banco', 'Contrato', 'Descontos', 'Valores', 'Outros'];
 const GROUP_ICON: Record<string, React.ElementType> = {
-  'Cliente': User, 'Endereço': MapPin, 'Banco': Building2, 'Contrato': FileText,
+  'Processo': Scale, 'Cliente': User, 'Endereço': MapPin, 'Réu': Building2, 'Banco': Building2, 'Contrato': FileText,
   'Descontos': Scale, 'Valores': DollarSign, 'Outros': List,
 };
 
