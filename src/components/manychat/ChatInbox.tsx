@@ -34,6 +34,7 @@ import { ChatFiltersBar, type ConversationFilter, type OrigemFilter } from "@/co
 import { formatWhatsAppText as formatWhatsAppTextHelper } from "@/lib/whatsappTextFormatter";
 import { InstanceInfo } from "@/lib/instanceUtils";
 import { invokeZapiSend } from "@/lib/zapiSendClient";
+import OpusRecorder from "opus-recorder";
 import {
   Send, Search, Phone, RefreshCw, Mic, Paperclip, X, CheckCheck,
   ArrowLeft, MoreVertical, Smile, Sun, Moon, Menu, Bot, UserRound,
@@ -288,6 +289,7 @@ const ManyChatInboxContent = () => {
   const nameInputRef             = useRef<HTMLInputElement>(null);
   const nameSavingRef            = useRef(false);
   const mediaRecorderRef         = useRef<MediaRecorder | null>(null);
+  const opusRecorderRef          = useRef<InstanceType<typeof OpusRecorder> | null>(null);
   const audioChunksRef           = useRef<Blob[]>([]);
   const typingTimeoutRef         = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recentMsgIdsRef          = useRef<Set<string>>(new Set());
@@ -1630,6 +1632,31 @@ const ManyChatInboxContent = () => {
   };
 
   const startRecording = async () => {
+    // Grava já em Ogg/Opus via WebAssembly (opus-recorder) — evita depender do
+    // MediaRecorder do navegador, que no Chrome/Edge só grava webm/opus e obriga
+    // o backend a converter via CloudConvert (round-trip lento, ~12s em média,
+    // picos de 60s+) antes de mandar pro WhatsApp.
+    if (OpusRecorder.isRecordingSupported()) {
+      try {
+        const recorder = new OpusRecorder({ encoderPath: "/opus-recorder/encoderWorker.min.js" });
+        opusRecorderRef.current = recorder;
+        recorder.ondataavailable = (typedArray: Uint8Array) => {
+          const audioBlob = new Blob([typedArray], { type: "audio/ogg" });
+          const audioFile = new File([audioBlob], `audio_${Date.now()}.ogg`, { type: "audio/ogg" });
+          setSelectedFile(audioFile);
+          setPreviewUrl(URL.createObjectURL(audioBlob));
+        };
+        await recorder.start();
+        setIsRecording(true);
+        return;
+      } catch (e) {
+        console.warn("[Gravação] opus-recorder falhou, usando MediaRecorder:", e);
+        opusRecorderRef.current = null;
+      }
+    }
+
+    // Fallback (navegadores sem WebAssembly/AudioContext): grava no formato que
+    // o navegador suportar; zapi-send converte pra ogg no backend se precisar.
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = MediaRecorder.isTypeSupported('audio/ogg;codecs=opus') ? 'audio/ogg;codecs=opus'
@@ -1656,7 +1683,13 @@ const ManyChatInboxContent = () => {
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) { mediaRecorderRef.current.stop(); setIsRecording(false); }
+    if (!isRecording) return;
+    if (opusRecorderRef.current) {
+      opusRecorderRef.current.stop().finally(() => { opusRecorderRef.current = null; });
+      setIsRecording(false);
+      return;
+    }
+    if (mediaRecorderRef.current) { mediaRecorderRef.current.stop(); setIsRecording(false); }
   };
 
   const sendAudioFromPreview = async () => {
