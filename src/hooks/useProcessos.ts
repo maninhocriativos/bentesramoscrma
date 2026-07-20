@@ -18,18 +18,24 @@ export function useProcessos({ withRealtime = true }: { withRealtime?: boolean }
   const [processos, setProcessos] = useState<Processo[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-  const { perfil, isAdvogado, isEstagiario } = usePerfil();
+  const { perfil, isAdvogado, isEstagiario, isAdmin, isGerente } = usePerfil();
   const { user } = useAuth();
   const initialLoadDone = useRef(false);
 
   const isAdvogadoRef  = useRef(isAdvogado);
   const isEstagiarioRef = useRef(isEstagiario);
+  const isAdminRef     = useRef(isAdmin);
+  const isGerenteRef   = useRef(isGerente);
   const perfilNomeRef  = useRef(perfil?.nome);
+  const perfilSobrenomeRef = useRef(perfil?.sobrenome);
   const userIdRef      = useRef(user?.id);
 
   useEffect(() => { isAdvogadoRef.current   = isAdvogado;   }, [isAdvogado]);
   useEffect(() => { isEstagiarioRef.current = isEstagiario; }, [isEstagiario]);
+  useEffect(() => { isAdminRef.current      = isAdmin;      }, [isAdmin]);
+  useEffect(() => { isGerenteRef.current    = isGerente;    }, [isGerente]);
   useEffect(() => { perfilNomeRef.current   = perfil?.nome; }, [perfil?.nome]);
+  useEffect(() => { perfilSobrenomeRef.current = perfil?.sobrenome; }, [perfil?.sobrenome]);
   useEffect(() => { userIdRef.current       = user?.id;     }, [user?.id]);
 
   const fetchProcessos = useCallback(async () => {
@@ -40,13 +46,29 @@ export function useProcessos({ withRealtime = true }: { withRealtime?: boolean }
       .select(PROCESSOS_LIST_SELECT)
       .order('created_at', { ascending: false });
 
-    if (isEstagiario && user?.id && !isAdvogado) {
+    // Administradores e Gerentes veem todos os processos do escritório —
+    // nunca aplicar o filtro por "meus processos" pra eles, mesmo que também
+    // tenham o cargo de Advogado (ex: sócio que também assina petições).
+    if (isAdmin || isGerente) {
+      // sem filtro adicional
+    } else if (isEstagiario && user?.id && !isAdvogado) {
       // Estagiários só veem processos onde são co-responsáveis
       query = query.eq('co_responsavel_id', user.id);
     } else if (isAdvogado && perfil?.nome && user?.id) {
-      // Advogados veem processos onde são responsáveis ou co-responsáveis
-      const nome = perfil.nome.replace(/"/g, '');
-      query = query.or(`advogado_responsavel.eq."${nome}",co_responsavel_id.eq.${user.id}`);
+      // Advogados veem processos onde são responsáveis ou co-responsáveis.
+      // Comparação por ILIKE (contém nome E sobrenome), não igualdade exata:
+      // "advogado_responsavel" é um campo de texto livre digitado em cada
+      // petição/processo, com variações de maiúsculas, "(OAB/AM ####)" e até
+      // erros de digitação (ex.: "Andery", "Andey Augusto Bentes Ramos") — e o
+      // nome do perfil pode estar cadastrado só com o primeiro nome. Um
+      // "eq" exato nunca bate nesses casos e o advogado via a lista vazia.
+      const escapar = (s: string) => s.replace(/[,()*]/g, '').trim();
+      const nome = escapar(perfil.nome);
+      const sobrenome = escapar(perfil.sobrenome || '');
+      const condNome = sobrenome
+        ? `and(advogado_responsavel.ilike.*${nome}*,advogado_responsavel.ilike.*${sobrenome}*)`
+        : `advogado_responsavel.ilike.*${nome}*`;
+      query = query.or(`${condNome},co_responsavel_id.eq.${user.id}`);
     }
 
     const { data, error } = await query;
@@ -59,7 +81,7 @@ export function useProcessos({ withRealtime = true }: { withRealtime?: boolean }
 
     initialLoadDone.current = true;
     setLoading(false);
-  }, [isAdvogado, isEstagiario, perfil?.nome, user?.id, toast]);
+  }, [isAdvogado, isEstagiario, isAdmin, isGerente, perfil?.nome, perfil?.sobrenome, user?.id, toast]);
 
   useEffect(() => {
     if (!user) return;
@@ -67,11 +89,17 @@ export function useProcessos({ withRealtime = true }: { withRealtime?: boolean }
   }, [user, fetchProcessos]);
 
   const isVisible = (next: Processo): boolean => {
+    if (isAdminRef.current || isGerenteRef.current) return true;
     if (isEstagiarioRef.current && !isAdvogadoRef.current) {
       return (next as any).co_responsavel_id === userIdRef.current;
     }
     if (isAdvogadoRef.current && perfilNomeRef.current) {
-      return next.advogado_responsavel === perfilNomeRef.current || (next as any).co_responsavel_id === userIdRef.current;
+      // Mesma comparação tolerante a variações usada no fetch inicial
+      // (ver fetchProcessos) — nome/sobrenome contidos no texto livre do campo.
+      const advResp = (next.advogado_responsavel || '').toLowerCase();
+      const nomeOk = advResp.includes(perfilNomeRef.current.toLowerCase());
+      const sobrenomeOk = !perfilSobrenomeRef.current || advResp.includes(perfilSobrenomeRef.current.toLowerCase());
+      return (nomeOk && sobrenomeOk) || (next as any).co_responsavel_id === userIdRef.current;
     }
     return true;
   };
