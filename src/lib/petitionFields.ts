@@ -122,6 +122,7 @@ type DictEntry = Omit<FieldConfig, 'key'> & { group: string };
 const FIELD_DICT: Record<string, DictEntry> = {
   // ── Processo ──
   vara_juizo:      { label: 'Vara / Juízo', placeholder: '1ª Vara Cível e de Acidentes de Trabalho da Comarca de Manaus/AM', span: 'full', group: 'Processo' },
+  cidade_peticao:  { label: 'Cidade/UF da Petição (assinatura)', placeholder: 'Manaus/AM', group: 'Processo', hint: 'Cidade que aparece no fecho, antes da data (geralmente a mesma comarca da Vara).' },
   nome_estagiario: { label: 'Nome do Estagiário (assinatura)', placeholder: 'Nome conforme petição', group: 'Processo' },
 
   // ── Cliente ──
@@ -175,6 +176,10 @@ const FIELD_DICT: Record<string, DictEntry> = {
   valor_total_contrato: { label: 'Valor Total do Contrato (R$)', placeholder: '2.444,40', group: 'Contrato' },
   valor_seguro:      { label: 'Valor do Seguro/Prestamista (R$)', placeholder: '207,79', group: 'Contrato' },
   valor_encargos:    { label: 'Valor dos Encargos (R$)', placeholder: '97,63', group: 'Contrato' },
+  nome_produto:      { label: 'Nome do Produto Vendido Casado', placeholder: 'Seguro / Pacote de Benefícios', hint: 'Como o contrato chama o produto embutido no empréstimo.', group: 'Contrato' },
+  valor_credito_liquido: { label: 'Crédito Líquido Disponibilizado (R$)', placeholder: '1.620,05', group: 'Contrato' },
+  valor_saldo_devedor:   { label: 'Valor do Saldo Devedor (R$)', placeholder: '3.494,05', group: 'Contrato' },
+  valor_iof:             { label: 'Valor do IOF (R$)', placeholder: '57,09', group: 'Contrato' },
   numero_beneficio_inss:       { label: 'Nº Benefício INSS', placeholder: '999.999.999-9', group: 'Contrato' },
   codigo_contrato_rcc:         { label: 'Código do Contrato (RCC)', placeholder: 'EMPRÉSTIMO SOBRE A RCC – CÓDIGO 000', span: 'full', group: 'Contrato' },
   codigo_contrato_rmc:         { label: 'Código do Contrato (RMC)', placeholder: 'EMPRÉSTIMO SOBRE A RMC – CÓDIGO 000', span: 'full', group: 'Contrato' },
