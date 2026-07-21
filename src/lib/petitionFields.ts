@@ -180,6 +180,9 @@ const FIELD_DICT: Record<string, DictEntry> = {
   valor_credito_liquido: { label: 'Crédito Líquido Disponibilizado (R$)', placeholder: '1.620,05', group: 'Contrato' },
   valor_saldo_devedor:   { label: 'Valor do Saldo Devedor (R$)', placeholder: '3.494,05', group: 'Contrato' },
   valor_iof:             { label: 'Valor do IOF (R$)', placeholder: '57,09', group: 'Contrato' },
+  valor_tributos:        { label: 'Valor dos Tributos (R$)', placeholder: '37,99', group: 'Contrato' },
+  valor_total_emprestimo: { label: 'Valor Total do Empréstimo (R$)', placeholder: '1.804,74', group: 'Contrato' },
+  valor_seguro_total:    { label: 'Total do Seguro (soma dos contratos) (R$)', placeholder: '444,58', hint: 'Some o valor do seguro de todos os contratos — o dobro é calculado automaticamente.', group: 'Contrato' },
   numero_beneficio_inss:       { label: 'Nº Benefício INSS', placeholder: '999.999.999-9', group: 'Contrato' },
   codigo_contrato_rcc:         { label: 'Código do Contrato (RCC)', placeholder: 'EMPRÉSTIMO SOBRE A RCC – CÓDIGO 000', span: 'full', group: 'Contrato' },
   codigo_contrato_rmc:         { label: 'Código do Contrato (RMC)', placeholder: 'EMPRÉSTIMO SOBRE A RMC – CÓDIGO 000', span: 'full', group: 'Contrato' },
@@ -255,11 +258,29 @@ export function buildDynamicSteps(placeholders: string[], temPrint = false): Ste
     if (seen.has(key)) continue;
     seen.add(key);
 
-    const dict = FIELD_DICT[key];
+    // Modelos com múltiplos contratos (ex.: 2 empréstimos venda casada, ou os
+    // 3 do Paraná Banco) usam sufixo numérico (numero_contrato_1, valor_seguro_2,
+    // ...) pra repetir o mesmo conceito de campo por contrato, e valores somados
+    // podem levar "_dobro" (valor_seguro_total_dobro, calculado por autoDobro).
+    // Em vez de duplicar cada entrada no FIELD_DICT pra cada combinação, resolve
+    // a chave "base" (sem esses sufixos) e reaproveita o rótulo dela.
+    let chaveBase = key;
+    let ehDobro = false;
+    if (chaveBase.endsWith('_dobro')) { ehDobro = true; chaveBase = chaveBase.slice(0, -'_dobro'.length); }
+    const matchNumerado = chaveBase.match(/^(.+)_(\d+)$/);
+    const numeroContrato = matchNumerado ? matchNumerado[2] : null;
+    if (matchNumerado) chaveBase = matchNumerado[1];
+
+    const dict = FIELD_DICT[key] ?? FIELD_DICT[chaveBase];
     const group = dict?.group ?? 'Outros';
+    let label = dict?.label ?? humanize(key);
+    if (dict) {
+      if (ehDobro) label = `${label} — em Dobro`;
+      if (numeroContrato) label = `${label} (Contrato ${numeroContrato})`;
+    }
     const field: FieldConfig = dict
-      ? { key, label: dict.label, placeholder: dict.placeholder, type: dict.type, options: dict.options, span: dict.span, hint: dict.hint, optional: dict.optional }
-      : { key, label: humanize(key) };
+      ? { key, label, placeholder: dict.placeholder, type: dict.type, options: dict.options, span: dict.span, hint: dict.hint, optional: dict.optional }
+      : { key, label };
 
     (porGrupo[group] ??= []).push(field);
   }
