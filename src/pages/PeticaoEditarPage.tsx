@@ -100,10 +100,16 @@ function autoExtenso(formData: FormData): Record<string, string> {
     }
   }
 
-  // Idade por extenso (mantém MAIÚSCULAS conforme padrão dos modelos)
-  if (formData.idade_numerica?.trim() && vazio('idade_extenso')) {
+  // Idade por extenso: MAIÚSCULAS pro bloco de título (padrão dos modelos) e
+  // minúsculas pra quando aparece no meio do texto corrido (ex.: "conta
+  // atualmente com 64 (sessenta e quatro) anos").
+  if (formData.idade_numerica?.trim()) {
     const n = parseInt(formData.idade_numerica.replace(/\D/g, ''), 10);
-    if (!isNaN(n)) extras.idade_extenso = inteiroPorExtenso(n).toUpperCase();
+    if (!isNaN(n)) {
+      const porExtenso = inteiroPorExtenso(n);
+      if (vazio('idade_extenso')) extras.idade_extenso = porExtenso.toUpperCase();
+      if (vazio('idade_min_extenso')) extras.idade_min_extenso = porExtenso;
+    }
   }
 
   return extras;
