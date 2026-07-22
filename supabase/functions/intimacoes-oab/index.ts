@@ -614,37 +614,60 @@ serve(async (req) => {
         return null;
       }
 
-      for (let pagina = 1; pagina <= 10; pagina++) {
-        const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroOab=${oab_numero}&ufOab=${oab_uf}&dataDisponibilizacaoInicio=${CUTOFF}&dataDisponibilizacaoFim=${new Date().toISOString().slice(0, 10)}&itensPorPagina=${ITENS_POR_PAGINA}&pagina=${pagina}`;
-        const resp = await fetchDjen(url);
-        if (!resp || !resp.ok) {
-          console.warn(`⚠️ [DJEN] p${pagina} → falhou após retries (HTTP ${resp?.status ?? "sem resposta"})`);
-          break;
-        }
-        const data = await resp.json();
-        const items: any[] = Array.isArray(data?.items) ? data.items : [];
-        if (pagina === 1) console.log(`🔎 [DJEN] total=${data?.count ?? "?"}`);
-        if (items.length === 0) break;
+      // Busca base: por número de OAB. Roda sempre.
+      const djenBaseUrl = (pagina: number) =>
+        `https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroOab=${oab_numero}&ufOab=${oab_uf}&dataDisponibilizacaoInicio=${CUTOFF}&dataDisponibilizacaoFim=${new Date().toISOString().slice(0, 10)}&itensPorPagina=${ITENS_POR_PAGINA}&pagina=${pagina}`;
 
-        for (const item of items) {
-          const conteudo = stripHtml(item.texto || "");
-          const tipoRaw = classifyMovimento(conteudo, item.tipoComunicacao || "");
-          const tipo = TIPOS_INTIMACAO.has(tipoRaw) ? tipoRaw : "Publicação";
-          intimacoes.push(makeItem({
-            cnj: item.numeroprocessocommascara || item.numero_processo || "",
-            titulo: item.nomeClasse || "Processo",
-            tribunal: item.siglaTribunal || "",
-            tipo, conteudo,
-            dataDisp: item.data_disponibilizacao || null,
-            oab_numero, oab_uf, advogado_id,
-            fonte: "djen",
-            raw: item,
-          }));
-          djenCount++;
+      // Busca complementar: por nome do advogado. A API do DJEN aceita o
+      // parâmetro `nomeAdvogado` (confirmado em teste real — devolve só as
+      // comunicações onde esse nome aparece em destinatarioadvogados) e cobre
+      // publicações que saem sem o número da OAB corretamente casado — mesmo
+      // buraco que a busca por nome já fecha nas estratégias Escavador/DJe-TJAM
+      // acima, só que faltava aqui na API nacional.
+      const djenNomeUrl = advogadoNome
+        ? (pagina: number) =>
+            `https://comunicaapi.pje.jus.br/api/v1/comunicacao?nomeAdvogado=${encodeURIComponent(advogadoNome!)}&dataDisponibilizacaoInicio=${CUTOFF}&dataDisponibilizacaoFim=${new Date().toISOString().slice(0, 10)}&itensPorPagina=${ITENS_POR_PAGINA}&pagina=${pagina}`
+        : null;
+
+      async function paginarDjen(buildUrl: (pagina: number) => string, fonte: string, label: string) {
+        let count = 0;
+        for (let pagina = 1; pagina <= 10; pagina++) {
+          const resp = await fetchDjen(buildUrl(pagina));
+          if (!resp || !resp.ok) {
+            console.warn(`⚠️ [${label}] p${pagina} → falhou após retries (HTTP ${resp?.status ?? "sem resposta"})`);
+            break;
+          }
+          const data = await resp.json();
+          const items: any[] = Array.isArray(data?.items) ? data.items : [];
+          if (pagina === 1) console.log(`🔎 [${label}] total=${data?.count ?? "?"}`);
+          if (items.length === 0) break;
+
+          for (const item of items) {
+            const conteudo = stripHtml(item.texto || "");
+            const tipoRaw = classifyMovimento(conteudo, item.tipoComunicacao || "");
+            const tipo = TIPOS_INTIMACAO.has(tipoRaw) ? tipoRaw : "Publicação";
+            intimacoes.push(makeItem({
+              cnj: item.numeroprocessocommascara || item.numero_processo || "",
+              titulo: item.nomeClasse || "Processo",
+              tribunal: item.siglaTribunal || "",
+              tipo, conteudo,
+              dataDisp: item.data_disponibilizacao || null,
+              oab_numero, oab_uf, advogado_id,
+              fonte,
+              raw: item,
+            }));
+            count++;
+          }
+          if (items.length < ITENS_POR_PAGINA) break;
         }
-        if (items.length < ITENS_POR_PAGINA) break;
+        return count;
       }
-      console.log(`📋 [DJEN] ${djenCount} publicações via Comunica PJe Nacional`);
+
+      djenCount += await paginarDjen(djenBaseUrl, "djen", "DJEN");
+      if (djenNomeUrl) {
+        djenCount += await paginarDjen(djenNomeUrl, "djen_nome", "DJEN-nome");
+      }
+      console.log(`📋 [DJEN] ${djenCount} publicações via Comunica PJe Nacional (OAB${djenNomeUrl ? " + nome" : ""})`);
     } catch (e) {
       console.warn("⚠️ [DJEN] Erro geral:", e);
     }

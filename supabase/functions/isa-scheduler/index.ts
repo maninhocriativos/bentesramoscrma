@@ -672,6 +672,106 @@ serve(async (req) => {
       }
     }
 
+    // ==================== EMAIL: INTIMAÇÕES PENDENTES ====================
+    if (task === 'email_intimacoes_pendentes' || task === 'all') {
+      // Mesma lógica de prazo (contagem de dias úteis por tipo de ato) usada na
+      // tela de Intimações (IntimacoesPage.tsx, calcularPrazos/getUrgencyInfo) —
+      // reimplementada aqui pq a function roda em Deno, sem acesso ao front.
+      const isWeekendDate = (d: Date) => { const day = d.getDay(); return day === 0 || day === 6; };
+      const addDaysDate = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+      const addBusinessDaysDate = (d: Date, n: number) => {
+        let r = new Date(d), added = 0;
+        while (added < n) { r = addDaysDate(r, 1); if (!isWeekendDate(r)) added++; }
+        return r;
+      };
+      const calcularPrazoFatal = (intimacao: any): Date | null => {
+        const baseStr = intimacao.data_publicacao || intimacao.data_intimacao || intimacao.data_disponibilizacao;
+        if (!baseStr) return null;
+        const base = new Date(baseStr);
+        if (isNaN(base.getTime())) return null;
+        const tipo = (intimacao.tipo_intimacao || '').toLowerCase();
+        let pf = 20;
+        if (tipo.includes('embargos')) pf = 10;
+        else if (tipo.includes('manifestação') || tipo.includes('manifestacao')) pf = 10;
+        else if (tipo.includes('ciência') || tipo.includes('ciencia')) pf = 15;
+        else if (tipo.includes('sessão') || tipo.includes('sessao') || tipo.includes('julgamento')) pf = 0;
+        else if (tipo.includes('pagamento')) pf = 15;
+        if (pf === 0) return null;
+        let start = addDaysDate(base, 1);
+        while (isWeekendDate(start)) start = addDaysDate(start, 1);
+        return addBusinessDaysDate(start, pf);
+      };
+      const urgenciaIntimacao = (intimacao: any) => {
+        const fatal = calcularPrazoFatal(intimacao);
+        if (!fatal) return { level: 'none' as const, dias: null as number | null, fatal: null as Date | null };
+        const dias = Math.ceil((fatal.getTime() - Date.now()) / 86400000);
+        const level = dias < 0 ? 'overdue' as const : dias <= 7 ? 'urgent' as const : dias <= 15 ? 'warning' as const : 'safe' as const;
+        return { level, dias, fatal };
+      };
+
+      const { data: pendentes } = await supabase
+        .from('intimacoes')
+        .select('id, processo_cnj, processo_titulo, tipo_intimacao, tribunal, data_publicacao, data_intimacao, data_disponibilizacao, advogado_id, oab_numero, oab_uf')
+        .eq('lida', false);
+
+      if (pendentes?.length) {
+        // Resolve o responsável de cada intimação: por advogado_id (preciso) ou,
+        // na falta dele, pela OAB/UF que gerou a busca (mesma lógica do
+        // resolverResponsavel() da tela de Intimações).
+        const { data: perfisComOab } = await supabase
+          .from('perfis')
+          .select('id, nome, email, oab_numero, oab_uf')
+          .eq('aprovado', true);
+
+        const porId = new Map((perfisComOab || []).map((p: any) => [p.id, p]));
+        const porOab = new Map((perfisComOab || []).filter((p: any) => p.oab_numero).map((p: any) => [`${p.oab_numero}-${p.oab_uf || 'AM'}`, p]));
+
+        const porEmail: Record<string, { nome: string; itens: any[] }> = {};
+        for (const it of pendentes) {
+          const responsavel = (it.advogado_id && porId.get(it.advogado_id))
+            || (it.oab_numero && porOab.get(`${it.oab_numero}-${it.oab_uf || 'AM'}`));
+          if (!responsavel?.email) continue;
+          (porEmail[responsavel.email] ??= { nome: responsavel.nome, itens: [] }).itens.push(it);
+        }
+
+        let totalEnviados = 0;
+        for (const [email, { nome, itens }] of Object.entries(porEmail)) {
+          const comUrgencia = itens
+            .map(it => ({ it, u: urgenciaIntimacao(it) }))
+            .sort((a, b) => (a.u.dias ?? 9999) - (b.u.dias ?? 9999));
+
+          const urgentes = comUrgencia.filter(x => x.u.level === 'overdue' || x.u.level === 'urgent').length;
+
+          let conteudo = `<p style="color: #4a5568; font-size: 16px;">Olá${nome ? ` ${nome.split(' ')[0]}` : ''}! Você tem <strong>${itens.length}</strong> intimação(ões)/publicação(ões) ainda não lida(s)${urgentes ? `, sendo <strong style="color:#e53e3e;">${urgentes} com prazo urgente ou vencido</strong>` : ''}:</p><ul style="padding-left: 18px;">`;
+
+          for (const { it, u } of comUrgencia.slice(0, 20)) {
+            const cor = u.level === 'overdue' ? '#e53e3e' : u.level === 'urgent' ? '#dd6b20' : u.level === 'warning' ? '#d69e2e' : '#4a5568';
+            const label = u.level === 'overdue' ? `Vencido há ${Math.abs(u.dias!)}d`
+              : u.level === 'urgent' ? (u.dias === 0 ? 'Vence hoje!' : `Faltam ${u.dias}d`)
+              : u.level === 'warning' ? `Faltam ${u.dias}d`
+              : '';
+            conteudo += `<li style="color:${cor}; margin-bottom: 6px;"><strong>${it.tipo_intimacao || 'Publicação'}</strong> — ${it.processo_titulo || it.processo_cnj || 'Processo não identificado'} (${it.tribunal || '—'})${label ? ` · <strong>${label}</strong>` : ''}</li>`;
+          }
+          if (itens.length > 20) conteudo += `<li style="color:#718096;">e mais ${itens.length - 20}...</li>`;
+          conteudo += '</ul><p style="margin-top:20px;"><a href="https://bentesramoscrm.com.br/intimacoes" style="color:#1a365d; font-weight:600;">Ver todas no sistema →</a></p>';
+
+          const enviado = await enviarEmail(
+            [email],
+            `📬 ${itens.length} intimação(ões) pendente(s)${urgentes ? ` — ${urgentes} urgente(s)` : ''}`,
+            emailTemplate('Intimações Pendentes', conteudo)
+          );
+          if (enviado) totalEnviados++;
+        }
+
+        results.actions.push({
+          tipo: 'email_intimacoes_pendentes',
+          pendentes: pendentes.length,
+          destinatarios: Object.keys(porEmail).length,
+          enviados: totalEnviados,
+        });
+      }
+    }
+
     // Registrar execução
     await supabase.from('system_events').insert({
       tipo: 'scheduler',
