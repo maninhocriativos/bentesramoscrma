@@ -10,6 +10,8 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 
 import RequireAuth from "@/components/auth/RequireAuth";
+import { SystemLockScreen } from "@/components/SystemLockScreen";
+import { SYSTEM_LOCK_ENABLED } from "@/config/systemLock";
 
 // Lazy-loaded pages
 const DashboardPage            = lazyWithRetry(() => import("./pages/DashboardPage"));
@@ -125,7 +127,7 @@ function AppRoutes() {
   );
 }
 
-const App = () => (
+const UnlockedApp = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
@@ -136,5 +138,8 @@ const App = () => (
     </TooltipProvider>
   </QueryClientProvider>
 );
+
+const App = () =>
+  SYSTEM_LOCK_ENABLED ? <SystemLockScreen /> : <UnlockedApp />;
 
 export default App;
