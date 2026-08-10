@@ -1,0 +1,17 @@
+name: Teste IP DJEN (temporário)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Testar acesso ao Comunica PJe (DJEN) a partir do runner
+        run: |
+          curl -sS -o body.json -w "HTTP_STATUS:%{http_code}\n" \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" \
+            -H "Accept: application/json" \
+            "https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroOab=7526&ufOab=AM&dataDisponibilizacaoInicio=2026-05-12&dataDisponibilizacaoFim=2026-08-09&itensPorPagina=5&pagina=1"
+          echo "--- corpo (primeiros 500 chars) ---"
+          head -c 500 body.json
