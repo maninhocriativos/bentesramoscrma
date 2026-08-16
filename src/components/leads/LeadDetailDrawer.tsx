@@ -4,9 +4,10 @@ import { ptBR } from 'date-fns/locale';
 import {
   X, User, Phone, Mail, Briefcase, DollarSign, Calendar,
   MessageCircle, Clock, Tag, Sparkles,
-  MessageSquare, Zap, ZapOff, Plus, 
+  MessageSquare, Zap, ZapOff, Plus,
   Loader2, ExternalLink, History, Link2, Pencil, Check,
-  FileSignature, Minus, Megaphone, Globe, Building2, Hash
+  FileSignature, Minus, Megaphone, Globe, Building2, Hash,
+  Bot, CircleDashed, CircleCheck
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,79 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+
+// Documentos coletados pelo agente de primeiro-contato (isa_documentos). Mantido em
+// sincronia com DOCS_ISA_DOCUMENTOS em supabase/functions/isa-auto-process/index.ts.
+const DOC_LABELS: Record<string, string> = {
+  contrato: 'Contrato',
+  identidade: 'Identidade',
+  cpf: 'CPF',
+  comprovante_residencia: 'Comprovante de residência',
+};
+const DOC_ORDEM = ['contrato', 'identidade', 'cpf', 'comprovante_residencia'];
+
+function AtendimentoIaCard({ lead }: { lead: Lead }) {
+  const [checklist, setChecklist] = useState<{ doc_type: string; received: boolean }[] | null>(null);
+
+  const elegivel = lead.linha_whatsapp === 'trafego_isa';
+
+  useEffect(() => {
+    if (!elegivel || !lead.id) { setChecklist(null); return; }
+    let cancelled = false;
+    supabase
+      .from('lead_docs_checklist')
+      .select('doc_type, received')
+      .eq('lead_id', lead.id)
+      .in('doc_type', DOC_ORDEM)
+      .then(({ data }) => { if (!cancelled) setChecklist(data || []); });
+    return () => { cancelled = true; };
+  }, [lead.id, elegivel]);
+
+  if (!elegivel) {
+    return (
+      <div className="space-y-2">
+        <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Atendimento IA</h3>
+        <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+          <Bot className="w-3.5 h-3.5" />
+          <span className="text-xs">Não elegível</span>
+        </div>
+      </div>
+    );
+  }
+
+  const receivedTypes = new Set((checklist || []).filter(d => d.received).map(d => d.doc_type));
+  const proximoPendente = DOC_ORDEM.find(t => !receivedTypes.has(t));
+  const statusLabel = checklist === null
+    ? 'Carregando...'
+    : proximoPendente
+      ? `Aguardando ${DOC_LABELS[proximoPendente].toLowerCase()}`
+      : 'Documentação completa';
+
+  return (
+    <div className="space-y-2.5">
+      <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Atendimento IA</h3>
+      <div className="flex items-center gap-2.5 text-sm">
+        <Bot className="w-3.5 h-3.5 text-muted-foreground" />
+        <Badge variant="secondary" className="text-[10px]">🤖 Agente IA</Badge>
+      </div>
+      <div className="space-y-1.5 pl-0.5">
+        {DOC_ORDEM.map(docType => {
+          const received = receivedTypes.has(docType);
+          return (
+            <div key={docType} className="flex items-center gap-2 text-xs">
+              {received
+                ? <CircleCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                : <CircleDashed className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+              <span className={received ? 'text-foreground' : 'text-muted-foreground'}>{DOC_LABELS[docType]}</span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-xs text-muted-foreground">{statusLabel}</p>
+      <p className="text-[10px] text-muted-foreground">Gerencie o atendimento (assumir/devolver ao agente) pelo chat.</p>
+    </div>
+  );
+}
 
 interface LeadDetailDrawerProps {
   lead: Lead | null;
@@ -532,6 +606,10 @@ export function LeadDetailDrawer({ lead, isOpen, onClose }: LeadDetailDrawerProp
                       </div>
                     )}
                   </div>
+
+                  <Separator />
+
+                  <AtendimentoIaCard lead={lead} />
 
                   <Separator />
 

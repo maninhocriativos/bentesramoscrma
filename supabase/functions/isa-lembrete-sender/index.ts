@@ -32,7 +32,7 @@ serve(async (req) => {
     let pulados = 0;
 
     for (const lembrete of lembretes || []) {
-      const { subscriber_id, lead_id, mensagem } = lembrete.dados || {};
+      const { subscriber_id, lead_id, mensagem, tentativa_numero, isa_agent_at_creation } = lembrete.dados || {};
 
       if (!subscriber_id || !mensagem) {
         await supabase.from('system_events').update({ processado: true }).eq('id', lembrete.id);
@@ -54,6 +54,20 @@ serve(async (req) => {
           .eq('id', lembrete.id);
         pulados++;
         continue;
+      }
+
+      // Reforça a regra "bot_ativo" do agente de coleta de documentos: se a Isa foi
+      // desativada para este lead (isa_ativa=false), não insiste com lembrete.
+      if (lead_id) {
+        const { data: leadAtivo } = await supabase.from('leads_juridicos').select('isa_ativa').eq('id', lead_id).maybeSingle();
+        if (leadAtivo?.isa_ativa === false) {
+          console.log(`[Lembrete] ⏭️ Pulando — isa_ativa=false: ${lead_id}`);
+          await supabase.from('system_events')
+            .update({ processado: true, dados: { ...lembrete.dados, cancelado_por: 'isa_inativa' } })
+            .eq('id', lembrete.id);
+          pulados++;
+          continue;
+        }
       }
 
       // Cancelar lembrete se o lead respondeu nas últimas 12h (não precisa mais do reengajamento)
@@ -158,6 +172,29 @@ serve(async (req) => {
 
         enviados++;
         console.log(`[Lembrete] ✅ Enviado para ${subscriber_id}`);
+
+        // Limite de tentativas de retomada — só para o agente de coleta de documentos
+        // (isa_documentos): depois de N lembretes sem retorno, desativa o bot e manda
+        // para humano em vez de insistir indefinidamente. Não afeta outros agentes.
+        const MAX_TENTATIVAS_ISA_DOCUMENTOS = 3;
+        if (isa_agent_at_creation === 'isa_documentos' && Number(tentativa_numero) >= MAX_TENTATIVAS_ISA_DOCUMENTOS && lead_id) {
+          const { data: pendentes } = await supabase
+            .from('lead_docs_checklist')
+            .select('id')
+            .eq('lead_id', lead_id)
+            .eq('is_required', true)
+            .eq('received', false);
+          if (pendentes && pendentes.length > 0) {
+            await supabase.from('manychat_subscribers').update({ atendimento_humano: true, atendimento_humano_desde: new Date().toISOString() }).eq('subscriber_id', subscriber_id);
+            await supabase.from('leads_juridicos').update({ status: 'Em Atendimento', isa_ativa: false }).eq('id', lead_id);
+            await supabase.from('system_events').insert({
+              tipo: 'handoff', fonte: 'isa_lembrete', acao: 'direcionar_atendimento_humano', lead_id,
+              dados: { tipo_handoff: 'sem_retorno_apos_tentativas', motivo: `Sem retorno após ${tentativa_numero} tentativas de retomada (isa_documentos)`, subscriber_id, timestamp: new Date().toISOString() },
+              processado: false,
+            });
+            console.log(`[Lembrete] 🙋 Lead ${lead_id} sem retorno após ${tentativa_numero} tentativas — encaminhado para humano`);
+          }
+        }
       } else {
         console.error(`[Lembrete] ❌ Z-API erro ${zapiResponse.status} para ${subscriber_id}`);
       }

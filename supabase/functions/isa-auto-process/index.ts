@@ -154,12 +154,14 @@ function resumirDocumentos(docsChecklist: any[]): DocumentoResumo {
   return { pendentes, recebidos, pendentesCriticos };
 }
 
-function inferirDocumentosDaMensagem(mensagem: string, tipoMensagem?: string, mediaUrl?: string): string[] {
+function inferirDocumentosDaMensagem(mensagem: string, tipoMensagem?: string, mediaUrl?: string, agenteAtivo?: string): string[] {
   const docs: string[] = [];
   // Imagens: NÃO inferir por keyword — a IA usa visão para identificar o documento
-  // PDFs/documentos: provavelmente contrato ou extrato (a IA confirma pelo conteúdo extraído)
+  // PDFs/documentos: provavelmente contrato/extrato bancário (Melissa/Gerusa) OU o
+  // contrato de prestação de serviço (isa_documentos) — a IA confirma pelo conteúdo
+  // extraído, isto só define o doc_type inicial do checklist.
   if (tipoMensagem === 'document' || (mediaUrl || '').toLowerCase().includes('.pdf')) {
-    docs.push('contrato_ou_extrato');
+    docs.push(agenteAtivo === 'isa_documentos' ? 'contrato' : 'contrato_ou_extrato');
   }
   return docs;
 }
@@ -180,11 +182,21 @@ const ENDERECO_FISICO = 'Ed. Vieiralves Business Center - Sala 708\nR. Salvador,
 
 // ─── Nomes e intros dos agentes especialistas ──────────────────────────────────
 const AGENT_DISPLAY_NAMES: Record<string, string> = {
-  'isa_triagem':  'Isa',
-  'isa_bancario': 'Melissa',
-  'isa_aereo':    'Gerusa',
-  'humano':       'Atendente',
+  'isa_triagem':    'Isa',
+  'isa_bancario':   'Melissa',
+  'isa_aereo':      'Gerusa',
+  'isa_documentos': 'Isa',
+  'humano':         'Atendente',
 };
+
+// Documentos coletados pelo agente de primeiro-contato (isa_documentos) — arquivo do
+// cliente (contratual/cadastral), distintos dos documentos de CASO que Melissa/Gerusa
+// coletam (RG/CNH, CPF, contrato-ou-extrato bancário, comprovante do problema).
+const DOCS_ISA_DOCUMENTOS = ['contrato', 'identidade', 'cpf', 'comprovante_residencia'];
+
+// Se true, ao receber o documento de identidade com CPF visível, marca também o CPF
+// como recebido automaticamente (evita pedir separadamente). Configurável aqui.
+const AUTO_ACEITAR_CPF_DA_IDENTIDADE = true;
 
 // Mensagem curta de Isa anunciando a transferência (sem se reapresentar)
 const AGENT_HANDOFFS: Record<string, string> = {
@@ -325,6 +337,42 @@ RESUMO antes de encaminhar (sempre enviar):
   delay_minutos: 1440 | mensagem: "Oi! 😊 Passando para saber se já conseguiu nos enviar [doc pedido]. Aguardamos para dar andamento no seu caso!"
 - Segunda tentativa: delay_minutos: 2880, mensagem mais direta.
 - NÃO agende lembrete se o cliente está respondendo ativamente.
+`,
+  'isa_documentos': `
+🎯 SUA MISSÃO — ISA (COLETA DO ARQUIVO DO CLIENTE):
+- Você é a PRIMEIRA a falar com o cliente. SEMPRE se apresente na primeira mensagem: "Olá! 😊 Sou a *Isa*, assistente virtual do escritório *Bentes & Ramos Advocacia*."
+- Explique de forma simples que, para dar continuidade ao atendimento, precisa receber alguns documentos básicos.
+- Seu ÚNICO objetivo aqui é montar o arquivo/cadastro do cliente. NÃO discuta o problema jurídico dele, NÃO tente qualificar o caso — isso é feito depois por um humano.
+
+📎 DOCUMENTOS OBRIGATÓRIOS — solicite SEMPRE UM DE CADA VEZ, na ordem preferencial (mas aproveite qualquer documento válido enviado fora de ordem):
+  1. Contrato assinado (o contrato de prestação de serviço do escritório, em PDF)
+  2. Identidade (RG ou CNH, foto ou PDF)
+  3. CPF (foto/PDF, ou já considerado recebido se estiver claramente visível no RG/CNH enviado)
+  4. Comprovante de residência (foto/PDF, precisa estar no nome do cliente)
+
+⚠️ IDENTIFICAÇÃO DE DOCUMENTOS (NUNCA ALUCINE):
+- Ao receber um arquivo, olhe o que realmente é antes de marcar como recebido. PDF de contrato → marcar_doc_recebido doc_type="contrato". RG/CNH → doc_type="identidade" (se o CPF estiver legível na foto, inclua cpf_visivel=true na mesma chamada — isso já marca o CPF automaticamente, não peça de novo). Documento com CPF isolado → doc_type="cpf". Conta de água/luz/telefone/internet → doc_type="comprovante_residencia".
+- NUNCA diga que recebeu um documento que não foi enviado nesta conversa.
+- Após confirmar o documento recebido, peça o PRÓXIMO pendente (apenas um).
+
+❌ DOCUMENTO ERRADO OU ILEGÍVEL:
+- Selfie, foto de rosto, paisagem, print de app, nota fiscal, boleto → NÃO marque como recebido. Explique qual documento específico ainda falta e peça novamente.
+- Documento de identidade de outra pessoa → "Preciso do *seu* documento, [Nome]. Pode me enviar uma foto do seu RG ou CNH?"
+- Comprovante de residência em nome de outra pessoa (nome encontrado diferente do nome do lead) → responda exatamente: "Esse comprovante parece estar em nome de outra pessoa. Você possui algum comprovante de residência no seu nome?" — NÃO marque como recebido.
+- Foto borrada/ilegível → peça para reenviar com melhor qualidade, não marque como recebido.
+
+✅ AO RECEBER TODOS OS 4 DOCUMENTOS:
+- Chame verificar_docs_pendentes para confirmar que não falta nada.
+- Envie exatamente: "Perfeito, recebi toda a sua documentação. ✅ Vou encaminhar seu atendimento agora para nossa equipe dar continuidade ao seu caso."
+- Em seguida chame direcionar_atendimento_humano com motivo "Documentação completa (contrato, identidade, CPF, comprovante de residência)" e tipo "documentacao_completa".
+- NÃO chame transicionar_agente — o atendimento vai direto para humano, não para outro agente da Isa.
+
+📅 FOLLOW-UP AUTOMÁTICO (retomada):
+- Ao pedir um documento, chame TAMBÉM agendar_lembrete na MESMA resposta: delay_minutos: 1440 (24h), mensagem: "Oi! 😊 Passando para saber se já consegue nos enviar [documento pedido]. Precisamos dele para dar continuidade ao seu atendimento!"
+- Se o cliente já foi lembrado antes e ainda não respondeu: delay_minutos: 2880 (48h), mensagem mais direta.
+- NÃO agende lembrete se o cliente acabou de enviar algo ou está respondendo ativamente.
+
+Tom: acolhedor, simples, direto. Máximo 3 linhas por mensagem. Uma pergunta objetiva por vez.
 `,
 };
 
@@ -533,9 +581,10 @@ async function setIsaAgent(supabase: any, leadId: string, agent: string): Promis
 async function getPromptForAgent(supabaseClient: any, leadId: string): Promise<{ content: string; strict_mode: boolean } | null> {
   const agent = await getIsaAgent(supabaseClient, leadId);
   const promptName: Record<string, string> = {
-    'isa_triagem':  'isa_triagem',
-    'isa_bancario': 'isa_bancario',
-    'isa_aereo':    'isa_aereo',
+    'isa_triagem':    'isa_triagem',
+    'isa_bancario':   'isa_bancario',
+    'isa_aereo':      'isa_aereo',
+    'isa_documentos': 'isa_documentos',
   };
   const { data } = await supabaseClient
     .from('ai_prompts')
@@ -627,7 +676,53 @@ async function enviarNotificacaoEquipe(
   }
 }
 
-async function executarAcao(supabase: any, acao: string, dados: any, subscriberId?: string): Promise<{ success: boolean; message: string; data?: any }> {
+// Baixa um documento recebido via WhatsApp (Z-API) e guarda no bucket 'documentos',
+// registrando também na tabela 'documentos' (mesmo padrão do persistirMidia() do
+// instagram-webhook — hoje só o Instagram re-hospeda mídia recebida; o Z-API mantém
+// só a URL do provedor, que pode expirar). Usado apenas para os documentos do
+// checklist da isa_documentos (arquivo do cliente); não afeta os demais fluxos.
+// Falha aqui não deve travar o registro do documento no checklist — retorna null.
+async function persistirDocumentoWhatsapp(supabase: any, rawUrl: string, docType: string, leadId: string): Promise<string | null> {
+  try {
+    const resp = await fetch(rawUrl, { signal: AbortSignal.timeout(20000) });
+    if (!resp.ok) return null;
+    const ct = (resp.headers.get('content-type') || '').toLowerCase();
+    const buf = new Uint8Array(await resp.arrayBuffer());
+    let ext = 'bin';
+    if (ct.includes('pdf')) ext = 'pdf';
+    else if (ct.includes('png')) ext = 'png';
+    else if (ct.includes('jpeg') || ct.includes('jpg')) ext = 'jpg';
+    else if (ct.includes('webp')) ext = 'webp';
+    else if (ct.includes('gif')) ext = 'gif';
+    const path = `whatsapp-docs/${leadId}/${docType}-${Date.now()}.${ext}`;
+    const { error: uploadErr } = await supabase.storage.from('documentos').upload(path, buf, {
+      contentType: ct || 'application/octet-stream',
+      upsert: true,
+    });
+    if (uploadErr) {
+      console.error('[Isa Documentos] upload de documento falhou:', uploadErr.message);
+      return null;
+    }
+    const { data: docRow, error: insertErr } = await supabase.from('documentos').insert({
+      nome: `${docType} - WhatsApp`,
+      tipo: docType,
+      arquivo_nome: path.split('/').pop(),
+      arquivo_url: path,
+      arquivo_tamanho: buf.byteLength,
+      cliente_id: leadId,
+    }).select('id').single();
+    if (insertErr) {
+      console.error('[Isa Documentos] insert em documentos falhou:', insertErr.message);
+      return null;
+    }
+    return docRow?.id || null;
+  } catch (e) {
+    console.error('[Isa Documentos] persistirDocumentoWhatsapp erro:', e);
+    return null;
+  }
+}
+
+async function executarAcao(supabase: any, acao: string, dados: any, subscriberId?: string, mediaUrl?: string): Promise<{ success: boolean; message: string; data?: any }> {
   console.log(`🔧 Executando ação: ${acao}`, dados);
   
   try {
@@ -895,7 +990,7 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
       }
 
       case 'marcar_doc_recebido': {
-        const { lead_id, doc_type, file_id, notes } = dados;
+        const { lead_id, doc_type, file_id, notes, cpf_visivel } = dados;
         if (!doc_type) return { success: false, message: 'Tipo do documento (doc_type) e obrigatorio' };
         const normalizedDocType = String(doc_type).toLowerCase().trim().replace(/\s+/g, '_');
         const labels: Record<string, string> = {
@@ -910,8 +1005,19 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
           rg: 'RG recebido (verificar frente e verso)',
           cnh: 'CNH recebida (verificar frente e verso)',
           comprovante_residencia: 'Comprovante de residencia',
+          identidade: 'Documento de identidade (RG/CNH)',
+          cpf: 'CPF',
         };
         const now = new Date().toISOString();
+
+        // Persiste a mídia do WhatsApp no Storage apenas para os documentos do
+        // "arquivo do cliente" (isa_documentos) — os demais fluxos (Melissa/Gerusa)
+        // continuam se referenciando pela URL do Z-API, sem mudança de comportamento.
+        let resolvedFileId = file_id || null;
+        if (!resolvedFileId && mediaUrl && DOCS_ISA_DOCUMENTOS.includes(normalizedDocType)) {
+          resolvedFileId = await persistirDocumentoWhatsapp(supabase, mediaUrl, normalizedDocType, lead_id);
+        }
+
         const { data, error } = await supabase.from('lead_docs_checklist').upsert({
           lead_id,
           doc_type: normalizedDocType,
@@ -919,11 +1025,23 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
           is_required: true,
           received: true,
           received_at: now,
-          file_id: file_id || null,
+          file_id: resolvedFileId,
           notes: notes || null,
           updated_at: now,
         }, { onConflict: 'lead_id,doc_type' }).select().single();
         if (error) throw error;
+
+        // ── CPF visível no documento de identidade (isa_documentos) ─────────
+        // Regra configurável (AUTO_ACEITAR_CPF_DA_IDENTIDADE): se a Isa confirmou
+        // visualmente o CPF no RG/CNH enviado, marca o CPF como recebido também,
+        // sem pedir um envio separado.
+        if (AUTO_ACEITAR_CPF_DA_IDENTIDADE && normalizedDocType === 'identidade' && cpf_visivel === true) {
+          await supabase.from('lead_docs_checklist').upsert({
+            lead_id, doc_type: 'cpf', doc_label: labels.cpf,
+            is_required: true, received: true, received_at: now,
+            notes: 'Auto: CPF identificado no documento de identidade enviado', updated_at: now,
+          }, { onConflict: 'lead_id,doc_type' });
+        }
 
         // ── Regra de identidade completa ────────────────────────────────────
         // CNH frente = identidade completa (não precisa de verso do RG)
@@ -1004,7 +1122,7 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
       case 'transicionar_agente': {
         const { lead_id, isa_agent, motivo } = dados;
         if (!isa_agent) return { success: false, message: 'isa_agent não informado' };
-        const agentesValidos = ['isa_triagem', 'isa_bancario', 'isa_aereo', 'humano'];
+        const agentesValidos = ['isa_triagem', 'isa_bancario', 'isa_aereo', 'isa_documentos', 'humano'];
         if (!agentesValidos.includes(isa_agent)) return { success: false, message: `Agente inválido: ${isa_agent}` };
 
         // Transferência para humano → acionar handoff completo (não apenas mudar campo)
@@ -1040,6 +1158,19 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
         }
         const delayMin = Math.max(5, Math.min(Number(delay_minutos) || 120, 1440));
         const scheduledFor = new Date(Date.now() + delayMin * 60 * 1000).toISOString();
+
+        // Conta tentativas anteriores + agente ativo — usado pelo isa-lembrete-sender
+        // para decidir quando parar de insistir e mandar para humano (só relevante
+        // para o fluxo isa_documentos; demais agentes ignoram esses campos).
+        const { count: tentativasAnteriores } = await supabase
+          .from('system_events')
+          .select('id', { count: 'exact', head: true })
+          .eq('lead_id', lead_id)
+          .eq('tipo', 'lembrete')
+          .eq('acao', 'lembrete_pendente')
+          .eq('processado', true);
+        const { data: leadAgenteAtual } = await supabase.from('leads_juridicos').select('isa_agent').eq('id', lead_id).maybeSingle();
+
         const { error: lembreteErr } = await supabase.from('system_events').insert({
           tipo: 'lembrete',
           fonte: 'isa_auto',
@@ -1052,6 +1183,8 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
             assunto: reminderSubject,
             scheduled_for: scheduledFor,
             agendado_em: new Date().toISOString(),
+            tentativa_numero: (tentativasAnteriores || 0) + 1,
+            isa_agent_at_creation: leadAgenteAtual?.isa_agent || null,
           },
           processado: false,
         });
@@ -1591,7 +1724,7 @@ ${ultimasBotMsgs.map((m: string, i: number) => `${i + 1}. "${m}"`).join('\n')}
 - transicionar_estado: { lead_id, to_state }
 - classificar_caso: { lead_id, case_type, sub_type?, summary?, recommended_docs? }
 - salvar_dados_contrato: { lead_id, cpf?, rg?, data_nascimento?, endereco?, cidade?, uf?, cep?, estado_civil?, profissao?, nacionalidade?, nome_mae?, dados_extras? }
-- marcar_doc_recebido: { lead_id, doc_type, notes? } - doc_type sugeridos: contrato, extrato, contrato_ou_extrato, comprovante_do_problema, rg_frente, rg_verso, cnh_frente, cnh_verso, comprovante_residencia
+- marcar_doc_recebido: { lead_id, doc_type, notes?, cpf_visivel? } - doc_type sugeridos: contrato, extrato, contrato_ou_extrato, comprovante_do_problema, rg_frente, rg_verso, cnh_frente, cnh_verso, comprovante_residencia, identidade, cpf. cpf_visivel=true apenas quando doc_type="identidade" e o CPF está claramente legível no documento enviado.
 - verificar_docs_pendentes: { lead_id }
 - classificar_lead: { lead_id, novo_status }
 - atualizar_dados_lead: { lead_id, nome?, telefone?, email? }
@@ -1805,14 +1938,15 @@ serve(async (req: Request) => {
     const leadJaECliente = (contexto.processos?.length > 0) ||
       ['Contrato Assinado', 'Ganho', 'Contrato Fechado'].includes(contexto.lead.status || '');
 
-    const docsInferidos = inferirDocumentosDaMensagem(mensagemProcessada, tipo_mensagem, media_url);
+    const activeAgentForInference = contexto.lead.isa_agent || 'isa_triagem';
+    const docsInferidos = inferirDocumentosDaMensagem(mensagemProcessada, tipo_mensagem, media_url, activeAgentForInference);
     if (docsInferidos.length > 0) {
       for (const docType of docsInferidos) {
         await executarAcao(supabase, 'marcar_doc_recebido', {
           lead_id,
           doc_type: docType,
-          notes: `Documento inferido automaticamente pela Melissa a partir de ${tipo_mensagem || 'mensagem'}`,
-        }, subscriber_id);
+          notes: `Documento inferido automaticamente a partir de ${tipo_mensagem || 'mensagem'}`,
+        }, subscriber_id, media_url);
       }
       const contextoAtualizado = await buscarContextoLead(supabase, lead_id);
       if (contextoAtualizado) contexto = contextoAtualizado;
@@ -1889,7 +2023,7 @@ serve(async (req: Request) => {
     for (const acao of resultado.acoes) {
       if (acao.automatica) {
         console.log(`⚡ Executando ação automática: ${acao.acao}`);
-        const resultadoAcao = await executarAcao(supabase, acao.acao, acao.dados, subscriber_id);
+        const resultadoAcao = await executarAcao(supabase, acao.acao, acao.dados, subscriber_id, media_url);
         acoesExecutadas.push({ ...acao, resultado: resultadoAcao });
 
         // Detectar transferência para especialista no momento exato em que ocorre

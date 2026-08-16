@@ -1530,6 +1530,10 @@ async function findOrCreateLead(
       empresa_tag: empresaTag,
       owner_tipo: ownerTipo,
       isa_ativa: isaAtiva,
+      // Leads novos da linha de tráfego entram primeiro no agente de coleta de
+      // documentos (arquivo do cliente); demais linhas mantêm o fluxo de triagem
+      // padrão. Não afeta leads já existentes (só o insert de lead novo).
+      isa_agent: linhaWhatsapp === 'trafego_isa' ? 'isa_documentos' : 'isa_triagem',
       whatsapp_numero_destino: instancePhone,
       resumo_ia: isFromOffice
         ? `Lead do ESCRITÓRIO (Bentes Ramos). Contato direto em ${new Date().toLocaleDateString('pt-BR')}. ISA DESATIVADA - atendimento humano direto.`
