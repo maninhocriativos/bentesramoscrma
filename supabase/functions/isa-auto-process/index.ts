@@ -18,6 +18,7 @@ const corsHeaders = {
 };
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+const OPENAI_MODEL = Deno.env.get('OPENAI_MODEL') || 'gpt-4o';
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 
 const ACAO_LABELS: Record<string, string> = {
@@ -1531,8 +1532,7 @@ function isPdfUrl(content: string): boolean {
 }
 
 async function analisarPdfComIA(pdfUrl: string): Promise<string | null> {
-  const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
-  if (!ANTHROPIC_API_KEY) { console.log('⚠️ ANTHROPIC_API_KEY não configurada'); return null; }
+  if (!OPENAI_API_KEY) { console.log('⚠️ OPENAI_API_KEY não configurada'); return null; }
   try {
     const pdfResponse = await fetch(pdfUrl, { signal: AbortSignal.timeout(30_000) });
     if (!pdfResponse.ok) { console.error('❌ Não foi possível baixar o PDF:', pdfResponse.status); return null; }
@@ -1542,31 +1542,29 @@ async function analisarPdfComIA(pdfUrl: string): Promise<string | null> {
     for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
     const base64 = btoa(binary);
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       signal: AbortSignal.timeout(45_000),
       headers: {
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'pdfs-2024-09-25',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: OPENAI_MODEL,
         max_tokens: 2000,
         messages: [{
           role: 'user',
           content: [
-            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+            { type: 'file', file: { filename: 'documento.pdf', file_data: `data:application/pdf;base64,${base64}` } },
             { type: 'text', text: 'Analise este documento e extraia as informações principais relevantes para um escritório de advocacia. Identifique: tipo de documento, nome do titular, CPF/RG se presente, datas relevantes, valores, banco/instituição se mencionado, cláusulas importantes. Seja conciso e objetivo. Responda em português.' },
           ],
         }],
       }),
     });
 
-    if (!response.ok) { console.error('❌ Erro Anthropic PDF:', await response.text()); return null; }
+    if (!response.ok) { console.error('❌ Erro OpenAI PDF:', await response.text()); return null; }
     const data = await response.json();
-    return data.content?.[0]?.text || null;
+    return data.choices?.[0]?.message?.content || null;
   } catch (error) {
     console.error('❌ Erro ao processar PDF:', error);
     return null;
@@ -1775,37 +1773,38 @@ Responda em JSON:
   "acoes": [{ "acao": "nome", "dados": {}, "motivo": "razão" }]
 }`;
 
-  const ANTHROPIC_KEY_MAIN = Deno.env.get('ANTHROPIC_API_KEY');
-  if (!ANTHROPIC_KEY_MAIN) throw new Error('ANTHROPIC_API_KEY não configurada');
+  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY não configurada');
 
   const userContent: any = imageUrl
     ? [
-        { type: 'image', source: { type: 'url', url: imageUrl } },
         { type: 'text', text: `NOVA MENSAGEM DO CLIENTE (enviou uma imagem):\n"${mensagem}"` },
+        { type: 'image_url', image_url: { url: imageUrl } },
       ]
     : `NOVA MENSAGEM DO CLIENTE:\n"${mensagem}"`;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     signal: AbortSignal.timeout(45_000),
     headers: {
-      'x-api-key': ANTHROPIC_KEY_MAIN,
-      'anthropic-version': '2023-06-01',
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
+      model: OPENAI_MODEL,
       max_tokens: 2048,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userContent }],
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userContent },
+      ],
       temperature: 0.3,
     }),
   });
 
-  if (!response.ok) { const error = await response.text(); console.error('❌ Erro na API Anthropic:', error); throw new Error('Erro ao processar com IA'); }
+  if (!response.ok) { const error = await response.text(); console.error('❌ Erro na API OpenAI:', error); throw new Error('Erro ao processar com IA'); }
 
   const data = await response.json();
-  const resultado = parseAiJson(data.content[0].text);
+  const resultado = parseAiJson(data.choices?.[0]?.message?.content || '');
 
   const acoesProcessadas = (resultado.acoes || []).map((a: any) => ({
     acao: a.acao,
@@ -1915,7 +1914,7 @@ serve(async (req: Request) => {
       mensagemProcessada = mensagem && mensagem !== imageUrlParaIA ? mensagem : '[Imagem enviada]';
       console.log('🖼️ Imagem detectada — enviando para análise visual');
     } else if (tipo_mensagem === 'document' || (media_url && isPdfUrl(media_url))) {
-      // PDF/Documento: extrai conteúdo com Anthropic e passa como texto
+      // PDF/Documento: extrai conteúdo com OpenAI e passa como texto
       const docUrl = media_url || mensagem;
       console.log('📄 Documento recebido — analisando com IA...');
       const analise = await analisarPdfComIA(docUrl);
