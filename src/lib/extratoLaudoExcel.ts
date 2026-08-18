@@ -248,18 +248,20 @@ function buildResumoSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado, con
 }
 
 // ─── Aba 2: Cobranças Indevidas (detalhamento INDIVIDUAL, item a item) ─────────
+// Simplificada a pedido do usuário: só as colunas essenciais (Data, Descrição,
+// Valor, Status) — Categoria, Base Legal e a Análise Individual (texto jurídico
+// longo) saíram da planilha pra ficar mais enxuta.
 function buildCobrancasSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado) {
   const ws = wb.addWorksheet('Cobranças Indevidas', { properties: { tabColor: { argb: `FF${C.vermelho}` } } });
   ws.columns = [
-    { width: 6 }, { width: 13 }, { width: 40 }, { width: 16 },
-    { width: 22 }, { width: 14 }, { width: 30 }, { width: 60 },
+    { width: 6 }, { width: 14 }, { width: 46 }, { width: 16 }, { width: 16 },
   ];
 
-  headerFill(ws, 1, 1, 8, 'COBRANÇAS INDEVIDAS — ANÁLISE INDIVIDUAL ITEM A ITEM', 13);
+  headerFill(ws, 1, 1, 5, 'COBRANÇAS INDEVIDAS — ANÁLISE INDIVIDUAL ITEM A ITEM', 13);
   ws.getRow(1).height = 32;
-  ws.getRow(2).height = 36;
+  ws.getRow(2).height = 22;
 
-  const hdrs = ['#', 'Data', 'Descrição', 'Valor (R$)', 'Categoria', 'Status', 'Base Legal', 'Análise Individual'];
+  const hdrs = ['#', 'Data', 'Descrição', 'Valor (R$)', 'Status'];
   hdrs.forEach((h, i) => colHeader(ws.getRow(2).getCell(i + 1), h));
 
   // Congelar cabeçalho + layout limpo
@@ -270,16 +272,13 @@ function buildCobrancasSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado) 
     const r    = idx + 3;
     const alt  = idx % 2 !== 0;
     const row  = ws.getRow(r);
-    row.height = 42;
+    row.height = 20;
 
     dataRow(row.getCell(1), idx + 1,                                alt, { center: true });
     dataRow(row.getCell(2), c.data,                                 alt);
-    dataRow(row.getCell(3), c.descricao,                            alt, { wrap: true });
+    dataRow(row.getCell(3), c.descricao,                            alt);
     dataRow(row.getCell(4), c.valor_total || c.valor_unitario || 0, alt, { currency: true, red: true, bold: true });
-    dataRow(row.getCell(5), c.categoria,                            alt);
-    dataRow(row.getCell(6), c.status,                               alt, { bold: true, color: corStatus(c.status) });
-    dataRow(row.getCell(7), c.base_legal,                           alt, { wrap: true });
-    dataRow(row.getCell(8), c.justificativa,                        alt, { wrap: true });
+    dataRow(row.getCell(5), c.status,                               alt, { bold: true, color: corStatus(c.status) });
   });
 
   // Linha de total (soma simples de todos os itens — não é agrupamento por categoria)
@@ -289,7 +288,7 @@ function buildCobrancasSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado) 
   ws.getRow(totalRow_).height = 24;
 
   // Auto filtro nas colunas
-  ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 8 } };
+  ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 5 } };
 }
 
 // ─── Exportar ─────────────────────────────────────────────────────────────────
