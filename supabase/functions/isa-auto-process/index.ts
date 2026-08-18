@@ -21,6 +21,26 @@ const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const OPENAI_MODEL = Deno.env.get('OPENAI_MODEL') || 'gpt-4o';
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 
+// Retenta em caso de HTTP 429 (rate limit por tokens/min da conta OpenAI), lendo o tempo de
+// espera sugerido pela própria API antes de desistir — evita derrubar o atendimento da Isa
+// por um estouro momentâneo de TPM.
+async function fetchOpenAIWithRetry(url: string, options: RequestInit, maxRetries = 2): Promise<Response> {
+  let lastResponse: Response | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await fetch(url, options);
+    if (response.status !== 429) return response;
+    lastResponse = response;
+    if (attempt === maxRetries) break;
+    const body = await response.clone().text();
+    const match = body.match(/try again in ([\d.]+)s/i);
+    const suggestedMs = match ? Math.ceil(parseFloat(match[1]) * 1000) : 2000;
+    const waitMs = Math.min(Math.max(suggestedMs, 500), 8000);
+    console.warn(`⚠️ OpenAI 429 (tentativa ${attempt + 1}/${maxRetries + 1}), aguardando ${waitMs}ms`);
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+  return lastResponse!;
+}
+
 const ACAO_LABELS: Record<string, string> = {
   'criar_tarefa': 'Criar Tarefa',
   'criar_compromisso': 'Agendar Compromisso',
@@ -1542,7 +1562,7 @@ async function analisarPdfComIA(pdfUrl: string): Promise<string | null> {
     for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
     const base64 = btoa(binary);
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetchOpenAIWithRetry('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       signal: AbortSignal.timeout(45_000),
       headers: {
@@ -1782,7 +1802,7 @@ Responda em JSON:
       ]
     : `NOVA MENSAGEM DO CLIENTE:\n"${mensagem}"`;
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetchOpenAIWithRetry('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     signal: AbortSignal.timeout(45_000),
     headers: {
