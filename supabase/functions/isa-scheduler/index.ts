@@ -17,6 +17,7 @@ import {
   gerarSubscriberId,
   enviarParaLead,
   enviarMensagemZapi,
+  resolveInstanceForLead,
 } from '../_shared/zapi-helper.ts';
 
 const corsHeaders = {
@@ -81,6 +82,93 @@ async function enviarLembreteCompromisso(
   const result = await enviarWhatsApp(supabase, phone, mensagem, leadId, dados.nome);
   
   return { enviado: result.success, metodo: result.metodo };
+}
+
+// ==================== LEMBRETE DE AUDIÊNCIA (15d/7d/3d) — helpers ====================
+
+function saudacaoPorHorario(): string {
+  const horaStr = new Intl.DateTimeFormat('en-US', { timeZone: MANAUS_TIMEZONE, hour: '2-digit', hour12: false }).format(new Date());
+  const h = parseInt(horaStr, 10);
+  if (h < 12) return 'Bom dia';
+  if (h < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
+function formatarHoraCompacta(horario: string | null): string {
+  if (!horario) return 'a confirmar';
+  const [hh, mm] = horario.split(':');
+  return `${hh}h${mm}`;
+}
+
+function extrairReu(partesJson: any): string | null {
+  if (!Array.isArray(partesJson)) return null;
+  const reu = partesJson.find((p: any) => {
+    const tipo = (p?.tipo || '').toLowerCase();
+    return tipo === 'réu' || tipo === 'reu' || p?.polo === 'PA';
+  });
+  return reu?.nome || null;
+}
+
+function detectarModalidadeAudiencia(titulo: string, descricao: string | null): 'Presencial' | 'Virtual' {
+  const texto = `${titulo} ${descricao || ''}`.toLowerCase();
+  return texto.includes('presencial') ? 'Presencial' : 'Virtual';
+}
+
+function extrairLinkAudiencia(descricao: string | null): string | null {
+  const m = (descricao || '').match(/https?:\/\/\S+/);
+  return m ? m[0].replace(/[.,;)\]]+$/, '') : null;
+}
+
+function montarMensagemAudiencia(dados: {
+  nomeCliente: string;
+  tituloAudiencia: string;
+  dataFormatada: string;
+  horaFormatada: string;
+  numeroProcesso: string;
+  reu: string | null;
+  modalidade: 'Presencial' | 'Virtual';
+  link: string | null;
+}): string {
+  const { nomeCliente, tituloAudiencia, dataFormatada, horaFormatada, numeroProcesso, reu, modalidade, link } = dados;
+  const saudacao = saudacaoPorHorario();
+  const contraParte = reu ? `, movido em face da *${reu}*` : '';
+
+  const blocoLocal = modalidade === 'Presencial'
+    ? `📍*Local: ${link || 'endereço será informado por nossa equipe'}*`
+    : `💻*Modalidade: Virtual*\n🔗 *Link da audiência: ${link || 'será enviado em breve por nossa equipe'}*`;
+
+  const blocoAntecedencia = modalidade === 'Presencial'
+    ? `Por esse motivo, pedimos que compareça ao local *com pelo menos 15 (quinze) minutos de antecedência*, para evitar imprevistos.`
+    : `Por esse motivo, pedimos que acesse o link *com pelo menos 10 (dez) minutos de antecedência*, para evitar eventuais problemas de conexão ou acesso à sala virtual.`;
+
+  return `*Assunto: ${tituloAudiencia} – ${dataFormatada} às ${horaFormatada}*
+
+Olá, Sr(a). ${nomeCliente}! ${saudacao}, tudo bem?
+
+Passamos para lembrar que foi designada *${tituloAudiencia}* referente ao seu processo nº *${numeroProcesso}*${contraParte}.
+
+📅*Data: ${dataFormatada}*
+🕐*Horário: ${horaFormatada}*
+${blocoLocal}
+
+⚠️ *IMPORTANTE*: Sua participação na audiência é *obrigatória.* *O não comparecimento poderá resultar no arquivamento do processo e na condenação ao pagamento de custas processuais.*
+
+${blocoAntecedencia}
+
+No dia anterior à audiência, nossa equipe entrará em contato novamente para explicar como será o procedimento e repassar todas as orientações necessárias para sua participação.
+
+Caso tenha qualquer dúvida ou dificuldade para acessar o link, entre em contato conosco.
+
+🕐 Nosso horário de atendimento é de segunda a sexta-feira, das 08h às 17h.
+
+Permanecemos à disposição! 😊
+
+Atenciosamente,
+
+*Equipe Bentes Ramos Advocacia e Consultoria Jurídica*
+📞 (92) 99160-4348 / (92) 98223-7330 / 98588-8190
+📧 juridico@bentesramos.adv.br
+🌐 www.bentesramos.com.br`;
 }
 
 // Função para enviar email via Resend
@@ -322,6 +410,104 @@ serve(async (req) => {
           contato: nome,
           enviado,
         });
+      }
+    }
+
+    // ==================== LEMBRETES DE AUDIÊNCIA — 15d/7d/3d ====================
+    // Fonte: tabela "tarefas" (não "compromissos") — é onde audiências são
+    // registradas hoje (titulo + data_limite + horario), confirmado direto no
+    // banco: nenhuma linha usa tipo estruturado, então o match é por título.
+    if (task === 'lembretes_audiencia' || task === 'all') {
+      const hojeManaus = getHojeManaus();
+      const hojeUtc = new Date(`${hojeManaus}T00:00:00Z`).getTime();
+      const JANELAS_DIAS = [15, 7, 3] as const;
+      const limiteBusca = new Date(hojeUtc + 16 * 86400000).toISOString().split('T')[0];
+
+      const { data: audienciasBrutas } = await supabase
+        .from('tarefas')
+        .select('*')
+        .ilike('titulo', '%udiênc%')
+        .neq('status', 'Concluída')
+        .gte('data_limite', hojeManaus)
+        .lte('data_limite', limiteBusca);
+
+      const audiencias = audienciasBrutas || [];
+
+      if (audiencias.length > 0) {
+        const processoIds = [...new Set(audiencias.map((a: any) => a.processo_id).filter(Boolean))];
+        const { data: processosData } = processoIds.length
+          ? await supabase.from('processos').select('id, numero_processo, partes_json, cliente_id').in('id', processoIds)
+          : { data: [] };
+        const processosPorId = new Map((processosData || []).map((p: any) => [p.id, p]));
+
+        const clienteIds = [...new Set(
+          audiencias.map((a: any) => a.cliente_id || processosPorId.get(a.processo_id)?.cliente_id).filter(Boolean)
+        )];
+        const { data: leadsData } = clienteIds.length
+          ? await supabase.from('leads_juridicos').select('id, nome, telefone, tipo_origem, linha_whatsapp').in('id', clienteIds)
+          : { data: [] };
+        const leadsPorId = new Map((leadsData || []).map((l: any) => [l.id, l]));
+
+        for (const tarefa of audiencias) {
+          const diffDias = Math.round((new Date(`${tarefa.data_limite}T00:00:00Z`).getTime() - hojeUtc) / 86400000);
+          const janela = JANELAS_DIAS.find(j => j === diffDias);
+          if (!janela) continue;
+
+          const campoEnviado = `lembrete_${janela}d_enviado_em` as const;
+          if (tarefa[campoEnviado]) continue;
+
+          const processo = processosPorId.get(tarefa.processo_id);
+          const clienteId = tarefa.cliente_id || processo?.cliente_id;
+          const lead = clienteId ? leadsPorId.get(clienteId) : null;
+
+          if (!lead?.telefone) {
+            console.warn(`[Lembrete Audiência] ⏭️ Sem telefone/lead identificável para tarefa ${tarefa.id} (${tarefa.titulo})`);
+            continue;
+          }
+
+          const modalidade = detectarModalidadeAudiencia(tarefa.titulo, tarefa.descricao);
+          const link = extrairLinkAudiencia(tarefa.descricao);
+          const mensagem = montarMensagemAudiencia({
+            nomeCliente: lead.nome || 'Cliente',
+            tituloAudiencia: tarefa.titulo,
+            dataFormatada: formatarData(`${tarefa.data_limite}T12:00:00Z`),
+            horaFormatada: formatarHoraCompacta(tarefa.horario),
+            numeroProcesso: processo?.numero_processo || 'não identificado',
+            reu: extrairReu(processo?.partes_json),
+            modalidade,
+            link,
+          });
+
+          const instanceId = await resolveInstanceForLead(supabase, lead);
+          const resultado = await enviarMensagemZapi(supabase, lead.telefone, mensagem, {
+            leadId: lead.id,
+            subscriberNome: lead.nome || 'Cliente',
+            context: `audiencia_lembrete_${janela}d`,
+            instanceId,
+          });
+
+          if (resultado.success) {
+            await supabase.from('tarefas').update({ [campoEnviado]: new Date().toISOString() }).eq('id', tarefa.id);
+          }
+
+          await supabase.from('system_events').insert({
+            tipo: 'notificacao',
+            fonte: 'isa_scheduler',
+            acao: `audiencia_lembrete_${janela}d`,
+            entidade_tipo: 'tarefa',
+            entidade_id: tarefa.id,
+            lead_id: lead.id,
+            dados: { enviado: resultado.success, erro: resultado.error, modalidade, janela },
+          });
+
+          results.actions.push({
+            tipo: 'audiencia_lembrete',
+            janela: `${janela}d`,
+            tarefa: tarefa.titulo,
+            lead: lead.nome,
+            enviado: resultado.success,
+          });
+        }
       }
     }
 
