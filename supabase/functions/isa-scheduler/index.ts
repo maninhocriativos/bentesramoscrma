@@ -262,7 +262,7 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { task } = await req.json();
+    const { task, force: forceBody } = await req.json();
     console.log(`[ISA-SCHEDULER Z-API] Executando task: ${task}`);
 
     const results: any = { task, timestamp: new Date().toISOString(), actions: [], provider: 'zapi' };
@@ -445,12 +445,17 @@ serve(async (req) => {
     // acima) em vez de coluna — funciona pra candidatos vindos de qualquer
     // uma das duas tabelas.
     if (task === 'lembretes_audiencia' || task === 'all') {
+      // "force" faz um disparo único pra TODA audiência futura já cadastrada
+      // (catch-up manual, ignora a janela de 15/7/3d), usado só sob pedido
+      // explícito — a rotina automática diária nunca passa force=true.
+      const force = forceBody === true;
       const hojeManaus = getHojeManaus();
       const hojeUtc = new Date(`${hojeManaus}T00:00:00Z`).getTime();
       const JANELAS_DIAS = [15, 7, 3] as const;
-      const horizonteManaus = new Date(hojeUtc + 16 * 86400000).toISOString().split('T')[0];
+      const diasHorizonte = force ? 60 : 16;
+      const horizonteManaus = new Date(hojeUtc + diasHorizonte * 86400000).toISOString().split('T')[0];
       const inicioHojeUtc = getInicioHojeUtc();
-      const fimHorizonteUtc = new Date(inicioHojeUtc.getTime() + 17 * 86400000);
+      const fimHorizonteUtc = new Date(inicioHojeUtc.getTime() + (diasHorizonte + 1) * 86400000);
 
       const paraDataHoraManaus = (iso: string): { data: string; hora: string } => ({
         data: new Intl.DateTimeFormat('en-CA', { timeZone: MANAUS_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso)),
@@ -541,10 +546,15 @@ serve(async (req) => {
 
         for (const audiencia of candidatos.values()) {
           const diffDias = Math.round((new Date(`${audiencia.dataStr}T00:00:00Z`).getTime() - hojeUtc) / 86400000);
+          if (diffDias < 0) continue;
           const janela = JANELAS_DIAS.find(j => j === diffDias);
-          if (!janela) continue;
+          if (!janela && !force) continue;
 
-          const acao = `audiencia_lembrete_${janela}d`;
+          // Fora do force, dedup por janela (15d/7d/3d) — cada marco só sai
+          // uma vez. No force (catch-up manual), uma única acao própria,
+          // separada dos marcos automáticos, pra não bloquear nem duplicar
+          // quando o 15/7/3d real dessa mesma audiência chegar depois.
+          const acao = force ? 'audiencia_lembrete_manual' : `audiencia_lembrete_${janela}d`;
 
           // Dedup via system_events (mesma chave — processo_id, ou fallback
           // cmp:/tar: — cobre candidato vindo de qualquer uma das 2 tabelas).
@@ -562,15 +572,20 @@ serve(async (req) => {
           const lead = clienteId ? leadsPorId.get(clienteId) : null;
           const telefone = lead?.telefone || extrairTelefoneAutor(processo?.partes_json);
 
-          if (!lead || !telefone) {
-            console.warn(`[Lembrete Audiência] ⏭️ Sem telefone/lead identificável para ${audiencia.chave} (${audiencia.titulo})`);
+          if (!telefone) {
+            console.warn(`[Lembrete Audiência] ⏭️ Sem telefone identificável para ${audiencia.chave} (${audiencia.titulo})`);
             continue;
           }
 
           const modalidade = detectarModalidadeAudiencia(audiencia.titulo, audiencia.descricaoTexto);
           const link = extrairLinkAudiencia(audiencia.descricaoTexto);
+          // Sem lead cadastrado (2 casos encontrados: processo sem cliente_id
+          // vinculado), o nome vem do partes_json — mesmo sufixo de telefone
+          // colado que leads_juridicos.nome costuma ter, então mesma limpeza.
+          const nomeBruto = lead?.nome || processo?.nome_cliente || 'Cliente';
+          const nomeCliente = limparNomeCliente(nomeBruto);
           const mensagem = montarMensagemAudiencia({
-            nomeCliente: lead.nome ? limparNomeCliente(lead.nome) : 'Cliente',
+            nomeCliente,
             tituloAudiencia: audiencia.titulo,
             dataFormatada: formatarData(`${audiencia.dataStr}T12:00:00Z`),
             horaFormatada: formatarHoraCompacta(audiencia.horario),
@@ -580,13 +595,33 @@ serve(async (req) => {
             link,
           });
 
-          const instanceId = await resolveInstanceForLead(supabase, lead);
+          // Sem lead, não dá pra resolver a instância pela origem dele —
+          // mas audiência é sempre caso já em andamento (nunca tráfego pago),
+          // então força tipo_origem "escritorio" na resolução (a instância
+          // "is_default" no cadastro é a de Tráfego, não a do Escritório —
+          // não dá pra deixar isso implícito/undefined aqui).
+          const instanceId = await resolveInstanceForLead(supabase, lead || { tipo_origem: 'escritorio' });
           const resultado = await enviarMensagemZapi(supabase, telefone, mensagem, {
-            leadId: lead.id,
-            subscriberNome: lead.nome ? limparNomeCliente(lead.nome) : 'Cliente',
+            leadId: lead?.id,
+            subscriberNome: nomeCliente,
             context: acao,
             instanceId,
           });
+
+          // Sem lead, enviarMensagemZapi não grava em manychat_mensagens
+          // (só grava quando tem leadId) — grava aqui pra ficar no histórico.
+          if (resultado.success && !lead) {
+            await supabase.from('manychat_mensagens').insert({
+              subscriber_id: gerarSubscriberId(telefone),
+              subscriber_nome: nomeCliente,
+              conteudo: mensagem,
+              tipo: 'text',
+              direcao: 'saida',
+              lead_id: null,
+              canal: 'whatsapp',
+              metadata: { source: 'zapi', context: acao },
+            });
+          }
 
           await supabase.from('system_events').insert({
             tipo: 'notificacao',
@@ -594,15 +629,15 @@ serve(async (req) => {
             acao,
             entidade_tipo: 'audiencia',
             entidade_id: audiencia.chave,
-            lead_id: lead.id,
-            dados: { enviado: resultado.success, erro: resultado.error, modalidade, janela, processo_id: audiencia.processoId },
+            lead_id: lead?.id || null,
+            dados: { enviado: resultado.success, erro: resultado.error, modalidade, janela: janela ?? diffDias, dias_ate: diffDias, processo_id: audiencia.processoId },
           });
 
           results.actions.push({
             tipo: 'audiencia_lembrete',
-            janela: `${janela}d`,
+            janela: janela ? `${janela}d` : `${diffDias}d(manual)`,
             audiencia: audiencia.titulo,
-            lead: lead.nome,
+            lead: nomeCliente,
             enviado: resultado.success,
           });
         }
