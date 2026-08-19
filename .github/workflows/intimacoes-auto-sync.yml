@@ -1,14 +1,13 @@
 name: Sync Automático de Intimações
 
 on:
-  schedule:
-    # Todos os dias (seg-dom), 3x por dia em horário de Brasília (UTC-3)
-    # 07:00 Brasília = 10:00 UTC
-    - cron: '0 10 * * *'
-    # 13:00 Brasília = 16:00 UTC
-    - cron: '0 16 * * *'
-    # 19:00 Brasília = 22:00 UTC
-    - cron: '0 22 * * *'
+  # O agendamento 3x/dia roda via pg_cron (jobs intimacoes-manha/meio-dia/tarde,
+  # 10h/16h/21h UTC — ver supabase/migrations/*_intimacoes_*sync*.sql), que
+  # chama a mesma intimacoes-scheduler direto do Postgres. Este workflow
+  # duplicava o disparo quase no mesmo horário (10h/16h/22h UTC), gerando
+  # ruído sem trazer nenhum benefício — dedupe do scheduler evitava dado
+  # duplicado, mas rodava a busca em dobro à toa. Mantido só como gatilho
+  # manual.
   workflow_dispatch:
 
 jobs:
