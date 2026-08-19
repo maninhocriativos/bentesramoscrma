@@ -51,9 +51,11 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
   const [prazoSeguranca, setPrazoSeguranca] = useState('');
   const [prazoFatal, setPrazoFatal]   = useState('');
   const [horario, setHorario]         = useState('');
+  const [linkAudiencia, setLinkAudiencia] = useState('');
   const [members, setMembers]         = useState<TeamMember[]>([]);
 
   const isEditing = !!tarefa;
+  const ehAudiencia = /audi[eê]nc/i.test(titulo);
 
   useEffect(() => {
     if (!open) return;
@@ -66,9 +68,11 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
       setPrazoSeguranca(tarefa.prazo_seguranca || '');
       setPrazoFatal(tarefa.prazo_fatal || tarefa.data_limite || '');
       setHorario(tarefa.horario?.slice(0, 5) || '');
+      setLinkAudiencia(tarefa.link_audiencia || '');
     } else {
       setTitulo(''); setDescricao(''); setPrioridade('Media'); setStatus('Pendente');
       setResponsavelId('none'); setPrazoSeguranca(''); setPrazoFatal(''); setHorario('');
+      setLinkAudiencia('');
     }
   }, [open, tarefa]);
 
@@ -94,6 +98,7 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
       prazo_seguranca: prazoSeguranca || null,
       prazo_fatal:     prazoFatal || null,
       horario:         horario || null,
+      link_audiencia:  ehAudiencia ? (linkAudiencia.trim() || null) : (tarefa?.link_audiencia ?? null),
       responsavel_id:  responsavelId !== 'none' ? responsavelId : null,
     };
     if (isEditing && tarefa) {
@@ -269,6 +274,19 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
                 style={{ ...inputStyle, maxWidth: 160 }}
               />
             </Field>
+
+            {ehAudiencia && (
+              <Field label="Link da audiência (virtual)">
+                <input
+                  type="url"
+                  value={linkAudiencia}
+                  onChange={e => setLinkAudiencia(e.target.value)}
+                  placeholder="https://..."
+                  className={inputFocusClass}
+                  style={inputStyle}
+                />
+              </Field>
+            )}
           </div>
 
           {/* Footer */}

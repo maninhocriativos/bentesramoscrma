@@ -11,6 +11,7 @@ export interface Tarefa {
   prazo_seguranca: string | null;
   prazo_fatal: string | null;
   horario: string | null;
+  link_audiencia: string | null;
   data_conclusao: string | null;
   started_at: string | null;
   created_at: string;

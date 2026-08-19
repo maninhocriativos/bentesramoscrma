@@ -139,6 +139,45 @@ function extrairLinkAudiencia(descricao: string | null): string | null {
   return m ? m[0].replace(/[.,;)\]]+$/, '') : null;
 }
 
+// O horário salvo em tarefas.horario é SEMPRE digitado já convertido pro
+// fuso de Manaus (UTC-4), mesmo quando a audiência é de um tribunal em
+// outro estado — confirmado com a equipe. Pra mostrar o horário real do
+// cliente/tribunal na mensagem, reconverte a partir do fuso do tribunal
+// (derivado de processos.tribunal, ex: "TJBA" → BA). Sem DST no Brasil
+// desde 2019, então é só diferença fixa de fuso.
+const UF_UTC_OFFSET: Record<string, number> = {
+  AC: -5,
+  AM: -4, RR: -4, MT: -4, MS: -4, RO: -4,
+  // demais 21 UFs (incluindo DF) são UTC-3 (Brasília) — tratadas pelo default abaixo.
+};
+const MANAUS_UTC_OFFSET = -4;
+
+function extrairUfTribunal(tribunal: string | null | undefined): string | null {
+  if (!tribunal) return null;
+  const m = tribunal.trim().toUpperCase().match(/^TJ([A-Z]{2})$/);
+  return m ? m[1] : null;
+}
+
+// Retorna {dataStr, horario} ajustados pro fuso real do tribunal, a partir
+// dos valores civis salvos (sempre "como se fossem" horário de Manaus).
+function converterParaFusoTribunal(dataStr: string, horario: string | null, tribunal: string | null | undefined): { dataStr: string; horario: string | null } {
+  if (!horario) return { dataStr, horario };
+  const uf = extrairUfTribunal(tribunal);
+  const offsetTribunal = uf ? (UF_UTC_OFFSET[uf] ?? -3) : MANAUS_UTC_OFFSET;
+  const deltaHoras = offsetTribunal - MANAUS_UTC_OFFSET;
+  if (deltaHoras === 0) return { dataStr, horario };
+
+  // Aritmética em UTC "de mentira" — os valores são civis (sem fuso real),
+  // usa-se UTC só como eixo numérico neutro pra somar/subtrair horas e
+  // deixar o próprio Date resolver virada de dia.
+  const base = new Date(`${dataStr}T${horario.length === 5 ? horario + ':00' : horario}Z`);
+  base.setUTCHours(base.getUTCHours() + deltaHoras);
+  return {
+    dataStr: base.toISOString().split('T')[0],
+    horario: base.toISOString().split('T')[1].slice(0, 8),
+  };
+}
+
 function montarMensagemAudiencia(dados: {
   nomeCliente: string;
   tituloAudiencia: string;
@@ -470,6 +509,7 @@ serve(async (req) => {
         dataStr: string;
         horario: string | null;
         descricaoTexto: string | null;
+        linkExplicito: string | null;
       }
 
       const { data: tarefasBrutas } = await supabase
@@ -501,6 +541,7 @@ serve(async (req) => {
           dataStr: t.data_limite,
           horario: t.horario,
           descricaoTexto: t.descricao || null,
+          linkExplicito: t.link_audiencia || null,
         });
       }
 
@@ -525,6 +566,7 @@ serve(async (req) => {
             dataStr,
             horario: horaStr,
             descricaoTexto: c.descricao || c.local_reuniao || null,
+            linkExplicito: null,
           });
         }
       }
@@ -532,7 +574,7 @@ serve(async (req) => {
       if (candidatos.size > 0) {
         const processoIds = [...new Set([...candidatos.values()].map(a => a.processoId).filter(Boolean))] as string[];
         const { data: processosData } = processoIds.length
-          ? await supabase.from('processos').select('id, numero_processo, partes_json, cliente_id').in('id', processoIds)
+          ? await supabase.from('processos').select('id, numero_processo, partes_json, cliente_id, tribunal, nome_cliente').in('id', processoIds)
           : { data: [] };
         const processosPorId = new Map((processosData || []).map((p: any) => [p.id, p]));
 
@@ -582,17 +624,22 @@ serve(async (req) => {
           }
 
           const modalidade = detectarModalidadeAudiencia(audiencia.titulo, audiencia.descricaoTexto);
-          const link = extrairLinkAudiencia(audiencia.descricaoTexto);
+          // Link explícito (campo dedicado em tarefas) tem prioridade sobre
+          // o extraído por regex da descrição — evita link errado/nenhum.
+          const link = audiencia.linkExplicito || extrairLinkAudiencia(audiencia.descricaoTexto);
           // Sem lead cadastrado (2 casos encontrados: processo sem cliente_id
           // vinculado), o nome vem do partes_json — mesmo sufixo de telefone
           // colado que leads_juridicos.nome costuma ter, então mesma limpeza.
           const nomeBruto = lead?.nome || processo?.nome_cliente || 'Cliente';
           const nomeCliente = limparNomeCliente(nomeBruto);
+          // Horário salvo é sempre "como se fosse" de Manaus — reconverte
+          // pro fuso real do tribunal antes de mostrar pro cliente.
+          const { dataStr: dataReal, horario: horaReal } = converterParaFusoTribunal(audiencia.dataStr, audiencia.horario, processo?.tribunal);
           const mensagem = montarMensagemAudiencia({
             nomeCliente,
             tituloAudiencia: audiencia.titulo,
-            dataFormatada: formatarData(`${audiencia.dataStr}T12:00:00Z`),
-            horaFormatada: formatarHoraCompacta(audiencia.horario),
+            dataFormatada: formatarData(`${dataReal}T12:00:00Z`),
+            horaFormatada: formatarHoraCompacta(horaReal),
             numeroProcesso: processo?.numero_processo || 'não identificado',
             reu: extrairReu(processo?.partes_json),
             modalidade,
