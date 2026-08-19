@@ -94,6 +94,13 @@ function saudacaoPorHorario(): string {
   return 'Boa noite';
 }
 
+// Alguns leads importados de processo têm o telefone colado no próprio nome
+// (ex: "Priscilla Ketrin da Costa Veras - (71) 99377-1767") — tira esse
+// sufixo antes de usar o nome numa saudação.
+function limparNomeCliente(nome: string): string {
+  return nome.replace(/\s*-\s*\(\d{2}\)\s*[\d\s-]+$/, '').trim();
+}
+
 function formatarHoraCompacta(horario: string | null): string {
   if (!horario) return 'a confirmar';
   const [hh, mm] = horario.split(':');
@@ -107,6 +114,19 @@ function extrairReu(partesJson: any): string | null {
     return tipo === 'réu' || tipo === 'reu' || p?.polo === 'PA';
   });
   return reu?.nome || null;
+}
+
+// Fallback pro telefone do cliente quando leads_juridicos.telefone está vazio
+// (leads importados de processo às vezes nunca tiveram o campo preenchido,
+// mas o celular do autor já veio junto no partes_json na sincronização).
+function extrairTelefoneAutor(partesJson: any): string | null {
+  if (!Array.isArray(partesJson)) return null;
+  const autor = partesJson.find((p: any) => {
+    const tipo = (p?.tipo || '').toLowerCase();
+    return tipo === 'autor' || p?.polo === 'AT';
+  });
+  const tel = autor?.celular || autor?.telefone_adicional;
+  return tel && String(tel).trim() ? String(tel).trim() : null;
 }
 
 function detectarModalidadeAudiencia(titulo: string, descricao: string | null): 'Presencial' | 'Virtual' {
@@ -540,8 +560,9 @@ serve(async (req) => {
           const processo = audiencia.processoId ? processosPorId.get(audiencia.processoId) : null;
           const clienteId = audiencia.clienteId || processo?.cliente_id;
           const lead = clienteId ? leadsPorId.get(clienteId) : null;
+          const telefone = lead?.telefone || extrairTelefoneAutor(processo?.partes_json);
 
-          if (!lead?.telefone) {
+          if (!lead || !telefone) {
             console.warn(`[Lembrete Audiência] ⏭️ Sem telefone/lead identificável para ${audiencia.chave} (${audiencia.titulo})`);
             continue;
           }
@@ -549,7 +570,7 @@ serve(async (req) => {
           const modalidade = detectarModalidadeAudiencia(audiencia.titulo, audiencia.descricaoTexto);
           const link = extrairLinkAudiencia(audiencia.descricaoTexto);
           const mensagem = montarMensagemAudiencia({
-            nomeCliente: lead.nome || 'Cliente',
+            nomeCliente: lead.nome ? limparNomeCliente(lead.nome) : 'Cliente',
             tituloAudiencia: audiencia.titulo,
             dataFormatada: formatarData(`${audiencia.dataStr}T12:00:00Z`),
             horaFormatada: formatarHoraCompacta(audiencia.horario),
@@ -560,9 +581,9 @@ serve(async (req) => {
           });
 
           const instanceId = await resolveInstanceForLead(supabase, lead);
-          const resultado = await enviarMensagemZapi(supabase, lead.telefone, mensagem, {
+          const resultado = await enviarMensagemZapi(supabase, telefone, mensagem, {
             leadId: lead.id,
-            subscriberNome: lead.nome || 'Cliente',
+            subscriberNome: lead.nome ? limparNomeCliente(lead.nome) : 'Cliente',
             context: acao,
             instanceId,
           });
