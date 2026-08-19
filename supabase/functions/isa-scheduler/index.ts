@@ -551,17 +551,21 @@ serve(async (req) => {
           if (!janela && !force) continue;
 
           // Fora do force, dedup por janela (15d/7d/3d) — cada marco só sai
-          // uma vez. No force (catch-up manual), uma única acao própria,
-          // separada dos marcos automáticos, pra não bloquear nem duplicar
-          // quando o 15/7/3d real dessa mesma audiência chegar depois.
+          // uma vez. No force (catch-up manual), uma acao própria separada
+          // dos marcos automáticos, pra não bloquear o 15/7/3d real quando
+          // chegar depois — MAS ainda precisa checar o marco automático
+          // também (bug já visto ao vivo: sem isso, quem calhou de já ter
+          // recebido o lembrete de Xd hoje tomava a mensagem de novo no
+          // catch-up, porque as duas acoes são rótulos diferentes).
           const acao = force ? 'audiencia_lembrete_manual' : `audiencia_lembrete_${janela}d`;
+          const acoesParaChecar = force && janela ? [acao, `audiencia_lembrete_${janela}d`] : [acao];
 
           // Dedup via system_events (mesma chave — processo_id, ou fallback
           // cmp:/tar: — cobre candidato vindo de qualquer uma das 2 tabelas).
           const { data: jaEnviado } = await supabase
             .from('system_events')
             .select('id')
-            .eq('acao', acao)
+            .in('acao', acoesParaChecar)
             .eq('entidade_id', audiencia.chave)
             .limit(1)
             .maybeSingle();
