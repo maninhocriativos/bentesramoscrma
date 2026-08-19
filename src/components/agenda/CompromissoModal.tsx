@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
 import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog,
   DialogContent,
@@ -33,7 +34,7 @@ import { Badge } from '@/components/ui/badge';
 import { Compromisso, TipoCompromisso, ConfirmacaoStatus } from '@/types/compromissos';
 import {
   Loader2, Trash2, X, Pencil, CalendarIcon, Clock, FileText,
-  Briefcase, AlertCircle,
+  Briefcase, AlertCircle, Search, Scale,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -92,6 +93,40 @@ export function CompromissoModal({
   const isNew = !compromisso;
   const showForm = isNew || isEditing;
 
+  // Vínculo com processo (opcional) — sem isso, o compromisso nunca aparece
+  // na aba "Tarefas do Processo" do modal do processo, só na Agenda geral.
+  interface ProcessoLite { id: string; nome_cliente: string | null; numero_processo: string | null; }
+  const [procId, setProcId]         = useState('');
+  const [procLabel, setProcLabel]   = useState('');
+  const [procQuery, setProcQuery]   = useState('');
+  const [procResults, setProcResults] = useState<ProcessoLite[]>([]);
+  const [procOpen, setProcOpen]     = useState(false);
+  const procTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const buscarProcesso = (q: string) => {
+    setProcQuery(q);
+    if (procTimer.current) clearTimeout(procTimer.current);
+    if (q.trim().length < 2) { setProcResults([]); setProcOpen(false); return; }
+    procTimer.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from('processos')
+        .select('id,nome_cliente,numero_processo')
+        .or(`nome_cliente.ilike.%${q}%,numero_processo.ilike.%${q}%`)
+        .limit(8);
+      setProcResults((data as ProcessoLite[]) || []);
+      setProcOpen(true);
+    }, 250);
+  };
+
+  const selecionarProcesso = (p: ProcessoLite) => {
+    setProcId(p.id);
+    setProcLabel(`${p.nome_cliente || 'Sem nome'}${p.numero_processo ? ' · ' + p.numero_processo : ''}`);
+    setProcOpen(false);
+    setProcQuery('');
+  };
+
+  const limparProcesso = () => { setProcId(''); setProcLabel(''); };
+
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -119,12 +154,19 @@ export function CompromissoModal({
         tipo: compromisso.tipo as TipoCompromisso,
       });
       setIsEditing(false);
+      if (compromisso.processo_id) {
+        supabase.from('processos').select('id,nome_cliente,numero_processo').eq('id', compromisso.processo_id).maybeSingle()
+          .then(({ data }) => { if (data) selecionarProcesso(data as ProcessoLite); else limparProcesso(); });
+      } else {
+        limparProcesso();
+      }
     } else {
       // NOVO: usa selectedDate ou hoje
       // Usa format() (fuso local do browser) para manter o mesmo dia que aparece
       // no calendário — evita off-by-one quando browser != Manaus (ex: BRT = UTC-3)
       const baseDate = selectedDate || new Date();
       const dataStr = format(baseDate, 'yyyy-MM-dd');
+      limparProcesso();
       form.reset({
         titulo: '',
         descricao: '',
@@ -155,6 +197,7 @@ export function CompromissoModal({
           descricao: data.descricao || null,
           data_inicio: dataIsoUtc,
           tipo: data.tipo,
+          processo_id: procId || null,
         });
         if (result?.error) return;
       } else {
@@ -165,7 +208,7 @@ export function CompromissoModal({
           data_fim: null,
           tipo: data.tipo,
           lead_id: null,
-          processo_id: null,
+          processo_id: procId || null,
           responsavel_id: null,
         });
         if (result?.error) return;
@@ -320,6 +363,43 @@ export function CompromissoModal({
                     </FormItem>
                   )}
                 />
+
+                <FormItem>
+                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                    <Scale className="h-3 w-3" /> Processo vinculado (opcional)
+                  </FormLabel>
+                  {procId ? (
+                    <div className="flex items-center gap-2 rounded-xl h-10 px-3 border border-border/40 bg-muted/20">
+                      <Scale className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                      <p className="text-xs font-medium flex-1 truncate">{procLabel}</p>
+                      <button type="button" onClick={limparProcesso} className="p-1 rounded-lg hover:bg-black/5" title="Desvincular">
+                        <X className="h-3 w-3 text-muted-foreground" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        value={procQuery}
+                        onChange={e => buscarProcesso(e.target.value)}
+                        placeholder="Buscar por cliente ou nº do processo..."
+                        autoComplete="off"
+                        className="h-10 rounded-xl pl-9"
+                      />
+                      {procOpen && procResults.length > 0 && (
+                        <div className="absolute z-20 left-0 right-0 mt-1 rounded-xl border border-border/60 bg-popover shadow-xl max-h-56 overflow-y-auto">
+                          {procResults.map(p => (
+                            <button key={p.id} type="button" onClick={() => selecionarProcesso(p)}
+                              className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors border-b border-border/30 last:border-0">
+                              <p className="text-xs font-semibold truncate">{p.nome_cliente || 'Sem nome'}</p>
+                              <p className="text-[11px] text-muted-foreground">{p.numero_processo || 'sem número'}</p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </FormItem>
 
                 <FormField
                   control={form.control}
@@ -491,7 +571,7 @@ export function CompromissoModal({
                   <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400 mb-1">
                     🔗 Processo vinculado
                   </p>
-                  <p className="text-xs font-mono text-muted-foreground">{compromisso.processo_id}</p>
+                  <p className="text-xs text-muted-foreground">{procLabel || compromisso.processo_id}</p>
                 </div>
               )}
 

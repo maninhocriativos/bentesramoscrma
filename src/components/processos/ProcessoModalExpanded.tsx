@@ -640,6 +640,11 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   const [criandoTarefa,        setCriandoTarefa]        = useState(false);
   const [processoTarefas,      setProcessoTarefas]      = useState<Tarefa[]>([]);
   const [tarefasLoading,       setTarefasLoading]       = useState(false);
+  // Compromissos da Agenda vinculados direto ao processo (sem passar por
+  // "tarefas") — a maioria das tarefas gera um compromisso via trigger, mas
+  // a Agenda também permite criar/vincular um compromisso direto ao processo,
+  // sem tarefa nenhuma. Mostrados à parte pra não duplicar com a lista acima.
+  const [processoCompromissos, setProcessoCompromissos] = useState<Array<{ id: string; titulo: string; data_inicio: string; tipo: string; confirmacao_status: string | null }>>([]);
   const [intimacoesVinculadas, setIntimacoesVinculadas] = useState<Array<{ id: string; tipo_intimacao: string | null; conteudo: string | null; data_disponibilizacao: string | null; fonte: string | null }>>([]);
   const [intimacoesLoading,    setIntimacoesLoading]    = useState(false);
   const [membros,              setMembros]              = useState<{ id: string; nome: string | null; sobrenome: string | null; email: string | null }[]>([]);
@@ -1124,8 +1129,12 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
   const fetchProcessoTarefas = useCallback(async () => {
     if (!processo?.id || isNew) return;
     setTarefasLoading(true);
-    const { data } = await supabase.from('tarefas').select('*').eq('processo_id', processo.id).order('created_at', { ascending: false });
-    setProcessoTarefas((data as Tarefa[]) || []);
+    const [tarefasRes, compromissosRes] = await Promise.all([
+      supabase.from('tarefas').select('*').eq('processo_id', processo.id).order('created_at', { ascending: false }),
+      supabase.from('compromissos').select('id,titulo,data_inicio,tipo,confirmacao_status').eq('processo_id', processo.id).is('tarefa_id', null).order('data_inicio', { ascending: false }),
+    ]);
+    setProcessoTarefas((tarefasRes.data as Tarefa[]) || []);
+    setProcessoCompromissos(compromissosRes.data || []);
     setTarefasLoading(false);
   }, [processo?.id, isNew]);
 
@@ -2003,7 +2012,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                       <span className="text-sm text-muted-foreground">Carregando tarefas...</span>
                     </div>
-                  ) : processoTarefas.length === 0 ? (
+                  ) : processoTarefas.length === 0 && processoCompromissos.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 gap-3 border-2 border-dashed border-border/40 rounded-2xl">
                       <div className="h-12 w-12 rounded-2xl bg-muted/60 flex items-center justify-center">
                         <ListTodo className="h-6 w-6 text-muted-foreground/30" />
@@ -2020,6 +2029,28 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
                           membros={membros}
                           onStatusChange={handleUpdateTarefaStatus}
                         />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Compromissos da Agenda vinculados direto (sem tarefa) */}
+                  {processoCompromissos.length > 0 && (
+                    <div className="space-y-2 pt-2">
+                      <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-1">
+                        Compromissos da Agenda vinculados
+                      </p>
+                      {processoCompromissos.map(c => (
+                        <div key={c.id} className="flex items-center gap-3 rounded-xl border border-border/40 bg-muted/10 px-3 py-2.5">
+                          <div className="h-7 w-7 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                            <Calendar className="h-3.5 w-3.5 text-amber-600" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-foreground truncate">{c.titulo}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {c.tipo} · {new Date(c.data_inicio).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Manaus' })}
+                            </p>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   )}
