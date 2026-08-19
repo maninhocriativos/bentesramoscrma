@@ -1,10 +1,10 @@
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useTarefas } from '@/hooks/useTarefas';
 import { Tarefa } from '@/types/tarefas';
 import { supabase } from '@/integrations/supabase/client';
-import { Trash2, X, Plus, Save } from 'lucide-react';
+import { Trash2, X, Plus, Save, Search, Scale } from 'lucide-react';
 
 const BROWN  = '#3d2b1f';
 const GOLD   = '#c9a96e';
@@ -54,8 +54,44 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
   const [linkAudiencia, setLinkAudiencia] = useState('');
   const [members, setMembers]         = useState<TeamMember[]>([]);
 
+  // Vínculo com processo — sem isso, a tarefa nunca aparece na aba "Tarefas
+  // do Processo" (ProcessoModalExpanded), mesmo mencionando o caso no título.
+  interface ProcessoLite { id: string; nome_cliente: string | null; numero_processo: string | null; cliente_id: string | null; }
+  const [procId, setProcId]         = useState('');
+  const [procLabel, setProcLabel]   = useState('');
+  const [procClienteId, setProcClienteId] = useState<string | null>(null);
+  const [procQuery, setProcQuery]   = useState('');
+  const [procResults, setProcResults] = useState<ProcessoLite[]>([]);
+  const [procOpen, setProcOpen]     = useState(false);
+  const procTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const isEditing = !!tarefa;
   const ehAudiencia = /audi[eê]nc/i.test(titulo);
+
+  const buscarProcesso = (q: string) => {
+    setProcQuery(q);
+    if (procTimer.current) clearTimeout(procTimer.current);
+    if (q.trim().length < 2) { setProcResults([]); setProcOpen(false); return; }
+    procTimer.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from('processos')
+        .select('id,nome_cliente,numero_processo,cliente_id')
+        .or(`nome_cliente.ilike.%${q}%,numero_processo.ilike.%${q}%`)
+        .limit(8);
+      setProcResults((data as ProcessoLite[]) || []);
+      setProcOpen(true);
+    }, 250);
+  };
+
+  const selecionarProcesso = (p: ProcessoLite) => {
+    setProcId(p.id);
+    setProcLabel(`${p.nome_cliente || 'Sem nome'}${p.numero_processo ? ' · ' + p.numero_processo : ''}`);
+    setProcClienteId(p.cliente_id || null);
+    setProcOpen(false);
+    setProcQuery('');
+  };
+
+  const limparProcesso = () => { setProcId(''); setProcLabel(''); setProcClienteId(null); };
 
   useEffect(() => {
     if (!open) return;
@@ -69,10 +105,16 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
       setPrazoFatal(tarefa.prazo_fatal || tarefa.data_limite || '');
       setHorario(tarefa.horario?.slice(0, 5) || '');
       setLinkAudiencia(tarefa.link_audiencia || '');
+      if (tarefa.processo_id) {
+        supabase.from('processos').select('id,nome_cliente,numero_processo,cliente_id').eq('id', tarefa.processo_id).maybeSingle()
+          .then(({ data }) => { if (data) selecionarProcesso(data as ProcessoLite); else limparProcesso(); });
+      } else {
+        limparProcesso();
+      }
     } else {
       setTitulo(''); setDescricao(''); setPrioridade('Media'); setStatus('Pendente');
       setResponsavelId('none'); setPrazoSeguranca(''); setPrazoFatal(''); setHorario('');
-      setLinkAudiencia('');
+      setLinkAudiencia(''); limparProcesso();
     }
   }, [open, tarefa]);
 
@@ -100,6 +142,8 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
       horario:         horario || null,
       link_audiencia:  ehAudiencia ? (linkAudiencia.trim() || null) : (tarefa?.link_audiencia ?? null),
       responsavel_id:  responsavelId !== 'none' ? responsavelId : null,
+      processo_id:     procId || null,
+      cliente_id:      procClienteId,
     };
     if (isEditing && tarefa) {
       await updateTarefa(tarefa.id, {
@@ -109,7 +153,7 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
     } else {
       await createTarefa({
         ...payload,
-        data_conclusao: null, processo_id: null, cliente_id: null,
+        data_conclusao: null,
         started_at: null,
         entrega_texto: null, entrega_anexo_url: null, entregue_em: null,
         aprovacao_status: null, aprovacao_nota: null, aprovacao_feedback: null,
@@ -181,6 +225,43 @@ export function TarefaModal({ open, onOpenChange, tarefa, onDelete, onSuccess }:
                 className={inputFocusClass}
                 style={inputStyle}
               />
+            </Field>
+
+            {/* Processo vinculado — sem isso a tarefa não aparece na aba
+                "Tarefas do Processo" dentro do modal do processo. */}
+            <Field label="Processo vinculado (opcional)">
+              {procId ? (
+                <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ border: `1px solid ${GOLD}40`, background: `${GOLD}0f` }}>
+                  <Scale style={{ width: 14, height: 14, color: GOLD_D }} className="shrink-0" />
+                  <p className="text-xs font-medium flex-1 truncate" style={{ color: BROWN }}>{procLabel || 'Processo selecionado'}</p>
+                  <button type="button" onClick={limparProcesso} className="p-1 rounded-lg hover:opacity-70" title="Desvincular">
+                    <X style={{ width: 12, height: 12, color: '#6b7280' }} />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2" style={{ width: 14, height: 14, color: '#9ca3af' }} />
+                  <input
+                    value={procQuery}
+                    onChange={e => buscarProcesso(e.target.value)}
+                    placeholder="Buscar por cliente ou nº do processo..."
+                    className={inputFocusClass}
+                    style={{ ...inputStyle, paddingLeft: 34 }}
+                  />
+                  {procOpen && procResults.length > 0 && (
+                    <div className="absolute z-20 left-0 right-0 mt-1 rounded-xl shadow-xl max-h-56 overflow-y-auto" style={{ border: `1px solid ${GOLD}40`, background: '#fff' }}>
+                      {procResults.map(p => (
+                        <button key={p.id} type="button" onClick={() => selecionarProcesso(p)}
+                          className="w-full text-left px-3 py-2 hover:opacity-80 transition-opacity"
+                          style={{ borderBottom: `0.5px solid ${GOLD}20` }}>
+                          <p className="text-xs font-semibold truncate" style={{ color: BROWN }}>{p.nome_cliente || 'Sem nome'}</p>
+                          <p className="text-[11px] text-muted-foreground">{p.numero_processo || 'sem número'}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </Field>
 
             {/* Descrição */}
