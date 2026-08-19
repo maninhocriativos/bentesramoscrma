@@ -414,64 +414,145 @@ serve(async (req) => {
     }
 
     // ==================== LEMBRETES DE AUDIÊNCIA — 15d/7d/3d ====================
-    // Fonte: tabela "tarefas" (não "compromissos") — é onde audiências são
-    // registradas hoje (titulo + data_limite + horario), confirmado direto no
-    // banco: nenhuma linha usa tipo estruturado, então o match é por título.
+    // Audiências aparecem em DUAS tabelas hoje: "tarefas" (data_limite +
+    // horario) e "compromissos" (a Agenda — data_inicio timestamptz), criadas
+    // juntas na maioria dos casos mas não sempre (a Agenda permite lançar um
+    // compromisso avulso sem tarefa correspondente). Nenhuma das duas usa um
+    // campo "tipo" estruturado pra audiência (confirmado no banco: tipo vem
+    // sempre como "Tarefa"/"Reunião"), então o match é por título nas duas.
+    // Junta as duas fontes por processo_id pra não perder nem duplicar envio,
+    // e dedupe via system_events (mesmo padrão já usado no bloco de 1h/24h
+    // acima) em vez de coluna — funciona pra candidatos vindos de qualquer
+    // uma das duas tabelas.
     if (task === 'lembretes_audiencia' || task === 'all') {
       const hojeManaus = getHojeManaus();
       const hojeUtc = new Date(`${hojeManaus}T00:00:00Z`).getTime();
       const JANELAS_DIAS = [15, 7, 3] as const;
-      const limiteBusca = new Date(hojeUtc + 16 * 86400000).toISOString().split('T')[0];
+      const horizonteManaus = new Date(hojeUtc + 16 * 86400000).toISOString().split('T')[0];
+      const inicioHojeUtc = getInicioHojeUtc();
+      const fimHorizonteUtc = new Date(inicioHojeUtc.getTime() + 17 * 86400000);
 
-      const { data: audienciasBrutas } = await supabase
+      const paraDataHoraManaus = (iso: string): { data: string; hora: string } => ({
+        data: new Intl.DateTimeFormat('en-CA', { timeZone: MANAUS_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso)),
+        hora: new Intl.DateTimeFormat('en-GB', { timeZone: MANAUS_TIMEZONE, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso)) + ':00',
+      });
+
+      interface CandidatoAudiencia {
+        chave: string;
+        processoId: string | null;
+        clienteId: string | null;
+        titulo: string;
+        dataStr: string;
+        horario: string | null;
+        descricaoTexto: string | null;
+      }
+
+      const { data: tarefasBrutas } = await supabase
         .from('tarefas')
         .select('*')
         .ilike('titulo', '%udiênc%')
         .neq('status', 'Concluída')
         .gte('data_limite', hojeManaus)
-        .lte('data_limite', limiteBusca);
+        .lte('data_limite', horizonteManaus);
 
-      const audiencias = audienciasBrutas || [];
+      const { data: compromissosBrutos } = await supabase
+        .from('compromissos')
+        .select('*')
+        .ilike('titulo', '%udiênc%')
+        .neq('confirmacao_status', 'cancelado')
+        .gte('data_inicio', inicioHojeUtc.toISOString())
+        .lte('data_inicio', fimHorizonteUtc.toISOString());
 
-      if (audiencias.length > 0) {
-        const processoIds = [...new Set(audiencias.map((a: any) => a.processo_id).filter(Boolean))];
+      const tarefaIdsUsadas = new Set((tarefasBrutas || []).map((t: any) => t.id));
+      const candidatos = new Map<string, CandidatoAudiencia>();
+
+      for (const t of tarefasBrutas || []) {
+        const chave = t.processo_id || `tar:${t.id}`;
+        candidatos.set(chave, {
+          chave,
+          processoId: t.processo_id || null,
+          clienteId: t.cliente_id || null,
+          titulo: t.titulo,
+          dataStr: t.data_limite,
+          horario: t.horario,
+          descricaoTexto: t.descricao || null,
+        });
+      }
+
+      for (const c of compromissosBrutos || []) {
+        // Já representado por uma tarefa (mesmo processo, ou mesma tarefa
+        // vinculada via compromissos.tarefa_id) — só completa campos vazios.
+        if (c.tarefa_id && tarefaIdsUsadas.has(c.tarefa_id) && !c.processo_id) continue;
+
+        const chave = c.processo_id || `cmp:${c.id}`;
+        const existente = candidatos.get(chave);
+        const { data: dataStr, hora: horaStr } = paraDataHoraManaus(c.data_inicio);
+
+        if (existente) {
+          existente.clienteId = existente.clienteId || c.lead_id || null;
+          existente.descricaoTexto = existente.descricaoTexto || c.descricao || c.local_reuniao || null;
+        } else {
+          candidatos.set(chave, {
+            chave,
+            processoId: c.processo_id || null,
+            clienteId: c.lead_id || null,
+            titulo: c.titulo,
+            dataStr,
+            horario: horaStr,
+            descricaoTexto: c.descricao || c.local_reuniao || null,
+          });
+        }
+      }
+
+      if (candidatos.size > 0) {
+        const processoIds = [...new Set([...candidatos.values()].map(a => a.processoId).filter(Boolean))] as string[];
         const { data: processosData } = processoIds.length
           ? await supabase.from('processos').select('id, numero_processo, partes_json, cliente_id').in('id', processoIds)
           : { data: [] };
         const processosPorId = new Map((processosData || []).map((p: any) => [p.id, p]));
 
         const clienteIds = [...new Set(
-          audiencias.map((a: any) => a.cliente_id || processosPorId.get(a.processo_id)?.cliente_id).filter(Boolean)
-        )];
+          [...candidatos.values()].map(a => a.clienteId || (a.processoId ? processosPorId.get(a.processoId)?.cliente_id : null)).filter(Boolean)
+        )] as string[];
         const { data: leadsData } = clienteIds.length
           ? await supabase.from('leads_juridicos').select('id, nome, telefone, tipo_origem, linha_whatsapp').in('id', clienteIds)
           : { data: [] };
         const leadsPorId = new Map((leadsData || []).map((l: any) => [l.id, l]));
 
-        for (const tarefa of audiencias) {
-          const diffDias = Math.round((new Date(`${tarefa.data_limite}T00:00:00Z`).getTime() - hojeUtc) / 86400000);
+        for (const audiencia of candidatos.values()) {
+          const diffDias = Math.round((new Date(`${audiencia.dataStr}T00:00:00Z`).getTime() - hojeUtc) / 86400000);
           const janela = JANELAS_DIAS.find(j => j === diffDias);
           if (!janela) continue;
 
-          const campoEnviado = `lembrete_${janela}d_enviado_em` as const;
-          if (tarefa[campoEnviado]) continue;
+          const acao = `audiencia_lembrete_${janela}d`;
 
-          const processo = processosPorId.get(tarefa.processo_id);
-          const clienteId = tarefa.cliente_id || processo?.cliente_id;
+          // Dedup via system_events (mesma chave — processo_id, ou fallback
+          // cmp:/tar: — cobre candidato vindo de qualquer uma das 2 tabelas).
+          const { data: jaEnviado } = await supabase
+            .from('system_events')
+            .select('id')
+            .eq('acao', acao)
+            .eq('entidade_id', audiencia.chave)
+            .limit(1)
+            .maybeSingle();
+          if (jaEnviado) continue;
+
+          const processo = audiencia.processoId ? processosPorId.get(audiencia.processoId) : null;
+          const clienteId = audiencia.clienteId || processo?.cliente_id;
           const lead = clienteId ? leadsPorId.get(clienteId) : null;
 
           if (!lead?.telefone) {
-            console.warn(`[Lembrete Audiência] ⏭️ Sem telefone/lead identificável para tarefa ${tarefa.id} (${tarefa.titulo})`);
+            console.warn(`[Lembrete Audiência] ⏭️ Sem telefone/lead identificável para ${audiencia.chave} (${audiencia.titulo})`);
             continue;
           }
 
-          const modalidade = detectarModalidadeAudiencia(tarefa.titulo, tarefa.descricao);
-          const link = extrairLinkAudiencia(tarefa.descricao);
+          const modalidade = detectarModalidadeAudiencia(audiencia.titulo, audiencia.descricaoTexto);
+          const link = extrairLinkAudiencia(audiencia.descricaoTexto);
           const mensagem = montarMensagemAudiencia({
             nomeCliente: lead.nome || 'Cliente',
-            tituloAudiencia: tarefa.titulo,
-            dataFormatada: formatarData(`${tarefa.data_limite}T12:00:00Z`),
-            horaFormatada: formatarHoraCompacta(tarefa.horario),
+            tituloAudiencia: audiencia.titulo,
+            dataFormatada: formatarData(`${audiencia.dataStr}T12:00:00Z`),
+            horaFormatada: formatarHoraCompacta(audiencia.horario),
             numeroProcesso: processo?.numero_processo || 'não identificado',
             reu: extrairReu(processo?.partes_json),
             modalidade,
@@ -482,28 +563,24 @@ serve(async (req) => {
           const resultado = await enviarMensagemZapi(supabase, lead.telefone, mensagem, {
             leadId: lead.id,
             subscriberNome: lead.nome || 'Cliente',
-            context: `audiencia_lembrete_${janela}d`,
+            context: acao,
             instanceId,
           });
-
-          if (resultado.success) {
-            await supabase.from('tarefas').update({ [campoEnviado]: new Date().toISOString() }).eq('id', tarefa.id);
-          }
 
           await supabase.from('system_events').insert({
             tipo: 'notificacao',
             fonte: 'isa_scheduler',
-            acao: `audiencia_lembrete_${janela}d`,
-            entidade_tipo: 'tarefa',
-            entidade_id: tarefa.id,
+            acao,
+            entidade_tipo: 'audiencia',
+            entidade_id: audiencia.chave,
             lead_id: lead.id,
-            dados: { enviado: resultado.success, erro: resultado.error, modalidade, janela },
+            dados: { enviado: resultado.success, erro: resultado.error, modalidade, janela, processo_id: audiencia.processoId },
           });
 
           results.actions.push({
             tipo: 'audiencia_lembrete',
             janela: `${janela}d`,
-            tarefa: tarefa.titulo,
+            audiencia: audiencia.titulo,
             lead: lead.nome,
             enviado: resultado.success,
           });
