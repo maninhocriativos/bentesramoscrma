@@ -53,6 +53,29 @@ function mesAnoLabel(key: string): string {
   return y && m ? `${m}/${y}` : key;
 }
 
+// Converte uma data "DD/MM/AAAA" (ou ISO "AAAA-MM-DD") numa chave ordenável
+// "AAAA-MM-DD" — a IA às vezes mistura os dois formatos entre lançamentos, o
+// que fazia a planilha sair com as datas fora de ordem quando só exibíamos o
+// texto cru sem normalizar antes de ordenar.
+function dataKey(data: string): string {
+  const s = (data || '').trim();
+  const br = s.match(/^(\d{2})\/(\d{2})\/(\d{2,4})/);
+  if (br) {
+    const yyyy = br[3].length === 2 ? `20${br[3]}` : br[3];
+    return `${yyyy}-${br[2]}-${br[1]}`;
+  }
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  return '9999-99-99'; // data ilegível vai pro fim, não pro início
+}
+
+// "AAAA-MM-DD" → "DD/MM/AAAA" para exibição — canoniza o formato mesmo
+// quando o lançamento original veio em ISO.
+function dataLabel(key: string): string {
+  const [y, m, d] = key.split('-');
+  return y && m && d && y !== '9999' ? `${d}/${m}/${y}` : 'Data não informada';
+}
+
 // Deriva o período (ex.: "05/2022 a 09/2025") a partir das próprias cobranças,
 // usado quando o usuário não informou o período no formulário.
 function periodoDasCobrancas(resultado: AnaliseResultado): string {
@@ -247,48 +270,67 @@ function buildResumoSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado, con
   }
 }
 
-// ─── Aba 2: Cobranças Indevidas (detalhamento INDIVIDUAL, item a item) ─────────
-// Simplificada a pedido do usuário: só as colunas essenciais (Data, Descrição,
-// Valor, Status) — Categoria, Base Legal e a Análise Individual (texto jurídico
-// longo) saíram da planilha pra ficar mais enxuta.
+// Cabeçalho de grupo (um por dia): dia + quantidade de lançamentos naquele dia.
+function diaHeader(ws: ExcelJS.Worksheet, row: number, from: number, to: number, dataFmt: string, qtd: number) {
+  ws.mergeCells(row, from, row, to);
+  const cell = ws.getRow(row).getCell(from);
+  cell.value = `📅 ${dataFmt}  —  ${qtd} lançamento${qtd > 1 ? 's' : ''}`;
+  cell.font  = { name: FONT_BASE, bold: true, size: 10, color: { argb: `FF${C.branco}` } };
+  cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${C.marromMed}` } };
+  cell.alignment = { horizontal: 'left', vertical: 'middle' };
+}
+
+// ─── Aba 2: Cobranças Indevidas (detalhamento INDIVIDUAL, agrupado por dia) ────
+// Simplificada a pedido do usuário: as datas saíam fora de ordem (a IA mistura
+// DD/MM/AAAA e ISO entre lançamentos) e a planilha tinha colunas demais. Agora
+// os lançamentos são ordenados de verdade por data, agrupados dia a dia (com
+// subtotal do dia) e a coluna "Data"/"#" por linha saiu — o cabeçalho do grupo
+// já mostra o dia, não precisa repetir em cada linha.
 function buildCobrancasSheet(wb: ExcelJS.Workbook, resultado: AnaliseResultado) {
   const ws = wb.addWorksheet('Cobranças Indevidas', { properties: { tabColor: { argb: `FF${C.vermelho}` } } });
   ws.columns = [
-    { width: 6 }, { width: 14 }, { width: 46 }, { width: 16 }, { width: 16 },
+    { width: 54 }, { width: 16 }, { width: 16 },
   ];
 
-  headerFill(ws, 1, 1, 5, 'COBRANÇAS INDEVIDAS — ANÁLISE INDIVIDUAL ITEM A ITEM', 13);
+  headerFill(ws, 1, 1, 3, 'COBRANÇAS INDEVIDAS — POR DIA', 13);
   ws.getRow(1).height = 32;
   ws.getRow(2).height = 22;
 
-  const hdrs = ['#', 'Data', 'Descrição', 'Valor (R$)', 'Status'];
+  const hdrs = ['Descrição', 'Valor (R$)', 'Status'];
   hdrs.forEach((h, i) => colHeader(ws.getRow(2).getCell(i + 1), h));
 
-  // Congelar cabeçalho + layout limpo
   ws.views = [{ state: 'frozen', ySplit: 2, showGridLines: false }];
 
-  const cobrancas = resultado.cobrancas_indevidas || [];
-  cobrancas.forEach((c, idx) => {
-    const r    = idx + 3;
-    const alt  = idx % 2 !== 0;
-    const row  = ws.getRow(r);
-    row.height = 20;
+  const cobrancas = [...(resultado.cobrancas_indevidas || [])]
+    .sort((a, b) => dataKey(a.data).localeCompare(dataKey(b.data)));
 
-    dataRow(row.getCell(1), idx + 1,                                alt, { center: true });
-    dataRow(row.getCell(2), c.data,                                 alt);
-    dataRow(row.getCell(3), c.descricao,                            alt);
-    dataRow(row.getCell(4), c.valor_total || c.valor_unitario || 0, alt, { currency: true, red: true, bold: true });
-    dataRow(row.getCell(5), c.status,                               alt, { bold: true, color: corStatus(c.status) });
-  });
+  let r = 3;
+  let diaAtual = '';
+  let alt = false;
+  for (const c of cobrancas) {
+    const key = dataKey(c.data);
+    if (key !== diaAtual) {
+      diaAtual = key;
+      const qtdNoDia = cobrancas.filter(x => dataKey(x.data) === key).length;
+      diaHeader(ws, r, 1, 3, dataLabel(key), qtdNoDia);
+      ws.getRow(r).height = 20;
+      r += 1;
+      alt = false;
+    }
+
+    const row = ws.getRow(r);
+    row.height = 20;
+    dataRow(row.getCell(1), c.descricao,                            alt);
+    dataRow(row.getCell(2), c.valor_total || c.valor_unitario || 0, alt, { currency: true, red: true, bold: true });
+    dataRow(row.getCell(3), c.status,                               alt, { bold: true, color: corStatus(c.status) });
+    alt = !alt;
+    r += 1;
+  }
 
   // Linha de total (soma simples de todos os itens — não é agrupamento por categoria)
-  const totalRow_ = cobrancas.length + 3;
   const total = cobrancas.reduce((s, c) => s + (c.valor_total || c.valor_unitario || 0), 0);
-  totalRow(ws, totalRow_, 1, 4, 'TOTAL GERAL', total);
-  ws.getRow(totalRow_).height = 24;
-
-  // Auto filtro nas colunas
-  ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 5 } };
+  totalRow(ws, r, 1, 2, 'TOTAL GERAL', total);
+  ws.getRow(r).height = 24;
 }
 
 // ─── Exportar ─────────────────────────────────────────────────────────────────

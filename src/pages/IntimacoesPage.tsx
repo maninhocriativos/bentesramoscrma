@@ -128,6 +128,23 @@ export default function IntimacoesPage() {
 
   useEffect(() => { if (user) fetchIntimacoes(); }, [user]);
   useEffect(() => { const t = setInterval(() => setTick(n => n + 1), 60000); return () => clearInterval(t); }, []);
+  // "Última sincronização" não pode depender só de localStorage (só atualizava
+  // quando alguém clicava "Sincronizar" NESSE aparelho) — busca a data real do
+  // último job concluído (inclui os do cron automático), pra não parecer que
+  // a sincronização automática está travada quando na verdade só ninguém
+  // clicou o botão manual recentemente.
+  useEffect(() => {
+    const fetchRealLastSync = () => {
+      supabase.rpc('get_ultima_sincronizacao_intimacoes').then(({ data, error }) => {
+        if (error || !data) return;
+        const realSync = new Date(data as string);
+        setLastSyncAt(prev => (!prev || realSync > prev) ? realSync : prev);
+      });
+    };
+    fetchRealLastSync();
+    const t = setInterval(fetchRealLastSync, 5 * 60000);
+    return () => clearInterval(t);
+  }, []);
   useEffect(() => { setCurrentPage(1); }, [searchTerm, filterLida]);
   useEffect(() => {
     supabase.from('perfis').select('id, nome, sobrenome, email, oab_numero, oab_uf').eq('aprovado', true)
