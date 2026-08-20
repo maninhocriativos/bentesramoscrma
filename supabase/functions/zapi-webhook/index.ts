@@ -29,6 +29,25 @@ interface TrafficSourceResult {
 // Mensagem padrão que vem do anúncio Click to WhatsApp
 const TRAFFIC_MESSAGE_PATTERN = 'quero saber se tenho dinheiro a receber';
 
+// Essa mensagem é específica da campanha ORIGINAL do agente isa_documentos —
+// o único funil em que o lead já assina o contrato ANTES de chegar no
+// WhatsApp (por isso a Isa já entra pedindo o contrato assinado). Qualquer
+// outra campanha de tráfego pago (detectada por ctwa_metadata ou por outro
+// texto) precisa passar pela triagem normal, senão a Isa pede um contrato
+// que o lead nunca assinou.
+function isPreSignedTrafficMessage(messageContent?: string | null): boolean {
+  if (!messageContent) return false;
+  const normalizedMessage = messageContent.toLowerCase().trim().replace(/[.!?]+$/, '');
+  const variations = [
+    TRAFFIC_MESSAGE_PATTERN,
+    'quero saber se tenho dinheiro',
+    'tenho dinheiro a receber',
+    'dinheiro a receber',
+    'quero saber sobre dinheiro',
+  ];
+  return variations.some(v => normalizedMessage.includes(v));
+}
+
 // Matching de instância usando os números canônicos do zapi-helper (fonte única de verdade).
 // PHONE_TRAFEGO = '5592985888190' → sufixo dos últimos 7 dígitos cobre todas variações da Z-API
 // PHONE_ESCRITORIO = '5592991604348' → sufixo dos últimos 8 dígitos cobre todas variações
@@ -145,27 +164,12 @@ function detectTrafficSource(body: any, messageContent?: string, instancePhone?:
   // "Quero saber se tenho dinheiro a receber."
   // Este é o texto enviado automaticamente quando o usuário clica no anúncio
   if (messageContent) {
-    const normalizedMessage = messageContent.toLowerCase().trim().replace(/[.!?]+$/, '');
-    
-    // Verificar padrão exato da mensagem de tráfego
-    const isTrafficMessage = normalizedMessage.includes(TRAFFIC_MESSAGE_PATTERN);
-    
-    // TAMBÉM detectar variações comuns da mensagem do anúncio
-    const trafficVariations = [
-      'quero saber se tenho dinheiro',
-      'tenho dinheiro a receber',
-      'dinheiro a receber',
-      'quero saber sobre dinheiro'
-    ];
-    const isTrafficVariation = trafficVariations.some(v => normalizedMessage.includes(v));
-    
-    if (isTrafficMessage || isTrafficVariation) {
+    if (isPreSignedTrafficMessage(messageContent)) {
       console.log('[Traffic Detection] ✅ DETECTED PAID TRAFFIC via MESSAGE CONTENT:', {
         message: messageContent.substring(0, 60),
         pattern: TRAFFIC_MESSAGE_PATTERN,
-        matchedVariation: isTrafficVariation
       });
-      
+
       return {
         isTraffic: true,
         source: 'meta_ads', // Assumir Meta Ads quando detectado por mensagem
@@ -1415,8 +1419,8 @@ async function fetchFacebookLeadData(sourceId: string | null): Promise<{
 }
 
 async function findOrCreateLead(
-  supabase: any, 
-  data: { phone: string | null; name: string | null },
+  supabase: any,
+  data: { phone: string | null; name: string | null; message?: string | null },
   trafficSource: TrafficSourceResult,
   instancePhone?: string | null
 ): Promise<{ leadId: string | null; isNewLead: boolean }> {
@@ -1530,10 +1534,13 @@ async function findOrCreateLead(
       empresa_tag: empresaTag,
       owner_tipo: ownerTipo,
       isa_ativa: isaAtiva,
-      // Leads novos da linha de tráfego entram primeiro no agente de coleta de
-      // documentos (arquivo do cliente); demais linhas mantêm o fluxo de triagem
-      // padrão. Não afeta leads já existentes (só o insert de lead novo).
-      isa_agent: linhaWhatsapp === 'trafego_isa' ? 'isa_documentos' : 'isa_triagem',
+      // Só o funil ORIGINAL (mensagem padrão "dinheiro a receber") entra direto
+      // no agente de coleta de documentos — nele o lead já assina o contrato
+      // antes de chegar no WhatsApp. Qualquer outra campanha de tráfego pago
+      // (detectada por ctwa_metadata, número da linha, etc.) passa pela
+      // triagem normal, senão a Isa pede um contrato que o lead nunca assinou.
+      // Não afeta leads já existentes (só o insert de lead novo).
+      isa_agent: isPreSignedTrafficMessage(data.message) ? 'isa_documentos' : 'isa_triagem',
       whatsapp_numero_destino: instancePhone,
       resumo_ia: isFromOffice
         ? `Lead do ESCRITÓRIO (Bentes Ramos). Contato direto em ${new Date().toLocaleDateString('pt-BR')}. ISA DESATIVADA - atendimento humano direto.`

@@ -299,9 +299,14 @@ const ManyChatInboxContent = () => {
   const selectedSubscriberRef    = useRef<Subscriber | null>(null);
   const subscribersRef           = useRef<Subscriber[]>([]);
   const prevSelectedSubIdRef     = useRef<string | null>(null);
+  // Timers de auto-limpeza do "cliente digitando" — o Z-API às vezes não manda
+  // o evento PAUSED (ex: cliente fecha o WhatsApp no meio), então limpamos por
+  // segurança se não chegar atualização nova em alguns segundos.
+  const customerTypingTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const [unreadCounts, setUnreadCounts]             = useState<Map<string, number>>(new Map());
   const [lastMessagePreviews, setLastMessagePreviews] = useState<Map<string, string>>(new Map());
+  const [customerTypingIds, setCustomerTypingIds]   = useState<Set<string>>(new Set());
 
   // ─── Presence + notifications ────────────────────────────────────────────────
 
@@ -997,6 +1002,34 @@ const ManyChatInboxContent = () => {
       .subscribe();
     readReceiptsChannelRef.current = readChannel;
 
+    // Broadcast channel: "cliente está digitando" — populado pelo webhook de
+    // presença do Z-API (zapi-presence-webhook), repassado em tempo real.
+    const customerTypingChannel = supabase.channel('whatsapp-customer-typing')
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        if (!isSubscribed || !payload) return;
+        const { subscriber_id, typing } = payload as any;
+        if (!subscriber_id) return;
+
+        const existingTimeout = customerTypingTimeoutsRef.current.get(subscriber_id);
+        if (existingTimeout) clearTimeout(existingTimeout);
+        customerTypingTimeoutsRef.current.delete(subscriber_id);
+
+        setCustomerTypingIds(prev => {
+          const next = new Set(prev);
+          if (typing) next.add(subscriber_id); else next.delete(subscriber_id);
+          return next;
+        });
+
+        if (typing) {
+          const t = setTimeout(() => {
+            customerTypingTimeoutsRef.current.delete(subscriber_id);
+            setCustomerTypingIds(prev => { const next = new Set(prev); next.delete(subscriber_id); return next; });
+          }, 8000);
+          customerTypingTimeoutsRef.current.set(subscriber_id, t);
+        }
+      })
+      .subscribe();
+
     return () => {
       isSubscribed = false;
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
@@ -1007,7 +1040,10 @@ const ManyChatInboxContent = () => {
       }
       supabase.removeChannel(subscribersChannel);
       supabase.removeChannel(readChannel);
+      supabase.removeChannel(customerTypingChannel);
       readReceiptsChannelRef.current = null;
+      customerTypingTimeoutsRef.current.forEach(t => clearTimeout(t));
+      customerTypingTimeoutsRef.current.clear();
     };
   }, [user?.id, playNotificationSound, notifyNewMessage, notifyAssignment]);
 
@@ -2446,7 +2482,9 @@ const ManyChatInboxContent = () => {
                           ) : (formatPhone(subscriber.telefone) && <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 leading-none ${themeClasses.secondaryText}`}>{formatPhone(subscriber.telefone)}</span>)}
                         </div>
                         <div className="flex items-center gap-1 min-w-0 mt-[3px] overflow-hidden">
-                          {isTyping(subscriber.subscriber_id) ? (
+                          {customerTypingIds.has(subscriber.subscriber_id) ? (
+                            <p className="text-[13px] truncate leading-tight font-medium text-[#00A884] animate-pulse">digitando...</p>
+                          ) : isTyping(subscriber.subscriber_id) ? (
                             <p className="text-[13px] truncate leading-tight font-medium text-[#00A884] animate-pulse">
                               {getTypingUserName(subscriber.subscriber_id) || "alguém"} digitando...
                             </p>
@@ -2620,7 +2658,9 @@ const ManyChatInboxContent = () => {
                       </button>
                     </>
                   )}
-                  {isTyping(selectedSubscriber.subscriber_id) && (
+                  {customerTypingIds.has(selectedSubscriber.subscriber_id) ? (
+                    <span className="text-[11px] text-[#00A884] font-medium animate-pulse shrink-0">digitando...</span>
+                  ) : isTyping(selectedSubscriber.subscriber_id) && (
                     <span className="text-[11px] text-[#00A884] font-medium animate-pulse shrink-0">
                       {getTypingUserName(selectedSubscriber.subscriber_id) || "alguém"} digitando...
                     </span>
