@@ -109,6 +109,8 @@ export function UsersTable() {
         return 'bg-muted text-muted-foreground border-muted';
       case 'Estagiário':
         return 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700';
+      case 'Atendente':
+        return 'bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-700';
       default:
         return 'bg-muted text-muted-foreground border-muted';
     }

@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Database } from '@/integrations/supabase/types';
 import {
   UserPlus, Copy, Check, Loader2, Shield, Briefcase, Scale,
-  ClipboardList, GraduationCap, ChevronDown, ChevronUp, RefreshCw,
+  ClipboardList, GraduationCap, Headset, ChevronDown, ChevronUp, RefreshCw,
   Mail, User, PartyPopper,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -76,12 +76,21 @@ const ROLES: RoleOption[] = [
     bg: 'bg-violet-50',
     border: 'border-violet-200',
   },
+  {
+    value: 'Atendente',
+    label: 'Atendente',
+    description: 'Leads, chat e documentos. Sem processos, dashboard ou financeiro.',
+    icon: Headset,
+    color: 'text-teal-700',
+    bg: 'bg-teal-50',
+    border: 'border-teal-200',
+  },
 ];
 
 const inviteSchema = z.object({
   email: z.string().trim().email('Email inválido').max(255),
   nome: z.string().trim().max(80).optional(),
-  role: z.enum(['Administrador', 'Gerente', 'Advogado', 'Secretaria', 'Estagiário'] as const),
+  role: z.enum(['Administrador', 'Gerente', 'Advogado', 'Secretaria', 'Estagiário', 'Atendente'] as const),
 });
 
 interface InviteUserModalProps {

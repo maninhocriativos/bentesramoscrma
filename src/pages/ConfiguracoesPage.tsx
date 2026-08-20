@@ -183,6 +183,16 @@ export default function ConfiguracoesPage() {
                       Acesso supervisionado: mesma base da Secretaria, com acesso controlado por tela individualmente pelo administrador.
                     </p>
                   </div>
+
+                  <div className="p-5 rounded-xl bg-gradient-to-br from-teal-50 to-teal-50/30 border border-teal-200 shadow-soft dark:from-teal-950/20 dark:to-teal-950/10 dark:border-teal-800">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-3 h-3 rounded-full bg-teal-400"></div>
+                      <h4 className="font-semibold text-teal-700 dark:text-teal-300">Atendente</h4>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Acesso de primeiro contato: leads, chat, documentos, agenda e tarefas. Sem processos jurídicos, dashboard ou financeiro por padrão — ajustável por tela pelo administrador.
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>

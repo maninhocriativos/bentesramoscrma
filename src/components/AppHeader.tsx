@@ -28,6 +28,7 @@ export function AppHeader({ title, onNewItem, newItemLabel = 'Novo' }: AppHeader
     'Gerente': 'bg-gold text-gold-foreground',
     'Advogado': 'bg-secondary text-secondary-foreground',
     'Secretaria': 'bg-muted text-muted-foreground',
+    'Atendente': 'bg-teal-100 text-teal-700',
   };
 
   return (

@@ -4768,6 +4768,7 @@ export type Database = {
         | "Secretaria"
         | "Gerente"
         | "Estagiário"
+        | "Atendente"
       petition_status_v3:
         | "rascunho"
         | "gerando"
@@ -4912,6 +4913,7 @@ export const Constants = {
         "Secretaria",
         "Gerente",
         "Estagiário",
+        "Atendente",
       ],
       petition_status_v3: [
         "rascunho",

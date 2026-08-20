@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, useMemo, ReactN
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
-type AppRole = 'Administrador' | 'Gerente' | 'Advogado' | 'Secretaria' | 'Estagiário';
+type AppRole = 'Administrador' | 'Gerente' | 'Advogado' | 'Secretaria' | 'Estagiário' | 'Atendente';
 
 export interface Perfil {
   id: string;
@@ -25,6 +25,7 @@ interface PerfilContextValue {
   isAdvogado: boolean;
   isSecretaria: boolean;
   isEstagiario: boolean;
+  isAtendente: boolean;
   canDelete: boolean;
   canAccessSettings: boolean;
   canAccessProcessos: boolean;
@@ -80,7 +81,7 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
     if (!rolesResult.error && rolesResult.data && rolesResult.data.length > 0) {
       userRoles = rolesResult.data.map(r => r.role as AppRole);
     } else if (perfilData?.cargo) {
-      const validRoles: AppRole[] = ['Administrador', 'Gerente', 'Advogado', 'Secretaria', 'Estagiário'];
+      const validRoles: AppRole[] = ['Administrador', 'Gerente', 'Advogado', 'Secretaria', 'Estagiário', 'Atendente'];
       const cargoAsRole = perfilData.cargo as AppRole;
       if (validRoles.includes(cargoAsRole)) {
         userRoles = [cargoAsRole];
@@ -167,12 +168,13 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
   const isAdvogado   = roles.includes('Advogado');
   const isSecretaria = roles.includes('Secretaria');
   const isEstagiario = roles.includes('Estagiário');
+  const isAtendente  = roles.includes('Atendente');
 
   const canDelete           = isAdmin || isGerente;
   const canAccessSettings   = isAdmin;
   const canAccessProcessos  = isAdmin || isGerente || isAdvogado || isSecretaria || isEstagiario;
-  const canAccessLeads      = isAdmin || isGerente || isAdvogado || isSecretaria || isEstagiario;
-  const canAccessDashboard  = isAdmin || isGerente || isAdvogado; // Secretaria e Estagiários: padrão sem dashboard
+  const canAccessLeads      = isAdmin || isGerente || isAdvogado || isSecretaria || isEstagiario || isAtendente;
+  const canAccessDashboard  = isAdmin || isGerente || isAdvogado; // Secretaria, Estagiários e Atendentes: padrão sem dashboard
   const canAccessAgenda     = true;
   const canAccessTarefas    = true;
   const canAccessFinanceiro = isAdmin || isGerente;
@@ -193,14 +195,14 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
   // quando qualquer estado do PerfilProvider muda
   const value = useMemo<PerfilContextValue>(() => ({
     perfil, loading, cargo, roles,
-    isAdmin, isGerente, isAdvogado, isSecretaria, isEstagiario,
+    isAdmin, isGerente, isAdvogado, isSecretaria, isEstagiario, isAtendente,
     canDelete, canAccessSettings, canAccessProcessos, canAccessLeads,
     canAccessDashboard, canAccessAgenda, canAccessTarefas, canAccessFinanceiro,
     needsOnboarding, fullName, pagePermissions, canAccessPage, updatePerfil, refetch,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [
     perfil, loading, cargo, roles,
-    isAdmin, isGerente, isAdvogado, isSecretaria, isEstagiario,
+    isAdmin, isGerente, isAdvogado, isSecretaria, isEstagiario, isAtendente,
     canDelete, canAccessSettings, canAccessProcessos, canAccessLeads,
     canAccessDashboard, canAccessAgenda, canAccessTarefas, canAccessFinanceiro,
     needsOnboarding, fullName, pagePermissions,
@@ -218,7 +220,7 @@ export function usePerfil(): PerfilContextValue {
   if (!context) {
     return {
       perfil: null, loading: true, cargo: 'Secretaria', roles: [],
-      isAdmin: false, isGerente: false, isAdvogado: false, isSecretaria: false, isEstagiario: false,
+      isAdmin: false, isGerente: false, isAdvogado: false, isSecretaria: false, isEstagiario: false, isAtendente: false,
       canDelete: false, canAccessSettings: false, canAccessProcessos: false,
       canAccessLeads: false, canAccessDashboard: false, canAccessAgenda: true,
       canAccessTarefas: true, canAccessFinanceiro: false, needsOnboarding: false,

@@ -106,6 +106,7 @@ export function EditUserModal({ user, open, onOpenChange, onSave }: EditUserModa
     if (adminOnly.includes(pageId)) return false;
     if (pageId === 'dashboard' || pageId === 'dados') return ['Gerente', 'Advogado'].includes(selectedRole);
     if (pageId === 'financeiro' || pageId === 'conferencia-extratos') return selectedRole === 'Gerente';
+    if (selectedRole === 'Atendente' && ['processos', 'intimacoes'].includes(pageId)) return false;
     return true;
   };
 
@@ -190,6 +191,7 @@ export function EditUserModal({ user, open, onOpenChange, onSave }: EditUserModa
                 <SelectItem value="Advogado">Advogado</SelectItem>
                 <SelectItem value="Secretaria">Secretaria</SelectItem>
                 <SelectItem value="Estagiário">Estagiário</SelectItem>
+                <SelectItem value="Atendente">Atendente</SelectItem>
               </SelectContent>
             </Select>
           </div>
