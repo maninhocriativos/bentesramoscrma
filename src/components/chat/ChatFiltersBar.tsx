@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import {
   Filter, Megaphone, MessageCircle, Bot, UserRound, Users,
-  CheckCircle2, ChevronDown, X, Sparkles,
+  CheckCircle2, ChevronDown, X, Sparkles, Instagram, Phone,
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -14,10 +14,12 @@ import { TagFilter } from '@/components/chat/TagFilter';
 
 export type ConversationFilter = 'all' | 'unread' | 'human' | 'bot' | 'mine';
 export type OrigemFilter       = 'all' | 'trafego' | 'whatsapp_direto';
+export type CanalFilter        = 'all' | 'whatsapp' | 'instagram';
 
 interface ChatFiltersBarProps {
   origemFilter:    OrigemFilter;
   atendFilter:     ConversationFilter;
+  canalFilter:     CanalFilter;
   selectedTagIds:  string[];
   availableTags:   any[];
   totalCount:      number;
@@ -33,6 +35,7 @@ interface ChatFiltersBarProps {
   };
   onOrigemChange:  (v: OrigemFilter) => void;
   onAtendChange:   (v: ConversationFilter) => void;
+  onCanalChange:   (v: CanalFilter) => void;
   onTagsChange:    (ids: string[]) => void;
   onResetAll:      () => void;
 }
@@ -52,18 +55,25 @@ const ATEND_OPTIONS: Array<{ value: ConversationFilter; label: string; icon: any
   { value: 'bot',    label: 'Isa (Bot)',          icon: Bot,       color: '#00A884' },
 ];
 
+const CANAL_OPTIONS: Array<{ value: CanalFilter; label: string; icon: any; color: string }> = [
+  { value: 'all',        label: 'Todos os canais', icon: Filter,     color: '#94a3b8' },
+  { value: 'whatsapp',   label: 'WhatsApp',        icon: Phone,      color: '#25D366' },
+  { value: 'instagram',  label: 'Instagram',       icon: Instagram,  color: '#E1306C' },
+];
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export function ChatFiltersBar({
-  origemFilter, atendFilter, selectedTagIds, availableTags,
+  origemFilter, atendFilter, canalFilter, selectedTagIds, availableTags,
   totalCount, unreadCount, isDark, themeClasses,
-  onOrigemChange, onAtendChange, onTagsChange, onResetAll,
+  onOrigemChange, onAtendChange, onCanalChange, onTagsChange, onResetAll,
 }: ChatFiltersBarProps) {
 
   const origemActive   = useMemo(() => ORIGEM_OPTIONS.find(o => o.value === origemFilter)!, [origemFilter]);
   const atendActive    = useMemo(() => ATEND_OPTIONS.find(a => a.value === atendFilter)!, [atendFilter]);
-  const hasAnyFilter   = origemFilter !== 'all' || atendFilter !== 'all' || selectedTagIds.length > 0;
-  const filtersCount   = (origemFilter !== 'all' ? 1 : 0) + (atendFilter !== 'all' ? 1 : 0) + selectedTagIds.length;
+  const canalActive    = useMemo(() => CANAL_OPTIONS.find(c => c.value === canalFilter)!, [canalFilter]);
+  const hasAnyFilter   = origemFilter !== 'all' || atendFilter !== 'all' || canalFilter !== 'all' || selectedTagIds.length > 0;
+  const filtersCount   = (origemFilter !== 'all' ? 1 : 0) + (atendFilter !== 'all' ? 1 : 0) + (canalFilter !== 'all' ? 1 : 0) + selectedTagIds.length;
 
   return (
     <div className={`px-3 py-2 ${themeClasses.sidebar} border-b ${themeClasses.border}`}>
@@ -177,6 +187,48 @@ export function ChatFiltersBar({
                       {unreadCount}
                     </span>
                   )}
+                  {isActive && <CheckCircle2 className="h-4 w-4 text-[#00A884]" />}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* ─── Dropdown CANAL ──────────────────────────────────────────── */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all
+                ${canalFilter !== 'all'
+                  ? 'text-white shadow-sm'
+                  : `${themeClasses.inputSearch} ${themeClasses.secondaryText} hover:brightness-110`
+                }`}
+              style={canalFilter !== 'all' ? { backgroundColor: canalActive.color } : undefined}
+            >
+              <canalActive.icon className="h-3 w-3" />
+              <span>{canalFilter === 'all' ? 'Canal' : canalActive.label}</span>
+              <ChevronDown className="h-3 w-3 opacity-60" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-52">
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">
+              Filtrar por canal
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {CANAL_OPTIONS.map(opt => {
+              const Icon = opt.icon;
+              const isActive = canalFilter === opt.value;
+              return (
+                <DropdownMenuItem
+                  key={opt.value}
+                  onClick={() => onCanalChange(opt.value)}
+                  className="gap-2 cursor-pointer"
+                >
+                  <div className="h-6 w-6 rounded-md flex items-center justify-center shrink-0"
+                       style={{ backgroundColor: `${opt.color}20`, color: opt.color }}>
+                    <Icon className="h-3.5 w-3.5" />
+                  </div>
+                  <span className="flex-1 text-sm">{opt.label}</span>
                   {isActive && <CheckCircle2 className="h-4 w-4 text-[#00A884]" />}
                 </DropdownMenuItem>
               );

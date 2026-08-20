@@ -30,7 +30,7 @@ import { ContratoFechadoModal } from "@/components/chat/ContratoFechadoModal";
 import { ChatContractReminder } from "@/components/chat/ChatContractReminder";
 import { useMetaCapi } from "@/hooks/useMetaCapi";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { ChatFiltersBar, type ConversationFilter, type OrigemFilter } from "@/components/chat/ChatFiltersBar";
+import { ChatFiltersBar, type ConversationFilter, type OrigemFilter, type CanalFilter } from "@/components/chat/ChatFiltersBar";
 import { formatWhatsAppText as formatWhatsAppTextHelper } from "@/lib/whatsappTextFormatter";
 import { InstanceInfo } from "@/lib/instanceUtils";
 import { invokeZapiSend } from "@/lib/zapiSendClient";
@@ -228,6 +228,7 @@ const ManyChatInboxContent = () => {
   const [isSyncing, setIsSyncing]             = useState(false);
   const [activeFilter, setActiveFilter]       = useState<ConversationFilter>("all");
   const [origemFilter, setOrigemFilter]       = useState<OrigemFilter>("all");
+  const [canalFilter, setCanalFilter]         = useState<CanalFilter>("all");
   const [selectedTagIds, setSelectedTagIds]   = useState<string[]>([]);
   const [pendingLeadId, setPendingLeadId]     = useState<string | null>(null);
   const [showContextPanel, setShowContextPanel] = useState(false);
@@ -2065,6 +2066,13 @@ const ManyChatInboxContent = () => {
       return true;
     })
     .filter(sub => {
+      if (canalFilter === "all") return true;
+      const isSocial = (sub as any).canal === "instagram" || (sub as any).canal === "facebook";
+      if (canalFilter === "instagram") return (sub as any).canal === "instagram";
+      if (canalFilter === "whatsapp") return !isSocial;
+      return true;
+    })
+    .filter(sub => {
       if (selectedTagIds.length === 0) return true;
       const subTags = getSubscriberTags(sub.subscriber_id);
       return selectedTagIds.every(tagId => subTags.some(st => st.tag_id === tagId));
@@ -2377,6 +2385,7 @@ const ManyChatInboxContent = () => {
         <ChatFiltersBar
           origemFilter={origemFilter}
           atendFilter={activeFilter}
+          canalFilter={canalFilter}
           selectedTagIds={selectedTagIds}
           availableTags={availableTags}
           totalCount={subscribers.length}
@@ -2385,10 +2394,12 @@ const ManyChatInboxContent = () => {
           themeClasses={themeClasses}
           onOrigemChange={setOrigemFilter}
           onAtendChange={setActiveFilter}
+          onCanalChange={setCanalFilter}
           onTagsChange={setSelectedTagIds}
           onResetAll={() => {
             setOrigemFilter('all');
             setActiveFilter('all');
+            setCanalFilter('all');
             setSelectedTagIds([]);
           }}
         />

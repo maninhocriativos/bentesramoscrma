@@ -153,6 +153,15 @@ Deno.serve(async (req) => {
           };
           let nextMsgUrl: string | null = null;
           let firstFetch = true;
+          // Upsert do contato só UMA vez por conversa, com o updated_time da
+          // PRÓPRIA conversa (sempre o mais recente de verdade) — nunca o
+          // created_time de uma mensagem individual. A Graph API devolve
+          // mensagens da mais nova pra mais antiga, então usar m.created_time
+          // a cada mensagem do loop ia regredindo ultima_interacao pra trás a
+          // cada iteração, terminando na mais ANTIGA da conversa — isso fazia
+          // a conversa "sumir" da lista do chat (ordenada por ultima_interacao
+          // DESC com limite de linhas).
+          let subscriberUpserted = false;
 
           do {
             const page = firstFetch
@@ -186,10 +195,13 @@ Deno.serve(async (req) => {
                 ? (m.to?.data?.[0]?.username ? `@${m.to.data[0].username}` : "Instagram User")
                 : (m.from?.username ? `@${m.from.username}` : "Instagram User");
 
-              await supabase.from("manychat_subscribers").upsert(
-                { subscriber_id: subscriberId, nome: nomeContato, canal: "instagram", ultima_interacao: m.created_time },
-                { onConflict: "subscriber_id", ignoreDuplicates: false },
-              );
+              if (!subscriberUpserted) {
+                subscriberUpserted = true;
+                await supabase.from("manychat_subscribers").upsert(
+                  { subscriber_id: subscriberId, nome: nomeContato, canal: "instagram", ultima_interacao: conv.updated_time || m.created_time },
+                  { onConflict: "subscriber_id", ignoreDuplicates: false },
+                );
+              }
 
               const anexos = (m.attachments?.data || []).map(extrairAnexo).filter(Boolean) as { tipo: string; url: string }[];
 
