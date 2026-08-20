@@ -239,6 +239,7 @@ const ManyChatInboxContent = () => {
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [forwardModalOpen, setForwardModalOpen]         = useState(false);
   const [forwardMessageContent, setForwardMessageContent] = useState("");
+  const [forwardMessageMeta, setForwardMessageMeta]     = useState<{ tipo: string; fileName?: string }>({ tipo: "text" });
   const [sendContactModalOpen, setSendContactModalOpen] = useState(false);
   const [editingMessageId, setEditingMessageId]         = useState<string | null>(null);
   const [editingText, setEditingText]                   = useState("");
@@ -304,7 +305,7 @@ const ManyChatInboxContent = () => {
 
   // ─── Presence + notifications ────────────────────────────────────────────────
 
-  const { isOnline, isTyping, setTyping } = useChatPresence(user?.id, fullName || user?.email?.split("@")[0]);
+  const { isOnline, isTyping, getTypingUserName, setTyping } = useChatPresence(user?.id, fullName || user?.email?.split("@")[0]);
   const { getTeamWithStatus, setCurrentChat, getOnlineCount } = usePresence();
   const { playNotificationSound, notifyAssignment, notifyNewMessage, requestNotificationPermission } = useChatNotifications();
 
@@ -1235,10 +1236,11 @@ const ManyChatInboxContent = () => {
   useEffect(() => { loadSubscribers(); }, []);
 
   const handleTyping = useCallback(() => {
-    setTyping(true);
+    if (!selectedSubscriber) return;
+    setTyping(true, selectedSubscriber.subscriber_id);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => setTyping(false), 2000);
-  }, [setTyping]);
+  }, [setTyping, selectedSubscriber]);
 
   // ─── loadSubscribers ────────────────────────────────────────────────────────
 
@@ -2119,21 +2121,31 @@ const ManyChatInboxContent = () => {
     const msg = messages.find(m => m.id === messageId);
     if (!msg) return;
     setForwardMessageContent(msg.conteudo);
+    setForwardMessageMeta({ tipo: msg.tipo || "text", fileName: msg.metadata?.file_name });
     setForwardModalOpen(true);
   }, [messages]);
 
   const handleForwardToSubscribers = useCallback(async (subscriberIds: string[]) => {
     if (!selectedSubscriber) return;
+    // Mensagens de mídia (documento/imagem/áudio/vídeo) precisam ser reenviadas
+    // como anexo de verdade — mandar a URL crua como texto quebra a prévia no
+    // WhatsApp (link sem OG tags vira card de "página não encontrada").
+    const isMedia = forwardMessageMeta.tipo !== "text";
     for (const targetSubId of subscriberIds) {
       const targetSub = subscribers.find(s => s.subscriber_id === targetSubId);
       if (!targetSub?.telefone) continue;
       const outboundInstanceId = resolveInstanceId(targetSub);
-      const forwarded = `⤵️ *Mensagem encaminhada*\n\n${forwardMessageContent}`;
-      await invokeZapiSend({ to_phone: targetSub.telefone, message: forwarded, type: "text", lead_id: targetSub.lead_id, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
-      await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: targetSubId, subscriber_nome: targetSub.nome, canal: "whatsapp", conteudo: forwarded, tipo: "text", direcao: "saida", lead_id: targetSub.lead_id, metadata: { sent_via: "chat_forward" } } as any);
+      if (isMedia) {
+        await invokeZapiSend({ to_phone: targetSub.telefone, message: forwardMessageContent, type: forwardMessageMeta.tipo, lead_id: targetSub.lead_id, file_name: forwardMessageMeta.fileName, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
+        await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: targetSubId, subscriber_nome: targetSub.nome, canal: "whatsapp", conteudo: forwardMessageContent, tipo: forwardMessageMeta.tipo, direcao: "saida", lead_id: targetSub.lead_id, metadata: { sent_via: "chat_forward", file_name: forwardMessageMeta.fileName } } as any);
+      } else {
+        const forwarded = `⤵️ *Mensagem encaminhada*\n\n${forwardMessageContent}`;
+        await invokeZapiSend({ to_phone: targetSub.telefone, message: forwarded, type: "text", lead_id: targetSub.lead_id, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
+        await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: targetSubId, subscriber_nome: targetSub.nome, canal: "whatsapp", conteudo: forwarded, tipo: "text", direcao: "saida", lead_id: targetSub.lead_id, metadata: { sent_via: "chat_forward" } } as any);
+      }
     }
     toast({ title: "↪️ Mensagem encaminhada!", description: `Enviada para ${subscriberIds.length} contato(s)` });
-  }, [selectedSubscriber, subscribers, forwardMessageContent, toast]);
+  }, [selectedSubscriber, subscribers, forwardMessageContent, forwardMessageMeta, toast]);
 
   const handleSendContact = useCallback(async (contact: { nome: string; telefone?: string; subscriber_id: string }) => {
     if (!selectedSubscriber?.telefone || !contact.telefone) return;
@@ -2434,7 +2446,11 @@ const ManyChatInboxContent = () => {
                           ) : (formatPhone(subscriber.telefone) && <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 leading-none ${themeClasses.secondaryText}`}>{formatPhone(subscriber.telefone)}</span>)}
                         </div>
                         <div className="flex items-center gap-1 min-w-0 mt-[3px] overflow-hidden">
-                          {msgPreview ? (
+                          {isTyping(subscriber.subscriber_id) ? (
+                            <p className="text-[13px] truncate leading-tight font-medium text-[#00A884] animate-pulse">
+                              {getTypingUserName(subscriber.subscriber_id) || "alguém"} digitando...
+                            </p>
+                          ) : msgPreview ? (
                             <>
                               {msgPreview.startsWith("Você:") && <CheckCheck className="h-3.5 w-3.5 shrink-0 text-[#53BDEB]" />}
                               <p className={`text-[13px] truncate leading-tight ${isUnreadVisual ? "text-[#D1D7DB] font-medium" : themeClasses.secondaryText}`}>{msgPreview.startsWith("Você: ") ? msgPreview.slice(6) : msgPreview}</p>
@@ -2605,7 +2621,9 @@ const ManyChatInboxContent = () => {
                     </>
                   )}
                   {isTyping(selectedSubscriber.subscriber_id) && (
-                    <span className="text-[11px] text-[#00A884] font-medium animate-pulse shrink-0">digitando...</span>
+                    <span className="text-[11px] text-[#00A884] font-medium animate-pulse shrink-0">
+                      {getTypingUserName(selectedSubscriber.subscriber_id) || "alguém"} digitando...
+                    </span>
                   )}
                 </div>
                 <div className="flex items-center gap-1 mt-[2px] min-w-0 flex-wrap">

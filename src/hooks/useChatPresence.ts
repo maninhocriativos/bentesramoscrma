@@ -4,19 +4,18 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 
 interface PresenceState {
   online: boolean;
-  typing: boolean;
+  typingSubscriberId: string | null;
   lastSeen?: string;
   userId: string;
   userName?: string;
 }
 
 interface UserPresence {
-  [subscriberId: string]: PresenceState;
+  [userId: string]: PresenceState;
 }
 
 export function useChatPresence(currentUserId?: string, currentUserName?: string) {
   const [onlineUsers, setOnlineUsers] = useState<UserPresence>({});
-  const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
 
   // Usa ref para o nome — evita recriar o canal toda vez que o nome muda
@@ -46,7 +45,7 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
             const presence = presences[0] as any;
             users[key] = {
               online: true,
-              typing: presence.typing || false,
+              typingSubscriberId: presence.typingSubscriberId || null,
               lastSeen: new Date().toISOString(),
               userId: key,
               userName: presence.userName,
@@ -55,12 +54,6 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
         });
 
         setOnlineUsers(users);
-
-        const typing = new Set<string>();
-        Object.entries(users).forEach(([key, presence]) => {
-          if (presence.typing) typing.add(key);
-        });
-        setTypingUsers(typing);
       })
       .on('presence', { event: 'join' }, ({ key, newPresences }) => {
         if (newPresences && newPresences.length > 0) {
@@ -69,7 +62,7 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
             ...prev,
             [key]: {
               online: true,
-              typing: presence.typing || false,
+              typingSubscriberId: presence.typingSubscriberId || null,
               lastSeen: new Date().toISOString(),
               userId: key,
               userName: presence.userName,
@@ -81,13 +74,8 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
         setOnlineUsers(prev => {
           const updated = { ...prev };
           if (updated[key]) {
-            updated[key] = { ...updated[key], online: false, lastSeen: new Date().toISOString() };
+            updated[key] = { ...updated[key], online: false, typingSubscriberId: null, lastSeen: new Date().toISOString() };
           }
-          return updated;
-        });
-        setTypingUsers(prev => {
-          const updated = new Set(prev);
-          updated.delete(key);
           return updated;
         });
       })
@@ -95,7 +83,7 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
         if (status === 'SUBSCRIBED') {
           await presenceChannel.track({
             online_at: new Date().toISOString(),
-            typing: false,
+            typingSubscriberId: null,
             userName: userNameRef.current, // lê o nome mais recente via ref
           });
         }
@@ -108,11 +96,14 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
     };
   }, [currentUserId]); // ✅ Só depende do ID — nome vai via ref
 
-  const setTyping = useCallback(async (isTyping: boolean) => {
+  // Marca (ou limpa) que o usuário atual está digitando numa conversa
+  // específica — precisa do subscriberId porque um atendente pode ter
+  // várias conversas abertas em abas diferentes do time.
+  const setTyping = useCallback(async (isTyping: boolean, subscriberId?: string) => {
     if (channel) {
       await channel.track({
         online_at: new Date().toISOString(),
-        typing: isTyping,
+        typingSubscriberId: isTyping ? (subscriberId ?? null) : null,
         userName: userNameRef.current,
       });
     }
@@ -122,9 +113,20 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
     return onlineUsers[subscriberId]?.online || false;
   }, [onlineUsers]);
 
+  // Outro atendente (não eu) está digitando nesta conversa agora?
   const isTyping = useCallback((subscriberId: string) => {
-    return typingUsers.has(subscriberId);
-  }, [typingUsers]);
+    return Object.values(onlineUsers).some(
+      p => p.online && p.userId !== currentUserId && p.typingSubscriberId === subscriberId
+    );
+  }, [onlineUsers, currentUserId]);
+
+  // Nome de quem está digitando nesta conversa (pro indicador "Fulano está digitando...")
+  const getTypingUserName = useCallback((subscriberId: string) => {
+    const typer = Object.values(onlineUsers).find(
+      p => p.online && p.userId !== currentUserId && p.typingSubscriberId === subscriberId
+    );
+    return typer?.userName;
+  }, [onlineUsers, currentUserId]);
 
   const getLastSeen = useCallback((subscriberId: string) => {
     return onlineUsers[subscriberId]?.lastSeen;
@@ -132,10 +134,10 @@ export function useChatPresence(currentUserId?: string, currentUserName?: string
 
   return {
     onlineUsers,
-    typingUsers,
     setTyping,
     isOnline,
     isTyping,
+    getTypingUserName,
     getLastSeen,
   };
 }
