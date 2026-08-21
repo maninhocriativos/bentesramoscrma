@@ -1807,8 +1807,17 @@ const ManyChatInboxContent = () => {
           const { error: uploadError } = await supabase.storage.from("documentos").upload(filePath, audioFile);
           const signResult = uploadError ? null : await supabase.storage.from("documentos").createSignedUrl(filePath, 60 * 60 * 24 * 30);
           const signedUrl = signResult?.data?.signedUrl || "";
+          // Sem signedUrl (upload ou sign falhou): NÃO salva a mensagem -- um registro
+          // com conteúdo vazio ficava pra sempre sem player, mesmo o áudio já tendo
+          // sido entregue ao cliente. Mantém só a mensagem otimista tocando pelo blob
+          // local nessa sessão; ela não sobrevive a um reload, mas ao menos não gera
+          // uma mensagem "fantasma" quebrada no histórico.
+          if (!signedUrl) {
+            console.error("[audio] upload/sign falhou em segundo plano — mensagem não salva no CRM", uploadError);
+            return;
+          }
           const { data: savedMsg } = await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: signedUrl, tipo: "audio", direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", message_id: msgId, file_name: audioFile.name } } as any).select().single();
-          if (savedMsg && signedUrl) {
+          if (savedMsg) {
             const savedAsMessage = savedMsg as Message;
             dedupKeysRef.current.add(getMessageDedupeKey(savedAsMessage));
             dedupKeysRef.current.add(`db_${savedAsMessage.id}`);
@@ -1816,7 +1825,6 @@ const ManyChatInboxContent = () => {
             // Já trocou pela URL do servidor; libera o blob local (com folga p/ não cortar reprodução em curso).
             setTimeout(() => URL.revokeObjectURL(localAudioUrl), 15000);
           }
-          // Sem signedUrl: mantém a mensagem otimista tocando pelo blob local (não sobrescreve o conteúdo).
         } catch (bgErr) {
           // Áudio já foi entregue ao cliente; mantém tocável pelo blob local.
           console.error("[audio] upload/salvar em segundo plano falhou:", bgErr);
