@@ -40,11 +40,22 @@ async function listDriveFiles(accessToken: string, folderId: string): Promise<Ma
   return map;
 }
 
+// Codifica em base64 em pedaços de 32KB — String.fromCharCode(...bytes) com o
+// array inteiro de uma vez estoura o tempo de CPU da function pra arquivos de
+// mídia maiores (era a causa real do "CPU Time exceeded" travando o backup
+// diário toda noite). Mesmo padrão já usado em zapi-send/index.ts.
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  return btoa(binary);
+}
+
 async function createDriveFile(accessToken: string, folderId: string, fileName: string, content: string | Uint8Array, mimeType: string): Promise<string> {
   const boundary = '----Boundary9MA5ZWxkTrZu1gX';
   const meta = JSON.stringify({ name: fileName, parents: [folderId] });
   const isBytes = content instanceof Uint8Array;
-  const bodyContent = isBytes ? btoa(String.fromCharCode(...content)) : content;
+  const bodyContent = isBytes ? uint8ToBase64(content) : content;
   const transferEncoding = isBytes ? 'Content-Transfer-Encoding: base64\r\n' : '';
   const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n${transferEncoding}\r\n${bodyContent}\r\n--${boundary}--`;
   const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
@@ -285,6 +296,10 @@ function groupByMonth(msgs: Record<string, unknown>[]): Map<string, Record<strin
   return map;
 }
 
+const TIME_BUDGET_MS = 120_000; // margem de segurança abaixo do limite de execução da function
+const startedAt = Date.now();
+const outOfTime = () => Date.now() - startedAt > TIME_BUDGET_MS;
+
 // ─── Main ──────────────────────────────────────────────────────────────────
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -440,7 +455,7 @@ serve(async (req: Request) => {
     await upsertDriveFile(accessToken, folderId, csvFileName, buildCsv(msgs24h), 'text/csv; charset=utf-8', existingFiles);
 
     const leadsAtivos = [...new Set(msgs24h.filter(m => m.lead_id).map(m => String(m.lead_id)))];
-    let criados = 0; let atualizados = 0; let midiasSalvas = 0;
+    let criados = 0; let atualizados = 0; let midiasSalvas = 0; let leadsRestantes = 0;
 
     if (leadsAtivos.length > 0) {
       const todasMsgs = await fetchMessages(supabase, undefined, undefined, leadsAtivos);
@@ -458,7 +473,16 @@ serve(async (req: Request) => {
         for (const l of (data ?? []) as Record<string, unknown>[]) leadsMap.set(String(l.id), l);
       }
 
+      // O CSV completo (acima) já salvou TODAS as mensagens das últimas 24h —
+      // as pastas por lead abaixo são um extra organizado, então se o tempo
+      // apertar é seguro parar aqui e continuar no próximo run, sem perder
+      // dado nenhum.
       for (let i = 0; i < leadsAtivos.length; i += 5) {
+        if (outOfTime()) {
+          leadsRestantes = leadsAtivos.length - i;
+          console.log(`[Backup] Tempo esgotando, parando com ${leadsRestantes} leads restantes (CSV completo já salvo)`);
+          break;
+        }
         await Promise.all(leadsAtivos.slice(i, i + 5).map(async (leadId) => {
           try {
             const lead = leadsMap.get(leadId) ?? null;
@@ -470,7 +494,7 @@ serve(async (req: Request) => {
       }
     }
 
-    return new Response(JSON.stringify({ success: true, csv: csvFileName, txt: { total: leadsAtivos.length, criados, atualizados }, midias: { salvas: midiasSalvas }, total_mensagens: msgs24h.length }),
+    return new Response(JSON.stringify({ success: true, csv: csvFileName, txt: { total: leadsAtivos.length, criados, atualizados, leads_restantes: leadsRestantes }, midias: { salvas: midiasSalvas }, total_mensagens: msgs24h.length }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (err: unknown) {
