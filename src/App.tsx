@@ -43,6 +43,7 @@ const PeticaoSaidaPage         = lazyWithRetry(() => import("./pages/PeticaoSaid
 const ModelosPage              = lazyWithRetry(() => import("./pages/ModelosPage"));
 const PeticaoModeloEditorPage  = lazyWithRetry(() => import("./pages/PeticaoModeloEditorPage"));
 const HistoricoAcessosPage     = lazyWithRetry(() => import("./pages/HistoricoAcessosPage"));
+const HistoricoAtendimentoPage = lazyWithRetry(() => import("./pages/HistoricoAtendimentoPage"));
 const IntimacoesPage           = lazyWithRetry(() => import("./pages/IntimacoesPage"));
 const BemVindoPage             = lazyWithRetry(() => import("./pages/BemVindoPage"));
 const ConferenciaExtratosPage  = lazyWithRetry(() => import("./pages/ConferenciaExtratosPage"));
@@ -112,6 +113,7 @@ function AppRoutes() {
             <Route path="/modelos"               element={<ModelosPage />} />
             <Route path="/peticoes/modelo-editor" element={<PeticaoModeloEditorPage />} />
             <Route path="/historico-acessos"     element={<HistoricoAcessosPage />} />
+            <Route path="/historico-atendimento" element={<HistoricoAtendimentoPage />} />
             <Route path="/intimacoes"            element={<IntimacoesPage />} />
             <Route path="/bem-vindo"             element={<BemVindoPage />} />
             <Route path="/conferencia-extratos"  element={<ConferenciaExtratosPage />} />

@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft,
   DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare,
-  Sparkles, Webhook, Zap, BookOpen, FormInput, History, FileEdit, Gavel, GraduationCap, Calculator, TrendingUp, BarChart3, LogOut
+  Sparkles, Webhook, Zap, BookOpen, FormInput, History, FileEdit, Gavel, GraduationCap, Calculator, TrendingUp, BarChart3, LogOut, UserRoundCog
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -75,6 +75,7 @@ const menuSections: MenuSection[] = [
     label: 'Administração',
     items: [
       { title: 'Histórico de Acessos', url: '/historico-acessos', icon: History, visibility: 'admin-only' },
+      { title: 'Histórico de Atendimento', url: '/historico-atendimento', icon: UserRoundCog, visibility: 'admin-only' },
       { title: 'API Hub', url: '/api-hub', icon: Webhook, visibility: 'admin-only' },
       { title: 'API Docs', url: '/api-docs', icon: BookOpen, visibility: 'admin-only' },
       { title: 'Configurações', url: '/configuracoes', icon: Settings, visibility: 'admin-only' },
