@@ -321,7 +321,14 @@ serve(async (req) => {
         const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
         if (!contentRes.ok) return new Response(JSON.stringify({ error: 'Erro ao baixar arquivo' }), { status: contentRes.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         const buffer = await contentRes.arrayBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        // Conversão em chunks -- espalhar o buffer inteiro em String.fromCharCode(...)
+        // estoura o limite de argumentos por chamada do V8 pra qualquer arquivo acima
+        // de ~64KB (todo arquivo de scanner/RG/PDF cai nessa faixa), quebrando o
+        // download com "Maximum call stack size exceeded".
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        const base64 = btoa(binary);
         return new Response(JSON.stringify({ name: meta.name, mimeType: meta.mimeType, content: base64 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
