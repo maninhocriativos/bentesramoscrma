@@ -5,12 +5,15 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { formatInTimeZone } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
-import { UserRoundCog, Search, Tag as TagIcon, ArrowRightLeft, PlayCircle, Users, Calendar, Timer } from 'lucide-react';
+import { UserRoundCog, Search, Tag as TagIcon, ArrowRightLeft, PlayCircle, Users, Calendar, Timer, ChevronLeft, ChevronRight, MessageSquareText } from 'lucide-react';
 
 const TZ = 'America/Manaus';
+const PAGE_SIZE = 30;
 
 interface Staff { id: string; nome: string; }
 
@@ -76,6 +79,8 @@ export default function HistoricoAtendimentoPage() {
   const [attendantFilter, setAttendantFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'atendimento' | 'tag'>('all');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [selectedClient, setSelectedClient] = useState<string | null>(null);
 
   const loadStaff = useCallback(async () => {
     const { data } = await supabase.from('perfis').select('id, nome').not('cargo', 'is', null).order('nome');
@@ -157,6 +162,21 @@ export default function HistoricoAtendimentoPage() {
       return true;
     });
   }, [events, typeFilter, attendantFilter, search, subscribers]);
+
+  // Volta pra página 1 sempre que os filtros (ou os dados) mudam.
+  useEffect(() => { setPage(1); }, [typeFilter, attendantFilter, search, dateFrom, dateTo]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = useMemo(() => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filtered, page]);
+
+  // Histórico completo de um cliente (todos os eventos carregados no período,
+  // ignorando os filtros de atendente/tipo/busca), pro modal de detalhes.
+  const clienteEventos = useMemo(() => {
+    if (!selectedClient) return [];
+    return events
+      .filter(e => e.subscriber_id === selectedClient)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }, [events, selectedClient]);
 
   // Tempo de espera de um evento "primeiro_atendimento": diferença entre a chegada
   // do cliente (created_at do subscriber) e o momento em que alguém assumiu.
@@ -312,10 +332,14 @@ export default function HistoricoAtendimentoPage() {
               <div className="text-center py-16 text-muted-foreground text-sm">Nenhum evento encontrado no período/filtros selecionados</div>
             ) : (
               <div className="divide-y divide-border/60">
-                {filtered.map(e => {
+                {paginated.map(e => {
                   const sub = subscribers[e.subscriber_id];
                   return (
-                    <div key={`${e.kind}-${e.id}`} className="flex items-center gap-4 px-5 py-3 hover:bg-muted/30 transition-colors">
+                    <button
+                      key={`${e.kind}-${e.id}`}
+                      onClick={() => setSelectedClient(e.subscriber_id)}
+                      className="w-full flex items-center gap-4 px-5 py-3 hover:bg-muted/30 transition-colors text-left"
+                    >
                       <div className="w-[70px] shrink-0 text-xs font-mono text-muted-foreground">
                         <div className="tabular-nums">{fmtHora(e.created_at)}</div>
                         <div className="text-[10px] opacity-60">{fmtData(e.created_at)}</div>
@@ -352,14 +376,81 @@ export default function HistoricoAtendimentoPage() {
                           </div>
                         )}
                       </div>
-                    </div>
+                      <MessageSquareText className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                    </button>
                   );
                 })}
               </div>
             )}
           </CardContent>
         </Card>
+
+        {/* Paginação */}
+        {!loading && filtered.length > 0 && (
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <p>
+              Mostrando {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} de {filtered.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+                <ChevronLeft className="h-4 w-4" /> Anterior
+              </Button>
+              <span className="text-xs px-2 tabular-nums">Página {page} de {totalPages}</span>
+              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+                Próxima <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Modal de detalhes do cliente */}
+      <Dialog open={!!selectedClient} onOpenChange={open => !open && setSelectedClient(null)}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{selectedClient ? subscribers[selectedClient]?.nome || selectedClient : ''}</DialogTitle>
+            <DialogDescription>
+              {selectedClient ? subscribers[selectedClient]?.telefone : ''} · histórico completo de atendimento e tags no período selecionado
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-y-auto -mx-6 px-6 space-y-3 pb-1">
+            {clienteEventos.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">Nenhum evento no período selecionado</p>
+            ) : (
+              clienteEventos.map(e => (
+                <div key={`${e.kind}-${e.id}`} className="flex gap-3 text-sm">
+                  <div className="w-[62px] shrink-0 text-xs font-mono text-muted-foreground pt-0.5">
+                    <div className="tabular-nums">{fmtHora(e.created_at)}</div>
+                    <div className="text-[10px] opacity-60">{fmtData(e.created_at)}</div>
+                  </div>
+                  <div className="flex-1 min-w-0 border-l-2 border-border/60 pl-3 pb-1">
+                    {e.kind === 'atendimento' ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {e.action === 'primeiro_atendimento'
+                          ? <PlayCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                          : <ArrowRightLeft className="h-3.5 w-3.5 text-sky-500 shrink-0" />}
+                        <span>{describeAtendimento(e)}</span>
+                        {e.action === 'primeiro_atendimento' && esperaMs(e) !== null && (
+                          <Badge variant="outline" className="text-[11px] gap-1">
+                            <Timer className="h-3 w-3" />{formatEspera(esperaMs(e)!)} de espera
+                          </Badge>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <TagIcon className={`h-3.5 w-3.5 shrink-0 ${e.action === 'added' ? 'text-emerald-500' : 'text-rose-500'}`} />
+                        <span><strong>{e.changed_by_nome}</strong> {e.action === 'added' ? 'adicionou' : 'removeu'} a tag</span>
+                        <Badge variant="outline" className="text-[11px]">{e.tag_nome}</Badge>
+                        {e.reason && <span className="text-[11px] text-muted-foreground">· {e.reason}</span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
