@@ -11,6 +11,7 @@ import {
   validarAgendamento
 } from '../_shared/timezone-helpers.ts';
 import { siteUrl } from '../_shared/site.ts';
+import { normalizeOutgoingWhatsappMarkdown } from '../_shared/zapi-helper.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1363,7 +1364,7 @@ async function enviarRespostaZapi(supabaseClient: any, subscriberId: string, men
     if (cleanPhone.length === 10 || cleanPhone.length === 11) cleanPhone = '55' + cleanPhone;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (clientToken) headers['Client-Token'] = clientToken;
-    const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, { method: 'POST', headers, body: JSON.stringify({ phone: cleanPhone, message: mensagem }), signal: AbortSignal.timeout(10_000) });
+    const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`, { method: 'POST', headers, body: JSON.stringify({ phone: cleanPhone, message: normalizeOutgoingWhatsappMarkdown(mensagem) }), signal: AbortSignal.timeout(10_000) });
     const result = await response.json();
     if (!response.ok || result.error) return { success: false };
     return { success: true, messageId: result.messageId || result.id };
@@ -1401,7 +1402,7 @@ async function enviarImagemZapi(supabaseClient: any, subscriberId: string, image
     if (clientToken) headers['Client-Token'] = clientToken;
     const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-image`, {
       method: 'POST', headers,
-      body: JSON.stringify({ phone: cleanPhone, image: imageUrl, caption }),
+      body: JSON.stringify({ phone: cleanPhone, image: imageUrl, caption: normalizeOutgoingWhatsappMarkdown(caption) }),
       signal: AbortSignal.timeout(10_000),
     });
     const result = await response.json();
@@ -1440,7 +1441,7 @@ async function enviarVideoZapi(supabaseClient: any, subscriberId: string, videoU
     if (clientToken) headers['Client-Token'] = clientToken;
     const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/send-video`, {
       method: 'POST', headers,
-      body: JSON.stringify({ phone: cleanPhone, video: videoUrl, caption }),
+      body: JSON.stringify({ phone: cleanPhone, video: videoUrl, caption: normalizeOutgoingWhatsappMarkdown(caption) }),
       signal: AbortSignal.timeout(10_000),
     });
     const result = await response.json();

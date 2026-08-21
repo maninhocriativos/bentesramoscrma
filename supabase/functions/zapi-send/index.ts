@@ -1,5 +1,6 @@
 const serve = Deno.serve;
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { normalizeOutgoingWhatsappMarkdown } from "../_shared/zapi-helper.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -267,7 +268,7 @@ async function sendViaZapi(
         body = {
           phone: cleanPhone,
           image: message, // URL da imagem
-          ...(caption && { caption }),
+          ...(caption && { caption: normalizeOutgoingWhatsappMarkdown(caption) }),
         };
         break;
 
@@ -288,7 +289,7 @@ async function sendViaZapi(
         body = {
           phone: cleanPhone,
           video: message, // URL do vídeo
-          ...(caption && { caption }),
+          ...(caption && { caption: normalizeOutgoingWhatsappMarkdown(caption) }),
         };
         break;
 
@@ -350,7 +351,7 @@ async function sendViaZapi(
         endpoint = `${baseUrl}/send-text`;
         const editBody = {
           phone: cleanPhone,
-          message,
+          message: normalizeOutgoingWhatsappMarkdown(message),
           editMessageId: messageId,
         };
 
@@ -407,7 +408,7 @@ async function sendViaZapi(
         endpoint = `${baseUrl}/send-text`;
         body = {
           phone: cleanPhone,
-          message: message
+          message: normalizeOutgoingWhatsappMarkdown(message)
         };
     }
 

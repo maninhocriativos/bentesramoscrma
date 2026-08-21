@@ -42,6 +42,19 @@ export interface ZapiSendResult {
 }
 
 /**
+ * Textos gerados por IA (Isa) ou colados de fontes como ChatGPT/Word usam
+ * markdown padrão (**negrito**, __negrito__, ~~riscado~~) -- o WhatsApp só
+ * reconhece *negrito*, _itálico_ e ~riscado~ com um único caractere colado
+ * na palavra. Sem isso o cliente recebe os asteriscos duplicados literais.
+ */
+export function normalizeOutgoingWhatsappMarkdown(text: string): string {
+  return text
+    .replace(/\*\*([^*\n]+?)\*\*/g, '*$1*')
+    .replace(/__([^_\n]+?)__/g, '*$1*')
+    .replace(/~~([^~\n]+?)~~/g, '~$1~');
+}
+
+/**
  * Normaliza número de telefone para formato internacional brasileiro
  * Sempre garante o 9º dígito para celulares (evita duplicatas 8-dig vs 9-dig)
  */
@@ -266,7 +279,7 @@ export async function sendText(
       {
         method: 'POST',
         headers,
-        body: JSON.stringify({ phone: cleanPhone, message }),
+        body: JSON.stringify({ phone: cleanPhone, message: normalizeOutgoingWhatsappMarkdown(message) }),
         signal: AbortSignal.timeout(10_000),
       }
     );
@@ -325,7 +338,7 @@ export async function sendImage(
         body: JSON.stringify({
           phone: cleanPhone,
           image: imageUrl,
-          caption: caption || ''
+          caption: caption ? normalizeOutgoingWhatsappMarkdown(caption) : ''
         }),
         signal: AbortSignal.timeout(10_000),
       }
@@ -593,7 +606,7 @@ export async function sendVideo(
     if (config.client_token) headers['Client-Token'] = config.client_token;
     const response = await fetch(
       `https://api.z-api.io/instances/${config.instance_id}/token/${config.token}/send-video`,
-      { method: 'POST', headers, body: JSON.stringify({ phone: cleanPhone, video: videoUrl, caption: caption || '' }), signal: AbortSignal.timeout(10_000) }
+      { method: 'POST', headers, body: JSON.stringify({ phone: cleanPhone, video: videoUrl, caption: caption ? normalizeOutgoingWhatsappMarkdown(caption) : '' }), signal: AbortSignal.timeout(10_000) }
     );
     const data = await response.json();
     if (response.ok && !data.error) return { success: true, messageId: data.messageId, provider: 'zapi' };
