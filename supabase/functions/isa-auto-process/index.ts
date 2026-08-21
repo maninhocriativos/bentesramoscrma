@@ -13,6 +13,11 @@ import {
 import { siteUrl } from '../_shared/site.ts';
 import { normalizeOutgoingWhatsappMarkdown } from '../_shared/zapi-helper.ts';
 
+// Mesma conta compartilhada do Drive usada em drive-sync/google-drive -- getValidAccessToken
+// ignora o user_id recebido e sempre resolve pra essa conta, mas o schema (drive_sync_jobs.user_id)
+// exige um uuid válido.
+const OFFICE_USER_ID = Deno.env.get('DRIVE_OFFICE_USER_ID') || '5c775450-665f-4f43-99cb-efb6167d4e20';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -736,6 +741,17 @@ async function persistirDocumentoWhatsapp(supabase: any, rawUrl: string, docType
     if (insertErr) {
       console.error('[Isa Documentos] insert em documentos falhou:', insertErr.message);
       return null;
+    }
+    // Dispara a sincronização com o Drive em segundo plano -- sem isso o documento
+    // ficava salvo só no Supabase Storage, nunca chegando na pasta do Drive (nem,
+    // por consequência, na sincronização local de quem usa o Google Drive Desktop).
+    if (docRow?.id) {
+      fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/drive-sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
+        body: JSON.stringify({ action: 'sync_to_drive', user_id: OFFICE_USER_ID, document_id: docRow.id }),
+        signal: AbortSignal.timeout(30_000),
+      }).catch(err => console.error('[Isa Documentos] falha ao disparar drive-sync:', err));
     }
     return docRow?.id || null;
   } catch (e) {
