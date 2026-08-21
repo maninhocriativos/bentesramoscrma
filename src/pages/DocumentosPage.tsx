@@ -16,7 +16,7 @@ import {
   Folder, File, FileText, Upload, ArrowLeft, Search,
   Loader2, Plus, RefreshCw, ExternalLink, Download,
   Cloud, HardDrive, ChevronRight, Home, FolderOpen,
-  FileImage, FileSpreadsheet, FolderPlus,
+  FileImage, FileSpreadsheet, FolderPlus, Eye, X, FolderInput,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -55,6 +55,8 @@ export default function DocumentosPage() {
   const [newFolderDialog, setNewFolderDialog] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const [preview, setPreview] = useState<{ name: string; mime: string; url: string; isBlob: boolean } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   // Busca o token do Drive compartilhado do escritório via edge function
   // (service role no servidor — não depende de RLS, funciona para todos os usuários)
@@ -159,6 +161,77 @@ export default function DocumentosPage() {
     const { data, error } = await supabase.storage.from('documentos').createSignedUrl(path, 60);
     if (error || !data?.signedUrl) { toastHook({ title: 'Erro ao abrir documento', variant: 'destructive' }); return; }
     window.open(data.signedUrl, '_blank');
+  };
+
+  const guessMime = (name: string): string => {
+    const ext = name.split('.').pop()?.toLowerCase() || '';
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext)) return `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+    if (ext === 'pdf') return 'application/pdf';
+    return 'application/octet-stream';
+  };
+
+  const triggerBlobDownload = (blob: Blob, name: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  };
+
+  const closePreview = () => {
+    if (preview?.isBlob && preview.url) URL.revokeObjectURL(preview.url);
+    setPreview(null);
+  };
+
+  const openDrivePreview = async (f: DriveFile) => {
+    setPreviewLoading(true);
+    setPreview({ name: f.name, mime: f.mimeType, url: '', isBlob: true });
+    try {
+      const d = await callDrive('download_file', { file_id: f.id });
+      const bytes = Uint8Array.from(atob(d.content), (c: string) => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: d.mimeType || f.mimeType });
+      setPreview({ name: f.name, mime: d.mimeType || f.mimeType, url: URL.createObjectURL(blob), isBlob: true });
+    } catch { toast.error('Erro ao carregar prévia'); setPreview(null); }
+    finally { setPreviewLoading(false); }
+  };
+
+  const downloadDriveFile = async (f: DriveFile) => {
+    try {
+      const d = await callDrive('download_file', { file_id: f.id });
+      const bytes = Uint8Array.from(atob(d.content), (c: string) => c.charCodeAt(0));
+      triggerBlobDownload(new Blob([bytes], { type: d.mimeType || f.mimeType }), f.name);
+    } catch { toast.error('Erro ao baixar arquivo'); }
+  };
+
+  const getLocalPath = (url: string) => url.includes('/documentos/') ? url.split('/documentos/')[1].split('?')[0] : url.split('?')[0];
+
+  const openLocalPreview = async (doc: typeof documentos[number]) => {
+    const name = doc.arquivo_nome || doc.nome;
+    setPreviewLoading(true);
+    setPreview({ name, mime: guessMime(name), url: '', isBlob: false });
+    try {
+      const { data, error } = await supabase.storage.from('documentos').createSignedUrl(getLocalPath(doc.arquivo_url), 300);
+      if (error || !data?.signedUrl) throw error;
+      setPreview({ name, mime: guessMime(name), url: data.signedUrl, isBlob: false });
+    } catch { toastHook({ title: 'Erro ao carregar prévia', variant: 'destructive' }); setPreview(null); }
+    finally { setPreviewLoading(false); }
+  };
+
+  const downloadLocalDoc = async (doc: typeof documentos[number]) => {
+    try {
+      const { data, error } = await supabase.storage.from('documentos').createSignedUrl(getLocalPath(doc.arquivo_url), 60);
+      if (error || !data?.signedUrl) throw error;
+      const blob = await fetch(data.signedUrl).then(r => r.blob());
+      triggerBlobDownload(blob, doc.arquivo_nome || doc.nome);
+    } catch { toastHook({ title: 'Erro ao baixar documento', variant: 'destructive' }); }
+  };
+
+  const handleDownloadFromPreview = async () => {
+    if (!preview) return;
+    try {
+      const blob = await fetch(preview.url).then(r => r.blob());
+      triggerBlobDownload(blob, preview.name);
+    } catch { toast.error('Erro ao baixar arquivo'); }
   };
 
   const fmtSize = (s?: string) => { if (!s) return '—'; const n = parseInt(s); if (n < 1024) return `${n}B`; if (n < 1048576) return `${(n/1024).toFixed(0)}KB`; return `${(n/1048576).toFixed(1)}MB`; };
@@ -441,17 +514,17 @@ export default function DocumentosPage() {
                                   <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3">Nome</th>
                                   <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3 hidden sm:table-cell">Tamanho</th>
                                   <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3 hidden md:table-cell">Modificado</th>
-                                  <th className="w-24 px-5 py-3" />
+                                  <th className="w-40 px-5 py-3" />
                                 </tr>
                               </thead>
                               <tbody>
                                 {files.map((f, i) => (
                                   <tr key={f.id} className={`group hover:bg-[#c9a96e]/3 transition-colors ${i < files.length - 1 ? 'border-b border-border/15' : ''}`}>
                                     <td className="px-5 py-3.5">
-                                      <div className="flex items-center gap-3">
+                                      <button onClick={() => openDrivePreview(f)} className="flex items-center gap-3 text-left hover:underline underline-offset-2 decoration-border">
                                         <FileIcon mime={f.mimeType} />
                                         <span className="text-sm font-medium truncate max-w-[180px] sm:max-w-[280px] md:max-w-none">{f.name}</span>
-                                      </div>
+                                      </button>
                                     </td>
                                     <td className="px-5 py-3.5 hidden sm:table-cell">
                                       <span className="text-xs text-muted-foreground/60 font-medium tabular-nums">{fmtSize(f.size)}</span>
@@ -461,11 +534,17 @@ export default function DocumentosPage() {
                                     </td>
                                     <td className="px-5 py-3.5">
                                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => openDrivePreview(f)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all" title="Pré-visualizar">
+                                          <Eye className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button onClick={() => downloadDriveFile(f)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all" title="Baixar">
+                                          <Download className="h-3.5 w-3.5" />
+                                        </button>
                                         <button onClick={() => window.open(f.webViewLink, '_blank')} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all" title="Abrir no Drive">
                                           <ExternalLink className="h-3.5 w-3.5" />
                                         </button>
                                         <button onClick={() => importFile(f)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all" title="Importar para o sistema">
-                                          <Download className="h-3.5 w-3.5" />
+                                          <FolderInput className="h-3.5 w-3.5" />
                                         </button>
                                       </div>
                                     </td>
@@ -507,17 +586,17 @@ export default function DocumentosPage() {
                         <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3">Nome</th>
                         <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3 hidden sm:table-cell">Tipo</th>
                         <th className="text-left text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest px-5 py-3 hidden md:table-cell">Data</th>
-                        <th className="w-16 px-5 py-3" />
+                        <th className="w-28 px-5 py-3" />
                       </tr>
                     </thead>
                     <tbody>
                       {localList.map((d, i) => (
                         <tr key={d.id} className={`group hover:bg-[#c9a96e]/3 transition-colors ${i < localList.length - 1 ? 'border-b border-border/15' : ''}`}>
                           <td className="px-5 py-3.5">
-                            <div className="flex items-center gap-3">
+                            <button onClick={() => openLocalPreview(d)} className="flex items-center gap-3 text-left hover:underline underline-offset-2 decoration-border">
                               <FileText className="h-4 w-4 text-[#c9a96e]/60 shrink-0" />
                               <span className="text-sm font-medium truncate max-w-[200px]">{d.nome}</span>
-                            </div>
+                            </button>
                           </td>
                           <td className="px-5 py-3.5 hidden sm:table-cell">
                             <span className="text-[10px] px-2 py-0.5 rounded-md bg-muted/60 text-muted-foreground font-semibold border border-border/30">{d.tipo}</span>
@@ -526,8 +605,14 @@ export default function DocumentosPage() {
                             <span className="text-xs text-muted-foreground/60">{fmtDate(d.created_at)}</span>
                           </td>
                           <td className="px-5 py-3.5">
-                            <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => openLocal(d.arquivo_url)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all">
+                            <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => openLocalPreview(d)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all" title="Pré-visualizar">
+                                <Eye className="h-3.5 w-3.5" />
+                              </button>
+                              <button onClick={() => downloadLocalDoc(d)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all" title="Baixar">
+                                <Download className="h-3.5 w-3.5" />
+                              </button>
+                              <button onClick={() => openLocal(d.arquivo_url)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all" title="Abrir em nova aba">
                                 <ExternalLink className="h-3.5 w-3.5" />
                               </button>
                             </div>
@@ -551,6 +636,43 @@ export default function DocumentosPage() {
             : undefined
         }
       />
+
+      {/* ── Modal Prévia ── */}
+      {preview && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.6)' }}
+          onClick={e => { if (e.target === e.currentTarget) closePreview(); }}
+        >
+          <div className="w-full max-w-3xl max-h-[90vh] rounded-2xl bg-card border border-border/40 shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-border/20 shrink-0">
+              <p className="text-sm font-semibold truncate">{preview.name}</p>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button size="sm" variant="outline" className="h-8 rounded-lg gap-1.5 border-border/40" onClick={handleDownloadFromPreview} disabled={previewLoading || !preview.url}>
+                  <Download className="h-3.5 w-3.5" /> Baixar
+                </Button>
+                <button onClick={closePreview} className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto bg-muted/10 flex items-center justify-center p-4 min-h-[300px]">
+              {previewLoading ? (
+                <Loader2 className="h-8 w-8 animate-spin text-[#c9a96e]/60" />
+              ) : preview.mime.includes('image') ? (
+                <img src={preview.url} alt={preview.name} className="max-w-full max-h-[75vh] object-contain rounded-lg" />
+              ) : preview.mime.includes('pdf') ? (
+                <iframe src={preview.url} title={preview.name} className="w-full h-[75vh] rounded-lg border-0 bg-white" />
+              ) : (
+                <div className="flex flex-col items-center gap-3 text-center py-10">
+                  <File className="h-10 w-10 text-muted-foreground/30" />
+                  <p className="text-sm text-muted-foreground max-w-xs">Pré-visualização não disponível para este tipo de arquivo. Baixe para abrir.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Dialog Nova Pasta ── */}
       {newFolderDialog && (
