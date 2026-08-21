@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { formatInTimeZone } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
-import { UserRoundCog, Search, Tag as TagIcon, ArrowRightLeft, PlayCircle, Users, Calendar } from 'lucide-react';
+import { UserRoundCog, Search, Tag as TagIcon, ArrowRightLeft, PlayCircle, Users, Calendar, Timer } from 'lucide-react';
 
 const TZ = 'America/Manaus';
 
@@ -40,7 +40,18 @@ interface TagEvent {
 
 type HistoricoEvent = AtendimentoEvent | TagEvent;
 
-interface SubscriberInfo { nome: string; telefone: string; linha_whatsapp: string | null; }
+interface SubscriberInfo { nome: string; telefone: string; linha_whatsapp: string | null; created_at: string | null; }
+
+// "Cliente chegou" = criação do subscriber, que coincide com a 1ª mensagem
+// dele (confirmado nos dados: mesma hora, diferença de segundos).
+function formatEspera(ms: number): string {
+  const min = Math.round(ms / 60000);
+  if (min < 1) return '<1min';
+  if (min < 60) return `${min}min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m === 0 ? `${h}h` : `${h}h${m}min`;
+}
 
 const primeiroNome = (n: string) => (n || '').split(' ')[0];
 
@@ -112,10 +123,10 @@ export default function HistoricoAtendimentoPage() {
     if (subIds.length > 0) {
       const { data: subs } = await supabase
         .from('manychat_subscribers')
-        .select('subscriber_id, nome, telefone, linha_whatsapp')
+        .select('subscriber_id, nome, telefone, linha_whatsapp, created_at')
         .in('subscriber_id', subIds);
       const map: Record<string, SubscriberInfo> = {};
-      ((subs || []) as any[]).forEach(s => { map[s.subscriber_id] = { nome: s.nome || s.subscriber_id, telefone: s.telefone || '', linha_whatsapp: s.linha_whatsapp }; });
+      ((subs || []) as any[]).forEach(s => { map[s.subscriber_id] = { nome: s.nome || s.subscriber_id, telefone: s.telefone || '', linha_whatsapp: s.linha_whatsapp, created_at: s.created_at || null }; });
       setSubscribers(map);
     } else {
       setSubscribers({});
@@ -147,26 +158,54 @@ export default function HistoricoAtendimentoPage() {
     });
   }, [events, typeFilter, attendantFilter, search, subscribers]);
 
+  // Tempo de espera de um evento "primeiro_atendimento": diferença entre a chegada
+  // do cliente (created_at do subscriber) e o momento em que alguém assumiu.
+  const esperaMs = useCallback((e: AtendimentoEvent): number | null => {
+    if (e.action !== 'primeiro_atendimento') return null;
+    const chegada = subscribers[e.subscriber_id]?.created_at;
+    if (!chegada) return null;
+    const ms = new Date(e.created_at).getTime() - new Date(chegada).getTime();
+    return ms >= 0 ? ms : null;
+  }, [subscribers]);
+
   const porAtendente = useMemo(() => {
-    const map = new Map<string, { nome: string; iniciados: number; handoffs: number; tags: number }>();
+    const map = new Map<string, { nome: string; iniciados: number; handoffs: number; tags: number; esperaSomaMs: number; esperaCount: number }>();
     const bump = (id: string, nome: string, field: 'iniciados' | 'handoffs' | 'tags') => {
       if (!id) return;
-      const cur = map.get(id) || { nome, iniciados: 0, handoffs: 0, tags: 0 };
+      const cur = map.get(id) || { nome, iniciados: 0, handoffs: 0, tags: 0, esperaSomaMs: 0, esperaCount: 0 };
       cur[field]++;
       map.set(id, cur);
     };
     events.forEach(e => {
       if (e.kind === 'atendimento') {
-        if (e.action === 'primeiro_atendimento') bump(e.user_id, primeiroNome(e.user_nome), 'iniciados');
-        else bump(e.user_id, primeiroNome(e.user_nome), 'handoffs');
+        if (e.action === 'primeiro_atendimento') {
+          bump(e.user_id, primeiroNome(e.user_nome), 'iniciados');
+          const ms = esperaMs(e);
+          if (ms !== null) {
+            const cur = map.get(e.user_id)!;
+            cur.esperaSomaMs += ms;
+            cur.esperaCount++;
+          }
+        } else {
+          bump(e.user_id, primeiroNome(e.user_nome), 'handoffs');
+        }
       } else {
         if (e.changed_by) bump(e.changed_by, primeiroNome(e.changed_by_nome), 'tags');
       }
     });
     return Array.from(map.values()).sort((a, b) => (b.iniciados + b.handoffs + b.tags) - (a.iniciados + a.handoffs + a.tags));
-  }, [events]);
+  }, [events, esperaMs]);
 
   const uniqueClients = new Set(events.map(e => e.subscriber_id)).size;
+
+  const tempoMedioEspera = useMemo(() => {
+    const tempos = events
+      .filter((e): e is AtendimentoEvent => e.kind === 'atendimento' && e.action === 'primeiro_atendimento')
+      .map(esperaMs)
+      .filter((ms): ms is number => ms !== null);
+    if (tempos.length === 0) return null;
+    return tempos.reduce((a, b) => a + b, 0) / tempos.length;
+  }, [events, esperaMs]);
 
   const fmtHora = (iso: string) => formatInTimeZone(new Date(iso), TZ, 'HH:mm');
   const fmtData = (iso: string) => formatInTimeZone(new Date(iso), TZ, "dd MMM", { locale: ptBR });
@@ -191,7 +230,7 @@ export default function HistoricoAtendimentoPage() {
         </div>
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <Card><CardContent className="pt-5">
             <p className="text-xs text-muted-foreground mb-1">Eventos no período</p>
             <p className="text-2xl font-bold">{events.length}</p>
@@ -208,6 +247,10 @@ export default function HistoricoAtendimentoPage() {
             <p className="text-xs text-muted-foreground mb-1">Mudanças de tag</p>
             <p className="text-2xl font-bold flex items-center gap-1.5"><TagIcon className="h-4 w-4 text-primary" />{events.filter(e => e.kind === 'tag').length}</p>
           </CardContent></Card>
+          <Card className="border-primary/30"><CardContent className="pt-5">
+            <p className="text-xs text-muted-foreground mb-1">Tempo médio até atender</p>
+            <p className="text-2xl font-bold flex items-center gap-1.5"><Timer className="h-4 w-4 text-primary" />{tempoMedioEspera !== null ? formatEspera(tempoMedioEspera) : '—'}</p>
+          </CardContent></Card>
         </div>
 
         {/* Por atendente */}
@@ -221,6 +264,9 @@ export default function HistoricoAtendimentoPage() {
                     <span className="flex items-center gap-1"><PlayCircle className="h-3 w-3" />{a.iniciados} iniciou</span>
                     <span className="flex items-center gap-1"><ArrowRightLeft className="h-3 w-3" />{a.handoffs} assumiu</span>
                     <span className="flex items-center gap-1"><TagIcon className="h-3 w-3" />{a.tags} tags</span>
+                    {a.esperaCount > 0 && (
+                      <span className="flex items-center gap-1"><Timer className="h-3 w-3" />{formatEspera(a.esperaSomaMs / a.esperaCount)} médio</span>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -280,11 +326,20 @@ export default function HistoricoAtendimentoPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         {e.kind === 'atendimento' ? (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             {e.action === 'primeiro_atendimento'
                               ? <PlayCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                               : <ArrowRightLeft className="h-3.5 w-3.5 text-sky-500 shrink-0" />}
                             <span className="text-sm truncate">{describeAtendimento(e)}</span>
+                            {e.action === 'primeiro_atendimento' && esperaMs(e) !== null && (
+                              <Badge variant="outline" className={`text-[11px] gap-1 ${
+                                esperaMs(e)! > 120 * 60000 ? 'text-rose-500 border-rose-500/30'
+                                : esperaMs(e)! > 30 * 60000 ? 'text-amber-500 border-amber-500/30'
+                                : 'text-emerald-500 border-emerald-500/30'
+                              }`}>
+                                <Timer className="h-3 w-3" />{formatEspera(esperaMs(e)!)} de espera
+                              </Badge>
+                            )}
                           </div>
                         ) : (
                           <div className="flex items-center gap-2 flex-wrap">
