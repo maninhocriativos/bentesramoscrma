@@ -10,6 +10,13 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+// O Drive é uma única conta compartilhada do escritório (ver google-drive/index.ts,
+// action get_office_token) -- só quem fez o OAuth original tem linha em
+// google_drive_tokens. Antes esse arquivo buscava o token pelo user_id de quem
+// enviou o documento, então a sincronização só funcionava pra essa uma pessoa e
+// falhava silenciosamente (sync_status='error') pra todo o resto da equipe.
+const OFFICE_USER_ID = Deno.env.get('DRIVE_OFFICE_USER_ID') || '5c775450-665f-4f43-99cb-efb6167d4e20';
+
 // Helper function to get Google credentials from app_settings
 async function getGoogleCredentials(): Promise<{ clientId: string | null; clientSecret: string | null }> {
   const { data, error } = await supabase
@@ -33,16 +40,18 @@ async function getGoogleCredentials(): Promise<{ clientId: string | null; client
   };
 }
 
-// Get valid access token, refreshing if needed
-async function getValidAccessToken(userId: string): Promise<string | null> {
+// Pega o token de acesso da conta compartilhada do escritório, renovando se preciso.
+// O parâmetro userId é ignorado de propósito (mantido só pros call sites não
+// precisarem mudar) -- só existe UMA conta Drive conectada, não uma por usuário.
+async function getValidAccessToken(_userId: string): Promise<string | null> {
   const { data: tokenData, error } = await supabase
     .from('google_drive_tokens')
     .select('*')
-    .eq('user_id', userId)
+    .eq('user_id', OFFICE_USER_ID)
     .maybeSingle();
 
   if (error || !tokenData) {
-    console.error('No tokens found for user:', userId);
+    console.error('No office Drive token found:', OFFICE_USER_ID);
     return null;
   }
 
@@ -78,7 +87,7 @@ async function getValidAccessToken(userId: string): Promise<string | null> {
           access_token: tokens.access_token,
           expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
         })
-        .eq('user_id', userId);
+        .eq('user_id', OFFICE_USER_ID);
 
       return tokens.access_token;
     }
