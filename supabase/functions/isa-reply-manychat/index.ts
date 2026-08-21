@@ -11,6 +11,9 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 // Z-API é usado via zapi-send Edge Function (não precisa de API key direta aqui)
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+// Amanda e Anelize dividem os handoffs -- notifica as duas (e-mail + interno) pra
+// quem estiver disponível pegar o caso, em vez de depender só da Amanda.
+const ATENDENTES_EMAILS = ['amanda@bentesramos.adv.br', 'anelize.matos05@gmail.com'];
 
 // ============================================================
 // PROMPT SISTEMA DA ISA - ORQUESTRADORA CENTRAL
@@ -1212,7 +1215,7 @@ serve(async (req: Request) => {
             },
             body: JSON.stringify({
               from: 'ISA <noreply@bentesramos.com.br>',
-              to: ['amanda@bentesramos.com.br'],
+              to: ATENDENTES_EMAILS,
               subject: `🚨 ISA transferiu atendimento: ${leadNome}`,
               html: `
                 <h2>Transferência de Atendimento</h2>
@@ -1229,31 +1232,30 @@ serve(async (req: Request) => {
               `,
             }),
           });
-          console.log('[ISA-REPLY] 📧 E-mail de notificação enviado para Amanda');
+          console.log('[ISA-REPLY] 📧 E-mail de notificação enviado para Amanda/Anelize');
         }
       } catch (emailErr) {
         console.error('[ISA-REPLY] Erro ao enviar e-mail de handoff:', emailErr);
       }
 
-      // 🔔 Notificação interna no sistema para Amanda (e admins)
+      // 🔔 Notificação interna no sistema para Amanda/Anelize (e admins)
       try {
         const leadNomeNotif = subscriber?.nome || nome || 'Cliente';
-        
+
         // Buscar todos os perfis com cargo Administrador ou Gerente para notificar
         const { data: admins } = await supabase
           .from('perfis')
           .select('id, email')
           .in('cargo', ['Administrador', 'Gerente']);
 
-        // Também buscar Amanda especificamente pelo email
-        const { data: amanda } = await supabase
+        // Também buscar Amanda e Anelize especificamente pelo email
+        const { data: atendentes } = await supabase
           .from('perfis')
           .select('id')
-          .eq('email', 'amanda@bentesramos.com.br')
-          .maybeSingle();
+          .in('email', ATENDENTES_EMAILS);
 
         const userIds = new Set<string>();
-        if (amanda?.id) userIds.add(amanda.id);
+        if (atendentes) atendentes.forEach((a: any) => userIds.add(a.id));
         if (admins) admins.forEach((a: any) => userIds.add(a.id));
 
         // Inserir notificação para cada usuário relevante
@@ -1375,7 +1377,7 @@ serve(async (req: Request) => {
             },
             body: JSON.stringify({
               from: 'ISA <noreply@bentesramos.com.br>',
-              to: ['amanda@bentesramos.com.br'],
+              to: ATENDENTES_EMAILS,
               subject: `📄 ISA analisou documentos: ${leadNomeAmanda}`,
               html: `
                 <h2>Análise Documental Concluída</h2>
@@ -1388,23 +1390,22 @@ serve(async (req: Request) => {
               `,
             }),
           });
-          console.log('[ISA-REPLY] 📧 E-mail enviado para Amanda (análise documental)');
+          console.log('[ISA-REPLY] 📧 E-mail enviado para Amanda/Anelize (análise documental)');
         }
       } catch (emailErr) {
-        console.error('[ISA-REPLY] Erro ao enviar e-mail para Amanda:', emailErr);
+        console.error('[ISA-REPLY] Erro ao enviar e-mail para Amanda/Anelize:', emailErr);
       }
 
       // Notificação interna
       try {
-        const { data: amandaPerfil } = await supabase
+        const { data: atendentesPerfis } = await supabase
           .from('perfis')
           .select('id')
-          .eq('email', 'amanda@bentesramos.com.br')
-          .maybeSingle();
+          .in('email', ATENDENTES_EMAILS);
 
-        if (amandaPerfil?.id) {
-          await supabase.from('notificacoes_internas').insert({
-            user_id: amandaPerfil.id,
+        if (atendentesPerfis && atendentesPerfis.length > 0) {
+          await supabase.from('notificacoes_internas').insert(atendentesPerfis.map((p: any) => ({
+            user_id: p.id,
             titulo: `📄 Análise concluída: ${leadNomeAmanda}`,
             mensagem: `A ISA analisou os documentos de ${leadNomeAmanda} (lead de anúncio) e encaminhou para você.`,
             tipo: 'encaminhamento',
@@ -1414,7 +1415,7 @@ serve(async (req: Request) => {
               subscriber_id: subscriberId,
               analise_isa: respostaFinal.substring(0, 500),
             },
-          });
+          })));
         }
       } catch (notifErr) {
         console.error('[ISA-REPLY] Erro ao criar notificação:', notifErr);

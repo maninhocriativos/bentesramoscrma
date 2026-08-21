@@ -294,8 +294,8 @@ SE O ASSUNTO NÃO FOR JURÍDICO (ex: limpeza, serviços, produtos, outros):
 
 📋 CLIENTES SEM CONTRATO — NÃO aposentados/pensionistas/servidores:
 Quando o cliente comum (que NÃO é aposentado/pensionista/servidor público) diz que NÃO tem ou não encontra o contrato/extrato:
-- Use direcionar_atendimento_humano com motivo: "Cliente não tem o contrato — encaminhar para Amanda orientar como obter junto ao banco"
-- Responda: "Sem problema! 😊 Vou te conectar com a *Amanda*, nossa atendente, que vai te orientar sobre como solicitar o documento direto no banco. Um momento!"
+- Use direcionar_atendimento_humano com motivo: "Cliente não tem o contrato — encaminhar para atendimento humano orientar como obter junto ao banco"
+- Responda: "Sem problema! 😊 Vou te conectar com a nossa equipe de atendimento — a *Amanda* ou a *Anelize* vai te orientar em breve sobre como solicitar o documento direto no banco. Um momento!"
 
 📋 CLIENTES APOSENTADOS/PENSIONISTAS SEM CONTRATO OU EXTRATO:
 Quando o cliente for aposentado/pensionista/servidor e NÃO tiver o contrato ou extrato:
@@ -310,7 +310,7 @@ Quando o cliente for aposentado/pensionista/servidor e NÃO tiver o contrato ou 
 
 RESPOSTA AOS BOTÕES DO VÍDEO (no histórico aparece como [BOTÃO CLICADO: ID]):
 - [BOTÃO CLICADO: video_ajudou_inss_1] ou video_ajudou_inss_2 ou video_ajudou_inss_3 → O vídeo ajudou! Elogie ("Ótimo! 🎉") e peça o próximo documento da lista.
-- [BOTÃO CLICADO: falar_amanda] → Cliente quer atendimento humano. Use direcionar_atendimento_humano com motivo "Cliente solicitou falar com Amanda via botão" e responda: "Claro! 😊 Vou te conectar com a *Amanda* agora. Um momento!"
+- [BOTÃO CLICADO: falar_amanda] → Cliente quer atendimento humano. Use direcionar_atendimento_humano com motivo "Cliente solicitou falar com atendente via botão" e responda: "Claro! 😊 Vou te conectar com a nossa equipe — a *Amanda* ou a *Anelize* vai falar com você em instantes!"
 
 📅 FOLLOW-UP AUTOMÁTICO (clientes de tráfego):
 - Sempre que pedir um documento, chame TAMBÉM agendar_lembrete na MESMA resposta:
@@ -1243,14 +1243,14 @@ async function executarAcao(supabase: any, acao: string, dados: any, subscriberI
         await new Promise<void>(r => setTimeout(r, 1200));
         const buttonSend = await enviarBotoesZapi(supabaseLocal, subscriberId, 'Este vídeo te ajudou? 😊', [
           { id: `video_ajudou_inss_${num}`, title: '✅ Sim, me ajudou!' },
-          { id: 'falar_amanda', title: '💬 Falar com Amanda' },
+          { id: 'falar_amanda', title: '💬 Falar com a equipe' },
         ]);
         if (buttonSend.success) {
           await supabaseLocal.from('manychat_mensagens').insert({
             subscriber_id: subscriberId,
             subscriber_nome: 'Melissa',
             canal: 'whatsapp',
-            conteudo: 'Este vídeo te ajudou? 😊 [Botões: ✅ Sim, me ajudou! | 💬 Falar com Amanda]',
+            conteudo: 'Este vídeo te ajudou? 😊 [Botões: ✅ Sim, me ajudou! | 💬 Falar com a equipe]',
             tipo: 'buttons',
             direcao: 'saida',
             lead_id,
