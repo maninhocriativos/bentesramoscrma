@@ -136,6 +136,17 @@ export function useChatTags() {
       return { error };
     }
 
+    // Log de auditoria -- não bloqueia a operação principal se falhar.
+    supabase.from('tag_change_log' as any).insert({
+      subscriber_id: subscriberId,
+      tag_id: tagId,
+      action: 'added',
+      changed_by: userData.user?.id,
+      reason: reason || null,
+    }).then(({ error: logError }) => {
+      if (logError) console.error('[useChatTags] Erro ao registrar log de tag:', logError);
+    });
+
     // Aplicar efeito real no lead se houver mapeamento
     if (leadId) {
       const tagName = tags.find(t => t.id === tagId)?.name;
@@ -159,9 +170,11 @@ export function useChatTags() {
 
   // Remove tag from subscriber
   const removeTagFromSubscriber = useCallback(async (
-    subscriberId: string, 
+    subscriberId: string,
     tagId: string
   ) => {
+    const { data: userData } = await supabase.auth.getUser();
+
     const { error } = await supabase
       .from('subscriber_tags')
       .delete()
@@ -173,6 +186,16 @@ export function useChatTags() {
       toast({ title: 'Erro ao remover tag', variant: 'destructive' });
       return { error };
     }
+
+    // Log de auditoria -- não bloqueia a operação principal se falhar.
+    supabase.from('tag_change_log' as any).insert({
+      subscriber_id: subscriberId,
+      tag_id: tagId,
+      action: 'removed',
+      changed_by: userData.user?.id,
+    }).then(({ error: logError }) => {
+      if (logError) console.error('[useChatTags] Erro ao registrar log de tag:', logError);
+    });
 
     // Update local state
     const newMap = new Map<string, SubscriberTag[]>(subscriberTags);
