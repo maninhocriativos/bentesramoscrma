@@ -86,9 +86,9 @@ Deno.serve(async (req) => {
   try {
     if (!IG_TOKEN) throw new Error("INSTAGRAM_ACCESS_TOKEN não configurado");
 
-    // Aceita texto OU mídia (imagem/vídeo/áudio) via media_url.
+    // Aceita texto OU mídia (imagem/vídeo/áudio/documento) via media_url.
     const { subscriber_id, text, type, media_url } = await req.json();
-    const ehMidia = ["image", "video", "audio"].includes(type) && !!media_url;
+    const ehMidia = ["image", "video", "audio", "document"].includes(type) && !!media_url;
     if (!subscriber_id || (!text && !ehMidia)) {
       throw new Error("subscriber_id e (text ou media_url) são obrigatórios");
     }
@@ -102,11 +102,17 @@ Deno.serve(async (req) => {
       ? await converterAudioParaInstagram(media_url)
       : media_url;
 
+    // A Graph API do Instagram usa "file" como attachment.type pra documentos
+    // (a Meta também manda "file" no lado de recebimento — normalizarTipo no
+    // instagram-webhook já converte isso pra "document", nosso vocabulário
+    // interno). Aqui é o caminho inverso, só no envio.
+    const attachmentType = type === "document" ? "file" : type;
+
     // Monta a mensagem: anexo (mídia) ou texto. A Graph API do Instagram busca
     // a URL da mídia no servidor, então precisa ser uma URL acessível (a URL
     // assinada do Storage funciona).
     const messagePayload = ehMidia
-      ? { attachment: { type, payload: { url: mediaUrlFinal } } }
+      ? { attachment: { type: attachmentType, payload: { url: mediaUrlFinal } } }
       : { text };
 
     // Envia via Graph API do Instagram

@@ -1637,12 +1637,11 @@ const ManyChatInboxContent = () => {
       const { data: signed, error: signError } = await supabase.storage.from("documentos").createSignedUrl(filePath, 60 * 60 * 24 * 30);
       if (signError || !signed?.signedUrl) throw signError;
       // Instagram: envia via Graph API (instagram-send registra no banco; o
-      // realtime substitui a mensagem otimista). Imagem/vídeo viram anexo;
-      // documento vai como link (a API do IG não aceita arquivo genérico).
+      // realtime substitui a mensagem otimista). image/video/audio/document
+      // viram anexo de verdade (instagram-send converte áudio e mapeia
+      // document -> "file" no attachment.type esperado pela Graph API).
       if ((subscriberSnapshot as any).canal === "instagram") {
-        const igBody = (mediaType === "image" || mediaType === "video")
-          ? { subscriber_id: subscriberSnapshot.subscriber_id, type: mediaType, media_url: signed.signedUrl }
-          : { subscriber_id: subscriberSnapshot.subscriber_id, text: signed.signedUrl };
+        const igBody = { subscriber_id: subscriberSnapshot.subscriber_id, type: mediaType, media_url: signed.signedUrl };
         const { data: igResult, error: igError } = await supabase.functions.invoke("instagram-send", { body: igBody });
         if (igError) throw new Error(igError.message || "Erro ao enviar no Instagram");
         if (!igResult?.success) throw new Error(igResult?.error || "Instagram: envio não confirmado");
