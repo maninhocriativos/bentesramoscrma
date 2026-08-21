@@ -589,10 +589,13 @@ async function scanDrive(userId: string): Promise<{ found: number; imported: num
 
 // Sync all pending documents for a user
 async function syncAllPending(userId: string): Promise<{ synced: number; errors: number }> {
+  // Inclui 'syncing' -- um documento parado nesse status sem drive_file_id é uma
+  // tentativa anterior que travou (crash/timeout no meio), não um sync em
+  // andamento de verdade. Sem isso ele nunca mais é reprocessado.
   const { data: pendingDocs, error } = await supabase
     .from('documentos')
     .select('id')
-    .in('sync_status', ['pending', 'error'])
+    .in('sync_status', ['pending', 'error', 'syncing'])
     .is('drive_file_id', null);
 
   if (error || !pendingDocs) {
