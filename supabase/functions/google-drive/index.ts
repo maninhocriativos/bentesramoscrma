@@ -227,12 +227,28 @@ serve(async (req) => {
         const query = body.query || '';
         let searchQuery = `'${folderId}' in parents and trashed = false`;
         if (query) searchQuery += ` and name contains '${query}'`;
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(searchQuery)}&fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,webContentLink,parents)&orderBy=name`, {
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(searchQuery)}&fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,webContentLink,thumbnailLink,parents)&orderBy=name`, {
           headers: { 'Authorization': `Bearer ${accessToken}` },
         });
         const data = await res.json();
         if (!res.ok) return new Response(JSON.stringify({ error: data.error?.message || 'Erro ao listar arquivos' }), { status: res.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         return new Response(JSON.stringify(data), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Baixa a miniatura de um arquivo (thumbnailLink exige o mesmo Bearer token
+      // de quem listou os arquivos -- por isso passa pelo servidor em vez de virar
+      // <img src> direto no navegador, que não teria como anexar o header).
+      if (postAction === 'get_thumbnail') {
+        const { thumbnail_url: thumbnailUrl } = body;
+        if (!thumbnailUrl) return new Response(JSON.stringify({ error: 'URL da miniatura não fornecida' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const thumbRes = await fetch(thumbnailUrl, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+        if (!thumbRes.ok) return new Response(JSON.stringify({ error: 'Erro ao baixar miniatura' }), { status: thumbRes.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const mimeType = thumbRes.headers.get('content-type') || 'image/jpeg';
+        const buffer = await thumbRes.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        return new Response(JSON.stringify({ mimeType, content: btoa(binary) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       // Create folder

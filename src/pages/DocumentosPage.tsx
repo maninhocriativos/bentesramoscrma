@@ -31,6 +31,7 @@ interface DriveFile {
   createdTime?: string;
   modifiedTime?: string;
   webViewLink?: string;
+  thumbnailLink?: string;
 }
 interface Crumb { id: string; name: string; }
 
@@ -57,6 +58,7 @@ export default function DocumentosPage() {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [preview, setPreview] = useState<{ name: string; mime: string; url: string; isBlob: boolean } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
 
   // Busca o token do Drive compartilhado do escritório via edge function
   // (service role no servidor — não depende de RLS, funciona para todos os usuários)
@@ -88,7 +90,15 @@ export default function DocumentosPage() {
     setDriveLoading(true);
     try {
       const d = await callDrive('list_files', { folder_id: fid || 'root' });
-      setDriveFiles(d?.files || []);
+      const loadedFiles: DriveFile[] = d?.files || [];
+      setDriveFiles(loadedFiles);
+      setThumbnails({});
+      // Miniatura real só pra imagens -- busca em paralelo, sem bloquear a lista.
+      loadedFiles.filter(f => f.mimeType.startsWith('image/') && f.thumbnailLink).forEach(f => {
+        callDrive('get_thumbnail', { thumbnail_url: f.thumbnailLink })
+          .then(t => { if (t?.content) setThumbnails(prev => ({ ...prev, [f.id]: `data:${t.mimeType};base64,${t.content}` })); })
+          .catch(() => {});
+      });
     } catch { toast.error('Erro ao carregar arquivos'); }
     finally { setDriveLoading(false); }
   }, [isConnected, callDrive]);
@@ -522,7 +532,11 @@ export default function DocumentosPage() {
                                   <tr key={f.id} className={`group hover:bg-[#c9a96e]/3 transition-colors ${i < files.length - 1 ? 'border-b border-border/15' : ''}`}>
                                     <td className="px-5 py-3.5">
                                       <button onClick={() => openDrivePreview(f)} className="flex items-center gap-3 text-left hover:underline underline-offset-2 decoration-border">
-                                        <FileIcon mime={f.mimeType} />
+                                        {thumbnails[f.id] ? (
+                                          <img src={thumbnails[f.id]} alt="" className="h-8 w-8 rounded object-cover shrink-0 border border-border/30" />
+                                        ) : (
+                                          <FileIcon mime={f.mimeType} />
+                                        )}
                                         <span className="text-sm font-medium truncate max-w-[180px] sm:max-w-[280px] md:max-w-none">{f.name}</span>
                                       </button>
                                     </td>
