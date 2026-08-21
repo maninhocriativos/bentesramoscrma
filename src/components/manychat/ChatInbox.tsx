@@ -70,6 +70,17 @@ function resolveInstanceId(subscriber: { instance_name?: string | null }): strin
   return undefined;
 }
 
+// Textos colados de fontes como ChatGPT/Isa/Word usam markdown padrão
+// (**negrito**, __negrito__, ~~riscado~~) — o WhatsApp não reconhece isso,
+// só *negrito*, _itálico_ e ~riscado~ com um único caractere. Sem essa
+// normalização o cliente recebe os asteriscos duplicados literalmente.
+function normalizeOutgoingWhatsappMarkdown(text: string): string {
+  return text
+    .replace(/\*\*([^*\n]+?)\*\*/g, "*$1*")
+    .replace(/__([^_\n]+?)__/g, "*$1*")
+    .replace(/~~([^~\n]+?)~~/g, "~$1~");
+}
+
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1516,7 +1527,7 @@ const ManyChatInboxContent = () => {
   // ─── sendMessage ────────────────────────────────────────────────────────────
 
   const sendMessage = async (mediaUrl?: string, mediaType?: string, fileName?: string) => {
-    const content = mediaUrl || newMessage.trim();
+    const content = normalizeOutgoingWhatsappMarkdown(mediaUrl || newMessage.trim());
     if (!content || !selectedSubscriber) return;
     const currentSubId = selectedSubscriber.subscriber_id;
     const rapidSendKey = `${currentSubId}|${mediaType || "text"}|${content.trim().slice(0, 180)}`;
@@ -1622,7 +1633,7 @@ const ManyChatInboxContent = () => {
     const originalFileName = selectedFile.name;
     const fileToUpload = selectedFile;
     const subscriberSnapshot = { ...selectedSubscriber };
-    const caption = newMessage.trim();
+    const caption = normalizeOutgoingWhatsappMarkdown(newMessage.trim());
     const mediaType = fileToUpload.type.startsWith("image/") ? "image" : fileToUpload.type.startsWith("audio/") ? "audio" : fileToUpload.type.startsWith("video/") ? "video" : "document";
     const fileSendKey = `${subscriberSnapshot.subscriber_id}|${mediaType}|${originalFileName}|${fileToUpload.size}`;
     if (shouldSkipRapidDuplicateSend(fileSendKey, 1800)) return;
@@ -2295,8 +2306,7 @@ const ManyChatInboxContent = () => {
       if (isPdf) return <div className={`flex flex-col rounded-lg overflow-hidden ${isDark ? "bg-[#1F2C33]" : "bg-[#F0F2F5]"} max-w-[320px]`}><div className="relative w-full h-[200px] bg-gray-100 dark:bg-gray-800"><iframe src={`${urlCandidate}#toolbar=0`} className="w-full h-full border-0" title={display} /><div className="absolute inset-0 cursor-pointer opacity-0 hover:opacity-100 bg-black/30 flex items-center justify-center" onClick={() => window.open(urlCandidate, "_blank")}><div className="bg-white/90 rounded-lg px-4 py-2"><span className="text-sm font-medium">Abrir PDF</span></div></div></div><div className="flex items-center gap-3 p-3"><p className={`text-sm font-medium truncate flex-1 ${themeClasses.headerText}`}>{display}</p><Button size="sm" variant="ghost" onClick={() => window.open(urlCandidate, "_blank")} className="shrink-0 h-8 w-8 p-0"><svg className={`h-5 w-5 ${themeClasses.iconColor}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg></Button></div></div>;
       return <div className={`flex items-center gap-3 p-3 rounded-lg ${isDark ? "bg-[#1F2C33]" : "bg-[#F0F2F5]"} min-w-[200px] max-w-[300px]`}><Paperclip className="h-8 w-8 text-blue-500" /><div className="flex-1 min-w-0"><p className={`text-sm font-medium truncate ${themeClasses.headerText}`}>{display}</p><p className={`text-xs ${themeClasses.secondaryText}`}>Documento</p></div><Button size="sm" variant="ghost" onClick={() => window.open(urlCandidate, "_blank")} className="shrink-0 h-8 w-8 p-0"><svg className={`h-5 w-5 ${themeClasses.iconColor}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg></Button></div>;
     }
-    const sentFromInterface = metadata?.sent_via === "chat_interface";
-    return <div className="whitespace-pre-wrap break-words text-[14.2px] leading-[19px] select-text">{sentFromInterface ? content : formatWhatsAppTextHelper(content)}</div>;
+    return <div className="whitespace-pre-wrap break-words text-[14.2px] leading-[19px] select-text">{formatWhatsAppTextHelper(content)}</div>;
   };
 
   const totalUnreadCount = subscribers.filter(s => hasUnreadForSubscriber(s)).length;
