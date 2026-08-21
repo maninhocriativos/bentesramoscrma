@@ -288,6 +288,8 @@ const ManyChatInboxContent = () => {
   const beforePrependScrollRef   = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const isLoadingMoreRef         = useRef(false);
   const fileInputRef             = useRef<HTMLInputElement>(null);
+  const textareaRef              = useRef<HTMLTextAreaElement>(null);
+  const resetTextareaHeight = () => { if (textareaRef.current) textareaRef.current.style.height = "44px"; };
   const nameInputRef             = useRef<HTMLInputElement>(null);
   const nameSavingRef            = useRef(false);
   const mediaRecorderRef         = useRef<MediaRecorder | null>(null);
@@ -1523,6 +1525,7 @@ const ManyChatInboxContent = () => {
     const optimisticMessage: Message = { id: tempId, conteudo: content, created_at: new Date().toISOString(), direcao: "saida", tipo: mediaType || "text", subscriber_id: currentSubId };
     setMessages(prev => { const updated = [...prev, optimisticMessage]; messagesCacheRef.current.set(currentSubId, updated); return updated; });
     setNewMessage("");
+    resetTextareaHeight();
     setTyping(false);
     setSelectedFile(null);
     setPreviewUrl(null);
@@ -1619,13 +1622,20 @@ const ManyChatInboxContent = () => {
     const originalFileName = selectedFile.name;
     const fileToUpload = selectedFile;
     const subscriberSnapshot = { ...selectedSubscriber };
+    const caption = newMessage.trim();
     const mediaType = fileToUpload.type.startsWith("image/") ? "image" : fileToUpload.type.startsWith("audio/") ? "audio" : fileToUpload.type.startsWith("video/") ? "video" : "document";
     const fileSendKey = `${subscriberSnapshot.subscriber_id}|${mediaType}|${originalFileName}|${fileToUpload.size}`;
     if (shouldSkipRapidDuplicateSend(fileSendKey, 1800)) return;
     setSelectedFile(null);
     setPreviewUrl(null);
+    setNewMessage("");
+    resetTextareaHeight();
+    // Z-API só suporta legenda nativa em image/video; document vira uma
+    // mensagem de texto de acompanhamento para o cliente não perder o texto.
+    const inlineCaption = caption && (mediaType === "image" || mediaType === "video") ? caption : undefined;
+    const followUpCaption = caption && mediaType === "document" ? caption : undefined;
     const tempId = `temp_${Date.now()}`;
-    const optimisticMessage: Message = { id: tempId, conteudo: mediaType === "image" ? "📷 Enviando imagem..." : mediaType === "video" ? "🎥 Enviando vídeo..." : `📄 Enviando ${originalFileName}...`, created_at: new Date().toISOString(), direcao: "saida", tipo: mediaType, subscriber_id: subscriberSnapshot.subscriber_id };
+    const optimisticMessage: Message = { id: tempId, conteudo: mediaType === "image" ? "📷 Enviando imagem..." : mediaType === "video" ? "🎥 Enviando vídeo..." : `📄 Enviando ${originalFileName}...`, created_at: new Date().toISOString(), direcao: "saida", tipo: mediaType, subscriber_id: subscriberSnapshot.subscriber_id, ...(inlineCaption && { metadata: { caption: inlineCaption } }) } as any;
     setMessages(prev => { const updated = [...prev, optimisticMessage]; messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
     scrollToBottom();
     try {
@@ -1646,15 +1656,19 @@ const ManyChatInboxContent = () => {
         if (igError) throw new Error(igError.message || "Erro ao enviar no Instagram");
         if (!igResult?.success) throw new Error(igResult?.error || "Instagram: envio não confirmado");
         setMessages(prev => { const updated = prev.filter(m => m.id !== tempId); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
+        // Graph API não tem conceito de legenda em anexos: manda o texto como mensagem separada.
+        if (caption) {
+          try { await supabase.functions.invoke("instagram-send", { body: { subscriber_id: subscriberSnapshot.subscriber_id, text: caption } }); } catch {}
+        }
         return;
       }
 
       const outboundInstanceId = resolveInstanceId(subscriberSnapshot);
-      const { data: zapiResult, error: zapiError } = await invokeZapiSend({ to_phone: subscriberSnapshot.telefone, message: signed.signedUrl, type: mediaType, lead_id: subscriberSnapshot.lead_id, file_name: originalFileName, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
+      const { data: zapiResult, error: zapiError } = await invokeZapiSend({ to_phone: subscriberSnapshot.telefone, message: signed.signedUrl, type: mediaType, lead_id: subscriberSnapshot.lead_id, file_name: originalFileName, ...(inlineCaption && { caption: inlineCaption }), ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
       if (zapiError) throw new Error(zapiError.message);
       if (!zapiResult?.success) throw new Error(zapiResult?.error || "Z-API: envio não confirmado pela instância");
       const msgId = zapiResult?.messageId;
-      supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: signed.signedUrl, tipo: mediaType, direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", message_id: msgId, file_name: originalFileName } } as any).select().single().then(({ data: savedMsg }) => {
+      supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: signed.signedUrl, tipo: mediaType, direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", message_id: msgId, file_name: originalFileName, ...(inlineCaption && { caption: inlineCaption }) } } as any).select().single().then(({ data: savedMsg }) => {
         if (savedMsg) {
           const savedAsMessage = savedMsg as Message;
           dedupKeysRef.current.add(getMessageDedupeKey(savedAsMessage));
@@ -1662,6 +1676,8 @@ const ManyChatInboxContent = () => {
           setMessages(prev => { const withoutTemp = prev.filter(m => m.id !== tempId); const updated = mergeMessageDedup(withoutTemp, savedAsMessage); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
         }
       });
+      // Documento não aceita legenda nativa: envia o texto digitado como mensagem de texto separada.
+      if (followUpCaption) await sendMessage(followUpCaption);
     } catch (error: any) {
       console.error("[Envio mídia] falhou:", error);
       setMessages(prev => { const updated = prev.map(m => m.id === tempId ? { ...m, conteudo: `❌ Erro no envio de ${originalFileName}`, metadata: { send_error: true } } : m); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
@@ -2272,7 +2288,7 @@ const ManyChatInboxContent = () => {
       return <div className="flex items-center gap-2 min-w-[160px] text-[13px] opacity-80"><Mic className="h-4 w-4 shrink-0" /><span>{message.direcao === "saida" ? "Áudio enviado" : "Áudio não disponível"}</span></div>;
     }
     if (isImage) return <div className="space-y-1"><img src={urlCandidate} alt="" className="max-w-[280px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity" onClick={() => window.open(urlCandidate, "_blank")} />{caption && <p className="whitespace-pre-wrap break-words text-[13px] leading-[18px] opacity-90">{formatWhatsAppTextHelper(caption)}</p>}</div>;
-    if (isVideo) return <video controls className="max-w-[280px] rounded-lg" preload="metadata"><source src={urlCandidate} /></video>;
+    if (isVideo) return <div className="space-y-1"><video controls className="max-w-[280px] rounded-lg" preload="metadata"><source src={urlCandidate} /></video>{caption && <p className="whitespace-pre-wrap break-words text-[13px] leading-[18px] opacity-90">{formatWhatsAppTextHelper(caption)}</p>}</div>;
     if (isDocument) {
       const display = fileName || urlCandidate.split("/").pop()?.split("?")[0] || "Documento";
       const isPdf = urlCandidate.toLowerCase().includes(".pdf") || display.toLowerCase().endsWith(".pdf");
@@ -2980,7 +2996,7 @@ const ManyChatInboxContent = () => {
               <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={isSending} className={`h-8 w-8 md:h-10 md:w-10 rounded-full shrink-0 ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}><Paperclip className="h-5 w-5 md:h-6 md:w-6" /></Button>
               <Button variant="ghost" size="icon" onClick={() => setSendContactModalOpen(true)} disabled={isSending} className={`hidden md:flex h-10 w-10 rounded-full shrink-0 ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}><Contact className="h-5 w-5" /></Button>
               <div className="flex-1">
-                <textarea placeholder="Digite uma mensagem" value={newMessage} onChange={e => { setNewMessage(e.target.value); handleTyping(); }} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (selectedFile) { if (selectedFile.type.startsWith("audio/")) sendAudioFromPreview(); else uploadAndSendFile(); } else sendMessage(); } }} onPaste={e => { const items = e.clipboardData?.items; if (!items) return; for (const item of Array.from(items)) { if (item.type.startsWith("image/")) { e.preventDefault(); const file = item.getAsFile(); if (file) { const namedFile = new File([file], `screenshot_${Date.now()}.png`, { type: file.type }); setSelectedFile(namedFile); setPreviewUrl(URL.createObjectURL(namedFile)); toast({ title: "📷 Imagem colada!" }); } return; } } }} disabled={isSending || isRecording} rows={1} style={{ minHeight: "44px", maxHeight: "120px", resize: "none" }} onInput={e => { const target = e.target as HTMLTextAreaElement; target.style.height = "44px"; target.style.height = Math.min(target.scrollHeight, 120) + "px"; }} className={`w-full rounded-2xl ${themeClasses.input} border-0 text-[15px] focus-visible:ring-0 focus-visible:outline-none shadow-sm py-[10px] px-4 overflow-y-auto`} />
+                <textarea ref={textareaRef} placeholder="Digite uma mensagem" value={newMessage} onChange={e => { setNewMessage(e.target.value); handleTyping(); }} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (selectedFile) { if (selectedFile.type.startsWith("audio/")) sendAudioFromPreview(); else uploadAndSendFile(); } else sendMessage(); } }} onPaste={e => { const items = e.clipboardData?.items; if (!items) return; for (const item of Array.from(items)) { if (item.type.startsWith("image/")) { e.preventDefault(); const file = item.getAsFile(); if (file) { const namedFile = new File([file], `screenshot_${Date.now()}.png`, { type: file.type }); setSelectedFile(namedFile); setPreviewUrl(URL.createObjectURL(namedFile)); toast({ title: "📷 Imagem colada!" }); } return; } } }} disabled={isSending || isRecording} rows={1} style={{ minHeight: "44px", maxHeight: "120px", resize: "none" }} onInput={e => { const target = e.target as HTMLTextAreaElement; target.style.height = "44px"; target.style.height = Math.min(target.scrollHeight, 120) + "px"; }} className={`w-full rounded-2xl ${themeClasses.input} border-0 text-[15px] focus-visible:ring-0 focus-visible:outline-none shadow-sm py-[10px] px-4 overflow-y-auto`} />
               </div>
               {newMessage.trim() || (selectedFile && !selectedFile.type.startsWith("audio/")) ? (
                 <Button onClick={selectedFile ? uploadAndSendFile : () => sendMessage()} disabled={isSending} size="icon" className={`h-11 w-11 rounded-full bg-[#00A884] hover:bg-[#008069] text-white shadow-lg`}><Send className="h-5 w-5" /></Button>

@@ -74,7 +74,7 @@ serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { to_phone, message, type = 'text', provider = 'zapi', lead_id, file_name, instance_id, message_id } = await req.json();
+    const { to_phone, message, type = 'text', provider = 'zapi', lead_id, file_name, instance_id, message_id, caption } = await req.json();
 
     // delete/edit exigem message_id
     if ((type === 'delete' || type === 'edit') && !message_id) {
@@ -154,7 +154,7 @@ serve(async (req: Request) => {
     let success = false;
 
     if (provider === 'zapi') {
-      result = await sendViaZapi(config.config_json, to_phone, message || '', type, file_name, message_id);
+      result = await sendViaZapi(config.config_json, to_phone, message || '', type, file_name, message_id, caption);
       success = result.success;
     } else if (provider === 'fiqon') {
       result = await sendViaFiqon(config.config_json, to_phone, message);
@@ -222,7 +222,8 @@ async function sendViaZapi(
   message: string, 
   type: string = 'text',
   fileName?: string,
-  messageId?: string
+  messageId?: string,
+  caption?: string
 ): Promise<{ success: boolean; data?: any; error?: string; messageId?: string }> {
   const instanceId = config.instance_id;
   const token = config.token;
@@ -266,6 +267,7 @@ async function sendViaZapi(
         body = {
           phone: cleanPhone,
           image: message, // URL da imagem
+          ...(caption && { caption }),
         };
         break;
 
@@ -286,6 +288,7 @@ async function sendViaZapi(
         body = {
           phone: cleanPhone,
           video: message, // URL do vídeo
+          ...(caption && { caption }),
         };
         break;
 

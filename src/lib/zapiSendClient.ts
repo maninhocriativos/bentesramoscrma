@@ -9,6 +9,7 @@ type ZapiSendPayload = {
   file_name?: string;
   instance_id?: string;
   message_id?: string;
+  caption?: string;
 };
 
 type ZapiSendResponse = {
