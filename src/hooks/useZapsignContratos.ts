@@ -19,6 +19,15 @@ function normalizePhone(p: string): string {
   return (p || '').replace(/\D/g, '').slice(-11);
 }
 
+// Um mesmo celular pode estar salvo com 10 dígitos (formato antigo, sem o "9"
+// extra) num lugar e 11 no outro (DDXXXXXXXXX) — sem isso, "8194792981" e
+// "81994792981" nunca batem mesmo sendo o mesmo número.
+function phoneVariants(n: string): string[] {
+  if (n.length === 11 && n[2] === '9') return [n, n.slice(0, 2) + n.slice(3)];
+  if (n.length === 10) return [n, n.slice(0, 2) + '9' + n.slice(2)];
+  return [n];
+}
+
 // Normaliza nome para matching: sem acentos, minúsculas, espaços colapsados.
 function normalizeName(s: string): string {
   return (s || '')
@@ -133,9 +142,24 @@ export async function fetchZapsignContratosData(): Promise<ContratoZapsignComSta
   //    signatário), cobrindo tráfego E escritório. Antes só buscava leads de
   //    tráfego e só casava por telefone/email → contratos criados direto no
   //    ZapSign (sem lead_id) ficavam todos "indefinido".
-  const { data: allLeads } = await supabase
-    .from('leads_juridicos')
-    .select(leadsSelect);
+  //
+  //    Paginado: leads_juridicos já passa de 3 mil linhas, e um select sem
+  //    .range()/.limit() é silenciosamente cortado pelo limite padrão do
+  //    PostgREST (1000 linhas) — a causa raiz real da maioria dos contratos
+  //    "Indefinido": o lead existia e o telefone batia, mas a busca "todos os
+  //    leads" nunca trazia esse lead pra dentro do mapa de matching. Mesmo
+  //    padrão de paginação já usado em useCompromissos.ts.
+  const PAGE = 1000;
+  const allLeads: any[] = [];
+  for (let page = 0; ; page++) {
+    const { data: chunk, error } = await supabase
+      .from('leads_juridicos')
+      .select(leadsSelect)
+      .range(page * PAGE, (page + 1) * PAGE - 1);
+    if (error) { console.error('[useZapsignContratos] erro ao paginar leads:', error); break; }
+    allLeads.push(...(chunk || []));
+    if (!chunk || chunk.length < PAGE) break;
+  }
 
   const leadByPhone   = new Map<string, any>();
   const leadByEmail   = new Map<string, any>();
@@ -146,7 +170,7 @@ export async function fetchZapsignContratosData(): Promise<ContratoZapsignComSta
     leadById.set(l.id, l); // garante que todos estejam disponíveis por id
     if (l.telefone) {
       const n = normalizePhone(l.telefone);
-      if (n.length >= 10 && !leadByPhone.has(n)) leadByPhone.set(n, l);
+      if (n.length >= 10) for (const v of phoneVariants(n)) if (!leadByPhone.has(v)) leadByPhone.set(v, l);
     }
     if (l.email) {
       const e = l.email.toLowerCase().trim();
@@ -172,7 +196,11 @@ export async function fetchZapsignContratosData(): Promise<ContratoZapsignComSta
     // 2) telefone do signatário
     if (!resolvedLead) {
       const phone = normalizePhone(local?.signer_phone || doc.signers?.[0]?.phone || '');
-      if (phone.length >= 10 && leadByPhone.has(phone)) resolvedLead = leadByPhone.get(phone);
+      if (phone.length >= 10) {
+        for (const v of phoneVariants(phone)) {
+          if (leadByPhone.has(v)) { resolvedLead = leadByPhone.get(v); break; }
+        }
+      }
     }
     // 3) email do signatário
     if (!resolvedLead) {
