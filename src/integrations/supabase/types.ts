@@ -670,12 +670,23 @@ export type Database = {
           google_event_id: string | null
           id: string
           lead_id: string | null
+          lembrete_24h_enviado_em: string | null
+          lembrete_2h_enviado_em: string | null
+          lembrete_5h_enviado_em: string | null
+          local_reuniao: string | null
+          modalidade: string | null
+          nome_contato: string | null
           origem: string | null
           processo_id: string | null
           responsavel_id: string | null
+          subscriber_id: string | null
+          tarefa_id: string | null
+          telefone_contato: string | null
           tipo: string
           titulo: string
           updated_at: string
+          verificacao_comparecimento_em: string | null
+          zapi_instance_id: string | null
         }
         Insert: {
           confirmacao_resposta?: string | null
@@ -689,12 +700,23 @@ export type Database = {
           google_event_id?: string | null
           id?: string
           lead_id?: string | null
+          lembrete_24h_enviado_em?: string | null
+          lembrete_2h_enviado_em?: string | null
+          lembrete_5h_enviado_em?: string | null
+          local_reuniao?: string | null
+          modalidade?: string | null
+          nome_contato?: string | null
           origem?: string | null
           processo_id?: string | null
           responsavel_id?: string | null
+          subscriber_id?: string | null
+          tarefa_id?: string | null
+          telefone_contato?: string | null
           tipo?: string
           titulo: string
           updated_at?: string
+          verificacao_comparecimento_em?: string | null
+          zapi_instance_id?: string | null
         }
         Update: {
           confirmacao_resposta?: string | null
@@ -708,12 +730,23 @@ export type Database = {
           google_event_id?: string | null
           id?: string
           lead_id?: string | null
+          lembrete_24h_enviado_em?: string | null
+          lembrete_2h_enviado_em?: string | null
+          lembrete_5h_enviado_em?: string | null
+          local_reuniao?: string | null
+          modalidade?: string | null
+          nome_contato?: string | null
           origem?: string | null
           processo_id?: string | null
           responsavel_id?: string | null
+          subscriber_id?: string | null
+          tarefa_id?: string | null
+          telefone_contato?: string | null
           tipo?: string
           titulo?: string
           updated_at?: string
+          verificacao_comparecimento_em?: string | null
+          zapi_instance_id?: string | null
         }
         Relationships: [
           {
@@ -728,6 +761,13 @@ export type Database = {
             columns: ["processo_id"]
             isOneToOne: false
             referencedRelation: "processos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compromissos_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
             referencedColumns: ["id"]
           },
         ]
@@ -900,9 +940,11 @@ export type Database = {
           meta_conversion_sent: boolean | null
           modalidade_assinatura: string
           observacoes: string | null
+          processo_id: string | null
           quantidade_contratos: number
           tipo_contrato: string
           updated_at: string | null
+          valor_contrato: number | null
         }
         Insert: {
           created_at?: string | null
@@ -913,9 +955,11 @@ export type Database = {
           meta_conversion_sent?: boolean | null
           modalidade_assinatura: string
           observacoes?: string | null
+          processo_id?: string | null
           quantidade_contratos?: number
           tipo_contrato: string
           updated_at?: string | null
+          valor_contrato?: number | null
         }
         Update: {
           created_at?: string | null
@@ -926,9 +970,11 @@ export type Database = {
           meta_conversion_sent?: boolean | null
           modalidade_assinatura?: string
           observacoes?: string | null
+          processo_id?: string | null
           quantidade_contratos?: number
           tipo_contrato?: string
           updated_at?: string | null
+          valor_contrato?: number | null
         }
         Relationships: [
           {
@@ -936,6 +982,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contratos_fechados_processo_id_fkey"
+            columns: ["processo_id"]
+            isOneToOne: false
+            referencedRelation: "processos"
             referencedColumns: ["id"]
           },
         ]
@@ -1493,6 +1546,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      instagram_backfill_state: {
+        Row: {
+          fully_synced: boolean
+          id: string
+          resume_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          fully_synced?: boolean
+          id?: string
+          resume_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          fully_synced?: boolean
+          id?: string
+          resume_url?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       integration_logs: {
         Row: {
@@ -3354,6 +3428,7 @@ export type Database = {
           is_default: boolean | null
           nome: string
           preview_image_url: string | null
+          print_slots_json: Json | null
           prompt_base: string | null
           requires_bank_data: boolean | null
           requires_contract_data: boolean | null
@@ -3376,6 +3451,7 @@ export type Database = {
           is_default?: boolean | null
           nome: string
           preview_image_url?: string | null
+          print_slots_json?: Json | null
           prompt_base?: string | null
           requires_bank_data?: boolean | null
           requires_contract_data?: boolean | null
@@ -3398,6 +3474,7 @@ export type Database = {
           is_default?: boolean | null
           nome?: string
           preview_image_url?: string | null
+          print_slots_json?: Json | null
           prompt_base?: string | null
           requires_bank_data?: boolean | null
           requires_contract_data?: boolean | null
@@ -3883,6 +3960,7 @@ export type Database = {
           tribunal: string | null
           ultima_atualizacao: string | null
           ultima_consulta_api_at: string | null
+          ultima_consulta_djen_at: string | null
           ultima_notificacao_at: string | null
           updated_at: string | null
           valor_causa: number | null
@@ -3950,6 +4028,7 @@ export type Database = {
           tribunal?: string | null
           ultima_atualizacao?: string | null
           ultima_consulta_api_at?: string | null
+          ultima_consulta_djen_at?: string | null
           ultima_notificacao_at?: string | null
           updated_at?: string | null
           valor_causa?: number | null
@@ -4017,6 +4096,7 @@ export type Database = {
           tribunal?: string | null
           ultima_atualizacao?: string | null
           ultima_consulta_api_at?: string | null
+          ultima_consulta_djen_at?: string | null
           ultima_notificacao_at?: string | null
           updated_at?: string | null
           valor_causa?: number | null
@@ -4208,6 +4288,51 @@ export type Database = {
           },
         ]
       }
+      tag_change_log: {
+        Row: {
+          action: string
+          changed_by: string | null
+          created_at: string
+          id: string
+          reason: string | null
+          subscriber_id: string
+          tag_id: string
+        }
+        Insert: {
+          action: string
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          reason?: string | null
+          subscriber_id: string
+          tag_id: string
+        }
+        Update: {
+          action?: string
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          reason?: string | null
+          subscriber_id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tag_change_log_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tag_change_log_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "chat_tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tarefas: {
         Row: {
           aprovacao_feedback: string | null
@@ -4225,6 +4350,11 @@ export type Database = {
           entregue_em: string | null
           horario: string | null
           id: string
+          intimacao_id: string | null
+          lembrete_15d_enviado_em: string | null
+          lembrete_3d_enviado_em: string | null
+          lembrete_7d_enviado_em: string | null
+          link_audiencia: string | null
           prazo_fatal: string | null
           prazo_seguranca: string | null
           prioridade: string | null
@@ -4251,6 +4381,11 @@ export type Database = {
           entregue_em?: string | null
           horario?: string | null
           id?: string
+          intimacao_id?: string | null
+          lembrete_15d_enviado_em?: string | null
+          lembrete_3d_enviado_em?: string | null
+          lembrete_7d_enviado_em?: string | null
+          link_audiencia?: string | null
           prazo_fatal?: string | null
           prazo_seguranca?: string | null
           prioridade?: string | null
@@ -4277,6 +4412,11 @@ export type Database = {
           entregue_em?: string | null
           horario?: string | null
           id?: string
+          intimacao_id?: string | null
+          lembrete_15d_enviado_em?: string | null
+          lembrete_3d_enviado_em?: string | null
+          lembrete_7d_enviado_em?: string | null
+          link_audiencia?: string | null
           prazo_fatal?: string | null
           prazo_seguranca?: string | null
           prioridade?: string | null
@@ -4293,6 +4433,13 @@ export type Database = {
             columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "leads_juridicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefas_intimacao_id_fkey"
+            columns: ["intimacao_id"]
+            isOneToOne: false
+            referencedRelation: "intimacoes"
             referencedColumns: ["id"]
           },
           {

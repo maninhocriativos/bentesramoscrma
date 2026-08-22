@@ -5,6 +5,7 @@ import { Processo } from '@/types/processos';
 import { DashboardStats } from '@/hooks/useDashboardStats';
 import { AnimatedCounter } from '@/components/ui/animated-counter';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 
 interface DashboardKPIsProps {
   leads: Lead[];
@@ -23,6 +24,26 @@ export function DashboardKPIs({ leads, stats }: DashboardKPIsProps) {
   const [recentChange, setRecentChange] = useState<string | null>(null);
   const [prevTotal, setPrevTotal] = useState(0);
 
+  // Contratos registrados manualmente (botão "Contrato Fechado" no chat) — mesmo
+  // sinal extra que ConversionMetrics.tsx já usa via Math.max, pra não perder
+  // conversão cujo lead_state não foi atualizado. Antes esse card ignorava esse
+  // sinal no número principal, só mostrava num badge secundário.
+  const [manualPorLead, setManualPorLead] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    let active = true;
+    supabase.from('contratos_fechados' as any).select('lead_id, quantidade_contratos')
+      .then(({ data, error }) => {
+        if (!active || error) return;
+        const map = new Map<string, number>();
+        for (const row of (data || []) as any[]) {
+          if (!row.lead_id) continue;
+          map.set(row.lead_id, (map.get(row.lead_id) || 0) + (row.quantidade_contratos || 0));
+        }
+        setManualPorLead(map);
+      });
+    return () => { active = false; };
+  }, []);
+
   const computed = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -34,13 +55,15 @@ export function DashboardKPIs({ leads, stats }: DashboardKPIsProps) {
 
     const trafegoLeads = leads.filter(isTrafegoLead);
     const leadsTrafego = trafegoLeads.length;
-    const contratosTrafegoTotal = trafegoLeads
-      .filter(l => l.lead_state === 'CONTRACT_SIGNED')
-      .reduce((s, l) => s + 1 + (l.contratos_adicionais || 0), 0);
+    const contratosTrafegoTotal = trafegoLeads.reduce((s, l) => {
+      const viaState = l.lead_state === 'CONTRACT_SIGNED' ? 1 + (l.contratos_adicionais || 0) : 0;
+      const viaManual = manualPorLead.get(l.id) || 0;
+      return s + Math.max(viaState, viaManual);
+    }, 0);
     const taxaConversao = leadsTrafego > 0 ? Math.round((contratosTrafegoTotal / leadsTrafego) * 100) : 0;
 
     return { totalLeads, leadsHoje, leadsNovos, leadsEmProgresso, leadsConvertidos, leadsTrafego, contratosTrafegoTotal, taxaConversao };
-  }, [leads]);
+  }, [leads, manualPorLead]);
 
   useEffect(() => {
     if (prevTotal !== 0 && computed.totalLeads !== prevTotal) {
@@ -89,12 +112,15 @@ export function DashboardKPIs({ leads, stats }: DashboardKPIsProps) {
       icon: Briefcase,
       trend: `de ${computed.leadsTrafego} leads`,
       trendUp: computed.contratosTrafegoTotal > 0,
+      // Não é mais "+N" (aditivo) — o valor principal já inclui os registros
+      // manuais via Math.max acima, então o badge só informa quantos desse total
+      // vieram do registro manual, sem sugerir que se somam por cima.
       description: stats.contratos_trafego_manual > 0
-        ? `+${stats.contratos_trafego_manual} inseridos manualmente`
+        ? `inclui ${stats.contratos_trafego_manual} confirmados manualmente`
         : `${computed.leadsConvertidos} total geral`,
       accent: '#16a34a', accentLight: 'rgba(22,163,74,0.08)', accentBar: '#16a34a',
       badge: stats.contratos_trafego_manual > 0
-        ? { text: `+${stats.contratos_trafego_manual} manual`, color: '#c9a96e' }
+        ? { text: `${stats.contratos_trafego_manual} manual`, color: '#c9a96e' }
         : null,
     },
   ];

@@ -9,13 +9,16 @@ import { EnviarKitModal } from '@/components/contratos/EnviarKitModal';
 import { ZapsignContratosKPIs } from '@/components/contratos/ZapsignContratosKPIs';
 import { ZapsignContratosTable } from '@/components/contratos/ZapsignContratosTable';
 import { CriarContratoZapsignModal } from '@/components/contratos/CriarContratoZapsignModal';
+import { ContratosFechadosTable } from '@/components/contratos/ContratosFechadosTable';
 import { useZapsignContratos, type ContratoZapsignComStatus, type TipoOrigemZapsign } from '@/hooks/useZapsignContratos';
+import { useContratosFechados } from '@/hooks/useContratosFechados';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, FileText, FolderOpen, Clock, CheckCircle2, XCircle, Zap, Plus, RefreshCw, Building2, HelpCircle } from 'lucide-react';
+import { Loader2, FileText, FolderOpen, Clock, CheckCircle2, XCircle, Zap, Plus, RefreshCw, Building2, HelpCircle, Handshake } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 
 function normalizePhone(p: string): string {
   return p.replace(/\D/g, '').slice(-11);
@@ -88,7 +91,7 @@ export default function ContratosPage() {
   const [activeTab, setActiveTab] = useState('todos');
   const [origemFilterCs, setOrigemFilterCs] = useState<'todas' | 'trafego' | 'escritorio' | 'indefinido'>('todas');
   const [enviarModalOpen, setEnviarModalOpen] = useState(false);
-  const [provider, setProvider] = useState<'clicksign' | 'zapsign'>('clicksign');
+  const [provider, setProvider] = useState<'clicksign' | 'zapsign' | 'fechados'>('clicksign');
   const [criarZapsignOpen, setCriarZapsignOpen] = useState(false);
 
   // Adapta os contratos do ClickSign para o MESMO painel de KPIs do ZapSign
@@ -118,6 +121,9 @@ export default function ContratosPage() {
 
   // Hook para Zapsign
   const { contratos: contratosZapsign, isLoading: loadingZapsign, isFetching: fetchingZapsign, refetch: refetchZapsign } = useZapsignContratos();
+
+  // Hook para registros manuais do chat ("Contrato Fechado"), cruzados com ZapSign/ClickSign
+  const { contratos: contratosFechados, resumo: resumoFechados, isLoading: loadingFechados, refetch: refetchFechados } = useContratosFechados();
 
   const handleRefreshZapsign = useCallback(async () => {
     const res = await refetchZapsign();
@@ -363,9 +369,10 @@ export default function ContratosPage() {
     }
   };
 
-  // Determinar se estamos em aba Zapsign
+  // Determinar se estamos em aba Zapsign ou na aba de registros manuais
   const isZapsignTab = activeTab.startsWith('zapsign-');
-  const isLoading = isZapsignTab ? loadingZapsign : loading;
+  const isFechadosTab = provider === 'fechados';
+  const isLoading = isZapsignTab ? loadingZapsign : isFechadosTab ? loadingFechados : loading;
 
   // Renderização para Zapsign
   const renderZapsignContent = () => {
@@ -437,10 +444,71 @@ export default function ContratosPage() {
                 Zapsign
                 <Badge variant="outline" className="ml-1 text-xs">Nova</Badge>
               </button>
+              <button
+                onClick={() => setProvider('fechados')}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                  provider === 'fechados'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-emerald-600/10'
+                )}
+              >
+                <Handshake className="h-4 w-4" />
+                Fechados no Chat
+              </button>
             </div>
 
             {/* Conteúdo específico do provider */}
-            {isZapsignTab ? (
+            {isFechadosTab ? (
+              <>
+                {/* KPIs dos registros manuais */}
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <Card className="border-border">
+                    <CardContent className="pt-5 pb-4">
+                      <p className="text-xs text-muted-foreground font-medium">Total registrado</p>
+                      <p className="text-2xl font-bold mt-1">{resumoFechados.total}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-emerald-200">
+                    <CardContent className="pt-5 pb-4">
+                      <p className="text-xs text-muted-foreground font-medium">Confirmados digitalmente</p>
+                      <p className="text-2xl font-bold mt-1 text-emerald-600">{resumoFechados.confirmados}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-amber-200">
+                    <CardContent className="pt-5 pb-4">
+                      <p className="text-xs text-muted-foreground font-medium">Não encontrados no provedor</p>
+                      <p className="text-2xl font-bold mt-1 text-amber-600">{resumoFechados.naoConfirmados}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-border">
+                    <CardContent className="pt-5 pb-4">
+                      <p className="text-xs text-muted-foreground font-medium">Meta pendente (tráfego)</p>
+                      <p className="text-2xl font-bold mt-1">{resumoFechados.metaPendente}</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">Registrados pelo botão "Contrato Fechado" no chat, cruzados com ZapSign/ClickSign por lead.</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => refetchFechados()}
+                    className="text-muted-foreground gap-2"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Atualizar
+                  </Button>
+                </div>
+
+                <ContratosFechadosTable
+                  contratos={contratosFechados}
+                  isLoading={loadingFechados}
+                  onRefresh={refetchFechados}
+                />
+              </>
+            ) : isZapsignTab ? (
               <>
                 {/* Zapsign Analytics e KPIs */}
                 <ZapsignContratosKPIs
