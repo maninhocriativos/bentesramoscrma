@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { usePerfil } from '@/hooks/usePerfil';
 import { useOfficeSettings } from '@/hooks/useOfficeSettings';
@@ -28,7 +28,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, parseISO, isValid, addDays, addBusinessDays, isWeekend } from 'date-fns';
+import { format, parseISO, isValid, addDays, addBusinessDays, subBusinessDays, isWeekend } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { generateIntimacaoReport, generateBatchIntimacaoReport } from '@/lib/intimacaoReportGenerator';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -46,6 +46,7 @@ interface TeamMember {
 
 interface AcaoSugerida { titulo: string; descricao: string; prazo_dias: number | null; prioridade: string; }
 interface AnaliseIA { resumo: string; recomendacao: string; acoes: AcaoSugerida[]; }
+interface TarefaVinculada { id: string; titulo: string; status: string; prazo_fatal: string | null; responsavel_id: string | null; }
 
 interface Intimacao {
   id: string;
@@ -81,6 +82,22 @@ async function copyTextToClipboard(text: string, label = 'Número do processo') 
     }
     toast.success(`${label} copiado!`);
   } catch { toast.error(`Não foi possível copiar ${label.toLowerCase()}`); }
+}
+
+// Prazo a partir da data REAL da intimação (publicação/intimação/disponibilização),
+// nunca de "hoje" — a análise da IA devolve dias úteis contados da intimação
+// (ver prompt em supabase/functions/intimacoes-analise), então usar addBusinessDays(new
+// Date(), ...) no momento em que alguém clica "aprovar" desloca o prazo fatal
+// para mais tarde do que o prazo legal real, sempre que a análise/aprovação
+// não acontece no mesmo dia da intimação.
+function prazoFatalDaIntimacao(intimacao: Intimacao, prazoDiasUteis: number): Date | null {
+  const baseDate = intimacao.data_publicacao || intimacao.data_intimacao || intimacao.data_disponibilizacao;
+  if (!baseDate) return null;
+  const base = parseISO(baseDate);
+  if (!isValid(base)) return null;
+  let start = addDays(base, 1);
+  while (isWeekend(start)) start = addDays(start, 1);
+  return addBusinessDays(start, prazoDiasUteis);
 }
 
 function getTypeConfig(tipo: string) {
@@ -781,6 +798,8 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const navigate = useNavigate();
   const [showDropdown, setShowDropdown] = useState(false);
   const [tarefasAdicionadas, setTarefasAdicionadas] = useState<string[]>([]);
+  const [tarefasVinculadas, setTarefasVinculadas] = useState<TarefaVinculada[]>([]);
+  const [tarefasVinculadasLoading, setTarefasVinculadasLoading] = useState(false);
   const [tarefasCustom, setTarefasCustom] = useState<string[]>([]);
   const [tarefaModalOpen, setTarefaModalOpen] = useState(false);
   const [documentoModalOpen, setDocumentoModalOpen] = useState(false);
@@ -936,10 +955,45 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     if (error) toast.error('Erro ao salvar vínculo do processo', { description: error.message });
   };
 
+  // Tarefas JÁ criadas para esta intimação (persistidas, por intimacao_id) — antes
+  // esta seção só mostrava o que tinha sido criado na sessão atual, então reabrir
+  // uma intimação já processada não avisava que ela já tinha virado tarefa.
+  const fetchTarefasVinculadas = useCallback(async () => {
+    setTarefasVinculadasLoading(true);
+    const { data, error } = await supabase
+      .from('tarefas')
+      .select('id, titulo, status, prazo_fatal, responsavel_id')
+      .eq('intimacao_id', intimacao.id)
+      .order('created_at', { ascending: false });
+    if (error) toast.error('Erro ao carregar tarefas vinculadas', { description: error.message });
+    setTarefasVinculadas((data as TarefaVinculada[]) || []);
+    setTarefasVinculadasLoading(false);
+  }, [intimacao.id]);
+
+  useEffect(() => { void fetchTarefasVinculadas(); }, [fetchTarefasVinculadas]);
+
+  // Ação mais urgente sugerida pela análise da IA (a que tem o menor prazo em
+  // dias úteis) — usada para pré-preencher o prazo fatal com uma estimativa
+  // baseada no conteúdo real da intimação, em vez do heurístico genérico por
+  // palavra-chave em `calcularPrazos` (que cai quase sempre em 15/20 dias
+  // porque `tipo_intimacao` só tem 4 valores genéricos vindos do DJEN).
+  const acaoMaisUrgente = analise?.acoes
+    ?.filter(a => a.prazo_dias != null)
+    ?.reduce<AcaoSugerida | null>((min, a) => (!min || a.prazo_dias! < min.prazo_dias! ? a : min), null) || null;
+  const prazoDiasIA = acaoMaisUrgente?.prazo_dias ?? null;
+
   useEffect(() => {
-    if (!prazoSeguranca && prazos.dataConclusao) setPrazoSeguranca(format(prazos.dataConclusao, 'yyyy-MM-dd'));
-    if (!prazoFatal && prazos.dataFatal) setPrazoFatal(format(prazos.dataFatal, 'yyyy-MM-dd'));
-  }, [prazos.dataConclusao, prazos.dataFatal, prazoFatal, prazoSeguranca]);
+    const dataFatalIA = prazoDiasIA != null ? prazoFatalDaIntimacao(intimacao, prazoDiasIA) : null;
+    if (!prazoFatal) {
+      const d = dataFatalIA || prazos.dataFatal;
+      if (d) setPrazoFatal(format(d, 'yyyy-MM-dd'));
+    }
+    if (!prazoSeguranca) {
+      const d = dataFatalIA ? subBusinessDays(dataFatalIA, 3) : prazos.dataConclusao;
+      if (d) setPrazoSeguranca(format(d, 'yyyy-MM-dd'));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prazoDiasIA, prazos.dataConclusao, prazos.dataFatal, prazoFatal, prazoSeguranca]);
 
   const handleAnalisar = async () => {
     setAnalisando(true);
@@ -1008,6 +1062,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
         dados: { source: 'intimacoes', intimacao_id: intimacao.id, tarefa_id: data?.id, prazo_seguranca: prazoSeguranca, prazo_fatal: prazoFatal, horario: horarioTarefa || null },
       } as any);
       setTarefasAdicionadas(prev => prev.includes(selectedTarefaTipo) ? prev : [...prev, selectedTarefaTipo]);
+      await fetchTarefasVinculadas();
       setSelectedTarefaTipo(''); setHorarioTarefa(''); setTarefaModalOpen(false);
       toast.success('Tarefa criada e atribuída ao responsável');
     } catch (err: any) {
@@ -1021,10 +1076,17 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     if (!responsavel) { toast.error('Selecione um responsável em "Criar tarefa" primeiro'); return; }
     setAprovandoTudo(true);
     try {
+      // Dedupe contra tarefas JÁ PERSISTIDAS (não só as criadas nesta sessão) —
+      // reabrir a intimação e clicar "aprovar tudo" de novo não deve duplicar
+      // uma tarefa que já existe para ela.
+      const titulosExistentes = new Set([...tarefasAdicionadas, ...tarefasVinculadas.map(t => t.titulo)]);
       let criadas = 0;
       for (const acao of analise.acoes) {
-        if (tarefasAdicionadas.includes(acao.titulo)) continue;
-        const fatal = acao.prazo_dias != null ? addBusinessDays(new Date(), acao.prazo_dias) : (prazos.dataFatal || addBusinessDays(new Date(), 15));
+        if (titulosExistentes.has(acao.titulo)) continue;
+        // Conta os dias úteis a partir da DATA DA INTIMAÇÃO (como a IA foi instruída
+        // a calcular), não do momento em que alguém clicou "aprovar" — senão o
+        // prazo fatal fica mais tarde que o prazo legal real.
+        const fatal = acao.prazo_dias != null ? (prazoFatalDaIntimacao(intimacao, acao.prazo_dias) || addBusinessDays(new Date(), acao.prazo_dias)) : (prazos.dataFatal || addBusinessDays(new Date(), 15));
         const fatalStr = format(fatal, 'yyyy-MM-dd');
         const prioridade = acao.prioridade === 'Urgente' ? 'Urgente' : acao.prioridade === 'Alta' ? 'Alta' : 'Media';
         const descriptionParts = [
@@ -1043,6 +1105,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
         }).select('id').single();
         if (!error) {
           criadas++;
+          titulosExistentes.add(acao.titulo);
           setTarefasAdicionadas(prev => [...prev, acao.titulo]);
           await supabase.from('notificacoes_internas' as any).insert({
             user_id: responsavel, titulo: 'Nova tarefa atribuída',
@@ -1052,7 +1115,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
           } as any);
         }
       }
-      if (criadas > 0) toast.success(`${criadas} tarefa(s) criada(s)`);
+      if (criadas > 0) { toast.success(`${criadas} tarefa(s) criada(s)`); await fetchTarefasVinculadas(); }
       else toast.info('Todas as ações já tinham tarefa criada');
     } catch (err: any) {
       toast.error('Erro ao aprovar ações', { description: err.message });
@@ -1236,17 +1299,35 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
             </div>
           </div>
 
-          {/* Tarefas */}
+          {/* Tarefas — lista as tarefas REALMENTE vinculadas (tarefas.intimacao_id),
+              não só as criadas nesta sessão, para deixar claro quando a intimação
+              já tem uma tarefa e evitar recriação duplicada. */}
           <CollapsibleSection icon={ClipboardList} title="Tarefas relacionadas"
             actions={<Button size="sm" className="h-7 text-xs rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white" onClick={e => { e.stopPropagation(); setTarefaModalOpen(true); }}>Adicionar</Button>}
           >
-            {tarefasAdicionadas.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {tarefasAdicionadas.map(t => (
-                  <Badge key={t} variant="secondary" className="gap-1.5 px-3 py-1.5 text-xs cursor-pointer hover:bg-rose-100 hover:text-rose-700 transition-colors rounded-lg" onClick={() => setTarefasAdicionadas(p => p.filter(x => x !== t))}>
-                    {t} <span className="opacity-50">✕</span>
-                  </Badge>
-                ))}
+            {tarefasVinculadasLoading ? (
+              <p className="text-sm text-muted-foreground">Carregando...</p>
+            ) : tarefasVinculadas.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                {tarefasVinculadas.map(t => {
+                  const member = members.find(m => m.id === t.responsavel_id);
+                  const statusBadge =
+                    t.status === 'Concluída' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                    : t.status === 'Em Andamento' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200'
+                    : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200';
+                  return (
+                    <div key={t.id} className="flex items-center justify-between gap-2 rounded-lg border border-border/40 px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{t.titulo}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {member ? getMemberName(member) : 'Sem responsável'}
+                          {t.prazo_fatal ? ` · prazo ${format(parseISO(t.prazo_fatal), 'dd/MM/yyyy')}` : ''}
+                        </p>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full shrink-0 ${statusBadge}`}>{t.status}</span>
+                    </div>
+                  );
+                })}
               </div>
             ) : <p className="text-sm text-muted-foreground">Nenhuma tarefa relacionada.</p>}
           </CollapsibleSection>
@@ -1486,6 +1567,11 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
               <div className="space-y-1.5">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Prazo fatal</p>
                 <Input type="date" value={prazoFatal} onChange={e => setPrazoFatal(e.target.value)} className="h-9 rounded-lg" />
+                {prazoDiasIA != null && (
+                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <Sparkles className="h-2.5 w-2.5" /> Estimado pela análise da IA ({prazoDiasIA}d úteis)
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Horario</p>
