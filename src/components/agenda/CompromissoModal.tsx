@@ -34,9 +34,11 @@ import { Badge } from '@/components/ui/badge';
 import { Compromisso, TipoCompromisso, ConfirmacaoStatus } from '@/types/compromissos';
 import {
   Loader2, Trash2, X, Pencil, CalendarIcon, Clock, FileText,
-  Briefcase, AlertCircle, Search, Scale,
+  Briefcase, AlertCircle, Search, Scale, Lock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { usePerfil } from '@/contexts/PerfilContext';
+import { useAuth } from '@/hooks/useAuth';
 
 // =============================================================================
 // CONFIG
@@ -90,8 +92,21 @@ export function CompromissoModal({
   const [isEditing, setIsEditing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const { isAdmin, isGerente, isSecretaria } = usePerfil();
+  const { user } = useAuth();
+
   const isNew = !compromisso;
   const showForm = isNew || isEditing;
+
+  // Espelha exatamente as políticas RLS da tabela `compromissos`:
+  // UPDATE permitido para Admin/Gerente/Secretaria ou o próprio responsável;
+  // DELETE permitido só para Admin/Secretaria. Sem isso, um Estagiário via
+  // botão habilitado e recebia um erro genérico do Postgrest ao tentar agir
+  // sobre compromissos de terceiros.
+  const canEditCompromisso = isNew
+    || isAdmin || isGerente || isSecretaria
+    || compromisso?.responsavel_id === user?.id;
+  const canDeleteCompromisso = isAdmin || isSecretaria;
 
   // Vínculo com processo (opcional) — sem isso, o compromisso nunca aparece
   // na aba "Tarefas do Processo" do modal do processo, só na Agenda geral.
@@ -307,7 +322,7 @@ export function CompromissoModal({
         {/* Action bar (apenas em view mode) */}
         {!isNew && !showForm && (
           <div className="flex items-center gap-2 px-5 py-3 border-b border-border/40 bg-muted/20">
-            <Select value={currentStatus} onValueChange={(v) => handleStatusChange(v as ConfirmacaoStatus)}>
+            <Select value={currentStatus} onValueChange={(v) => handleStatusChange(v as ConfirmacaoStatus)} disabled={!canEditCompromisso}>
               <SelectTrigger className={cn('w-[140px] h-8 text-xs font-bold rounded-lg border-0', statusCfg.className)}>
                 <SelectValue />
               </SelectTrigger>
@@ -320,12 +335,20 @@ export function CompromissoModal({
               </SelectContent>
             </Select>
 
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setIsEditing(true)}>
-              <Pencil className="h-3.5 w-3.5" /> Editar
-            </Button>
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5 rounded-lg text-red-600 hover:bg-red-500/10 hover:text-red-700 border-red-500/30" onClick={handleDelete}>
-              <Trash2 className="h-3.5 w-3.5" /> Excluir
-            </Button>
+            {canEditCompromisso ? (
+              <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setIsEditing(true)}>
+                <Pencil className="h-3.5 w-3.5" /> Editar
+              </Button>
+            ) : (
+              <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground px-2" title="Somente o responsável ou a administração podem editar este compromisso">
+                <Lock className="h-3 w-3" /> Somente o responsável pode editar
+              </span>
+            )}
+            {canDeleteCompromisso && (
+              <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5 rounded-lg text-red-600 hover:bg-red-500/10 hover:text-red-700 border-red-500/30" onClick={handleDelete}>
+                <Trash2 className="h-3.5 w-3.5" /> Excluir
+              </Button>
+            )}
           </div>
         )}
 

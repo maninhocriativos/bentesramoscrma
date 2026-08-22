@@ -113,10 +113,6 @@ function SummaryPanel({ kpis, statusFilter, setStatusFilter }: {
     { key: 'Perdido',      label: 'Perdidos',     color: '#ef4444' },
     { key: 'Arquivado',    label: 'Arquivados',   color: '#94a3b8' },
   ];
-  const extra = [
-    { key: 'recursal', label: 'Recursal', color: '#7c3aed' },
-    { key: 'execucao', label: 'Execução',  color: '#ea580c' },
-  ];
   const total = kpis.total || 1;
   const donutSegs = rows.map(r => ({ value: kpis[r.key] || 0, color: r.color }));
 
@@ -148,22 +144,6 @@ function SummaryPanel({ kpis, statusFilter, setStatusFilter }: {
               <span className="text-[10px] font-black w-6 text-right shrink-0" style={{ color: isActive ? row.color : undefined }}>
                 {val}
               </span>
-            </button>
-          );
-        })}
-      </div>
-      <div className="shrink-0 hidden lg:flex flex-col gap-2.5">
-        {extra.map(e => {
-          const val = kpis[e.key] || 0;
-          return (
-            <button
-              key={e.key}
-              onClick={() => setStatusFilter(statusFilter === e.key ? 'todos' : e.key)}
-              className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
-            >
-              <span className="h-2 w-2 rounded-full shrink-0" style={{ background: e.color }} />
-              <span className="text-[10px] text-muted-foreground">{e.label}</span>
-              <span className="text-[10px] font-black ml-1" style={{ color: e.color }}>{val}</span>
             </button>
           );
         })}
@@ -363,7 +343,12 @@ function ProcessosPage() {
 
   const showSpinner = loading && processos.length === 0;
 
-  // KPI config with reliable inline colors
+  // KPI config with reliable inline colors.
+  // Só entram aqui status mutuamente exclusivos (todo processo tem exatamente
+  // um), então a soma dos 5 sempre bate com o Total. Recursal/Execução são
+  // uma FASE (não status) e podem se sobrepor a qualquer um destes — por isso
+  // ficam fora desta linha e viram chips à parte (evita a linha "8 números que
+  // não somam o total", que confundia quem olhava o painel).
   const kpiItems = [
     { key: 'todos',        label: 'Total',      icon: Scale,        num: 'hsl(var(--foreground))',  bar: 'hsl(var(--primary))',  bg: 'rgba(var(--primary-rgb),0.08)' },
     { key: 'Em Andamento', label: 'Andamento',  icon: CheckCircle2, num: '#2563eb', bar: '#3b82f6', bg: 'rgba(59,130,246,0.10)' },
@@ -371,8 +356,11 @@ function ProcessosPage() {
     { key: 'Arquivado',    label: 'Arquivados', icon: Archive,      num: '#64748b', bar: '#94a3b8', bg: 'rgba(148,163,184,0.10)' },
     { key: 'Ganho',        label: 'Ganhos',     icon: Trophy,       num: '#059669', bar: '#10b981', bg: 'rgba(16,185,129,0.10)' },
     { key: 'Perdido',      label: 'Perdidos',   icon: XCircle,      num: '#dc2626', bar: '#ef4444', bg: 'rgba(239,68,68,0.10)' },
-    { key: 'recursal',     label: 'Recursal',   icon: Gavel,        num: '#7c3aed', bar: '#8b5cf6', bg: 'rgba(139,92,246,0.10)' },
-    { key: 'execucao',     label: 'Execução',   icon: FileCheck,    num: '#c2410c', bar: '#f97316', bg: 'rgba(249,115,22,0.10)' },
+  ];
+
+  const faseItems = [
+    { key: 'recursal', label: 'Recursal', icon: Gavel,     color: '#7c3aed', bg: 'rgba(139,92,246,0.10)' },
+    { key: 'execucao', label: 'Execução',  icon: FileCheck, color: '#c2410c', bg: 'rgba(249,115,22,0.10)' },
   ];
 
   const kpiValue = (key: string) => key === 'todos' ? kpis.total : (kpis as any)[key] || 0;
@@ -450,20 +438,48 @@ function ProcessosPage() {
 
         {/* KPI CARDS + SUMMARY */}
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-5 items-start">
-          <div className="grid grid-cols-4 md:grid-cols-8 gap-2.5">
-            {kpiItems.map(k => (
-              <KpiCard
-                key={k.key}
-                label={k.label}
-                value={kpiValue(k.key)}
-                icon={k.icon}
-                numColor={k.num}
-                barColor={k.bar}
-                iconBg={k.bg}
-                active={statusFilter === k.key}
-                onClick={() => setStatusFilter(statusFilter === k.key ? 'todos' : k.key)}
-              />
-            ))}
+          <div className="space-y-2.5">
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-2.5">
+              {kpiItems.map(k => (
+                <KpiCard
+                  key={k.key}
+                  label={k.label}
+                  value={kpiValue(k.key)}
+                  icon={k.icon}
+                  numColor={k.num}
+                  barColor={k.bar}
+                  iconBg={k.bg}
+                  active={statusFilter === k.key}
+                  onClick={() => setStatusFilter(statusFilter === k.key ? 'todos' : k.key)}
+                />
+              ))}
+            </div>
+
+            {/* Fase processual — dimensão à parte do status: um processo "Em
+                Andamento" pode também estar em fase Recursal ou de Execução,
+                por isso não entra na soma dos cards acima. */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Fase:</span>
+              {faseItems.map(f => {
+                const active = statusFilter === f.key;
+                const val = kpiValue(f.key);
+                return (
+                  <button
+                    key={f.key}
+                    onClick={() => setStatusFilter(active ? 'todos' : f.key)}
+                    className={`flex items-center gap-1.5 pl-2 pr-3 py-1.5 rounded-full border text-xs font-bold transition-all duration-200
+                      ${active ? 'border-transparent shadow-sm' : 'border-border/50 bg-card hover:border-border'}`}
+                    style={active ? { background: f.color, color: '#fff' } : undefined}
+                  >
+                    <span className="h-5 w-5 rounded-full flex items-center justify-center" style={{ background: active ? 'rgba(255,255,255,0.25)' : f.bg }}>
+                      <f.icon className="h-3 w-3" style={{ color: active ? '#fff' : f.color }} />
+                    </span>
+                    {f.label}
+                    <span className="tabular-nums">{val}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
           <div className="hidden xl:block">
             <SummaryPanel kpis={kpis} statusFilter={statusFilter} setStatusFilter={setStatusFilter} />

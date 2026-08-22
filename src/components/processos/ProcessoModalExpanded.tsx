@@ -1133,6 +1133,8 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
       supabase.from('tarefas').select('*').eq('processo_id', processo.id).order('created_at', { ascending: false }),
       supabase.from('compromissos').select('id,titulo,data_inicio,tipo,confirmacao_status').eq('processo_id', processo.id).is('tarefa_id', null).order('data_inicio', { ascending: false }),
     ]);
+    if (tarefasRes.error) toast.error('Erro ao carregar tarefas', { description: tarefasRes.error.message });
+    if (compromissosRes.error) toast.error('Erro ao carregar compromissos', { description: compromissosRes.error.message });
     setProcessoTarefas((tarefasRes.data as Tarefa[]) || []);
     setProcessoCompromissos(compromissosRes.data || []);
     setTarefasLoading(false);
