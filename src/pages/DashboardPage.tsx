@@ -117,9 +117,12 @@ function DashboardPage() {
     today.setHours(0, 0, 0, 0);
     const totalLeads = filteredLeads.length;
     const convertidos = filteredLeads.filter(l => CONVERTIDO_STATES.includes(l.lead_state || '')).length;
-    const leadsHoje = filteredLeads.filter(l => new Date(l.created_at) >= today).length;
-    const leadsTrafego = filteredLeads.filter(l => l.tipo_origem === 'trafego' || l.origem === 'Tráfego Pago').length;
-    return { totalLeads, convertidos, leadsHoje, leadsTrafego };
+    const isTrafego = (l: typeof filteredLeads[number]) => l.tipo_origem === 'trafego' || l.origem === 'Tráfego Pago';
+    // "Tráfego Hoje" precisa contar só leads de tráfego criados hoje — antes contava
+    // QUALQUER lead do dia (ex: 10 leads hoje, dos quais só 1 era de tráfego).
+    const trafegoHoje = filteredLeads.filter(l => new Date(l.created_at) >= today && isTrafego(l)).length;
+    const leadsTrafego = filteredLeads.filter(isTrafego).length;
+    return { totalLeads, convertidos, trafegoHoje, leadsTrafego };
   }, [filteredLeads]);
 
   const handleAlertClick = (alerta: any) => {
@@ -180,7 +183,7 @@ function DashboardPage() {
               />
               <HeroCard
                 label={isFiltered ? 'Tráfego Hoje (filtrado)' : 'Tráfego Hoje'}
-                value={heroMetrics.leadsHoje.toLocaleString('pt-BR')}
+                value={heroMetrics.trafegoHoje.toLocaleString('pt-BR')}
                 sub={`${heroMetrics.leadsTrafego.toLocaleString('pt-BR')} total de tráfego`}
                 icon={Zap}
                 accent="bg-blue-500"
@@ -217,7 +220,7 @@ function DashboardPage() {
 
                 {/* Gráficos — largura total */}
                 <Suspense fallback={<ChartFallback />}>
-                  <DashboardCharts leads={filteredLeads} />
+                  <DashboardCharts leads={filteredLeads} processos={processos} />
                 </Suspense>
 
                 {/* Resumo financeiro */}

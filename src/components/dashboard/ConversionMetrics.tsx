@@ -91,7 +91,14 @@ function buildSegment(
     });
     const converted = signedInPeriod.reduce((s, l) => s + contratosDoLead(l), 0);
     const lost = pl.filter(l => l.is_lost || l.status === 'Perdido').length;
-    const conversionRate = total > 0 ? (converted / total) * 100 : 0;
+    // Taxa de conversão = dos leads CRIADOS neste período, quantos já converteram
+    // (não depende de saber a data exata da assinatura — só do status atual). Antes
+    // dividia "criados no período" por "assinados no período" (via getSignedDate),
+    // dois grupos que não são a mesma coorte — um lead antigo assinado essa semana
+    // inflava o numerador sem nunca ter entrado no denominador, produzindo taxas
+    // perto de/acima de 100%.
+    const convertidosDaCoorte = pl.filter(l => isConverted(l)).length;
+    const conversionRate = total > 0 ? (convertidosDaCoorte / total) * 100 : 0;
     const totalValue = signedInPeriod.reduce((s, l) => s + (valorPorLead.get(l.id) || 0), 0);
     return { total, converted, lost, conversionRate, totalValue };
   };

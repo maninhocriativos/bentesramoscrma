@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Lead } from '@/types/leads';
+import { Processo } from '@/types/processos';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -7,7 +8,9 @@ import {
 import { ArrowRight, DollarSign, PieChart as PieChartIcon, Layers, TrendingUp, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-interface DashboardChartsProps { leads: Lead[]; }
+interface DashboardChartsProps { leads: Lead[]; processos: Processo[]; }
+
+const PROCESSO_STATUS_EXCLUIDOS = ['Arquivado', 'Perdido'];
 
 const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }).format(v);
 
@@ -37,8 +40,24 @@ const TIPO_COLORS: Record<string, string> = {
 
 type ValorView = 'status' | 'origem';
 
-export function DashboardCharts({ leads }: DashboardChartsProps) {
+export function DashboardCharts({ leads, processos }: DashboardChartsProps) {
   const [valorView, setValorView] = useState<ValorView>('status');
+
+  // Valor real da causa — vem dos processos vinculados ao lead (cliente_id), não do
+  // campo valor_causa do próprio lead (que fica vazio até o processo ser aberto: só
+  // 2 de ~3.300 leads no banco têm esse campo preenchido). Mesmo padrão já usado em
+  // ConversionMetrics.tsx.
+  const valorPorLead = useMemo(() => {
+    const map = new Map<string, number>();
+    processos.forEach(p => {
+      if (!p.cliente_id) return;
+      if (p.status && PROCESSO_STATUS_EXCLUIDOS.includes(p.status)) return;
+      if (!p.valor_causa) return;
+      map.set(p.cliente_id, (map.get(p.cliente_id) || 0) + p.valor_causa);
+    });
+    return map;
+  }, [processos]);
+  const valorDoLead = (l: Lead) => valorPorLead.get(l.id) || 0;
 
   const data = useMemo(() => {
     const total = leads.length;
@@ -58,7 +77,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
     // Valor por status
     const valorPorStatus = STATUS_CONFIG.map(c => {
       const sl = leads.filter(l => l.status === c.status);
-      return { status: c.label, valor: sl.reduce((s, l) => s + (l.valor_causa || 0), 0), color: c.color, count: sl.length };
+      return { status: c.label, valor: sl.reduce((s, l) => s + valorDoLead(l), 0), color: c.color, count: sl.length };
     }).filter(i => i.valor > 0);
 
     // Valor por tipo_origem
@@ -66,20 +85,20 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
     leads.forEach(l => {
       const k = (l as any).tipo_origem || 'indefinido';
       if (!tipoMap[k]) tipoMap[k] = { valor: 0, count: 0 };
-      tipoMap[k].valor += l.valor_causa || 0;
+      tipoMap[k].valor += valorDoLead(l);
       tipoMap[k].count += 1;
     });
     const origemValorData = Object.entries(tipoMap)
       .map(([k, d]) => ({ name: TIPO_LABELS[k] || k, valor: d.valor, count: d.count, color: TIPO_COLORS[k] || '#94a3b8' }))
       .filter(i => i.valor > 0).sort((a, b) => b.valor - a.valor);
 
-    const totalValor = leads.reduce((s, l) => s + (l.valor_causa || 0), 0);
+    const totalValor = leads.reduce((s, l) => s + valorDoLead(l), 0);
     const ganhos = leads.filter(l => l.status === 'Ganho' || l.status === 'Contrato Assinado');
-    const valorGanhos = ganhos.reduce((s, l) => s + (l.valor_causa || 0), 0);
-    const top5 = [...leads].filter(l => (l.valor_causa || 0) > 0).sort((a, b) => (b.valor_causa || 0) - (a.valor_causa || 0)).slice(0, 5);
+    const valorGanhos = ganhos.reduce((s, l) => s + valorDoLead(l), 0);
+    const top5 = [...leads].filter(l => valorDoLead(l) > 0).sort((a, b) => valorDoLead(b) - valorDoLead(a)).slice(0, 5);
 
     return { origemData, total, funnelData, statusMap, valorPorStatus, origemValorData, tipoMap, totalValor, ganhos, valorGanhos, top5 };
-  }, [leads]);
+  }, [leads, valorPorLead]);
 
   const getConversionRate = (idx: number) => {
     if (idx === 0) return 100;
@@ -160,7 +179,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
           {/* Mini cards de status */}
           <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 mt-4 pt-4" style={{ borderTop: '0.5px solid rgba(201,169,110,0.12)' }}>
             {STATUS_CONFIG.map(c => {
-              const valor = leads.filter(l => l.status === c.status).reduce((s, l) => s + (l.valor_causa || 0), 0);
+              const valor = leads.filter(l => l.status === c.status).reduce((s, l) => s + valorDoLead(l), 0);
               const count = data.statusMap[c.status] || 0;
               return (
                 <div key={c.status} className="text-center p-2.5 rounded-xl transition-colors hover:bg-stone-50" style={{ background: 'rgba(201,169,110,0.04)' }}>
@@ -190,7 +209,7 @@ export function DashboardCharts({ leads }: DashboardChartsProps) {
                       <span style={{ fontSize: 12, fontWeight: 500 }} className="truncate">{l.nome || 'Sem nome'}</span>
                       <span style={{ fontSize: 10, color: '#9ca3af' }} className="shrink-0">{TIPO_LABELS[(l as any).tipo_origem] || ''}</span>
                     </div>
-                    <span style={{ fontSize: 12, fontWeight: 700, flexShrink: 0, marginLeft: 8 }}>{fmt(l.valor_causa || 0)}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, flexShrink: 0, marginLeft: 8 }}>{fmt(valorDoLead(l))}</span>
                   </div>
                 ))}
               </div>
