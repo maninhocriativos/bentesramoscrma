@@ -16,20 +16,35 @@ export function useLeads() {
       setLoading(true);
     }
 
-    const { data, error } = await supabase
-      .from('leads_juridicos')
-      .select(LEADS_SELECT)
-      .order('created_at', { ascending: false })
-      .limit(5000);
+    // Paginado — leads_juridicos já passa de 3 mil linhas, e um único .limit(5000)
+    // não escapa do teto padrão de 1000 linhas por requisição do PostgREST: o
+    // pedido de 5000 é silenciosamente cortado nas 1000 mais recentes (order by
+    // created_at desc), fazendo TODO o Dashboard perder os 2/3 mais antigos de
+    // leads sem nenhum aviso. Mesmo bug já encontrado e corrigido no matching de
+    // leads do ZapSign (useZapsignContratos.ts) e no fetch de compromissos
+    // (useCompromissos.ts) — aqui pagina do mesmo jeito.
+    const PAGE = 1000;
+    const all: Lead[] = [];
+    let pageError: any = null;
+    for (let page = 0; ; page++) {
+      const { data, error } = await supabase
+        .from('leads_juridicos')
+        .select(LEADS_SELECT)
+        .order('created_at', { ascending: false })
+        .range(page * PAGE, (page + 1) * PAGE - 1);
+      if (error) { pageError = error; break; }
+      all.push(...((data as Lead[]) || []));
+      if (!data || data.length < PAGE) break;
+    }
 
-    if (error) {
+    if (pageError) {
       toast({
         title: 'Erro ao carregar leads',
-        description: error.message,
+        description: pageError.message,
         variant: 'destructive',
       });
     } else {
-      setLeads((data as Lead[]) || []);
+      setLeads(all);
     }
 
     initialLoadDone.current = true;

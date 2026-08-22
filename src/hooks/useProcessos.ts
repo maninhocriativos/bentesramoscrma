@@ -41,42 +41,59 @@ export function useProcessos({ withRealtime = true }: { withRealtime?: boolean }
   const fetchProcessos = useCallback(async () => {
     if (!initialLoadDone.current) setLoading(true);
 
-    let query = supabase
-      .from('processos')
-      .select(PROCESSOS_LIST_SELECT)
-      .order('created_at', { ascending: false });
+    // Monta uma query nova a cada página (em vez de reusar um builder já
+    // resolvido) pra poder paginar com .range() abaixo.
+    const buildQuery = () => {
+      let query = supabase
+        .from('processos')
+        .select(PROCESSOS_LIST_SELECT)
+        .order('created_at', { ascending: false });
 
-    // Administradores e Gerentes veem todos os processos do escritório —
-    // nunca aplicar o filtro por "meus processos" pra eles, mesmo que também
-    // tenham o cargo de Advogado (ex: sócio que também assina petições).
-    if (isAdmin || isGerente) {
-      // sem filtro adicional
-    } else if (isEstagiario && user?.id && !isAdvogado) {
-      // Estagiários só veem processos onde são co-responsáveis
-      query = query.eq('co_responsavel_id', user.id);
-    } else if (isAdvogado && perfil?.nome && user?.id) {
-      // Advogados veem processos onde são responsáveis ou co-responsáveis.
-      // Comparação por ILIKE (contém nome E sobrenome), não igualdade exata:
-      // "advogado_responsavel" é um campo de texto livre digitado em cada
-      // petição/processo, com variações de maiúsculas, "(OAB/AM ####)" e até
-      // erros de digitação (ex.: "Andery", "Andey Augusto Bentes Ramos") — e o
-      // nome do perfil pode estar cadastrado só com o primeiro nome. Um
-      // "eq" exato nunca bate nesses casos e o advogado via a lista vazia.
-      const escapar = (s: string) => s.replace(/[,()*]/g, '').trim();
-      const nome = escapar(perfil.nome);
-      const sobrenome = escapar(perfil.sobrenome || '');
-      const condNome = sobrenome
-        ? `and(advogado_responsavel.ilike.*${nome}*,advogado_responsavel.ilike.*${sobrenome}*)`
-        : `advogado_responsavel.ilike.*${nome}*`;
-      query = query.or(`${condNome},co_responsavel_id.eq.${user.id}`);
+      // Administradores e Gerentes veem todos os processos do escritório —
+      // nunca aplicar o filtro por "meus processos" pra eles, mesmo que também
+      // tenham o cargo de Advogado (ex: sócio que também assina petições).
+      if (isAdmin || isGerente) {
+        // sem filtro adicional
+      } else if (isEstagiario && user?.id && !isAdvogado) {
+        // Estagiários só veem processos onde são co-responsáveis
+        query = query.eq('co_responsavel_id', user.id);
+      } else if (isAdvogado && perfil?.nome && user?.id) {
+        // Advogados veem processos onde são responsáveis ou co-responsáveis.
+        // Comparação por ILIKE (contém nome E sobrenome), não igualdade exata:
+        // "advogado_responsavel" é um campo de texto livre digitado em cada
+        // petição/processo, com variações de maiúsculas, "(OAB/AM ####)" e até
+        // erros de digitação (ex.: "Andery", "Andey Augusto Bentes Ramos") — e o
+        // nome do perfil pode estar cadastrado só com o primeiro nome. Um
+        // "eq" exato nunca bate nesses casos e o advogado via a lista vazia.
+        const escapar = (s: string) => s.replace(/[,()*]/g, '').trim();
+        const nome = escapar(perfil.nome);
+        const sobrenome = escapar(perfil.sobrenome || '');
+        const condNome = sobrenome
+          ? `and(advogado_responsavel.ilike.*${nome}*,advogado_responsavel.ilike.*${sobrenome}*)`
+          : `advogado_responsavel.ilike.*${nome}*`;
+        query = query.or(`${condNome},co_responsavel_id.eq.${user.id}`);
+      }
+      return query;
+    };
+
+    // Paginado — processos já passa de 1.000 linhas pra Admin/Gerente (que veem
+    // todos), e um select sem .range() é cortado silenciosamente no teto padrão
+    // de 1000 linhas do PostgREST, mesmo bug já corrigido em useLeads.ts e
+    // useZapsignContratos.ts nesta mesma base.
+    const PAGE = 1000;
+    const all: any[] = [];
+    let pageError: any = null;
+    for (let page = 0; ; page++) {
+      const { data, error } = await buildQuery().range(page * PAGE, (page + 1) * PAGE - 1);
+      if (error) { pageError = error; break; }
+      all.push(...(data || []));
+      if (!data || data.length < PAGE) break;
     }
 
-    const { data, error } = await query;
-
-    if (error) {
-      toast({ title: 'Erro ao carregar processos', description: error.message, variant: 'destructive' });
+    if (pageError) {
+      toast({ title: 'Erro ao carregar processos', description: pageError.message, variant: 'destructive' });
     } else {
-      setProcessos((data as unknown as Processo[]) || []);
+      setProcessos(all as unknown as Processo[]);
     }
 
     initialLoadDone.current = true;
