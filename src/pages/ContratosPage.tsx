@@ -377,6 +377,7 @@ export default function ContratosPage() {
         contratos={contratosZapsign}
         isLoading={loadingZapsign}
         activeTab={activeTab}
+        onRefresh={refetchZapsign}
       />
     );
   };

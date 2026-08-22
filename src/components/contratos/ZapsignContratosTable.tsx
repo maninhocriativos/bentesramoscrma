@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import {
   Table, TableBody, TableCell, TableHead,
   TableHeader, TableRow,
@@ -19,8 +19,9 @@ import {
   AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, ExternalLink, Search, ChevronLeft, ChevronRight, Zap, Building2, HelpCircle, MessageCircle, AlertTriangle, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Loader2, ExternalLink, Search, ChevronLeft, ChevronRight, Zap, Building2, HelpCircle, MessageCircle, AlertTriangle, MoreHorizontal, Trash2, Link2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { ContratoZapsignComStatus, TipoOrigemZapsign } from '@/hooks/useZapsignContratos';
@@ -32,6 +33,200 @@ interface ZapsignContratosTableProps {
   contratos: ContratoZapsignComStatus[];
   isLoading: boolean;
   activeTab: string;
+  onRefresh?: () => void;
+}
+
+interface LeadSugestao {
+  id: string; nome: string | null; email: string | null;
+  telefone: string | null; tipo_origem: string | null;
+  matchType: 'telefone' | 'email' | 'nome' | 'busca';
+}
+
+// ─── Vincular Lead (ZapSign) ────────────────────────────────────────────────
+// Mesma ideia do "Vincular Lead" que já existe no ClickSign (ContratoDetailModal),
+// mas o ZapSign não tinha nenhum jeito de corrigir manualmente um contrato que o
+// matching automático (telefone/email/nome) não conseguiu resolver.
+function VincularLeadZapsignDialog({ contrato, open, onOpenChange, onLinked }: {
+  contrato: ContratoZapsignComStatus | null;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onLinked: () => void;
+}) {
+  const { toast } = useToast();
+  const [search, setSearch] = useState('');
+  const [sugestoes, setSugestoes] = useState<LeadSugestao[]>([]);
+  const [loadingSugestoes, setLoadingSugestoes] = useState(false);
+  const [vinculandoId, setVinculandoId] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const signerName  = contrato?.leadNome  || contrato?.signers?.[0]?.name  || '';
+  const signerEmail = contrato?.leadEmail || contrato?.signers?.[0]?.email || '';
+  const signerPhone = contrato?.leadPhone || contrato?.signers?.[0]?.phone || '';
+
+  const buscarLeads = async (texto?: string) => {
+    setLoadingSugestoes(true);
+    try {
+      const found: LeadSugestao[] = [];
+      const seen = new Set<string>();
+      const add = (l: any, type: LeadSugestao['matchType']) => {
+        if (!seen.has(l.id)) {
+          seen.add(l.id);
+          found.push({ id: l.id, nome: l.nome, email: l.email, telefone: l.telefone, tipo_origem: l.tipo_origem, matchType: type });
+        }
+      };
+
+      if (texto && texto.length >= 2) {
+        const [{ data: byNome }, { data: byEmail }, { data: byFone }] = await Promise.all([
+          supabase.from('leads_juridicos').select('id, nome, email, telefone, tipo_origem').ilike('nome', `%${texto}%`).limit(5),
+          supabase.from('leads_juridicos').select('id, nome, email, telefone, tipo_origem').ilike('email', `%${texto}%`).limit(3),
+          supabase.from('leads_juridicos').select('id, nome, email, telefone, tipo_origem').ilike('telefone', `%${texto}%`).limit(3),
+        ]);
+        for (const l of byNome || []) add(l, 'nome');
+        for (const l of byEmail || []) add(l, 'email');
+        for (const l of byFone || []) add(l, 'telefone');
+      } else {
+        if (signerPhone) {
+          const norm = signerPhone.replace(/\D/g, '').slice(-8);
+          if (norm.length >= 8) {
+            const { data } = await supabase.from('leads_juridicos').select('id, nome, email, telefone, tipo_origem').ilike('telefone', `%${norm}`).limit(5);
+            for (const l of data || []) add(l, 'telefone');
+          }
+        }
+        if (signerEmail) {
+          const { data } = await supabase.from('leads_juridicos').select('id, nome, email, telefone, tipo_origem').eq('email', signerEmail).limit(3);
+          for (const l of data || []) add(l, 'email');
+        }
+        if (signerName && found.length < 5) {
+          const firstName = signerName.split(' ')[0];
+          if (firstName.length >= 3) {
+            const { data } = await supabase.from('leads_juridicos').select('id, nome, email, telefone, tipo_origem').ilike('nome', `${firstName}%`).limit(5);
+            for (const l of data || []) add(l, 'nome');
+          }
+        }
+      }
+      setSugestoes(found.slice(0, 8));
+    } catch (err: any) {
+      toast({ title: 'Erro ao buscar leads', description: err.message, variant: 'destructive' });
+    } finally {
+      setLoadingSugestoes(false);
+    }
+  };
+
+  const handleOpenChange = (v: boolean) => {
+    onOpenChange(v);
+    if (v) { setSearch(''); setSugestoes([]); buscarLeads(); }
+    else { if (debounceRef.current) clearTimeout(debounceRef.current); setSugestoes([]); setSearch(''); }
+  };
+
+  const handleVincular = async (leadId: string) => {
+    if (!contrato) return;
+    setVinculandoId(leadId);
+    try {
+      // Atualiza se já existe registro local, insere se não (documentos criados
+      // direto no painel ZapSign, sem passar pelo CRM, não têm linha aqui ainda).
+      const { data: updated, error: updateErr } = await supabase
+        .from('contract_reminders_zapsign')
+        .update({ lead_id: leadId })
+        .eq('document_id', contrato.id)
+        .select('id');
+      if (updateErr) throw updateErr;
+
+      if (!updated || updated.length === 0) {
+        const { error: insertErr } = await supabase
+          .from('contract_reminders_zapsign')
+          .insert({
+            document_id: contrato.id,
+            document_name: contrato.name || 'Documento Zapsign',
+            lead_id: leadId,
+            signer_name: signerName || null,
+            signer_email: signerEmail || null,
+            signer_phone: signerPhone || null,
+          });
+        if (insertErr) throw insertErr;
+      }
+
+      toast({ title: 'Lead vinculado!', description: 'O contrato foi vinculado a este lead.' });
+      handleOpenChange(false);
+      onLinked();
+    } catch (err: any) {
+      toast({ title: 'Erro ao vincular', description: err.message, variant: 'destructive' });
+    } finally {
+      setVinculandoId(null);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base">Vincular lead</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground truncate" title={contrato?.name}>
+            {contrato?.name}
+          </p>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50 pointer-events-none" />
+            <Input
+              placeholder="Nome, email ou telefone..."
+              value={search}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSearch(val);
+                if (debounceRef.current) clearTimeout(debounceRef.current);
+                debounceRef.current = setTimeout(() => buscarLeads(val), 400);
+              }}
+              className="pl-8 h-9 text-sm"
+              autoFocus
+            />
+          </div>
+
+          {loadingSugestoes && (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          {!loadingSugestoes && sugestoes.length === 0 && search.length >= 2 && (
+            <p className="text-xs text-muted-foreground text-center py-2">Nenhum lead encontrado</p>
+          )}
+          {!loadingSugestoes && sugestoes.length === 0 && search.length < 2 && (
+            <p className="text-[11px] text-muted-foreground text-center py-1">Sugestões automáticas por telefone, email e nome do signatário</p>
+          )}
+
+          <div className="space-y-1.5 max-h-72 overflow-y-auto">
+            {sugestoes.map(s => (
+              <div key={s.id} className="flex items-center gap-2 p-2.5 rounded-xl border border-border/60 hover:border-border transition-colors">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                    <span className="text-xs font-medium text-foreground truncate">{s.nome || '—'}</span>
+                    <span className={cn(
+                      'text-[9px] px-1 py-0.5 rounded font-semibold shrink-0',
+                      s.matchType === 'telefone' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                      s.matchType === 'email'    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                                                   'bg-muted text-muted-foreground'
+                    )}>
+                      {s.matchType === 'telefone' ? 'Fone' : s.matchType === 'email' ? 'Email' : 'Nome'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground truncate">{s.email || s.telefone || ''}</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleVincular(s.id)}
+                  disabled={!!vinculandoId}
+                  className="h-7 px-2.5 text-[11px] shrink-0"
+                >
+                  {vinculandoId === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Vincular'}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -62,7 +257,7 @@ function OrigemBadge({ origem }: { origem: TipoOrigemZapsign }) {
   );
 }
 
-export function ZapsignContratosTable({ contratos, isLoading, activeTab }: ZapsignContratosTableProps) {
+export function ZapsignContratosTable({ contratos, isLoading, activeTab, onRefresh }: ZapsignContratosTableProps) {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm]     = useState('');
   const [origemFilter, setOrigemFilter] = useState<string>('todas');
@@ -71,6 +266,7 @@ export function ZapsignContratosTable({ contratos, isLoading, activeTab }: Zapsi
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [vincularContrato, setVincularContrato] = useState<ContratoZapsignComStatus | null>(null);
 
   const handleDelete = async (contratoId: string) => {
     setDeletingId(contratoId);
@@ -408,6 +604,15 @@ export function ZapsignContratosTable({ contratos, isLoading, activeTab }: Zapsi
                           </DropdownMenuItem>
                         )}
 
+                        {/* Vincular lead */}
+                        <DropdownMenuItem
+                          onClick={() => setVincularContrato(c)}
+                          className="gap-2 cursor-pointer"
+                        >
+                          <Link2 className="h-4 w-4 text-muted-foreground" />
+                          {c.tipoOrigem === 'indefinido' ? 'Vincular lead' : 'Trocar lead vinculado'}
+                        </DropdownMenuItem>
+
                         {/* Cancelar */}
                         {!['Cancelado','Rejeitado','Expirado','Assinado'].includes(c.statusLocal) && (
                           <>
@@ -430,6 +635,14 @@ export function ZapsignContratosTable({ contratos, isLoading, activeTab }: Zapsi
           </Table>
         </div>
       )}
+
+      {/* Vincular lead */}
+      <VincularLeadZapsignDialog
+        contrato={vincularContrato}
+        open={!!vincularContrato}
+        onOpenChange={(v) => { if (!v) setVincularContrato(null); }}
+        onLinked={() => onRefresh?.()}
+      />
 
       {/* Dialog de confirmação de cancelamento */}
       <AlertDialog open={!!confirmDeleteId} onOpenChange={() => setConfirmDeleteId(null)}>
