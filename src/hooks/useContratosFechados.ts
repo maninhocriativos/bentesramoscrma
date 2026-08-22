@@ -134,7 +134,12 @@ export function useContratosFechados() {
     indefinido: contratos.filter(c => c.tipoOrigem === 'indefinido').length,
     confirmados: contratos.filter(c => c.confirmadoDigitalmente === true).length,
     naoConfirmados: contratos.filter(c => c.confirmadoDigitalmente === false).length,
-    metaPendente: contratos.filter(c => c.tipoOrigem === 'trafego' && !c.meta_conversion_sent).length,
+    // Usa leadTipoOrigem (campo bruto), não tipoOrigem (classificação ampla por
+    // linha_whatsapp) — o envio ao Meta em ContratoFechadoModal.tsx só é tentado
+    // quando leads_juridicos.tipo_origem === 'trafego' literalmente. Usar a
+    // classificação ampla aqui mostraria "pendente" pra contratos que nunca
+    // tentaram enviar (não é o mesmo critério).
+    metaPendente: contratos.filter(c => c.leadTipoOrigem === 'trafego' && !c.meta_conversion_sent).length,
   }), [contratos]);
 
   return {

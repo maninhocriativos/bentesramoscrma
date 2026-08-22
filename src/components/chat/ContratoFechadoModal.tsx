@@ -128,15 +128,18 @@ export function ContratoFechadoModal({ open, onClose, leadId, leadNome }: Contra
     limparProcesso();
   }, [leadId, leadNome, open]);
 
-  // Pré-preenche o valor do contrato com valor_causa do lead, quando existir
+  // Pré-preenche o valor do contrato com valor_causa do lead, quando existir.
+  // Só busca com o modal aberto — o componente fica montado o tempo todo no
+  // chat, então sem essa checagem isso disparava uma query a cada troca de
+  // conversa, mesmo com o modal fechado.
   useEffect(() => {
-    if (!formData.leadId) return;
+    if (!open || !formData.leadId) return;
     supabase.from('leads_juridicos').select('valor_causa').eq('id', formData.leadId).maybeSingle()
       .then(({ data }) => {
         const vc = (data as any)?.valor_causa;
         if (vc > 0) setFormData(prev => (prev.valorContrato ? prev : { ...prev, valorContrato: String(vc) }));
       });
-  }, [formData.leadId]);
+  }, [open, formData.leadId]);
 
   // Carrega lista de leads para o select (quando não vem do chat)
   useEffect(() => {

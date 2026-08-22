@@ -231,7 +231,7 @@ export function ContratosFechadosTable({ contratos, isLoading, onRefresh }: Cont
                   <TableCell><OrigemBadge origem={c.tipoOrigem} /></TableCell>
                   <TableCell><ConfirmadoBadge contrato={c} /></TableCell>
                   <TableCell>
-                    {c.tipoOrigem !== 'trafego' ? (
+                    {c.leadTipoOrigem !== 'trafego' ? (
                       <span className="text-xs text-muted-foreground">—</span>
                     ) : c.meta_conversion_sent ? (
                       <Badge variant="outline" className="gap-1 text-xs bg-emerald-50 text-emerald-700 border-emerald-300">
