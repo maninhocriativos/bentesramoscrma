@@ -76,12 +76,22 @@ export function LeadsTableHeader({
 
   const exportToCSV = async () => {
     try {
-      const { data: leads, error } = await supabase
-        .from('leads_juridicos')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Paginado — leads_juridicos já passa de 3 mil linhas, e um select sem
+      // .range() é cortado silenciosamente no teto padrão de 1000 linhas do
+      // PostgREST: a exportação perdia os leads mais antigos sem nenhum aviso.
+      const PAGE = 1000;
+      const leads: any[] = [];
+      for (let page = 0; ; page++) {
+        const { data, error } = await supabase
+          .from('leads_juridicos')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .range(page * PAGE, (page + 1) * PAGE - 1);
+        if (error) throw error;
+        leads.push(...(data || []));
+        if (!data || data.length < PAGE) break;
+      }
 
-      if (error) throw error;
       if (!leads || leads.length === 0) {
         toast({ title: 'Nenhum lead para exportar', variant: 'destructive' });
         return;

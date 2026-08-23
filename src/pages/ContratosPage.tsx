@@ -203,9 +203,22 @@ export default function ContratosPage() {
       // Busca TODOS os leads e monta os conjuntos de tráfego (email, telefone,
       // nome exato e nome tolerante = primeiro+último). Antes só buscava leads de
       // tráfego literal e casava nome exato → muitos não pegavam a tag.
-      const { data: allLeadsData } = await supabase
-        .from('leads_juridicos')
-        .select('id, nome, email, telefone, tipo_origem, origem, linha_whatsapp');
+      //
+      // Paginado — leads_juridicos já passa de 3 mil linhas, e um select sem
+      // .range() é cortado silenciosamente no teto de 1000 do PostgREST (mesmo
+      // bug já corrigido no matching de leads do ZapSign, useZapsignContratos.ts).
+      const allLeadsData: any[] = [];
+      {
+        const PAGE = 1000;
+        for (let page = 0; ; page++) {
+          const { data } = await supabase
+            .from('leads_juridicos')
+            .select('id, nome, email, telefone, tipo_origem, origem, linha_whatsapp')
+            .range(page * PAGE, (page + 1) * PAGE - 1);
+          allLeadsData.push(...(data || []));
+          if (!data || data.length < PAGE) break;
+        }
+      }
       const leadById      = new Map<string, any>();
       const leadByEmail   = new Map<string, any>();
       const leadByPhone   = new Map<string, any>();

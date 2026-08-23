@@ -178,13 +178,25 @@ export default function IntimacoesPage() {
 
   const fetchIntimacoes = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('intimacoes')
-      .select('*')
-      .order('data_publicacao', { ascending: false, nullsFirst: false })
-      .order('data_disponibilizacao', { ascending: false, nullsFirst: false })
-      .order('created_at', { ascending: false });
-    if (error) console.error(error); else setIntimacoes((data as any[]) || []);
+    // Paginado — a tabela já está perto de 1000 linhas e crescendo (sync
+    // automático), e um select sem .range() é cortado silenciosamente nesse
+    // teto do PostgREST (mesmo bug já corrigido em várias outras telas hoje).
+    const PAGE = 1000;
+    const all: any[] = [];
+    let fetchError: any = null;
+    for (let page = 0; ; page++) {
+      const { data, error } = await supabase
+        .from('intimacoes')
+        .select('*')
+        .order('data_publicacao', { ascending: false, nullsFirst: false })
+        .order('data_disponibilizacao', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .range(page * PAGE, (page + 1) * PAGE - 1);
+      if (error) { fetchError = error; break; }
+      all.push(...(data || []));
+      if (!data || data.length < PAGE) break;
+    }
+    if (fetchError) console.error(fetchError); else setIntimacoes(all);
     setLoading(false);
   };
 

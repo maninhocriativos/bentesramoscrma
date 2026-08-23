@@ -119,14 +119,23 @@ export default function IsaAutonomaPage() {
     try {
       const last7Days = subDays(startOfDay(new Date()), 7).toISOString();
 
-      const { data: events } = await supabase
-        .from('system_events')
-        .select('id, acao, tipo, processado, metadata, created_at, fonte, dados')
-        .or('fonte.eq.isa,fonte.eq.isa_auto,fonte.eq.isa_scheduler,fonte.eq.sistema')
-        .gte('created_at', last7Days)
-        .order('created_at', { ascending: false });
+      // Paginado — já perto de 1000 linhas nos últimos 7 dias e crescendo; um
+      // select sem .range() é cortado silenciosamente nesse teto do PostgREST.
+      const PAGE = 1000;
+      const events: any[] = [];
+      for (let page = 0; ; page++) {
+        const { data } = await supabase
+          .from('system_events')
+          .select('id, acao, tipo, processado, metadata, created_at, fonte, dados')
+          .or('fonte.eq.isa,fonte.eq.isa_auto,fonte.eq.isa_scheduler,fonte.eq.sistema')
+          .gte('created_at', last7Days)
+          .order('created_at', { ascending: false })
+          .range(page * PAGE, (page + 1) * PAGE - 1);
+        events.push(...(data || []));
+        if (!data || data.length < PAGE) break;
+      }
 
-      if (events) {
+      if (events.length > 0) {
         const leadsClassificados = events.filter(e =>
           e.acao === 'lead_classificado' || e.acao === 'dados_lead_atualizados' || e.acao === 'classificar_lead'
         ).length;
@@ -181,13 +190,24 @@ export default function IsaAutonomaPage() {
       }
 
       // ── Isa: leads sem contato +7d ─────────────────────────────────────────
-      const { data: leadsNoContact } = await supabase
-        .from('leads_juridicos')
-        .select('id, nome, updated_at')
-        .lt('updated_at', sevenDaysAgo)
-        .in('status', ['Lead Frio', 'Em Negociação', 'Aguardando Contrato']);
+      // Paginado — só "Lead Frio" já passa de 1.400 leads; um select sem
+      // .range() é cortado no teto de 1000 do PostgREST, subestimando o alerta.
+      const leadsNoContact: any[] = [];
+      {
+        const PAGE = 1000;
+        for (let page = 0; ; page++) {
+          const { data } = await supabase
+            .from('leads_juridicos')
+            .select('id, nome, updated_at')
+            .lt('updated_at', sevenDaysAgo)
+            .in('status', ['Lead Frio', 'Em Negociação', 'Aguardando Contrato'])
+            .range(page * PAGE, (page + 1) * PAGE - 1);
+          leadsNoContact.push(...(data || []));
+          if (!data || data.length < PAGE) break;
+        }
+      }
 
-      if (leadsNoContact && leadsNoContact.length > 0) {
+      if (leadsNoContact.length > 0) {
         found.push({
           id: 'isa-leads-no-contact',
           agent: 'isa',

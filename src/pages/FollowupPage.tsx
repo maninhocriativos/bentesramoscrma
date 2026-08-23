@@ -602,11 +602,24 @@ function InscricaoModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
     setLoading(true);
     try {
       // Apenas leads ATIVOS no follow-up (não permite re-inscrever quem ainda está em andamento)
-      const [{ data: existentes }, { data: optedOut }] = await Promise.all([
-        supabase.from('traffic_followups').select('lead_id')
-          .or('automation_active.eq.true,status.in.(new,in_progress)'),
-        supabase.from('traffic_followups').select('lead_id')
-          .eq('automation_active', false),
+      // Paginado — traffic_followups já passa de 2 mil linhas, e um select sem
+      // .range() é cortado no teto de 1000 do PostgREST: faltando leads aqui,
+      // o risco é re-inscrever quem já está ativo ou ignorar quem pediu pausa.
+      const fetchAllLeadIds = async (build: () => any) => {
+        const PAGE = 1000;
+        const all: any[] = [];
+        for (let page = 0; ; page++) {
+          const { data } = await build().range(page * PAGE, (page + 1) * PAGE - 1);
+          all.push(...(data || []));
+          if (!data || data.length < PAGE) break;
+        }
+        return all;
+      };
+      const [existentes, optedOut] = await Promise.all([
+        fetchAllLeadIds(() => supabase.from('traffic_followups').select('lead_id')
+          .or('automation_active.eq.true,status.in.(new,in_progress)')),
+        fetchAllLeadIds(() => supabase.from('traffic_followups').select('lead_id')
+          .eq('automation_active', false)),
       ]);
       const inscritosSet = new Set((existentes || []).map((e: any) => e.lead_id));
       setOptedOutIds(new Set((optedOut || []).map((e: any) => e.lead_id)));

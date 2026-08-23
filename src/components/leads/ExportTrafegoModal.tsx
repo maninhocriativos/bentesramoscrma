@@ -46,34 +46,53 @@ export function ExportTrafegoModal({ open, onOpenChange }: ExportTrafegoModalPro
     const from = format(dateFrom, 'yyyy-MM-dd');
     const to = format(dateTo, 'yyyy-MM-dd');
 
-    // Fetch traffic leads in period
-    let query = supabase
-      .from('leads_juridicos')
-      .select('id, nome, telefone, email, created_at, resumo_ia, contract_signed_at, status')
-      .or('tipo_origem.eq.trafego,linha_whatsapp.eq.trafego_isa')
-      .gte('created_at', `${from}T00:00:00`)
-      .lte('created_at', `${to}T23:59:59`)
-      .order('created_at', { ascending: false });
+    // Fetch traffic leads in period — paginado: um período amplo facilmente
+    // passa de 1000 leads de tráfego, e o PostgREST corta silenciosamente
+    // qualquer select sem .range() nesse teto (mesmo bug já corrigido em
+    // useLeads.ts/useProcessos.ts), perdendo os mais antigos do período sem
+    // avisar — inaceitável numa exportação.
+    const buildLeadsQuery = () => {
+      let q = supabase
+        .from('leads_juridicos')
+        .select('id, nome, telefone, email, created_at, resumo_ia, contract_signed_at, status')
+        .or('tipo_origem.eq.trafego,linha_whatsapp.eq.trafego_isa')
+        .gte('created_at', `${from}T00:00:00`)
+        .lte('created_at', `${to}T23:59:59`)
+        .order('created_at', { ascending: false });
+      if (filterMode === 'contrato_assinado') {
+        q = q.not('contract_signed_at', 'is', null);
+      }
+      return q;
+    };
 
-    // Filter only signed contracts
-    if (filterMode === 'contrato_assinado') {
-      query = query.not('contract_signed_at', 'is', null);
+    const PAGE = 1000;
+    const leads: any[] = [];
+    for (let page = 0; ; page++) {
+      const { data, error } = await buildLeadsQuery().range(page * PAGE, (page + 1) * PAGE - 1);
+      if (error) throw error;
+      leads.push(...(data || []));
+      if (!data || data.length < PAGE) break;
     }
+    if (leads.length === 0) return [];
 
-    const { data: leads, error } = await query;
-
-    if (error) throw error;
-    if (!leads || leads.length === 0) return [];
-
-    // Fetch last 5 messages for each lead
+    // Fetch messages for each lead — mantém o mesmo alvo de antes (~5 por lead),
+    // só que agora paginado: um único .limit(leadIds.length*5) acima de 1000
+    // era cortado pelo mesmo teto do PostgREST, então exportações com muitos
+    // leads perdiam a prévia de mensagem justamente dos leads mais antigos.
     const leadIds = leads.map(l => l.id);
-    const { data: messages } = await supabase
-      .from('manychat_mensagens')
-      .select('lead_id, conteudo, direcao, created_at')
-      .in('lead_id', leadIds)
-      .eq('tipo', 'text')
-      .order('created_at', { ascending: false })
-      .limit(leadIds.length * 5);
+    const targetMsgCount = leadIds.length * 5;
+    const messages: any[] = [];
+    for (let offset = 0; offset < targetMsgCount; offset += PAGE) {
+      const { data } = await supabase
+        .from('manychat_mensagens')
+        .select('lead_id, conteudo, direcao, created_at')
+        .in('lead_id', leadIds)
+        .eq('tipo', 'text')
+        .order('created_at', { ascending: false })
+        .range(offset, Math.min(offset + PAGE, targetMsgCount) - 1);
+      messages.push(...(data || []));
+      if (!data || data.length < Math.min(PAGE, targetMsgCount - offset)) break;
+    }
 
     const msgMap = new Map<string, string[]>();
     if (messages) {

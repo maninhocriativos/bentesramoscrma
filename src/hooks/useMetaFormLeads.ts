@@ -28,9 +28,29 @@ export function useMetaFormLeads() {
   const fetchLeads = useCallback(async () => {
     if (!initialLoadDone.current) setLoading(true);
     try {
+      // leads_juridicos de tráfego já passa de 2 mil linhas — paginado porque um
+      // select sem .range() é cortado silenciosamente no teto de 1000 do
+      // PostgREST (mesmo bug já corrigido em useLeads.ts/useProcessos.ts).
+      const fetchAllTrafegoLeads = async () => {
+        const PAGE = 1000;
+        const all: any[] = [];
+        for (let page = 0; ; page++) {
+          const { data, error } = await supabase
+            .from('leads_juridicos')
+            .select('*')
+            .eq('tipo_origem', 'trafego')
+            .order('created_at', { ascending: false })
+            .range(page * PAGE, (page + 1) * PAGE - 1);
+          if (error) return { data: null, error };
+          all.push(...(data || []));
+          if (!data || data.length < PAGE) break;
+        }
+        return { data: all, error: null };
+      };
+
       const [metaResult, leadsResult, aereoResult] = await Promise.all([
         supabase.from('meta_form_leads').select('*').order('created_at', { ascending: false }),
-        supabase.from('leads_juridicos').select('*').eq('tipo_origem', 'trafego').order('created_at', { ascending: false }),
+        fetchAllTrafegoLeads(),
         supabase.from('meta_leads_aereo').select('*').order('created_at', { ascending: false }),
       ]);
 
