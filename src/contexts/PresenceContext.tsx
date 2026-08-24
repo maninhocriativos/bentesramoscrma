@@ -31,6 +31,9 @@ interface PresenceContextValue {
   getOnlineCount: () => number;
   isTeamMemberOnline: (userId: string) => boolean;
   getTeamMemberChat: (userId: string) => string | undefined;
+  teamLoading: boolean;
+  teamError: boolean;
+  refetchTeam: () => Promise<void>;
 }
 
 const PresenceContext = createContext<PresenceContextValue>({
@@ -39,6 +42,9 @@ const PresenceContext = createContext<PresenceContextValue>({
   getOnlineCount: () => 0,
   isTeamMemberOnline: () => false,
   getTeamMemberChat: () => undefined,
+  teamLoading: true,
+  teamError: false,
+  refetchTeam: async () => {},
 });
 
 export function usePresence() {
@@ -56,22 +62,29 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { fullName } = usePerfil();
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [teamLoading, setTeamLoading] = useState(true);
+  const [teamError, setTeamError] = useState(false);
   const [onlineTeam, setOnlineTeam] = useState<Record<string, PresenceEntry>>({});
   const channelRef = useRef<RealtimeChannel | null>(null);
   const userNameRef = useRef<string>('Usuário');
   userNameRef.current = fullName || user?.email?.split('@')[0] || 'Usuário';
 
-  // Carrega membros da equipe (inclui last_seen_at para presença por heartbeat)
-  const fetchTeam = useCallback(async () => {
+  // Carrega membros da equipe (inclui last_seen_at para presença por heartbeat).
+  // `silent` evita o piscar de loading nos re-fetches periódicos em background.
+  const fetchTeam = useCallback(async (silent = false) => {
     const { data, error } = await supabase
       .from('perfis')
       .select('id, nome, sobrenome, cargo, email, last_seen_at')
       .eq('aprovado', true);
     if (error) {
       console.error('[PresenceContext] Erro ao buscar equipe:', error);
+      setTeamError(true);
+      if (!silent) setTeamLoading(false);
       return false;
     }
     setTeamMembers((data || []) as TeamMember[]);
+    setTeamError(false);
+    setTeamLoading(false);
     return true;
   }, []);
 
@@ -83,7 +96,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       if (!ok && !cancelled) setTimeout(() => { if (!cancelled) fetchTeam(); }, 3000);
     });
     // Re-fetch da lista a cada 3 minutos para atualizar last_seen_at dos membros
-    const interval = setInterval(fetchTeam, 3 * 60 * 1000);
+    const interval = setInterval(() => fetchTeam(true), 3 * 60 * 1000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [fetchTeam]);
 
@@ -192,8 +205,14 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     }))
   , [teamMembers, isTeamMemberOnline, onlineTeam]);
 
+  const refetchTeam = useCallback(async () => {
+    setTeamLoading(true);
+    setTeamError(false);
+    await fetchTeam();
+  }, [fetchTeam]);
+
   return (
-    <PresenceContext.Provider value={{ setCurrentChat, getTeamWithStatus, getOnlineCount, isTeamMemberOnline, getTeamMemberChat }}>
+    <PresenceContext.Provider value={{ setCurrentChat, getTeamWithStatus, getOnlineCount, isTeamMemberOnline, getTeamMemberChat, teamLoading, teamError, refetchTeam }}>
       {children}
     </PresenceContext.Provider>
   );

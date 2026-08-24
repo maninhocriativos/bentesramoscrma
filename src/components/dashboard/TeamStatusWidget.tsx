@@ -26,7 +26,7 @@ const PRIORIDADE_CONFIG: Record<string, { label: string; dot: string; bg: string
 export function TeamStatusWidget() {
   const { user } = useAuth();
   const { canAccessSettings } = usePerfil();
-  const { getTeamWithStatus, getOnlineCount } = usePresence();
+  const { getTeamWithStatus, getOnlineCount, teamLoading, teamError, refetchTeam } = usePresence();
   const { tarefas } = useTarefas();
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
   const [selectedTarefa, setSelectedTarefa] = useState<Tarefa | null>(null);
@@ -38,9 +38,10 @@ export function TeamStatusWidget() {
   const team = getTeamWithStatus();
   const onlineCount = getOnlineCount();
 
-  const handleManualRefresh = () => {
+  const handleManualRefresh = async () => {
     setIsRefreshing(true);
-    setTimeout(() => setIsRefreshing(false), 800);
+    await refetchTeam();
+    setIsRefreshing(false);
   };
 
   const tarefasPorUsuario = useMemo(() => {
@@ -87,7 +88,23 @@ export function TeamStatusWidget() {
         {/* Lista */}
         <ScrollArea style={{ height: 300 }}>
           <div>
-            {team.length === 0 ? (
+            {teamLoading ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center px-5">
+                <RefreshCw style={{ width: 20, height: 20, color: '#d1d5db', marginBottom: 8 }} className="animate-spin" />
+                <p style={{ fontSize: 13, color: '#9ca3af' }}>Carregando equipe…</p>
+              </div>
+            ) : teamError ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center px-5">
+                <Users style={{ width: 24, height: 24, color: '#dc2626', marginBottom: 8 }} />
+                <p style={{ fontSize: 13, fontWeight: 700, color: '#1c1917' }}>Não foi possível carregar a equipe</p>
+                <button onClick={handleManualRefresh}
+                  className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-lg transition-colors hover:opacity-80"
+                  style={{ fontSize: 12, fontWeight: 700, color: '#b8922a', background: 'rgba(201,169,110,0.15)' }}>
+                  <RefreshCw style={{ width: 12, height: 12 }} className={cn(isRefreshing && 'animate-spin')} />
+                  Tentar novamente
+                </button>
+              </div>
+            ) : team.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center px-5">
                 <Users style={{ width: 24, height: 24, color: '#d1d5db', marginBottom: 8 }} />
                 <p style={{ fontSize: 13, color: '#9ca3af' }}>Nenhum membro encontrado</p>

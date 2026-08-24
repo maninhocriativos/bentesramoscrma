@@ -19,7 +19,7 @@ import { buildTarefasReport, tarefasReportFilename } from '@/lib/tarefaReportGen
 import {
   Plus, Clock, AlertTriangle, CheckCircle2, CheckSquare,
   TrendingUp, Users, Star, Bell, Flame, Calendar,
-  ChevronRight, Circle, FileDown, ChevronLeft, Download, User
+  ChevronRight, Circle, FileDown, ChevronLeft, Download, User, RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { differenceInCalendarDays, formatDistanceToNow, isPast, isToday, isTomorrow, format } from 'date-fns';
@@ -293,7 +293,7 @@ function KpiCard({ label, value, icon: Icon, accent, bg, suffix = '', highlight 
 // ── Main ─────────────────────────────────────────────────────────────────────
 export default function TarefasPage() {
   const { user }   = useAuth();
-  const { getTeamWithStatus } = usePresence();
+  const { getTeamWithStatus, teamLoading, teamError, refetchTeam } = usePresence();
   const { canAccessSettings: isAdmin } = usePerfil();
   const { tarefas, loading, updateTarefa, deleteTarefa, fetchTarefas } = useTarefas();
   const { registros, loading: loadingTS } = useTimesheet();
@@ -720,7 +720,36 @@ export default function TarefasPage() {
                 </span>
               )}
             </div>
-            {team.length === 0 ? (
+            {teamLoading ? (
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {[0, 1, 2, 3].map(i => (
+                  <div key={i} className="rounded-xl p-3 animate-pulse"
+                    style={{ border: '0.5px solid rgba(201,169,110,0.18)', background: '#fefdfb' }}>
+                    <div className="flex items-center gap-2.5 mb-2.5">
+                      <div className="h-8 w-8 rounded-xl shrink-0" style={{ background: `${GOLD}15` }} />
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="h-2.5 rounded" style={{ width: '60%', background: `${GOLD}15` }} />
+                        <div className="h-2 rounded" style={{ width: '40%', background: `${GOLD}10` }} />
+                      </div>
+                    </div>
+                    <div className="h-1.5 rounded-full mb-2.5" style={{ background: `${GOLD}10` }} />
+                    <div className="h-8 rounded-lg" style={{ background: `${GOLD}08` }} />
+                  </div>
+                ))}
+              </div>
+            ) : teamError ? (
+              <div className="py-10 text-center px-4">
+                <AlertTriangle style={{ width: 28, height: 28, color: '#dc2626', margin: '0 auto 8px' }} />
+                <p style={{ fontSize: 13, fontWeight: 700, color: '#1c1917' }}>Não foi possível carregar a equipe</p>
+                <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 3 }}>Falha de conexão ao buscar os membros — tente novamente</p>
+                <button onClick={() => refetchTeam()}
+                  className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-lg transition-colors hover:opacity-80"
+                  style={{ fontSize: 12, fontWeight: 700, color: GOLD_D, background: `${GOLD}15` }}>
+                  <RefreshCw style={{ width: 12, height: 12 }} />
+                  Tentar novamente
+                </button>
+              </div>
+            ) : team.length === 0 ? (
               <div className="py-10 text-center px-4">
                 <Users style={{ width: 28, height: 28, color: '#d1d5db', margin: '0 auto 8px' }} />
                 <p style={{ fontSize: 13, fontWeight: 700, color: '#1c1917' }}>Nenhum membro encontrado</p>
