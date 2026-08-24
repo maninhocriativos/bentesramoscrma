@@ -14,6 +14,9 @@ export interface ContratoZapsignComStatus extends ZapsignDocument {
   leadPhone?: string;
   tipoOrigem: TipoOrigemZapsign;
   statusLocal: string;
+  // Caminho no Storage do PDF assinado arquivado (webhook) — quando presente,
+  // gerar o link de download é local (Storage), sem depender da Zapsign.
+  signedPdfPath?: string | null;
 }
 
 function normalizePhone(p: string): string {
@@ -88,7 +91,7 @@ export async function fetchZapsignContratosData(): Promise<ContratoZapsignComSta
   // 2. Buscar registros locais
   const { data: localRecords } = await supabase
     .from('contract_reminders_zapsign')
-    .select('document_id, lead_id, signer_name, signer_email, signer_phone, status, background_check_status')
+    .select('document_id, lead_id, signer_name, signer_email, signer_phone, status, background_check_status, metadata')
     .in('document_id', docIds);
 
   const recordsByDocId = new Map((localRecords || []).map(r => [r.document_id, r]));
@@ -210,6 +213,7 @@ export async function fetchZapsignContratosData(): Promise<ContratoZapsignComSta
       leadPhone: local?.signer_phone || resolvedLead?.telefone || doc.signers?.[0]?.phone,
       tipoOrigem: classifyOrigem(resolvedLead),
       statusLocal: mapZapsignStatus(doc.status, doc.signers),
+      signedPdfPath: (local?.metadata as any)?.signed_pdf_path || null,
     };
   });
 

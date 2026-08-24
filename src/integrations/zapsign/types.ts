@@ -9,6 +9,10 @@ export interface ZapsignDocument {
   signers: ZapsignSigner[];
   expires_at?: string;
   metadata?: Record<string, any>;
+  // Links temporários da Zapsign (expiram ~60min a cada consulta) — usar como
+  // fallback quando não houver cópia arquivada em Storage (metadata local).
+  original_file?: string | null;
+  signed_file?: string | null;
 }
 
 export interface ZapsignSigner {

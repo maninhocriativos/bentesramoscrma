@@ -177,8 +177,8 @@ export function CriarContratoZapsignModal({
       }));
 
       const invokeBody = docsGerados.length === 1
-        ? { action: 'create_from_template', name: docsGerados[0].name, base64_docx: docsGerados[0].base64_docx, signers, expires_in_days: parseInt(expiresInDays) }
-        : { action: 'create_envelope', docs: docsGerados, signers, expires_in_days: parseInt(expiresInDays) };
+        ? { action: 'create_from_template', name: docsGerados[0].name, base64_docx: docsGerados[0].base64_docx, signers, expires_in_days: parseInt(expiresInDays), send_automatic_email: enviarAosCriar }
+        : { action: 'create_envelope', docs: docsGerados, signers, expires_in_days: parseInt(expiresInDays), send_automatic_email: enviarAosCriar };
 
       const { data, error } = await supabase.functions.invoke('zapsign', { body: invokeBody });
 
@@ -209,13 +209,14 @@ export function CriarContratoZapsignModal({
       } as any);
 
       const totalDocs = envelopeDocs.length;
+      const destino = totalDocs > 1 ? `1 link com ${totalDocs} documentos` : 'O link de assinatura';
       toast({
         title: totalDocs > 1
           ? `✅ Envelope criado! ${totalDocs} documentos`
           : '✅ Contrato criado!',
-        description: totalDocs > 1
-          ? `1 link com ${totalDocs} documentos enviado para ${nomeCliente}`
-          : `Link de assinatura enviado para ${nomeCliente}`,
+        description: enviarAosCriar
+          ? `${destino} enviado para ${nomeCliente} por email.`
+          : `${destino} foi gerado, mas ainda não foi enviado — copie o link na tabela de contratos e envie manualmente.`,
       });
 
       onSuccess?.();

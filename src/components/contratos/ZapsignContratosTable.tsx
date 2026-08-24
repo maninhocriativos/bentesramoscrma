@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, ExternalLink, Search, ChevronLeft, ChevronRight, Zap, Building2, HelpCircle, MessageCircle, AlertTriangle, MoreHorizontal, Trash2, Link2 } from 'lucide-react';
+import { Loader2, ExternalLink, Search, ChevronLeft, ChevronRight, Zap, Building2, HelpCircle, MessageCircle, AlertTriangle, MoreHorizontal, Trash2, Link2, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { ContratoZapsignComStatus, TipoOrigemZapsign } from '@/hooks/useZapsignContratos';
@@ -267,6 +267,34 @@ export function ZapsignContratosTable({ contratos, isLoading, activeTab, onRefre
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [vincularContrato, setVincularContrato] = useState<ContratoZapsignComStatus | null>(null);
+  const [baixandoId, setBaixandoId] = useState<string | null>(null);
+
+  // Abre o PDF assinado — nunca existia como funcionar antes: uma vez o
+  // cliente assinando, o link que sobrava na tela ("Abrir documento") era o
+  // de ASSINATURA, não o do arquivo final. Prioriza a cópia arquivada no
+  // Storage (webhook, permanente); sem ela (contratos assinados antes dessa
+  // mudança), busca um link temporário direto na Zapsign na hora.
+  const baixarAssinado = async (contrato: ContratoZapsignComStatus) => {
+    setBaixandoId(contrato.id);
+    try {
+      if (contrato.signedPdfPath) {
+        const { data, error } = await supabase.storage.from('documentos').createSignedUrl(contrato.signedPdfPath, 3600);
+        if (error) throw error;
+        if (data?.signedUrl) { window.open(data.signedUrl, '_blank', 'noopener,noreferrer'); return; }
+      }
+      const { data, error } = await supabase.functions.invoke('zapsign', {
+        body: { action: 'get_document', document_id: contrato.id },
+      });
+      if (error) throw new Error(error.message);
+      const signedFile = data?.signed_file;
+      if (!signedFile) throw new Error('Zapsign ainda não disponibilizou o PDF assinado');
+      window.open(signedFile, '_blank', 'noopener,noreferrer');
+    } catch (err: any) {
+      toast({ title: 'Erro ao abrir PDF assinado', description: err.message, variant: 'destructive' });
+    } finally {
+      setBaixandoId(null);
+    }
+  };
 
   const handleDelete = async (contratoId: string) => {
     setDeletingId(contratoId);
@@ -589,7 +617,21 @@ export function ZapsignContratosTable({ contratos, isLoading, activeTab, onRefre
                             <DropdownMenuSeparator />
                           </>
                         )}
-                        {/* Abrir documento */}
+                        {/* Baixar PDF assinado — só depois de concluído */}
+                        {c.statusLocal === 'Assinado' && (
+                          <DropdownMenuItem
+                            onClick={() => baixarAssinado(c)}
+                            disabled={baixandoId === c.id}
+                            className="gap-2 cursor-pointer"
+                          >
+                            {baixandoId === c.id
+                              ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                              : <Download className="h-4 w-4 text-emerald-600" />}
+                            Baixar PDF assinado
+                          </DropdownMenuItem>
+                        )}
+
+                        {/* Abrir documento (link de assinatura) */}
                         {c.signers?.[0]?.sign_url && (
                           <DropdownMenuItem asChild>
                             <a
@@ -599,7 +641,7 @@ export function ZapsignContratosTable({ contratos, isLoading, activeTab, onRefre
                               className="gap-2 cursor-pointer"
                             >
                               <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                              Abrir documento
+                              {c.statusLocal === 'Assinado' ? 'Abrir na Zapsign' : 'Abrir documento'}
                             </a>
                           </DropdownMenuItem>
                         )}

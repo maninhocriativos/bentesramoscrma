@@ -148,7 +148,7 @@ async function convertDocxToPdf(base64Docx: string): Promise<string> {
   return btoa(binary);
 }
 
-function buildSigners(signers: any[]) {
+function buildSigners(signers: any[], sendAutomaticEmail: boolean) {
   return signers.map((s: any) => ({
     name:  s.name,
     email: s.email || undefined,
@@ -156,7 +156,17 @@ function buildSigners(signers: any[]) {
     phone_number:  s.phone ? s.phone.replace(/\D/g, '').slice(-11) : undefined,
     cpf:   s.cpf || undefined,
     auth_mode: 'assinaturaTela',
-    send_automatic_email: true,
+    send_automatic_email: sendAutomaticEmail,
+    // Verificação de identidade forte: além de desenhar a assinatura, o
+    // cliente precisa fotografar um documento e tirar uma selfie, e a Zapsign
+    // confere se a selfie bate com a foto do documento (liveness-document-match
+    // — cobre Brasil; identity-verification, que consulta base de governo, só
+    // vale pra AR/CO/MX/CL/PE). Tem custo: ~25 créditos (~US$0,50) por
+    // assinatura na Zapsign, cobrado por signatário.
+    require_document: true,
+    require_selfie_photo: true,
+    require_document_photo: true,
+    selfie_validation_type: 'liveness-document-match',
   }));
 }
 
@@ -195,6 +205,10 @@ function normalizeDoc(doc: any) {
     updated_at: doc.last_update_date || doc.updated_at || doc.created_at,
     expires_at: doc.expiration_date || null,
     signers,
+    // Links temporários da Zapsign p/ o PDF (original e assinado) — a API não
+    // traz esses campos na listagem, só no detalhe de cada documento.
+    original_file: doc.original_file || null,
+    signed_file:   doc.signed_file || null,
   };
 }
 
@@ -257,14 +271,14 @@ async function getDocument(token: string, params: any) {
 }
 
 async function createDocument(token: string, params: any) {
-  const { name, signers, file_url, expires_in_days } = params;
+  const { name, signers, file_url, expires_in_days, send_automatic_email } = params;
   if (!name || !signers?.length || !file_url) {
     throw new Error('name, signers e file_url são obrigatórios');
   }
   const body: any = {
     name,
     url_pdf: file_url,
-    signers: buildSigners(signers),
+    signers: buildSigners(signers, send_automatic_email !== false),
     expires_in_days: expires_in_days || 7,
   };
   const data = await zapsignFetch(token, '/docs/', 'POST', body);
@@ -273,13 +287,17 @@ async function createDocument(token: string, params: any) {
 
 // Criar documento a partir de markdown, HTML ou .docx (base64)
 async function createFromMarkdown(token: string, params: any) {
-  const { name, markdown_text, html_text, base64_docx, signers, expires_in_days } = params;
+  const { name, markdown_text, html_text, base64_docx, signers, expires_in_days, send_automatic_email } = params;
   if (!name || (!markdown_text && !html_text && !base64_docx) || !signers?.length) {
     throw new Error('name, (markdown_text, html_text ou base64_docx) e signers são obrigatórios');
   }
+  // send_automatic_email controla se a Zapsign notifica o cliente na hora ou
+  // se o documento fica só criado (link copiável manualmente na tela) — antes
+  // vinha sempre true, ignorando a escolha do usuário no modal ("Enviar para
+  // assinatura ao criar" era só cosmético, nunca influenciava o envio real).
   const body: any = {
     name,
-    signers: buildSigners(signers),
+    signers: buildSigners(signers, send_automatic_email !== false),
     expires_in_days: expires_in_days || 7,
   };
 
@@ -303,7 +321,7 @@ async function createFromMarkdown(token: string, params: any) {
 // os signatários e ficam no mesmo link. A Zapsign aceita só PDF no extra-doc,
 // então convertemos cada .docx em PDF antes (CloudConvert).
 async function createEnvelope(token: string, params: any) {
-  const { docs, signers, expires_in_days } = params;
+  const { docs, signers, expires_in_days, send_automatic_email } = params;
   // docs = [{ name, base64_docx | html_text | markdown_text }, ...]
   if (!docs?.length || !signers?.length) {
     throw new Error('docs e signers são obrigatórios');
@@ -323,7 +341,7 @@ async function createEnvelope(token: string, params: any) {
   // 1) Documento principal
   const mainBody: any = {
     name: pdfs[0].name,
-    signers: buildSigners(signers),
+    signers: buildSigners(signers, send_automatic_email !== false),
     expires_in_days: expires_in_days || 7,
   };
   if (pdfs[0].base64_pdf) mainBody.base64_pdf = pdfs[0].base64_pdf;
@@ -372,6 +390,37 @@ async function getSignUrl(token: string, params: any) {
   return { sign_url: signer?.sign_url || null };
 }
 
+// Baixa o PDF assinado da Zapsign (link temporário) e guarda uma cópia
+// permanente no bucket "documentos" — path salvo em metadata.signed_pdf_path
+// pra o front gerar um signed URL do Storage sob demanda (sem depender do
+// link da Zapsign, que expira).
+async function archiveSignedPdf(supabase: any, docToken: string, existingMetadata: Record<string, any>) {
+  const zsToken = Deno.env.get('ZAPSIGN_API_TOKEN');
+  if (!zsToken) return;
+
+  const detail = await zapsignFetch(zsToken, `/docs/${docToken}/`);
+  const signedFileUrl = detail?.signed_file;
+  if (!signedFileUrl) {
+    console.warn(`[Zapsign] signed_file ainda não disponível pra ${docToken}`);
+    return;
+  }
+
+  const pdfResp = await fetch(signedFileUrl, { signal: AbortSignal.timeout(30000) });
+  if (!pdfResp.ok) throw new Error(`download signed_file: ${pdfResp.status}`);
+  const pdfBuffer = new Uint8Array(await pdfResp.arrayBuffer());
+
+  const path = `contratos-zapsign/${docToken}.pdf`;
+  const { error: upErr } = await supabase.storage.from('documentos')
+    .upload(path, pdfBuffer, { contentType: 'application/pdf', upsert: true });
+  if (upErr) throw new Error(`upload storage: ${upErr.message}`);
+
+  await supabase.from('contract_reminders_zapsign')
+    .update({ metadata: { ...existingMetadata, signed_pdf_path: path } })
+    .eq('document_id', docToken);
+
+  console.log(`[Zapsign] PDF assinado arquivado: ${path}`);
+}
+
 // ── Webhook ───────────────────────────────────────────────────────────────────
 
 async function handleWebhook(payload: any) {
@@ -392,7 +441,12 @@ async function handleWebhook(payload: any) {
 
   console.log(`[Zapsign Webhook] event=${event} status=${status} doc=${docToken}`);
 
+  // doc_signed dispara por SIGNATÁRIO, não pelo documento inteiro — só é
+  // seguro tratar como "documento assinado" porque hoje todo documento criado
+  // pelo CRM tem exatamente 1 signatário (o cliente). Se um dia um envelope
+  // ganhar 2+ signatários, isso precisa checar se TODOS já assinaram.
   const isSigned    = event.includes('signed') || payload.signed === true || status === 'signed';
+  const isRefused   = event.includes('refused') || status === 'refused' || status === 'rejected';
   const isCancelled = event.includes('deleted') || event.includes('cancel') || status === 'cancelled';
   const isExpired   = event.includes('expired') || status === 'expired';
 
@@ -402,11 +456,26 @@ async function handleWebhook(payload: any) {
       .eq('document_id', docToken);
 
     const { data: contract } = await supabase.from('contract_reminders_zapsign')
-      .select('lead_id').eq('document_id', docToken).maybeSingle();
+      .select('lead_id, metadata').eq('document_id', docToken).maybeSingle();
     if (contract?.lead_id) {
       await supabase.from('leads_juridicos')
         .update({ status: 'Contrato Assinado' }).eq('id', contract.lead_id);
     }
+
+    // Arquiva o PDF assinado no Storage — o link `signed_file` que a Zapsign
+    // devolve é temporário (expira ~60min), e até aqui NADA no sistema
+    // guardava o documento final assinado: uma vez assinado, o escritório
+    // não tinha como recuperá-lo pelo CRM, só entrando direto no painel da
+    // Zapsign. Best-effort: não falha o webhook se a Zapsign ou o Storage
+    // não cooperarem agora — fica disponível via fallback ao vivo (get_document).
+    try {
+      await archiveSignedPdf(supabase, docToken, contract?.metadata || {});
+    } catch (e) {
+      console.error(`[Zapsign Webhook] falha ao arquivar PDF assinado (${docToken}):`, e);
+    }
+  } else if (isRefused) {
+    await supabase.from('contract_reminders_zapsign')
+      .update({ status: 'rejected' }).eq('document_id', docToken);
   } else if (isCancelled) {
     await supabase.from('contract_reminders_zapsign')
       .update({ status: 'cancelled' }).eq('document_id', docToken);
