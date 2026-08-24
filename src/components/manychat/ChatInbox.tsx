@@ -1569,7 +1569,7 @@ const ManyChatInboxContent = () => {
         if (!zapiResult?.success) throw new Error(zapiResult?.error || "Z-API: envio não confirmado pela instância");
         const msgId = zapiResult?.messageId;
         // Salva sempre no banco — independente de ter ou não messageId do Z-API
-        const { data: savedMsg, error: insertErr } = await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: content, tipo: mediaType || "text", direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", ...(msgId && { message_id: msgId }), ...(fileName && { file_name: fileName }) } } as any).select().single();
+        const { data: savedMsg, error: insertErr } = await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: content, tipo: mediaType || "text", direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", ...(msgId && { message_id: msgId }), ...(fileName && { file_name: fileName }), sent_by_id: user?.id || null, sent_by_nome: fullName || null } } as any).select().single();
         if (insertErr) {
           if (insertErr.code === "23505" && msgId) {
             const { data: existingMsg } = await supabase.from("manychat_mensagens" as any).select("*").eq("metadata->>message_id", msgId).maybeSingle();
@@ -1596,7 +1596,7 @@ const ManyChatInboxContent = () => {
           setMessages(prev => { const withoutTemp = prev.filter(m => m.id !== tempId); const updated = mergeMessageDedup(withoutTemp, savedAsMessage); messagesCacheRef.current.set(subscriberSnapshot.subscriber_id, updated); return updated; });
         }
         if (subscriberSnapshot.lead_id) {
-          await supabase.from("interacoes").insert({ cliente_id: subscriberSnapshot.lead_id, tipo: "Chat", resumo: `Mensagem via WhatsApp: ${content.substring(0, 100)}...`, detalhes: content, direcao: "saida", data_interacao: new Date().toISOString() });
+          await supabase.from("interacoes").insert({ cliente_id: subscriberSnapshot.lead_id, tipo: "Chat", resumo: `Mensagem via WhatsApp: ${content.substring(0, 100)}...`, detalhes: content, direcao: "saida", data_interacao: new Date().toISOString(), responsavel_id: user?.id || null });
           try {
             await supabase.from('manychat_subscribers').update({ atendimento_humano: true, atendimento_humano_desde: new Date().toISOString() }).eq('subscriber_id', subscriberSnapshot.subscriber_id);
             await supabase.from('leads_juridicos').update({ isa_ativa: false, owner_tipo: 'humano' } as any).eq('id', subscriberSnapshot.lead_id);
@@ -1681,7 +1681,7 @@ const ManyChatInboxContent = () => {
       if (zapiError) throw new Error(zapiError.message);
       if (!zapiResult?.success) throw new Error(zapiResult?.error || "Z-API: envio não confirmado pela instância");
       const msgId = zapiResult?.messageId;
-      supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: signed.signedUrl, tipo: mediaType, direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", message_id: msgId, file_name: originalFileName, ...(inlineCaption && { caption: inlineCaption }) } } as any).select().single().then(({ data: savedMsg }) => {
+      supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: signed.signedUrl, tipo: mediaType, direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", message_id: msgId, file_name: originalFileName, ...(inlineCaption && { caption: inlineCaption }), sent_by_id: user?.id || null, sent_by_nome: fullName || null } } as any).select().single().then(({ data: savedMsg }) => {
         if (savedMsg) {
           const savedAsMessage = savedMsg as Message;
           dedupKeysRef.current.add(getMessageDedupeKey(savedAsMessage));
@@ -1818,7 +1818,7 @@ const ManyChatInboxContent = () => {
             console.error("[audio] upload/sign falhou em segundo plano — mensagem não salva no CRM", uploadError);
             return;
           }
-          const { data: savedMsg } = await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: signedUrl, tipo: "audio", direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", message_id: msgId, file_name: audioFile.name } } as any).select().single();
+          const { data: savedMsg } = await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: subscriberSnapshot.subscriber_id, subscriber_nome: subscriberSnapshot.nome, canal: "whatsapp", conteudo: signedUrl, tipo: "audio", direcao: "saida", lead_id: subscriberSnapshot.lead_id, metadata: { sent_via: "chat_interface", zapi_status: zapiResult?.success ? "success" : "error", message_id: msgId, file_name: audioFile.name, sent_by_id: user?.id || null, sent_by_nome: fullName || null } } as any).select().single();
           if (savedMsg) {
             const savedAsMessage = savedMsg as Message;
             dedupKeysRef.current.add(getMessageDedupeKey(savedAsMessage));
@@ -2217,24 +2217,24 @@ const ManyChatInboxContent = () => {
       const outboundInstanceId = resolveInstanceId(targetSub);
       if (isMedia) {
         await invokeZapiSend({ to_phone: targetSub.telefone, message: forwardMessageContent, type: forwardMessageMeta.tipo, lead_id: targetSub.lead_id, file_name: forwardMessageMeta.fileName, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
-        await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: targetSubId, subscriber_nome: targetSub.nome, canal: "whatsapp", conteudo: forwardMessageContent, tipo: forwardMessageMeta.tipo, direcao: "saida", lead_id: targetSub.lead_id, metadata: { sent_via: "chat_forward", file_name: forwardMessageMeta.fileName } } as any);
+        await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: targetSubId, subscriber_nome: targetSub.nome, canal: "whatsapp", conteudo: forwardMessageContent, tipo: forwardMessageMeta.tipo, direcao: "saida", lead_id: targetSub.lead_id, metadata: { sent_via: "chat_forward", file_name: forwardMessageMeta.fileName, sent_by_id: user?.id || null, sent_by_nome: fullName || null } } as any);
       } else {
         const forwarded = `⤵️ *Mensagem encaminhada*\n\n${forwardMessageContent}`;
         await invokeZapiSend({ to_phone: targetSub.telefone, message: forwarded, type: "text", lead_id: targetSub.lead_id, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
-        await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: targetSubId, subscriber_nome: targetSub.nome, canal: "whatsapp", conteudo: forwarded, tipo: "text", direcao: "saida", lead_id: targetSub.lead_id, metadata: { sent_via: "chat_forward" } } as any);
+        await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: targetSubId, subscriber_nome: targetSub.nome, canal: "whatsapp", conteudo: forwarded, tipo: "text", direcao: "saida", lead_id: targetSub.lead_id, metadata: { sent_via: "chat_forward", sent_by_id: user?.id || null, sent_by_nome: fullName || null } } as any);
       }
     }
     toast({ title: "↪️ Mensagem encaminhada!", description: `Enviada para ${subscriberIds.length} contato(s)` });
-  }, [selectedSubscriber, subscribers, forwardMessageContent, forwardMessageMeta, toast]);
+  }, [selectedSubscriber, subscribers, forwardMessageContent, forwardMessageMeta, toast, user, fullName]);
 
   const handleSendContact = useCallback(async (contact: { nome: string; telefone?: string; subscriber_id: string }) => {
     if (!selectedSubscriber?.telefone || !contact.telefone) return;
     const outboundInstanceId = resolveInstanceId(selectedSubscriber);
     const contactMsg = `👤 *Contato compartilhado*\n📛 ${contact.nome}\n📱 ${contact.telefone}`;
     await invokeZapiSend({ to_phone: selectedSubscriber.telefone, message: contactMsg, type: "text", lead_id: selectedSubscriber.lead_id, ...(outboundInstanceId && { instance_id: outboundInstanceId }) });
-    await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: selectedSubscriber.subscriber_id, subscriber_nome: selectedSubscriber.nome, canal: "whatsapp", conteudo: contactMsg, tipo: "text", direcao: "saida", lead_id: selectedSubscriber.lead_id, metadata: { sent_via: "chat_contact_share", shared_contact: { name: contact.nome, phone: contact.telefone } } } as any);
+    await supabase.from("manychat_mensagens" as any).insert({ subscriber_id: selectedSubscriber.subscriber_id, subscriber_nome: selectedSubscriber.nome, canal: "whatsapp", conteudo: contactMsg, tipo: "text", direcao: "saida", lead_id: selectedSubscriber.lead_id, metadata: { sent_via: "chat_contact_share", shared_contact: { name: contact.nome, phone: contact.telefone }, sent_by_id: user?.id || null, sent_by_nome: fullName || null } } as any);
     toast({ title: "👤 Contato enviado!" });
-  }, [selectedSubscriber, toast]);
+  }, [selectedSubscriber, toast, user, fullName]);
 
   const handleSearchHighlight = useCallback((messageId: string | null) => {
     setHighlightedMessageId(messageId);
