@@ -37,42 +37,43 @@ export function useLeadProcessos(leadId: string | undefined) {
       const autoProcessos: Processo[] = [];
 
       if (leadData) {
-        // Search by matching partes in processo_partes table
-        const conditions: string[] = [];
-        if (leadData.cpf) {
-          conditions.push(`documento.ilike.%${leadData.cpf.replace(/\D/g, '')}%`);
+        // Busca partes por CPF e por nome em duas queries separadas — evita
+        // montar um filtro .or() por interpolação de string (nome/documento
+        // com vírgula, parêntese etc. quebrava ou distorcia o filtro
+        // silenciosamente, já que esses caracteres são separadores da sintaxe
+        // .or() do PostgREST).
+        const cpfDigits = leadData.cpf ? leadData.cpf.replace(/\D/g, '') : '';
+        const nomeBusca = leadData.nome && leadData.nome.length > 5 ? leadData.nome : '';
+
+        const partesEncontradas: { processo_id: string }[] = [];
+        if (cpfDigits) {
+          const { data } = await supabase.from('processo_partes').select('processo_id').ilike('documento', `%${cpfDigits}%`);
+          if (data) partesEncontradas.push(...data);
         }
-        if (leadData.nome && leadData.nome.length > 5) {
-          conditions.push(`nome.ilike.%${leadData.nome}%`);
+        if (nomeBusca) {
+          const { data } = await supabase.from('processo_partes').select('processo_id').ilike('nome', `%${nomeBusca}%`);
+          if (data) partesEncontradas.push(...data);
         }
+        if (partesEncontradas.length > 0) {
+          const processoIds = [...new Set(partesEncontradas.map(p => p.processo_id))].filter(id => !directIds.has(id));
 
-        if (conditions.length > 0) {
-          const { data: partes } = await supabase
-            .from('processo_partes')
-            .select('processo_id')
-            .or(conditions.join(','));
+          if (processoIds.length > 0) {
+            const { data: found } = await supabase
+              .from('processos')
+              .select('*')
+              .in('id', processoIds);
 
-          if (partes && partes.length > 0) {
-            const processoIds = [...new Set(partes.map(p => p.processo_id))].filter(id => !directIds.has(id));
-            
-            if (processoIds.length > 0) {
-              const { data: found } = await supabase
-                .from('processos')
-                .select('*')
-                .in('id', processoIds);
-
-              if (found) {
-                // Auto-link these processes to the lead
-                for (const proc of found) {
-                  if (!proc.cliente_id) {
-                    await supabase
-                      .from('processos')
-                      .update({ cliente_id: leadId })
-                      .eq('id', proc.id);
-                    autoLinked++;
-                  }
-                  autoProcessos.push(proc as Processo);
+            if (found) {
+              // Auto-link these processes to the lead
+              for (const proc of found) {
+                if (!proc.cliente_id) {
+                  await supabase
+                    .from('processos')
+                    .update({ cliente_id: leadId })
+                    .eq('id', proc.id);
+                  autoLinked++;
                 }
+                autoProcessos.push(proc as Processo);
               }
             }
           }

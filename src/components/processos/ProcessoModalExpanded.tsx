@@ -860,12 +860,14 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
         const proc = data.processo; const fields = extractFromProc(proc);
         const toDate = (v?: string | null): string => { if (!v) return ''; if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10); const pt = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if (pt) return `${pt[3]}-${pt[2]}-${pt[1]}`; try { const d = new Date(v); if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10); } catch { /**/ } return ''; };
         const newPartes = proc.partes || []; const newMovs = (proc.movimentos || []).slice(0, 100);
-        let partesFinais: ProcessoParte[] = [];
-        setPartes((prev: ProcessoParte[]) => {
-          if (!newPartes.length) return prev;
-          partesFinais = mergePartesPreservandoManual(newPartes, prev);
-          return partesFinais;
-        });
+        // partesFinais precisa ficar disponível de forma síncrona pro update()
+        // logo abaixo — por isso calculado direto a partir do estado atual
+        // (partes), não dentro do callback do setPartes. Antes, quando a fonte
+        // (ex: DataJud) não retornava partes, partesFinais nunca era atribuído
+        // e o update() gravava partes_json: null, apagando partes cadastradas
+        // manualmente ou vindas de outra fonte (ex: Escavador) a cada sync automático.
+        const partesFinais = newPartes.length ? mergePartesPreservandoManual(newPartes, partes) : partes;
+        setPartes(partesFinais);
         setMovimentos(newMovs);
         setFormData(prev => ({ ...prev,
           titulo_acao:       fields.classe          || prev.titulo_acao,
@@ -887,7 +889,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
             vara_comarca: fields.varaComarca || null, assunto: fields.assunto || null,
             assunto_cnj: fields.assuntoCnj || null, classe_cnj: fields.classeCnj || null,
             valor_causa: fields.valorCausa || null,
-            partes_json: partesFinais.length > 0 ? partesFinais : (newPartes.length > 0 ? newPartes : null), movimentos_json: newMovs.length > 0 ? newMovs : null,
+            partes_json: partesFinais.length > 0 ? partesFinais : null, movimentos_json: newMovs.length > 0 ? newMovs : null,
             ultima_consulta_api_at: new Date().toISOString(), data_ultima_atualizacao: new Date().toISOString(),
           }).eq('id', processo.id);
           fetchProcessos();

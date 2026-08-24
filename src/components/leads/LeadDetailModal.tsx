@@ -309,142 +309,6 @@ function ResumoTab({ lead }: { lead: Lead }) {
   );
 }
 
-// ============== INFO/EDIT TAB ==============
-function InfoEditTab({ lead, onSaved }: { lead: Lead; onSaved: (updated: Lead) => void }) {
-  const [saving, setSaving] = useState(false);
-  const [hasChanges, setHasChanges] = useState(false);
-  const [form, setForm] = useState({
-    nome: lead.nome || '',
-    telefone: lead.telefone || '',
-    email: lead.email || '',
-    status: lead.status as LeadStatus || 'Lead Frio',
-    origem: (lead.origem as LeadOrigem) || 'Outro',
-    tipo_acao: lead.tipo_acao || '',
-    valor_causa: lead.valor_causa?.toString() || '',
-    resumo_ia: lead.resumo_ia || '',
-    link_contrato: lead.link_contrato || '',
-    fonte_trafego: lead.fonte_trafego || '',
-  });
-
-  useEffect(() => {
-    const newForm = {
-      nome: lead.nome || '',
-      telefone: lead.telefone || '',
-      email: lead.email || '',
-      status: lead.status as LeadStatus || 'Lead Frio',
-      origem: (lead.origem as LeadOrigem) || 'Outro',
-      tipo_acao: lead.tipo_acao || '',
-      valor_causa: lead.valor_causa?.toString() || '',
-      resumo_ia: lead.resumo_ia || '',
-      link_contrato: lead.link_contrato || '',
-      fonte_trafego: lead.fonte_trafego || '',
-    };
-    setForm(newForm);
-    setHasChanges(false);
-  }, [lead.id, lead.updated_at]);
-
-  const updateField = (key: string, value: string) => {
-    setForm(prev => ({ ...prev, [key]: value }));
-    setHasChanges(true);
-  };
-
-  const handleSave = async () => {
-    if (!form.nome.trim()) {
-      toast.error('O nome é obrigatório');
-      return;
-    }
-    setSaving(true);
-    const updates: Record<string, any> = {
-      nome: form.nome.trim(),
-      telefone: form.telefone.trim() || null,
-      email: form.email.trim() || null,
-      status: form.status,
-      origem: form.origem,
-      tipo_acao: form.tipo_acao.trim() || null,
-      valor_causa: form.valor_causa ? Number(form.valor_causa) : null,
-      resumo_ia: form.resumo_ia.trim() || null,
-      link_contrato: form.link_contrato.trim() || null,
-      fonte_trafego: form.fonte_trafego.trim() || null,
-      updated_at: new Date().toISOString(),
-    };
-
-    const { data, error } = await supabase
-      .from('leads_juridicos')
-      .update(updates)
-      .eq('id', lead.id)
-      .select()
-      .single();
-
-    setSaving(false);
-    if (error) {
-      toast.error('Erro ao salvar: ' + error.message);
-      return;
-    }
-    setHasChanges(false);
-    toast.success('Lead salvo com sucesso');
-    if (data) onSaved(data as Lead);
-  };
-
-  return (
-    <ScrollArea className="h-[62vh]">
-      <div className="p-5 space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <Label className="text-xs font-medium">Nome *</Label>
-            <Input value={form.nome} onChange={e => updateField('nome', e.target.value)} className="h-9 text-sm rounded-lg mt-1" />
-          </div>
-          <div>
-            <Label className="text-xs font-medium">Telefone</Label>
-            <Input value={form.telefone} onChange={e => updateField('telefone', e.target.value)} className="h-9 text-sm rounded-lg mt-1" />
-          </div>
-          <div>
-            <Label className="text-xs font-medium">Email</Label>
-            <Input value={form.email} onChange={e => updateField('email', e.target.value)} className="h-9 text-sm rounded-lg mt-1" />
-          </div>
-          <div>
-            <Label className="text-xs font-medium">Status</Label>
-            <Select value={form.status} onValueChange={v => { setForm(prev => ({ ...prev, status: v as LeadStatus })); setHasChanges(true); }}>
-              <SelectTrigger className="h-9 text-sm rounded-lg mt-1"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs font-medium">Origem</Label>
-            <Select value={form.origem} onValueChange={v => { setForm(prev => ({ ...prev, origem: v as LeadOrigem })); setHasChanges(true); }}>
-              <SelectTrigger className="h-9 text-sm rounded-lg mt-1"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {ORIGENS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs font-medium">Tipo de Ação</Label>
-            <Input value={form.tipo_acao} onChange={e => updateField('tipo_acao', e.target.value)} className="h-9 text-sm rounded-lg mt-1" placeholder="Ex: Trabalhista" />
-          </div>
-          <div>
-            <Label className="text-xs font-medium">Valor da Causa (R$)</Label>
-            <Input type="number" value={form.valor_causa} onChange={e => updateField('valor_causa', e.target.value)} className="h-9 text-sm rounded-lg mt-1" />
-          </div>
-          <div>
-            <Label className="text-xs font-medium">Fonte de Tráfego</Label>
-            <Input value={form.fonte_trafego} onChange={e => updateField('fonte_trafego', e.target.value)} className="h-9 text-sm rounded-lg mt-1" />
-          </div>
-          <div className="col-span-2">
-            <Label className="text-xs font-medium">Link do Contrato</Label>
-            <Input value={form.link_contrato} onChange={e => updateField('link_contrato', e.target.value)} className="h-9 text-sm rounded-lg mt-1" placeholder="https://..." />
-          </div>
-          <div className="col-span-2">
-            <Label className="text-xs font-medium">Resumo / Anotações</Label>
-            <Textarea value={form.resumo_ia} onChange={e => updateField('resumo_ia', e.target.value)} className="min-h-[80px] text-sm rounded-lg mt-1" />
-          </div>
-        </div>
-      </div>
-    </ScrollArea>
-  );
-}
-
 // ============== PROCESSOS TAB ==============
 function ProcessosTab({ lead }: { lead: Lead }) {
   const { data: processosData, isLoading } = useLeadProcessos(lead.id);
@@ -465,7 +329,10 @@ function ProcessosTab({ lead }: { lead: Lead }) {
               </Badge>
             )}
           </div>
-          <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs rounded-lg" onClick={() => navigate('/processos')}>
+          <Button
+            size="sm" variant="outline" className="h-8 gap-1.5 text-xs rounded-lg"
+            onClick={() => navigate('/processos', { state: { novoProcesso: { cliente_id: lead.id, nome_cliente: lead.nome || '' } } })}
+          >
             <Plus className="h-3 w-3" /> Adicionar
           </Button>
         </div>
@@ -485,7 +352,7 @@ function ProcessosTab({ lead }: { lead: Lead }) {
             {processos.map(proc => (
               <div
                 key={proc.id}
-                onClick={() => navigate('/processos')}
+                onClick={() => navigate('/processos', { state: { abrirProcessoId: proc.id } })}
                 className="p-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors"
               >
                 <div className="flex items-start justify-between gap-2">

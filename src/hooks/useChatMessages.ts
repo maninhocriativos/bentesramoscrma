@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { usePerfil } from '@/hooks/usePerfil';
 
 export interface ChatMessage {
   id: string;
@@ -14,6 +15,8 @@ export interface ChatMessage {
     zapi_status?: string;
     message_id?: string;
     sent_via?: string;
+    sent_by_id?: string;
+    sent_by_nome?: string;
   };
 }
 
@@ -57,6 +60,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
   const activeSubscriberRef = useRef<string | null>(null);
   const onNewMessageRef = useRef(onNewMessage);
   const { toast } = useToast();
+  const { perfil } = usePerfil();
 
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
@@ -253,10 +257,12 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
           tipo: options.mediaType || 'text',
           direcao: 'saida',
           lead_id: options.leadId,
-          metadata: { 
-            sent_via: 'chat_interface', 
-            zapi_status: zapiResult?.success ? 'success' : 'error', 
-            message_id: zapiResult?.messageId || zapiResult?.data?.messageId
+          metadata: {
+            sent_via: 'chat_interface',
+            zapi_status: zapiResult?.success ? 'success' : 'error',
+            message_id: zapiResult?.messageId || zapiResult?.data?.messageId,
+            sent_by_id: perfil?.id || null,
+            sent_by_nome: perfil ? [perfil.nome, perfil.sobrenome].filter(Boolean).join(' ') || null : null,
           }
         } as any)
         .select()
@@ -280,6 +286,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
           detalhes: content,
           direcao: 'saida',
           data_interacao: new Date().toISOString(),
+          responsavel_id: perfil?.id || null,
         });
 
         // ── Pausa ISA automaticamente quando atendente humano intervir ────────
@@ -321,7 +328,7 @@ export function useChatMessages({ subscriberId, onNewMessage }: UseChatMessagesO
     } finally {
       setIsSending(false);
     }
-  }, [subscriberId]);
+  }, [subscriberId, perfil]);
 
   const addMessage = useCallback((message: ChatMessage) => {
     setMessages(prev => {

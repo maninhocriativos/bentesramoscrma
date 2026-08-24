@@ -196,8 +196,35 @@ export default function IntimacoesPage() {
       all.push(...(data || []));
       if (!data || data.length < PAGE) break;
     }
-    if (fetchError) console.error(fetchError); else setIntimacoes(all);
+    if (fetchError) { console.error(fetchError); setLoading(false); return; }
+    setIntimacoes(all);
     setLoading(false);
+    void linkIntimacoesJaCadastradas(all);
+  };
+
+  // Uma intimação só mostra "processo cadastrado" quando intimacoes.processo_id
+  // está preenchido — mas o vínculo nem sempre é feito no momento em que o
+  // processo é cadastrado (ou a intimação chega antes do cadastro manual).
+  // Isso deixava intimações de processos que já existem no sistema aparecendo
+  // como "N/A"/"cadastrar processo" na lista. Aqui, a cada carga da tela,
+  // fazemos o vínculo automático por número CNJ pras que ainda não têm.
+  const linkIntimacoesJaCadastradas = async (lista: Intimacao[]) => {
+    const normalize = (s: string) => (s || '').replace(/\D/g, '');
+    const pendentes = lista.filter(i => !i.processo_id && normalize(i.processo_cnj));
+    if (!pendentes.length) return;
+    const cnjsNecessarios = Array.from(new Set(pendentes.map(i => normalize(i.processo_cnj))));
+    const { data: matches } = await supabase.from('processos').select('id, cnj_normalizado').in('cnj_normalizado', cnjsNecessarios);
+    if (!matches?.length) return;
+    const processoIdPorCnj = new Map(matches.map((p: any) => [p.cnj_normalizado as string, p.id as string]));
+    const paraAtualizar = pendentes
+      .map(i => ({ intimacaoId: i.id, processoId: processoIdPorCnj.get(normalize(i.processo_cnj)) }))
+      .filter((x): x is { intimacaoId: string; processoId: string } => !!x.processoId);
+    if (!paraAtualizar.length) return;
+    await Promise.all(paraAtualizar.map(({ intimacaoId, processoId }) =>
+      supabase.from('intimacoes').update({ processo_id: processoId }).eq('id', intimacaoId)
+    ));
+    const processoIdPorIntimacao = new Map(paraAtualizar.map(x => [x.intimacaoId, x.processoId]));
+    setIntimacoes(prev => prev.map(i => processoIdPorIntimacao.has(i.id) ? { ...i, processo_id: processoIdPorIntimacao.get(i.id)! } : i));
   };
 
   const handleSync = async () => {
@@ -793,6 +820,22 @@ export default function IntimacoesPage() {
   );
 }
 
+// processos.partes_json fica vazio sempre que a última sincronização do
+// processo veio do DataJud (a API pública do DataJud não retorna partes).
+// As partes reais, quando existem, ficam na tabela processo_partes (fonte
+// que o ProcessoModalExpanded já trata como principal) — sem esse fallback
+// aqui, um processo com partes cadastradas aparecia "Partes envolvidas: —".
+async function resolvePartesEnvolvidas(processoId: string, partesJson: any[] | null | undefined) {
+  if (partesJson && partesJson.length > 0) return partesJson;
+  const { data } = await supabase.from('processo_partes').select('*').eq('processo_id', processoId);
+  if (!data || data.length === 0) return partesJson || [];
+  return data.map((p: any) => ({
+    nome: p.nome, tipo: p.tipo, polo: p.polo || '', tipoPessoa: p.tipo_pessoa || '',
+    documento: p.documento || '', celular: p.celular || '', telefone_adicional: p.telefone_adicional || '',
+    advogados: Array.isArray(p.advogados) ? p.advogados : [],
+  }));
+}
+
 function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularPrazos, onMarkRead, onGenerateReport, onVisualizarProcesso }: {
   intimacao: Intimacao; formatDate: (d: string | null) => string | null; formatDateLong: (d: string | null) => string;
   calcularPrazos: (i: Intimacao) => { dataBase: Date | null; dataConclusao: Date | null; dataFatal: Date | null };
@@ -879,10 +922,11 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   };
 
   const selecionarProcesso = async (p: { id: string; numero_processo: string; titulo_acao?: string; nome_cliente?: string; cliente_id?: string | null; area?: string | null; assunto?: string | null; advogado_responsavel?: string | null; tribunal?: string | null; partes_json?: any[] | null }) => {
+    const partes = await resolvePartesEnvolvidas(p.id, p.partes_json);
     setLinkedProcesso({
       id: p.id, numero: p.numero_processo || '', titulo: p.titulo_acao || p.nome_cliente || '',
       area: p.area, assunto: p.assunto, advogado_responsavel: p.advogado_responsavel,
-      tribunal: p.tribunal, partes_json: p.partes_json,
+      tribunal: p.tribunal, partes_json: partes,
     });
     setLinkedClienteId(p.cliente_id || null);
     setProcessoSearch('');
@@ -951,10 +995,11 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
         .eq('id', intimacao.processo_id)
         .maybeSingle();
       if (data) {
+        const partes = await resolvePartesEnvolvidas(data.id, data.partes_json as any[] | null);
         setLinkedProcesso({
           id: data.id, numero: data.numero_processo || '', titulo: data.titulo_acao || data.nome_cliente || '',
           area: data.area, assunto: (data as any).assunto, advogado_responsavel: data.advogado_responsavel,
-          tribunal: data.tribunal, partes_json: (data.partes_json as any[]) || [],
+          tribunal: data.tribunal, partes_json: partes,
         });
         setLinkedClienteId(data.cliente_id || null);
       }

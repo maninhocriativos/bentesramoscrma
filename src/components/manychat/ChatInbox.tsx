@@ -2,6 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } fr
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -263,6 +264,7 @@ const ManyChatInboxContent = () => {
   const [contratoModalOpen, setContratoModalOpen]       = useState(false);
   const [leadPerdidoOpen, setLeadPerdidoOpen]           = useState(false);
   const [leadPerdidoLoading, setLeadPerdidoLoading]     = useState(false);
+  const [leadPerdidoMotivo, setLeadPerdidoMotivo]       = useState('');
   const [editingLeadName, setEditingLeadName]           = useState(false);
   const [editingLeadNameValue, setEditingLeadNameValue] = useState("");
   const [hasMoreMessages, setHasMoreMessages]           = useState(false);
@@ -2243,13 +2245,35 @@ const ManyChatInboxContent = () => {
 
   const handleLeadPerdido = async () => {
     if (!selectedSubscriber?.lead_id) return;
+    const motivo = leadPerdidoMotivo.trim();
+    if (!motivo) return;
     setLeadPerdidoLoading(true);
     try {
+      const { data: leadAntes } = await supabase
+        .from('leads_juridicos')
+        .select('lead_state')
+        .eq('id', selectedSubscriber.lead_id)
+        .single();
+
+      const agora = new Date().toISOString();
       const { error } = await supabase
         .from('leads_juridicos')
-        .update({ status: 'Perdido', lead_state: 'LOST', state_updated_at: new Date().toISOString() } as any)
+        .update({
+          status: 'Perdido', lead_state: 'LOST', state_updated_at: agora,
+          is_lost: true, lost_at: agora, lost_reason: motivo,
+        } as any)
         .eq('id', selectedSubscriber.lead_id);
       if (error) throw error;
+
+      // Fica registrado no histórico do lead (aba Histórico do modal de detalhe) —
+      // até aqui só is_lost/lost_reason eram salvos, sem nenhum rastro na timeline.
+      await supabase.from('lead_state_history').insert({
+        lead_id: selectedSubscriber.lead_id,
+        from_state: leadAntes?.lead_state || null,
+        to_state: 'LOST',
+        changed_by: fullName || 'Equipe',
+        reason: motivo,
+      });
 
       await sendMetaEvent({
         lead_id:          selectedSubscriber.lead_id,
@@ -2268,6 +2292,7 @@ const ManyChatInboxContent = () => {
 
       toast({ title: '❌ Lead marcado como Perdido', description: 'Evento enviado para a Meta.' });
       setLeadPerdidoOpen(false);
+      setLeadPerdidoMotivo('');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
       toast({ title: 'Erro', description: msg, variant: 'destructive' });
@@ -2731,7 +2756,7 @@ const ManyChatInboxContent = () => {
                 {selectedSubscriber.lead_id && (
                   <Button
                     size="sm"
-                    onClick={() => setLeadPerdidoOpen(true)}
+                    onClick={() => { setLeadPerdidoMotivo(''); setLeadPerdidoOpen(true); }}
                     title="Marcar lead como perdido"
                     className="h-7 md:h-8 px-2.5 md:px-3.5 rounded-full gap-1.5 text-[11px] md:text-xs font-semibold
                       border border-red-400/60 bg-red-500/10 text-red-500
@@ -3091,6 +3116,42 @@ const ManyChatInboxContent = () => {
                 Um evento <strong>LeadPerdido</strong> será enviado à Meta para que o algoritmo aprenda a não exibir anúncios para perfis similares.
               </p>
             </div>
+
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-gray-700">
+                Motivo da perda <span className="text-red-500">*</span>
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  'Não respondeu mais',
+                  'Não tem caso elegível',
+                  'Fora do prazo (prescrição)',
+                  'Escolheu outro escritório',
+                  'Desistiu do processo',
+                  'Valor não compensa',
+                  'Duplicado / spam',
+                ].map(opcao => (
+                  <button
+                    key={opcao}
+                    type="button"
+                    onClick={() => setLeadPerdidoMotivo(opcao)}
+                    className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+                      leadPerdidoMotivo === opcao
+                        ? 'bg-red-500 text-white border-red-500'
+                        : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-red-300 hover:text-red-600'
+                    }`}
+                  >
+                    {opcao}
+                  </button>
+                ))}
+              </div>
+              <Textarea
+                value={leadPerdidoMotivo}
+                onChange={e => setLeadPerdidoMotivo(e.target.value)}
+                placeholder="Descreva o motivo (obrigatório)..."
+                className="text-sm rounded-lg min-h-[64px] resize-none"
+              />
+            </div>
           </div>
 
           {/* Footer */}
@@ -3105,7 +3166,7 @@ const ManyChatInboxContent = () => {
             </Button>
             <Button
               onClick={handleLeadPerdido}
-              disabled={leadPerdidoLoading}
+              disabled={leadPerdidoLoading || !leadPerdidoMotivo.trim()}
               className="rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white border-0 gap-1.5"
             >
               {leadPerdidoLoading
