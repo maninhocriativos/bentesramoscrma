@@ -72,20 +72,30 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   // Carrega membros da equipe (inclui last_seen_at para presença por heartbeat).
   // `silent` evita o piscar de loading nos re-fetches periódicos em background.
   const fetchTeam = useCallback(async (silent = false) => {
-    const { data, error } = await supabase
-      .from('perfis')
-      .select('id, nome, sobrenome, cargo, email, last_seen_at')
-      .eq('aprovado', true);
-    if (error) {
-      console.error('[PresenceContext] Erro ao buscar equipe:', error);
+    try {
+      const { data, error } = await supabase
+        .from('perfis')
+        .select('id, nome, sobrenome, cargo, email, last_seen_at')
+        .eq('aprovado', true);
+      if (error) {
+        console.error('[PresenceContext] Erro ao buscar equipe:', error);
+        setTeamError(true);
+        if (!silent) setTeamLoading(false);
+        return false;
+      }
+      setTeamMembers((data || []) as TeamMember[]);
+      setTeamError(false);
+      setTeamLoading(false);
+      return true;
+    } catch (err) {
+      // Qualquer exceção (rede, timeout, cliente mal configurado) precisa cair
+      // aqui também — sem isso a promise nunca resolve o estado de loading e o
+      // skeleton fica preso pra sempre em vez de mostrar o erro.
+      console.error('[PresenceContext] Exceção ao buscar equipe:', err);
       setTeamError(true);
       if (!silent) setTeamLoading(false);
       return false;
     }
-    setTeamMembers((data || []) as TeamMember[]);
-    setTeamError(false);
-    setTeamLoading(false);
-    return true;
   }, []);
 
   useEffect(() => {
