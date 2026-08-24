@@ -10,6 +10,7 @@ interface NotificationPayload {
   processoId: string;
   mensagem?: string;
   tipo?: 'status_update' | 'movimento' | 'audiencia' | 'prazo';
+  force?: boolean;
 }
 
 // Traduz status técnico para linguagem acessível ao cliente
@@ -269,7 +270,7 @@ serve(async (req) => {
     );
 
     const body = await req.json() as NotificationPayload;
-    const { processoId, mensagem, tipo = 'status_update' } = body;
+    const { processoId, mensagem, tipo = 'status_update', force = false } = body;
 
     if (!processoId) {
       return new Response(
@@ -302,10 +303,68 @@ serve(async (req) => {
       );
     }
 
+    // Trava de frequência: no máximo 1 notificação a cada `frequencia_notificacao_dias`
+    // (padrão 30) por processo. É a ÚNICA barreira compartilhada por todos os
+    // chamadores (processo-auto-sync, processo-status-monitor, botão manual no CRM),
+    // então fica aqui e não em cada chamador. O "claim" é uma UPDATE condicional
+    // atômica — evita a corrida de duas chamadas quase simultâneas lendo
+    // ultima_notificacao_at "livre" ao mesmo tempo e ambas enviando.
+    const ultimaNotificacaoAnterior = processo.ultima_notificacao_at;
+    let janelaReclamada = false;
+
+    if (!force) {
+      const frequenciaDias = processo.frequencia_notificacao_dias || 30;
+      const cutoff = new Date(Date.now() - frequenciaDias * 24 * 60 * 60 * 1000).toISOString();
+
+      // Sem .or() de propósito — evita depender do parser de filtros combinados do
+      // PostgREST; a condição (null vs. < cutoff) já é decidida com o valor que
+      // acabamos de ler, mas a comparação em si roda contra a linha atual no
+      // momento da UPDATE, então a atomicidade contra outra chamada concorrente
+      // é preservada de qualquer forma.
+      let claimQuery = supabase
+        .from("processos")
+        .update({ ultima_notificacao_at: new Date().toISOString() })
+        .eq("id", processoId);
+      claimQuery = ultimaNotificacaoAnterior
+        ? claimQuery.lt("ultima_notificacao_at", cutoff)
+        : claimQuery.is("ultima_notificacao_at", null);
+
+      const { data: claimed, error: claimError } = await claimQuery.select("id");
+
+      if (claimError) {
+        console.error("Erro ao verificar janela de notificação:", claimError);
+        return new Response(
+          JSON.stringify({ error: claimError.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (!claimed || claimed.length === 0) {
+        console.log(`⏳ Notificação de ${processo.numero_processo} pulada — dentro da janela de ${frequenciaDias} dias (última em ${processo.ultima_notificacao_at}).`);
+        return new Response(
+          JSON.stringify({ success: true, skipped: true, motivo: "dentro_da_janela", frequenciaDias, ultimaNotificacao: processo.ultima_notificacao_at }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      janelaReclamada = true;
+    }
+
+    // Se algo falhar depois de reclamar a janela (Z-API fora do ar, instância não
+    // configurada, etc.), desfaz o carimbo para não bloquear o cliente pelo resto
+    // da janela de frequência por causa de uma falha passageira.
+    const desfazerReclamacaoDaJanela = async () => {
+      if (!janelaReclamada) return;
+      await supabase
+        .from("processos")
+        .update({ ultima_notificacao_at: ultimaNotificacaoAnterior })
+        .eq("id", processoId);
+    };
+
     // Resolve the correct Z-API instance based on client origin
     const instance = await resolveInstance(supabase, cliente);
 
     if (!instance) {
+      await desfazerReclamacaoDaJanela();
       return new Response(
         JSON.stringify({ error: "Z-API não configurado" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -323,32 +382,43 @@ serve(async (req) => {
 
     // Enviar via Z-API
     const zapiUrl = `https://api.z-api.io/instances/${instance.instanceId}/token/${instance.token}/send-text`;
-    
-    const zapiResponse = await fetch(zapiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Client-Token": instance.clientToken || "",
-      },
-      body: JSON.stringify({
-        phone: telefone,
-        message: textoMensagem,
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
 
-    const zapiResult = await zapiResponse.json();
+    let zapiResponse: Response;
+    let zapiResult: any;
+    try {
+      zapiResponse = await fetch(zapiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Client-Token": instance.clientToken || "",
+        },
+        body: JSON.stringify({
+          phone: telefone,
+          message: textoMensagem,
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      zapiResult = await zapiResponse.json();
+    } catch (fetchErr) {
+      await desfazerReclamacaoDaJanela();
+      throw fetchErr;
+    }
+
     console.log(`Z-API response (via ${instance.instanceName}):`, zapiResult);
 
     if (!zapiResponse.ok) {
+      await desfazerReclamacaoDaJanela();
       throw new Error(`Z-API error: ${JSON.stringify(zapiResult)}`);
     }
 
-    // Atualizar última notificação
-    await supabase
-      .from("processos")
-      .update({ ultima_notificacao_at: new Date().toISOString() })
-      .eq("id", processoId);
+    // Se veio de um envio forçado (botão manual), a janela não foi reclamada acima —
+    // registra agora para que a próxima automática respeite a janela a partir daqui.
+    if (force) {
+      await supabase
+        .from("processos")
+        .update({ ultima_notificacao_at: new Date().toISOString() })
+        .eq("id", processoId);
+    }
 
     // Registrar na tabela de mensagens (subscriber_id = zapi_<phone> para aparecer no chat)
     await supabase.from("manychat_mensagens").insert({

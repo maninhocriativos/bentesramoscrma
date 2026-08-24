@@ -1006,7 +1006,7 @@ export function ProcessoModalExpanded({ processo, isOpen, onClose, isNew = false
     if (!processo?.id) return;
     setSendingNotif(true);
     try {
-      const { data, error } = await supabase.functions.invoke('processo-status-notify', { body: { processoId: processo.id } });
+      const { data, error } = await supabase.functions.invoke('processo-status-notify', { body: { processoId: processo.id, force: true } });
       if (error) throw error;
       if (data?.success) toast.success('Notificação enviada!', { description: `WhatsApp para ${data.telefone}` });
       else throw new Error(data?.error);

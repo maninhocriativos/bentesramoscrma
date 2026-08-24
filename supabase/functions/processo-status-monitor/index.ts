@@ -510,16 +510,43 @@ serve(async (req) => {
           await supabase.from('processos').update({ status: novoStatus }).eq('id', proc.id);
         }
 
+        // Reclama a janela de frequência atomicamente ANTES de enviar, fechando a
+        // corrida com processo-status-notify (chamado por processo-auto-sync e pelo
+        // botão manual do CRM) — ambos escrevem em ultima_notificacao_at. Se outra
+        // rotina já notificou esse processo entre a busca acima e agora, a UPDATE
+        // condicional não afeta nenhuma linha e pulamos o envio.
+        const cutoffClaim = new Date(agora.getTime() - frequencia * 24 * 60 * 60 * 1000).toISOString();
+        let claimQuery = supabase
+          .from('processos')
+          .update({ ultima_notificacao_at: agora.toISOString() })
+          .eq('id', proc.id);
+        claimQuery = proc.ultima_notificacao_at
+          ? claimQuery.lt('ultima_notificacao_at', cutoffClaim)
+          : claimQuery.is('ultima_notificacao_at', null);
+        const { data: claimedRows, error: claimErr } = await claimQuery.select('id');
+
+        if (claimErr || !claimedRows || claimedRows.length === 0) {
+          console.log(`[Monitor] Processo ${proc.numero_processo} já foi notificado por outra rotina nesse meio-tempo — pulando.`);
+          return new Response(
+            JSON.stringify({ success: true, enviados: 0, motivo: 'notificado_por_outra_rotina', numero: proc.numero_processo }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         const mensagem = formatarMensagemAtualizacao(processoAtualizado, lead.nome || 'Cliente');
         // Routing null-safe: tráfego → instância tráfego; qualquer outro → escritório
         const tipoOrigem = lead.tipo_origem ?? 'escritorio';
         const enviado = await enviarViaZapi(supabase, tipoOrigem, lead.telefone, mensagem);
 
-        if (enviado) {
+        if (!enviado) {
+          // Envio falhou depois de reclamar a janela — desfaz o carimbo pra não
+          // bloquear o cliente pelo resto da janela por causa de uma falha passageira.
           await supabase.from('processos')
-            .update({ ultima_notificacao_at: agora.toISOString() })
+            .update({ ultima_notificacao_at: proc.ultima_notificacao_at ?? null })
             .eq('id', proc.id);
+        }
 
+        if (enviado) {
           await supabase.from('system_events').insert({
             tipo: 'processo', fonte: 'isa_monitor', acao: 'atualizacao_processo_enviada',
             lead_id: proc.cliente_id,
