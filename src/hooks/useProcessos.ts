@@ -4,6 +4,7 @@ import { Processo } from '@/types/processos';
 import { useToast } from '@/hooks/use-toast';
 import { usePerfil } from './usePerfil';
 import { useAuth } from './useAuth';
+import { fetchAllPaginated } from '@/lib/fetchAllPaginated';
 
 const PROCESSOS_LIST_SELECT = 'id,numero_processo,numero_complementar,titulo_acao,status,advogado_responsavel,cliente_id,cpf_cliente,nome_cliente,created_at,tribunal,vara_comarca,assunto,valor_causa,data_ajuizamento,data_ultima_atualizacao,orgao_julgador,grau,classe_cnj,status_detalhado,origem_cliente,ultima_consulta_api_at,frequencia_notificacao_dias,notificacao_ativa,ultima_notificacao_at,descricao,marcadores,area,fase,assunto_cnj,segredo_justica,data_distribuicao,data_citacao,data_recebimento,data_arquivamento,data_encerramento,valor_provisionado,probabilidade,monitorar_push,tipo_orgao_julgador,sistema_judicial,complemento_enderecamento,processo_pai_id,partes_json,movimentos_json,co_responsavel_id,co_responsavel:perfis!co_responsavel_id(id,nome,sobrenome)';
 
@@ -79,16 +80,12 @@ export function useProcessos({ withRealtime = true }: { withRealtime?: boolean }
     // Paginado — processos já passa de 1.000 linhas pra Admin/Gerente (que veem
     // todos), e um select sem .range() é cortado silenciosamente no teto padrão
     // de 1000 linhas do PostgREST, mesmo bug já corrigido em useLeads.ts e
-    // useZapsignContratos.ts nesta mesma base.
-    const PAGE = 1000;
-    const all: any[] = [];
-    let pageError: any = null;
-    for (let page = 0; ; page++) {
-      const { data, error } = await buildQuery().range(page * PAGE, (page + 1) * PAGE - 1);
-      if (error) { pageError = error; break; }
-      all.push(...(data || []));
-      if (!data || data.length < PAGE) break;
-    }
+    // useZapsignContratos.ts nesta mesma base. Páginas buscadas em paralelo
+    // (fetchAllPaginated) em vez de uma por vez — sequencial deixava o
+    // Dashboard/Processos lentos pra carregar conforme a tabela cresce.
+    const { data: all, error: pageError } = await fetchAllPaginated<any>((from, to) =>
+      buildQuery().range(from, to)
+    );
 
     if (pageError) {
       toast({ title: 'Erro ao carregar processos', description: pageError.message, variant: 'destructive' });

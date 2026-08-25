@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Lead, LeadStatus } from '@/types/leads';
 import { useToast } from '@/hooks/use-toast';
+import { fetchAllPaginated } from '@/lib/fetchAllPaginated';
 
 const LEADS_SELECT = 'id,created_at,updated_at,nome,telefone,email,status,origem,tipo_acao,lead_state,state_updated_at,valor_causa,resumo_ia,tipo_origem,fonte_trafego,linha_whatsapp,empresa_tag,owner_tipo,isa_ativa,is_lost,lost_reason,lost_at,link_contrato,contract_key,contract_sent_at,contract_signed_at,last_contact_at,cidade,uf,cpf,triage_started_at,canal_origem,facebook_lead_id,contratos_adicionais' as const;
 
@@ -22,20 +23,16 @@ export function useLeads() {
     // created_at desc), fazendo TODO o Dashboard perder os 2/3 mais antigos de
     // leads sem nenhum aviso. Mesmo bug já encontrado e corrigido no matching de
     // leads do ZapSign (useZapsignContratos.ts) e no fetch de compromissos
-    // (useCompromissos.ts) — aqui pagina do mesmo jeito.
-    const PAGE = 1000;
-    const all: Lead[] = [];
-    let pageError: any = null;
-    for (let page = 0; ; page++) {
-      const { data, error } = await supabase
+    // (useCompromissos.ts) — aqui pagina do mesmo jeito. Páginas buscadas em
+    // paralelo (fetchAllPaginated) em vez de uma por vez — sequencial deixava
+    // o Dashboard/Leads lentos pra carregar conforme a tabela cresce.
+    const { data: all, error: pageError } = await fetchAllPaginated<Lead>((from, to) =>
+      supabase
         .from('leads_juridicos')
         .select(LEADS_SELECT)
         .order('created_at', { ascending: false })
-        .range(page * PAGE, (page + 1) * PAGE - 1);
-      if (error) { pageError = error; break; }
-      all.push(...((data as Lead[]) || []));
-      if (!data || data.length < PAGE) break;
-    }
+        .range(from, to)
+    );
 
     if (pageError) {
       toast({

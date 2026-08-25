@@ -172,6 +172,7 @@ interface Subscriber {
   atendimento_humano_desde?: string;
   assigned_to?: string;
   lead_tipo_origem?: string;
+  lead_is_lost?: boolean;
   instance_name?: string;
   // Presença em tempo real (limpa quando sai)
   attending_by?: string | null;
@@ -1305,9 +1306,13 @@ const ManyChatInboxContent = () => {
       const rawSubscribers = (subsData as Subscriber[]) || [];
       const leadIds = [...new Set(rawSubscribers.map(s => s.lead_id).filter(Boolean))];
       const leadsMap = new Map<string, string>();
+      const lostLeadIds = new Set<string>();
       if (leadIds.length > 0) {
-        const { data: leadsData } = await supabase.from("leads_juridicos").select("id, tipo_origem").in("id", leadIds);
-        if (leadsData) leadsData.forEach((lead: any) => leadsMap.set(lead.id, lead.tipo_origem || "indefinido"));
+        const { data: leadsData } = await supabase.from("leads_juridicos").select("id, tipo_origem, is_lost").in("id", leadIds);
+        if (leadsData) leadsData.forEach((lead: any) => {
+          leadsMap.set(lead.id, lead.tipo_origem || "indefinido");
+          if (lead.is_lost) lostLeadIds.add(lead.id);
+        });
       }
       const subsWithoutInstance = rawSubscribers.filter(s => !s.instance_name);
       const instanceByLeadId = new Map<string, string>();
@@ -1353,6 +1358,8 @@ const ManyChatInboxContent = () => {
         // Canais sociais (Instagram/Facebook) não têm telefone — sempre passam
         const isSocial = sub.canal === "instagram" || sub.canal === "facebook";
         if (!hasRealPhone && !hasHistoryByLead && !hasHistoryBySubscriber && !isSocial) continue;
+        // Lead perdido: some do inbox de vez — só fica visível em Leads > Perdidos.
+        if (sub.lead_id && lostLeadIds.has(sub.lead_id)) continue;
         const subWithOrigem = { ...sub, lead_tipo_origem: sub.lead_id ? leadsMap.get(sub.lead_id) : undefined, instance_name: sub.instance_name || (sub.lead_id ? instanceByLeadId.get(sub.lead_id) : undefined) || instanceBySubscriberId.get(sub.subscriber_id) || undefined };
         const phoneClean = cleanPhone || (validPhoneInId ? rawSubscriberId : "");
         const normalizedPhone = phoneClean.startsWith("55") ? phoneClean : phoneClean.length >= 8 ? "55" + phoneClean : phoneClean;
@@ -2290,7 +2297,14 @@ const ManyChatInboxContent = () => {
         .send({ type: 'broadcast', event: 'lead_perdido', payload: { lead_id: selectedSubscriber.lead_id } })
         .catch(() => {});
 
-      toast({ title: '❌ Lead marcado como Perdido', description: 'Evento enviado para a Meta.' });
+      // Some do inbox na hora — não espera o próximo recarregamento pra sumir.
+      const leadIdPerdido = selectedSubscriber.lead_id;
+      setSubscribers(prev => prev.filter(s => s.lead_id !== leadIdPerdido));
+      if (selectedSubscriberRef.current?.lead_id === leadIdPerdido) {
+        setSelectedSubscriber(null);
+      }
+
+      toast({ title: '❌ Lead marcado como Perdido', description: 'Conversa removida do chat. Evento enviado para a Meta.' });
       setLeadPerdidoOpen(false);
       setLeadPerdidoMotivo('');
     } catch (err) {
