@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { ContratosKPIs } from '@/components/contratos/ContratosKPIs';
 import { ContratosAnalytics } from '@/components/contratos/ContratosAnalytics';
@@ -411,7 +410,7 @@ export default function ContratosPage() {
   };
 
   return (
-    <AppLayout>
+    <>
       <AppHeader title="Contratos" />
 
       <div className="flex-1 px-4 md:px-6 lg:px-8 py-5 space-y-5 animate-fade-in overflow-auto">
@@ -694,6 +693,6 @@ export default function ContratosPage() {
         onClose={() => setCriarZapsignOpen(false)}
         onSuccess={() => refetchZapsign()}
       />
-    </AppLayout>
+    </>
   );
 }

@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback, lazy, Suspense, memo } from 'react';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
 import { DashboardFiltersBar, DashboardFilters } from '@/components/dashboard/DashboardFilters';
@@ -138,7 +137,7 @@ function DashboardPage() {
   const chartsReady = !leadsLoading && !processosLoading;
 
   return (
-    <AppLayout>
+    <>
       <AppHeader title="Dashboard" />
 
       <div className="flex-1 overflow-auto">
@@ -262,7 +261,7 @@ function DashboardPage() {
           </div>
         )}
       </div>
-    </AppLayout>
+    </>
   );
 }
 

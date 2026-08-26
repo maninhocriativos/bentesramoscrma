@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { useNavigate } from 'react-router-dom';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -32,9 +31,9 @@ export default function ConfiguracoesPage() {
   if (loading) {
     
     return (
-      <AppLayout>
+      <>
         <PageSkeleton cards={2} rows={4} />
-      </AppLayout>
+      </>
     );
   }
 
@@ -46,7 +45,7 @@ export default function ConfiguracoesPage() {
   
 
   return (
-    <AppLayout>
+    <>
       <AppHeader title="Configurações" />
       
       <div className="flex-1 p-4 md:p-6 page-enter">
@@ -203,6 +202,6 @@ export default function ConfiguracoesPage() {
           </TabsContent>
         </Tabs>
       </div>
-    </AppLayout>
+    </>
   );
 }

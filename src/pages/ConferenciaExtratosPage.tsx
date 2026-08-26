@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Badge } from '@/components/ui/badge';
 import { ExtratoConfigForm } from '@/components/extratos/ExtratoConfigForm';
@@ -132,7 +131,7 @@ export default function ConferenciaExtratosPage() {
   };
 
   return (
-    <AppLayout>
+    <>
       <AppHeader title="Conferência de Extratos" />
       <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
         <div className="flex items-center gap-3">
@@ -170,6 +169,6 @@ export default function ConferenciaExtratosPage() {
           />
         )}
       </div>
-    </AppLayout>
+    </>
   );
 }

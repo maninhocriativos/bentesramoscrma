@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { usePerfil } from '@/hooks/usePerfil';
 import { useOfficeSettings } from '@/hooks/useOfficeSettings';
 import { supabase } from '@/integrations/supabase/client';
@@ -380,7 +379,7 @@ export default function IntimacoesPage() {
   ];
 
   return (
-    <AppLayout>
+    <>
       {/* HEADER */}
       <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-card/95 backdrop-blur-md">
         <div className="flex h-16 md:h-[72px] items-center justify-between px-4 md:px-8 gap-3">
@@ -816,7 +815,7 @@ export default function IntimacoesPage() {
           />
         </Suspense>
       )}
-    </AppLayout>
+    </>
   );
 }
 

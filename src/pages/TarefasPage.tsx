@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -435,7 +434,7 @@ export default function TarefasPage() {
   const columns = ['Pendente', 'Em Andamento', 'Concluída'] as const;
 
   return (
-    <AppLayout>
+    <>
       <AppHeader title="Tarefas & Timesheet" />
 
       <div className="flex-1 overflow-auto" style={{ background: '#faf9f7' }}>
@@ -1007,6 +1006,6 @@ export default function TarefasPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </AppLayout>
+    </>
   );
 }

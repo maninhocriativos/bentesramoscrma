@@ -1,5 +1,4 @@
 import { memo, useState, useMemo } from 'react';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { Calendar } from '@/components/agenda/Calendar';
 import { AgendaKPIs } from '@/components/agenda/AgendaKPIs';
 import { AgendaListView } from '@/components/agenda/AgendaListView';
@@ -125,7 +124,7 @@ function AgendaPage() {
   const handleStatusChange  = async (id: string, s: ConfirmacaoStatus) => { await updateCompromisso(id, { confirmacao_status: s }); };
 
   return (
-    <AppLayout>
+    <>
       {/* ── Header ── */}
       <div className="sticky top-0 z-20 bg-card/95 backdrop-blur-md" style={{ borderBottom: '0.5px solid rgba(201,169,110,0.2)' }}>
 
@@ -303,7 +302,7 @@ function AgendaPage() {
           compromissos={compromissos}
         />
       )}
-    </AppLayout>
+    </>
   );
 }
 

@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -237,7 +236,7 @@ export default function HistoricoAtendimentoPage() {
   };
 
   return (
-    <AppLayout>
+    <>
       <div className="p-6 space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
@@ -451,6 +450,6 @@ export default function HistoricoAtendimentoPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </AppLayout>
+    </>
   );
 }

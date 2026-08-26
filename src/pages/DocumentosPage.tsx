@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { useDocumentos } from '@/hooks/useDocumentos';
 import { useLeads } from '@/hooks/useLeads';
 import { usePerfil } from '@/hooks/usePerfil';
@@ -259,7 +258,7 @@ export default function DocumentosPage() {
   };
 
   return (
-    <AppLayout>
+    <>
       <div className="flex flex-col h-full bg-background">
 
         {/* ══ HERO HEADER ══ */}
@@ -727,6 +726,6 @@ export default function DocumentosPage() {
           </div>
         </div>
       )}
-    </AppLayout>
+    </>
   );
 }

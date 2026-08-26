@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { PageTransition } from '@/components/layouts/PageTransition';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -210,7 +209,7 @@ export default function ModelosPage() {
   };
 
   return (
-    <AppLayout>
+    <>
       <PageTransition>
         <div className="container mx-auto p-6 space-y-6">
           {/* Header */}
@@ -548,6 +547,6 @@ export default function ModelosPage() {
           </Dialog>
         </div>
       </PageTransition>
-    </AppLayout>
+    </>
   );
 }

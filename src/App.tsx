@@ -10,6 +10,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 
 import RequireAuth from "@/components/auth/RequireAuth";
+import { AppLayoutRoute } from "@/components/layouts/AppLayoutRoute";
 import { SystemLockScreen } from "@/components/SystemLockScreen";
 import { SYSTEM_LOCK_ENABLED } from "@/config/systemLock";
 
@@ -89,36 +90,42 @@ function AppRoutes() {
 
           {/* Protected */}
           <Route element={<RequireAuth />}>
-            <Route path="/dashboard"              element={<DashboardPage />} />
-            <Route path="/leads"                  element={<LeadsPage />} />
-            <Route path="/leads/:id"              element={<LeadDetailPage />} />
-            <Route path="/processos"             element={<ProcessosPage />} />
-            <Route path="/agenda"                element={<AgendaPage />} />
-            <Route path="/financeiro"            element={<FinanceiroPage />} />
-            <Route path="/documentos"            element={<DocumentosPage />} />
-            <Route path="/contratos"             element={<ContratosPage />} />
-            <Route path="/tarefas"               element={<TarefasPage />} />
-            <Route path="/configuracoes"         element={<ConfiguracoesPage />} />
-            <Route path="/assistente"            element={<AssistentePage />} />
-            <Route path="/isa-autonoma"          element={<IsaAutonomaPage />} />
+            {/* /chat (ChatInbox) é tela cheia própria, sem AppSidebar — fica fora do AppLayoutRoute */}
             <Route path="/chat"                  element={<ChatPage />} />
-            <Route path="/meta-leads"            element={<MetaLeadsPage />} />
-            <Route path="/api-hub"               element={<ApiHubPage />} />
-            <Route path="/api-docs"              element={<ApiDocsPage />} />
-            <Route path="/peticoes"              element={<PeticoesPage />} />
-            <Route path="/peticoes/nova"         element={<PeticaoEditarPage />} />
-            <Route path="/peticoes/:id/editar"   element={<PeticaoEditarPage />} />
-            <Route path="/peticoes/:id/revisao"  element={<PeticaoRevisaoPage />} />
-            <Route path="/peticoes/:id/saida"    element={<PeticaoSaidaPage />} />
-            <Route path="/modelos"               element={<ModelosPage />} />
-            <Route path="/peticoes/modelo-editor" element={<PeticaoModeloEditorPage />} />
-            <Route path="/historico-acessos"     element={<HistoricoAcessosPage />} />
-            <Route path="/historico-atendimento" element={<HistoricoAtendimentoPage />} />
-            <Route path="/intimacoes"            element={<IntimacoesPage />} />
-            <Route path="/bem-vindo"             element={<BemVindoPage />} />
-            <Route path="/conferencia-extratos"  element={<ConferenciaExtratosPage />} />
-            <Route path="/followup"              element={<FollowupPage />} />
-            <Route path="/dados"                 element={<DadosPage />} />
+
+            {/* Layout compartilhado: AppSidebar/PresenceProvider/ChatInterno montam uma
+                única vez e sobrevivem à troca de rota entre essas páginas. */}
+            <Route element={<AppLayoutRoute />}>
+              <Route path="/dashboard"              element={<DashboardPage />} />
+              <Route path="/leads"                  element={<LeadsPage />} />
+              <Route path="/leads/:id"              element={<LeadDetailPage />} />
+              <Route path="/processos"             element={<ProcessosPage />} />
+              <Route path="/agenda"                element={<AgendaPage />} />
+              <Route path="/financeiro"            element={<FinanceiroPage />} />
+              <Route path="/documentos"            element={<DocumentosPage />} />
+              <Route path="/contratos"             element={<ContratosPage />} />
+              <Route path="/tarefas"               element={<TarefasPage />} />
+              <Route path="/configuracoes"         element={<ConfiguracoesPage />} />
+              <Route path="/assistente"            element={<AssistentePage />} />
+              <Route path="/isa-autonoma"          element={<IsaAutonomaPage />} />
+              <Route path="/meta-leads"            element={<MetaLeadsPage />} />
+              <Route path="/api-hub"               element={<ApiHubPage />} />
+              <Route path="/api-docs"              element={<ApiDocsPage />} />
+              <Route path="/peticoes"              element={<PeticoesPage />} />
+              <Route path="/peticoes/nova"         element={<PeticaoEditarPage />} />
+              <Route path="/peticoes/:id/editar"   element={<PeticaoEditarPage />} />
+              <Route path="/peticoes/:id/revisao"  element={<PeticaoRevisaoPage />} />
+              <Route path="/peticoes/:id/saida"    element={<PeticaoSaidaPage />} />
+              <Route path="/modelos"               element={<ModelosPage />} />
+              <Route path="/peticoes/modelo-editor" element={<PeticaoModeloEditorPage />} />
+              <Route path="/historico-acessos"     element={<HistoricoAcessosPage />} />
+              <Route path="/historico-atendimento" element={<HistoricoAtendimentoPage />} />
+              <Route path="/intimacoes"            element={<IntimacoesPage />} />
+              <Route path="/bem-vindo"             element={<BemVindoPage />} />
+              <Route path="/conferencia-extratos"  element={<ConferenciaExtratosPage />} />
+              <Route path="/followup"              element={<FollowupPage />} />
+              <Route path="/dados"                 element={<DadosPage />} />
+            </Route>
           </Route>
 
           <Route path="*" element={<NotFound />} />

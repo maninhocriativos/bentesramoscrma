@@ -12,7 +12,6 @@ import { DespesaModal } from '@/components/financeiro/DespesaModal';
 import { HonorariosTable } from '@/components/financeiro/HonorariosTable';
 import { ParcelasTable } from '@/components/financeiro/ParcelasTable';
 import { DespesasTable } from '@/components/financeiro/DespesasTable';
-import { AppLayout } from '@/components/layouts/AppLayout';
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v);
@@ -39,7 +38,7 @@ export default function FinanceiroPage() {
   const parcelasAtrasadas  = parcelas.filter(p => p.status === 'Pendente' && new Date(p.data_vencimento) < new Date());
 
   return (
-    <AppLayout>
+    <>
       <div className="p-4 md:p-8 space-y-6 page-enter">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -275,6 +274,6 @@ export default function FinanceiroPage() {
         <HonorarioModal open={honorarioModalOpen} onOpenChange={setHonorarioModalOpen} />
         <DespesaModal open={despesaModalOpen} onOpenChange={setDespesaModalOpen} />
       </div>
-    </AppLayout>
+    </>
   );
 }

@@ -6,7 +6,6 @@ import {
   User, MapPin, Building2, DollarSign, CheckCircle2,
   FileText, Scale, AlertCircle, Image as ImageIcon, Upload, X, Search, UserCheck, Eye,
 } from 'lucide-react';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -931,17 +930,17 @@ export default function PeticaoEditarPage() {
 
   if (loadingInitial) {
     return (
-      <AppLayout>
+      <>
         <AppHeader title="Carregando..." />
         <DetailSkeleton />
-      </AppLayout>
+      </>
     );
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────────
 
   return (
-    <AppLayout>
+    <>
       <AppHeader title={actionName || 'Nova Petição'} />
       <ScrollArea className="flex-1">
         <div className="p-4 md:p-6 max-w-[860px] mx-auto space-y-5">
@@ -1353,6 +1352,6 @@ export default function PeticaoEditarPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </AppLayout>
+    </>
   );
 }

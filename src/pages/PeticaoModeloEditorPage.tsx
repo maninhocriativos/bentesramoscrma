@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import DOMPurify from 'dompurify';
 import { useNavigate } from 'react-router-dom';
 import mammoth from 'mammoth';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -279,7 +278,7 @@ export default function PeticaoModeloEditorPage() {
   // Empty state - upload
   if (!html) {
     return (
-      <AppLayout>
+      <>
         <AppHeader title="Editor de Modelo de Petição" />
         <div className="flex-1 flex items-center justify-center p-6">
           <Card className="max-w-lg w-full">
@@ -333,13 +332,13 @@ export default function PeticaoModeloEditorPage() {
             </CardContent>
           </Card>
         </div>
-      </AppLayout>
+      </>
     );
   }
 
   // Editor state
   return (
-    <AppLayout>
+    <>
       <AppHeader title={`Editando: ${fileName}`} />
       <div className="flex-1 flex flex-col">
         {/* Top actions bar */}
@@ -472,6 +471,6 @@ export default function PeticaoModeloEditorPage() {
           </div>
         )}
       </div>
-    </AppLayout>
+    </>
   );
 }

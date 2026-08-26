@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -265,7 +264,7 @@ export default function ApiHubPage() {
   ];
 
   return (
-    <AppLayout>
+    <>
       <AppHeader title="API Hub - Central de Integrações" />
       
       <div className="flex-1 p-4 md:p-6 space-y-6 overflow-auto animate-fade-in">
@@ -809,7 +808,7 @@ Content-Type: application/json
           </TabsContent>
         </Tabs>
       </div>
-    </AppLayout>
+    </>
   );
 }
 

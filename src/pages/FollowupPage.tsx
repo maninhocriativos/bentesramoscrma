@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -965,18 +964,18 @@ export default function FollowupPage() {
   ];
 
   if (loading) return (
-    <AppLayout>
+    <>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 14, background: T.cream }}>
         <div style={{ width: 48, height: 48, borderRadius: 14, background: `linear-gradient(135deg, ${T.marrom}, ${T.marromMed})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Zap size={22} style={{ color: T.douradoLight }} />
         </div>
         <span style={{ color: T.muted, fontWeight: 700, fontSize: 15 }}>Carregando follow-ups...</span>
       </div>
-    </AppLayout>
+    </>
   );
 
   return (
-    <AppLayout>
+    <>
       <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', background: T.cream, overflow: 'hidden' }}>
 
         {/* ── TOPBAR ── */}
@@ -1168,6 +1167,6 @@ export default function FollowupPage() {
           onSuccess={() => { setShowInscricao(false); fetchData(); }}
         />
       )}
-    </AppLayout>
+    </>
   );
 }

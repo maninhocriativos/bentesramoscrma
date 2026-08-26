@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 
 export default function PeticaoSaidaPage() {
@@ -16,9 +15,9 @@ export default function PeticaoSaidaPage() {
   }, [id, navigate]);
 
   return (
-    <AppLayout>
+    <>
       <AppHeader title="Redirecionando..." />
       <div className="flex-1" />
-    </AppLayout>
+    </>
   );
 }

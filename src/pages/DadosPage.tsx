@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { useLeadsAnalytics, LeadAnalytics, ExitoEstado } from '@/hooks/useLeadsAnalytics';
 import {
@@ -273,7 +272,7 @@ export default function DadosPage() {
   ];
 
   return (
-    <AppLayout>
+    <>
       <AppHeader title="Dados" />
       <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-5 bg-background">
 
@@ -441,6 +440,6 @@ export default function DadosPage() {
           </>
         )}
       </div>
-    </AppLayout>
+    </>
   );
 }

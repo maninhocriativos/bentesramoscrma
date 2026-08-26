@@ -5,7 +5,6 @@ import {
   ArrowLeft, Download, FileText, Loader2, CheckCircle2, Edit3,
   Sparkles, Clock, User, DollarSign, Copy, Archive, Eye
 } from 'lucide-react';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -134,20 +133,20 @@ export default function PeticaoRevisaoPage() {
 
   if (loading) {
     return (
-      <AppLayout><AppHeader title="Carregando..." />
+      <><AppHeader title="Carregando..." />
         <DetailSkeleton />
-      </AppLayout>
+      </>
     );
   }
 
   if (!petition) {
     return (
-      <AppLayout><AppHeader title="Petição não encontrada" />
+      <><AppHeader title="Petição não encontrada" />
         <div className="flex-1 flex items-center justify-center flex-col gap-4">
           <p className="text-muted-foreground">Petição não encontrada</p>
           <Button onClick={() => navigate('/peticoes')}>Voltar</Button>
         </div>
-      </AppLayout>
+      </>
     );
   }
 
@@ -174,7 +173,7 @@ export default function PeticaoRevisaoPage() {
   const statusCfg = statusMap[petition.status] || statusMap.draft;
 
   return (
-    <AppLayout>
+    <>
       <AppHeader title="Revisão da Petição" />
       <ScrollArea className="flex-1">
         <div className="p-4 md:p-6 max-w-[1000px] mx-auto space-y-6">
@@ -318,6 +317,6 @@ export default function PeticaoRevisaoPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </AppLayout>
+    </>
   );
 }

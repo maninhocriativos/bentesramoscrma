@@ -1,4 +1,3 @@
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -205,7 +204,7 @@ export default function ApiDocsPage() {
   };
 
   return (
-    <AppLayout>
+    <>
       <AppHeader title="Documentação da API" />
       
       <div className="flex-1 px-4 md:px-6 lg:px-8 py-4 overflow-hidden">
@@ -283,7 +282,7 @@ export default function ApiDocsPage() {
           </TabsContent>
         </Tabs>
       </div>
-    </AppLayout>
+    </>
   );
 }
 

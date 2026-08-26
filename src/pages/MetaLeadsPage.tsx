@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { useMetaFormLeads, useMetaFormChat } from '@/hooks/useMetaFormLeads';
 import { MetaFormLead, MetaFormLeadStatus, LeadClassificacao } from '@/types/metaFormLeads';
 import {
@@ -458,7 +457,7 @@ export default function MetaLeadsPage() {
   };
 
   if (loading) return (
-    <AppLayout>
+    <>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 14, background: T.cream }}>
         <div style={{ width: 48, height: 48, borderRadius: 14, background: `linear-gradient(135deg, ${T.marrom}, ${T.marromMed})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Activity size={22} style={{ color: T.douradoLight }} />
@@ -466,11 +465,11 @@ export default function MetaLeadsPage() {
         <span style={{ color: T.muted, fontWeight: 700, fontSize: 15 }}>Carregando leads...</span>
         <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
       </div>
-    </AppLayout>
+    </>
   );
 
   return (
-    <AppLayout>
+    <>
       <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', background: T.cream, overflow: 'hidden' }}>
 
         {/* TOPBAR */}
@@ -593,6 +592,6 @@ export default function MetaLeadsPage() {
         </div>
       </div>
       <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
-    </AppLayout>
+    </>
   );
 }

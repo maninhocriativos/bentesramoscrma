@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense, memo
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { ProcessosTable } from '@/components/processos/ProcessosTable';
 import { useProcessos } from '@/hooks/useProcessos';
 import { usePerfil } from '@/hooks/usePerfil';
@@ -338,7 +337,7 @@ function ProcessosPage() {
     a.click(); URL.revokeObjectURL(url);
   }, [filteredProcessos]);
 
-  if (perfilLoading) return <AppLayout><PageSkeleton cards={5} rows={8} /></AppLayout>;
+  if (perfilLoading) return <><PageSkeleton cards={5} rows={8} /></>;
   if (!canAccessProcessos) return null;
 
   const showSpinner = loading && processos.length === 0;
@@ -366,7 +365,7 @@ function ProcessosPage() {
   const kpiValue = (key: string) => key === 'todos' ? kpis.total : (kpis as any)[key] || 0;
 
   return (
-    <AppLayout>
+    <>
       {/* HEADER */}
       <header className="sticky top-0 z-40 w-full bg-card/95 backdrop-blur-md border-b border-border/60">
         <div className="flex h-[72px] items-center justify-between px-4 md:px-8 gap-3">
@@ -746,7 +745,7 @@ function ProcessosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </AppLayout>
+    </>
   );
 }
 

@@ -7,7 +7,6 @@ import {
   ShoppingCart, Package, ArrowRight, X, ChevronRight,
   ChevronDown, Sparkles, Gavel, FolderOpen,
 } from 'lucide-react';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -512,7 +511,7 @@ export default function PeticoesPage() {
   ];
 
   return (
-    <AppLayout>
+    <>
       <AppHeader title="Gerador de Petições" />
 
       <ScrollArea className="flex-1">
@@ -793,6 +792,6 @@ export default function PeticoesPage() {
         getModelsForAction={getModelsForAction}
         onConfirm={(actionId, modelId) => navigate(`/peticoes/nova?action=${actionId}&model=${modelId}`)}
       />
-    </AppLayout>
+    </>
   );
 }

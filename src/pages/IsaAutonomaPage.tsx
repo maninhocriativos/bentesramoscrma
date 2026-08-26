@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -355,7 +354,7 @@ export default function IsaAutonomaPage() {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <AppLayout>
+    <>
       <AppHeader title="Central de Agentes" />
 
       <div className="flex-1 p-6 overflow-y-auto">
@@ -736,6 +735,6 @@ export default function IsaAutonomaPage() {
           </Tabs>
         </div>
       </div>
-    </AppLayout>
+    </>
   );
 }

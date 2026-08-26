@@ -6,7 +6,6 @@ import {
   Scale, Search, Calendar, CheckCircle2,
   BarChart2, Users, Target, TrendingUp, ScanLine, FileText,
 } from 'lucide-react';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { AppHeader } from '@/components/AppHeader';
 import { IsaChat } from '@/components/assistentes/IsaChat';
 import { IsaConversionMetrics } from '@/components/assistentes/IsaConversionMetrics';
@@ -42,7 +41,7 @@ const DONNA_CAPABILITIES = [
 // ── Isa — chat ─────────────────────────────────────────────────────────────────
 function IsaView({ onBack }: { onBack: () => void }) {
   return (
-    <AppLayout>
+    <>
       <AppHeader title="Isa — Assistente Jurídica" />
       <div className="flex-1 flex flex-col min-h-0">
         <div className="flex items-center gap-3 px-4 py-2.5 border-b bg-card shrink-0">
@@ -59,14 +58,14 @@ function IsaView({ onBack }: { onBack: () => void }) {
         </div>
         <IsaChat />
       </div>
-    </AppLayout>
+    </>
   );
 }
 
 // ── Isa — métricas ─────────────────────────────────────────────────────────────
 function IsaMetricsView({ onBack }: { onBack: () => void }) {
   return (
-    <AppLayout>
+    <>
       <AppHeader title="Isa — Métricas de Conversão" />
       <div className="flex-1 overflow-auto">
         <div className="px-4 py-2.5 border-b bg-card">
@@ -81,14 +80,14 @@ function IsaMetricsView({ onBack }: { onBack: () => void }) {
           <IsaConversionMetrics />
         </div>
       </div>
-    </AppLayout>
+    </>
   );
 }
 
 // ── Donn@ — chat ──────────────────────────────────────────────────────────────
 function DonnaView({ onBack }: { onBack: () => void }) {
   return (
-    <AppLayout>
+    <>
       <AppHeader title="Donn@ — Análise e Relatórios" />
       <div className="flex-1 flex flex-col min-h-0">
         <div className="flex items-center gap-3 px-4 py-2.5 border-b bg-card shrink-0">
@@ -105,7 +104,7 @@ function DonnaView({ onBack }: { onBack: () => void }) {
         </div>
         <DonnaChat />
       </div>
-    </AppLayout>
+    </>
   );
 }
 
@@ -124,7 +123,7 @@ export default function AssistentePage() {
   if (view === 'donna-chat')  return <DonnaView      onBack={() => setView('grid')} />;
 
   return (
-    <AppLayout>
+    <>
       <AppHeader title="Agentes IA" />
 
       <div className="flex-1 overflow-auto">
@@ -358,6 +357,6 @@ export default function AssistentePage() {
 
         </div>
       </div>
-    </AppLayout>
+    </>
   );
 }

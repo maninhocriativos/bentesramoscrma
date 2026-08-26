@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft, Phone, Mail, Calendar, Globe, FileText, MessageSquare, Scale, DollarSign, User, ScrollText, Link2, Pencil, Check, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Lead } from '@/types/leads';
-import { AppLayout } from '@/components/layouts/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -114,13 +113,13 @@ export default function LeadDetailPage() {
 
   if (loading) {
     return (
-      <AppLayout>
+      <>
         <div className="p-6 space-y-6">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-48 w-full" />
           <Skeleton className="h-96 w-full" />
         </div>
-      </AppLayout>
+      </>
     );
   }
 
@@ -129,7 +128,7 @@ export default function LeadDetailPage() {
   }
 
   return (
-    <AppLayout>
+    <>
       <div className="p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center gap-4">
@@ -272,6 +271,6 @@ export default function LeadDetailPage() {
           }}
         />
       </div>
-    </AppLayout>
+    </>
   );
 }
