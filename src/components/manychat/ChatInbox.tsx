@@ -321,6 +321,10 @@ const ManyChatInboxContent = () => {
   const selectedSubscriberRef    = useRef<Subscriber | null>(null);
   const subscribersRef           = useRef<Subscriber[]>([]);
   const prevSelectedSubIdRef     = useRef<string | null>(null);
+  // Rascunho por conversa: evita que o texto digitado pra um cliente vaze pra
+  // outro se o agente trocar de conversa antes de enviar (newMessage era global).
+  const draftMessagesRef         = useRef<Map<string, string>>(new Map());
+  const newMessageRef            = useRef("");
   // Timers de auto-limpeza do "cliente digitando" — o Z-API às vezes não manda
   // o evento PAUSED (ex: cliente fecha o WhatsApp no meio), então limpamos por
   // segurança se não chegar atualização nova em alguns segundos.
@@ -640,6 +644,7 @@ const ManyChatInboxContent = () => {
   }, [subscribers, computeInitialUnreads, loadMessagePreviews]);
 
   useEffect(() => { selectedSubscriberRef.current = selectedSubscriber; }, [selectedSubscriber]);
+  useEffect(() => { newMessageRef.current = newMessage; }, [newMessage]);
   useEffect(() => { subscribersRef.current = subscribers; }, [subscribers]);
   // Fecha edição de nome ao trocar de conversa
   useEffect(() => { setEditingLeadName(false); nameSavingRef.current = false; }, [selectedSubscriber?.subscriber_id]);
@@ -1249,7 +1254,18 @@ const ManyChatInboxContent = () => {
 
   useEffect(() => {
     const currentSubId = selectedSubscriber?.subscriber_id || null;
-    if (currentSubId === prevSelectedSubIdRef.current) return;
+    const previousSubId = prevSelectedSubIdRef.current;
+    if (currentSubId === previousSubId) return;
+    // Salva o rascunho da conversa anterior antes de trocar, e limpa o campo —
+    // sem isso o texto digitado pra um cliente ficava no input e podia ser
+    // enviado sem querer pra outro cliente ao trocar de conversa.
+    if (previousSubId) {
+      if (newMessageRef.current.trim()) draftMessagesRef.current.set(previousSubId, newMessageRef.current);
+      else draftMessagesRef.current.delete(previousSubId);
+    }
+    setNewMessage(currentSubId ? (draftMessagesRef.current.get(currentSubId) || "") : "");
+    setSelectedFile(null);
+    setPreviewUrl(null);
     prevSelectedSubIdRef.current = currentSubId;
     if (selectedSubscriber) {
       setMessages([]);
@@ -1561,6 +1577,7 @@ const ManyChatInboxContent = () => {
     const optimisticMessage: Message = { id: tempId, conteudo: content, created_at: new Date().toISOString(), direcao: "saida", tipo: mediaType || "text", subscriber_id: currentSubId };
     setMessages(prev => { const updated = [...prev, optimisticMessage]; messagesCacheRef.current.set(currentSubId, updated); return updated; });
     setNewMessage("");
+    draftMessagesRef.current.delete(currentSubId);
     resetTextareaHeight();
     setTyping(false);
     setSelectedFile(null);
@@ -1665,6 +1682,7 @@ const ManyChatInboxContent = () => {
     setSelectedFile(null);
     setPreviewUrl(null);
     setNewMessage("");
+    draftMessagesRef.current.delete(subscriberSnapshot.subscriber_id);
     resetTextareaHeight();
     // Z-API só suporta legenda nativa em image/video; document vira uma
     // mensagem de texto de acompanhamento para o cliente não perder o texto.
