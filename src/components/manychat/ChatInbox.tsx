@@ -285,6 +285,11 @@ const ManyChatInboxContent = () => {
   const { sendMetaEvent } = useMetaCapi();
   const { setAttending } = useChatAttending(user?.id, fullName ?? 'Usuário');
 
+  // loadSubscriberTags é recriada a cada tag add/remove (depende de subscriberTags) —
+  // usamos ref pra chamar a versão mais recente sem forçar o canal realtime a reconectar.
+  const loadSubscriberTagsRef = useRef(loadSubscriberTags);
+  useEffect(() => { loadSubscriberTagsRef.current = loadSubscriberTags; }, [loadSubscriberTags]);
+
   // ─── Refs ───────────────────────────────────────────────────────────────────
 
   const messagesCacheRef         = useRef<Map<string, Message[]>>(new Map());
@@ -999,8 +1004,18 @@ const ManyChatInboxContent = () => {
       return channel;
     };
 
+    const setupTagsChannel = () => {
+      const channel = supabase.channel(`subscriber-tags-${user?.id || "anon"}`).on("postgres_changes", { event: "*", schema: "public", table: "subscriber_tags" }, (payload) => {
+        if (!isSubscribed) return;
+        const subId = (payload.new as any)?.subscriber_id || (payload.old as any)?.subscriber_id;
+        if (subId) loadSubscriberTagsRef.current([subId]);
+      }).subscribe();
+      return channel;
+    };
+
     setupMessagesChannel();
     const subscribersChannel = setupSubscribersChannel();
+    const tagsChannel = setupTagsChannel();
 
     // Broadcast channel: sincroniza leitura de mensagens entre todos os agentes conectados
     const readChannel = supabase.channel('chat-read-receipts-global')
@@ -1056,6 +1071,7 @@ const ManyChatInboxContent = () => {
         activeMessagesChannelRef.current = null;
       }
       supabase.removeChannel(subscribersChannel);
+      supabase.removeChannel(tagsChannel);
       supabase.removeChannel(readChannel);
       supabase.removeChannel(customerTypingChannel);
       readReceiptsChannelRef.current = null;
