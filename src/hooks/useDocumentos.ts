@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Documento } from '@/types/documentos';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { fetchAllPaginated } from '@/lib/fetchAllPaginated';
 
 // Helper para sincronizar com Google Drive em background
 async function syncToGoogleDrive(
@@ -108,24 +109,29 @@ export function useDocumentos(processoId?: string, clienteId?: string) {
 
   const fetchDocumentos = async () => {
     setLoading(true);
-    let query = supabase
-      .from('documentos')
-      .select('*')
-      .order('created_at', { ascending: false });
 
-    if (processoId) {
-      query = query.eq('processo_id', processoId);
-    }
-    if (clienteId) {
-      query = query.eq('cliente_id', clienteId);
-    }
-
-    const { data, error } = await query;
+    // Paginado — sem processoId/clienteId (aba "todos os documentos"), um
+    // único .select('*') fica sujeito ao teto padrão de 1000 linhas do
+    // PostgREST: acima disso a lista corta silenciosamente sem nenhum aviso.
+    // Desempate por id na ordenação — created_at sozinho pode empatar entre
+    // uploads na mesma janela, e paginação por .range() só é confiável com
+    // ordem totalmente determinística.
+    const { data, error } = await fetchAllPaginated<Documento>((from, to) => {
+      let query = supabase
+        .from('documentos')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to);
+      if (processoId) query = query.eq('processo_id', processoId);
+      if (clienteId) query = query.eq('cliente_id', clienteId);
+      return query;
+    });
 
     if (error) {
       toast({ title: 'Erro ao carregar documentos', description: error.message, variant: 'destructive' });
     } else {
-      setDocumentos(data as Documento[]);
+      setDocumentos(data);
     }
     setLoading(false);
   };

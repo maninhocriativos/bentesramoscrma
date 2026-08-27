@@ -171,20 +171,24 @@ export default function IsaAutonomaPage() {
 
     try {
       // ── Isa: tarefas atrasadas ─────────────────────────────────────────────
-      const { data: overdueTasks } = await supabase
+      // Conta com { count: 'exact', head: true } em vez de trazer as linhas —
+      // além de mais rápido (Postgres só devolve o número), escapa do teto de
+      // 1000 linhas do PostgREST que um .select() normal levaria: acima disso
+      // o alerta subestimaria a contagem real sem nenhum aviso.
+      const { count: overdueTasksCount } = await supabase
         .from('tarefas')
-        .select('id, titulo, data_limite')
+        .select('id', { count: 'exact', head: true })
         .lt('data_limite', today)
         .in('status', ['Pendente', 'Em Andamento']);
 
-      if (overdueTasks && overdueTasks.length > 0) {
+      if (overdueTasksCount && overdueTasksCount > 0) {
         found.push({
           id: 'isa-overdue-tasks',
           agent: 'isa',
           priority: 'Alta',
           title: 'Tarefas atrasadas',
-          description: `${overdueTasks.length} tarefa(s) com prazo vencido aguardam ação`,
-          count: overdueTasks.length,
+          description: `${overdueTasksCount} tarefa(s) com prazo vencido aguardam ação`,
+          count: overdueTasksCount,
         });
       }
 
@@ -218,54 +222,54 @@ export default function IsaAutonomaPage() {
       }
 
       // ── Isa: leads aguardando contrato ────────────────────────────────────
-      const { data: leadsAguardando } = await supabase
+      const { count: leadsAguardandoCount } = await supabase
         .from('leads_juridicos')
-        .select('id, nome, status')
+        .select('id', { count: 'exact', head: true })
         .eq('status', 'Aguardando Contrato');
 
-      if (leadsAguardando && leadsAguardando.length > 0) {
+      if (leadsAguardandoCount && leadsAguardandoCount > 0) {
         found.push({
           id: 'isa-leads-awaiting-contract',
           agent: 'isa',
           priority: 'Média',
           title: 'Leads aguardando contrato',
-          description: `${leadsAguardando.length} lead(s) prontos para assinatura de contrato`,
-          count: leadsAguardando.length,
+          description: `${leadsAguardandoCount} lead(s) prontos para assinatura de contrato`,
+          count: leadsAguardandoCount,
         });
       }
 
       // ── Donn@: parcelas em atraso ─────────────────────────────────────────
-      const { data: overdueParcelas } = await supabase
+      const { count: overdueParcelasCount } = await supabase
         .from('parcelas')
-        .select('id, valor, data_vencimento')
+        .select('id', { count: 'exact', head: true })
         .lt('data_vencimento', today)
         .in('status', ['Pendente', 'Atrasado']);
 
-      if (overdueParcelas && overdueParcelas.length > 0) {
+      if (overdueParcelasCount && overdueParcelasCount > 0) {
         found.push({
           id: 'donna-overdue-parcelas',
           agent: 'donna',
           priority: 'Alta',
           title: 'Parcelas em atraso',
-          description: `${overdueParcelas.length} parcela(s) com vencimento passado sem pagamento`,
-          count: overdueParcelas.length,
+          description: `${overdueParcelasCount} parcela(s) com vencimento passado sem pagamento`,
+          count: overdueParcelasCount,
         });
       }
 
       // ── Donn@: processos parados +30d ─────────────────────────────────────
-      const { data: staleProcessos } = await supabase
+      const { count: staleProcessosCount } = await supabase
         .from('processos')
-        .select('id, titulo, updated_at')
+        .select('id', { count: 'exact', head: true })
         .lt('updated_at', thirtyDaysAgo);
 
-      if (staleProcessos && staleProcessos.length > 0) {
+      if (staleProcessosCount && staleProcessosCount > 0) {
         found.push({
           id: 'donna-stale-processos',
           agent: 'donna',
           priority: 'Média',
           title: 'Processos sem atualização',
-          description: `${staleProcessos.length} processo(s) sem movimentação nos últimos 30 dias`,
-          count: staleProcessos.length,
+          description: `${staleProcessosCount} processo(s) sem movimentação nos últimos 30 dias`,
+          count: staleProcessosCount,
         });
       }
     } catch (err) {
