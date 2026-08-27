@@ -51,6 +51,7 @@ const ConferenciaExtratosPage  = lazyWithRetry(() => import("./pages/Conferencia
 const GoogleAuthCallback       = lazyWithRetry(() => import("./pages/GoogleAuthCallback"));
 const FollowupPage             = lazyWithRetry(() => import("./pages/FollowupPage"));
 const DadosPage                = lazyWithRetry(() => import("./pages/DadosPage"));
+const PeticoesPageV2           = lazyWithRetry(() => import("./pages/v2/PeticoesPageV2"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -118,6 +119,8 @@ function AppRoutes() {
               <Route path="/peticoes/:id/saida"    element={<PeticaoSaidaPage />} />
               <Route path="/modelos"               element={<ModelosPage />} />
               <Route path="/peticoes/modelo-editor" element={<PeticaoModeloEditorPage />} />
+              {/* v2 — backend novo (Cloudflare), rota paralela não linkada na barra lateral ainda */}
+              <Route path="/peticoes-v2"           element={<PeticoesPageV2 />} />
               <Route path="/historico-acessos"     element={<HistoricoAcessosPage />} />
               <Route path="/historico-atendimento" element={<HistoricoAtendimentoPage />} />
               <Route path="/intimacoes"            element={<IntimacoesPage />} />
