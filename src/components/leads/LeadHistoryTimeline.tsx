@@ -42,6 +42,7 @@ const CHANNEL_ICONS: Record<string, React.ElementType> = {
   'Reunião': Video,
   'Documento': FileText,
   'Contrato': FileSignature,
+  'Anotação': FileText,
 };
 
 // changed_by em lead_state_history nunca é um usuário humano — é sempre uma
@@ -258,7 +259,7 @@ export function LeadHistoryTimeline({ leadId, telefone }: LeadHistoryTimelinePro
                       <div
                         key={item.id}
                         className={cn(
-                          "flex gap-2.5 p-2.5 rounded-lg text-sm transition-colors",
+                          "flex gap-2.5 p-2.5 rounded-lg text-sm transition-colors min-w-0",
                           item.type === 'isa' && "bg-violet-50 border border-violet-100 dark:bg-violet-950/20 dark:border-violet-900/40",
                           item.type === 'system' && "bg-muted/50 border border-border",
                           item.type === 'message' && item.direction === 'in' && "bg-blue-50 border border-blue-100 dark:bg-blue-950/20 dark:border-blue-900/40",
@@ -298,7 +299,7 @@ export function LeadHistoryTimeline({ leadId, telefone }: LeadHistoryTimelinePro
                               {format(new Date(item.timestamp), 'HH:mm')}
                             </span>
                           </div>
-                          <p className="text-xs text-foreground/80 leading-relaxed break-words">
+                          <p className="text-xs text-foreground/80 leading-relaxed break-all">
                             {item.content}
                           </p>
                         </div>

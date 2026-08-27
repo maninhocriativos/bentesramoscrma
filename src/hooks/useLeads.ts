@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Lead, LeadStatus } from '@/types/leads';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAllPaginated } from '@/lib/fetchAllPaginated';
+import { usePerfil } from '@/contexts/PerfilContext';
+import { marcarLeadPerdido } from '@/lib/leadPerdido';
 
 const LEADS_SELECT = 'id,created_at,updated_at,nome,telefone,email,status,origem,tipo_acao,lead_state,state_updated_at,valor_causa,resumo_ia,tipo_origem,fonte_trafego,linha_whatsapp,empresa_tag,owner_tipo,isa_ativa,is_lost,lost_reason,lost_at,link_contrato,contract_key,contract_sent_at,contract_signed_at,last_contact_at,cidade,uf,cpf,triage_started_at,canal_origem,facebook_lead_id,contratos_adicionais' as const;
 
@@ -10,6 +12,7 @@ export function useLeads() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { fullName } = usePerfil();
   const initialLoadDone = useRef(false);
 
   const fetchLeads = useCallback(async () => {
@@ -181,6 +184,31 @@ export function useLeads() {
     return { error: null };
   };
 
+  // Marca o lead como Perdido registrando o motivo — usado quando o card é
+  // arrastado pra coluna "Perdido" no Kanban. Antes disso só o drag-and-drop
+  // simples (updateLeadStatus) rodava, sem gravar is_lost/lost_reason nem
+  // nenhum rastro em lead_state_history — por isso o motivo nunca aparecia
+  // na aba Histórico do modal do lead. Mesmo padrão já usado no botão
+  // "Lead Perdido" do ChatInbox (ver src/lib/leadPerdido.ts).
+  const markLeadAsLost = async (id: string, motivo: string) => {
+    const previousLeads = [...leads];
+    const agora = new Date().toISOString();
+
+    setLeads(prev => prev.map(lead =>
+      lead.id === id ? { ...lead, status: 'Perdido' as LeadStatus, is_lost: true, lost_reason: motivo, lost_at: agora, updated_at: agora } : lead
+    ));
+
+    const { error } = await marcarLeadPerdido(id, motivo, fullName || 'Equipe');
+
+    if (error) {
+      setLeads(previousLeads);
+      toast({ title: 'Erro ao marcar como perdido', description: error.message, variant: 'destructive' });
+      return { error };
+    }
+
+    return { error: null };
+  };
+
   return {
     leads,
     setLeads,
@@ -190,5 +218,6 @@ export function useLeads() {
     updateLead,
     deleteLead,
     updateLeadStatus,
+    markLeadAsLost,
   };
 }

@@ -30,6 +30,10 @@ import { useLeadProcessos } from '@/hooks/useLeadProcessos';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { LeadHistoryTimeline } from './LeadHistoryTimeline';
+import { LeadPerdidoDialog } from './LeadPerdidoDialog';
+import { marcarLeadPerdido } from '@/lib/leadPerdido';
+import { usePerfil } from '@/contexts/PerfilContext';
+import { useAuth } from '@/hooks/useAuth';
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
@@ -501,7 +505,13 @@ export function LeadDetailModal({ lead: initialLead, isOpen, onClose, onLeadUpda
   const [localLead, setLocalLead] = useState<Lead | null>(initialLead);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [lostDialogOpen, setLostDialogOpen] = useState(false);
+  const [notaTexto, setNotaTexto] = useState('');
+  const [salvandoNota, setSalvandoNota] = useState(false);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const navigate = useNavigate();
+  const { fullName } = usePerfil();
+  const { user } = useAuth();
 
   // Form state for edit tab — lifted here so save button in footer works
   const [form, setForm] = useState({
@@ -540,6 +550,14 @@ export function LeadDetailModal({ lead: initialLead, isOpen, onClose, onLeadUpda
       toast.error('O nome é obrigatório');
       return;
     }
+
+    // "Perdido" exige motivo — sem isso a mudança de status ficava sem
+    // nenhum rastro na aba Histórico do lead (só o campo status trocava).
+    if (form.status === 'Perdido' && localLead.status !== 'Perdido') {
+      setLostDialogOpen(true);
+      return;
+    }
+
     setSaving(true);
     const updates: Record<string, any> = {
       nome: form.nome.trim(),
@@ -576,6 +594,69 @@ export function LeadDetailModal({ lead: initialLead, isOpen, onClose, onLeadUpda
     }
   }, [localLead, form, onLeadUpdated]);
 
+  const handleConfirmLost = useCallback(async (motivo: string) => {
+    if (!localLead) return;
+    setSaving(true);
+
+    // Campos normais do formulário primeiro (status/motivo entram no passo
+    // seguinte, via o mesmo helper usado pelo Kanban e pelo ChatInbox).
+    const camposUpdates: Record<string, any> = {
+      nome: form.nome.trim(),
+      telefone: form.telefone.trim() || null,
+      email: form.email.trim() || null,
+      origem: form.origem,
+      tipo_acao: form.tipo_acao.trim() || null,
+      valor_causa: form.valor_causa ? Number(form.valor_causa) : null,
+      resumo_ia: form.resumo_ia.trim() || null,
+      link_contrato: form.link_contrato.trim() || null,
+      fonte_trafego: form.fonte_trafego.trim() || null,
+    };
+    await supabase.from('leads_juridicos').update(camposUpdates).eq('id', localLead.id);
+
+    const { error } = await marcarLeadPerdido(localLead.id, motivo, fullName || 'Equipe');
+    setSaving(false);
+    if (error) {
+      toast.error('Erro ao marcar como perdido: ' + error.message);
+      return;
+    }
+
+    setLostDialogOpen(false);
+    setHasChanges(false);
+    toast.success('Lead marcado como Perdido');
+
+    const { data } = await supabase.from('leads_juridicos').select('*').eq('id', localLead.id).single();
+    if (data) {
+      const updated = data as Lead;
+      setLocalLead(updated);
+      onLeadUpdated?.(updated);
+    }
+  }, [localLead, form, fullName, onLeadUpdated]);
+
+  // Registro manual na timeline (aba Histórico) — a interação virava
+  // "invisível" até aqui: só existia o campo único Resumo/Anotações
+  // (resumo_ia, sem data nem autor), sem jeito de anotar o que aconteceu em
+  // cada contato ao longo do tempo. Grava em `interacoes`, já lida pela
+  // LeadHistoryTimeline.
+  const handleAddNota = useCallback(async () => {
+    if (!localLead || !notaTexto.trim()) return;
+    setSalvandoNota(true);
+    const { error } = await supabase.from('interacoes').insert({
+      cliente_id: localLead.id,
+      tipo: 'Anotação',
+      resumo: notaTexto.trim(),
+      data_interacao: new Date().toISOString(),
+      responsavel_id: user?.id || null,
+    });
+    setSalvandoNota(false);
+    if (error) {
+      toast.error('Erro ao registrar: ' + error.message);
+      return;
+    }
+    setNotaTexto('');
+    setHistoryRefreshKey(k => k + 1);
+    toast.success('Registrado no histórico');
+  }, [localLead, notaTexto, user?.id]);
+
   const updateFormField = (key: string, value: string) => {
     setForm(prev => ({ ...prev, [key]: value }));
     setHasChanges(true);
@@ -588,6 +669,7 @@ export function LeadDetailModal({ lead: initialLead, isOpen, onClose, onLeadUpda
   const initials = (lead.nome || '??').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={() => onClose()}>
       <DialogContent className="max-w-2xl p-0 rounded-2xl overflow-hidden gap-0 max-h-[90vh]">
         {/* Premium Header */}
@@ -711,8 +793,25 @@ export function LeadDetailModal({ lead: initialLead, isOpen, onClose, onLeadUpda
             <ContratosTab lead={lead} />
           </TabsContent>
           <TabsContent value="historico" className="mt-0 flex-1">
-            <div className="p-1">
-              <LeadHistoryTimeline leadId={lead.id} telefone={lead.telefone} />
+            <div className="p-1 flex flex-col h-full">
+              <div className="px-3 pt-2 pb-1 flex items-end gap-2">
+                <Textarea
+                  value={notaTexto}
+                  onChange={e => setNotaTexto(e.target.value)}
+                  placeholder="Registrar manualmente o que aconteceu (ligação, decisão, observação)..."
+                  className="text-sm rounded-lg min-h-[44px] max-h-24 resize-none"
+                />
+                <Button
+                  size="sm"
+                  onClick={handleAddNota}
+                  disabled={salvandoNota || !notaTexto.trim()}
+                  className="h-9 gap-1.5 text-xs rounded-lg shrink-0"
+                >
+                  {salvandoNota ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                  Registrar
+                </Button>
+              </div>
+              <LeadHistoryTimeline key={historyRefreshKey} leadId={lead.id} telefone={lead.telefone} />
             </div>
           </TabsContent>
         </Tabs>
@@ -741,5 +840,13 @@ export function LeadDetailModal({ lead: initialLead, isOpen, onClose, onLeadUpda
         </div>
       </DialogContent>
     </Dialog>
+    <LeadPerdidoDialog
+      open={lostDialogOpen}
+      leadNome={lead.nome}
+      loading={saving}
+      onConfirm={handleConfirmLost}
+      onCancel={() => setLostDialogOpen(false)}
+    />
+    </>
   );
 }

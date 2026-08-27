@@ -10,6 +10,8 @@ import { useLeads } from '@/hooks/useLeads';
 import { useLeadsProcessoCounts } from '@/hooks/useLeadProcessos';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { LeadPerdidoDialog } from './LeadPerdidoDialog';
+import { useToast } from '@/hooks/use-toast';
 
 const LEADS_PER_PAGE = 30;
 
@@ -27,7 +29,10 @@ const PIPELINE_STAGES: { status: LeadStatus; label: string }[] = [
 type ViewMode = 'cards' | 'list' | 'board';
 
 export function LeadsTableView() {
-  const { leads, loading, updateLeadStatus } = useLeads();
+  const { leads, loading, updateLeadStatus, markLeadAsLost } = useLeads();
+  const { toast } = useToast();
+  const [pendingLostLead, setPendingLostLead] = useState<Lead | null>(null);
+  const [markingLost, setMarkingLost] = useState(false);
   const [search, setSearch] = useState('');
   const [filterOrigem, setFilterOrigem] = useState('all');
   const [filterResponsavel, setFilterResponsavel] = useState('all');
@@ -121,7 +126,25 @@ export function LeadsTableView() {
   };
 
   const handleMoveStage = async (leadId: string, newStatus: LeadStatus) => {
+    // "Perdido" exige motivo — sem isso não sobrava nenhum rastro na aba
+    // Histórico do lead (mesmo bug do drag-and-drop no Kanban).
+    if (newStatus === 'Perdido') {
+      const lead = leads.find(l => l.id === leadId);
+      if (lead) setPendingLostLead(lead);
+      return;
+    }
     await updateLeadStatus(leadId, newStatus);
+  };
+
+  const handleConfirmLost = async (motivo: string) => {
+    if (!pendingLostLead) return;
+    setMarkingLost(true);
+    const result = await markLeadAsLost(pendingLostLead.id, motivo);
+    setMarkingLost(false);
+    if (!result.error) {
+      toast({ title: '❌ Lead marcado como Perdido', description: pendingLostLead.nome || undefined });
+      setPendingLostLead(null);
+    }
   };
 
   // Map viewMode for header (cards and list both show in header as list/board)
@@ -250,6 +273,14 @@ export function LeadsTableView() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onLeadUpdated={(updated) => setSelectedLead(updated)}
+      />
+
+      <LeadPerdidoDialog
+        open={!!pendingLostLead}
+        leadNome={pendingLostLead?.nome || null}
+        loading={markingLost}
+        onConfirm={handleConfirmLost}
+        onCancel={() => setPendingLostLead(null)}
       />
     </div>
   );
