@@ -7,7 +7,7 @@ import {
   MessageCircle, Clock, Tag, Sparkles, Bot, Scale, FileSignature,
   Zap, ZapOff, Plus, Loader2, ExternalLink, History, Link2,
   Pencil, Check, Minus, Megaphone, Globe, Building2, Hash,
-  Save, ChevronRight, Copy, Trash2, ArrowRight, MessageSquare
+  Save, ChevronRight, Copy, Trash2, ArrowRight, MessageSquare, NotebookPen
 } from 'lucide-react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -30,10 +30,10 @@ import { useLeadProcessos } from '@/hooks/useLeadProcessos';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { LeadHistoryTimeline } from './LeadHistoryTimeline';
+import { LeadRegistrosTab } from './LeadRegistrosTab';
 import { LeadPerdidoDialog } from './LeadPerdidoDialog';
 import { marcarLeadPerdido } from '@/lib/leadPerdido';
 import { usePerfil } from '@/contexts/PerfilContext';
-import { useAuth } from '@/hooks/useAuth';
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
@@ -506,12 +506,8 @@ export function LeadDetailModal({ lead: initialLead, isOpen, onClose, onLeadUpda
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [lostDialogOpen, setLostDialogOpen] = useState(false);
-  const [notaTexto, setNotaTexto] = useState('');
-  const [salvandoNota, setSalvandoNota] = useState(false);
-  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const navigate = useNavigate();
   const { fullName } = usePerfil();
-  const { user } = useAuth();
 
   // Form state for edit tab — lifted here so save button in footer works
   const [form, setForm] = useState({
@@ -632,31 +628,6 @@ export function LeadDetailModal({ lead: initialLead, isOpen, onClose, onLeadUpda
     }
   }, [localLead, form, fullName, onLeadUpdated]);
 
-  // Registro manual na timeline (aba Histórico) — a interação virava
-  // "invisível" até aqui: só existia o campo único Resumo/Anotações
-  // (resumo_ia, sem data nem autor), sem jeito de anotar o que aconteceu em
-  // cada contato ao longo do tempo. Grava em `interacoes`, já lida pela
-  // LeadHistoryTimeline.
-  const handleAddNota = useCallback(async () => {
-    if (!localLead || !notaTexto.trim()) return;
-    setSalvandoNota(true);
-    const { error } = await supabase.from('interacoes').insert({
-      cliente_id: localLead.id,
-      tipo: 'Anotação',
-      resumo: notaTexto.trim(),
-      data_interacao: new Date().toISOString(),
-      responsavel_id: user?.id || null,
-    });
-    setSalvandoNota(false);
-    if (error) {
-      toast.error('Erro ao registrar: ' + error.message);
-      return;
-    }
-    setNotaTexto('');
-    setHistoryRefreshKey(k => k + 1);
-    toast.success('Registrado no histórico');
-  }, [localLead, notaTexto, user?.id]);
-
   const updateFormField = (key: string, value: string) => {
     setForm(prev => ({ ...prev, [key]: value }));
     setHasChanges(true);
@@ -720,6 +691,9 @@ export function LeadDetailModal({ lead: initialLead, isOpen, onClose, onLeadUpda
             </TabsTrigger>
             <TabsTrigger value="historico" className="text-xs h-8 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none gap-1.5 px-3">
               <History className="w-3 h-3" /> Histórico
+            </TabsTrigger>
+            <TabsTrigger value="registros" className="text-xs h-8 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none gap-1.5 px-3">
+              <NotebookPen className="w-3 h-3" /> Registros
             </TabsTrigger>
           </TabsList>
 
@@ -793,31 +767,12 @@ export function LeadDetailModal({ lead: initialLead, isOpen, onClose, onLeadUpda
             <ContratosTab lead={lead} />
           </TabsContent>
           <TabsContent value="historico" className="mt-0 flex-1">
-            <div className="flex flex-col h-full">
-              <div className="mx-4 mt-3 mb-1 p-2.5 rounded-xl border border-border/60 bg-muted/30 space-y-1.5">
-                <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                  <Pencil className="w-2.5 h-2.5" /> Registrar manualmente
-                </Label>
-                <div className="flex items-end gap-2">
-                  <Textarea
-                    value={notaTexto}
-                    onChange={e => setNotaTexto(e.target.value)}
-                    placeholder="Ligação, decisão, observação..."
-                    className="text-sm rounded-lg min-h-[40px] max-h-24 resize-none bg-background"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={handleAddNota}
-                    disabled={salvandoNota || !notaTexto.trim()}
-                    className="h-9 gap-1.5 text-xs rounded-lg shrink-0"
-                  >
-                    {salvandoNota ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                    Registrar
-                  </Button>
-                </div>
-              </div>
-              <LeadHistoryTimeline key={historyRefreshKey} leadId={lead.id} telefone={lead.telefone} />
+            <div className="p-1">
+              <LeadHistoryTimeline leadId={lead.id} telefone={lead.telefone} />
             </div>
+          </TabsContent>
+          <TabsContent value="registros" className="mt-0 flex-1">
+            <LeadRegistrosTab leadId={lead.id} />
           </TabsContent>
         </Tabs>
 
