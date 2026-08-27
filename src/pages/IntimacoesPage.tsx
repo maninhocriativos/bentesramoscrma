@@ -854,6 +854,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const [tarefasVinculadas, setTarefasVinculadas] = useState<TarefaVinculada[]>([]);
   const [tarefasVinculadasLoading, setTarefasVinculadasLoading] = useState(false);
   const [tarefasCustom, setTarefasCustom] = useState<string[]>([]);
+  const [tarefasCustomDb, setTarefasCustomDb] = useState<string[]>([]);
   const [tarefaModalOpen, setTarefaModalOpen] = useState(false);
   const [documentoModalOpen, setDocumentoModalOpen] = useState(false);
   const [novaTarefa, setNovaTarefa] = useState('');
@@ -873,8 +874,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const { user: currentUser } = useAuth();
 
   const TAREFAS = ['Manifestação','Recurso de Apelação','Recurso Especial','Recurso Extraordinário','Recurso Ordinário','Recurso Inominado','Embargos de Declaração','Contrarrazões','Alegações Finais','Memoriais','Agravo de Instrumento','Agravo Interno','Sentença','Acórdão','Sessão de Julgamento','Réplica','Perícia'];
-  const allTarefas = [...TAREFAS, ...tarefasCustom];
-  const ehAudienciaTarefa = /audi[eê]nc/i.test(selectedTarefaTipo);
+  const allTarefas = [...new Set([...TAREFAS, ...tarefasCustomDb, ...tarefasCustom])];
   const toggleResponsavelTarefa = (id: string) =>
     setResponsavelIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const tc = getTypeConfig(intimacao.tipo_intimacao);
@@ -1033,6 +1033,27 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
 
   useEffect(() => { void fetchTarefasVinculadas(); }, [fetchTarefasVinculadas]);
 
+  // Tipos de tarefa cadastrados "na hora" (botão Cadastrar) só viviam em memória
+  // e somem ao fechar/recarregar a página — pareciam nunca salvar de verdade.
+  // Busca os títulos customizados já usados em tarefas reais (persistidos no
+  // banco), pra esses ficarem disponíveis pra sempre no dropdown, não só na
+  // sessão em que foram digitados.
+  useEffect(() => {
+    if (!tarefaModalOpen) return;
+    (async () => {
+      const { data } = await supabase
+        .from('tarefas')
+        .select('titulo')
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (data) {
+        const custom = [...new Set(data.map(d => d.titulo).filter(Boolean))]
+          .filter(t => !TAREFAS.includes(t));
+        setTarefasCustomDb(custom);
+      }
+    })();
+  }, [tarefaModalOpen]);
+
   // Ação mais urgente sugerida pela análise da IA (a que tem o menor prazo em
   // dias úteis) — usada para pré-preencher o prazo fatal com uma estimativa
   // baseada no conteúdo real da intimação, em vez do heurístico genérico por
@@ -1087,6 +1108,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
     if (!allTarefas.includes(title)) setTarefasCustom(prev => [...prev, title]);
     setSelectedTarefaTipo(title);
     setNovaTarefa('');
+    toast.success(`"${title}" selecionado`, { description: 'Preencha os campos abaixo e clique em "Criar tarefa relacionada" para salvar.' });
   };
 
   const handleCreateRelatedTask = async () => {
@@ -1098,7 +1120,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
       const prazoFat = parseISO(prazoFatal);
       const prioridade = isValid(prazoFat) && Math.ceil((prazoFat.getTime() - Date.now()) / 86400000) <= 3 ? 'Urgente' : 'Alta';
       const processoNumero = linkedProcesso?.numero || intimacao.processo_cnj || 'sem numero';
-      const linkAudienciaVal = ehAudienciaTarefa ? (linkAudienciaTarefa.trim() || null) : null;
+      const linkAudienciaVal = linkAudienciaTarefa.trim() || null;
       const descriptionParts = [
         `Tarefa criada a partir da intimacao ${intimacao.tipo_intimacao || ''}`.trim(),
         `Processo: ${processoNumero}`,
@@ -1656,12 +1678,10 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
               <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Observações da tarefa</p>
               <Textarea placeholder="Instruções, contexto adicional..." value={observacaoTarefa} onChange={e => setObservacaoTarefa(e.target.value)} className="resize-none rounded-lg" rows={3} maxLength={2000} />
             </div>
-            {ehAudienciaTarefa && (
-              <div className="space-y-1.5">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Link da audiência</p>
-                <Input placeholder="https://..." value={linkAudienciaTarefa} onChange={e => setLinkAudienciaTarefa(e.target.value)} className="h-9 rounded-lg" />
-              </div>
-            )}
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Link da audiência <span className="text-muted-foreground/60 font-normal normal-case">(se houver)</span></p>
+              <Input placeholder="https://..." value={linkAudienciaTarefa} onChange={e => setLinkAudienciaTarefa(e.target.value)} className="h-9 rounded-lg" />
+            </div>
             <div className="space-y-1.5 border-t border-border/50 pt-3">
               <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Responsáveis pela tarefa</p>
               <Popover modal>
