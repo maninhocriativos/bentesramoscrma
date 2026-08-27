@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Tarefa, Timesheet } from '@/types/tarefas';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { fetchAllPaginated } from '@/lib/fetchAllPaginated';
 
 export function useTarefas(processoId?: string) {
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
@@ -12,21 +13,33 @@ export function useTarefas(processoId?: string) {
 
   const fetchTarefas = useCallback(async () => {
     setLoading(true);
-    let query = supabase
-      .from('tarefas')
-      .select('*')
-      .order('data_limite', { ascending: true });
 
-    if (processoId) {
-      query = query.eq('processo_id', processoId);
-    }
-
-    const { data, error } = await query;
+    // Paginado — sem isso, um único .select('*') fica sujeito ao teto padrão
+    // de 1000 linhas por requisição do PostgREST: passando desse número, a
+    // tabela corta silenciosamente (sem erro) e a página de Tarefas + os
+    // widgets do Dashboard que usam este hook passam a mostrar dados
+    // incompletos sem nenhum aviso. Mesmo bug já corrigido em useLeads/
+    // useProcessos — aqui pagina do mesmo jeito, em paralelo.
+    const { data, error } = await fetchAllPaginated<Tarefa>((from, to) => {
+      // Ordena por data_limite + id como desempate: data_limite sozinho não é
+      // único (muitas tarefas podem compartilhar a mesma data), e paginação
+      // por .range() só é confiável com uma ordem totalmente determinística —
+      // sem desempate, linhas podem repetir ou faltar entre páginas buscadas
+      // em paralelo.
+      let query = supabase
+        .from('tarefas')
+        .select('*')
+        .order('data_limite', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to);
+      if (processoId) query = query.eq('processo_id', processoId);
+      return query;
+    });
 
     if (error) {
       toast({ title: 'Erro ao carregar tarefas', description: error.message, variant: 'destructive' });
     } else {
-      setTarefas(data as Tarefa[]);
+      setTarefas(data);
     }
     setLoading(false);
   }, [processoId, toast]);
