@@ -7,7 +7,7 @@ import {
   MessageCircle, Clock, Tag, Sparkles, Bot, Scale, FileSignature,
   Zap, ZapOff, Plus, Loader2, ExternalLink, History, Link2,
   Pencil, Check, Minus, Megaphone, Globe, Building2, Hash,
-  Save, ChevronRight, Copy, Trash2, ArrowRight, MessageSquare, NotebookPen
+  Save, ChevronRight, Copy, Trash2, ArrowRight, MessageSquare, NotebookPen, Activity
 } from 'lucide-react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useLeadContracts } from '@/hooks/useLeadContracts';
 import { useLeadProcessos } from '@/hooks/useLeadProcessos';
+import { enrichMovements, getCategoriaColor } from '@/lib/cnjMovimentosMap';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { LeadHistoryTimeline } from './LeadHistoryTimeline';
@@ -313,10 +314,82 @@ function ResumoTab({ lead }: { lead: Lead }) {
   );
 }
 
+// ============== MOVIMENTAÇÕES DE UM PROCESSO (inline, dentro do card) ==============
+interface MovimentoRow {
+  id: string;
+  data_movimento: string | null;
+  movimento_titulo: string;
+  movimento_cnj_codigo: string | null;
+  titulo_humano: string;
+  categoria: string;
+}
+
+function ProcessoMovimentacoes({ processoId }: { processoId: string }) {
+  const [movimentos, setMovimentos] = useState<MovimentoRow[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('processo_movimentacoes')
+        .select('id, data_movimento, movimento_titulo, movimento_cnj_codigo')
+        .eq('processo_id', processoId)
+        .order('data_movimento', { ascending: false, nullsFirst: false })
+        .limit(15);
+      if (cancel) return;
+      if (error) { console.error('[ProcessoMovimentacoes]', error.message); setMovimentos([]); setLoading(false); return; }
+      const enriched = (data || []).map((m: any) => {
+        const [result] = enrichMovements([{
+          dataHora: m.data_movimento || '',
+          nome: m.movimento_titulo,
+          codigo: m.movimento_cnj_codigo ? parseInt(m.movimento_cnj_codigo, 10) : undefined,
+        }]);
+        return { ...m, titulo_humano: result?.titulo_humano || m.movimento_titulo, categoria: result?.categoria || 'outros' };
+      });
+      setMovimentos(enriched);
+      setLoading(false);
+    })();
+    return () => { cancel = true; };
+  }, [processoId]);
+
+  if (loading) {
+    return <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>;
+  }
+  if (!movimentos || movimentos.length === 0) {
+    return <p className="text-xs text-muted-foreground text-center py-3">Nenhuma movimentação sincronizada ainda</p>;
+  }
+
+  return (
+    <div className="space-y-1.5 pt-1">
+      {movimentos.map(m => {
+        const colorClass = getCategoriaColor(m.categoria);
+        return (
+          <div key={m.id} className="flex items-start gap-2 text-xs">
+            <span className={cn("mt-0.5 shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md border text-[9px] font-bold", colorClass)}>
+              {m.categoria}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-foreground/90 leading-snug break-words">{m.titulo_humano}</p>
+              {m.data_movimento && (
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  {format(new Date(m.data_movimento), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ============== PROCESSOS TAB ==============
 function ProcessosTab({ lead }: { lead: Lead }) {
   const { data: processosData, isLoading } = useLeadProcessos(lead.id);
   const navigate = useNavigate();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const processos = processosData?.processos || [];
   const autoLinked = processosData?.autoLinked || 0;
 
@@ -353,37 +426,59 @@ function ProcessosTab({ lead }: { lead: Lead }) {
           </div>
         ) : (
           <div className="space-y-2">
-            {processos.map(proc => (
-              <div
-                key={proc.id}
-                onClick={() => navigate('/processos', { state: { abrirProcessoId: proc.id } })}
-                className="p-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-mono text-muted-foreground truncate">{proc.numero_processo || 'Sem número'}</p>
-                    <p className="text-sm font-medium truncate mt-0.5">{proc.titulo_acao || 'Sem título'}</p>
+            {processos.map(proc => {
+              const isExpanded = expandedId === proc.id;
+              return (
+                <div key={proc.id} className="rounded-lg border border-border/50 bg-card overflow-hidden">
+                  <div
+                    onClick={() => setExpandedId(isExpanded ? null : proc.id)}
+                    className="p-3 hover:bg-muted/30 cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-mono text-muted-foreground truncate">{proc.numero_processo || 'Sem número'}</p>
+                        <p className="text-sm font-medium truncate mt-0.5">{proc.titulo_acao || 'Sem título'}</p>
+                      </div>
+                      <Badge variant="secondary" className={cn("text-[9px] shrink-0",
+                        proc.status === 'Em Andamento' ? 'bg-stage-atendimento-bg text-stage-atendimento' :
+                        proc.status === 'Ganho' ? 'bg-stage-ganho-bg text-stage-ganho' :
+                        proc.status === 'Perdido' ? 'bg-stage-perdido-bg text-stage-perdido' :
+                        'bg-muted text-muted-foreground'
+                      )}>
+                        {proc.status || 'Indefinido'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground">
+                      {proc.tribunal && <span>{proc.tribunal}</span>}
+                      {proc.advogado_responsavel && <span>• {proc.advogado_responsavel}</span>}
+                      {proc.origem_cliente && (
+                        <Badge variant="outline" className="text-[8px] h-3.5 ml-auto">
+                          {proc.origem_cliente === 'manual' ? 'Manual' : 'Auto'}
+                        </Badge>
+                      )}
+                    </div>
+                    <button
+                      onClick={e => { e.stopPropagation(); setExpandedId(isExpanded ? null : proc.id); }}
+                      className="flex items-center gap-1 mt-2 text-[10px] font-semibold text-primary hover:underline"
+                    >
+                      <Activity className="h-3 w-3" /> {isExpanded ? 'Ocultar movimentações' : 'Ver movimentações'}
+                    </button>
                   </div>
-                  <Badge variant="secondary" className={cn("text-[9px] shrink-0",
-                    proc.status === 'Em Andamento' ? 'bg-stage-atendimento-bg text-stage-atendimento' :
-                    proc.status === 'Ganho' ? 'bg-stage-ganho-bg text-stage-ganho' :
-                    proc.status === 'Perdido' ? 'bg-stage-perdido-bg text-stage-perdido' :
-                    'bg-muted text-muted-foreground'
-                  )}>
-                    {proc.status || 'Indefinido'}
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground">
-                  {proc.tribunal && <span>{proc.tribunal}</span>}
-                  {proc.advogado_responsavel && <span>• {proc.advogado_responsavel}</span>}
-                  {proc.origem_cliente && (
-                    <Badge variant="outline" className="text-[8px] h-3.5 ml-auto">
-                      {proc.origem_cliente === 'manual' ? 'Manual' : 'Auto'}
-                    </Badge>
+
+                  {isExpanded && (
+                    <div className="px-3 pb-3 border-t border-border/40 bg-muted/10">
+                      <ProcessoMovimentacoes processoId={proc.id} />
+                      <button
+                        onClick={() => navigate('/processos', { state: { abrirProcessoId: proc.id } })}
+                        className="flex items-center gap-1 mt-2 text-[10px] font-semibold text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        Abrir processo completo <ChevronRight className="h-3 w-3" />
+                      </button>
+                    </div>
                   )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

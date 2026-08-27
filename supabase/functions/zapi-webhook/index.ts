@@ -1,6 +1,6 @@
 const serve = Deno.serve;
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { normalizePhone, gerarSubscriberId, identificarInstanciaOrigem, getZapiConfig, sendText, PHONE_TRAFEGO, PHONE_ESCRITORIO } from '../_shared/zapi-helper.ts';
+import { normalizePhone, gerarSubscriberId, identificarInstanciaOrigem, getZapiConfig, sendText, sanitizarNomeContato, PHONE_TRAFEGO, PHONE_ESCRITORIO } from '../_shared/zapi-helper.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -570,7 +570,7 @@ serve(async (req: Request) => {
       || existingNome.startsWith('zapi_')
       || existingNome.startsWith('{{')
       || ['Desconhecido', 'Sem nome', 'Contato', 'desconhecido', 'null', 'undefined'].includes(existingNome);
-    const nomeToSave = isGenericNome ? (normalized.name || normalized.phone) : existingNome;
+    const nomeToSave = isGenericNome ? (sanitizarNomeContato(normalized.name) || normalized.phone) : existingNome;
 
     const { error: subError } = await supabase
       .from('manychat_subscribers')
@@ -1227,7 +1227,11 @@ function normalizeZapiEvent(body: any): {
   const rawPhoneDigits = rawPhone ? String(rawPhone).replace(/\D/g, '') : '';
   const isLikelyInvalidPhone = !!rawPhoneDigits && (rawPhoneDigits.length < 10 || rawPhoneDigits.length > 13);
   const looksLikeLidIdentifier = !!body.chatLid && rawPhoneDigits === String(body.chatLid).replace(/\D/g, '');
-  const name = body.senderName || body.sender?.name || body.pushName;
+  // A equipe salva contatos no WhatsApp Business com prefixos próprios de
+  // organização (ex.: "Cliente - Maria..."), e a Z-API devolve isso como
+  // nome — sanitiza na fonte pra nenhum consumidor de `normalized.name`
+  // (criação de lead, nome do subscriber no chat...) herdar o prefixo.
+  const name = sanitizarNomeContato(body.senderName || body.sender?.name || body.pushName) || null;
 
   // Alguns payloads sinalizam que a mensagem foi enviada por nós (eco de saída)
   const fromMe =
@@ -1515,7 +1519,7 @@ async function findOrCreateLead(
   const isTrafficLead = trafficSource.isTraffic || isFromTrafficLine;
   
   // Usar nome do FB se disponível, senão usar o do WhatsApp
-  const leadName = nameFromFb || data.name || `Contato ${data.phone}`;
+  const leadName = sanitizarNomeContato(nameFromFb || data.name) || `Contato ${data.phone}`;
   
   const { data: newLead, error } = await supabase
     .from('leads_juridicos')

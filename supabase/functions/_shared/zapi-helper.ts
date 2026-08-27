@@ -82,6 +82,20 @@ export function normalizePhone(phone: string): string {
   return cleaned;
 }
 
+// A equipe salva alguns contatos no WhatsApp Business com um prefixo próprio
+// de organização (ex.: "Cliente - Maria Barbosa Pereira"), e a Z-API devolve
+// esse nome de contato salvo como pushName — o webhook gravava isso direto
+// como nome do lead. Além de aparecer feio em todo o CRM, quebrava o
+// vínculo automático de processos por nome (useLeadProcessos.ts), que
+// nunca batia porque procurava pelo nome COM o prefixo, e o nome da parte
+// no processo nunca tem esse prefixo interno. Remove qualquer prefixo desse
+// tipo (várias grafias comuns) antes de gravar.
+const PREFIXOS_CONTATO_INTERNO = /^\s*(cliente|contato|lead|cli)\s*[-:–—]\s*/i;
+export function sanitizarNomeContato(nome: string | null | undefined): string {
+  if (!nome) return '';
+  return nome.replace(PREFIXOS_CONTATO_INTERNO, '').trim();
+}
+
 /**
  * Busca todas as instâncias Z-API ativas
  */

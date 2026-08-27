@@ -43,7 +43,14 @@ export function useLeadProcessos(leadId: string | undefined) {
         // silenciosamente, já que esses caracteres são separadores da sintaxe
         // .or() do PostgREST).
         const cpfDigits = leadData.cpf ? leadData.cpf.replace(/\D/g, '') : '';
-        const nomeBusca = leadData.nome && leadData.nome.length > 5 ? leadData.nome : '';
+        // Alguns nomes de lead chegam com um prefixo de organização interna
+        // (ex.: "Cliente - Maria..."), herdado do nome de contato salvo no
+        // WhatsApp Business (já sanitizado na origem em zapi-webhook, mas
+        // esta é uma segunda camada) — sem remover, a busca por nome nunca
+        // batia com o nome real da parte no processo, e o vínculo automático
+        // silenciosamente não encontrava processos que já existiam.
+        const nomeLimpo = (leadData.nome || '').replace(/^\s*(cliente|contato|lead|cli)\s*[-:–—]\s*/i, '').trim();
+        const nomeBusca = nomeLimpo.length > 5 ? nomeLimpo : '';
 
         const partesEncontradas: { processo_id: string }[] = [];
         if (cpfDigits) {
