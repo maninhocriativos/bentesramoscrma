@@ -4,8 +4,9 @@
 -- /peticoes* do CRM não usam mais essas tabelas. Modelos serão recadastrados
 -- do zero via a ferramenta de upload nova.
 
--- Arquivos do bucket de storage (templates e petições geradas em .docx/.pdf)
-delete from storage.objects where bucket_id = 'peticoes-modelos';
+-- Os arquivos do bucket de storage (peticoes-modelos) são limpos à parte,
+-- via Storage API/CLI — o Supabase bloqueia DELETE direto em storage.objects
+-- por SQL (SQLSTATE 42501).
 
 -- Dados (ordem respeita as foreign keys: versions -> petitions -> models/action_types)
 delete from public.petition_versions;
