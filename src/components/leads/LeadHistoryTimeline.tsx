@@ -14,10 +14,14 @@ import {
   Loader2,
   RefreshCw,
   FileSignature,
+  Mic,
+  Image as ImageIcon,
+  ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { detectMediaType } from '@/lib/chatUtils';
 
 interface HistoryItem {
   id: string;
@@ -27,7 +31,23 @@ interface HistoryItem {
   timestamp: string;
   sender: string;
   channel?: string;
+  mediaKind?: 'audio' | 'image' | 'video' | 'document';
+  mediaUrl?: string;
 }
+
+const MEDIA_LABELS: Record<string, string> = {
+  audio: 'Mensagem de áudio',
+  image: 'Imagem enviada',
+  video: 'Vídeo enviado',
+  document: 'Documento enviado',
+};
+
+const MEDIA_ICONS: Record<string, React.ElementType> = {
+  audio: Mic,
+  image: ImageIcon,
+  video: Video,
+  document: FileText,
+};
 
 interface LeadHistoryTimelineProps {
   leadId: string;
@@ -144,14 +164,26 @@ export function LeadHistoryTimeline({ leadId, telefone }: LeadHistoryTimelinePro
                 : isIsa
                   ? 'Isa (IA)'
                   : (meta.sent_by_nome || 'Equipe');
+
+              // Mensagens de mídia chegam como só uma URL crua (áudio, foto,
+              // documento) — mostrar o link inteiro quebrava o layout e não
+              // dizia nada útil. Detecta pelo tipo salvo ou pela extensão
+              // (mesma lógica já usada no chat completo) e mostra um card
+              // compacto com um link "Abrir" em vez do texto cru.
+              const kind = detectMediaType(m.conteudo, m.tipo || undefined);
+              const isMedia = kind !== 'text' && kind !== 'sticker' && kind !== 'location'
+                && /^https?:\/\//i.test(m.conteudo.trim());
+
               items.push({
                 id: `msg-${m.id}`,
                 type: isIsa ? 'isa' : 'message',
                 direction: m.direcao === 'entrada' ? 'in' : 'out',
-                content: m.conteudo.substring(0, 200) + (m.conteudo.length > 200 ? '...' : ''),
+                content: isMedia ? '' : m.conteudo.substring(0, 200) + (m.conteudo.length > 200 ? '...' : ''),
                 timestamp: m.created_at,
                 sender,
                 channel: 'WhatsApp',
+                mediaKind: isMedia ? (kind as 'audio' | 'image' | 'video' | 'document') : undefined,
+                mediaUrl: isMedia ? m.conteudo.trim() : undefined,
               });
             });
           }
@@ -299,9 +331,22 @@ export function LeadHistoryTimeline({ leadId, telefone }: LeadHistoryTimelinePro
                               {format(new Date(item.timestamp), 'HH:mm')}
                             </span>
                           </div>
-                          <p className="text-xs text-foreground/80 leading-relaxed break-all">
-                            {item.content}
-                          </p>
+                          {item.mediaKind && item.mediaUrl ? (
+                            <a
+                              href={item.mediaUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs text-foreground/80 bg-background/60 hover:bg-background border border-border/50 rounded-lg px-2 py-1 transition-colors"
+                            >
+                              {(() => { const MediaIcon = MEDIA_ICONS[item.mediaKind]; return <MediaIcon className="h-3.5 w-3.5 shrink-0" />; })()}
+                              {MEDIA_LABELS[item.mediaKind]}
+                              <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
+                            </a>
+                          ) : (
+                            <p className="text-xs text-foreground/80 leading-relaxed break-words">
+                              {item.content}
+                            </p>
+                          )}
                         </div>
                       </div>
                     );

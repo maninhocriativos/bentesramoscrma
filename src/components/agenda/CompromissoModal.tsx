@@ -272,6 +272,7 @@ export function CompromissoModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
+        hideCloseButton
         className="max-w-lg p-0 gap-0 overflow-hidden rounded-2xl"
         onOpenAutoFocus={e => e.preventDefault()}
       >

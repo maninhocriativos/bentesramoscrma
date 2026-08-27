@@ -671,7 +671,7 @@ export function LeadDetailModal({ lead: initialLead, isOpen, onClose, onLeadUpda
   return (
     <>
     <Dialog open={isOpen} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-2xl p-0 rounded-2xl overflow-hidden gap-0 max-h-[90vh]">
+      <DialogContent hideCloseButton className="max-w-3xl p-0 rounded-2xl overflow-hidden gap-0 max-h-[90vh]">
         {/* Premium Header */}
         <div className="relative bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(24,21%,28%)] px-6 py-5">
           <div className="flex items-center gap-4">
@@ -793,23 +793,28 @@ export function LeadDetailModal({ lead: initialLead, isOpen, onClose, onLeadUpda
             <ContratosTab lead={lead} />
           </TabsContent>
           <TabsContent value="historico" className="mt-0 flex-1">
-            <div className="p-1 flex flex-col h-full">
-              <div className="px-3 pt-2 pb-1 flex items-end gap-2">
-                <Textarea
-                  value={notaTexto}
-                  onChange={e => setNotaTexto(e.target.value)}
-                  placeholder="Registrar manualmente o que aconteceu (ligação, decisão, observação)..."
-                  className="text-sm rounded-lg min-h-[44px] max-h-24 resize-none"
-                />
-                <Button
-                  size="sm"
-                  onClick={handleAddNota}
-                  disabled={salvandoNota || !notaTexto.trim()}
-                  className="h-9 gap-1.5 text-xs rounded-lg shrink-0"
-                >
-                  {salvandoNota ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                  Registrar
-                </Button>
+            <div className="flex flex-col h-full">
+              <div className="mx-4 mt-3 mb-1 p-2.5 rounded-xl border border-border/60 bg-muted/30 space-y-1.5">
+                <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                  <Pencil className="w-2.5 h-2.5" /> Registrar manualmente
+                </Label>
+                <div className="flex items-end gap-2">
+                  <Textarea
+                    value={notaTexto}
+                    onChange={e => setNotaTexto(e.target.value)}
+                    placeholder="Ligação, decisão, observação..."
+                    className="text-sm rounded-lg min-h-[40px] max-h-24 resize-none bg-background"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleAddNota}
+                    disabled={salvandoNota || !notaTexto.trim()}
+                    className="h-9 gap-1.5 text-xs rounded-lg shrink-0"
+                  >
+                    {salvandoNota ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                    Registrar
+                  </Button>
+                </div>
               </div>
               <LeadHistoryTimeline key={historyRefreshKey} leadId={lead.id} telefone={lead.telefone} />
             </div>
