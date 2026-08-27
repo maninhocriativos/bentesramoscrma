@@ -254,6 +254,11 @@ serve(async (req) => {
     console.log(`🔍 [Intimações] OAB/${oab_uf} ${oab_numero} | advogado: ${advogadoNome || "desconhecido"} | janela: ${CUTOFF}`);
 
     const intimacoes: any[] = [];
+    // Sinaliza se alguma fonte falhou de verdade (403/timeout) em vez de
+    // simplesmente não ter nada novo — usado abaixo para o job não ser
+    // marcado como "concluído" quando total=0 só por causa do bloqueio
+    // intermitente do DJEN (ver comentário na Estratégia DJEN).
+    let sourcesFailed = false;
 
     if (!ESCAVADOR_API_KEY) {
       console.warn("⚠️ ESCAVADOR_API_KEY não configurada — pulando busca no Escavador");
@@ -611,6 +616,9 @@ serve(async (req) => {
           }
           await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
         }
+        // Esgotou as tentativas sem resposta válida — provável bloqueio
+        // intermitente do CloudFront, não "sem publicações novas".
+        sourcesFailed = true;
         return null;
       }
 
@@ -1037,6 +1045,21 @@ serve(async (req) => {
     console.log(`📌 Total bruto: ${intimacoes.length} itens | ${foundToday} com data_disponibilizacao de hoje (${todayStr}) | mais recente: ${latestDate}`);
 
     if (intimacoes.length === 0) {
+      if (sourcesFailed) {
+        // Não é "nada novo hoje" — uma fonte (tipicamente o DJEN) falhou
+        // depois de esgotar as tentativas. Reporta como falha para o
+        // intimacoes-worker reagendar o job em vez de marcar como concluído,
+        // já que o bloqueio costuma ser passageiro (minutos).
+        console.warn("⚠️ Nenhuma publicação obtida e ao menos uma fonte falhou — sinalizando erro para nova tentativa");
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: "Fontes de dados falharam (ex: DJEN bloqueado/instável) — nenhum resultado obtido, será tentado novamente.",
+            total: 0, saved: 0, updated: 0, by_strategy: {},
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       return new Response(
         JSON.stringify({ success: true, total: 0, saved: 0, updated: 0, by_strategy: {} }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
