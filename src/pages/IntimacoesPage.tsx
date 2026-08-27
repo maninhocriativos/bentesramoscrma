@@ -858,6 +858,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
   const [documentoModalOpen, setDocumentoModalOpen] = useState(false);
   const [novaTarefa, setNovaTarefa] = useState('');
   const [selectedTarefaTipo, setSelectedTarefaTipo] = useState('');
+  const [tipoTarefaPopoverOpen, setTipoTarefaPopoverOpen] = useState(false);
   const [prazoSeguranca, setPrazoSeguranca] = useState('');
   const [prazoFatal, setPrazoFatal] = useState('');
   const [horarioTarefa, setHorarioTarefa] = useState('');
@@ -1607,7 +1608,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
             <DialogTitle className="text-base font-semibold">Adicionar tarefa relacionada</DialogTitle>
           </DialogHeader>
           <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
-            <Popover modal>
+            <Popover modal open={tipoTarefaPopoverOpen} onOpenChange={setTipoTarefaPopoverOpen}>
               <PopoverTrigger asChild>
                 <Button variant="outline" role="combobox" className="w-full justify-between rounded-lg">
                   {selectedTarefaTipo || 'Selecione o tipo de tarefa'}
@@ -1621,7 +1622,7 @@ function IntimacaoDetailModal({ intimacao, formatDate, formatDateLong, calcularP
                   <CommandList>
                     <CommandGroup>
                       {allTarefas.map(t => (
-                        <CommandItem key={t} value={t} onSelect={() => setSelectedTarefaTipo(t)}>{t}</CommandItem>
+                        <CommandItem key={t} value={t} onSelect={() => { setSelectedTarefaTipo(t); setTipoTarefaPopoverOpen(false); }}>{t}</CommandItem>
                       ))}
                     </CommandGroup>
                   </CommandList>
