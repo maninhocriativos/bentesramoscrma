@@ -95,6 +95,101 @@ export async function fetchModels(actionTypeId?: string): Promise<PetitionModelV
   return MOCK_MODELS.filter(m => m.is_active && (!actionTypeId || m.action_type_id === actionTypeId));
 }
 
+// ─── Admin (tela de cadastro de modelos) ──────────────────────────────────────
+// Inclui inativos — a lista de admin precisa mostrar tudo, não só o que
+// aparece pro advogado no catálogo.
+
+export async function fetchAllActionTypes(): Promise<ActionType[]> {
+  await delay();
+  return [...MOCK_ACTION_TYPES];
+}
+
+export async function fetchAllModels(): Promise<PetitionModelV2[]> {
+  await delay();
+  return [...MOCK_MODELS];
+}
+
+function slugify(nome: string): string {
+  return nome
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+export async function createActionType(nome: string, descricao: string): Promise<ActionType> {
+  await delay();
+  const at: ActionType = {
+    id: `at-${Date.now()}`, slug: slugify(nome), nome, descricao: descricao || null,
+    icone: 'FileText', cor: 'slate', ativo: true,
+  };
+  MOCK_ACTION_TYPES.push(at);
+  return at;
+}
+
+export interface CreateModelInput {
+  actionTypeId: string;
+  nome: string;
+  descricao: string;
+  tags: string[];
+  templateFileName: string; // no futuro: o R2 key real após o upload
+  printSlots: PrintSlot[] | null;
+  isActive: boolean;
+  isDefault: boolean;
+}
+
+// Cria o modelo já dentro da categoria escolhida — some da tela de admin
+// e aparece imediatamente no catálogo (PeticoesPageV2), porque as duas telas
+// leem o mesmo MOCK_MODELS. No backend real isso vira POST /api/models,
+// multipart com o .docx, e o Worker salva no R2 + insere no D1.
+export async function createModel(input: CreateModelInput): Promise<PetitionModelV2> {
+  await delay();
+  if (input.isDefault) {
+    for (const m of MOCK_MODELS) if (m.action_type_id === input.actionTypeId) m.is_default = false;
+  }
+  const model: PetitionModelV2 = {
+    id: `m-${Date.now()}`,
+    action_type_id: input.actionTypeId,
+    nome: input.nome,
+    slug: slugify(input.nome),
+    descricao: input.descricao || null,
+    tags: input.tags,
+    template_r2_key: input.templateFileName,
+    is_active: input.isActive,
+    is_default: input.isDefault,
+    print_slots_json: input.printSlots,
+  };
+  MOCK_MODELS.push(model);
+  return model;
+}
+
+export async function updateModel(id: string, updates: Partial<CreateModelInput>): Promise<void> {
+  await delay();
+  const m = MOCK_MODELS.find(x => x.id === id);
+  if (!m) return;
+  if (updates.isDefault) {
+    for (const other of MOCK_MODELS) if (other.action_type_id === m.action_type_id) other.is_default = false;
+  }
+  if (updates.actionTypeId !== undefined) m.action_type_id = updates.actionTypeId;
+  if (updates.nome !== undefined) { m.nome = updates.nome; m.slug = slugify(updates.nome); }
+  if (updates.descricao !== undefined) m.descricao = updates.descricao || null;
+  if (updates.tags !== undefined) m.tags = updates.tags;
+  if (updates.isActive !== undefined) m.is_active = updates.isActive;
+  if (updates.isDefault !== undefined) m.is_default = updates.isDefault;
+}
+
+export async function toggleModelActive(id: string): Promise<void> {
+  await delay();
+  const m = MOCK_MODELS.find(x => x.id === id);
+  if (m) m.is_active = !m.is_active;
+}
+
+export async function deleteModel(id: string): Promise<void> {
+  await delay();
+  const idx = MOCK_MODELS.findIndex(x => x.id === id);
+  if (idx >= 0) MOCK_MODELS.splice(idx, 1);
+}
+
 export async function fetchPetitions(): Promise<PetitionV2[]> {
   await delay();
   return MOCK_PETITIONS.map(attachJoins).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
