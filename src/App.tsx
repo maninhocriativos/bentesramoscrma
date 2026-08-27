@@ -40,7 +40,6 @@ const InstallPage              = lazyWithRetry(() => import("./pages/InstallPage
 const PeticoesPage             = lazyWithRetry(() => import("./pages/PeticoesPage"));
 const PeticaoEditarPage        = lazyWithRetry(() => import("./pages/PeticaoEditarPage"));
 const PeticaoRevisaoPage       = lazyWithRetry(() => import("./pages/PeticaoRevisaoPage"));
-const PeticaoModelosAdminPage  = lazyWithRetry(() => import("./pages/PeticaoModelosAdminPage"));
 const HistoricoAcessosPage     = lazyWithRetry(() => import("./pages/HistoricoAcessosPage"));
 const HistoricoAtendimentoPage = lazyWithRetry(() => import("./pages/HistoricoAtendimentoPage"));
 const IntimacoesPage           = lazyWithRetry(() => import("./pages/IntimacoesPage"));
@@ -116,7 +115,6 @@ function AppRoutes() {
               <Route path="/peticoes/nova"         element={<PeticaoEditarPage />} />
               <Route path="/peticoes/:id/editar"   element={<PeticaoEditarPage />} />
               <Route path="/peticoes/:id/revisao"  element={<PeticaoRevisaoPage />} />
-              <Route path="/peticoes/modelos"      element={<PeticaoModelosAdminPage />} />
               <Route path="/historico-acessos"     element={<HistoricoAcessosPage />} />
               <Route path="/historico-atendimento" element={<HistoricoAtendimentoPage />} />
               <Route path="/intimacoes"            element={<IntimacoesPage />} />

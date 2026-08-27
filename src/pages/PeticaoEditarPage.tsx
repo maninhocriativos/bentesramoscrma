@@ -1,15 +1,17 @@
 // Formulário dinâmico de preenchimento — backend Cloudflare. Os campos vêm
 // dos {{marcadores}} reais do .docx do modelo (fetchModelFields), a
-// mesclagem final acontece no Worker (petitionEngine.ts) — esta tela só
-// coleta os dados, autosalva e dispara a geração. Print do contrato ainda
-// não é suportado neste fluxo (ver TODO em petitionEngine.ts no repo
-// peticoes-cloudflare) — fica pra uma etapa seguinte.
+// mesclagem final acontece no Worker (petitionEngine.ts) — esta tela coleta
+// os dados, autosalva, pré-visualiza (via Worker + Edge Function
+// docx-to-pdf) e dispara a geração — inclusive com o print do contrato,
+// convertido pra PNG aqui no navegador (Canvas não existe no Worker) e
+// enviado pronto em /generate.
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { DetailSkeleton } from '@/components/ui/PageSkeleton';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRight, Save, Sparkles, Loader2,
-  CheckCircle2, AlertCircle, Search, UserCheck,
+  CheckCircle2, AlertCircle, Search, UserCheck, Eye,
+  Image as ImageIcon, Upload, X,
 } from 'lucide-react';
 import { AppHeader } from '@/components/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -21,6 +23,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -29,10 +32,40 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { saveAs } from 'file-saver';
 import { parseValor } from '@/lib/extenso';
-import { buildDynamicSteps, normalizeKey, BANCO_CNPJ, BANCO_ENDERECO, type FieldConfig, type StepConfig } from '@/lib/petitionFields';
+import { buildDynamicSteps, BANCO_CNPJ, BANCO_ENDERECO, type FieldConfig, type StepConfig } from '@/lib/petitionFields';
 import * as api from '@/lib/peticoesV2Client';
+import type { PrintSlot, PrintParaEnviar } from '@/lib/peticoesV2Client';
 
 type FormData = Record<string, string>;
+
+function base64ToBlobUrl(base64: string, mime = 'application/pdf'): string {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return URL.createObjectURL(new Blob([bytes], { type: mime }));
+}
+
+// Converte o arquivo enviado (JPG/PNG) em PNG via <canvas> — o Worker não
+// tem essa API, então essa conversão só pode acontecer aqui.
+async function fileToPngBlob(file: File): Promise<Blob> {
+  const dataUrl = await new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result as string);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = rej;
+    i.src = dataUrl;
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  canvas.getContext('2d')!.drawImage(img, 0, 0);
+  return new Promise<Blob>((res) => canvas.toBlob(b => res(b!), 'image/png'));
+}
 
 function FieldInput({
   config, value, onChange, submitted,
@@ -79,17 +112,24 @@ export default function PeticaoEditarPage() {
   const [modelNome,      setModelNome]      = useState('');
   const [actionName,     setActionName]     = useState('');
   const [placeholders,   setPlaceholders]   = useState<string[]>([]);
+  const [temImagem,      setTemImagem]      = useState(false);
+  const [printSlots,     setPrintSlots]     = useState<PrintSlot[] | null>(null);
   const [saving,         setSaving]         = useState(false);
   const [generating,     setGenerating]     = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [submitted,      setSubmitted]      = useState(false);
+  const [printFiles,     setPrintFiles]     = useState<File[]>([]);
+  const [printsPorSlot,  setPrintsPorSlot]  = useState<Record<number, File | null>>({});
+  const [previewOpen,    setPreviewOpen]    = useState(false);
+  const [previewPdfUrl,  setPreviewPdfUrl]  = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [leadQuery,   setLeadQuery]   = useState('');
   const [leadResults, setLeadResults] = useState<Array<Record<string, string>>>([]);
   const [leadOpen,    setLeadOpen]    = useState(false);
   const leadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const steps = useMemo(() => buildDynamicSteps(placeholders, false), [placeholders]);
+  const steps = useMemo(() => buildDynamicSteps(placeholders, temImagem), [placeholders, temImagem]);
 
   useEffect(() => {
     const init = async () => {
@@ -105,10 +145,12 @@ export default function PeticaoEditarPage() {
           setCurrentStep(petition.current_step || 1);
           setActionName(petition.action_types?.nome || '');
           setModelNome(petition.petition_models?.nome || '');
+          setPrintSlots(petition.petition_models?.print_slots_json || null);
           setPetitionId(id);
           if (petition.model_id) {
             const fields = await api.fetchModelFields(petition.model_id);
-            setPlaceholders(fields);
+            setPlaceholders(fields.placeholders);
+            setTemImagem(fields.temImagem);
           }
           setLoadingInitial(false);
           return;
@@ -221,13 +263,14 @@ export default function PeticaoEditarPage() {
   const currentStepConfig = steps.find(s => s.id === currentStep) || steps[0];
   const currentIdx        = steps.findIndex(s => s.id === currentStep);
   const isReviewStep      = currentStepConfig.title === 'Revisão';
+  const isPrintStep       = currentStepConfig.title === 'Print';
   const progress          = ((currentIdx + 1) / steps.length) * 100;
 
   const stepMissingFields = (step: StepConfig) => step.fields.filter(f => !f.optional && !(formData[f.key] || '').trim());
-  const firstInvalidStepIdx = () => steps.findIndex(s => s.title !== 'Revisão' && stepMissingFields(s).length > 0);
+  const firstInvalidStepIdx = () => steps.findIndex(s => s.title !== 'Revisão' && s.title !== 'Print' && stepMissingFields(s).length > 0);
 
   const goNext = () => {
-    if (!isReviewStep && stepMissingFields(currentStepConfig).length > 0) {
+    if (!isReviewStep && !isPrintStep && stepMissingFields(currentStepConfig).length > 0) {
       setSubmitted(true);
       toast({ title: 'Campos obrigatórios', description: 'Preencha os campos destacados antes de continuar.', variant: 'destructive' });
       return;
@@ -247,6 +290,55 @@ export default function PeticaoEditarPage() {
     setSaving(false);
   };
 
+  // Monta os prints já convertidos pra PNG, no formato que /generate espera.
+  const montarPrintsParaEnviar = async (): Promise<PrintParaEnviar[]> => {
+    if (printSlots && printSlots.length > 0) {
+      const resultado: PrintParaEnviar[] = [];
+      for (let i = 0; i < printSlots.length; i++) {
+        const file = printsPorSlot[i];
+        if (!file) continue;
+        const blob = await fileToPngBlob(file);
+        resultado.push({ field: `print_slot_${i}`, blob });
+      }
+      return resultado;
+    }
+    const resultado: PrintParaEnviar[] = [];
+    for (let i = 0; i < printFiles.length; i++) {
+      const blob = await fileToPngBlob(printFiles[i]);
+      resultado.push({ field: `print_generico_${i}`, blob });
+    }
+    return resultado;
+  };
+
+  const handlePreview = async () => {
+    const invalidIdx = firstInvalidStepIdx();
+    if (invalidIdx !== -1) {
+      setSubmitted(true);
+      setCurrentStep(steps[invalidIdx].id);
+      toast({ title: 'Faltam campos obrigatórios', description: `Preencha a etapa "${steps[invalidIdx].title}" antes de pré-visualizar.`, variant: 'destructive' });
+      return;
+    }
+    if (!petitionId) return;
+
+    setPreviewLoading(true);
+    if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl);
+    setPreviewPdfUrl(null);
+    setPreviewOpen(true);
+    try {
+      const base64_docx = await api.previewPetition(petitionId, formData);
+      const { data, error } = await supabase.functions.invoke('docx-to-pdf', { body: { base64_docx } });
+      if (error) throw error;
+      if (!data?.base64_pdf) throw new Error(data?.error?.message || 'PDF não retornado');
+      setPreviewPdfUrl(base64ToBlobUrl(data.base64_pdf));
+    } catch (err) {
+      console.error('[PeticaoEditarPage] Erro ao pré-visualizar:', err);
+      toast({ title: 'Erro na pré-visualização', description: err instanceof Error ? err.message : 'Erro desconhecido', variant: 'destructive' });
+      setPreviewOpen(false);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   const handleGenerate = async () => {
     setSubmitted(true);
     if (!petitionId) return;
@@ -261,7 +353,8 @@ export default function PeticaoEditarPage() {
     setGenerating(true);
     try {
       await api.savePetitionDraft(petitionId, formData, currentStep);
-      const result = await api.generatePetition(petitionId);
+      const prints = await montarPrintsParaEnviar();
+      const result = await api.generatePetition(petitionId, prints);
       const blob = await api.downloadPetitionFile(result.r2_key);
       const clienteNome = formData.nome_completo || formData.nome_maiusculo || 'documento';
       saveAs(blob, `Peticao_${clienteNome.replace(/\s+/g, '_')}.docx`);
@@ -319,7 +412,7 @@ export default function PeticaoEditarPage() {
 
           <Card className="rounded-2xl border border-border/50 shadow-sm">
             <CardContent className="p-5 md:p-6">
-              {!isReviewStep && currentStepConfig.fields.length > 0 && (
+              {!isReviewStep && !isPrintStep && currentStepConfig.fields.length > 0 && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-2 mb-2">
                     <currentStepConfig.icon className="h-5 w-5 text-primary" />
@@ -358,6 +451,81 @@ export default function PeticaoEditarPage() {
                 </div>
               )}
 
+              {isPrintStep && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <ImageIcon className="h-5 w-5 text-primary" />
+                    <h3 className="font-bold text-foreground">Prints do contrato</h3>
+                  </div>
+
+                  {printSlots ? (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        Este modelo tem {printSlots.length} espaço{printSlots.length > 1 ? 's' : ''} de print
+                        identificado{printSlots.length > 1 ? 's' : ''}. Cada um vai exatamente no lugar
+                        correspondente do documento. Opcional — pode gerar sem preencher algum.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {printSlots.map((slot, i) => {
+                          const file = printsPorSlot[i];
+                          return (
+                            <div key={i} className="p-3 rounded-xl border border-border/50 space-y-2">
+                              <p className="text-xs font-semibold text-foreground truncate" title={slot.label}>{i + 1}. {slot.label}</p>
+                              {file ? (
+                                <div className="relative">
+                                  <Button variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6 rounded-lg bg-background/80"
+                                    onClick={() => setPrintsPorSlot(prev => ({ ...prev, [i]: null }))}>
+                                    <X className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <img src={URL.createObjectURL(file)} alt={slot.label} className="h-28 w-full object-contain rounded-lg border border-border/50 bg-background" />
+                                  <p className="text-[11px] text-muted-foreground truncate mt-1">{file.name}</p>
+                                </div>
+                              ) : (
+                                <label className="flex flex-col items-center justify-center gap-1.5 p-4 rounded-lg border-2 border-dashed border-border/60 hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer">
+                                  <Upload className="h-5 w-5 text-muted-foreground" />
+                                  <span className="text-xs font-medium text-foreground">Anexar print</span>
+                                  <input type="file" accept="image/png,image/jpeg" className="hidden"
+                                    onChange={e => { const f = e.target.files?.[0]; if (f) setPrintsPorSlot(prev => ({ ...prev, [i]: f })); e.target.value = ''; }} />
+                                </label>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        Anexe o(s) print(s) do contrato do cliente (CET / proposta). O primeiro entra no
+                        lugar da imagem de exemplo do modelo; os demais são adicionados ao final do
+                        documento. Opcional — pode gerar sem.
+                      </p>
+                      {printFiles.length > 0 && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          {printFiles.map((f, i) => (
+                            <div key={i} className="relative p-3 rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30">
+                              <span className="absolute top-2 left-2 h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">{i + 1}</span>
+                              <Button variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6 rounded-lg" onClick={() => setPrintFiles(prev => prev.filter((_, idx) => idx !== i))}>
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                              <img src={URL.createObjectURL(f)} alt={`Print ${i + 1}`} className="h-28 w-full object-contain rounded-lg border border-border/50 bg-background mt-3" />
+                              <p className="text-xs font-medium text-foreground truncate mt-2">{f.name}</p>
+                              <p className="text-[11px] text-muted-foreground">{(f.size / 1024).toFixed(0)} KB</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <label className="flex flex-col items-center justify-center gap-1.5 p-6 rounded-xl border-2 border-dashed border-border/60 hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer">
+                        <Upload className="h-6 w-6 text-muted-foreground" />
+                        <span className="text-sm font-medium text-foreground">Clique para anexar print(s)</span>
+                        <input type="file" accept="image/png,image/jpeg" multiple className="hidden"
+                          onChange={e => { const files = Array.from(e.target.files || []); if (files.length) setPrintFiles(prev => [...prev, ...files]); e.target.value = ''; }} />
+                      </label>
+                    </>
+                  )}
+                </div>
+              )}
+
               {isReviewStep && (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 mb-2">
@@ -365,8 +533,8 @@ export default function PeticaoEditarPage() {
                     <h3 className="font-bold text-foreground">Revisão</h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Confira os dados preenchidos nas etapas anteriores e clique em <b>Gerar Petição</b> pra baixar o .docx.
-                    O print do contrato ainda não é suportado neste fluxo — se o modelo precisar dele, insira manualmente no .docx gerado antes de protocolar.
+                    Confira os dados preenchidos nas etapas anteriores. Clique em <b>Pré-visualizar</b> pra
+                    ver como a petição fica antes de gerar, ou em <b>Gerar Petição</b> pra baixar o .docx final.
                   </p>
                 </div>
               )}
@@ -380,9 +548,14 @@ export default function PeticaoEditarPage() {
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Salvar Rascunho
               </Button>
               {isReviewStep ? (
-                <Button onClick={handleGenerate} disabled={generating} className="gap-2 rounded-xl font-bold">
-                  {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Gerar Petição
-                </Button>
+                <>
+                  <Button variant="outline" onClick={handlePreview} disabled={previewLoading} className="gap-2 rounded-xl">
+                    {previewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />} Pré-visualizar
+                  </Button>
+                  <Button onClick={handleGenerate} disabled={generating} className="gap-2 rounded-xl font-bold">
+                    {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Gerar Petição
+                  </Button>
+                </>
               ) : (
                 <Button onClick={goNext} className="gap-2 rounded-xl font-bold">Próximo <ArrowRight className="h-4 w-4" /></Button>
               )}
@@ -390,6 +563,27 @@ export default function PeticaoEditarPage() {
           </div>
         </div>
       </ScrollArea>
+
+      <Dialog open={previewOpen} onOpenChange={(o) => { setPreviewOpen(o); if (!o && previewPdfUrl) { URL.revokeObjectURL(previewPdfUrl); setPreviewPdfUrl(null); } }}>
+        <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-5 pt-4 pb-3 border-b border-border/50">
+            <DialogTitle className="text-base">Pré-visualização</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 bg-muted/20">
+            {previewLoading ? (
+              <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Gerando pré-visualização...
+              </div>
+            ) : previewPdfUrl ? (
+              <iframe src={previewPdfUrl} title="Pré-visualização da petição" className="w-full h-full border-0" />
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                Não foi possível carregar a pré-visualização.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

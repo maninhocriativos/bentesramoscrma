@@ -1,8 +1,10 @@
-// Cliente de dados do módulo de Petições v2 — backend real (Cloudflare
-// Worker + D1 + R2, ver D:\crm-bentes_ramos\peticoes-cloudflare). Rotas de
-// action-types/models são públicas (mesmo backend que a página standalone
-// de cadastro de modelos usa — peticoes-modelos-admin.bentesramos.workers.dev);
-// rotas de petitions exigem o token de serviço (peticoesAuthBridge).
+// Cliente de dados do módulo de Petições — backend real (Cloudflare Worker +
+// D1 + R2, ver D:\crm-bentes_ramos\peticoes-cloudflare). O CRM só CONSOME
+// (lista tipos de ação/modelos e gera petições) — cadastro de tipo de ação e
+// de modelo (upload do .docx) é feito só no site standalone
+// peticoes-modelos-admin.bentesramos.workers.dev. Rotas de action-types/
+// models são públicas; rotas de petitions exigem o token de serviço
+// (peticoesAuthBridge).
 import { getPeticoesToken } from './peticoesAuthBridge';
 
 const WORKER_URL = 'https://peticoes-poc.bentesramos.workers.dev';
@@ -58,70 +60,17 @@ async function authedReq<T>(path: string, init: RequestInit = {}): Promise<T> {
   return req<T>(path, { ...init, headers: { ...init.headers, Authorization: `Bearer ${token}` } });
 }
 
-// ─── action-types / models (públicas, mesmo backend da página standalone) ────
+// ─── action-types / models (públicas, só leitura — cadastro é no standalone) ─
 
 export const fetchActionTypes = () => req<ActionType[]>('/api/action-types').then(r => r.filter(a => a.ativo));
-export const fetchAllActionTypes = () => req<ActionType[]>('/api/action-types');
 
 export const fetchModels = (actionTypeId?: string) =>
   req<PetitionModelV2[]>(`/api/models${actionTypeId ? `?action_type_id=${actionTypeId}` : ''}`).then(r => r.filter(m => m.is_active));
-export const fetchAllModels = () => req<PetitionModelV2[]>('/api/models');
-
-export const createActionType = (nome: string, descricao: string) =>
-  req<ActionType>('/api/action-types', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nome, descricao }),
-  });
-
-export interface CreateModelInput {
-  file: File;
-  actionTypeId: string;
-  nome: string;
-  descricao: string;
-  tags: string[];
-  printSlots: PrintSlot[] | null;
-  isActive: boolean;
-  isDefault: boolean;
-}
-export async function createModel(input: CreateModelInput): Promise<PetitionModelV2> {
-  const form = new FormData();
-  form.set('file', input.file);
-  form.set('action_type_id', input.actionTypeId);
-  form.set('nome', input.nome);
-  form.set('descricao', input.descricao);
-  form.set('tags', JSON.stringify(input.tags));
-  form.set('print_slots_json', input.printSlots ? JSON.stringify(input.printSlots) : '');
-  form.set('is_active', String(input.isActive));
-  form.set('is_default', String(input.isDefault));
-  return req<PetitionModelV2>('/api/models', { method: 'POST', body: form });
-}
-
-export interface UpdateModelInput {
-  actionTypeId?: string; nome?: string; descricao?: string; tags?: string[];
-  isActive?: boolean; isDefault?: boolean;
-}
-export const updateModel = (id: string, updates: UpdateModelInput) =>
-  req<PetitionModelV2>(`/api/models/${id}`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action_type_id: updates.actionTypeId, nome: updates.nome, descricao: updates.descricao,
-      tags: updates.tags, is_active: updates.isActive, is_default: updates.isDefault,
-    }),
-  });
-
-export const toggleModelActive = async (id: string) => {
-  const models = await fetchAllModels();
-  const m = models.find(x => x.id === id);
-  if (!m) return;
-  await updateModel(id, { isActive: !m.is_active });
-};
-
-export const deleteModel = (id: string) => req<{ success: boolean }>(`/api/models/${id}`, { method: 'DELETE' });
 
 // Marcadores {{...}} reais do .docx do modelo — usado pra montar o formulário
-// dinâmico de PeticaoEditarPageV2 sem baixar o arquivo no navegador.
+// dinâmico de PeticaoEditarPage sem baixar o arquivo no navegador.
 export const fetchModelFields = (modelId: string) =>
-  req<{ placeholders: string[] }>(`/api/models/${modelId}/fields`).then(r => r.placeholders);
+  req<{ placeholders: string[]; temImagem: boolean }>(`/api/models/${modelId}/fields`);
 
 // ─── petitions (autenticadas — ligadas ao usuário logado) ─────────────────────
 
@@ -179,9 +128,33 @@ export async function deletePetition(id: string): Promise<void> {
   await authedReq(`/api/petitions/${id}`, { method: 'DELETE' });
 }
 
+// Print pronto (já convertido pra PNG no navegador) a enviar em /generate.
+// `field` é "print_slot_<i>" (modelo com print_slots_json, i = índice do
+// slot) ou "print_generico_<i>" (fluxo sem slots nomeados).
+export interface PrintParaEnviar { field: string; blob: Blob }
+
 export interface GerarResultado { success: boolean; version: number; r2_key: string }
-export async function generatePetition(id: string): Promise<GerarResultado> {
-  return authedReq<GerarResultado>(`/api/petitions/${id}/generate`, { method: 'POST' });
+export async function generatePetition(id: string, prints: PrintParaEnviar[] = []): Promise<GerarResultado> {
+  if (prints.length === 0) {
+    return authedReq<GerarResultado>(`/api/petitions/${id}/generate`, { method: 'POST' });
+  }
+  const token = await getPeticoesToken();
+  const form = new FormData();
+  for (const p of prints) form.set(p.field, p.blob, `${p.field}.png`);
+  return req<GerarResultado>(`/api/petitions/${id}/generate`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form,
+  });
+}
+
+// Gera o .docx com os dados ATUAIS do formulário (mesmo sem estar salvo)
+// sem persistir nada, e devolve o base64 pra converter em PDF via a Edge
+// Function docx-to-pdf do Supabase — não depende do Worker pra essa parte.
+export async function previewPetition(id: string, formData: Record<string, unknown>): Promise<string> {
+  const { base64_docx } = await authedReq<{ base64_docx: string }>(`/api/petitions/${id}/preview`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ form_data_json: formData }),
+  });
+  return base64_docx;
 }
 
 export interface PetitionVersion { id: string; version_number: number; generated_r2_key: string; created_at: string }

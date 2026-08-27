@@ -100,6 +100,7 @@ function NovaPeticaoModal({
   return (
     <Dialog open={open} onOpenChange={v => !v && handleClose()}>
       <DialogContent
+        hideCloseButton
         className="max-w-2xl p-0 gap-0 overflow-hidden rounded-2xl border border-border/60 shadow-2xl"
         style={{ height: '82vh', display: 'flex', flexDirection: 'column' }}
       >
