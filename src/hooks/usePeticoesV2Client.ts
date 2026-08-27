@@ -1,6 +1,6 @@
 // Hook da v2 (backend novo, Cloudflare) — mesma forma do usePeticoesV2.ts
 // original (Supabase), pra a tela poder trocar de hook sem reescrever a UI.
-// Fonte de dados: src/lib/peticoesV2Client.ts (mock por enquanto).
+// Fonte de dados: src/lib/peticoesV2Client.ts (Worker + D1 + R2, real).
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import * as api from '@/lib/peticoesV2Client';

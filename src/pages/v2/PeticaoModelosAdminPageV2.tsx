@@ -2,10 +2,9 @@
 // edição manual direto no banco: sobe o .docx, analisa {{marcadores}} e
 // imagens do corpo 100% no navegador (docxAnalyzer.ts, via pizzip — não
 // depende do Worker pra essa parte), nomeia print slots, e cadastra dentro
-// da categoria escolhida (ou cria uma nova, inline). O modelo criado aparece
-// imediatamente no catálogo de /peticoes-v2, porque as duas telas leem o
-// mesmo estado mock (peticoesV2Client.ts) — no backend real isso vira um
-// POST /api/models multipart pro Worker, que salva no R2 + insere no D1.
+// da categoria escolhida (ou cria uma nova, inline). O envio final é um
+// POST /api/models multipart pro Worker (peticoesV2Client.ts), que salva o
+// arquivo no R2 e insere no D1 — aparece na hora no catálogo de /peticoes-v2.
 import { useState, useEffect, useCallback } from 'react';
 import {
   Upload, FileText, Plus, Pencil, Trash2, ImageIcon, CheckCircle2,
@@ -128,7 +127,7 @@ export default function PeticaoModelosAdminPageV2() {
       const tags = form.tags.split(',').map(t => t.trim()).filter(Boolean);
       await api.createModel({
         actionTypeId: form.actionTypeId, nome: form.nome.trim(), descricao: form.descricao.trim(),
-        tags, templateFileName: file.name, printSlots: printSlots.length > 0 ? printSlots : null,
+        tags, file, printSlots: printSlots.length > 0 ? printSlots : null,
         isActive: form.isActive, isDefault: form.isDefault,
       });
       toast({ title: '✅ Modelo cadastrado', description: `${form.nome} já aparece no catálogo de /peticoes-v2.` });
@@ -181,7 +180,7 @@ export default function PeticaoModelosAdminPageV2() {
         <div className="p-4 md:p-6 space-y-6 max-w-[1200px] mx-auto">
           <div className="rounded-xl border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
             <Sparkles className="h-3.5 w-3.5 shrink-0" />
-            Versão beta — modelos cadastrados aqui ficam em memória (mock), mas a análise do .docx (marcadores + imagens) já é real.
+            Versão beta — modelos cadastrados aqui já são salvos de verdade (Cloudflare Worker/D1/R2) e aparecem no catálogo de /peticoes-v2.
           </div>
 
           <Card className="rounded-2xl border border-border/50 shadow-sm">

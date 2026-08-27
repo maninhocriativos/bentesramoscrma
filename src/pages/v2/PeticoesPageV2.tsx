@@ -353,7 +353,7 @@ export default function PeticoesPageV2() {
         <div className="p-4 md:p-6 space-y-5 max-w-[1680px] mx-auto">
           <div className="rounded-xl border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
             <Sparkles className="h-3.5 w-3.5 shrink-0" />
-            Versão beta rodando no backend novo (Cloudflare) — dados de exemplo por enquanto, a versão oficial continua em <button className="underline font-semibold" onClick={() => navigate('/peticoes')}>/peticoes</button>.
+            Versão beta rodando no backend novo (Cloudflare) — dados já são reais, mas a versão oficial continua em <button className="underline font-semibold" onClick={() => navigate('/peticoes')}>/peticoes</button>.
           </div>
 
           <div className="flex items-center justify-between gap-4 flex-wrap rounded-xl border border-border/60 bg-card px-4 py-4 shadow-sm">
