@@ -40,9 +40,7 @@ const InstallPage              = lazyWithRetry(() => import("./pages/InstallPage
 const PeticoesPage             = lazyWithRetry(() => import("./pages/PeticoesPage"));
 const PeticaoEditarPage        = lazyWithRetry(() => import("./pages/PeticaoEditarPage"));
 const PeticaoRevisaoPage       = lazyWithRetry(() => import("./pages/PeticaoRevisaoPage"));
-const PeticaoSaidaPage         = lazyWithRetry(() => import("./pages/PeticaoSaidaPage"));
-const ModelosPage              = lazyWithRetry(() => import("./pages/ModelosPage"));
-const PeticaoModeloEditorPage  = lazyWithRetry(() => import("./pages/PeticaoModeloEditorPage"));
+const PeticaoModelosAdminPage  = lazyWithRetry(() => import("./pages/PeticaoModelosAdminPage"));
 const HistoricoAcessosPage     = lazyWithRetry(() => import("./pages/HistoricoAcessosPage"));
 const HistoricoAtendimentoPage = lazyWithRetry(() => import("./pages/HistoricoAtendimentoPage"));
 const IntimacoesPage           = lazyWithRetry(() => import("./pages/IntimacoesPage"));
@@ -51,10 +49,6 @@ const ConferenciaExtratosPage  = lazyWithRetry(() => import("./pages/Conferencia
 const GoogleAuthCallback       = lazyWithRetry(() => import("./pages/GoogleAuthCallback"));
 const FollowupPage             = lazyWithRetry(() => import("./pages/FollowupPage"));
 const DadosPage                = lazyWithRetry(() => import("./pages/DadosPage"));
-const PeticoesPageV2           = lazyWithRetry(() => import("./pages/v2/PeticoesPageV2"));
-const PeticaoModelosAdminPageV2 = lazyWithRetry(() => import("./pages/v2/PeticaoModelosAdminPageV2"));
-const PeticaoEditarPageV2      = lazyWithRetry(() => import("./pages/v2/PeticaoEditarPageV2"));
-const PeticaoRevisaoPageV2     = lazyWithRetry(() => import("./pages/v2/PeticaoRevisaoPageV2"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -115,19 +109,14 @@ function AppRoutes() {
               <Route path="/meta-leads"            element={<MetaLeadsPage />} />
               <Route path="/api-hub"               element={<ApiHubPage />} />
               <Route path="/api-docs"              element={<ApiDocsPage />} />
+              {/* Petições — backend novo (Cloudflare Worker + D1 + R2), única versão em uso.
+                  O sistema antigo (Supabase: petitions_v2/petition_models_v2/action_types)
+                  foi zerado — ver migration de reset. */}
               <Route path="/peticoes"              element={<PeticoesPage />} />
               <Route path="/peticoes/nova"         element={<PeticaoEditarPage />} />
               <Route path="/peticoes/:id/editar"   element={<PeticaoEditarPage />} />
               <Route path="/peticoes/:id/revisao"  element={<PeticaoRevisaoPage />} />
-              <Route path="/peticoes/:id/saida"    element={<PeticaoSaidaPage />} />
-              <Route path="/modelos"               element={<ModelosPage />} />
-              <Route path="/peticoes/modelo-editor" element={<PeticaoModeloEditorPage />} />
-              {/* v2 — backend novo (Cloudflare), rota paralela não linkada na barra lateral ainda */}
-              <Route path="/peticoes-v2"              element={<PeticoesPageV2 />} />
-              <Route path="/peticoes-v2/nova"         element={<PeticaoEditarPageV2 />} />
-              <Route path="/peticoes-v2/:id/editar"   element={<PeticaoEditarPageV2 />} />
-              <Route path="/peticoes-v2/:id/revisao"  element={<PeticaoRevisaoPageV2 />} />
-              <Route path="/peticoes-v2/modelos"      element={<PeticaoModelosAdminPageV2 />} />
+              <Route path="/peticoes/modelos"      element={<PeticaoModelosAdminPage />} />
               <Route path="/historico-acessos"     element={<HistoricoAcessosPage />} />
               <Route path="/historico-atendimento" element={<HistoricoAtendimentoPage />} />
               <Route path="/intimacoes"            element={<IntimacoesPage />} />

@@ -20,7 +20,6 @@ const PAGE_TITLES: Record<string, string> = {
   '/api-docs': 'API Docs',
   '/configuracoes': 'Configurações',
   '/peticoes': 'Petições',
-  '/modelos': 'Modelos',
   '/historico-acessos': 'Histórico de Acessos',
 };
 

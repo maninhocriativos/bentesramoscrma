@@ -1,10 +1,15 @@
+// Formulário dinâmico de preenchimento — backend Cloudflare. Os campos vêm
+// dos {{marcadores}} reais do .docx do modelo (fetchModelFields), a
+// mesclagem final acontece no Worker (petitionEngine.ts) — esta tela só
+// coleta os dados, autosalva e dispara a geração. Print do contrato ainda
+// não é suportado neste fluxo (ver TODO em petitionEngine.ts no repo
+// peticoes-cloudflare) — fica pra uma etapa seguinte.
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { DetailSkeleton } from '@/components/ui/PageSkeleton';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRight, Save, Sparkles, Loader2,
-  User, MapPin, Building2, DollarSign, CheckCircle2,
-  FileText, Scale, AlertCircle, Image as ImageIcon, Upload, X, Search, UserCheck, Eye,
+  CheckCircle2, AlertCircle, Search, UserCheck,
 } from 'lucide-react';
 import { AppHeader } from '@/components/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -12,403 +17,25 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { AutocompleteInput } from '@/components/ui/AutocompleteInput';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import PizZip from 'pizzip';
-import Docxtemplater from 'docxtemplater';
 import { saveAs } from 'file-saver';
-import type { PetitionModelV2 } from '@/hooks/usePeticoesV2';
-import { reaisPorExtenso, inteiroPorExtenso, parseValor } from '@/lib/extenso';
+import { parseValor } from '@/lib/extenso';
 import { buildDynamicSteps, normalizeKey, BANCO_CNPJ, BANCO_ENDERECO, type FieldConfig, type StepConfig } from '@/lib/petitionFields';
-import { padronizarRodape } from '@/lib/petitionFooter';
-
-// ─── Tipos ─────────────────────────────────────────────────────────────────────
+import * as api from '@/lib/peticoesV2Client';
 
 type FormData = Record<string, string>;
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
-
-function base64ToBlobUrl(base64: string, mime = 'application/pdf'): string {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return URL.createObjectURL(new Blob([bytes], { type: mime }));
-}
-
-// Calcula automaticamente {{valor_X_dobro}} = 2× {{valor_X}} pra qualquer
-// campo valor_* que o modelo peça essa contrapartida (padrão de restituição em
-// dobro do art. 42, parágrafo único, CDC, usado em vários modelos de
-// consignado/venda casada) — sem precisar de código específico por modelo.
-// Só preenche se o advogado não tiver digitado o dobro manualmente.
-function autoDobro(formData: FormData): Record<string, string> {
-  const extras: Record<string, string> = {};
-  for (const [key, raw] of Object.entries(formData)) {
-    if (!/^valor_/.test(key) || key.endsWith('_dobro') || key.endsWith('_extenso')) continue;
-    const dobroKey = `${key}_dobro`;
-    if (formData[dobroKey]?.trim()) continue; // já preenchido manualmente
-    const num = parseValor(raw || '');
-    if (isNaN(num)) continue;
-    extras[dobroKey] = (num * 2).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-  return extras;
-}
-
-// Gera automaticamente os campos "por extenso" a partir dos valores numéricos,
-// preenchendo apenas os que o advogado deixou em branco (não sobrescreve manual).
-function autoExtenso(formData: FormData): Record<string, string> {
-  const extras: Record<string, string> = {};
-  const vazio = (k: string) => !(formData[k] && formData[k].trim());
-
-  for (const [key, raw] of Object.entries(formData)) {
-    const val = String(raw ?? '').trim();
-    if (!val || key.endsWith('_extenso')) continue;
-
-    // Valores monetários (valor_*) → reais por extenso
-    if (/^valor_/.test(key)) {
-      const extKey = `${key}_extenso`;
-      if (vazio(extKey)) {
-        const txt = reaisPorExtenso(val);
-        if (txt) extras[extKey] = txt;
-      }
-    }
-
-    // Quantidades de parcelas → inteiro por extenso
-    if (/^num_parcelas/.test(key)) {
-      const extKey = `${key}_extenso`;
-      const n = parseInt(val.replace(/\D/g, ''), 10);
-      if (vazio(extKey) && !isNaN(n)) extras[extKey] = inteiroPorExtenso(n);
-    }
-  }
-
-  // Idade por extenso: MAIÚSCULAS pro bloco de título (padrão dos modelos) e
-  // minúsculas pra quando aparece no meio do texto corrido (ex.: "conta
-  // atualmente com 64 (sessenta e quatro) anos").
-  if (formData.idade_numerica?.trim()) {
-    const n = parseInt(formData.idade_numerica.replace(/\D/g, ''), 10);
-    if (!isNaN(n)) {
-      const porExtenso = inteiroPorExtenso(n);
-      if (vazio('idade_extenso')) extras.idade_extenso = porExtenso.toUpperCase();
-      if (vazio('idade_min_extenso')) extras.idade_min_extenso = porExtenso;
-    }
-  }
-
-  return extras;
-}
-
-// L\u00ea o template .docx (via URL p\u00fablica) e devolve os marcadores {{...}} e se h\u00e1
-// imagem no corpo (espa\u00e7o para o print). Remove as tags XML antes de casar, para
-// juntar marcadores quebrados em runs.
-async function extrairModeloInfo(url: string): Promise<{ placeholders: string[]; temImagem: boolean }> {
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error('Falha ao baixar o modelo');
-  const buf = await resp.arrayBuffer();
-  const zip = new PizZip(buf);
-  const xml = zip.file('word/document.xml')?.asText() || '';
-  const texto = xml.replace(/<[^>]+>/g, '');
-  const set = new Set<string>();
-  for (const m of texto.matchAll(/\{\{\s*([^}]+?)\s*\}\}/g)) {
-    set.add(m[1].trim());
-  }
-  const rels = zip.file('word/_rels/document.xml.rels')?.asText() || '';
-  const temImagem = /Target="media\/image[^"]+\.(?:png|jpe?g|gif)"/i.test(rels);
-  return { placeholders: [...set], temImagem };
-}
-
-function buildEnderecoCliente(formData: FormData): string {
-  const cidadeUf = [formData.endereco_cidade, formData.endereco_uf].filter(Boolean).join('/');
-  const parts = [
-    formData.endereco_rua,
-    formData.endereco_numero ? `n° ${formData.endereco_numero}` : '',
-    formData.endereco_complemento,
-    formData.endereco_bairro ? `bairro: ${formData.endereco_bairro}` : '',
-    cidadeUf,
-    formData.endereco_cep ? `Cep: ${formData.endereco_cep}` : '',
-  ].filter(Boolean);
-
-  return parts.join(', ');
-}
-
-function buildQualificacao(formData: FormData): string {
-  return [
-    formData.nacionalidade,
-    formData.naturalidade,
-    formData.estado_civil,
-    formData.profissao,
-  ].filter(Boolean).join(', ');
-}
-
-// Lê o primeiro valor não-vazio dentre várias chaves possíveis — cobre tanto a
-// chave minúscula canônica quanto variantes em MAIÚSCULAS que podem ter ficado
-// gravadas em petições salvas antes da normalização de chaves (ver normalizeKey
-// em petitionFields.ts): um modelo cujo {{MARCADOR}} está em caixa alta gerava um
-// campo cuja key preservava essa caixa, e essa função não enxergava o valor.
-function get(formData: FormData, ...keys: string[]): string {
-  for (const k of keys) {
-    const v = formData[k];
-    if (v !== undefined && v !== null && String(v).trim()) return String(v);
-  }
-  return '';
-}
-
-// `placeholders` é a lista crua de {{marcadores}} extraída do .docx (na caixa
-// exata em que o autor do modelo escreveu). O docxtemplater substitui por
-// correspondência exata de texto, então precisamos garantir que TODO marcador
-// cru tenha uma entrada em `data` — mesmo os que não têm alias nomeado abaixo —
-// olhando o valor pela chave normalizada (minúscula) que o formulário usa.
-function buildTemplateData(formData: FormData, actionName: string, placeholders: string[] = []): Record<string, string> {
-  const enderecoCliente = get(formData, 'endereco_cliente', 'ENDERECO_CLIENTE') || buildEnderecoCliente(formData);
-  const qualificacao = get(formData, 'qualificacao', 'QUALIFICACAO') || buildQualificacao(formData);
-  const tipoAcao = get(formData, 'tipo_acao', 'TIPO_ACAO') || actionName;
-  const reuNome = get(formData, 'reu_nome', 'REU_NOME', 'banco_nome', 'BANCO_NOME');
-  const reuCnpj = get(formData, 'reu_cnpj', 'REU_CNPJ', 'banco_cnpj', 'BANCO_CNPJ');
-  const reuEndereco = get(formData, 'reu_endereco', 'REU_ENDERECO', 'banco_endereco', 'BANCO_ENDERECO');
-  const nomeCompleto = get(formData, 'nome_completo', 'NOME_COMPLETO_NORMAL', 'nome_maiusculo', 'NOME_COMPLETO');
-  const nomeMaiusculo = get(formData, 'nome_maiusculo', 'NOME_COMPLETO') || nomeCompleto.toUpperCase();
-  const varaJuizo = get(formData, 'vara_juizo', 'VARA_JUIZO') || '____ª VARA DO JUIZADO ESPECIAL CÍVEL DA COMARCA DE MANAUS/AM';
-  const rg = get(formData, 'rg', 'RG');
-  const cpf = get(formData, 'cpf', 'CPF');
-
-  // Restituição em dobro do seguro (art. 42, parágrafo único, CDC) — o modelo
-  // de venda casada consignado pede o valor já dobrado, mas só o valor do
-  // seguro é digitado no formulário; calculamos o dobro aqui.
-  const valorSeguroNum = parseValor(get(formData, 'valor_seguro', 'VALOR_SEGURO'));
-  const valorSeguroDobro = isNaN(valorSeguroNum) ? '' : (valorSeguroNum * 2).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const valorSeguroDobroExtenso = isNaN(valorSeguroNum) ? '' : reaisPorExtenso(valorSeguroNum * 2);
-
-  const formDataComDobro = { ...formData, ...autoDobro(formData) };
-
-  const data: Record<string, string> = {
-    ...formDataComDobro,
-    ...autoExtenso(formDataComDobro),
-    // Alias: alguns modelos usam {{data_petição}} (com cedilha) e o form salva data_peticao.
-    'data_petição': get(formData, 'data_petição', 'data_peticao'),
-    nome_completo: nomeCompleto,
-    nome_maiusculo: nomeMaiusculo,
-    qualificacao,
-    endereco_cliente: enderecoCliente,
-    tipo_acao: tipoAcao,
-    reu_nome: reuNome,
-    reu_cnpj: reuCnpj,
-    reu_endereco: reuEndereco,
-    doc_id: rg || cpf,
-    vara_juizo: varaJuizo,
-    rg, cpf,
-    NOME_COMPLETO: nomeMaiusculo,
-    NOME_COMPLETO_NORMAL: nomeCompleto,
-    QUALIFICACAO: qualificacao,
-    RG: rg,
-    CPF: cpf,
-    ENDERECO_CLIENTE: enderecoCliente,
-    TIPO_ACAO: tipoAcao,
-    REU_NOME: reuNome,
-    REU_CNPJ: reuCnpj,
-    REU_ENDERECO: reuEndereco,
-    BANCO_NOME: get(formData, 'banco_nome', 'BANCO_NOME') || reuNome,
-    BANCO_CNPJ: get(formData, 'banco_cnpj', 'BANCO_CNPJ') || reuCnpj,
-    BANCO_ENDERECO: get(formData, 'banco_endereco', 'BANCO_ENDERECO') || reuEndereco,
-    DOC_ID: rg || cpf,
-    VARA_JUIZO: varaJuizo,
-    valor_seguro_dobro: valorSeguroDobro,
-    valor_seguro_dobro_extenso: valorSeguroDobroExtenso,
-  };
-
-  // Cobertura genérica: qualquer marcador cru do template que não tenha alias
-  // explícito acima ainda recebe o valor certo, buscando pela chave normalizada.
-  for (const raw of placeholders) {
-    if (raw in data) continue;
-    const norm = normalizeKey(raw);
-    const v = get(formData, norm, raw);
-    if (v) data[raw] = v;
-  }
-
-  return Object.fromEntries(
-    Object.entries(data).map(([key, value]) => [key, String(value ?? '')]),
-  );
-}
-
-// ─── Inserção do print do contrato no .docx ─────────────────────────────────────
-
-interface PrintImagem { bytes: Uint8Array; width: number; height: number }
-
-// Converte o arquivo enviado (JPG/PNG) em PNG e devolve também as dimensões.
-async function fileToPng(file: File): Promise<PrintImagem> {
-  const dataUrl = await new Promise<string>((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result as string);
-    r.onerror = rej;
-    r.readAsDataURL(file);
-  });
-  const img = await new Promise<HTMLImageElement>((res, rej) => {
-    const i = new Image();
-    i.onload = () => res(i);
-    i.onerror = rej;
-    i.src = dataUrl;
-  });
-  const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth;
-  canvas.height = img.naturalHeight;
-  canvas.getContext('2d')!.drawImage(img, 0, 0);
-  const blob = await new Promise<Blob>((res) => canvas.toBlob(b => res(b!), 'image/png'));
-  return { bytes: new Uint8Array(await blob.arrayBuffer()), width: img.naturalWidth, height: img.naturalHeight };
-}
-
-// Ajusta a caixa de exibição (extent) do print no document.xml: preserva a LARGURA
-// definida no template e recalcula a ALTURA pela proporção da nova imagem — evita
-// que o print fique esticado/achatado ao herdar a caixa da imagem antiga.
-function ajustarExtent(zip: PizZip, targetMedia: string, imgW: number, imgH: number) {
-  if (!imgW || !imgH) return;
-  const relsTxt = zip.file('word/_rels/document.xml.rels')?.asText() || '';
-  const esc = targetMedia.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const relEl = relsTxt.match(new RegExp('<Relationship\\b[^>]*Target="' + esc + '"[^>]*>'));
-  const rId = relEl?.[0].match(/Id="(rId\d+)"/)?.[1];
-  if (!rId) return;
-
-  let doc = zip.file('word/document.xml')?.asText() || '';
-  let blipIdx = doc.indexOf(`r:embed="${rId}"`);
-  if (blipIdx < 0) return;
-
-  // wp:extent (nível do desenho) — o mais próximo ANTES do blip
-  const wpRe = /<wp:extent\b[^>]*\bcx="(\d+)"[^>]*\bcy="\d+"[^>]*\/>/g;
-  let wp: RegExpExecArray | null = null, m: RegExpExecArray | null;
-  while ((m = wpRe.exec(doc)) && m.index < blipIdx) wp = m;
-  if (wp) {
-    const cx = parseInt(wp[1], 10);
-    const cy = Math.round((cx * imgH) / imgW);
-    doc = doc.slice(0, wp.index) + `<wp:extent cx="${cx}" cy="${cy}"/>` + doc.slice(wp.index + wp[0].length);
-  }
-
-  // a:ext (nível da figura) — o primeiro DEPOIS do blip
-  blipIdx = doc.indexOf(`r:embed="${rId}"`);
-  const aRe = /<a:ext\b[^>]*\bcx="(\d+)"[^>]*\bcy="\d+"[^>]*\/>/g;
-  aRe.lastIndex = blipIdx;
-  const a = aRe.exec(doc);
-  if (a) {
-    const cx = parseInt(a[1], 10);
-    const cy = Math.round((cx * imgH) / imgW);
-    doc = doc.slice(0, a.index) + `<a:ext cx="${cx}" cy="${cy}"/>` + doc.slice(a.index + a[0].length);
-  }
-
-  zip.file('word/document.xml', doc);
-}
-
-// Substitui uma imagem ESPECÍFICA do corpo (identificada pelo media_target
-// exato, ex.: "media/image1.png") pelo print enviado naquele slot — usado
-// quando o modelo define print_slots_json, pra nunca mexer em imagens fixas
-// do documento (ex.: print de notícia institucional sobre o banco).
-function substituirImagemPorTarget(zip: PizZip, mediaTarget: string, png: PrintImagem): boolean {
-  const alvo = mediaTarget.replace(/^word\//, '');
-  const file = zip.file(`word/${alvo}`);
-  if (!file) return false;
-  zip.file(`word/${alvo}`, png.bytes);
-  ajustarExtent(zip, alvo, png.width, png.height);
-  return true;
-}
-
-// Substitui a imagem do CORPO do documento (o print do contrato) pela enviada e
-// ajusta a caixa de exibição. A logo do timbre fica no cabeçalho (header rels),
-// então não é tocada. Havendo várias imagens no corpo, troca a maior.
-// Usado só quando o modelo NÃO define print_slots_json (comportamento antigo).
-function substituirPrintNoDocx(zip: PizZip, png: PrintImagem): boolean {
-  const relsFile = zip.file('word/_rels/document.xml.rels');
-  if (!relsFile) return false;
-
-  const rels = relsFile.asText();
-  const alvos = [...rels.matchAll(/Target="(media\/image[^"]+\.(?:png|jpe?g|gif))"/gi)].map(m => m[1]);
-  if (alvos.length === 0) return false;
-
-  let alvo = alvos[0];
-  let maior = -1;
-  for (const t of alvos) {
-    const f = zip.file(`word/${t}`);
-    const sz = f ? f.asUint8Array().length : 0;
-    if (sz > maior) { maior = sz; alvo = t; }
-  }
-
-  zip.file(`word/${alvo}`, png.bytes);
-  ajustarExtent(zip, alvo, png.width, png.height);
-  return true;
-}
-
-// Anexa prints adicionais como novos parágrafos (um por página, centralizados) logo
-// antes do <w:sectPr> final do corpo — ou seja, ao final do documento. Usa DrawingML
-// moderno (independente do template usar VML ou DrawingML na imagem original) com os
-// namespaces a:/pic: declarados inline, já que nem todo modelo os declara na raiz.
-function adicionarPrintsExtras(zip: PizZip, images: PrintImagem[]): void {
-  if (images.length === 0) return;
-
-  const relsPath = 'word/_rels/document.xml.rels';
-  const relsFile = zip.file(relsPath);
-  if (!relsFile) return;
-  let relsXml = relsFile.asText();
-
-  const existingIds = [...relsXml.matchAll(/Id="rId(\d+)"/g)].map(m => parseInt(m[1], 10));
-  let nextId = (existingIds.length ? Math.max(...existingIds) : 0) + 1;
-
-  let doc = zip.file('word/document.xml')?.asText() || '';
-  const PAGE_WIDTH_EMU = 6120130; // largura útil aproximada de uma A4 com margens padrão
-
-  let newRelsEntries = '';
-  let newParagraphs = '';
-
-  images.forEach((img, idx) => {
-    const rId = `rId${nextId++}`;
-    const mediaName = `image_print_extra_${Date.now()}_${idx}.png`;
-    zip.file(`word/media/${mediaName}`, img.bytes);
-    newRelsEntries += `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${mediaName}"/>`;
-
-    const cx = PAGE_WIDTH_EMU;
-    const cy = img.width && img.height ? Math.round((cx * img.height) / img.width) : Math.round(cx * 0.75);
-    const drawingId = 900000 + idx;
-
-    newParagraphs += `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:noProof/></w:rPr><w:drawing>` +
-      `<wp:inline distT="0" distB="0" distL="0" distR="0">` +
-      `<wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>` +
-      `<wp:docPr id="${drawingId}" name="PrintExtra${idx}"/>` +
-      `<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>` +
-      `<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
-      `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
-      `<pic:nvPicPr><pic:cNvPr id="${drawingId}" name="PrintExtra${idx}"/><pic:cNvPicPr/></pic:nvPicPr>` +
-      `<pic:blipFill><a:blip r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
-      `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
-      `</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
-  });
-
-  relsXml = relsXml.replace('</Relationships>', newRelsEntries + '</Relationships>');
-  zip.file(relsPath, relsXml);
-
-  const sectPrIdx = doc.lastIndexOf('<w:sectPr');
-  doc = sectPrIdx >= 0
-    ? doc.slice(0, sectPrIdx) + newParagraphs + doc.slice(sectPrIdx)
-    : doc.replace('</w:body>', newParagraphs + '</w:body>');
-  zip.file('word/document.xml', doc);
-}
-
-// ─── Componente de Campo ────────────────────────────────────────────────────────
-
 function FieldInput({
-  config,
-  value,
-  onChange,
-  submitted,
+  config, value, onChange, submitted,
 }: {
   config: FieldConfig;
   value: string;
@@ -416,7 +43,6 @@ function FieldInput({
   submitted: boolean;
 }) {
   const isEmpty = submitted && !config.optional && !value?.trim();
-
   return (
     <div className={config.span === 'full' ? 'col-span-2' : ''}>
       <Label className={cn('text-xs mb-1.5 flex items-center gap-1', isEmpty ? 'text-destructive' : 'text-muted-foreground')}>
@@ -424,48 +50,22 @@ function FieldInput({
         {config.optional && <span className="text-muted-foreground/60 font-normal">(opcional)</span>}
         {isEmpty && <AlertCircle className="h-3 w-3" />}
       </Label>
-
       {config.type === 'select' ? (
         <Select value={value} onValueChange={onChange}>
-          <SelectTrigger className={cn('rounded-xl mt-0', isEmpty && 'border-destructive')}>
-            <SelectValue placeholder="Selecione..." />
-          </SelectTrigger>
-          <SelectContent>
-            {config.options?.map(opt => (
-              <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-            ))}
-          </SelectContent>
+          <SelectTrigger className={cn('rounded-xl mt-0', isEmpty && 'border-destructive')}><SelectValue placeholder="Selecione..." /></SelectTrigger>
+          <SelectContent>{config.options?.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}</SelectContent>
         </Select>
       ) : config.type === 'textarea' ? (
-        <Textarea
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={config.placeholder}
-          className={cn('rounded-xl mt-0 min-h-[80px]', isEmpty && 'border-destructive')}
-        />
+        <Textarea value={value} onChange={e => onChange(e.target.value)} placeholder={config.placeholder} className={cn('rounded-xl mt-0 min-h-[80px]', isEmpty && 'border-destructive')} />
       ) : config.type === 'autocomplete' ? (
-        <AutocompleteInput
-          value={value}
-          onChange={onChange}
-          options={config.options || []}
-          placeholder={config.placeholder}
-          invalid={isEmpty}
-          capitalize
-        />
+        <AutocompleteInput value={value} onChange={onChange} options={config.options || []} placeholder={config.placeholder} invalid={isEmpty} capitalize />
       ) : (
-        <Input
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={config.placeholder}
-          className={cn('rounded-xl mt-0', isEmpty && 'border-destructive')}
-        />
+        <Input value={value} onChange={e => onChange(e.target.value)} placeholder={config.placeholder} className={cn('rounded-xl mt-0', isEmpty && 'border-destructive')} />
       )}
       {config.hint && <p className="text-[10px] text-muted-foreground mt-1">{config.hint}</p>}
     </div>
   );
 }
-
-// ─── Página Principal ───────────────────────────────────────────────────────────
 
 export default function PeticaoEditarPage() {
   const navigate       = useNavigate();
@@ -476,37 +76,20 @@ export default function PeticaoEditarPage() {
   const [currentStep,    setCurrentStep]    = useState(1);
   const [formData,       setFormData]       = useState<FormData>({});
   const [petitionId,     setPetitionId]     = useState(id || '');
-  const [model,          setModel]          = useState<PetitionModelV2 | null>(null);
+  const [modelNome,      setModelNome]      = useState('');
   const [actionName,     setActionName]     = useState('');
   const [placeholders,   setPlaceholders]   = useState<string[]>([]);
-  const [temPrint,       setTemPrint]       = useState(false);
   const [saving,         setSaving]         = useState(false);
   const [generating,     setGenerating]     = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [submitted,      setSubmitted]      = useState(false);
-  const [printFiles,     setPrintFiles]      = useState<File[]>([]);
-  // Quando o modelo define print_slots_json: um arquivo por slot nomeado,
-  // indexado pela posição no array de slots (em vez da lista genérica acima).
-  const [printsPorSlot,  setPrintsPorSlot]   = useState<Record<number, File | null>>({});
-  const [previewOpen,    setPreviewOpen]     = useState(false);
-  const [previewPdfUrl,  setPreviewPdfUrl]   = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading]  = useState(false);
-  // Busca de lead do CRM para autopreencher os dados do cliente
   const [leadQuery,   setLeadQuery]   = useState('');
   const [leadResults, setLeadResults] = useState<Array<Record<string, string>>>([]);
   const [leadOpen,    setLeadOpen]    = useState(false);
   const leadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autosaveTimer = useRef<NodeJS.Timeout | null>(null);
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Campos gerados dinamicamente a partir dos {{marcadores}} do template do modelo.
-  const steps = useMemo(() => buildDynamicSteps(placeholders, temPrint), [placeholders, temPrint]);
-  const activeSteps = steps;
-
-  // Slots de print nomeados do modelo (se definidos) — cada um vira um upload
-  // separado e identificado na etapa de Print, em vez do fluxo genérico.
-  const printSlots = model?.print_slots_json && model.print_slots_json.length > 0 ? model.print_slots_json : null;
-
-  // ── Init ──────────────────────────────────────────────────────────────────────
+  const steps = useMemo(() => buildDynamicSteps(placeholders, false), [placeholders]);
 
   useEffect(() => {
     const init = async () => {
@@ -514,98 +97,46 @@ export default function PeticaoEditarPage() {
       const actionId = searchParams.get('action');
       const modelId  = searchParams.get('model');
 
-      if (id) {
-        const { data } = await supabase
-          .from('petitions_v2')
-          .select('*, action_types(nome, slug), petition_models_v2(*)')
-          .eq('id', id)
-          .single();
-
-        if (data) {
-          const d = data as any;
-          setFormData(d.form_data_json || {});
-          setCurrentStep(d.current_step || 1);
-          setActionName(d.action_types?.nome || '');
-          setModel(d.petition_models_v2 || null);
+      try {
+        if (id) {
+          const petition = await api.fetchPetition(id);
+          if (!petition) { navigate('/peticoes'); return; }
+          setFormData((petition.form_data_json as FormData) || {});
+          setCurrentStep(petition.current_step || 1);
+          setActionName(petition.action_types?.nome || '');
+          setModelNome(petition.petition_models?.nome || '');
           setPetitionId(id);
-          // Carrega os campos do formulário a partir dos marcadores do template.
-          const tplUrl = d.petition_models_v2?.template_file_url;
-          if (tplUrl) {
-            try {
-              const info = await extrairModeloInfo(tplUrl);
-              setPlaceholders(info.placeholders);
-              setTemPrint(info.temImagem);
-            } catch (e) { console.error('Falha ao ler campos do modelo:', e); }
+          if (petition.model_id) {
+            const fields = await api.fetchModelFields(petition.model_id);
+            setPlaceholders(fields);
           }
-        }
-        setLoadingInitial(false);
-        return;
-      }
-
-      if (actionId && modelId) {
-        const [{ data: actionData }, { data: modelData }] = await Promise.all([
-          supabase.from('action_types').select('nome, slug').eq('id', actionId).single(),
-          supabase.from('petition_models_v2').select('*').eq('id', modelId).single(),
-        ]);
-
-        const aName = (actionData as any)?.nome || '';
-        setActionName(aName);
-        setModel((modelData as any) || null);
-
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) {
-            toast({ title: 'Erro', description: 'Usuário não autenticado.', variant: 'destructive' });
-            navigate('/peticoes');
-            return;
-          }
-
-          const { data: newPetition, error } = await supabase
-            .from('petitions_v2')
-            .insert({
-              action_type_id: actionId,
-              model_id:       modelId,
-              status:         'draft',
-              current_step:   1,
-              form_data_json: {},
-              created_by:     user.id,
-            })
-            .select('id')
-            .single();
-
-          if (error) {
-            toast({ title: 'Erro ao criar petição', description: error.message, variant: 'destructive' });
-            setLoadingInitial(false);
-            return;
-          }
-
-          if (newPetition) {
-            const newId = (newPetition as any).id;
-            setPetitionId(newId);
-            navigate(`/peticoes/${newId}/editar`, { replace: true });
-          }
-        } catch (err) {
-          toast({ title: 'Erro inesperado', description: 'Tente novamente.', variant: 'destructive' });
+          setLoadingInitial(false);
+          return;
         }
 
-        setLoadingInitial(false);
-        return;
-      }
+        if (actionId && modelId) {
+          const newId = await api.createPetition(actionId, modelId);
+          setPetitionId(newId);
+          navigate(`/peticoes/${newId}/editar`, { replace: true });
+          return;
+        }
 
-      navigate('/peticoes');
+        navigate('/peticoes');
+      } catch (err) {
+        toast({ title: 'Erro ao carregar petição', description: err instanceof Error ? err.message : 'Erro desconhecido', variant: 'destructive' });
+        navigate('/peticoes');
+      }
     };
     init();
   }, [id, searchParams, navigate, toast]);
 
-  // ── Autosave ───────────────────────────────────────────────────────────────────
-
   const doAutosave = useCallback(async () => {
     if (!petitionId) return;
-    await supabase.from('petitions_v2').update({
-      form_data_json: formData as any,
-      current_step:   currentStep,
-      updated_at:     new Date().toISOString(),
-    }).eq('id', petitionId);
+    try {
+      await api.savePetitionDraft(petitionId, formData, currentStep);
+    } catch (err) {
+      console.error('[PeticaoEditarPage] autosave falhou:', err);
+    }
   }, [petitionId, formData, currentStep]);
 
   useEffect(() => {
@@ -614,8 +145,6 @@ export default function PeticaoEditarPage() {
     autosaveTimer.current = setTimeout(doAutosave, 2000);
     return () => { if (autosaveTimer.current) clearTimeout(autosaveTimer.current); };
   }, [formData, currentStep, doAutosave, petitionId, loadingInitial]);
-
-  // ── CEP lookup ─────────────────────────────────────────────────────────────────
 
   const handleCepLookup = async (cep: string) => {
     const clean = cep.replace(/\D/g, '');
@@ -635,38 +164,25 @@ export default function PeticaoEditarPage() {
     } catch { /* ignore */ }
   };
 
-  // Campos que compõem o "Valor Total do Contrato" — recalculado sempre que
-  // qualquer um deles muda, em vez de exigir digitação manual da soma.
   const VALOR_TOTAL_FONTES = ['valor_emprestimo', 'valor_seguro', 'valor_encargos'];
 
   const updateField = (key: string, value: string) => {
     setFormData(prev => {
       const next = { ...prev, [key]: value };
-      // Ao selecionar o banco, puxa CNPJ/endereço/CEP automaticamente (se conhecidos).
-      // Banco não mapeado → mantém os campos para preenchimento manual.
       if (key === 'banco_nome') {
         if (BANCO_CNPJ[value]) next.banco_cnpj = BANCO_CNPJ[value];
         const end = BANCO_ENDERECO[value];
-        if (end) {
-          next.banco_endereco = end.endereco;
-          next.banco_cep = end.cep;
-        }
+        if (end) { next.banco_endereco = end.endereco; next.banco_cep = end.cep; }
       }
       if (VALOR_TOTAL_FONTES.includes(key)) {
         const soma = VALOR_TOTAL_FONTES.reduce((acc, k) => acc + (parseValor(next[k] || '') || 0), 0);
-        next.valor_total_contrato = soma > 0
-          ? soma.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-          : '';
+        next.valor_total_contrato = soma > 0 ? soma.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
       }
       return next;
     });
     if (key === 'endereco_cep') handleCepLookup(value);
   };
 
-  // ── Busca de lead do CRM ────────────────────────────────────────────────────────
-
-  // Busca precisa por nome, telefone OU CPF (RPC compara só os dígitos de tel/cpf,
-  // então casa mesmo com valores formatados no banco). Debounce de 250ms.
   const buscarLeads = (q: string) => {
     setLeadQuery(q);
     if (leadTimer.current) clearTimeout(leadTimer.current);
@@ -702,44 +218,27 @@ export default function PeticaoEditarPage() {
     toast({ title: 'Cliente carregado', description: `Dados de ${l.nome} preenchidos automaticamente.` });
   };
 
-  // ── Navegação ──────────────────────────────────────────────────────────────────
-
-  const currentStepConfig = activeSteps.find(s => s.id === currentStep) || activeSteps[0];
-  const currentIdx        = activeSteps.findIndex(s => s.id === currentStep);
-  const isLastStep        = currentIdx === activeSteps.length - 1;
+  const currentStepConfig = steps.find(s => s.id === currentStep) || steps[0];
+  const currentIdx        = steps.findIndex(s => s.id === currentStep);
   const isReviewStep      = currentStepConfig.title === 'Revisão';
-  const isPrintStep       = currentStepConfig.title === 'Print';
-  const progress          = ((currentIdx + 1) / activeSteps.length) * 100;
+  const progress          = ((currentIdx + 1) / steps.length) * 100;
 
-  // Campos de um passo que ainda estão vazios — todo campo aqui veio de um
-  // {{marcador}} real do modelo .docx, então deixá-lo em branco vira um espaço
-  // vazio na petição final. Sem essa checagem dava pra clicar "Próximo" e depois
-  // "Gerar" com o formulário inteiro vazio, baixando o modelo sem nenhum dado
-  // preenchido (foi exatamente o que aconteceu no teste do Gabriel).
-  const stepMissingFields = (step: StepConfig) =>
-    step.fields.filter(f => !f.optional && !(formData[f.key] || '').trim());
-
-  const firstInvalidStepIdx = () =>
-    activeSteps.findIndex(s => s.title !== 'Revisão' && s.title !== 'Print' && stepMissingFields(s).length > 0);
+  const stepMissingFields = (step: StepConfig) => step.fields.filter(f => !f.optional && !(formData[f.key] || '').trim());
+  const firstInvalidStepIdx = () => steps.findIndex(s => s.title !== 'Revisão' && stepMissingFields(s).length > 0);
 
   const goNext = () => {
-    if (!isReviewStep && !isPrintStep && stepMissingFields(currentStepConfig).length > 0) {
+    if (!isReviewStep && stepMissingFields(currentStepConfig).length > 0) {
       setSubmitted(true);
       toast({ title: 'Campos obrigatórios', description: 'Preencha os campos destacados antes de continuar.', variant: 'destructive' });
       return;
     }
     setSubmitted(false);
-    if (currentIdx < activeSteps.length - 1) {
-      setCurrentStep(activeSteps[currentIdx + 1].id);
-    }
+    if (currentIdx < steps.length - 1) setCurrentStep(steps[currentIdx + 1].id);
   };
-
   const goPrev = () => {
     if (currentIdx === 0) navigate('/peticoes');
-    else setCurrentStep(activeSteps[currentIdx - 1].id);
+    else setCurrentStep(steps[currentIdx - 1].id);
   };
-
-  // ── Salvar rascunho ────────────────────────────────────────────────────────────
 
   const handleSaveDraft = async () => {
     setSaving(true);
@@ -748,254 +247,78 @@ export default function PeticaoEditarPage() {
     setSaving(false);
   };
 
-  // ── Gerar petição ──────────────────────────────────────────────────────────────
-
-  // Monta o .docx final (template + dados + prints) a partir do estado atual do
-  // formulário, sem salvar nada — reaproveitado tanto pela geração real quanto
-  // pela pré-visualização.
-  const buildPeticaoDocxBlob = async (): Promise<Blob> => {
-    if (!model?.template_file_url) throw new Error('Modelo sem arquivo vinculado.');
-
-    const response = await fetch(model.template_file_url);
-    if (!response.ok) throw new Error('Erro ao baixar o modelo .docx');
-    const arrayBuffer = await response.arrayBuffer();
-
-    const zip = new PizZip(arrayBuffer);
-    const doc = new Docxtemplater(zip, {
-      paragraphLoop: true,
-      linebreaks:    true,
-      delimiters:    { start: '{{', end: '}}' },
-      nullGetter()  { return ''; },
-    });
-
-    const templateData = buildTemplateData(formData, actionName, placeholders);
-    doc.render(templateData);
-
-    const outZip = doc.getZip();
-
-    if (printSlots) {
-      // Modelo com slots nomeados: cada print vai exatamente na posição/
-      // imagem que já era daquele slot no modelo — imagens fixas (ex.:
-      // notícia institucional sobre o banco) nunca são tocadas.
-      for (let i = 0; i < printSlots.length; i++) {
-        const file = printsPorSlot[i];
-        if (!file) continue;
-        try {
-          const png = await fileToPng(file);
-          const ok = substituirImagemPorTarget(outZip, printSlots[i].media_target, png);
-          if (!ok) {
-            toast({ title: 'Aviso', description: `Não encontrei o espaço do print "${printSlots[i].label}" no modelo.`, variant: 'destructive' });
-          }
-        } catch (imgErr) {
-          console.error(`Falha ao inserir o print do slot "${printSlots[i].label}":`, imgErr);
-          toast({ title: 'Aviso', description: `Não foi possível inserir o print "${printSlots[i].label}".`, variant: 'destructive' });
-        }
-      }
-    } else if (printFiles.length > 0) {
-      try {
-        const primeiroPng = await fileToPng(printFiles[0]);
-        const ok = substituirPrintNoDocx(outZip, primeiroPng);
-        if (!ok) {
-          toast({ title: 'Aviso', description: 'Este modelo não tem espaço para print — o documento será gerado sem a imagem.', variant: 'destructive' });
-        }
-      } catch (imgErr) {
-        console.error('Falha ao inserir o print no documento:', imgErr);
-        toast({ title: 'Aviso', description: 'Não foi possível inserir o print; o documento será gerado sem ele.', variant: 'destructive' });
-      }
-
-      if (printFiles.length > 1) {
-        try {
-          const extrasPng = await Promise.all(printFiles.slice(1).map(fileToPng));
-          adicionarPrintsExtras(outZip, extrasPng);
-        } catch (imgErr) {
-          console.error('Falha ao anexar prints extras:', imgErr);
-          toast({ title: 'Aviso', description: 'Não foi possível anexar todos os prints extras.', variant: 'destructive' });
-        }
-      }
-    }
-
-    try { padronizarRodape(outZip); } catch (e) { console.error('Falha ao padronizar rodapé:', e); }
-
-    return outZip.generate({
-      type:     'blob',
-      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    });
-  };
-
-  const handlePreview = async () => {
-    const invalidIdx = firstInvalidStepIdx();
-    if (invalidIdx !== -1) {
-      setSubmitted(true);
-      setCurrentStep(activeSteps[invalidIdx].id);
-      toast({
-        title: 'Faltam campos obrigatórios',
-        description: `Preencha a etapa "${activeSteps[invalidIdx].title}" antes de pré-visualizar.`,
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setPreviewLoading(true);
-    if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl);
-    setPreviewPdfUrl(null);
-    setPreviewOpen(true);
-    try {
-      const blob = await buildPeticaoDocxBlob();
-      const base64_docx = await blobToBase64(blob);
-      const { data, error } = await supabase.functions.invoke('docx-to-pdf', { body: { base64_docx } });
-      if (error) throw error;
-      if (!data?.base64_pdf) throw new Error(data?.error?.message || 'PDF não retornado');
-      setPreviewPdfUrl(base64ToBlobUrl(data.base64_pdf));
-    } catch (err: any) {
-      console.error('[PeticaoEditarPage] Erro ao pré-visualizar:', err);
-      toast({ title: 'Erro na pré-visualização', description: err.message || 'Erro desconhecido', variant: 'destructive' });
-      setPreviewOpen(false);
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
   const handleGenerate = async () => {
     setSubmitted(true);
-    if (!petitionId || !model?.template_file_url) {
-      toast({ title: 'Erro', description: 'Modelo sem arquivo vinculado.', variant: 'destructive' });
-      return;
-    }
+    if (!petitionId) return;
 
     const invalidIdx = firstInvalidStepIdx();
     if (invalidIdx !== -1) {
-      setCurrentStep(activeSteps[invalidIdx].id);
-      toast({
-        title: 'Faltam campos obrigatórios',
-        description: `Preencha a etapa "${activeSteps[invalidIdx].title}" antes de gerar — senão a petição sai com espaços em branco.`,
-        variant: 'destructive',
-      });
+      setCurrentStep(steps[invalidIdx].id);
+      toast({ title: 'Faltam campos obrigatórios', description: `Preencha a etapa "${steps[invalidIdx].title}" antes de gerar.`, variant: 'destructive' });
       return;
     }
 
     setGenerating(true);
     try {
-      const { error: saveError } = await supabase.from('petitions_v2').update({
-        form_data_json: formData as any,
-        status:         'review',
-        updated_at:     new Date().toISOString(),
-      }).eq('id', petitionId);
-      if (saveError) throw saveError;
-
-      const blob = await buildPeticaoDocxBlob();
-
-      // Salvar no Storage
-      const fileName    = `peticao-${petitionId}-${Date.now()}.docx`;
-      const storagePath = `peticoes/geradas/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage.from('peticoes-modelos').upload(storagePath, blob, {
-        cacheControl: '3600', upsert: true,
-      });
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('peticoes-modelos')
-        .getPublicUrl(storagePath);
-
-      const { error: statusError } = await supabase.from('petitions_v2').update({
-        status:             'generated',
-        generated_docx_url: publicUrl,
-        updated_at:         new Date().toISOString(),
-      }).eq('id', petitionId);
-      if (statusError) throw statusError;
-
-      const { error: versionError } = await supabase.from('petition_versions').insert({
-        petition_id:        petitionId,
-        version_number:     1,
-        form_data_json:     formData as any,
-        generated_docx_url: publicUrl,
-      });
-      if (versionError) console.error('[PeticaoEditarPage] Falha ao salvar versão:', versionError);
-
+      await api.savePetitionDraft(petitionId, formData, currentStep);
+      const result = await api.generatePetition(petitionId);
+      const blob = await api.downloadPetitionFile(result.r2_key);
       const clienteNome = formData.nome_completo || formData.nome_maiusculo || 'documento';
       saveAs(blob, `Peticao_${clienteNome.replace(/\s+/g, '_')}.docx`);
-
       toast({ title: '✅ Petição gerada!', description: 'O arquivo .docx foi baixado.' });
-      navigate('/peticoes');
-
-    } catch (err: any) {
+      navigate(`/peticoes/${petitionId}/revisao`);
+    } catch (err) {
       console.error(err);
-      toast({ title: 'Erro na geração', description: err.message || 'Erro desconhecido', variant: 'destructive' });
+      toast({ title: 'Erro na geração', description: err instanceof Error ? err.message : 'Erro desconhecido', variant: 'destructive' });
     } finally {
       setGenerating(false);
     }
   };
 
-  // ── Loading ────────────────────────────────────────────────────────────────────
-
   if (loadingInitial) {
-    return (
-      <>
-        <AppHeader title="Carregando..." />
-        <DetailSkeleton />
-      </>
-    );
+    return (<><AppHeader title="Carregando..." /><DetailSkeleton /></>);
   }
-
-  // ── Render ─────────────────────────────────────────────────────────────────────
 
   return (
     <>
       <AppHeader title={actionName || 'Nova Petição'} />
       <ScrollArea className="flex-1">
         <div className="p-4 md:p-6 max-w-[860px] mx-auto space-y-5">
-
-          {/* Progress card */}
           <Card className="rounded-2xl border border-border/50 shadow-sm overflow-hidden">
             <div className="p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="font-bold text-foreground leading-tight">{model?.nome || 'Petição'}</h2>
+                  <h2 className="font-bold text-foreground leading-tight">{modelNome || 'Petição'}</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">{actionName}</p>
                 </div>
                 <Badge variant="outline" className="text-xs">Rascunho</Badge>
               </div>
-
-              {/* Steps */}
               <div className="flex items-center gap-1.5 flex-wrap">
-                {activeSteps.map((step, i) => {
-                  const Icon     = step.icon;
+                {steps.map((step, i) => {
+                  const Icon = step.icon;
                   const isActive = step.id === currentStep;
-                  const isDone   = step.id < currentStep;
+                  const isDone = step.id < currentStep;
                   return (
                     <div key={step.id} className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => setCurrentStep(step.id)}
-                        className={cn(
-                          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                      <button onClick={() => setCurrentStep(step.id)}
+                        className={cn('flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all',
                           isActive && 'bg-primary text-primary-foreground shadow-sm',
-                          isDone   && 'bg-primary/10 text-primary',
-                          !isActive && !isDone && 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                        )}
-                      >
-                        {isDone
-                          ? <CheckCircle2 className="h-3.5 w-3.5" />
-                          : <Icon className="h-3.5 w-3.5" />
-                        }
+                          isDone && 'bg-primary/10 text-primary',
+                          !isActive && !isDone && 'bg-muted/50 text-muted-foreground hover:bg-muted')}>
+                        {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Icon className="h-3.5 w-3.5" />}
                         <span className="hidden sm:inline">{step.title}</span>
                       </button>
-                      {i < activeSteps.length - 1 && (
-                        <ArrowRight className="h-3 w-3 text-muted-foreground/30 shrink-0" />
-                      )}
+                      {i < steps.length - 1 && <ArrowRight className="h-3 w-3 text-muted-foreground/30 shrink-0" />}
                     </div>
                   );
                 })}
               </div>
-
               <Progress value={progress} className="h-1.5 rounded-full" />
             </div>
           </Card>
 
-          {/* Step Content */}
           <Card className="rounded-2xl border border-border/50 shadow-sm">
             <CardContent className="p-5 md:p-6">
-
-              {/* Fields step */}
               {!isReviewStep && currentStepConfig.fields.length > 0 && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-2 mb-2">
@@ -1003,7 +326,6 @@ export default function PeticaoEditarPage() {
                     <h3 className="font-bold text-foreground">{currentStepConfig.title}</h3>
                   </div>
 
-                  {/* Autopreenchimento a partir de um lead do CRM (só na etapa Cliente) */}
                   {currentStepConfig.title === 'Cliente' && (
                     <div className="relative rounded-xl border border-primary/20 bg-primary/5 p-3">
                       <div className="flex items-center gap-2 mb-2">
@@ -1012,27 +334,15 @@ export default function PeticaoEditarPage() {
                       </div>
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          value={leadQuery}
-                          onChange={e => buscarLeads(e.target.value)}
-                          onFocus={() => leadResults.length && setLeadOpen(true)}
-                          placeholder="Buscar por nome, telefone ou CPF..."
-                          className="pl-10 rounded-lg bg-background"
-                        />
+                        <Input value={leadQuery} onChange={e => buscarLeads(e.target.value)} onFocus={() => leadResults.length && setLeadOpen(true)}
+                          placeholder="Buscar por nome, telefone ou CPF..." className="pl-10 rounded-lg bg-background" />
                       </div>
                       {leadOpen && leadResults.length > 0 && (
                         <div className="absolute z-20 left-3 right-3 mt-1 rounded-lg border border-border/60 bg-popover shadow-xl max-h-64 overflow-y-auto">
                           {leadResults.map(l => (
-                            <button
-                              key={l.id}
-                              type="button"
-                              onClick={() => aplicarLead(l)}
-                              className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors border-b border-border/30 last:border-0"
-                            >
+                            <button key={l.id} type="button" onClick={() => aplicarLead(l)} className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors border-b border-border/30 last:border-0">
                               <p className="text-sm font-medium text-foreground">{l.nome || 'Sem nome'}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {[l.cpf && `CPF ${l.cpf}`, l.cidade, l.telefone].filter(Boolean).join(' · ') || '—'}
-                              </p>
+                              <p className="text-xs text-muted-foreground">{[l.cpf && `CPF ${l.cpf}`, l.cidade, l.telefone].filter(Boolean).join(' · ') || '—'}</p>
                             </button>
                           ))}
                         </div>
@@ -1042,316 +352,44 @@ export default function PeticaoEditarPage() {
 
                   <div className="grid grid-cols-2 gap-4">
                     {currentStepConfig.fields.map(field => (
-                      <FieldInput
-                        key={field.key}
-                        config={field}
-                        value={formData[field.key] || ''}
-                        onChange={v => updateField(field.key, v)}
-                        submitted={submitted}
-                      />
+                      <FieldInput key={field.key} config={field} value={formData[field.key] || ''} onChange={v => updateField(field.key, v)} submitted={submitted} />
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Print step — anexar o(s) print(s) do contrato */}
-              {isPrintStep && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <ImageIcon className="h-5 w-5 text-primary" />
-                    <h3 className="font-bold text-foreground">Prints do contrato</h3>
-                  </div>
-
-                  {printSlots ? (
-                    <>
-                      <p className="text-sm text-muted-foreground">
-                        Este modelo tem {printSlots.length} espaço{printSlots.length > 1 ? 's' : ''} de print
-                        identificado{printSlots.length > 1 ? 's' : ''}. Cada um vai exatamente no lugar
-                        correspondente do documento — os demais (ex.: notícia institucional) não são alterados.
-                        Opcional, campo a campo — pode gerar sem preencher algum.
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {printSlots.map((slot, i) => {
-                          const file = printsPorSlot[i];
-                          return (
-                            <div key={i} className="p-3 rounded-xl border border-border/50 space-y-2">
-                              <p className="text-xs font-semibold text-foreground truncate" title={slot.label}>
-                                {i + 1}. {slot.label}
-                              </p>
-                              {file ? (
-                                <div className="relative">
-                                  <Button
-                                    variant="ghost" size="icon"
-                                    className="absolute top-1 right-1 h-6 w-6 rounded-lg bg-background/80"
-                                    onClick={() => setPrintsPorSlot(prev => ({ ...prev, [i]: null }))}
-                                  >
-                                    <X className="h-3.5 w-3.5" />
-                                  </Button>
-                                  <img
-                                    src={URL.createObjectURL(file)}
-                                    alt={slot.label}
-                                    className="h-28 w-full object-contain rounded-lg border border-border/50 bg-background"
-                                  />
-                                  <p className="text-[11px] text-muted-foreground truncate mt-1">{file.name}</p>
-                                </div>
-                              ) : (
-                                <label className="flex flex-col items-center justify-center gap-1.5 p-4 rounded-lg border-2 border-dashed border-border/60 hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer">
-                                  <Upload className="h-5 w-5 text-muted-foreground" />
-                                  <span className="text-xs font-medium text-foreground">Anexar print</span>
-                                  <input
-                                    type="file" accept="image/png,image/jpeg" className="hidden"
-                                    onChange={e => {
-                                      const f = e.target.files?.[0];
-                                      if (f) setPrintsPorSlot(prev => ({ ...prev, [i]: f }));
-                                      e.target.value = '';
-                                    }}
-                                  />
-                                </label>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm text-muted-foreground">
-                        Anexe o(s) print(s) do contrato do cliente (CET / proposta). O primeiro entra no
-                        lugar da imagem de exemplo do modelo, na seção <b>DOS FATOS</b>; os demais são
-                        adicionados ao final do documento. Opcional — pode gerar sem.
-                      </p>
-
-                      {printFiles.length > 0 && (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                          {printFiles.map((f, i) => (
-                            <div key={i} className="relative p-3 rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30">
-                              <span className="absolute top-2 left-2 h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
-                                {i + 1}
-                              </span>
-                              <Button
-                                variant="ghost" size="icon"
-                                className="absolute top-1 right-1 h-6 w-6 rounded-lg"
-                                onClick={() => setPrintFiles(prev => prev.filter((_, idx) => idx !== i))}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </Button>
-                              <img
-                                src={URL.createObjectURL(f)}
-                                alt={`Print ${i + 1}`}
-                                className="h-28 w-full object-contain rounded-lg border border-border/50 bg-background mt-3"
-                              />
-                              <p className="text-xs font-medium text-foreground truncate mt-2">{f.name}</p>
-                              <p className="text-[11px] text-muted-foreground">{(f.size / 1024).toFixed(0)} KB</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <label className="flex flex-col items-center justify-center gap-2 p-8 rounded-2xl border-2 border-dashed border-border/60 hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer">
-                        <Upload className="h-7 w-7 text-muted-foreground" />
-                        <span className="text-sm font-semibold text-foreground">
-                          {printFiles.length > 0 ? 'Adicionar mais um print' : 'Clique para anexar o(s) print(s)'}
-                        </span>
-                        <span className="text-xs text-muted-foreground">PNG ou JPG — pode selecionar vários de uma vez</span>
-                        <input
-                          type="file" accept="image/png,image/jpeg" multiple className="hidden"
-                          onChange={e => {
-                            const novos = Array.from(e.target.files ?? []);
-                            if (novos.length) setPrintFiles(prev => [...prev, ...novos]);
-                            e.target.value = '';
-                          }}
-                        />
-                      </label>
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* Review step */}
               {isReviewStep && (
-                <div className="space-y-5">
+                <div className="space-y-4">
                   <div className="flex items-center gap-2 mb-2">
                     <CheckCircle2 className="h-5 w-5 text-primary" />
-                    <h3 className="font-bold text-foreground">Revisão e Geração</h3>
+                    <h3 className="font-bold text-foreground">Revisão</h3>
                   </div>
-
-                  {/* Summary cards */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card className="rounded-xl border border-border/40">
-                      <CardHeader className="pb-2 pt-4 px-4">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                          <User className="h-4 w-4 text-primary" /> Cliente
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="px-4 pb-4 space-y-1 text-sm">
-                        <p><span className="text-muted-foreground">Nome:</span> {formData.nome_completo || formData.nome_maiusculo || '—'}</p>
-                        <p><span className="text-muted-foreground">CPF:</span> {formData.cpf || '—'}</p>
-                        <p><span className="text-muted-foreground">RG:</span> {formData.rg || '—'}</p>
-                        <p><span className="text-muted-foreground">Profissão:</span> {formData.profissao || '—'}</p>
-                        {formData.idade_numerica && (
-                          <p><span className="text-muted-foreground">Idade:</span> {formData.idade_numerica} anos</p>
-                        )}
-                      </CardContent>
-                    </Card>
-
-                    <Card className="rounded-xl border border-border/40">
-                      <CardHeader className="pb-2 pt-4 px-4">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                          <Building2 className="h-4 w-4 text-primary" /> Banco Réu
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="px-4 pb-4 space-y-1 text-sm">
-                        <p><span className="text-muted-foreground">Banco:</span> {formData.banco_nome || '—'}</p>
-                        <p><span className="text-muted-foreground">CNPJ:</span> {formData.banco_cnpj || '—'}</p>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="rounded-xl border border-border/40">
-                      <CardHeader className="pb-2 pt-4 px-4">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                          <MapPin className="h-4 w-4 text-primary" /> Endereço
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="px-4 pb-4 space-y-1 text-sm">
-                        <p>{formData.endereco_rua || '—'}, {formData.endereco_numero || '—'}</p>
-                        <p>{formData.endereco_bairro || '—'}, {formData.endereco_cidade || '—'}/{formData.endereco_uf || '—'}</p>
-                        <p>CEP: {formData.endereco_cep || '—'}</p>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="rounded-xl border border-border/40">
-                      <CardHeader className="pb-2 pt-4 px-4">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                          <DollarSign className="h-4 w-4 text-primary" /> Valores
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="px-4 pb-4 space-y-1 text-sm">
-                        {formData.valor_emprestimo && <p><span className="text-muted-foreground">Empréstimo:</span> R$ {formData.valor_emprestimo}</p>}
-                        {formData.valor_seguro && <p><span className="text-muted-foreground">Seguro:</span> R$ {formData.valor_seguro}</p>}
-                        {formData.valor_descontos_indevidos && <p><span className="text-muted-foreground">Desc. indevidos:</span> R$ {formData.valor_descontos_indevidos}</p>}
-                        {formData.valor_danos_morais && <p><span className="text-muted-foreground">Danos Morais:</span> R$ {formData.valor_danos_morais}</p>}
-                        {formData.valor_causa && <p><span className="text-muted-foreground font-semibold">Valor da Causa:</span> R$ {formData.valor_causa}</p>}
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  <Separator />
-
-                  {/* Modelo info */}
-                  <div className="flex items-center gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
-                    <FileText className="h-5 w-5 text-primary shrink-0" />
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{model?.nome || '—'}</p>
-                      <p className="text-xs text-muted-foreground">{actionName}</p>
-                    </div>
-                    {model?.template_file_url ? (
-                      <Badge className="ml-auto bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">
-                        ✓ Template vinculado
-                      </Badge>
-                    ) : (
-                      <Badge className="ml-auto bg-red-100 text-red-700 border-red-200 text-xs">
-                        ✗ Sem template
-                      </Badge>
-                    )}
-                  </div>
-
-                  {/* Lembrete do(s) print(s) anexado(s) (o upload fica no passo "Print") */}
-                  {temPrint && (() => {
-                    const anexados = printSlots
-                      ? Object.values(printsPorSlot).filter(Boolean).length
-                      : printFiles.length;
-                    const total = printSlots?.length;
-                    return (
-                      <div className={cn(
-                        'flex items-center gap-2 p-3 rounded-xl border text-sm',
-                        anexados > 0
-                          ? 'border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400'
-                          : 'border-amber-200 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400'
-                      )}>
-                        <ImageIcon className="h-4 w-4 shrink-0" />
-                        {anexados > 0
-                          ? <span>{anexados}{total ? ` de ${total}` : ''} print{anexados > 1 ? 's' : ''} anexado{anexados > 1 ? 's' : ''}</span>
-                          : <span>Nenhum print anexado — volte ao passo <b>Print</b> se quiser inserir o contrato.</span>}
-                      </div>
-                    );
-                  })()}
-
-                  <Separator />
-
-                  {/* Botões */}
-                  <div className="flex flex-col sm:flex-row items-center gap-3 justify-center pt-2">
-                    <Button
-                      variant="outline"
-                      onClick={handlePreview}
-                      disabled={previewLoading || !model?.template_file_url}
-                      className="gap-2 rounded-xl h-12 px-8 text-base font-bold"
-                    >
-                      {previewLoading
-                        ? <><Loader2 className="h-5 w-5 animate-spin" /> Gerando prévia...</>
-                        : <><Eye className="h-5 w-5" /> Pré-visualizar</>
-                      }
-                    </Button>
-                    <Button
-                      onClick={handleGenerate}
-                      disabled={generating || !model?.template_file_url}
-                      className="gap-2 rounded-xl h-12 px-8 shadow-md text-base font-bold"
-                    >
-                      {generating
-                        ? <><Loader2 className="h-5 w-5 animate-spin" /> Gerando...</>
-                        : <><Sparkles className="h-5 w-5" /> Gerar Petição Final</>
-                      }
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={handleSaveDraft}
-                      disabled={saving}
-                      className="gap-2 rounded-xl h-12 px-6"
-                    >
-                      <Save className="h-4 w-4" />
-                      {saving ? 'Salvando...' : 'Salvar Rascunho'}
-                    </Button>
-                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Confira os dados preenchidos nas etapas anteriores e clique em <b>Gerar Petição</b> pra baixar o .docx.
+                    O print do contrato ainda não é suportado neste fluxo — se o modelo precisar dele, insira manualmente no .docx gerado antes de protocolar.
+                  </p>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Navegação */}
-          <div className="flex items-center justify-between">
-            <Button variant="outline" onClick={goPrev} className="gap-2 rounded-xl">
-              <ArrowLeft className="h-4 w-4" />
-              {currentIdx === 0 ? 'Voltar' : 'Anterior'}
-            </Button>
-            {!isLastStep && (
-              <Button onClick={goNext} className="gap-2 rounded-xl font-semibold">
-                Próximo <ArrowRight className="h-4 w-4" />
+          <div className="flex items-center justify-between gap-3">
+            <Button variant="outline" onClick={goPrev} className="gap-2 rounded-xl"><ArrowLeft className="h-4 w-4" /> Voltar</Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={handleSaveDraft} disabled={saving} className="gap-2 rounded-xl">
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Salvar Rascunho
               </Button>
-            )}
+              {isReviewStep ? (
+                <Button onClick={handleGenerate} disabled={generating} className="gap-2 rounded-xl font-bold">
+                  {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Gerar Petição
+                </Button>
+              ) : (
+                <Button onClick={goNext} className="gap-2 rounded-xl font-bold">Próximo <ArrowRight className="h-4 w-4" /></Button>
+              )}
+            </div>
           </div>
-
         </div>
       </ScrollArea>
-
-      <Dialog open={previewOpen} onOpenChange={(o) => { setPreviewOpen(o); if (!o && previewPdfUrl) { URL.revokeObjectURL(previewPdfUrl); setPreviewPdfUrl(null); } }}>
-        <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 gap-0">
-          <DialogHeader className="px-5 pt-4 pb-3 border-b border-border/50">
-            <DialogTitle className="text-base">Pré-visualização</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 bg-muted/20">
-            {previewLoading ? (
-              <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Gerando pré-visualização...
-              </div>
-            ) : previewPdfUrl ? (
-              <iframe src={previewPdfUrl} title="Pré-visualização da petição" className="w-full h-full border-0" />
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                Não foi possível carregar a pré-visualização.
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

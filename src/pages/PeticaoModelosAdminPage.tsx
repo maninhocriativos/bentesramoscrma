@@ -1,10 +1,9 @@
-// Tela de administração de modelos (v2 — backend Cloudflare). Substitui a
-// edição manual direto no banco: sobe o .docx, analisa {{marcadores}} e
+// Tela de administração de modelos — backend Cloudflare. Sobe o .docx, analisa {{marcadores}} e
 // imagens do corpo 100% no navegador (docxAnalyzer.ts, via pizzip — não
 // depende do Worker pra essa parte), nomeia print slots, e cadastra dentro
 // da categoria escolhida (ou cria uma nova, inline). O envio final é um
 // POST /api/models multipart pro Worker (peticoesV2Client.ts), que salva o
-// arquivo no R2 e insere no D1 — aparece na hora no catálogo de /peticoes-v2.
+// arquivo no R2 e insere no D1 — aparece na hora no catálogo de /peticoes.
 import { useState, useEffect, useCallback } from 'react';
 import {
   Upload, FileText, Plus, Pencil, Trash2, ImageIcon, CheckCircle2,
@@ -46,7 +45,7 @@ interface ModeloFormState {
 }
 const FORM_VAZIO: ModeloFormState = { actionTypeId: '', nome: '', descricao: '', tags: '', isDefault: false, isActive: true };
 
-export default function PeticaoModelosAdminPageV2() {
+export default function PeticaoModelosAdminPage() {
   const { toast } = useToast();
   const [actionTypes, setActionTypes] = useState<ActionType[]>([]);
   const [models, setModels]           = useState<PetitionModelV2[]>([]);
@@ -130,7 +129,7 @@ export default function PeticaoModelosAdminPageV2() {
         tags, file, printSlots: printSlots.length > 0 ? printSlots : null,
         isActive: form.isActive, isDefault: form.isDefault,
       });
-      toast({ title: '✅ Modelo cadastrado', description: `${form.nome} já aparece no catálogo de /peticoes-v2.` });
+      toast({ title: '✅ Modelo cadastrado', description: `${form.nome} já aparece no catálogo de /peticoes.` });
       resetForm();
       await fetchAll();
     } catch (err) {
@@ -175,14 +174,9 @@ export default function PeticaoModelosAdminPageV2() {
 
   return (
     <>
-      <AppHeader title="Modelos de Petição (v2 — beta)" />
+      <AppHeader title="Modelos de Petição" />
       <ScrollArea className="flex-1">
         <div className="p-4 md:p-6 space-y-6 max-w-[1200px] mx-auto">
-          <div className="rounded-xl border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
-            <Sparkles className="h-3.5 w-3.5 shrink-0" />
-            Versão beta — modelos cadastrados aqui já são salvos de verdade (Cloudflare Worker/D1/R2) e aparecem no catálogo de /peticoes-v2.
-          </div>
-
           <Card className="rounded-2xl border border-border/50 shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg font-bold">

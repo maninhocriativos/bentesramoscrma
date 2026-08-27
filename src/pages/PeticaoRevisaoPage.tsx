@@ -1,9 +1,12 @@
+// Revisão + histórico de versões — backend Cloudflare. Sem prévia em PDF
+// ainda (o Worker não tem conversão docx-to-pdf) — os botões baixam o .docx
+// direto do R2 via peticoesAuthBridge.
 import { useState, useEffect } from 'react';
 import { DetailSkeleton } from '@/components/ui/PageSkeleton';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Download, FileText, Loader2, CheckCircle2, Edit3,
-  Sparkles, Clock, User, DollarSign, Copy, Archive, Eye
+  Clock, User, DollarSign, Archive,
 } from 'lucide-react';
 import { AppHeader } from '@/components/AppHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,132 +14,78 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { saveAs } from 'file-saver';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-
-function arrayBufferToBase64(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf);
-  let binary = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
-
-function base64ToBlobUrl(base64: string, mime: string): string {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return URL.createObjectURL(new Blob([bytes], { type: mime }));
-}
-
-interface PetitionData {
-  id: string;
-  status: string;
-  form_data_json: Record<string, unknown>;
-  generated_docx_url: string | null;
-  generated_pdf_url: string | null;
-  created_at: string;
-  updated_at: string;
-  action_types?: { nome: string };
-  petition_models_v2?: { nome: string; slug: string; tags: string[] };
-}
-
-interface VersionData {
-  id: string;
-  version_number: number;
-  generated_docx_url: string | null;
-  created_at: string;
-}
+import * as api from '@/lib/peticoesV2Client';
+import type { PetitionV2, PetitionVersion } from '@/lib/peticoesV2Client';
 
 export default function PeticaoRevisaoPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [petition, setPetition] = useState<PetitionData | null>(null);
-  const [versions, setVersions] = useState<VersionData[]>([]);
+  const [petition, setPetition] = useState<PetitionV2 | null>(null);
+  const [versions, setVersions] = useState<PetitionVersion[]>([]);
   const [loading, setLoading] = useState(true);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
+  const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
       if (!id) return;
       setLoading(true);
-      const [{ data: petData }, { data: versData }] = await Promise.all([
-        supabase.from('petitions_v2').select('*, action_types(nome), petition_models_v2(nome, slug, tags)').eq('id', id).single(),
-        supabase.from('petition_versions').select('*').eq('petition_id', id).order('version_number', { ascending: false }),
-      ]);
-      setPetition((petData as unknown as PetitionData) || null);
-      setVersions((versData as unknown as VersionData[]) || []);
-      setLoading(false);
+      try {
+        const [pet, vers] = await Promise.all([api.fetchPetition(id), api.fetchVersions(id)]);
+        setPetition(pet);
+        setVersions(vers);
+      } catch (err) {
+        toast({ title: 'Erro ao carregar petição', description: err instanceof Error ? err.message : 'Erro desconhecido', variant: 'destructive' });
+      } finally {
+        setLoading(false);
+      }
     };
     load();
-  }, [id]);
+  }, [id, toast]);
 
   const handleMarkFiled = async () => {
     if (!id) return;
-    const { error } = await supabase.from('petitions_v2').update({ status: 'filed', updated_at: new Date().toISOString() }).eq('id', id);
-    if (error) {
-      toast({ title: 'Erro', description: 'Não foi possível marcar como protocolada', variant: 'destructive' });
-      return;
+    try {
+      await api.markPetitionFiled(id);
+      toast({ title: 'Protocolado', description: 'Petição marcada como protocolada' });
+      setPetition(prev => prev ? { ...prev, status: 'filed' } : prev);
+    } catch (err) {
+      toast({ title: 'Erro', description: err instanceof Error ? err.message : 'Não foi possível marcar como protocolada', variant: 'destructive' });
     }
-    toast({ title: 'Protocolado', description: 'Petição marcada como protocolada' });
-    setPetition(prev => prev ? { ...prev, status: 'filed' } : prev);
   };
 
   const handleArchive = async () => {
     if (!id) return;
-    const { error } = await supabase.from('petitions_v2').update({ status: 'archived', updated_at: new Date().toISOString() }).eq('id', id);
-    if (error) {
-      toast({ title: 'Erro', description: 'Não foi possível arquivar a petição', variant: 'destructive' });
-      return;
+    try {
+      await api.archivePetition(id);
+      toast({ title: 'Arquivado', description: 'Petição arquivada' });
+      navigate('/peticoes');
+    } catch (err) {
+      toast({ title: 'Erro', description: err instanceof Error ? err.message : 'Não foi possível arquivar a petição', variant: 'destructive' });
     }
-    toast({ title: 'Arquivado', description: 'Petição arquivada' });
-    navigate('/peticoes');
   };
 
-  // Converte via CloudConvert (docx-to-pdf) em vez de mammoth: mammoth ignora
-  // cabeçalho/rodapé, então a prévia saía sem o timbre do escritório. A conversão
-  // real preserva logo, cabeçalho e rodapé exatamente como o documento imprime.
-  const handlePreview = async (docxUrl: string) => {
-    setPreviewOpen(true);
-    setPreviewLoading(true);
-    if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl);
-    setPreviewPdfUrl(null);
+  const handleDownload = async (r2Key: string, versionLabel: string) => {
+    setDownloadingKey(r2Key);
     try {
-      const resp = await fetch(docxUrl);
-      if (!resp.ok) throw new Error('Falha ao baixar o documento');
-      const arrayBuffer = await resp.arrayBuffer();
-      const base64_docx = arrayBufferToBase64(arrayBuffer);
-
-      const { data, error } = await supabase.functions.invoke('docx-to-pdf', { body: { base64_docx } });
-      if (error) throw error;
-      if (!data?.base64_pdf) throw new Error(data?.error?.message || 'PDF não retornado');
-
-      setPreviewPdfUrl(base64ToBlobUrl(data.base64_pdf, 'application/pdf'));
+      const blob = await api.downloadPetitionFile(r2Key);
+      const clienteNome = (petition?.form_data_json?.nome_completo as string) || (petition?.form_data_json?.nome_maiusculo as string) || 'documento';
+      saveAs(blob, `Peticao_${clienteNome.replace(/\s+/g, '_')}_${versionLabel}.docx`);
     } catch (err) {
-      console.error('[PeticaoRevisaoPage] Erro ao gerar pré-visualização:', err);
-      toast({ title: 'Erro', description: 'Não foi possível gerar a pré-visualização', variant: 'destructive' });
-      setPreviewOpen(false);
+      toast({ title: 'Erro ao baixar', description: err instanceof Error ? err.message : 'Erro desconhecido', variant: 'destructive' });
     } finally {
-      setPreviewLoading(false);
+      setDownloadingKey(null);
     }
   };
 
   if (loading) {
-    return (
-      <><AppHeader title="Carregando..." />
-        <DetailSkeleton />
-      </>
-    );
+    return (<><AppHeader title="Carregando..." /><DetailSkeleton /></>);
   }
 
   if (!petition) {
@@ -150,10 +99,6 @@ export default function PeticaoRevisaoPage() {
     );
   }
 
-  // form_data_json é um objeto "chato" (uma chave por campo, ex: nome_completo, cpf,
-  // valor_causa) — não aninhado em cliente/endereco/banco/valores como este card
-  // assumia antes. Também cobre a variante em MAIÚSCULAS que o docxtemplater usa
-  // como alias (NOME_COMPLETO, CPF...), presente em alguns registros mais antigos.
   const fd = (petition.form_data_json || {}) as Record<string, unknown>;
   const campo = (...chaves: string[]): string => {
     for (const chave of chaves) {
@@ -177,7 +122,6 @@ export default function PeticaoRevisaoPage() {
       <AppHeader title="Revisão da Petição" />
       <ScrollArea className="flex-1">
         <div className="p-4 md:p-6 max-w-[1000px] mx-auto space-y-6">
-          {/* Header */}
           <div className="flex items-center justify-between">
             <Button variant="ghost" onClick={() => navigate('/peticoes')} className="gap-2 rounded-xl">
               <ArrowLeft className="h-4 w-4" /> Voltar
@@ -197,15 +141,14 @@ export default function PeticaoRevisaoPage() {
             </div>
           </div>
 
-          {/* Petition info */}
           <Card className="rounded-xl border border-border/50 shadow-sm">
             <CardContent className="p-6">
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <h2 className="text-lg font-bold text-foreground">{petition.action_types?.nome || 'Petição'}</h2>
-                  <p className="text-sm text-muted-foreground">{petition.petition_models_v2?.nome}</p>
+                  <p className="text-sm text-muted-foreground">{petition.petition_models?.nome}</p>
                 </div>
-                <Badge className={cn("text-xs", statusCfg.color)}>{statusCfg.label}</Badge>
+                <Badge className={cn('text-xs', statusCfg.color)}>{statusCfg.label}</Badge>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
@@ -239,26 +182,18 @@ export default function PeticaoRevisaoPage() {
                 </Card>
               </div>
 
-              {/* Download / preview buttons */}
-              {petition.generated_docx_url && (
+              {petition.generated_r2_key && (
                 <>
                   <Separator className="my-4" />
-                  <div className="flex items-center gap-3">
-                    <Button variant="outline" className="gap-2 rounded-xl" onClick={() => handlePreview(petition.generated_docx_url!)}>
-                      <Eye className="h-4 w-4" /> Pré-visualizar
-                    </Button>
-                    <Button asChild className="gap-2 rounded-xl">
-                      <a href={petition.generated_docx_url} target="_blank" rel="noopener noreferrer">
-                        <Download className="h-4 w-4" /> Baixar DOCX
-                      </a>
-                    </Button>
-                  </div>
+                  <Button className="gap-2 rounded-xl" disabled={downloadingKey === petition.generated_r2_key}
+                    onClick={() => handleDownload(petition.generated_r2_key!, 'atual')}>
+                    {downloadingKey === petition.generated_r2_key ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Baixar DOCX
+                  </Button>
                 </>
               )}
             </CardContent>
           </Card>
 
-          {/* Version History */}
           {versions.length > 0 && (
             <Card className="rounded-xl border border-border/50 shadow-sm">
               <CardHeader>
@@ -272,21 +207,13 @@ export default function PeticaoRevisaoPage() {
                     <div key={v.id} className="flex items-center justify-between p-3 rounded-xl border border-border/30 hover:border-border/60 transition-colors">
                       <div>
                         <p className="text-sm font-medium">Versão {v.version_number}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(v.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                        </p>
+                        <p className="text-xs text-muted-foreground">{format(new Date(v.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
                       </div>
-                      {v.generated_docx_url && (
-                        <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm" className="gap-2 rounded-lg" onClick={() => handlePreview(v.generated_docx_url!)}>
-                            <Eye className="h-3.5 w-3.5" /> Ver
-                          </Button>
-                          <Button asChild variant="outline" size="sm" className="gap-2 rounded-lg">
-                            <a href={v.generated_docx_url} target="_blank" rel="noopener noreferrer">
-                              <Download className="h-3.5 w-3.5" /> DOCX
-                            </a>
-                          </Button>
-                        </div>
+                      {v.generated_r2_key && (
+                        <Button variant="outline" size="sm" className="gap-2 rounded-lg" disabled={downloadingKey === v.generated_r2_key}
+                          onClick={() => handleDownload(v.generated_r2_key, `v${v.version_number}`)}>
+                          {downloadingKey === v.generated_r2_key ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} DOCX
+                        </Button>
                       )}
                     </div>
                   ))}
@@ -296,27 +223,6 @@ export default function PeticaoRevisaoPage() {
           )}
         </div>
       </ScrollArea>
-
-      <Dialog open={previewOpen} onOpenChange={(o) => { setPreviewOpen(o); if (!o && previewPdfUrl) { URL.revokeObjectURL(previewPdfUrl); setPreviewPdfUrl(null); } }}>
-        <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 gap-0">
-          <DialogHeader className="px-5 pt-4 pb-3 border-b border-border/50">
-            <DialogTitle className="text-base">Pré-visualização</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 bg-muted/20">
-            {previewLoading ? (
-              <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Gerando pré-visualização...
-              </div>
-            ) : previewPdfUrl ? (
-              <iframe src={previewPdfUrl} title="Pré-visualização da petição" className="w-full h-full border-0" />
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                Não foi possível carregar a pré-visualização.
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
