@@ -2783,7 +2783,10 @@ const ManyChatInboxContent = () => {
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-1 mt-[2px] min-w-0 flex-wrap">
+                <div
+                  className="flex items-center gap-1 mt-[2px] min-w-0 flex-nowrap overflow-x-auto md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden"
+                  style={{ scrollbarWidth: 'none' }}
+                >
                   {getSubscriberTags(selectedSubscriber.subscriber_id).map(st => st.tag && (
                     <TagBadge key={st.id} tag={st.tag} reason={st.reason} size="sm" showRemove dark={isDark}
                       onRemove={() => removeTagFromSubscriber(selectedSubscriber.subscriber_id, st.tag_id)} />

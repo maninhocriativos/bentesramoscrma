@@ -20,11 +20,19 @@ export function useIntimacoes() {
   const [loading, setLoading] = useState(true);
 
   const fetchIntimacoes = useCallback(async () => {
+    // A fonte ativa hoje (processo-djen-sync) nunca preenche data_intimacao —
+    // só data_publicacao/data_disponibilizacao. O filtro .gte('data_intimacao', ...)
+    // que existia aqui excluía TODA linha com data_intimacao nula (NULL >= x é
+    // sempre falso no Postgres), ou seja, zerava o resultado pra praticamente
+    // tudo que o sync atual insere. IntimacoesPage.tsx (a tela real) nunca usou
+    // esse filtro — ordena por data_publicacao/disponibilizacao/created_at, sem
+    // exigir data_intimacao. Replicado aqui pelo mesmo motivo.
     const { data, error } = await supabase
       .from('intimacoes')
       .select('id, processo_cnj, processo_titulo, conteudo, data_intimacao, data_publicacao, data_disponibilizacao, tribunal, tipo_intimacao, lida, oab_numero')
-      .gte('data_intimacao', '2026-01-01T00:00:00Z')
-      .order('data_intimacao', { ascending: false, nullsFirst: false })
+      .order('data_publicacao', { ascending: false, nullsFirst: false })
+      .order('data_disponibilizacao', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
       .limit(100);
 
     if (!error && data) {
