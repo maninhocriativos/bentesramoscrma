@@ -3,6 +3,7 @@ import { MessageSquare, X, Send, ChevronDown, AtSign, Bell, Paperclip, FileText 
 import { useChatInterno, decodeMencoes, decodeAnexo, type ChatAnexo } from '@/hooks/useChatInterno';
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 import { format, isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -49,6 +50,10 @@ function MsgText({ content }: { content: string }) {
 }
 
 export function ChatInterno() {
+  const isMobile = useIsMobile();
+  // No mobile a MobileTabBar (AppLayout) ocupa os ~64px + safe-area do rodapé —
+  // o widget precisa flutuar acima dela, não por baixo.
+  const mobileBottomOffset = 'calc(4.5rem + env(safe-area-inset-bottom))';
   const [open,         setOpen]        = useState(false);
   const [texto,        setTexto]       = useState('');
   const [onlineUsers,  setOnlineUsers] = useState<OnlineUser[]>([]);
@@ -232,8 +237,10 @@ export function ChatInterno() {
       {/* ── Pop-up de menção ── */}
       {mencaoNotif && (
         <div
-          className="fixed z-[200] bottom-24 right-5 w-80 rounded-2xl overflow-hidden shadow-2xl"
+          className="fixed z-[200] right-5 rounded-2xl overflow-hidden shadow-2xl"
           style={{
+            bottom: isMobile ? `calc(${mobileBottomOffset} + 4.25rem)` : '6rem',
+            width: 'min(320px, calc(100vw - 2.5rem))',
             background: BROWN,
             border: `1px solid ${GOLD}40`,
             boxShadow: `0 8px 32px rgba(0,0,0,0.35), 0 2px 8px ${GOLD}20`,
@@ -278,13 +285,17 @@ export function ChatInterno() {
       )}
 
       {/* ── Widget principal ── */}
-      <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
+      <div
+        className="fixed right-5 z-50 flex flex-col items-end gap-2"
+        style={{ bottom: isMobile ? mobileBottomOffset : '1.25rem' }}
+      >
 
         {open && (
           <div
             className="flex flex-col rounded-2xl overflow-hidden shadow-2xl"
             style={{
-              width: 360, height: 520,
+              width: 'min(360px, calc(100vw - 2.5rem))',
+              height: 'min(520px, 68vh)',
               background: 'white',
               border: `1px solid ${GOLD}40`,
               boxShadow: `0 20px 60px rgba(0,0,0,0.18), 0 4px 16px ${GOLD}20`,

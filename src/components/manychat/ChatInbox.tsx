@@ -2800,43 +2800,48 @@ const ManyChatInboxContent = () => {
               </div>
 
               <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
-                {/* ❌ BOTÃO LEAD PERDIDO */}
-                {selectedSubscriber.lead_id && (
+                {/* No mobile, Perdido/Contrato Fechado/Lembrete de assinatura saem da
+                    barra (lotavam a linha e sobrepunham as tags) e viram itens do
+                    menu "..." — ver DropdownMenuItems com md:hidden mais abaixo. */}
+                <div className="hidden md:flex items-center gap-1 md:gap-1.5">
+                  {/* ❌ BOTÃO LEAD PERDIDO */}
+                  {selectedSubscriber.lead_id && (
+                    <Button
+                      size="sm"
+                      onClick={() => { setLeadPerdidoMotivo(''); setLeadPerdidoOpen(true); }}
+                      title="Marcar lead como perdido"
+                      className="h-7 md:h-8 px-2.5 md:px-3.5 rounded-full gap-1.5 text-[11px] md:text-xs font-semibold
+                        border border-red-400/60 bg-red-500/10 text-red-500
+                        hover:bg-red-500 hover:text-white hover:border-red-500 hover:shadow-md hover:shadow-red-500/25
+                        active:scale-95 transition-all duration-150"
+                    >
+                      <XCircle className="h-3.5 w-3.5 shrink-0" />
+                      <span className="hidden lg:inline">Perdido</span>
+                    </Button>
+                  )}
+
+                  {/* ✅ BOTÃO CONTRATO FECHADO */}
                   <Button
                     size="sm"
-                    onClick={() => { setLeadPerdidoMotivo(''); setLeadPerdidoOpen(true); }}
-                    title="Marcar lead como perdido"
+                    onClick={() => setContratoModalOpen(true)}
+                    title="Registrar contrato fechado"
                     className="h-7 md:h-8 px-2.5 md:px-3.5 rounded-full gap-1.5 text-[11px] md:text-xs font-semibold
-                      border border-red-400/60 bg-red-500/10 text-red-500
-                      hover:bg-red-500 hover:text-white hover:border-red-500 hover:shadow-md hover:shadow-red-500/25
+                      border border-emerald-400/60 bg-emerald-500/10 text-emerald-600 dark:text-emerald-500
+                      hover:bg-emerald-500 hover:text-white hover:border-emerald-500 hover:shadow-md hover:shadow-emerald-500/25
                       active:scale-95 transition-all duration-150"
                   >
-                    <XCircle className="h-3.5 w-3.5 shrink-0" />
-                    <span className="hidden lg:inline">Perdido</span>
+                    <BadgeCheck className="h-3.5 w-3.5 shrink-0" />
+                    <span className="hidden lg:inline">Contrato Fechado</span>
                   </Button>
-                )}
 
-                {/* ✅ BOTÃO CONTRATO FECHADO */}
-                <Button
-                  size="sm"
-                  onClick={() => setContratoModalOpen(true)}
-                  title="Registrar contrato fechado"
-                  className="h-7 md:h-8 px-2.5 md:px-3.5 rounded-full gap-1.5 text-[11px] md:text-xs font-semibold
-                    border border-emerald-400/60 bg-emerald-500/10 text-emerald-600 dark:text-emerald-500
-                    hover:bg-emerald-500 hover:text-white hover:border-emerald-500 hover:shadow-md hover:shadow-emerald-500/25
-                    active:scale-95 transition-all duration-150"
-                >
-                  <BadgeCheck className="h-3.5 w-3.5 shrink-0" />
-                  <span className="hidden lg:inline">Contrato Fechado</span>
-                </Button>
-
-                {/* ✍️ LEMBRETE DE ASSINATURA (link real ClickSign/ZapSign do contrato do lead) */}
-                <ChatContractReminder
-                  leadId={selectedSubscriber.lead_id}
-                  leadNome={getDisplayName(selectedSubscriber)}
-                  leadPhone={selectedSubscriber.telefone}
-                  triggerClassName={`${themeClasses.iconColor} ${themeClasses.hoverBtn}`}
-                />
+                  {/* ✍️ LEMBRETE DE ASSINATURA (link real ClickSign/ZapSign do contrato do lead) */}
+                  <ChatContractReminder
+                    leadId={selectedSubscriber.lead_id}
+                    leadNome={getDisplayName(selectedSubscriber)}
+                    leadPhone={selectedSubscriber.telefone}
+                    triggerClassName={`${themeClasses.iconColor} ${themeClasses.hoverBtn}`}
+                  />
+                </div>
 
                 {selectedSubscriber.telefone && (
                   <>
@@ -2876,6 +2881,25 @@ const ManyChatInboxContent = () => {
                     <Button variant="ghost" size="icon" className={`h-8 w-8 md:h-10 md:w-10 rounded-full ${themeClasses.iconColor} ${themeClasses.hoverBtn}`}><MoreVertical className="h-4 w-4 md:h-5 md:w-5" /></Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56 py-1.5">
+                    {/* Grupo: ações movidas da barra no mobile (desktop já as mostra como botão) */}
+                    {selectedSubscriber.lead_id && (
+                      <DropdownMenuItem
+                        className="gap-2.5 text-[13px] py-2 cursor-pointer md:hidden text-red-500 focus:text-red-500"
+                        onClick={() => { setLeadPerdidoMotivo(''); setLeadPerdidoOpen(true); }}
+                      >
+                        <XCircle className="h-3.5 w-3.5 shrink-0" />
+                        Marcar lead como perdido
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem
+                      className="gap-2.5 text-[13px] py-2 cursor-pointer md:hidden text-emerald-600 focus:text-emerald-600"
+                      onClick={() => setContratoModalOpen(true)}
+                    >
+                      <BadgeCheck className="h-3.5 w-3.5 shrink-0" />
+                      Registrar contrato fechado
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="my-1 md:hidden" />
+
                     {/* Grupo: Navegação */}
                     {selectedSubscriber.lead_id && (
                       <DropdownMenuItem className="gap-2.5 text-[13px] py-2 cursor-pointer" onClick={() => navigate(`/leads/${selectedSubscriber.lead_id}`)}>
