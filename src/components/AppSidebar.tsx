@@ -1,9 +1,6 @@
-import {
-  LayoutDashboard, Users, Scale, Settings, CalendarDays, ChevronLeft,
-  DollarSign, FileText, CheckSquare, FileSignature, Bot, MessageSquare,
-  Sparkles, Webhook, Zap, BookOpen, FormInput, History, FileEdit, Gavel, GraduationCap, Calculator, TrendingUp, BarChart3, LogOut, UserRoundCog
-} from 'lucide-react';
+import { ChevronLeft, Sparkles, LogOut } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { menuSections, canShowMenuItem } from '@/config/navigation';
 import {
   Sidebar,
   SidebarContent,
@@ -22,66 +19,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import logo from '@/assets/logo-bentes-ramos.png';
 import { cn } from '@/lib/utils';
-
-type MenuItemVisibility = 'all' | 'admin-only' | 'processos-only' | 'leads-only' | 'dashboard-only' | 'financeiro-only';
-
-interface MenuItem {
-  title: string;
-  url: string;
-  icon: typeof LayoutDashboard;
-  visibility: MenuItemVisibility;
-}
-
-interface MenuSection {
-  label: string;
-  items: MenuItem[];
-}
-
-const menuSections: MenuSection[] = [
-  {
-    label: 'Principal',
-    items: [
-      { title: 'Bem-Vindo', url: '/bem-vindo', icon: GraduationCap, visibility: 'all' },
-      { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, visibility: 'dashboard-only' },
-      { title: 'Dados', url: '/dados', icon: BarChart3, visibility: 'dashboard-only' },
-      { title: 'Leads', url: '/leads', icon: Users, visibility: 'leads-only' },
-      { title: 'Leads API (Meta)', url: '/meta-leads', icon: FormInput, visibility: 'leads-only' },
-      { title: 'Processos', url: '/processos', icon: Scale, visibility: 'processos-only' },
-      { title: 'Intimações', url: '/intimacoes', icon: Gavel, visibility: 'processos-only' },
-    ],
-  },
-  {
-    label: 'Gestão',
-    items: [
-      { title: 'Tarefas', url: '/tarefas', icon: CheckSquare, visibility: 'all' },
-      { title: 'Agenda', url: '/agenda', icon: CalendarDays, visibility: 'all' },
-      { title: 'Financeiro', url: '/financeiro', icon: DollarSign, visibility: 'financeiro-only' },
-      { title: 'Documentos', url: '/documentos', icon: FileText, visibility: 'all' },
-      { title: 'Contratos', url: '/contratos', icon: FileSignature, visibility: 'all' },
-      { title: 'Petições Iniciais', url: '/peticoes', icon: FileEdit, visibility: 'all' },
-    ],
-  },
-  {
-    label: 'Inteligência',
-    items: [
-      { title: 'Assistentes IA', url: '/assistente', icon: Bot, visibility: 'all' },
-      { title: 'Isa Autônoma', url: '/isa-autonoma', icon: Zap, visibility: 'all' },
-      { title: 'Follow-up', url: '/followup', icon: TrendingUp, visibility: 'all' },
-      { title: 'Conferência de Extratos', url: '/conferencia-extratos', icon: Calculator, visibility: 'all' },
-      { title: 'Chat', url: '/chat', icon: MessageSquare, visibility: 'all' },
-    ],
-  },
-  {
-    label: 'Administração',
-    items: [
-      { title: 'Histórico de Acessos', url: '/historico-acessos', icon: History, visibility: 'admin-only' },
-      { title: 'Histórico de Atendimento', url: '/historico-atendimento', icon: UserRoundCog, visibility: 'admin-only' },
-      { title: 'API Hub', url: '/api-hub', icon: Webhook, visibility: 'admin-only' },
-      { title: 'API Docs', url: '/api-docs', icon: BookOpen, visibility: 'admin-only' },
-      { title: 'Configurações', url: '/configuracoes', icon: Settings, visibility: 'admin-only' },
-    ],
-  },
-];
 
 export function AppSidebar() {
   const location = useLocation();
@@ -106,23 +43,11 @@ export function AppSidebar() {
     navigate('/auth');
   };
 
-  const canShow = (visibility: MenuItemVisibility, url: string) => {
-    const pageId = url.replace(/^\//, '');
-    const explicit = pagePermissions[pageId];
-
-    // Permissão explícita do admin tem prioridade absoluta
-    if (explicit === true)  return true;
-    if (explicit === false) return false;
-
-    // Sem permissão explícita: aplica regra padrão por cargo
-    if (!canAccessPage(pageId)) return false;
-    if (visibility === 'admin-only')     return canAccessSettings;
-    if (visibility === 'processos-only') return canAccessProcessos;
-    if (visibility === 'leads-only')     return canAccessLeads;
-    if (visibility === 'dashboard-only') return canAccessDashboard;
-    if (visibility === 'financeiro-only') return canAccessFinanceiro;
-    return true;
-  };
+  const canShow = (visibility: Parameters<typeof canShowMenuItem>[1], url: string) =>
+    canShowMenuItem({
+      canAccessSettings, canAccessProcessos, canAccessLeads,
+      canAccessDashboard, canAccessFinanceiro, canAccessPage, pagePermissions,
+    }, visibility, url);
 
   return (
     <Sidebar className="border-r-0" collapsible="icon">

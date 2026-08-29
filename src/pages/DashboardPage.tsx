@@ -17,6 +17,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, isAfter } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { MobileDashboardScreen } from '@/components/mobile/MobileDashboardScreen';
 
 const DashboardCharts      = lazy(() => import('@/components/dashboard/DashboardCharts').then(m => ({ default: m.DashboardCharts })));
 const ConversionMetrics    = lazy(() => import('@/components/dashboard/ConversionMetrics').then(m => ({ default: m.ConversionMetrics })));
@@ -69,6 +71,7 @@ function HeroCard({
 }
 
 function DashboardPage() {
+  const isMobile = useIsMobile();
   const { stats, loading: statsLoading } = useDashboardStats();
   const { leads, loading: leadsLoading, fetchLeads } = useLeads();
   const { processos, loading: processosLoading } = useProcessos();
@@ -135,6 +138,17 @@ function DashboardPage() {
 
   const heroReady  = !statsLoading;
   const chartsReady = !leadsLoading && !processosLoading;
+
+  if (isMobile) {
+    if (!heroReady) {
+      return (
+        <div className="flex items-center justify-center h-full py-24">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      );
+    }
+    return <MobileDashboardScreen stats={stats} heroMetrics={heroMetrics} formatCurrency={formatCurrency} />;
+  }
 
   return (
     <>

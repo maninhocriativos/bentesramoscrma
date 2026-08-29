@@ -1,9 +1,8 @@
-import { LogOut, Menu, Plus } from 'lucide-react';
+import { LogOut, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { usePerfil } from '@/hooks/usePerfil';
 import { useNavigate } from 'react-router-dom';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Badge } from '@/components/ui/badge';
 import { NotificacoesBell } from '@/components/NotificacoesBell';
 
@@ -35,7 +34,6 @@ export function AppHeader({ title, onNewItem, newItemLabel = 'Novo' }: AppHeader
     <header className="sticky top-0 z-40 w-full bg-card/80 backdrop-blur-md border-b border-border">
       <div className="flex h-14 md:h-16 items-center justify-between px-3 md:px-6 gap-2">
         <div className="flex items-center gap-2 md:gap-4 min-w-0">
-          <SidebarTrigger className="md:hidden shrink-0" />
           <h1 className="text-base md:text-xl font-semibold text-foreground truncate">{title}</h1>
         </div>
 
