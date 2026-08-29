@@ -11,6 +11,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Compromisso, ConfirmacaoStatus } from '@/types/compromissos';
 import { IntimacaoEvent } from '@/hooks/useIntimacoes';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 
@@ -145,6 +146,7 @@ export function Calendar({
   viewMode = 'mes', onViewModeChange, onDayClick, onEventClick,
 }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const isMobile = useIsMobile();
 
   // ─── INDEX ────────────────────────────────────────────────────────────────
   const eventsByDay = useMemo(() => {
@@ -258,6 +260,29 @@ export function Calendar({
     );
   };
 
+  // ─── DOTS (mês, mobile) ────────────────────────────────────────────────────
+  // Célula de ~46px de largura não cabe chip de texto legível — no mobile a
+  // grade vira só pontinhos coloridos por tipo; tocar no dia abre o
+  // DayEventsModal (onDayClick), que já lista tudo com detalhe.
+  const renderDots = (events: CalEvent[]) => {
+    const maxDots = 4;
+    const visible = events.slice(0, maxDots);
+    const extra = events.length - maxDots;
+    return (
+      <div className="flex flex-wrap items-center gap-[3px] justify-center">
+        {visible.map(ev => (
+          <span key={ev.id} style={{
+            width: 5, height: 5, borderRadius: '50%',
+            background: (PALETTE[ev.pk] ?? PALETTE.outro).bar, flexShrink: 0,
+          }} />
+        ))}
+        {extra > 0 && (
+          <span style={{ fontSize: 8, fontWeight: 700, color: '#c9a96e', lineHeight: 1 }}>+{extra}</span>
+        )}
+      </div>
+    );
+  };
+
   // ─── VIEW MÊS ──────────────────────────────────────────────────────────────
   const renderMonthView = () => {
     const monthStart = startOfMonth(currentDate);
@@ -305,8 +330,8 @@ export function Calendar({
                   onClick={() => onDayClick(day)}
                   className="cursor-pointer relative"
                   style={{
-                    minHeight: 118,
-                    padding: '7px 7px 10px',
+                    minHeight: isMobile ? 52 : 118,
+                    padding: isMobile ? '4px 2px 5px' : '7px 7px 10px',
                     background: isNow ? 'rgba(201,169,110,0.05)' : '#ffffff',
                     opacity: !inMonth ? 0.32 : 1,
                     borderBottom: rowIdx < rows - 1 ? '0.5px solid rgba(201,169,110,0.1)' : 'none',
@@ -329,21 +354,21 @@ export function Calendar({
                   )}
 
                   {/* Número do dia */}
-                  <div className="flex justify-end mb-1.5">
+                  <div className={cn('flex mb-1.5', isMobile ? 'justify-center' : 'justify-end')}>
                     {isNow ? (
                       <span style={{
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        width: 24, height: 24, borderRadius: '50%',
+                        width: isMobile ? 20 : 24, height: isMobile ? 20 : 24, borderRadius: '50%',
                         background: '#3d2b1f', color: '#c9a96e',
-                        fontSize: 11, fontWeight: 800,
+                        fontSize: isMobile ? 10 : 11, fontWeight: 800,
                       }}>
                         {format(day, 'd')}
                       </span>
                     ) : (
                       <span style={{
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        width: 24, height: 24, borderRadius: '50%',
-                        fontSize: 12, fontWeight: 500,
+                        width: isMobile ? 20 : 24, height: isMobile ? 20 : 24, borderRadius: '50%',
+                        fontSize: isMobile ? 10.5 : 12, fontWeight: 500,
                         color: inMonth ? '#6b7280' : '#d1d5db',
                       }}>
                         {format(day, 'd')}
@@ -352,18 +377,20 @@ export function Calendar({
                   </div>
 
                   {/* Eventos */}
-                  <div>
-                    {visible.map(ev => renderChip(ev, day))}
-                    {extra > 0 && (
-                      <div style={{
-                        fontSize: 10, fontWeight: 600,
-                        color: '#c9a96e', paddingLeft: 5, paddingTop: 1,
-                        letterSpacing: '-0.01em',
-                      }}>
-                        +{extra} mais
-                      </div>
-                    )}
-                  </div>
+                  {isMobile ? renderDots(events) : (
+                    <div>
+                      {visible.map(ev => renderChip(ev, day))}
+                      {extra > 0 && (
+                        <div style={{
+                          fontSize: 10, fontWeight: 600,
+                          color: '#c9a96e', paddingLeft: 5, paddingTop: 1,
+                          letterSpacing: '-0.01em',
+                        }}>
+                          +{extra} mais
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -501,63 +528,79 @@ export function Calendar({
   };
 
   // ─── RENDER PRINCIPAL ──────────────────────────────────────────────────────
+  const navButtons = (
+    <div className="flex items-center gap-1">
+      <button type="button" onClick={goPrev} aria-label="Anterior"
+        className="p-2 rounded-xl transition-colors"
+        style={{ color: '#9ca3af' }}
+        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(201,169,110,0.1)')}
+        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+        <ChevronLeft className="h-4 w-4" />
+      </button>
+      <button type="button" onClick={goNext} aria-label="Próximo"
+        className="p-2 rounded-xl transition-colors"
+        style={{ color: '#9ca3af' }}
+        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(201,169,110,0.1)')}
+        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+        <ChevronRight className="h-4 w-4" />
+      </button>
+      <button type="button" onClick={goToday}
+        className="px-3 py-1.5 rounded-lg text-xs font-semibold ml-1 transition-all"
+        style={{ background: 'rgba(201,169,110,0.1)', color: '#3d2b1f', border: '0.5px solid rgba(201,169,110,0.3)' }}
+        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(201,169,110,0.18)')}
+        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(201,169,110,0.1)')}>
+        Hoje
+      </button>
+    </div>
+  );
+
+  const periodTitle = (
+    <h2 className={cn('capitalize font-semibold tracking-tight dark:text-[#c9a96e] truncate', isMobile ? 'flex-1 text-right' : '')}
+      style={{ fontSize: isMobile ? 14 : 17, color: '#3d2b1f', letterSpacing: '-0.02em' }}>
+      {getTitle()}
+    </h2>
+  );
+
+  const viewToggle = (
+    <div className={cn('inline-flex rounded-xl p-0.5', isMobile && 'w-full')}
+      style={{ background: 'rgba(201,169,110,0.07)', border: '0.5px solid rgba(201,169,110,0.2)' }}>
+      {([
+        { label: 'Mês',    value: 'mes'    as ViewMode },
+        { label: 'Semana', value: 'semana' as ViewMode },
+        { label: 'Dia',    value: 'dia'    as ViewMode },
+      ]).map(({ label, value }) => (
+        <button type="button" key={value} onClick={() => onViewModeChange?.(value)}
+          className={cn('transition-all', isMobile && 'flex-1')}
+          style={{
+            padding: '5px 14px', fontSize: 12, fontWeight: 500,
+            borderRadius: 10, cursor: 'pointer',
+            background: viewMode === value ? '#3d2b1f' : 'transparent',
+            color: viewMode === value ? '#c9a96e' : '#9ca3af',
+          }}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       {/* ── Barra de navegação premium ── */}
-      <div className="flex items-center justify-between gap-3">
-
-        {/* Prev / Next / Hoje */}
-        <div className="flex items-center gap-1">
-          <button type="button" onClick={goPrev} aria-label="Anterior"
-            className="p-2 rounded-xl transition-colors"
-            style={{ color: '#9ca3af' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(201,169,110,0.1)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <button type="button" onClick={goNext} aria-label="Próximo"
-            className="p-2 rounded-xl transition-colors"
-            style={{ color: '#9ca3af' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(201,169,110,0.1)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-            <ChevronRight className="h-4 w-4" />
-          </button>
-          <button type="button" onClick={goToday}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold ml-1 transition-all"
-            style={{ background: 'rgba(201,169,110,0.1)', color: '#3d2b1f', border: '0.5px solid rgba(201,169,110,0.3)' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(201,169,110,0.18)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(201,169,110,0.1)')}>
-            Hoje
-          </button>
+      {isMobile ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            {navButtons}
+            {periodTitle}
+          </div>
+          {viewToggle}
         </div>
-
-        {/* Título do período */}
-        <h2 className="capitalize font-semibold tracking-tight dark:text-[#c9a96e]"
-          style={{ fontSize: 17, color: '#3d2b1f', letterSpacing: '-0.02em' }}>
-          {getTitle()}
-        </h2>
-
-        {/* Toggle de visualização */}
-        <div className="inline-flex rounded-xl p-0.5"
-          style={{ background: 'rgba(201,169,110,0.07)', border: '0.5px solid rgba(201,169,110,0.2)' }}>
-          {([
-            { label: 'Mês',    value: 'mes'    as ViewMode },
-            { label: 'Semana', value: 'semana' as ViewMode },
-            { label: 'Dia',    value: 'dia'    as ViewMode },
-          ]).map(({ label, value }) => (
-            <button type="button" key={value} onClick={() => onViewModeChange?.(value)}
-              className="transition-all"
-              style={{
-                padding: '5px 14px', fontSize: 12, fontWeight: 500,
-                borderRadius: 10, cursor: 'pointer',
-                background: viewMode === value ? '#3d2b1f' : 'transparent',
-                color: viewMode === value ? '#c9a96e' : '#9ca3af',
-              }}>
-              {label}
-            </button>
-          ))}
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          {navButtons}
+          {periodTitle}
+          {viewToggle}
         </div>
-      </div>
+      )}
 
       {viewMode === 'mes'    && renderMonthView()}
       {viewMode === 'semana' && renderWeekView()}

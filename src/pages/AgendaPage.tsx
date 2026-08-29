@@ -197,7 +197,7 @@ function AgendaPage() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             <input
               type="text"
-              placeholder="Buscar compromisso..."
+              placeholder="Buscar..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full h-8 pl-8 pr-7 text-xs rounded-xl bg-muted/40 border border-[rgba(201,169,110,0.2)] focus:outline-none focus:border-[#c9a96e] focus:bg-background transition-colors"
@@ -210,9 +210,9 @@ function AgendaPage() {
           </div>
 
           {/* Period filter */}
-          <div className="inline-flex items-center rounded-xl overflow-hidden" style={{ border: '0.5px solid rgba(201,169,110,0.2)' }}>
+          <div className="inline-flex items-center rounded-xl overflow-x-auto max-w-full [&::-webkit-scrollbar]:hidden" style={{ border: '0.5px solid rgba(201,169,110,0.2)', scrollbarWidth: 'none' }}>
             {(['all', 'today', 'week', 'month', 'next30'] as PeriodFilter[]).map((p, i, arr) => (
-              <button key={p} onClick={() => setPeriodFilter(p)} className="transition-all" style={{ padding: '5px 10px', fontSize: 11, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', background: periodFilter === p ? '#3d2b1f' : 'transparent', color: periodFilter === p ? '#c9a96e' : '#6b7280', borderRight: i < arr.length - 1 ? '0.5px solid rgba(201,169,110,0.15)' : 'none' }}>
+              <button key={p} onClick={() => setPeriodFilter(p)} className="transition-all shrink-0" style={{ padding: '5px 10px', fontSize: 11, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', background: periodFilter === p ? '#3d2b1f' : 'transparent', color: periodFilter === p ? '#c9a96e' : '#6b7280', borderRight: i < arr.length - 1 ? '0.5px solid rgba(201,169,110,0.15)' : 'none' }}>
                 {PERIOD_LABELS[p]}
               </button>
             ))}
