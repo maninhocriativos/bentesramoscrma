@@ -93,6 +93,12 @@ verify_jwt = false
 [functions.zapi-send]
 verify_jwt = false
 
+[functions.cliente-portal-lookup]
+verify_jwt = false
+
+[functions.cliente-portal-data]
+verify_jwt = false
+
 [functions.fix-subscriber-ids]
 verify_jwt = false
 
