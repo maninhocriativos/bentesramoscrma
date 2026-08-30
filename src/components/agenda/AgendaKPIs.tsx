@@ -157,10 +157,11 @@ export function AgendaKPIs({ compromissos, intimacoes }: AgendaKPIsProps) {
               <div className="min-w-0 flex-1">
                 {/* Título + badge total */}
                 <div className="flex items-center gap-1.5 mb-1.5">
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#3d2b1f' }} className="dark:text-[#c9a96e]">
+                  <span className="dark:text-[#c9a96e] truncate min-w-0" style={{ fontSize: 12, fontWeight: 600, color: '#3d2b1f' }}>
                     {kpi.title}
                   </span>
                   <span
+                    className="shrink-0 whitespace-nowrap"
                     style={{
                       fontSize: 10, fontWeight: 700,
                       padding: '1px 6px', borderRadius: 6,
