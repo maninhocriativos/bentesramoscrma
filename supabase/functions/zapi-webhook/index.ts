@@ -12,6 +12,46 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 // ============================================
+// PUSH NOTIFICATION — mensagem nova de cliente
+// ============================================
+// Só notifica o atendente já designado pra conversa (manychat_subscribers.
+// assigned_to) — sem designação, ninguém é notificado por ora, pra não virar
+// spam pra equipe inteira a cada lead novo sem dono ainda. Nunca deve
+// derrubar o processamento do webhook: falha aqui é só logada.
+async function notificarNovaMensagem(
+  supabase: ReturnType<typeof createClient>,
+  subscriberId: string,
+  nomeCliente: string,
+  preview: string,
+): Promise<void> {
+  try {
+    const pushSecret = Deno.env.get('PUSH_SEND_SECRET');
+    if (!pushSecret) return; // não configurado ainda — silencioso
+
+    const { data: sub } = await supabase
+      .from('manychat_subscribers')
+      .select('assigned_to')
+      .eq('subscriber_id', subscriberId)
+      .maybeSingle();
+    const assignedTo = (sub as any)?.assigned_to;
+    if (!assignedTo) return;
+
+    await fetch(`${supabaseUrl}/functions/v1/push-send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-push-secret': pushSecret },
+      body: JSON.stringify({
+        user_ids: [assignedTo],
+        title: `Nova mensagem de ${nomeCliente}`,
+        body: preview.slice(0, 140),
+        url: '/chat',
+      }),
+    });
+  } catch (err) {
+    console.error('[Z-API Webhook] push notify falhou (não bloqueia o webhook):', err);
+  }
+}
+
+// ============================================
 // DETECÇÃO DE TRÁFEGO PAGO (CTWA - Click to WhatsApp Ads)
 // ============================================
 interface TrafficSourceResult {
@@ -765,11 +805,16 @@ serve(async (req: Request) => {
             cliente_id: leadId,
             tipo: 'WhatsApp',
             direcao: 'Entrada',
-            resumo: normalized.messageType === 'text' 
-              ? normalized.message.substring(0, 100) 
+            resumo: normalized.messageType === 'text'
+              ? normalized.message.substring(0, 100)
               : `[${normalized.messageType}]`,
             detalhes: normalized.message
           });
+          await notificarNovaMensagem(
+            supabase, subscriberId,
+            normalized.name || normalized.phone || 'Cliente',
+            normalized.messageType === 'text' ? normalized.message : `[${normalized.messageType}]`,
+          );
         }
       } else {
         // Sem message_id, salvar normalmente (fallback)
@@ -810,11 +855,16 @@ serve(async (req: Request) => {
             cliente_id: leadId,
             tipo: 'WhatsApp',
             direcao: 'Entrada',
-            resumo: normalized.messageType === 'text' 
-              ? normalized.message.substring(0, 100) 
+            resumo: normalized.messageType === 'text'
+              ? normalized.message.substring(0, 100)
               : `[${normalized.messageType}]`,
             detalhes: normalized.message
           });
+          await notificarNovaMensagem(
+            supabase, subscriberId,
+            normalized.name || normalized.phone || 'Cliente',
+            normalized.messageType === 'text' ? normalized.message : `[${normalized.messageType}]`,
+          );
         }
       }
     }

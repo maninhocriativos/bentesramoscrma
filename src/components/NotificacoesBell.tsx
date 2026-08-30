@@ -1,9 +1,11 @@
-import { Bell, Check, CheckCheck, ExternalLink } from 'lucide-react';
+import { Bell, Check, CheckCheck, ExternalLink, BellRing } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { useNotificacoes, Notificacao } from '@/hooks/useNotificacoes';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
@@ -25,6 +27,7 @@ const tipoBadgeColors: Record<string, string> = {
 
 export function NotificacoesBell() {
   const { notificacoes, naoLidas, marcarComoLida, marcarTodasComoLidas } = useNotificacoes();
+  const push = usePushNotifications();
   const navigate = useNavigate();
 
   const handleClick = (notif: Notificacao) => {
@@ -95,6 +98,26 @@ export function NotificacoesBell() {
             </div>
           )}
         </ScrollArea>
+        {push.supported && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-border">
+            <div className="flex items-center gap-2 min-w-0">
+              <BellRing className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs font-medium truncate">Notificações push</p>
+                <p className="text-[10px] text-muted-foreground truncate">
+                  {push.permission === 'denied'
+                    ? 'Bloqueado nas permissões do navegador'
+                    : 'Avisa quando chegar mensagem nova'}
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={push.subscribed}
+              disabled={push.loading || push.permission === 'denied'}
+              onCheckedChange={(checked) => (checked ? push.subscribe() : push.unsubscribe())}
+            />
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );
